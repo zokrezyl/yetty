@@ -187,16 +187,22 @@ shaders:
       # - "0x0029-vinyl"       # Spinning vinyl record
       # - "0x002a-dvd-bounce"  # DVD screensaver bounce
       #
-      # Decorative/artistic (high GPU cost)
-      # - "0xeff5-butterfly-flock"  # Butterfly swarm
-      # - "0xeff6-looping-spline"   # Spline animation
-      # - "0xeff7-mandelbrot-deco"  # Mandelbrot decoration
-      # - "0xeff8-hg-sdf"      # SDF rendering
-      # - "0xeff9-voronoi"     # Voronoi diagram
-      # - "0xeffa-minkowski-tube"   # Minkowski tube
-      # - "0xeffb-biomine"     # Biomine effect
-      # - "0xeffc-julia"       # Julia set fractal
-      # - "0xeffd-mandelbrot"  # Mandelbrot fractal
+      # Decorative/artistic — heavy raymarched / scene shaders. Known to
+      # stress the GPU on Intel HD 530 + Mesa/ANV and similar (compile
+      # blow-up of the merged WGSL switch, even when not invoked at
+      # runtime). Uncomment with care; enable one at a time and confirm.
+      # - "0x00f5-butterfly-flock"  # Butterfly swarm (40 raymarched objects)
+      # - "0x00f6-looping-spline"   # Spline animation
+      # - "0x00f7-mandelbrot-deco"  # Mandelbrot decoration
+      # - "0x00f8-hg-sdf"           # HG-SDF rendering
+      # - "0x00f9-voronoi"          # Voronoi diagram
+      # - "0x00fa-minkowski-tube"   # Minkowski tube
+      # - "0x00fb-biomine"          # Biomine effect
+      # - "0x00fc-julia"            # Julia set fractal
+      # - "0x00fd-mandelbrot"       # Mandelbrot fractal
+      #
+      # Debug
+      # - "0x00ff-debug-green"      # Solid green — sanity-check the path
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Workspace Configuration

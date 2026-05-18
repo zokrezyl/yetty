@@ -160,13 +160,6 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
         ytime_start(full_frame);
 
-        /* Global clear() removed — each pane's background-layer (tile.c
-         * pane_render → background_layer.render) wipes the pane to its bg
-         * colour with an opaque RGBA fill before any other layer paints,
-         * and the tabbar paints its own strip, so the only pixels the old
-         * global Clear ever delivered to the screen were inter-pane gap
-         * pixels that nothing else overwrites. */
-
         ytime_start(workspace_render);
         if (yetty->tabbar) {
             struct yetty_ycore_void_result res =
@@ -186,11 +179,6 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
         }
 
-        /* Present the big target to surface. render-target-texture's
-         * present() internally spawns a "presenter" coroutine that does
-         * the wgpuSurfacePresent via the wgpu-wait pool — present()
-         * returns immediately after the submit + spawn, the actual
-         * Present blocks on the worker thread instead of here. */
         ytime_start(present);
         struct yetty_ycore_void_result res =
             yetty->render_target->ops->present(yetty->render_target);
@@ -484,19 +472,6 @@ static struct yetty_ycore_int_result yetty_event_handler(
         ydebug("yetty: RESIZE %ux%u", width, height);
 
         if (width == 0 || height == 0) {
-            return YETTY_OK(yetty_ycore_int, 1);
-        }
-
-        /* No-op fast path. Skip the whole reconfigure dance when nothing
-         * changed — first-frame RESIZE from GLFW often fires at the same
-         * size we already configured during init, and calling
-         * wgpuSurfaceConfigure while the presenter coro's worker thread
-         * is mid-wgpuSurfacePresent corrupts the swapchain (Mesa/ANV
-         * segfaults on Wayland). */
-        uint32_t cur_w = yetty->context.app_context.app_gpu_context.surface_width;
-        uint32_t cur_h = yetty->context.app_context.app_gpu_context.surface_height;
-        if (cur_w == width && cur_h == height) {
-            ydebug("yetty: RESIZE no-op (already %ux%u)", width, height);
             return YETTY_OK(yetty_ycore_int, 1);
         }
 

@@ -61,6 +61,15 @@ struct yetty_yconfig_config_ops {
     struct yetty_yconfig_config *(*get_node)(const struct yetty_yconfig_config *self,
                                              const char *path);
 
+    /* Sequence accessors. The YAML loader stores sequence items as
+     * scalar children with numeric keys ("0", "1", …). get_array_count
+     * returns the number of items at `path` (or 0 if `path` is missing /
+     * not a sequence). get_array_item returns the scalar text of item
+     * `index`, or `default_value` if absent. */
+    int (*get_array_count)(const struct yetty_yconfig_config *self, const char *path);
+    const char *(*get_array_item)(const struct yetty_yconfig_config *self, const char *path,
+                                  int index, const char *default_value);
+
     /* Resolve shell argv for execvp.
      *
      * If shell/command is set (via -e), tokenize it into argv (no shell

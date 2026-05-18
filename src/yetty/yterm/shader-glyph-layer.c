@@ -132,20 +132,80 @@ static int glyph_entry_cmp(const void *a, const void *b)
     return (la > lb) - (la < lb);
 }
 
+/* Match a glyph file's basename (e.g. "0x0000-spinner.wgsl") against an
+ * entry in shaders/preload/glyphs (e.g. "0x0000-spinner"). Returns 1 on
+ * match. We compare case-insensitively because the YAML config tends to
+ * have "0xeff5-..." in lowercase while filenames vary, and the hex
+ * prefix is the only part that risks case skew. */
+static int glyph_name_matches(const char *filename, const char *want)
+{
+    size_t flen = strlen(filename);
+    if (flen <= 5 || strcmp(filename + flen - 5, ".wgsl") != 0) {
+        return 0;
+    }
+    size_t stem_len = flen - 5;
+    size_t wlen = strlen(want);
+    if (wlen != stem_len) {
+        return 0;
+    }
+    for (size_t i = 0; i < stem_len; i++) {
+        char a = filename[i];
+        char b = want[i];
+        if (a >= 'A' && a <= 'Z') {
+            a = (char)(a - 'A' + 'a');
+        }
+        if (b >= 'A' && b <= 'Z') {
+            b = (char)(b - 'A' + 'a');
+        }
+        if (a != b) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* True if `filename` appears in shaders/preload/glyphs in the user
+ * config. Strict allow-list: missing key, empty list, or NULL config →
+ * load NOTHING. The user must explicitly enumerate which glyphs to
+ * compile in. This avoids dragging in heavy shaders (butterfly-flock,
+ * hg-sdf, etc.) that hang the GPU on Intel HD 530 / Mesa-ANV when
+ * they're merely included in the merged WGSL even without runtime
+ * invocation. */
+static int glyph_allowed(struct yetty_yconfig_config *config, const char *filename)
+{
+    if (!config) {
+        return 0;
+    }
+    int n = config->ops->get_array_count(config, "shaders/preload/glyphs");
+    for (int i = 0; i < n; i++) {
+        const char *want =
+            config->ops->get_array_item(config, "shaders/preload/glyphs", i, NULL);
+        if (want && glyph_name_matches(filename, want)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* Returns a yetty_ycore_buffer with the assembled WGSL (data is malloc'd,
  * caller frees via free(buf.value.data)).
  *
  * Files starting with '_' are prelude libraries (e.g. _util.wgsl providing
  * util_hash, util_valueNoise, util_colorNoise - copied from yetty-poc). They
  * are concatenated FIRST, in name-sorted order, so glyph functions can call
- * their helpers. Files starting with '0x' are glyphs, sorted by local-id. */
-static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph_dir)
+ * their helpers. Files starting with '0x' are glyphs, sorted by local-id —
+ * filtered through shaders/preload/glyphs in the user's yetty config. */
+static struct yetty_ycore_buffer_result assemble_glyph_shaders(
+    const char *glyph_dir, struct yetty_yconfig_config *config)
 {
     DIR *d = opendir(glyph_dir);
     if (!d) {
         ywarn("glyph-shaders: opendir(%s) failed", glyph_dir);
         return YETTY_ERR(yetty_ycore_buffer, "glyph-shaders: opendir failed");
     }
+    int allow_list_size =
+        config ? config->ops->get_array_count(config, "shaders/preload/glyphs") : 0;
+    yinfo("glyph-shaders: explicit allow-list, %d glyphs requested", allow_list_size);
 
     struct yetty_yterm_glyph_entry *entries = NULL;
     size_t cap = 0, n = 0;
@@ -170,6 +230,13 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
         snprintf(path, sizeof(path), "%s/%s", glyph_dir, name);
 
         if (name[0] == '_') {
+            /* Prelude (shared helpers like _util.wgsl). Only worth
+             * concatenating if at least one glyph shader is actually
+             * being loaded — without glyphs the helpers are dead code. */
+            if (allow_list_size <= 0) {
+                ydebug("glyph-shaders: %s skipped (no glyphs requested)", name);
+                continue;
+            }
             if (prelude_count >= 8) {
                 ywarn("glyph-shaders: too many prelude files (max 8)");
                 continue;
@@ -191,6 +258,11 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
             continue;
         }
 
+        if (!glyph_allowed(config, name)) {
+            ydebug("glyph-shaders: %s skipped (not in shaders/preload/glyphs)", name);
+            continue;
+        }
+
         uint32_t local_id = (uint32_t)strtoul(name + 2, NULL, 16);
 
         struct yetty_ycore_buffer_result br = yetty_ycore_read_file(path);
@@ -199,6 +271,7 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
             yetty_ycore_error_destroy(br.error);
             continue;
         }
+        ydebug("glyph-shaders: %s loaded (%zu B)", name, br.value.size);
 
         if (n >= cap) {
             size_t new_cap = cap ? cap * 2 : 32;
@@ -401,8 +474,12 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
                          template_res);
     }
 
-    /* Assemble per-glyph .wgsl files + generated dispatcher. */
-    struct yetty_ycore_buffer_result glyph_res = assemble_glyph_shaders(glyph_dir);
+    /* Assemble per-glyph .wgsl files + generated dispatcher. The config
+     * filters which glyphs get baked into the merged shader (see
+     * shaders/preload/glyphs in defaults.yaml); the heavy "scene"
+     * shaders like 0xeff5-butterfly-flock are commented out by default
+     * because they hang the GPU on some integrated stacks. */
+    struct yetty_ycore_buffer_result glyph_res = assemble_glyph_shaders(glyph_dir, config);
     if (YETTY_IS_ERR(glyph_res)) {
         free(template_res.value.data);
         return YETTY_ERR(yetty_yterm_terminal_layer, "shader-glyph-layer: assemble failed",

@@ -68,6 +68,9 @@ static const char *config_font_family(const struct yetty_yconfig_config *self);
 
 static struct yetty_yconfig_config *config_get_node(const struct yetty_yconfig_config *self,
                                                     const char *path);
+static int config_get_array_count(const struct yetty_yconfig_config *self, const char *path);
+static const char *config_get_array_item(const struct yetty_yconfig_config *self, const char *path,
+                                         int index, const char *default_value);
 static struct yetty_ycore_void_result config_get_shell_argv(const struct yetty_yconfig_config *self,
                                                             struct yetty_yconfig_shell_argv *out);
 
@@ -79,6 +82,8 @@ static const struct yetty_yconfig_config_ops config_ops = {
     .has = config_has,
     .set_string = config_set_string,
     .get_node = config_get_node,
+    .get_array_count = config_get_array_count,
+    .get_array_item = config_get_array_item,
     .get_shell_argv = config_get_shell_argv,
     .use_damage_tracking = config_use_damage_tracking,
     .show_fps = config_show_fps,
@@ -324,15 +329,49 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
         if (child)
             load_yaml_mapping(parser, child, dir);
     } else if (event.type == YAML_SEQUENCE_START_EVENT) {
-        /* Skip sequences for now */
+        /* Store the sequence as a child node with each item as a child
+         * keyed by index "0", "1", … . Nested sequences/mappings inside
+         * the sequence are still skipped — yetty config consumers only
+         * need flat string lists today (e.g. shaders/preload/glyphs). */
         yaml_event_delete(&event);
-        int depth = 1;
-        while (depth > 0 && yaml_parser_parse(parser, &event)) {
-            if (event.type == YAML_SEQUENCE_START_EVENT)
-                depth++;
-            else if (event.type == YAML_SEQUENCE_END_EVENT)
-                depth--;
-            yaml_event_delete(&event);
+        struct config_node *seq = node_get_or_create_child(parent, key);
+        int index = 0;
+        for (;;) {
+            if (!yaml_parser_parse(parser, &event)) {
+                break;
+            }
+            if (event.type == YAML_SEQUENCE_END_EVENT) {
+                yaml_event_delete(&event);
+                break;
+            }
+            if (event.type == YAML_SCALAR_EVENT) {
+                if (seq) {
+                    char idx_key[16];
+                    snprintf(idx_key, sizeof(idx_key), "%d", index);
+                    node_set_value(seq, idx_key, (const char *)event.data.scalar.value);
+                }
+                index++;
+                yaml_event_delete(&event);
+                continue;
+            }
+            /* Nested seq/map: skip the whole sub-tree. */
+            int depth = 1;
+            if (event.type == YAML_SEQUENCE_START_EVENT ||
+                event.type == YAML_MAPPING_START_EVENT) {
+                yaml_event_delete(&event);
+                while (depth > 0 && yaml_parser_parse(parser, &event)) {
+                    if (event.type == YAML_SEQUENCE_START_EVENT ||
+                        event.type == YAML_MAPPING_START_EVENT) {
+                        depth++;
+                    } else if (event.type == YAML_SEQUENCE_END_EVENT ||
+                               event.type == YAML_MAPPING_END_EVENT) {
+                        depth--;
+                    }
+                    yaml_event_delete(&event);
+                }
+            } else {
+                yaml_event_delete(&event);
+            }
         }
     } else {
         yaml_event_delete(&event);
@@ -615,6 +654,10 @@ static struct yetty_ycore_void_result subnode_set_string(struct yetty_yconfig_co
 
 static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_config *self,
                                                      const char *path);
+static int subnode_get_array_count(const struct yetty_yconfig_config *self, const char *path);
+static const char *subnode_get_array_item(const struct yetty_yconfig_config *self,
+                                          const char *path, int index,
+                                          const char *default_value);
 
 static const struct yetty_yconfig_config_ops subnode_ops = {
     .destroy = subnode_destroy,
@@ -624,6 +667,8 @@ static const struct yetty_yconfig_config_ops subnode_ops = {
     .has = subnode_has,
     .set_string = subnode_set_string,
     .get_node = subnode_get_node,
+    .get_array_count = subnode_get_array_count,
+    .get_array_item = subnode_get_array_item,
     .get_shell_argv = NULL,
     .use_damage_tracking = NULL,
     .show_fps = NULL,
@@ -672,6 +717,82 @@ static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_
 
     struct config_node *node = node_find_child(parent, key);
     return create_subconfig(node);
+}
+
+/* Array accessors (root and subnode flavours).
+ *
+ * A YAML sequence is stored as a child node whose own children carry the
+ * items, keyed by stringified index ("0", "1", …). get_array_count
+ * counts those children; get_array_item walks them and returns the
+ * value of the one whose key parses to `index`. */
+static int node_array_count(struct config_node *node)
+{
+    if (!node) {
+        return 0;
+    }
+    return node->child_count;
+}
+
+static const char *node_array_item(struct config_node *node, int index,
+                                   const char *default_value)
+{
+    if (!node) {
+        return default_value;
+    }
+    char idx_key[16];
+    snprintf(idx_key, sizeof(idx_key), "%d", index);
+    struct config_node *item = node_find_child(node, idx_key);
+    if (!item || item->value[0] == '\0') {
+        return default_value;
+    }
+    return item->value;
+}
+
+static int config_get_array_count(const struct yetty_yconfig_config *self, const char *path)
+{
+    struct config_impl *impl = container_of(self, struct config_impl, base);
+    char key[MAX_KEY_LEN] = {0};
+    struct config_node *parent = navigate_path(impl->root, path, key);
+    if (!parent) {
+        return 0;
+    }
+    return node_array_count(node_find_child(parent, key));
+}
+
+static const char *config_get_array_item(const struct yetty_yconfig_config *self, const char *path,
+                                         int index, const char *default_value)
+{
+    struct config_impl *impl = container_of(self, struct config_impl, base);
+    char key[MAX_KEY_LEN] = {0};
+    struct config_node *parent = navigate_path(impl->root, path, key);
+    if (!parent) {
+        return default_value;
+    }
+    return node_array_item(node_find_child(parent, key), index, default_value);
+}
+
+static int subnode_get_array_count(const struct yetty_yconfig_config *self, const char *path)
+{
+    struct config_subnode *sub = (struct config_subnode *)self;
+    char key[MAX_KEY_LEN] = {0};
+    struct config_node *parent = navigate_path(sub->node, path, key);
+    if (!parent) {
+        return 0;
+    }
+    return node_array_count(node_find_child(parent, key));
+}
+
+static const char *subnode_get_array_item(const struct yetty_yconfig_config *self,
+                                          const char *path, int index,
+                                          const char *default_value)
+{
+    struct config_subnode *sub = (struct config_subnode *)self;
+    char key[MAX_KEY_LEN] = {0};
+    struct config_node *parent = navigate_path(sub->node, path, key);
+    if (!parent) {
+        return default_value;
+    }
+    return node_array_item(node_find_child(parent, key), index, default_value);
 }
 
 /* Store platform paths */

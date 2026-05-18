@@ -1,5 +1,7 @@
 #include <yetty/webgpu/error.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Global error state */
@@ -53,6 +55,20 @@ void yetty_ywebgpu_uncaptured_error_callback(WGPUDevice const *device, WGPUError
         break;
     }
     yerror("WebGPU %s error: %s", type_str, yetty_ywebgpu_error.message);
+
+    /* Fail fast on uncaptured wgpu errors. The user asked for an
+     * immediate exit with a clear stderr message — the alternative
+     * (carry on with the error state set) tends to mask the original
+     * fault behind a chain of secondary failures that's painful to
+     * unpick later. Comment out if you need to keep running through
+     * validation hits while iterating. */
+    fprintf(stderr,
+            "\n[FATAL] WebGPU %s error: %s\n"
+            "        See yetty trace log for the call sequence leading up.\n"
+            "        Exiting.\n",
+            type_str, yetty_ywebgpu_error.message);
+    fflush(stderr);
+    _Exit(2);
 }
 
 WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void)
@@ -92,6 +108,21 @@ void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLost
     }
     buf[len] = '\0';
     yerror("WebGPU device lost (%s): %s", reason_str, buf);
+
+    /* Destroyed = normal teardown when we drop our device handle, not a
+     * real fault — let the cleanup path complete. Anything else (GPU
+     * hung at runtime, driver crash, hot-unplug, …) we exit immediately
+     * so the failure mode is visible instead of cascading. */
+    if (reason != WGPUDeviceLostReason_Destroyed) {
+        fprintf(stderr,
+                "\n[FATAL] WebGPU device lost (%s): %s\n"
+                "        This usually means a GPU hang — check ytrace log for the\n"
+                "        Submit/Present that preceded it.\n"
+                "        Exiting.\n",
+                reason_str, buf);
+        fflush(stderr);
+        _Exit(3);
+    }
 }
 
 WGPUDeviceLostCallbackInfo yetty_ywebgpu_get_device_lost_callback_info(void)

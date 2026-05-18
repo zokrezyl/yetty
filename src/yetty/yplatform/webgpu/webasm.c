@@ -151,13 +151,3 @@ struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_wgpu_surface_present_await(
-    struct yetty_yplatform_wgpu *wgpu, WGPUSurface surface)
-{
-    /* On webasm, wgpuSurfacePresent is a no-op (the browser RAF page-flips
-     * automatically). We don't even need to call it. Keep the symbol so the
-     * desktop caller compiles unchanged. */
-    (void)wgpu;
-    (void)surface;
-    return YETTY_OK_VOID();
-}
