@@ -515,13 +515,26 @@ static struct yetty_ycore_int_result yetty_event_handler(
             yetty->render_target->ops->resize(yetty->render_target, vp);
         }
 
-        /* Resize the tabbar: it slices off the strip height and forwards the
-         * remainder to each workspace. */
+        /* Resize the tabbar: it slices off the strip height at the top
+         * and forwards the remainder to each workspace. We pre-subtract
+         * yui's statusbar height from the bottom here so the workspace
+         * area sits between [tabbar_strip .. H - statusbar_h]; without
+         * this the bottom row of terminal cells is drawn under the
+         * yui statusbar. */
+        float bottom_inset =
+            yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f;
+        float ws_height = (float)height - bottom_inset;
+        if (ws_height < 0.0f) {
+            ws_height = 0.0f;
+        }
         if (yetty->tabbar) {
-            yetty_yui_tabbar_resize(yetty->tabbar, (float)width, (float)height);
+            yetty_yui_tabbar_resize(yetty->tabbar, (float)width, ws_height);
         }
 
-        /* Resize the app-level yui's scene canvas to match. */
+        /* Resize the app-level yui's scene canvas to match the full
+         * framebuffer — yui's own bars (statusbar today, titlebar /
+         * menubar later) live in the full canvas; only the terminal
+         * workspaces below get the carved-out client area. */
         if (yetty->yui) {
             struct yetty_ycore_void_result yr = yetty_yui_resize(yetty->yui, width, height);
             if (YETTY_IS_ERR(yr)) {
@@ -530,11 +543,13 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
         }
 
-        /* Forward to tabbar for tile/view resize handling on the active
-         * workspace. */
-        if (yetty->tabbar) {
-            yetty_yui_tabbar_on_event(yetty->tabbar, event);
-        }
+        /* No second RESIZE forward to tabbar_on_event: tabbar_resize
+         * already dispatched a synthetic RESIZE to every workspace
+         * with the carved-out workspace height (ws_height - strip).
+         * The old forward sent the *tabbar's input height* (which
+         * still included the strip) and the terminal_view rebuilt its
+         * bounds at that larger size, overflowing by `strip` pixels
+         * over the statusbar at the bottom. */
 
         /* Request re-render after resize */
         if (yetty->event_loop && yetty->event_loop->ops->request_render) {

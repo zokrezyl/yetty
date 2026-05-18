@@ -69,6 +69,14 @@ struct yetty_yui {
      * unused slots (kinds with fewer fields, or kinds with no dialog). */
     struct yetty_ygui_widget *dialog_inputs[YETTY_YUI_VIEW_KIND_COUNT][4];
 
+    /* Application statusbar — STATUSBAR widget pinned to the bottom of
+     * the engine's canvas via engine_set_statusbar. The widget paints
+     * the brand-themed strip (bg_header band + top hairline) plus
+     * vertically-centered left/right text via its own render. The
+     * default render_all walks children too, so apps can layer ygui
+     * widgets on top via yetty_yui_statusbar(). */
+    struct yetty_ygui_widget *statusbar;
+
     /* Connect dispatch — invoked from each dialog's "Connect" button. */
     yetty_yui_connect_cb connect_cb;
     void               *connect_userdata;
@@ -317,20 +325,27 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->yui_endpoint = pp.value.a;
     yui->render_endpoint = pp.value.b;
 
-    /* Scene-canvas ydraw layer. Computes a coarse cols/rows from the
-     * window dims; primitives are absolute-pixel so the grid is just an
-     * addressing index for the scene-canvas's primitive lookup. */
-    uint32_t cols = (uint32_t)((float)surface_w / cell_w);
-    uint32_t rows = (uint32_t)((float)surface_h / cell_h);
+    /* Scene-canvas ydraw layer. yui primitives are absolute-pixel, so
+     * we don't care about the grid stride for layout — only that the
+     * canvas's `cols * cell_w x rows * cell_h` equals the framebuffer
+     * exactly (otherwise the shader's NDC→pixel map stretches and
+     * primitives pinned to the edges, like the statusbar at H-22, get
+     * shifted/clipped). Algorithm: round the requested cell stride
+     * against the framebuffer to pick integer cols/rows, then re-derive
+     * actual cell stride as `pixel / cells`. */
+    uint32_t cols = (uint32_t)((float)surface_w / cell_w + 0.5f);
+    uint32_t rows = (uint32_t)((float)surface_h / cell_h + 0.5f);
     if (cols == 0) {
         cols = 1;
     }
     if (rows == 0) {
         rows = 1;
     }
+    float actual_cell_w = (float)surface_w / (float)cols;
+    float actual_cell_h = (float)surface_h / (float)rows;
 
     struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ydraw_layer_create(
-        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows, cell_w, cell_h, context,
+        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows, actual_cell_w, actual_cell_h, context,
         /*request_render_fn=*/NULL, /*request_render_userdata=*/NULL,
         /*scroll_fn=*/NULL, /*scroll_userdata=*/NULL,
         /*cursor_fn=*/NULL, /*cursor_userdata=*/NULL);
@@ -356,7 +371,11 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     }
     yui->sm = sr.value;
 
-    /* Register YDRAW codes against the SM. */
+    /* Register YDRAW codes against the SM. ygui's producer (ygui_osc.c)
+     * emits SCENE_BIN — that's the one that must be wired for the v-menu
+     * to reach the scene canvas. CLEAR/BIN/OVERLAY are kept registered so
+     * future producers that target the same yui layer (e.g. an external
+     * yface tool reusing this transport) still work. */
     struct yetty_ycore_void_result rr;
     rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_CLEAR, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register CLEAR");
@@ -364,6 +383,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register BIN");
     rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_OVERLAY, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register OVERLAY");
+    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_SCENE_BIN, yui->layer);
+    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register SCENE_BIN");
 
     /* Wake the consumer side via post_to_loop whenever the producer
      * writes — defers even in same-thread mode, so the wake never
@@ -528,6 +549,35 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
                                                        &s_cb_ctx[k]);
             }
         }
+
+        /* Statusbar — STATUSBAR widget pinned to the bottom of the
+         * engine canvas by engine_set_statusbar; engine_pin_bars
+         * rewrites its width/y every layout pass so resize follows the
+         * framebuffer for free.
+         *
+         * Default content lives in the widget's own left/right text
+         * slots — statusbar_render centers them vertically inside the
+         * strip ([self->y + (self->h - font_size) * 0.5]), which a
+         * child label widget can't do (label_render is top-aligned
+         * inside its own box). The standard default render_all walks
+         * children too, so callers adding their own widgets via
+         * yetty_yui_statusbar() still get their tree drawn on top of
+         * the centered text. */
+        struct yetty_ygui_widget *sb = yetty_ygui_engine_statusbar(
+            yui->engine, "yui_statusbar", 0, 0, /*w=*/0, /*h=*/22, "Ready");
+        if (sb) {
+            yui->statusbar = sb;
+            yetty_ygui_widget_statusbar_set_right(sb, "yetty");
+            yetty_ygui_engine_set_statusbar(yui->engine, sb);
+        }
+
+        /* Force a full redraw on the next render: the engine had widgets
+         * added one-by-one during this constructor; add_to_engine sets
+         * dirty=1 per widget, but none of them flip needs_full_redraw.
+         * Without this, the very first frame after create can emit a
+         * stale GROUP set whose dedup cache then locks the bottom bar
+         * out of view until the next resize. */
+        yetty_ygui_engine_mark_dirty(yui->engine);
     } else {
         ywarn("yui_create: ygui engine create failed: %s", er.error.msg);
         yetty_ycore_error_destroy(er.error);
@@ -736,6 +786,42 @@ void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float ancho
     }
 }
 
+struct yetty_ygui_widget *yetty_yui_statusbar(struct yetty_yui *yui)
+{
+    return yui ? yui->statusbar : NULL;
+}
+
+void yetty_yui_set_status_left(struct yetty_yui *yui, const char *text)
+{
+    if (!yui || !yui->statusbar) {
+        return;
+    }
+    yetty_ygui_widget_statusbar_set_left(yui->statusbar, text ? text : "");
+}
+
+void yetty_yui_set_status_right(struct yetty_yui *yui, const char *text)
+{
+    if (!yui || !yui->statusbar) {
+        return;
+    }
+    yetty_ygui_widget_statusbar_set_right(yui->statusbar, text ? text : "");
+}
+
+float yetty_yui_statusbar_height(const struct yetty_yui *yui)
+{
+    /* Read the resolved size from the widget via the public accessor —
+     * engine_pin_bars rewrites the height every layout pass, so this
+     * stays in sync with whatever the bar is currently rendered at.
+     * The 22 fallback matches the constructor default for the case
+     * where layout hasn't run yet (pre-first-frame). */
+    if (!yui || !yui->statusbar) {
+        return 0.0f;
+    }
+    float w = 0.0f, h = 0.0f;
+    yetty_ygui_widget_get_size(yui->statusbar, &w, &h);
+    return h > 0.0f ? h : 22.0f;
+}
+
 const char *yetty_yui_get_field_text(const struct yetty_yui *yui,
                                      enum yetty_yui_view_kind kind, int field_idx)
 {
@@ -859,20 +945,28 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
     if (surface_w == 0 || surface_h == 0 || yui->cell_w <= 0.0f || yui->cell_h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    uint32_t cols = (uint32_t)((float)surface_w / yui->cell_w);
-    uint32_t rows = (uint32_t)((float)surface_h / yui->cell_h);
+    /* Same algorithm as yui_create — round the requested cell stride
+     * against the new framebuffer, then re-derive actual cell stride so
+     * cols*cell_w == surface_w and rows*cell_h == surface_h. The unified
+     * resize_grid pushes both onto the canvas in one atomic step. */
+    uint32_t cols = (uint32_t)((float)surface_w / yui->cell_w + 0.5f);
+    uint32_t rows = (uint32_t)((float)surface_h / yui->cell_h + 0.5f);
     if (cols == 0) {
         cols = 1;
     }
     if (rows == 0) {
         rows = 1;
     }
+    struct yetty_ycore_pixel_size actual_cs = {
+        .width = (float)surface_w / (float)cols,
+        .height = (float)surface_h / (float)rows,
+    };
     if (yui->engine) {
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
     }
     if (yui->layer->ops->resize_grid) {
         struct yetty_ycore_grid_size gs = {.cols = cols, .rows = rows};
-        return yui->layer->ops->resize_grid(yui->layer, gs);
+        return yui->layer->ops->resize_grid(yui->layer, gs, actual_cs);
     }
     return YETTY_OK_VOID();
 }

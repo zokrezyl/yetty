@@ -2022,6 +2022,21 @@ void yetty_ygui_engine_set_display_pixel_size(struct yetty_ygui_engine *engine, 
     /* Reinitialize grid with actual size */
     yetty_ygui_grid_destroy(&engine->grid);
     yetty_ygui_grid_init(&engine->grid, width, height, calc_grid_bucket_size(width, height));
+
+    /* Unconditionally force a re-emit. The yui transport calls
+     * set_display_pixel_size right before invoking
+     * layer->ops->resize_grid, and the scene-canvas's
+     * scene_set_grid_size wipes every entity regardless of whether the
+     * new grid dims differ from the old ones. Without this, GLFW's
+     * initial RESIZE-after-first-frame (same dimensions as the first
+     * frame) silently destroys the just-emitted widget tree on the
+     * consumer side while our dedup cache keeps us from sending it
+     * again — bottom bar, popups, etc. all disappear until the next
+     * dimension-changing resize. The "changed" guard was unsafe
+     * precisely because the consumer wipe is unconditional. */
+    engine->dirty = 1;
+    engine->needs_full_redraw = 1;
+    engine->prev_emit_size = 0;
 }
 
 /* yetty_ygui_engine_get_loop / yetty_ygui_engine_poll are libuv-coupled —

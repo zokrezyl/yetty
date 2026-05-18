@@ -607,6 +607,15 @@ struct yetty_ygui_widget {
              * window_set_statusbar. NULL = no statusbar. The widget
              * is reparented into the window's child list. */
             struct yetty_ygui_widget *statusbar;
+            /* Title-bar drag state — set in on_press when the click
+             * lands in the title strip (and not on the hamburger
+             * button), consumed by on_drag to move the window.
+             * drag_press_l[xy] are widget-local at press time;
+             * drag_orig_[xy] capture the window's authored position
+             * at press so on_drag deltas are press-relative. */
+            int   dragging;
+            float drag_press_lx, drag_press_ly;
+            float drag_orig_x,    drag_orig_y;
         } window;
 
         struct {

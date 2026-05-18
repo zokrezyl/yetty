@@ -188,9 +188,8 @@ static struct yetty_ycore_void_result ymgui_process_input(
     struct yetty_yrender_terminal_layer *self,
     struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ymgui_resize_grid(struct yetty_yrender_terminal_layer *self,
-                                                        struct yetty_ycore_grid_size gs);
-static struct yetty_ycore_void_result ymgui_set_cell_size(struct yetty_yrender_terminal_layer *self,
-                                                          struct yetty_ycore_pixel_size cs);
+                                                        struct yetty_ycore_grid_size gs,
+                                                        struct yetty_ycore_pixel_size cs);
 static struct yetty_ycore_void_result ymgui_set_visual_zoom(
     struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y);
 static struct yetty_yrender_gpu_resource_set_result ymgui_get_gpu_resource_set(
@@ -211,7 +210,6 @@ static const struct yetty_yterm_terminal_layer_ops ymgui_ops = {
     .destroy = ymgui_destroy,
     .process_input = ymgui_process_input,
     .resize_grid = ymgui_resize_grid,
-    .set_cell_size = ymgui_set_cell_size,
     .set_visual_zoom = ymgui_set_visual_zoom,
     .get_gpu_resource_set = ymgui_get_gpu_resource_set,
     .render = ymgui_render,
@@ -1751,45 +1749,21 @@ static struct yetty_ycore_void_result ymgui_process_input(
  *=========================================================================*/
 
 static struct yetty_ycore_void_result ymgui_resize_grid(struct yetty_yrender_terminal_layer *self,
-                                                        struct yetty_ycore_grid_size gs)
-{
-    struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
-    self->grid_size = gs;
-    self->dirty = 1;
-
-    /* Resize-aware cards (w_cells=0 = "until right edge", h_cells=0 =
-     * "until bottom edge") need to notify the client of their new pixel
-     * size so DisplaySize tracks the pane. */
-    if (l->base.emit_osc_fn) {
-        for (size_t i = 0; i < l->card_count; i++) {
-            struct yetty_yterm_ymgui_card *c = l->cards[i];
-            if (c->w_cells != 0 && c->h_cells != 0) {
-                continue;
-            }
-            struct yetty_ymgui_wire_input_resize msg = {
-                .magic = YMGUI_WIRE_MAGIC_INPUT_RESIZE,
-                .version = YMGUI_WIRE_VERSION,
-                .card_id = c->id,
-                .width = card_pixel_w(l, c),
-                .height = card_pixel_h(l, c),
-            };
-            l->base.emit_osc_fn(YMGUI_OSC_SC_RESIZE, &msg, sizeof(msg), l->base.emit_osc_userdata);
-        }
-    }
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result ymgui_set_cell_size(struct yetty_yrender_terminal_layer *self,
-                                                          struct yetty_ycore_pixel_size cs)
+                                                        struct yetty_ycore_grid_size gs,
+                                                        struct yetty_ycore_pixel_size cs)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     if (cs.width <= 0.0f || cs.height <= 0.0f) {
-        return YETTY_ERR(yetty_ycore_void, "ymgui: invalid cell size");
+        return YETTY_ERR(yetty_ycore_void, "ymgui_resize_grid: invalid cell size");
     }
+    self->grid_size = gs;
     self->cell_size = cs;
     self->dirty = 1;
 
-    /* Cell size change → every card's pixel size changes. */
+    /* Both cards with w_cells/h_cells=0 (auto-fit to right/bottom edge)
+     * and ones with explicit cells see a pixel-size change whenever
+     * either the grid or the cell stride moves, so emit SC_RESIZE for
+     * every card. */
     if (l->base.emit_osc_fn) {
         for (size_t i = 0; i < l->card_count; i++) {
             struct yetty_yterm_ymgui_card *c = l->cards[i];

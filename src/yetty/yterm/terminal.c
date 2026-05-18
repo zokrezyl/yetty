@@ -1359,7 +1359,8 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
 }
 
 struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
-    struct yetty_yterm_terminal *terminal, struct yetty_ycore_grid_size grid_size)
+    struct yetty_yterm_terminal *terminal, struct yetty_ycore_grid_size grid_size,
+    struct yetty_ycore_pixel_size cell_size)
 {
     if (!terminal) {
         return YETTY_ERR(yetty_ycore_void,
@@ -1372,7 +1373,8 @@ struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (layer && layer->ops && layer->ops->resize_grid) {
-            struct yetty_ycore_void_result r = layer->ops->resize_grid(layer, grid_size);
+            struct yetty_ycore_void_result r =
+                layer->ops->resize_grid(layer, grid_size, cell_size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                                 "yetty_yterm_terminal_resize_grid: layer resize_grid failed");
         }
@@ -1668,26 +1670,40 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             }
         }
 
-        /* Calculate grid dimensions from first layer's cell size */
+        /* Grid + cell stride: rows are derived from the desired target
+         * stride (the font's natural cell height, or a sensible fallback),
+         * then cell_w/cell_h are re-derived as workspace / rows so the
+         * canvas's `cols * cell_w x rows * cell_h` equals the workspace
+         * exactly. Without that, the shader's NDC-to-pixel map shifts /
+         * scales by a few px against the framebuffer and primitives
+         * pinned to the bottom edge (yui statusbar at H-22, terminal
+         * cells at the bottom row) end up cut or stretched. */
         if (terminal->layer_count > 0) {
             struct yetty_yrender_terminal_layer *layer = terminal->layers[0];
-            float cell_w = layer->cell_size.width > 0 ? layer->cell_size.width : 10.0f;
-            float cell_h = layer->cell_size.height > 0 ? layer->cell_size.height : 20.0f;
-            uint32_t new_cols = (uint32_t)(width / cell_w);
-            uint32_t new_rows = (uint32_t)(height / cell_h);
-
-            if (new_cols > 0 && new_rows > 0 &&
-                (new_cols != terminal->cols || new_rows != terminal->rows)) {
-                struct yetty_ycore_void_result rgr = yetty_yterm_terminal_resize_grid(
-                    terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows});
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
-                                    "terminal_view_on_event: terminal_resize_grid failed");
-                if (terminal->context.pty->ops->resize) {
-                    struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-                        terminal->context.pty, new_cols, new_rows);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
-                                        "terminal_view_on_event: pty resize failed");
-                }
+            float cell_w_target = layer->cell_size.width > 0 ? layer->cell_size.width : 10.0f;
+            float cell_h_target = layer->cell_size.height > 0 ? layer->cell_size.height : 20.0f;
+            uint32_t new_cols = (uint32_t)(width / cell_w_target + 0.5f);
+            uint32_t new_rows = (uint32_t)(height / cell_h_target + 0.5f);
+            if (new_cols == 0) {
+                new_cols = 1;
+            }
+            if (new_rows == 0) {
+                new_rows = 1;
+            }
+            struct yetty_ycore_pixel_size new_cell = {
+                .width = width / (float)new_cols,
+                .height = height / (float)new_rows,
+            };
+            struct yetty_ycore_void_result rgr = yetty_yterm_terminal_resize_grid(
+                terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows},
+                new_cell);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
+                                "terminal_view_on_event: terminal_resize_grid failed");
+            if (terminal->context.pty->ops->resize) {
+                struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
+                    terminal->context.pty, new_cols, new_rows);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
+                                    "terminal_view_on_event: pty resize failed");
             }
         }
         /* Cards self-announce their pixel size via per-card YMGUI_OSC_SC_RESIZE
@@ -1697,10 +1713,12 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
     }
 
     case YETTY_YCORE_ZOOM_CELL_SIZE: {
-        /* Structural zoom — scale each layer's cell pixel size (via set_cell_size,
-     * which updates BOTH the layer field AND the shader uniform), then
-     * re-derive cols/rows from the current view bounds and propagate to the
-     * PTY + vterm. */
+        /* Structural zoom — scale the target cell stride by `factor`, then
+         * resnap rows/cols so the canvas covers the view bounds exactly.
+         * One call into terminal_resize_grid pushes both grid and cell
+         * into every layer (and the PTY) in lockstep — the old separate
+         * set_cell_size + resize_grid pair drifted because the cell write
+         * and the grid write weren't atomic. */
         float delta = event->zoom_cell_size.delta;
         float factor;
         if (event->zoom_cell_size.reset) {
@@ -1727,51 +1745,34 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             return YETTY_OK(yetty_ycore_int, 1);
         }
 
-        for (size_t i = 0; i < terminal->layer_count; i++) {
-            struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
-            if (!layer) {
-                continue;
-            }
-            struct yetty_ycore_pixel_size new_cs = layer->cell_size;
-            if (new_cs.width > 0) {
-                new_cs.width *= factor;
-            }
-            if (new_cs.height > 0) {
-                new_cs.height *= factor;
-            }
-            if (layer->ops && layer->ops->set_cell_size) {
-                struct yetty_ycore_void_result cs_r = layer->ops->set_cell_size(layer, new_cs);
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, cs_r,
-                                    "terminal_view_on_event: layer set_cell_size failed");
-            } else {
-                layer->cell_size = new_cs;
-                layer->dirty = 1;
-            }
-        }
-
         if (terminal->layer_count > 0) {
             struct yetty_yrender_terminal_layer *layer = terminal->layers[0];
-            float cw = layer->cell_size.width > 0 ? layer->cell_size.width : 10.0f;
-            float ch = layer->cell_size.height > 0 ? layer->cell_size.height : 20.0f;
-            uint32_t new_cols = (uint32_t)(view_w / cw);
-            uint32_t new_rows = (uint32_t)(view_h / ch);
+            float cell_w_target =
+                (layer->cell_size.width > 0 ? layer->cell_size.width : 10.0f) * factor;
+            float cell_h_target =
+                (layer->cell_size.height > 0 ? layer->cell_size.height : 20.0f) * factor;
+            uint32_t new_cols = (uint32_t)(view_w / cell_w_target + 0.5f);
+            uint32_t new_rows = (uint32_t)(view_h / cell_h_target + 0.5f);
             if (new_cols == 0) {
                 new_cols = 1;
             }
             if (new_rows == 0) {
                 new_rows = 1;
             }
-            if (new_cols != terminal->cols || new_rows != terminal->rows) {
-                struct yetty_ycore_void_result rgr = yetty_yterm_terminal_resize_grid(
-                    terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows});
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
-                                    "terminal_view_on_event: terminal_resize_grid (zoom) failed");
-                if (terminal->context.pty->ops->resize) {
-                    struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-                        terminal->context.pty, new_cols, new_rows);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
-                                        "terminal_view_on_event: pty resize (zoom) failed");
-                }
+            struct yetty_ycore_pixel_size new_cell = {
+                .width = view_w / (float)new_cols,
+                .height = view_h / (float)new_rows,
+            };
+            struct yetty_ycore_void_result rgr = yetty_yterm_terminal_resize_grid(
+                terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows},
+                new_cell);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
+                                "terminal_view_on_event: terminal_resize_grid (zoom) failed");
+            if (terminal->context.pty->ops->resize) {
+                struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
+                    terminal->context.pty, new_cols, new_rows);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
+                                    "terminal_view_on_event: pty resize (zoom) failed");
             }
         }
 

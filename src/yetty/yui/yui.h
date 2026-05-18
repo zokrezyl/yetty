@@ -36,6 +36,7 @@ extern "C" {
 struct yetty_yui;
 struct yetty_context;
 struct yetty_ydraw_target;
+struct yetty_ygui_widget;
 
 YETTY_YRESULT_DECLARE(yetty_yui_ptr, struct yetty_yui *);
 
@@ -121,6 +122,24 @@ struct yetty_platform_pty *yetty_yui_producer_pty(struct yetty_yui *yui);
  * Wired to the tabbar's v-button click. Items: shell, ssh, telnet, yvnc;
  * each opens the corresponding config dialog. */
 void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float anchor_y);
+
+/* Application statusbar — STATUSBAR widget pinned to the bottom of the
+ * engine canvas by engine_set_statusbar. Lives for the whole yui
+ * lifetime. The default content is two flex-laid-out labels (left flush,
+ * right flush). The simple setters update those labels' text; callers
+ * that need richer widgets in the bar add children directly to the
+ * widget returned by yetty_yui_statusbar(). NULL when ygui engine
+ * allocation failed. */
+struct yetty_ygui_widget *yetty_yui_statusbar(struct yetty_yui *yui);
+void yetty_yui_set_status_left(struct yetty_yui *yui, const char *text);
+void yetty_yui_set_status_right(struct yetty_yui *yui, const char *text);
+
+/* Pixel height of the statusbar strip, or 0 when no statusbar is
+ * attached. Used by the tabbar / workspace layout so terminal cells
+ * don't render under the bar. Mirrors the tabbar's own
+ * YETTY_YUI_TABBAR_HEIGHT — yui carves out the bottom strip the way
+ * the tabbar carves out the top. */
+float yetty_yui_statusbar_height(const struct yetty_yui *yui);
 
 /* Subscribe to "Connect" presses in any view's config dialog. The
  * registered callback is called from the ygui widget tree at click

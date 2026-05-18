@@ -40,25 +40,16 @@ static struct yetty_ycore_void_result bg_destroy(struct yetty_yrender_terminal_l
 }
 
 static struct yetty_ycore_void_result bg_resize_grid(struct yetty_yrender_terminal_layer *self,
-                                                     struct yetty_ycore_grid_size grid_size)
+                                                     struct yetty_ycore_grid_size grid_size,
+                                                     struct yetty_ycore_pixel_size cell_size)
 {
     struct yetty_yterm_background_layer *layer =
         container_of(self, struct yetty_yterm_background_layer, base);
     self->grid_size = grid_size;
-    layer->rs.pixel_size.width = (float)grid_size.cols * self->cell_size.width;
-    layer->rs.pixel_size.height = (float)grid_size.rows * self->cell_size.height;
-    self->dirty = 1;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result bg_set_cell_size(struct yetty_yrender_terminal_layer *self,
-                                                       struct yetty_ycore_pixel_size cell_size)
-{
-    struct yetty_yterm_background_layer *layer =
-        container_of(self, struct yetty_yterm_background_layer, base);
     self->cell_size = cell_size;
-    layer->rs.pixel_size.width = (float)self->grid_size.cols * cell_size.width;
-    layer->rs.pixel_size.height = (float)self->grid_size.rows * cell_size.height;
+    layer->rs.pixel_size.width = (float)grid_size.cols * cell_size.width;
+    layer->rs.pixel_size.height = (float)grid_size.rows * cell_size.height;
+    self->dirty = 1;
     return YETTY_OK_VOID();
 }
 
@@ -90,7 +81,6 @@ static int bg_is_empty(const struct yetty_yrender_terminal_layer *self)
 static const struct yetty_yterm_terminal_layer_ops bg_ops = {
     .destroy = bg_destroy,
     .resize_grid = bg_resize_grid,
-    .set_cell_size = bg_set_cell_size,
     .get_gpu_resource_set = bg_get_gpu_resource_set,
     .render = bg_render,
     .is_empty = bg_is_empty,

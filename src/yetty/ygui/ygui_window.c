@@ -184,6 +184,52 @@ static int window_on_press(struct yetty_ygui_widget *self, float lx, float ly, y
         }
         return 1;
     }
+
+    /* Title-bar grab — anywhere in the title strip outside the hamburger
+     * button starts a window drag. The delta is captured on_drag using
+     * the press-time origin so the math stays press-relative even when
+     * the window's authored position changes between frames. */
+    float th = window_title_h(self);
+    if (ly >= 0 && ly < th) {
+        self->data.window.dragging = 1;
+        self->data.window.drag_press_lx = lx;
+        self->data.window.drag_press_ly = ly;
+        self->data.window.drag_orig_x = self->x;
+        self->data.window.drag_orig_y = self->y;
+        return 1;
+    }
+    return 0;
+}
+
+static int window_on_drag(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+{
+    (void)out;
+    if (!self->data.window.dragging) {
+        return 0;
+    }
+    /* Same delta math as ygui_widgets.c::popup_on_drag — lx/ly are mouse
+     * coords relative to the widget's effective_x/y at the last render,
+     * so the difference from the press-time lx/ly is the screen-space
+     * drag delta. */
+    float dx = lx - self->data.window.drag_press_lx;
+    float dy = ly - self->data.window.drag_press_ly;
+    self->x = self->data.window.drag_orig_x + dx;
+    self->y = self->data.window.drag_orig_y + dy;
+    self->authored_x = self->x;
+    self->authored_y = self->y;
+    self->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
+    return 1;
+}
+
+static int window_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+{
+    (void)lx;
+    (void)ly;
+    (void)out;
+    self->data.window.dragging = 0;
     return 0;
 }
 
@@ -197,6 +243,8 @@ static void window_destroy(struct yetty_ygui_widget *self)
 static const struct yetty_ygui_widget_vtable window_vtable = {
     .render = window_render,
     .on_press = window_on_press,
+    .on_drag = window_on_drag,
+    .on_release = window_on_release,
     .destroy = window_destroy,
 };
 
