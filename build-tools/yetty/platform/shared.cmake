@@ -470,7 +470,9 @@ endif()
 # Order: yui (composes views) → yterm (concrete view) → yui-core (abstract
 # view interface, depends on neither). With the cycle removed there are no
 # duplicate archive entries on the link line.
-list(APPEND YETTY_LIBS yetty_yui yetty_yterm yetty_yui_core yetty_yrender yetty_yrender_utils yetty_ywebgpu yetty_yevent)
+# yetty_yetty is the module wrapping yetty.c + <yetty/yetty/yetty.h>; it
+# PUBLIC-links webgpu so anything linking it gets the webgpu include path.
+list(APPEND YETTY_LIBS yetty_yetty yetty_yui yetty_yterm yetty_yui_core yetty_yrender yetty_yrender_utils yetty_ywebgpu yetty_yevent)
 
 # Feature library link platforms
 if(YETTY_ENABLE_FEATURE_BASE)

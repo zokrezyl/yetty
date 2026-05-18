@@ -117,6 +117,15 @@ struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
     WGPUSurface surface, /* NULL for layer/terminal targets */
     struct yetty_yrender_viewport viewport);
 
+/* Plumb in the yplatform wgpu handle so present() can yield via
+ * yetty_yplatform_wgpu_surface_present_await instead of blocking the
+ * caller on wgpuSurfacePresent. Optional — when unset, present() falls
+ * back to the synchronous path (used by tests/headless and the
+ * non-surface targets that never call present anyway). */
+struct yetty_yplatform_wgpu;
+void yetty_yrender_target_texture_set_wgpu(struct yetty_ydraw_target *target,
+                                           struct yetty_yplatform_wgpu *wgpu);
+
 /*=============================================================================
  * VNC render target - renders to texture and sends to VNC clients
  *

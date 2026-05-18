@@ -6,6 +6,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/ywebgpu.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
@@ -65,6 +66,10 @@ struct yetty_yetty_yetty {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat surface_format;
+    /* Present mode picked at init from surface capabilities + config.
+     * Reused on RESIZE so wgpuSurfaceConfigure doesn't silently flip
+     * back to Fifo. See initWebGPU for the selection policy. */
+    WGPUPresentMode present_mode;
 
     /* Coroutine-aware wgpu await machinery (loop-thread tick + completion
      * routing). Owned by Yetty; lifetime spans event_loop + wgpu instance. */
@@ -159,17 +164,6 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
         ytime_start(full_frame);
 
-        /* Global clear() removed — each pane's background-layer (tile.c
-         * pane_render → background_layer.render) wipes the pane to its bg
-         * colour with an opaque RGBA fill before any other layer paints,
-         * and the tabbar paints its own strip, so the only pixels the old
-         * global Clear ever delivered to the screen were inter-pane gap
-         * pixels that nothing else overwrites. Try without and see whether
-         * any visible gap shows previous-frame ghosting; if so, re-add a
-         * scissored clear for just the gap rects, not the whole 4K. */
-
-        /* Render the tab strip + active workspace. Inactive workspaces hold
-         * GPU state but don't contribute to the frame. */
         ytime_start(workspace_render);
         if (yetty->tabbar) {
             struct yetty_ycore_void_result res =
@@ -180,8 +174,6 @@ static struct yetty_ycore_int_result yetty_event_handler(
         }
         ytime_report(workspace_render);
 
-        /* App-level yui on top of every terminal. ygui-produced
-         * primitives travel via memory-pty → scene ydraw-layer here. */
         if (yetty->yui) {
             struct yetty_ycore_void_result yr =
                 yetty_yui_render(yetty->yui, yetty->render_target);
@@ -191,7 +183,6 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
         }
 
-        /* Present the big target to surface */
         ytime_start(present);
         struct yetty_ycore_void_result res =
             yetty->render_target->ops->present(yetty->render_target);
@@ -500,7 +491,10 @@ static struct yetty_ycore_int_result yetty_event_handler(
             config.usage = WGPUTextureUsage_RenderAttachment;
             config.width = width;
             config.height = height;
-            config.presentMode = WGPUPresentMode_Fifo;
+            /* Keep the present-mode that initWebGPU picked from the
+             * surface capabilities — re-querying caps here is fine but
+             * we already chose it once and stashed it in yetty. */
+            config.presentMode = yetty->present_mode;
             wgpuSurfaceConfigure(surface, &config);
 
             yetty->context.app_context.app_gpu_context.surface_width = width;
@@ -913,6 +907,27 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     device_desc.requiredLimits = &limits;
     device_desc.defaultQueue.label = queue_label;
     device_desc.uncapturedErrorCallbackInfo = yetty_ywebgpu_get_error_callback_info();
+    device_desc.deviceLostCallbackInfo = yetty_ywebgpu_get_device_lost_callback_info();
+
+    /* Device-scope Dawn toggles (opt-in via YETTY_DAWN_DEBUG=1). Same toggle
+     * names as instance-level — Dawn applies them at device-creation time.
+     * Static so the pointer remains valid until Dawn finishes the async
+     * RequestDevice. */
+    static const char *const dawn_device_enabled_toggles[] = {
+        "use_user_defined_labels_in_backend",
+        "disable_symbol_renaming",
+        "enable_immediate_error_handling",
+    };
+    WGPUDawnTogglesDescriptor dawn_device_toggles = {0};
+    if (getenv("YETTY_DAWN_DEBUG")) {
+        dawn_device_toggles.chain.sType = WGPUSType_DawnTogglesDescriptor;
+        dawn_device_toggles.enabledToggleCount =
+            sizeof(dawn_device_enabled_toggles) / sizeof(dawn_device_enabled_toggles[0]);
+        dawn_device_toggles.enabledToggles = dawn_device_enabled_toggles;
+        device_desc.nextInChain = &dawn_device_toggles.chain;
+        ydebug("initWebGPU: device-level Dawn debug toggles chained (%zu)",
+               dawn_device_toggles.enabledToggleCount);
+    }
 
     struct yetty_ywebgpu_device_request_state device_cb_data = {{0}, 0};
     WGPURequestDeviceCallbackInfo device_cb = {0};
@@ -941,13 +956,73 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     yetty->queue = wgpuDeviceGetQueue(yetty->device);
     ydebug("initWebGPU: Queue obtained");
 
-    /* Determine surface format */
+    /* Determine surface format + pick present mode in one capabilities
+     * query. Default policy: prefer Mailbox (non-blocking, replaces the
+     * queued frame on Present) over FifoRelaxed over Fifo — the
+     * render-thread stall we keep hitting under Fifo on Wayland/Mesa-ANV
+     * is exactly what Mailbox avoids: Present never waits for the
+     * compositor to release the previous image. User override via
+     * config: rendering/present-mode = "mailbox" | "fifo-relaxed" |
+     * "fifo" | "immediate" | "auto" (auto = the policy above). */
+    yetty->present_mode = WGPUPresentMode_Fifo;
     if (surface) {
         WGPUSurfaceCapabilities caps = {0};
         wgpuSurfaceGetCapabilities(surface, yetty->adapter, &caps);
         if (caps.formatCount > 0) {
             yetty->surface_format = caps.formats[0];
         }
+
+        const char *want = yetty->context.app_context.config->ops->get_string(
+            yetty->context.app_context.config, "rendering/present-mode", "auto");
+
+        int have_fifo = 0, have_fifo_relaxed = 0, have_mailbox = 0, have_immediate = 0;
+        for (size_t i = 0; i < caps.presentModeCount; i++) {
+            switch (caps.presentModes[i]) {
+            case WGPUPresentMode_Fifo:
+                have_fifo = 1;
+                break;
+            case WGPUPresentMode_FifoRelaxed:
+                have_fifo_relaxed = 1;
+                break;
+            case WGPUPresentMode_Mailbox:
+                have_mailbox = 1;
+                break;
+            case WGPUPresentMode_Immediate:
+                have_immediate = 1;
+                break;
+            default:
+                break;
+            }
+        }
+
+        const char *picked_name = "fifo";
+        if (strcmp(want, "mailbox") == 0 && have_mailbox) {
+            yetty->present_mode = WGPUPresentMode_Mailbox;
+            picked_name = "mailbox (user)";
+        } else if (strcmp(want, "fifo-relaxed") == 0 && have_fifo_relaxed) {
+            yetty->present_mode = WGPUPresentMode_FifoRelaxed;
+            picked_name = "fifo-relaxed (user)";
+        } else if (strcmp(want, "immediate") == 0 && have_immediate) {
+            yetty->present_mode = WGPUPresentMode_Immediate;
+            picked_name = "immediate (user)";
+        } else if (strcmp(want, "fifo") == 0) {
+            yetty->present_mode = WGPUPresentMode_Fifo;
+            picked_name = "fifo (user)";
+        } else { /* auto (default) — prefer non-blocking modes */
+            if (have_mailbox) {
+                yetty->present_mode = WGPUPresentMode_Mailbox;
+                picked_name = "mailbox (auto)";
+            } else if (have_fifo_relaxed) {
+                yetty->present_mode = WGPUPresentMode_FifoRelaxed;
+                picked_name = "fifo-relaxed (auto)";
+            } else {
+                yetty->present_mode = WGPUPresentMode_Fifo;
+                picked_name = "fifo (auto — only mode available)";
+            }
+        }
+        yinfo("present mode: %s (avail: fifo=%d fifo-relaxed=%d mailbox=%d immediate=%d)",
+              picked_name, have_fifo, have_fifo_relaxed, have_mailbox, have_immediate);
+
         wgpuSurfaceCapabilitiesFreeMembers(caps);
     } else {
         yetty->surface_format = WGPUTextureFormat_BGRA8Unorm;
@@ -962,9 +1037,10 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
         surface_config.usage = WGPUTextureUsage_RenderAttachment;
         surface_config.width = yetty->context.app_context.app_gpu_context.surface_width;
         surface_config.height = yetty->context.app_context.app_gpu_context.surface_height;
-        surface_config.presentMode = WGPUPresentMode_Fifo;
+        surface_config.presentMode = yetty->present_mode;
         wgpuSurfaceConfigure(surface, &surface_config);
-        ydebug("initWebGPU: Surface configured %ux%u", surface_config.width, surface_config.height);
+        ydebug("initWebGPU: Surface configured %ux%u present_mode=%d", surface_config.width,
+               surface_config.height, (int)surface_config.presentMode);
     } else {
         ydebug("initWebGPU: No surface (headless mode)");
     }
@@ -1078,6 +1154,12 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
                          yetty->context.app_context.app_gpu_context.x11_window != 0UL;
 #endif
 
+    /* set_wgpu casts straight to render_target_texture and writes to its
+     * `wgpu` field by raw offset — calling it on a VNC or X11-tile target
+     * stomps unrelated fields in those structs. Only flip this true when
+     * the chosen target is genuinely a texture target. */
+    bool target_is_texture = false;
+
     if (vnc_enabled) {
         /* VNC render target: sends frames to VNC, optionally presents to surface */
         target_res = yetty_yrender_target_vnc_create(
@@ -1096,17 +1178,26 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
                   target_res.error.msg);
             target_res = yetty_yrender_target_texture_create(
                 yetty->device, yetty->queue, yetty->surface_format, alloc_res.value, surface, vp);
+            target_is_texture = true;
         }
 #endif
     } else {
         /* Standard texture render target */
         target_res = yetty_yrender_target_texture_create(
             yetty->device, yetty->queue, yetty->surface_format, alloc_res.value, surface, vp);
+        target_is_texture = true;
     }
     if (!YETTY_IS_OK(target_res)) {
         return YETTY_ERR(yetty_ycore_void, "failed to create render target");
     }
     yetty->render_target = target_res.value;
+    /* Surface-bearing texture targets need the wgpu handle so present()
+     * can yield via yetty_yplatform_wgpu_surface_present_await instead of
+     * blocking the loop thread on wgpuSurfacePresent. Non-surface targets
+     * (layer/compositing) ignore this and never call present(). */
+    if (surface && target_is_texture) {
+        yetty_yrender_target_texture_set_wgpu(yetty->render_target, yetty->wgpu);
+    }
     ydebug("initWebGPU: render target created %.0fx%.0f vnc=%d", vp.w, vp.h, vnc_enabled);
 
     ydebug("initWebGPU: Complete");

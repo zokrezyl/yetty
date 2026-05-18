@@ -32,6 +32,10 @@ if(YETTY_ENABLE_FEATURE_YRPC)
     add_subdirectory(yrpc)
 endif()
 
+# The yetty module — INTERFACE wrapper for <yetty/yetty/yetty.h>, exposes
+# webgpu PUBLIC so consumers of that header get the include path.
+add_subdirectory(yetty)
+
 # Yetty sources (src/yetty/*.c)
 set(YETTY_SOURCES
     ${YETTY_ROOT}/src/yetty/yetty/yetty.c

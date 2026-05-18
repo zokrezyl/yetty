@@ -11,14 +11,98 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yterm/terminal.h>
+#include <yetty/yplatform/ywebgpu.h>
+#include <yetty/yplatform/ycoroutine.h>
+#include <yetty/webgpu/error.h>
 #include <yetty/ytrace/ytrace.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 /* Shader embedded via incbin_add_resources (stubs on Emscripten) */
 extern const unsigned char gblend_shaderData[];
 extern const unsigned int gblend_shaderSize;
 
 #define MAX_BLEND_SOURCES 4
+
+/* =============================================================================
+ * Present watchdog
+ *
+ * wgpuSurfacePresent on Dawn/Wayland intermittently never returns on this
+ * machine — the render thread parks inside Vulkan/Wayland Present and the
+ * whole loop locks up with no error surfaced. The instrumentation around
+ * the call shows "BEFORE wgpuSurfacePresent" with no matching AFTER, so we
+ * know exactly where it's stuck, but the process keeps running, the window
+ * goes black, and the user is left guessing.
+ *
+ * The watchdog is a single background pthread that polls a monotonic
+ * "in-Present since" timestamp set right before the wgpuSurfacePresent
+ * call. If the value stays non-zero for more than WATCHDOG_LIMIT_MS, it
+ * writes a clear FATAL line to stderr (including how long Present has
+ * been stuck) and _Exit's the process. Better a loud crash than a silent
+ * freeze.
+ * =========================================================================== */
+
+#define PRESENT_WATCHDOG_LIMIT_MS 5000
+
+static _Atomic uint64_t g_present_started_ns = 0;
+static _Atomic int g_present_watchdog_started = 0;
+
+static uint64_t monotonic_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+YETTY_EXTERNAL_CALLBACK
+static void *present_watchdog_thread(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        struct timespec ts = {.tv_sec = 0, .tv_nsec = 500 * 1000 * 1000};
+        nanosleep(&ts, NULL);
+        uint64_t started = atomic_load(&g_present_started_ns);
+        if (started == 0) {
+            continue;
+        }
+        uint64_t elapsed_ms = (monotonic_ns() - started) / 1000000ull;
+        if (elapsed_ms >= PRESENT_WATCHDOG_LIMIT_MS) {
+            fprintf(stderr,
+                    "\n[FATAL] wgpuSurfacePresent stuck for %llums (>%dms threshold)\n"
+                    "        Render thread is parked inside Dawn's Wayland Present.\n"
+                    "        See ytrace log: last 'present_coro: BEFORE wgpuSurfacePresent'\n"
+                    "        line tags the frame.\n"
+                    "        Exiting.\n",
+                    (unsigned long long)elapsed_ms, PRESENT_WATCHDOG_LIMIT_MS);
+            fflush(stderr);
+            _Exit(5);
+        }
+    }
+    return NULL;
+}
+
+static void start_present_watchdog_once(void)
+{
+    int expected = 0;
+    if (!atomic_compare_exchange_strong(&g_present_watchdog_started, &expected, 1)) {
+        return;
+    }
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    int rc = pthread_create(&tid, &attr, present_watchdog_thread, NULL);
+    pthread_attr_destroy(&attr);
+    if (rc != 0) {
+        ywarn("present watchdog: pthread_create failed (rc=%d) — running without watchdog", rc);
+        atomic_store(&g_present_watchdog_started, 0);
+    } else {
+        yinfo("present watchdog: started, limit=%d ms", PRESENT_WATCHDOG_LIMIT_MS);
+    }
+}
 
 /* Per-layer binder cache entry. Each layer's resource_set tree concatenates
  * its own shader (e.g. text-grid + msdf-font, ydraw-grid + ydraw-prims),
@@ -46,6 +130,24 @@ struct yetty_yrender_render_target_texture {
 
     /* Optional surface for present() - NULL for layer/terminal targets */
     WGPUSurface surface;
+
+    /* Optional yplatform wgpu handle. When set, present() spawns a
+     * "presenter" coroutine that yields via queue_done_await (the
+     * wgpu-wait pool blocks in wgpuInstanceWaitAny on a helper thread,
+     * libuv keeps running on the render thread). When the GPU work
+     * has finished, the coro is resumed on the render thread and calls
+     * wgpuSurfacePresent there — Wayland's surface backend is bound to
+     * the render thread, so Present MUST happen on it. NULL → fall back
+     * to inline synchronous Present (e.g. headless smoke tests). */
+    struct yetty_yplatform_wgpu *wgpu;
+
+    /* Set while the presenter coroutine is mid-await. The next call to
+     * present() returns early instead of stacking another submit on
+     * top of an unpresented swapchain image — overlapping presents on
+     * the same surface deadlock under Wayland. The coro clears this
+     * after wgpuSurfacePresent returns. is_busy() exposes this so the
+     * RENDER event handler can skip the whole pipeline. */
+    int present_in_flight;
 
     /* Per-layer binder cache for render_layer. Lazily populated — first
      * call for a given layer creates and caches the binder. Stored as a
@@ -418,17 +520,31 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
         wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y, (uint32_t)vp.w,
                                             (uint32_t)vp.h);
 
-        wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+        /* instance_count defaults to 1 (single full-pane quad). Layers like
+         * shader-glyph set it to the per-frame cell count for instanced
+         * draws — each instance covers one cell, vertex shader fetches the
+         * cell's position from a storage buffer indexed by instance_index.
+         * Defensive: treat 0 as "draw once" so layers that don't set the
+         * field still render. */
+        uint32_t instance_count = rs->instance_count > 0 ? rs->instance_count : 1u;
+        ydebug("render_layer: BEFORE Draw vertices=6 instances=%u layer=%p", instance_count,
+               (void *)layer);
+        wgpuRenderPassEncoderDraw(pass, 6, instance_count, 0, 0);
+        ydebug("render_layer: AFTER Draw layer=%p", (void *)layer);
     }
 
+    ydebug("render_layer: BEFORE RenderPassEncoderEnd layer=%p", (void *)layer);
     wgpuRenderPassEncoderEnd(pass);
+    ydebug("render_layer: AFTER RenderPassEncoderEnd layer=%p", (void *)layer);
     wgpuRenderPassEncoderRelease(pass);
 
     WGPUCommandBufferDescriptor cmd_desc = {0};
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+    ydebug("render_layer: BEFORE QueueSubmit layer=%p", (void *)layer);
     ytime_start(rt_submit_queue);
     wgpuQueueSubmit(rt->queue, 1, &cmd);
     ytime_report(rt_submit_queue);
+    ydebug("render_layer: AFTER QueueSubmit layer=%p", (void *)layer);
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(encoder);
 
@@ -437,7 +553,8 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
     /* Clear dirty flag */
     layer->dirty = 0;
 
-    ydebug("render_target_texture: rendered layer");
+    ydebug("render_target_texture: rendered layer instance_count_used=%u",
+           rs->instance_count > 0 ? rs->instance_count : 1u);
     return YETTY_OK_VOID();
 }
 
@@ -725,6 +842,61 @@ static struct yetty_ycore_void_result render_target_texture_blend(
  * present - blit texture to surface (if surface was provided at creation)
  *===========================================================================*/
 
+/* Args for the presenter coroutine spawned from present(). The coroutine
+ * owns surface_view across the yield: releasing it earlier would leave
+ * the render pass holding a dangling view by the time wgpuSurfacePresent
+ * runs. The coroutine writes 0 back to rt->present_in_flight so the
+ * RENDER handler stops skipping. */
+struct present_coro_args {
+    struct yetty_yrender_render_target_texture *rt;
+    WGPUTextureView surface_view;
+};
+
+YETTY_EXTERNAL_CALLBACK
+static void render_target_texture_present_coro(void *arg)
+{
+    struct present_coro_args *a = arg;
+    struct yetty_yrender_render_target_texture *rt = a->rt;
+
+    /* No yield yet — earlier queue_done_await between Submit and
+     * Present triggered Dawn validation
+     * "GetCurrentTexture was not called on [Surface] this frame prior to
+     * calling Present". The wgpu-wait pool's wgpuInstanceWaitAny seems
+     * to advance a surface-frame boundary inside Dawn. Until we have a
+     * yield that doesn't pump surface events, this coro just calls
+     * Present synchronously — same blocking semantics as before, just
+     * routed through the coro machinery for instrumentation parity. */
+    ydebug("present_coro: ENTER coro=%u surface=%p",
+           yetty_yplatform_coro_id(yetty_yplatform_coro_current()), (void *)rt->surface);
+    ydebug("present_coro: BEFORE wgpuSurfacePresent");
+    /* Arm the watchdog. If wgpuSurfacePresent blocks for longer than
+     * PRESENT_WATCHDOG_LIMIT_MS, the watchdog thread will write a
+     * [FATAL] message naming this call and _Exit. */
+    atomic_store(&g_present_started_ns, monotonic_ns());
+    ytime_start(surface_present);
+    wgpuSurfacePresent(rt->surface);
+    ytime_report(surface_present);
+    atomic_store(&g_present_started_ns, 0);
+    YETTY_WGPU_CHECK("present_coro:SurfacePresent");
+    ydebug("present_coro: AFTER  wgpuSurfacePresent");
+
+    ydebug("present_coro: BEFORE wgpuTextureViewRelease view=%p", (void *)a->surface_view);
+    wgpuTextureViewRelease(a->surface_view);
+    YETTY_WGPU_CHECK("present_coro:TextureViewRelease");
+    ydebug("present_coro: AFTER  wgpuTextureViewRelease");
+
+    rt->present_in_flight = 0;
+    free(a);
+    ydebug("present_coro: EXIT");
+}
+
+static bool render_target_texture_is_busy(const struct yetty_ydraw_target *self)
+{
+    const struct yetty_yrender_render_target_texture *rt =
+        (const struct yetty_yrender_render_target_texture *)self;
+    return rt->present_in_flight != 0;
+}
+
 static struct yetty_ycore_void_result render_target_texture_present(
     struct yetty_ydraw_target *self)
 {
@@ -735,27 +907,51 @@ static struct yetty_ycore_void_result render_target_texture_present(
         return YETTY_ERR(yetty_ycore_void, "no surface configured for present");
     }
 
+    /* Skip if the previous presenter coro hasn't returned yet — the
+     * RENDER handler should already gate on is_busy(), but double-check
+     * here so a stray caller doesn't double-acquire the swapchain. */
+    if (rt->present_in_flight) {
+        ydebug("present: skipped, presenter coro still in flight");
+        return YETTY_OK_VOID();
+    }
+
     /* Acquire surface texture — on X11/VNC (incl. VirtualGL) this can block
 	 * waiting for the compositor/VNC-server to hand back a free swapchain
 	 * image, so this is one of the prime suspects on slow remote displays. */
+    ydebug("present: BEFORE GetCurrentTexture surface=%p", (void *)rt->surface);
     ytime_start(present_acquire);
     WGPUSurfaceTexture surface_texture;
     wgpuSurfaceGetCurrentTexture(rt->surface, &surface_texture);
     ytime_report(present_acquire);
+    ydebug("present: AFTER GetCurrentTexture status=%d tex=%p", (int)surface_texture.status,
+           (void *)surface_texture.texture);
 
+    YETTY_WGPU_CHECK("present:GetCurrentTexture");
     if (surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
         surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
-        return YETTY_ERR(yetty_ycore_void, "surface not ready");
+        fprintf(stderr,
+                "\n[FATAL] wgpuSurfaceGetCurrentTexture returned non-Success status=%d "
+                "(surface=%p). Likely surface lost or out-of-date — exiting.\n",
+                (int)surface_texture.status, (void *)rt->surface);
+        fflush(stderr);
+        _Exit(4);
     }
 
+    ydebug("present: BEFORE wgpuTextureCreateView tex=%p", (void *)surface_texture.texture);
     WGPUTextureView surface_view = wgpuTextureCreateView(surface_texture.texture, NULL);
+    YETTY_WGPU_CHECK("present:CreateView");
     if (!surface_view) {
-        return YETTY_ERR(yetty_ycore_void, "failed to create surface view");
+        fprintf(stderr, "\n[FATAL] wgpuTextureCreateView returned NULL — exiting.\n");
+        fflush(stderr);
+        _Exit(4);
     }
+    ydebug("present: AFTER  wgpuTextureCreateView view=%p", (void *)surface_view);
 
     /* Create blend pipeline if needed (reuse for present) */
     if (!rt->blend_pipeline) {
+        ydebug("present: lazy create_blend_pipeline");
         struct yetty_ycore_void_result res = create_blend_pipeline(rt);
+        YETTY_WGPU_CHECK("present:create_blend_pipeline");
         if (!YETTY_IS_OK(res)) {
             wgpuTextureViewRelease(surface_view);
             return res;
@@ -779,7 +975,10 @@ static struct yetty_ycore_void_result render_target_texture_present(
         .target_h = (uint32_t)rt->base.viewport.h,
         .zoom_scale = 1.0f,
     };
+    ydebug("present: BEFORE QueueWriteBuffer (uniforms %zu B)", sizeof(uniforms));
     wgpuQueueWriteBuffer(rt->queue, rt->uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    YETTY_WGPU_CHECK("present:QueueWriteBuffer(uniforms)");
+    ydebug("present: AFTER  QueueWriteBuffer (uniforms)");
 
     /* Create bind group with this target's texture as source */
     WGPUTextureView source_views[MAX_BLEND_SOURCES];
@@ -804,20 +1003,27 @@ static struct yetty_ycore_void_result render_target_texture_present(
     bg_desc.entryCount = MAX_BLEND_SOURCES + 2;
     bg_desc.entries = bg_entries;
 
+    ydebug("present: BEFORE wgpuDeviceCreateBindGroup");
     WGPUBindGroup bind_group = wgpuDeviceCreateBindGroup(rt->device, &bg_desc);
+    YETTY_WGPU_CHECK("present:CreateBindGroup");
     if (!bind_group) {
-        wgpuTextureViewRelease(surface_view);
-        return YETTY_ERR(yetty_ycore_void, "failed to create bind group");
+        fprintf(stderr, "\n[FATAL] wgpuDeviceCreateBindGroup returned NULL — exiting.\n");
+        fflush(stderr);
+        _Exit(4);
     }
+    ydebug("present: AFTER  wgpuDeviceCreateBindGroup bg=%p", (void *)bind_group);
 
     /* Create encoder */
     WGPUCommandEncoderDescriptor enc_desc = {0};
+    ydebug("present: BEFORE wgpuDeviceCreateCommandEncoder");
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
+    YETTY_WGPU_CHECK("present:CreateCommandEncoder");
     if (!encoder) {
-        wgpuBindGroupRelease(bind_group);
-        wgpuTextureViewRelease(surface_view);
-        return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
+        fprintf(stderr, "\n[FATAL] wgpuDeviceCreateCommandEncoder returned NULL — exiting.\n");
+        fflush(stderr);
+        _Exit(4);
     }
+    ydebug("present: AFTER  wgpuDeviceCreateCommandEncoder enc=%p", (void *)encoder);
 
     /* Render pass to surface */
     WGPURenderPassColorAttachment color_attachment = {0};
@@ -831,41 +1037,95 @@ static struct yetty_ycore_void_result render_target_texture_present(
     pass_desc.colorAttachmentCount = 1;
     pass_desc.colorAttachments = &color_attachment;
 
+    ydebug("present: BEFORE wgpuCommandEncoderBeginRenderPass");
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
+    YETTY_WGPU_CHECK("present:BeginRenderPass");
     if (!pass) {
-        wgpuCommandEncoderRelease(encoder);
-        wgpuBindGroupRelease(bind_group);
-        wgpuTextureViewRelease(surface_view);
-        return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
+        fprintf(stderr, "\n[FATAL] wgpuCommandEncoderBeginRenderPass returned NULL — exiting.\n");
+        fflush(stderr);
+        _Exit(4);
     }
+    ydebug("present: AFTER  wgpuCommandEncoderBeginRenderPass pass=%p", (void *)pass);
 
+    ydebug("present: BEFORE SetPipeline/SetBindGroup/Draw");
     wgpuRenderPassEncoderSetPipeline(pass, rt->blend_pipeline);
+    YETTY_WGPU_CHECK("present:SetPipeline");
     wgpuRenderPassEncoderSetBindGroup(pass, 0, bind_group, 0, NULL);
+    YETTY_WGPU_CHECK("present:SetBindGroup");
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+    YETTY_WGPU_CHECK("present:Draw");
+    ydebug("present: AFTER  SetPipeline/SetBindGroup/Draw");
 
+    ydebug("present: BEFORE RenderPassEncoderEnd");
     wgpuRenderPassEncoderEnd(pass);
+    YETTY_WGPU_CHECK("present:RenderPassEncoderEnd");
+    ydebug("present: AFTER  RenderPassEncoderEnd");
     wgpuRenderPassEncoderRelease(pass);
 
     /* Submit the blit-to-surface command buffer */
     WGPUCommandBufferDescriptor cmd_desc = {0};
+    ydebug("present: BEFORE CommandEncoderFinish");
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+    YETTY_WGPU_CHECK("present:CommandEncoderFinish");
+    if (!cmd) {
+        fprintf(stderr, "\n[FATAL] wgpuCommandEncoderFinish returned NULL — exiting.\n");
+        fflush(stderr);
+        _Exit(4);
+    }
+    ydebug("present: AFTER  CommandEncoderFinish cmd=%p", (void *)cmd);
+
+    ydebug("present: BEFORE QueueSubmit (blit-to-surface)");
     ytime_start(present_submit);
     wgpuQueueSubmit(rt->queue, 1, &cmd);
     ytime_report(present_submit);
+    YETTY_WGPU_CHECK("present:QueueSubmit(blit)");
+    ydebug("present: AFTER  QueueSubmit (blit-to-surface)");
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(encoder);
     wgpuBindGroupRelease(bind_group);
 
-    /* Hand texture to the window system. On X11/VNC with VirtualGL this is
-	 * where the GPU->CPU readback happens and the image is shipped to the
-	 * X server (and then to the VNC client over the network). Expect this
-	 * to dominate on remote displays. */
 #ifndef __EMSCRIPTEN__
-    ytime_start(surface_present);
-    wgpuSurfacePresent(rt->surface);
-    ytime_report(surface_present);
-#endif
+    /* Hand the (potentially blocking) wgpuSurfacePresent off to a
+     * presenter coroutine. The coro yields via queue_done_await — the
+     * wgpu-wait pool blocks in wgpuInstanceWaitAny, libuv stays
+     * responsive. When GPU work drains the coro resumes on this same
+     * (render) thread and calls Present synchronously. Without a wgpu
+     * handle (headless / pre-init) we just call Present inline. */
+    if (rt->wgpu) {
+        struct present_coro_args *args = malloc(sizeof(*args));
+        if (!args) {
+            wgpuTextureViewRelease(surface_view);
+            return YETTY_ERR(yetty_ycore_void, "present: arg alloc failed");
+        }
+        args->rt = rt;
+        args->surface_view = surface_view;
+        struct yplatform_coro_ptr_result cr = yetty_yplatform_coro_spawn(
+            render_target_texture_present_coro, args, 0, "presenter");
+        if (!YETTY_IS_OK(cr)) {
+            free(args);
+            wgpuTextureViewRelease(surface_view);
+            return YETTY_ERR(yetty_ycore_void, "present: coro spawn failed");
+        }
+        rt->present_in_flight = 1;
+        ydebug("present: spawned presenter coro");
+        yetty_yplatform_coro_resume(cr.value);
+        if (yetty_yplatform_coro_is_finished(cr.value)) {
+            yetty_yplatform_coro_destroy(cr.value);
+        }
+        /* If the coro yielded inside queue_done_await, the wgpu-wait
+         * pool's done callback (post_to_loop'd onto the render thread)
+         * resumes and destroys it once the GPU work completes. */
+    } else {
+        ydebug("present: BEFORE SurfacePresent (sync — no wgpu handle)");
+        ytime_start(surface_present);
+        wgpuSurfacePresent(rt->surface);
+        ytime_report(surface_present);
+        ydebug("present: AFTER SurfacePresent (sync)");
+        wgpuTextureViewRelease(surface_view);
+    }
+#else
     wgpuTextureViewRelease(surface_view);
+#endif
 
     ydebug("render_target_texture: presented to surface");
     return YETTY_OK_VOID();
@@ -901,6 +1161,10 @@ static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .get_texture = render_target_texture_get_texture,
     .resize = render_target_texture_resize,
     .set_visual_zoom = render_target_texture_set_visual_zoom,
+    /* Reports present_in_flight so the RENDER handler skips a frame
+     * while the presenter coro is mid-await. Without it we'd queue a
+     * second render+submit on top of an unpresented swapchain image. */
+    .is_busy = render_target_texture_is_busy,
 };
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
@@ -932,5 +1196,26 @@ struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
 
     ydebug("yetty_yrender_target_texture_create: %.0fx%.0f at (%.0f,%.0f) format=%d surface=%p",
            viewport.w, viewport.h, viewport.x, viewport.y, format, (void *)surface);
+
+    /* Spin up the present watchdog the first time any surface-bearing
+     * texture target is created. Non-surface targets (layer/composite)
+     * never call wgpuSurfacePresent so they don't need it. */
+    if (surface) {
+        start_present_watchdog_once();
+    }
+
     return YETTY_OK(yetty_yrender_target_ptr, &rt->base);
+}
+
+void yetty_yrender_target_texture_set_wgpu(struct yetty_ydraw_target *target,
+                                           struct yetty_yplatform_wgpu *wgpu)
+{
+    if (!target) {
+        return;
+    }
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)target;
+    rt->wgpu = wgpu;
+    ydebug("render_target_texture: wgpu plumbed in (%p) — present() will use await path",
+           (void *)wgpu);
 }

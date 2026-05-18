@@ -992,6 +992,19 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
      * sharing the big target can't stomp each other — loadOp ignores
      * scissor, so a Clear would have wiped every other pane. */
     ytime_start(layers);
+    /* Per-layer dirty gate with downstream cascade.
+     *
+     * Layers stack bottom→top (text → ydraw-scrolling → ydraw-scene →
+     * shader-glyph → ymgui) and all paint into the same big_target with
+     * LoadOp_Load. Skipping a clean layer keeps last frame's pixels for
+     * it, which is correct as long as no LOWER layer re-rendered: lower
+     * layers overwrite pixels upper layers paint over, so if layer[i]
+     * re-renders, every layer[j>i] must too or its content gets wiped.
+     *
+     * The cascade flag carries that obligation forward — once any layer
+     * has rendered, every layer above must render regardless of its own
+     * dirty bit. */
+    int cascade = 0;
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (!layer) {
@@ -1003,6 +1016,10 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
         if (layer->ops->is_empty && layer->ops->is_empty(layer)) {
             continue;
         }
+        if (!cascade && !layer->dirty) {
+            continue;
+        }
+        cascade = 1;
         struct yetty_ycore_void_result res = layer->ops->render(layer, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "terminal_render_frame: layer render failed");
     }

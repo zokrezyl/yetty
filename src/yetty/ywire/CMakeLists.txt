@@ -8,5 +8,6 @@ target_include_directories(yetty_ywire PUBLIC
 
 target_link_libraries(yetty_ywire
     yetty_ycore
+    yetty_yetty
     lz4_static
 )

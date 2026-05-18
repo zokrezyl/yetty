@@ -150,3 +150,4 @@ struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(
     }
     return YETTY_OK_VOID();
 }
+

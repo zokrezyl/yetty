@@ -5,15 +5,24 @@
 # This module downloads pre-built Dawn binaries from GitHub releases
 # and sets up the webgpu target for linking.
 #
-# Supported platforms:
-#   - Linux x86_64 (ubuntu-latest)
-#   - macOS x86_64/aarch64 (macos-latest, macos-15-intel)
-#   - Windows x86_64 (windows-latest)
-#   - iOS arm64 (via dawn-apple xcframework)
+# Supported platforms and sources:
+#   - Linux x86_64  → dawn-exotic (Wayland surface support enabled)
+#   - Linux aarch64 → dawn-exotic (Wayland surface support enabled)
+#   - macOS x86_64/aarch64 → google/dawn (macos-15-intel, macos-latest)
+#   - Windows x86_64       → google/dawn (windows-latest)
+#   - iOS arm64            → google/dawn (dawn-apple xcframework)
+#   - tvOS                 → dawn-exotic (google/dawn has no tvOS slices)
 #
 # For Android, use the separate build-tools/android/build-dawn.sh script.
 #
-# Dawn release URL: https://github.com/google/dawn/releases
+# Release URLs:
+#   google/dawn:   https://github.com/google/dawn/releases
+#   dawn-exotic:   https://github.com/zokrezyl/dawn-exotic/releases
+#
+# Linux x86_64 was moved off Google's ubuntu-latest prebuilt because that
+# build ships without SurfaceSourceWaylandSurface — rendering on a Wayland
+# session aborts with "Unsupported sType". dawn-exotic builds both Linux
+# archs with the Wayland backend enabled.
 #
 # Note: Dawn provides STATIC libraries (.a/.lib), not shared libraries.
 #
@@ -123,10 +132,26 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
     message(STATUS "  Library: ${DAWN_LIB_PATH}")
     message(STATUS "  Headers: ${DAWN_INCLUDE_DIR}")
 
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-    # aarch64 Linux: prebuilt install bundle (lib + headers + cmake config) from
-    # dawn-exotic releases. Set DAWN_LOCAL_DIR to override with a local build tree.
-    set(DAWN_LOCAL_DIR "" CACHE PATH "Optional local Dawn build tree (aarch64 Linux)")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Linux desktop (x86_64 and aarch64): prebuilt install bundle from
+    # the in-house dawn-exotic build. Google's official Linux release
+    # (used for macOS / Windows below) is built without Wayland surface
+    # support — yetty's render-target-texture path needs
+    # SurfaceSourceWaylandSurface to present directly to a Wayland
+    # surface and skip the X11-tile readback+diff. dawn-exotic enables
+    # the Wayland backend so we can opt into native Wayland via
+    # YETTY_GLFW_PLATFORM=wayland.
+    #
+    # Set DAWN_LOCAL_DIR to point at a local Dawn build tree to override.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+        set(_dawn_arch "aarch64")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+        set(_dawn_arch "x86_64")
+    else()
+        message(FATAL_ERROR "Unsupported Linux architecture for Dawn: ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+
+    set(DAWN_LOCAL_DIR "" CACHE PATH "Optional local Dawn build tree (Linux)")
     set(DAWN_LOCAL_BUILD_TYPE "Release"
         CACHE STRING "Build type of the local Dawn tree (Debug or Release)")
 
@@ -137,7 +162,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aa
             "${DAWN_LOCAL_DIR}/include"
             "${DAWN_LOCAL_DIR}/out/${DAWN_LOCAL_BUILD_TYPE}/gen/include"
         )
-        set(_dawn_aarch64_source "local ${DAWN_LOCAL_BUILD_TYPE}")
+        set(_dawn_linux_source "local ${DAWN_LOCAL_BUILD_TYPE}")
 
         if(NOT EXISTS "${DAWN_LIB_PATH}")
             message(FATAL_ERROR "Local Dawn library not found: ${DAWN_LIB_PATH}")
@@ -147,29 +172,29 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aa
         endif()
     else()
         # Always Release for the prebuilt (Debug Dawn is huge).
-        set(DAWN_AARCH64_URL
-            "https://github.com/zokrezyl/dawn-exotic/releases/download/v${DAWN_VERSION}/dawn-linux-aarch64-release-${DAWN_VERSION}.tar.gz")
+        set(DAWN_LINUX_URL
+            "https://github.com/zokrezyl/dawn-exotic/releases/download/v${DAWN_VERSION}/dawn-linux-${_dawn_arch}-release-${DAWN_VERSION}.tar.gz")
 
-        message(STATUS "Downloading Dawn aarch64 install bundle from dawn-exotic v${DAWN_VERSION}")
-        message(STATUS "  URL: ${DAWN_AARCH64_URL}")
+        message(STATUS "Downloading Dawn ${_dawn_arch} install bundle from dawn-exotic v${DAWN_VERSION}")
+        message(STATUS "  URL: ${DAWN_LINUX_URL}")
         FetchContent_Declare(
-            dawn_aarch64
-            URL "${DAWN_AARCH64_URL}"
+            dawn_linux
+            URL "${DAWN_LINUX_URL}"
             DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         )
-        FetchContent_MakeAvailable(dawn_aarch64)
+        FetchContent_MakeAvailable(dawn_linux)
 
-        set(DAWN_LIB_PATH "${dawn_aarch64_SOURCE_DIR}/lib/libwebgpu_dawn.a")
-        set(DAWN_PRIMARY_INCLUDE_DIR "${dawn_aarch64_SOURCE_DIR}/include")
+        set(DAWN_LIB_PATH "${dawn_linux_SOURCE_DIR}/lib/libwebgpu_dawn.a")
+        set(DAWN_PRIMARY_INCLUDE_DIR "${dawn_linux_SOURCE_DIR}/include")
         set(DAWN_INCLUDE_DIRS "${DAWN_PRIMARY_INCLUDE_DIR}")
 
         if(NOT EXISTS "${DAWN_LIB_PATH}")
-            message(FATAL_ERROR "Dawn aarch64 library not found in extracted tarball: ${DAWN_LIB_PATH}")
+            message(FATAL_ERROR "Dawn ${_dawn_arch} library not found in extracted tarball: ${DAWN_LIB_PATH}")
         endif()
         if(NOT EXISTS "${DAWN_PRIMARY_INCLUDE_DIR}/webgpu/webgpu.h")
             message(FATAL_ERROR "webgpu.h not found at ${DAWN_PRIMARY_INCLUDE_DIR}/webgpu/")
         endif()
-        set(_dawn_aarch64_source "prebuilt v${DAWN_VERSION}")
+        set(_dawn_linux_source "prebuilt v${DAWN_VERSION}")
     endif()
 
     include(${YETTY_ROOT}/build-tools/yetty/x11-static.cmake)
@@ -181,7 +206,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aa
     )
     target_compile_definitions(webgpu INTERFACE WEBGPU_BACKEND_DAWN)
 
-    message(STATUS "Dawn (aarch64, ${_dawn_aarch64_source}) ready:")
+    message(STATUS "Dawn (linux/${_dawn_arch}, ${_dawn_linux_source}) ready:")
     message(STATUS "  Library: ${DAWN_LIB_PATH}")
     message(STATUS "  Headers: ${DAWN_INCLUDE_DIRS}")
 
@@ -193,12 +218,9 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aa
     return()
 
 else()
-    # Desktop platforms: Linux x86_64, macOS, Windows
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set(DAWN_PLATFORM "ubuntu-latest")
-        set(DAWN_LIB_DIR_NAME "lib64")
-        set(DAWN_LIB_NAME "libwebgpu_dawn.a")
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    # Remaining desktop platforms: macOS, Windows (Linux is handled above
+    # via dawn-exotic and returns before reaching here).
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
             set(DAWN_PLATFORM "macos-latest")
         elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
