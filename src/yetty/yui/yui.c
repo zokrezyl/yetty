@@ -34,6 +34,11 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywebgpu/utils.h>
+#include <yetty/yui/workspace.h>
+#include <yetty/yevent/event.h>
+#include <yetty/yevent/dispatch.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/window-manager.h>
 
 #include "tabbar.h"
 
@@ -130,6 +135,38 @@ struct yetty_yui {
 
     /* Cached for the memory-pty wake bridge. */
     struct yetty_yevent_event_loop *loop;
+
+    /* Borrowed context pointer — needed for posting events (input pipe
+     * lives at ctx->app_context.platform_input_pipe). yetty owns the
+     * context and outlives yui. */
+    const struct yetty_context *ctx;
+
+    /* Cached surface dims so the per-split splitter sync knows the
+     * workspace area. Updated by yetty_yui_resize. */
+    float surface_w;
+    float surface_h;
+
+    /* Per-split visual divider widgets. yui creates one engine_splitter
+     * per yetty_yui_split node in the active workspace and positions it
+     * absolutely on the boundary between the two child tiles. Drags fire
+     * a callback that posts SPLIT_RESIZE so the workspace re-lays out.
+     * Keyed by tile_id; reconciled every render against the active
+     * workspace's tile tree. */
+    struct yetty_yui_splitter_entry {
+        yetty_ycore_object_id split_id;     /* tile_id of the yui_split */
+        yetty_ycore_object_id workspace_id; /* parent workspace id */
+        struct yetty_ygui_widget *widget;
+        struct yetty_yui *yui;              /* back-pointer for callback */
+        struct yetty_yui_splitter_thunk *thunk; /* owned; passed as widget cb userdata */
+        int seen;                           /* per-sync mark */
+    } *splitters;
+    size_t splitter_count;
+    size_t splitter_cap;
+
+    /* Last cursor shape we asked the OS to display. Cached so the
+     * MOUSE_MOVE → cursor decision can skip the cross-thread post when
+     * nothing changed since last frame. -1 means "not initialised yet". */
+    int last_cursor_shape;
 
     /* Cell stride captured at create — `resize` recomputes grid cols/rows
      * from new surface dims but leaves cell size alone. */
@@ -396,6 +433,10 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         return YETTY_ERR(yetty_yui_ptr, "yui_create: alloc failed");
     }
     yui->loop = context->event_loop;
+    yui->ctx = context;
+    yui->surface_w = (float)surface_w;
+    yui->surface_h = (float)surface_h;
+    yui->last_cursor_shape = -1;
     yui->cell_w = cell_w;
     yui->cell_h = cell_h;
 
@@ -798,8 +839,250 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
     if (yui->render_endpoint) {
         yui->render_endpoint->ops->destroy(yui->render_endpoint);
     }
+    free(yui->splitters);
     free(yui);
     return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Per-split divider widgets
+ *
+ * Each yetty_yui_split node in the active workspace's tile tree gets
+ * exactly one engine_splitter widget pinned at the boundary between
+ * its two children. The widgets are absolutely positioned (outside any
+ * flex parent) and use the splitter's external-drive mode: drags fire
+ * yui_splitter_on_change, which posts a SPLIT_RESIZE event so the
+ * workspace re-lays out and the next sync re-positions the widget.
+ *
+ * Reconciliation is per-frame: walk the active workspace's tile tree,
+ * mark every existing entry whose split is still present (creating
+ * fresh widgets for new splits and updating their bounds), then drop
+ * any entry that wasn't marked.
+ *===========================================================================*/
+
+#define YETTY_YUI_SPLITTER_THICKNESS 6.0f
+
+/* Thunk passed to the engine_splitter widget. Holds enough state to
+ * compose a SPLIT_RESIZE event: yui (for posting + dim), workspace_id +
+ * split_id (the routing key). Owned by the splitter entry; freed when
+ * the widget is removed. */
+struct yetty_yui_splitter_thunk {
+    struct yetty_yui *yui;
+    yetty_ycore_object_id workspace_id;
+    yetty_ycore_object_id split_id;
+};
+
+static void yui_splitter_on_change(struct yetty_ygui_widget *widget, float delta,
+                                   void *userdata);
+
+static struct yetty_yui_splitter_entry *yui_splitter_find_entry(struct yetty_yui *yui,
+                                                                yetty_ycore_object_id split_id)
+{
+    if (!yui) {
+        return NULL;
+    }
+    for (size_t i = 0; i < yui->splitter_count; i++) {
+        if (yui->splitters[i].split_id == split_id) {
+            return &yui->splitters[i];
+        }
+    }
+    return NULL;
+}
+
+static struct yetty_yui_splitter_entry *yui_splitter_alloc_entry(struct yetty_yui *yui)
+{
+    if (yui->splitter_count == yui->splitter_cap) {
+        size_t new_cap = yui->splitter_cap ? yui->splitter_cap * 2 : 4;
+        struct yetty_yui_splitter_entry *arr =
+            realloc(yui->splitters, new_cap * sizeof(*yui->splitters));
+        if (!arr) {
+            return NULL;
+        }
+        yui->splitters = arr;
+        yui->splitter_cap = new_cap;
+    }
+    struct yetty_yui_splitter_entry *e = &yui->splitters[yui->splitter_count++];
+    memset(e, 0, sizeof(*e));
+    return e;
+}
+
+static void yui_splitter_entry_destroy_widget(struct yetty_yui_splitter_entry *e)
+{
+    if (!e) {
+        return;
+    }
+    if (e->widget) {
+        yetty_ygui_widget_remove(e->widget);
+        e->widget = NULL;
+    }
+    free(e->thunk);
+    e->thunk = NULL;
+}
+
+static void yui_splitter_remove_at(struct yetty_yui *yui, size_t idx)
+{
+    if (!yui || idx >= yui->splitter_count) {
+        return;
+    }
+    yui_splitter_entry_destroy_widget(&yui->splitters[idx]);
+    /* Compact (swap with last). */
+    if (idx != yui->splitter_count - 1) {
+        yui->splitters[idx] = yui->splitters[yui->splitter_count - 1];
+    }
+    yui->splitter_count--;
+}
+
+static void yui_splitter_walk_tree(struct yetty_yui *yui, struct yetty_yui_tile *tile,
+                                   yetty_ycore_object_id workspace_id)
+{
+    if (!tile || yetty_yui_tile_type(tile) != YETTY_YUI_TILE_SPLIT) {
+        return;
+    }
+
+    yetty_ycore_object_id split_id = yetty_yui_tile_id(tile);
+    struct yetty_yui_tile *first = yetty_yui_tile_split_first(tile);
+    struct yetty_yui_tile *second = yetty_yui_tile_split_second(tile);
+    enum yetty_yui_orientation orient = yetty_yui_tile_split_orientation(tile);
+    struct yetty_yui_rect fb = first ? yetty_yui_tile_bounds(first)
+                                     : (struct yetty_yui_rect){0, 0, 0, 0};
+    struct yetty_yui_rect sb = second ? yetty_yui_tile_bounds(second)
+                                      : (struct yetty_yui_rect){0, 0, 0, 0};
+
+    struct yetty_yui_splitter_entry *e = yui_splitter_find_entry(yui, split_id);
+    if (!e) {
+        e = yui_splitter_alloc_entry(yui);
+        if (!e) {
+            return;
+        }
+        e->split_id = split_id;
+        e->workspace_id = workspace_id;
+        e->yui = yui;
+
+        char id_buf[48];
+        snprintf(id_buf, sizeof(id_buf), "yui_splitter_%llu",
+                 (unsigned long long)split_id);
+        e->widget = yetty_ygui_engine_splitter(yui->engine, id_buf, 0, 0,
+                                               YETTY_YUI_SPLITTER_THICKNESS,
+                                               YETTY_YUI_SPLITTER_THICKNESS);
+        if (e->widget) {
+            yetty_ygui_widget_set_position_mode(e->widget, YETTY_YGUI_POSITION_ABSOLUTE);
+            yetty_ygui_widget_splitter_set_axis(
+                e->widget, orient == YETTY_YUI_VERTICAL ? 1 : 0);
+            yetty_ygui_widget_splitter_set_min(e->widget, 30.0f);
+
+            struct yetty_yui_splitter_thunk *t = calloc(1, sizeof(*t));
+            if (t) {
+                t->yui = yui;
+                t->workspace_id = workspace_id;
+                t->split_id = split_id;
+                e->thunk = t;
+                yetty_ygui_widget_splitter_on_change(e->widget, yui_splitter_on_change, t);
+            }
+        }
+    } else if (e->widget) {
+        /* Orientation can't actually change after creation today, but
+         * keep the axis in sync defensively — and refresh workspace_id
+         * in case the same split_id is reused across reloads. */
+        e->workspace_id = workspace_id;
+        yetty_ygui_widget_splitter_set_axis(e->widget,
+                                            orient == YETTY_YUI_VERTICAL ? 1 : 0);
+    }
+    e->seen = 1;
+
+    /* Position the splitter on the boundary between the two child
+     * tiles. VERTICAL split = side-by-side panes → vertical bar at the
+     * shared x edge. HORIZONTAL split = stacked panes → horizontal bar
+     * at the shared y edge. Span the whole shared edge so the user can
+     * grab anywhere on it. */
+    if (e->widget && first && second) {
+        const float t = YETTY_YUI_SPLITTER_THICKNESS;
+        if (orient == YETTY_YUI_VERTICAL) {
+            /* Vertical bar between fb and sb (sb starts where fb ends in x). */
+            float x = sb.x - t * 0.5f;
+            float y = fb.y;
+            float h = fb.h;
+            yetty_ygui_widget_set_position(e->widget, x, y);
+            yetty_ygui_widget_set_size(e->widget, t, h);
+        } else {
+            /* Horizontal bar between fb (top) and sb (bottom). */
+            float x = fb.x;
+            float y = sb.y - t * 0.5f;
+            float w = fb.w;
+            yetty_ygui_widget_set_position(e->widget, x, y);
+            yetty_ygui_widget_set_size(e->widget, w, t);
+        }
+    }
+
+    yui_splitter_walk_tree(yui, first, workspace_id);
+    yui_splitter_walk_tree(yui, second, workspace_id);
+}
+
+static void yui_splitters_sync(struct yetty_yui *yui)
+{
+    if (!yui || !yui->engine || !yui->tabbar_model) {
+        return;
+    }
+    struct yetty_yui_workspace *ws = yetty_yui_tabbar_active_workspace(yui->tabbar_model);
+    yetty_ycore_object_id ws_id = ws ? yetty_yui_workspace_id(ws) : 0;
+    struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
+
+    for (size_t i = 0; i < yui->splitter_count; i++) {
+        yui->splitters[i].seen = 0;
+    }
+    if (root && ws_id != 0) {
+        yui_splitter_walk_tree(yui, root, ws_id);
+    }
+    /* Drop entries that disappeared from the tree (splits removed,
+     * workspace switched, etc.). Iterate backwards so swap-and-shrink
+     * stays consistent. */
+    for (size_t i = yui->splitter_count; i-- > 0;) {
+        if (!yui->splitters[i].seen) {
+            yui_splitter_remove_at(yui, i);
+        }
+    }
+}
+
+static void yui_splitter_on_change(struct yetty_ygui_widget *widget, float delta,
+                                   void *userdata)
+{
+    (void)widget;
+    struct yetty_yui_splitter_thunk *t = userdata;
+    if (!t || !t->yui || !t->yui->ctx) {
+        return;
+    }
+    struct yetty_yui_tabbar *bar = t->yui->tabbar_model;
+    struct yetty_yui_workspace *ws =
+        bar ? yetty_yui_tabbar_find_workspace(bar, t->workspace_id) : NULL;
+    if (!ws) {
+        return;
+    }
+    struct yetty_yui_tile *split =
+        yetty_yui_tile_find_by_id(yetty_yui_workspace_root(ws), t->split_id);
+    if (!split || yetty_yui_tile_type(split) != YETTY_YUI_TILE_SPLIT) {
+        return;
+    }
+    struct yetty_yui_rect split_b = yetty_yui_tile_bounds(split);
+    enum yetty_yui_orientation orient = yetty_yui_tile_split_orientation(split);
+    float span = (orient == YETTY_YUI_VERTICAL) ? split_b.w : split_b.h;
+    if (span <= 0.0f) {
+        return;
+    }
+    float old_ratio = yetty_yui_tile_split_ratio(split);
+    float new_first = old_ratio * span + delta;
+    float ratio = new_first / span;
+    if (ratio < 0.05f) {
+        ratio = 0.05f;
+    }
+    if (ratio > 0.95f) {
+        ratio = 0.95f;
+    }
+
+    struct yetty_yui_event ev = {0};
+    ev.type = YETTY_YCORE_SPLIT_RESIZE;
+    ev.split_resize.workspace_id = t->workspace_id;
+    ev.split_resize.split_id = t->split_id;
+    ev.split_resize.ratio = ratio;
+    yetty_yevent_post_async(t->yui->ctx->app_context.platform_input_pipe, &ev);
 }
 
 /*===========================================================================
@@ -819,6 +1102,12 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
      * something changed. Idempotent / no-op when the model and widget
      * tree already match. */
     yui_titlebar_sync(yui);
+
+    /* Same reconciliation pattern for the per-split divider widgets:
+     * one engine_splitter per yui_split node in the active workspace,
+     * positioned absolutely on the shared edge. New splits appear,
+     * stale ones get removed; positions track tile bounds. */
+    yui_splitters_sync(yui);
 
     /* Drive the producer engine when dirty. Writes the OSC frame envelope
      * into the yui_endpoint memory pty (no stdout, no b64-round-trip). */
@@ -1545,6 +1834,51 @@ int yetty_yui_is_active(const struct yetty_yui *yui)
     return 0;
 }
 
+/* Pick the OS cursor shape for the current engine state. Drag in
+ * progress (pressed != NULL) wins over hover so the cursor stays the
+ * resize shape even if the user's pointer momentarily strays off the
+ * splitter bar mid-drag. */
+static int yui_compute_cursor_shape(const struct yetty_yui *yui)
+{
+    if (!yui || !yui->engine) {
+        return YETTY_YCORE_CURSOR_DEFAULT;
+    }
+    struct yetty_ygui_widget *w = yetty_ygui_engine_pressed_widget(yui->engine);
+    if (!w) {
+        w = yetty_ygui_engine_hovered_widget(yui->engine);
+    }
+    if (!w) {
+        return YETTY_YCORE_CURSOR_DEFAULT;
+    }
+    if (yetty_ygui_widget_get_type(w) == YETTY_YGUI_WIDGET_SPLITTER) {
+        int axis = yetty_ygui_widget_splitter_get_axis(w);
+        /* axis: 1 = row-bar (vertical bar splitting side-by-side panes)
+         *   → user resizes the horizontal extent → ↔ HRESIZE cursor.
+         *  0 = column-bar (horizontal bar splitting stacked panes)
+         *   → user resizes the vertical extent → ↕ VRESIZE cursor. */
+        return axis == 1 ? YETTY_YCORE_CURSOR_HRESIZE
+                         : YETTY_YCORE_CURSOR_VRESIZE;
+    }
+    return YETTY_YCORE_CURSOR_DEFAULT;
+}
+
+static void yui_apply_cursor(struct yetty_yui *yui)
+{
+    if (!yui || !yui->ctx) {
+        return;
+    }
+    int shape = yui_compute_cursor_shape(yui);
+    if (shape == yui->last_cursor_shape) {
+        return; /* nothing to do */
+    }
+    struct yetty_yplatform_window_manager *wm =
+        yui->ctx->app_context.window_manager;
+    if (wm && wm->ops && wm->ops->set_cursor) {
+        wm->ops->set_cursor(wm, shape);
+    }
+    yui->last_cursor_shape = shape;
+}
+
 struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
                                                   const struct yetty_yui_event *event)
 {
@@ -1552,16 +1886,20 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
-    /* Two ways yui captures mouse:
+    /* Three ways yui captures mouse:
      *   (a) Globally — when a menu / dialog is open (is_active). All
      *       mouse events route to the engine and are consumed.
-     *   (b) Locally — for clicks landing in the engine-pinned
-     *       titlebar y-range. Even without an open overlay, the
-     *       titlebar widgets (≡, tabs, +, _, □, ✕) must receive
-     *       clicks. Consume only when the engine's hit-test landed on
-     *       a widget; otherwise let the click fall through so the
-     *       tabbar's window-drag logic picks it up. */
+     *   (b) Locally in the titlebar — engine-pinned titlebar widgets
+     *       (≡, tabs, +, _, □, ✕) must receive clicks even with no
+     *       overlay open.
+     *   (c) Locally in the workspace area — only the per-split
+     *       divider widgets (engine_splitter, absolutely positioned)
+     *       live there. We MOUSE_DOWN through to the engine to give
+     *       it a chance to grab a widget; if it does, ongoing
+     *       MOVE/UP belong to that drag. If no widget grabs the
+     *       click, the workspace beneath sees it unchanged. */
     int active = yetty_yui_is_active(yui);
+    int has_pressed = yetty_ygui_engine_has_pressed_widget(yui->engine);
     int in_titlebar = 0;
     switch (event->type) {
     case YETTY_YCORE_MOUSE_DOWN:
@@ -1573,11 +1911,15 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     default:
         break;
     }
-    if (!active && !in_titlebar) {
-        /* Pure-pane events (clicks in the workspace) — let the workspace
-         * handle them. Note: keyboard / text events still need to be
-         * routable when a widget is focused; today nothing in the
-         * titlebar takes keyboard input, so passing through is fine. */
+    /* For pure-keyboard or non-mouse events with no overlay active,
+     * pass through. Mouse events ALWAYS go through the engine hit-test
+     * so absolutely-positioned splitter widgets in the workspace area
+     * can grab them. */
+    if (!active && !in_titlebar && !has_pressed &&
+        event->type != YETTY_YCORE_MOUSE_DOWN &&
+        event->type != YETTY_YCORE_MOUSE_UP &&
+        event->type != YETTY_YCORE_MOUSE_MOVE &&
+        event->type != YETTY_YCORE_MOUSE_DRAG) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
@@ -1585,24 +1927,30 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     case YETTY_YCORE_MOUSE_DOWN:
         yetty_ygui_engine_mouse_down(yui->engine, event->mouse.x, event->mouse.y,
                                      event->mouse.button);
+        yui_apply_cursor(yui);
         if (active || yetty_ygui_engine_has_pressed_widget(yui->engine)) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
-        /* Titlebar click but no widget hit — fall through to tabbar's
-         * window-drag handler. */
+        /* No widget grabbed it — fall through (tabbar drag handler in
+         * the strip, workspace click in the pane area). */
         return YETTY_OK(yetty_ycore_int, 0);
     case YETTY_YCORE_MOUSE_UP:
         yetty_ygui_engine_mouse_up(yui->engine, event->mouse.x, event->mouse.y,
                                    event->mouse.button);
-        return YETTY_OK(yetty_ycore_int, active || in_titlebar ? 1 : 0);
+        yui_apply_cursor(yui);
+        /* Consume if we were the one tracking the drag (had a pressed
+         * widget before this UP) or any other overlay-style reason. */
+        return YETTY_OK(yetty_ycore_int,
+                        active || in_titlebar || has_pressed ? 1 : 0);
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
         yetty_ygui_engine_mouse_move(yui->engine, event->mouse.x, event->mouse.y);
-        /* Don't consume hover/drag through the titlebar — workspace
-         * panes still need MOVE for terminal mouse modes. Only consume
-         * when we're globally active (menu / dialog open) so the
-         * underlying panes don't see motion behind the overlay. */
-        return YETTY_OK(yetty_ycore_int, active ? 1 : 0);
+        yui_apply_cursor(yui);
+        /* Consume during an active drag (a splitter or other widget
+         * holds the press) so the workspace below doesn't also see
+         * the motion. Hover-only moves still pass through so terminal
+         * mouse modes work in the panes. */
+        return YETTY_OK(yetty_ycore_int, active || has_pressed ? 1 : 0);
     case YETTY_YCORE_KEY_DOWN:
         yetty_ygui_engine_key_down(yui->engine, event->key.key, event->key.mods);
         return YETTY_OK(yetty_ycore_int, 1);
@@ -1687,6 +2035,8 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
         .width = (float)surface_w / (float)cols,
         .height = (float)surface_h / (float)rows,
     };
+    yui->surface_w = (float)surface_w;
+    yui->surface_h = (float)surface_h;
     if (yui->engine) {
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
     }

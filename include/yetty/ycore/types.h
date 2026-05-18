@@ -16,6 +16,14 @@ typedef uint64_t yetty_ycore_object_id;
 
 #define YETTY_YCORE_OBJECT_ID_NONE 0
 
+/* Mint a fresh, never-before-used object id. Chrome pre-allocates the ids
+ * of every workspace/pane/split it intends to create and embeds them in
+ * the corresponding event payloads (WORKSPACE_CREATE / PANE_CREATE /
+ * PANE_SPLIT). The workspace-side handler creates the tile with the
+ * exact id chrome minted, so both sides agree on the identifier without
+ * a discovery round-trip. */
+yetty_ycore_object_id yetty_ycore_next_object_id(void);
+
 /*=============================================================================
  * Color
  *===========================================================================*/

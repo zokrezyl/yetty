@@ -345,6 +345,21 @@ struct yetty_ygui_widget {
             /* Smallest size enforced on each adjacent sibling during
              * drag (main-axis dimension). */
             float min_size;
+            /* Drag axis override for external-drive mode. When set
+             * (1=row → vertical bar, 0=column → horizontal bar),
+             * bypass splitter_axis_row's flex-parent inspection — the
+             * widget is absolutely positioned over a non-flex region,
+             * so there is no parent direction to infer from.
+             * -1 = auto (use parent flex direction, default).
+             *
+             * When change_callback (on widget base) is non-NULL, the
+             * splitter forwards drag deltas (in pixels along the main
+             * axis) instead of mutating sibling widgets' authored
+             * sizes. The host re-positions the splitter widget itself
+             * after applying its layout decision. Used by yui's pane
+             * tile tree, where the "siblings" aren't ygui widgets at
+             * all. */
+            int axis_override;
         } splitter;
 
         struct {

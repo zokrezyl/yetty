@@ -37,9 +37,17 @@ enum yetty_yevent_event_type {
     YETTY_YCORE_CARD_SCROLL,
     YETTY_YCORE_CARD_KEY_DOWN,
     YETTY_YCORE_CARD_CHAR,
-    /* Tree manipulation */
+    /* Tree manipulation. Naming convention: OBJECT_VERB (the noun is the
+     * target, the verb is the action — "pane split", not "split pane",
+     * which reads like a command). All chrome-driven creation events
+     * carry pre-allocated ids minted by yetty_ycore_next_object_id, so
+     * the handler can construct the tile with the exact id the chrome
+     * already keyed its widget map on — no discovery round-trip. */
     YETTY_YCORE_CLOSE,
-    YETTY_YCORE_SPLIT_PANE,
+    YETTY_YCORE_WORKSPACE_CREATE,
+    YETTY_YCORE_PANE_CREATE,
+    YETTY_YCORE_PANE_SPLIT,
+    YETTY_YCORE_SPLIT_RESIZE,
     /* Clipboard */
     YETTY_YCORE_COPY,
     YETTY_YCORE_PASTE,
@@ -179,9 +187,46 @@ struct yetty_ycore_event_close {
     yetty_ycore_object_id object_id;
 };
 
-struct yetty_ycore_event_split_pane {
-    yetty_ycore_object_id object_id;
+/* Chrome asks the workspace layer to materialise a workspace with the
+ * pre-allocated id. The first pane inside the workspace is created
+ * separately via PANE_CREATE so chrome owns both ids from the very
+ * first moment. */
+struct yetty_ycore_event_workspace_create {
+    yetty_ycore_object_id workspace_id;
+};
+
+/* Chrome asks the workspace layer to place a fresh empty pane (just an
+ * empty tile — view selection happens elsewhere) at the workspace root,
+ * using the pre-allocated id. Today only used for the very first pane;
+ * subsequent panes are born from PANE_SPLIT. */
+struct yetty_ycore_event_pane_create {
+    yetty_ycore_object_id workspace_id;
+    yetty_ycore_object_id pane_id;
+};
+
+/* Chrome asks the workspace layer to split target_pane_id into a new
+ * split node (new_split_id) holding the existing pane plus a fresh new
+ * pane (new_pane_id). All three ids are pre-allocated by chrome so its
+ * splitter-widget map stays keyed on the same numbers the tile tree
+ * uses. orientation: 0=horizontal divider (panes stacked top/bottom),
+ * 1=vertical divider (panes side-by-side). */
+struct yetty_ycore_event_pane_split {
+    yetty_ycore_object_id workspace_id;
+    yetty_ycore_object_id target_pane_id;
+    yetty_ycore_object_id new_pane_id;
+    yetty_ycore_object_id new_split_id;
     uint8_t orientation;
+};
+
+/* Chrome reports a splitter-drag end (or live drag, depending on
+ * widget policy) on a specific split. The workspace updates the
+ * split's ratio and re-lays out — chrome's splitter widget itself
+ * does NOT mutate the tile tree, the round trip via the event loop
+ * keeps yui and workspace in sync. */
+struct yetty_ycore_event_split_resize {
+    yetty_ycore_object_id workspace_id;
+    yetty_ycore_object_id split_id;
+    float ratio;
 };
 
 struct yetty_ycore_event_command_key {
@@ -190,8 +235,18 @@ struct yetty_ycore_event_command_key {
     int mods;
 };
 
+/* Shape codes for set_cursor.shape. Kept as a plain int on the event
+ * so the union stays POD-copyable through the input pipe. */
+enum yetty_ycore_cursor_shape {
+    YETTY_YCORE_CURSOR_DEFAULT = 0,
+    YETTY_YCORE_CURSOR_HRESIZE,    /* ↔  left-right resize (vertical bar) */
+    YETTY_YCORE_CURSOR_VRESIZE,    /* ↕  up-down resize (horizontal bar) */
+    YETTY_YCORE_CURSOR_IBEAM,      /* text I-beam */
+    YETTY_YCORE_CURSOR_HAND,       /* pointer / hand */
+};
+
 struct yetty_ycore_event_set_cursor {
-    int shape;
+    int shape; /* enum yetty_ycore_cursor_shape */
 };
 
 struct yetty_ycore_event_card_repack {
@@ -263,7 +318,10 @@ struct yetty_yui_event {
         struct yetty_ycore_event_card_key card_key;
         struct yetty_ycore_event_card_char card_char;
         struct yetty_ycore_event_close close;
-        struct yetty_ycore_event_split_pane split_pane;
+        struct yetty_ycore_event_workspace_create workspace_create;
+        struct yetty_ycore_event_pane_create pane_create;
+        struct yetty_ycore_event_pane_split pane_split;
+        struct yetty_ycore_event_split_resize split_resize;
         struct yetty_ycore_event_command_key cmd_key;
         struct yetty_ycore_event_set_cursor set_cursor;
         struct yetty_ycore_event_card_repack card_repack;

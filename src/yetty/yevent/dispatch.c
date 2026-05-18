@@ -49,6 +49,13 @@ struct yetty_ycore_void_result yetty_yevent_register_default_listeners(
          * onto the input pipe after fetching the system clipboard. The
          * focused terminal consumes it and writes the bytes to its PTY. */
         YETTY_YCORE_PASTE,
+        /* Chrome-driven structural mutations. yui pre-allocates ids and
+         * posts these so the workspace layer materialises tiles with the
+         * exact same identifiers chrome already keyed its widget map on. */
+        YETTY_YCORE_WORKSPACE_CREATE,
+        YETTY_YCORE_PANE_CREATE,
+        YETTY_YCORE_PANE_SPLIT,
+        YETTY_YCORE_SPLIT_RESIZE,
     };
 
     for (size_t i = 0; i < sizeof(kTypes) / sizeof(kTypes[0]); ++i) {

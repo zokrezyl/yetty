@@ -355,6 +355,85 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
+    struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id,
+    const struct yetty_yconfig_config *config, const struct yetty_context *yetty_ctx,
+    struct yetty_yui_workspace **out_ws)
+{
+    if (!bar) {
+        return YETTY_ERR(yetty_ycore_void, "tabbar_attach_empty_ws: NULL bar");
+    }
+    if (out_ws) {
+        *out_ws = NULL;
+    }
+
+    /* Cache config + ctx the first time we're called so later spawn
+     * paths (Ctrl+Shift+T) still work. */
+    if (!bar->config) {
+        bar->config = config;
+        bar->yetty_ctx = yetty_ctx;
+    }
+
+    if (bar->count == bar->capacity) {
+        struct yetty_ycore_void_result gr = tabbar_grow(bar);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "tabbar_attach_empty_ws: grow failed");
+    }
+
+    struct yetty_yui_workspace_ptr_result wr =
+        yetty_yui_workspace_create_with_id(workspace_id);
+    if (YETTY_IS_ERR(wr)) {
+        return YETTY_ERR(yetty_ycore_void, "tabbar_attach_empty_ws: workspace_create failed",
+                         wr);
+    }
+    struct yetty_yui_workspace *ws = wr.value;
+
+    float strip = YETTY_YUI_TABBAR_HEIGHT;
+    if (strip > bar->height) {
+        strip = bar->height;
+    }
+    if (bar->width > 0 && bar->height > 0) {
+        struct yetty_ycore_void_result oo = yetty_yui_workspace_set_origin(ws, 0, strip);
+        if (YETTY_IS_ERR(oo)) {
+            yetty_yui_workspace_destroy(ws);
+            return YETTY_ERR(yetty_ycore_void, "tabbar_attach_empty_ws: set_origin failed", oo);
+        }
+        struct yetty_ycore_void_result rr =
+            yetty_yui_workspace_resize(ws, bar->width, bar->height - strip);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_yui_workspace_destroy(ws);
+            return YETTY_ERR(yetty_ycore_void, "tabbar_attach_empty_ws: initial resize failed",
+                             rr);
+        }
+    }
+
+    if (bar->count > 0 && bar->workspaces[bar->active]) {
+        yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0);
+    }
+    bar->workspaces[bar->count++] = ws;
+    bar->active = bar->count - 1;
+
+    if (out_ws) {
+        *out_ws = ws;
+    }
+    tabbar_request_render(bar);
+    return YETTY_OK_VOID();
+}
+
+struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(
+    const struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id)
+{
+    if (!bar) {
+        return NULL;
+    }
+    for (size_t i = 0; i < bar->count; i++) {
+        if (bar->workspaces[i] &&
+            yetty_yui_workspace_id(bar->workspaces[i]) == workspace_id) {
+            return bar->workspaces[i];
+        }
+    }
+    return NULL;
+}
+
 /* Map a tabbar_kind onto the small set of config keys the existing PTY
  * factory + workspace.c dispatch consult. Each kind sets its own flag
  * and clears the others so the spawn is unambiguous.

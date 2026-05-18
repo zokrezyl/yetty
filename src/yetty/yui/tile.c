@@ -14,17 +14,6 @@
 #include <string.h>
 
 /*=============================================================================
- * Object ID generation
- *===========================================================================*/
-
-static uint64_t g_next_id = 1;
-
-static yetty_ycore_object_id next_object_id(void)
-{
-    return g_next_id++;
-}
-
-/*=============================================================================
  * Internal tile structures
  *===========================================================================*/
 
@@ -214,7 +203,8 @@ static const struct yetty_yui_tile_ops split_ops = {
     .on_event = split_on_event,
 };
 
-struct yetty_yui_tile_ptr_result yetty_yui_split_create(enum yetty_yui_orientation orientation)
+struct yetty_yui_tile_ptr_result yetty_yui_split_create_with_id(
+    yetty_ycore_object_id id, enum yetty_yui_orientation orientation)
 {
     struct yetty_yui_split *split;
 
@@ -224,12 +214,17 @@ struct yetty_yui_tile_ptr_result yetty_yui_split_create(enum yetty_yui_orientati
     }
 
     split->base.ops = &split_ops;
-    split->base.id = next_object_id();
+    split->base.id = id;
     split->base.type = YETTY_YUI_TILE_SPLIT;
     split->orientation = orientation;
     split->ratio = 0.5f;
 
     return YETTY_OK(yetty_yui_tile_ptr, &split->base);
+}
+
+struct yetty_yui_tile_ptr_result yetty_yui_split_create(enum yetty_yui_orientation orientation)
+{
+    return yetty_yui_split_create_with_id(yetty_ycore_next_object_id(), orientation);
 }
 
 /*=============================================================================
@@ -346,7 +341,7 @@ static const struct yetty_yui_tile_ops pane_ops = {
     .on_event = pane_on_event,
 };
 
-struct yetty_yui_tile_ptr_result yetty_yui_pane_create(void)
+struct yetty_yui_tile_ptr_result yetty_yui_pane_create_with_id(yetty_ycore_object_id id)
 {
     struct yetty_yui_pane *pane;
 
@@ -356,10 +351,15 @@ struct yetty_yui_tile_ptr_result yetty_yui_pane_create(void)
     }
 
     pane->base.ops = &pane_ops;
-    pane->base.id = next_object_id();
+    pane->base.id = id;
     pane->base.type = YETTY_YUI_TILE_PANE;
 
     return YETTY_OK(yetty_yui_tile_ptr, &pane->base);
+}
+
+struct yetty_yui_tile_ptr_result yetty_yui_pane_create(void)
+{
+    return yetty_yui_pane_create_with_id(yetty_ycore_next_object_id());
 }
 
 /*=============================================================================

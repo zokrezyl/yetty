@@ -80,6 +80,21 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
     struct yetty_yui_tabbar *bar, const struct yetty_yconfig_config *config,
     const struct yetty_context *yetty_ctx);
 
+/* Chrome-driven workspace creation: append an empty workspace (no
+ * layout, no tile tree yet) with the caller-supplied id. The new
+ * workspace becomes active. Use together with a subsequent PANE_CREATE
+ * (which fills in the first pane) when chrome wants to own all ids
+ * from the very first moment. Returns the new workspace via *out_ws
+ * (borrowed; the tabbar owns it). */
+struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
+    struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id,
+    const struct yetty_yconfig_config *config, const struct yetty_context *yetty_ctx,
+    struct yetty_yui_workspace **out_ws);
+
+/* Find a workspace by id. NULL if not present. */
+struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(
+    const struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id);
+
 /* Kinds the "v" dropdown menu can spawn. Each kind toggles a small set
  * of config keys (ssh/enabled, telnet/enabled, vnc/client) so the
  * existing pty-factory + workspace dispatch paths pick the right

@@ -37,6 +37,16 @@ struct yetty_yui_tile_ptr_result yetty_yui_split_create(enum yetty_yui_orientati
 
 struct yetty_yui_tile_ptr_result yetty_yui_pane_create(void);
 
+/* Chrome-driven creation: caller mints the id (via
+ * yetty_ycore_next_object_id) and the tile is born with that exact id.
+ * Used by yui to pre-allocate ids before posting PANE_CREATE / PANE_SPLIT
+ * events so both sides agree on the identifier without a discovery
+ * round-trip. */
+struct yetty_yui_tile_ptr_result yetty_yui_split_create_with_id(
+    yetty_ycore_object_id id, enum yetty_yui_orientation orientation);
+
+struct yetty_yui_tile_ptr_result yetty_yui_pane_create_with_id(yetty_ycore_object_id id);
+
 /* Create tile tree from config - recursively builds splits/panes */
 struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
     const struct yetty_yconfig_config *config, const struct yetty_context *yetty_ctx);
