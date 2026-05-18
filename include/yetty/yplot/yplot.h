@@ -2,18 +2,20 @@
 #define YETTY_YPLOT_YPLOT_H
 
 /*
- * yplot — high-level API for producing a yplot complex primitive from
- * a function-expression string.
+ * yplot — high-level API for producing yplot complex primitives. Two
+ * curve kinds coexist in one instance:
+ *
+ *   expressions: multi-function plot syntax compiled to yfsvm bytecode and
+ *                evaluated per pixel on the GPU
+ *      (e.g. "f=sin(x); g=cos(x); @f.color=#FF6B6B")
+ *   data buffers: precomputed f32 sample arrays (e.g. live audio)
+ *                rendered as anti-aliased line plots from the storage buffer
  *
  * Pipeline:
- *   yexpr_parse_plot(source)  — multi-function plot syntax with per-plot
- *                               attrs (`f = sin(x); g = cos(x); @f.color=...`)
- *   yfsvm_compile_multi(ast)  — bytecode for the GPU interpreter
- *   yplot_serialize(uniforms, bytecode) — wire bytes
- *   ydraw_core_buffer_add_prim(buffer)  — attach to a ydraw buffer
- *
- * The frontend tool (tools/yplot) wraps this with a CLI; yecho's
- * `{plot: ...}` block uses the same path internally.
+ *   yexpr_parse_plot(source)   — multi-function plot syntax
+ *   yfsvm_compile_multi(ast)   — bytecode for the GPU interpreter
+ *   yplot_serialize(uniforms, bytecode + data buffers) — wire bytes
+ *   ydraw_core_draw_list_add_prim(buffer) — attach to a ydraw draw list
  */
 
 #include <stddef.h>
@@ -45,6 +47,13 @@ struct yetty_yplot_render_config {
     uint32_t flags; /* YETTY_YPLOT_FLAG_* (default = grid|axes|labels) */
 };
 
+/* One data buffer + optional color. color = 0 picks a palette default. */
+struct yetty_yplot_buffer_input {
+    const float *samples;
+    size_t count;
+    uint32_t color; /* ARGB; 0 → palette default for the corresponding slot */
+};
+
 /* Render `source` (multi-plot-expression syntax — see yexpr_parse_plot)
  * into a fresh ydraw-core buffer holding ONE yplot complex prim.
  *
@@ -55,6 +64,21 @@ struct yetty_yplot_render_config {
  * Caller frees the returned buffer with yetty_ydraw_draw_list_destroy. */
 struct yetty_ydraw_draw_list_result yetty_yplot_render(
     const char *source, size_t len, const struct yetty_yplot_render_config *config);
+
+/* Same as yetty_yplot_render but also attaches `buffer_count` data buffers
+ * (variable count, can be 0). Each data buffer is rendered as an
+ * anti-aliased line plot mapped over x_min..x_max; its color comes from
+ * the buffer_input entry (0 → palette default).
+ *
+ * Color slot assignment in the 8-slot palette:
+ *   slot 0..M-1            expression curves (M = number of named plots)
+ *   slot M..M+N-1 (mod 8)  data buffers in invocation order
+ *
+ * Caller frees the returned buffer with yetty_ydraw_draw_list_destroy. */
+struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
+    const char *source, size_t len,
+    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
+    const struct yetty_yplot_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */

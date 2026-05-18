@@ -50,6 +50,37 @@ extern "C" {
  * model (e.g. scrolling-canvas today) treat it as a no-op. */
 #define YETTY_YDRAW_CMD_DELETE (YETTY_YDRAW_HAS_ID_FLAG | 0x00000001u)
 
+/*------------------------------------------------------------------------*
+ * CRITICAL — type-word namespace collision risk:                         *
+ *                                                                        *
+ * cmd values that set HAS_ID_FLAG (CMD_DELETE, CMD_GROUP, CMD_UPDATE)    *
+ * land in the same 0x8XXXXXXX range as complex-prim type_ids             *
+ * (YETTY_YDRAW_COMPLEX_TYPE_BASE = 0x80000000). The drawable iterator    *
+ * disambiguates by *exact-match* on each cmd constant before falling     *
+ * through to the prim registry — so each cmd value MUST stay distinct    *
+ * from every complex-prim type_id ever assigned.                         *
+ *                                                                        *
+ * Existing complex prim type_ids cluster at 0x80000003 (yplot),          *
+ * 0x80000004 (yimage), 0x80000005 (ymesh). To avoid future clashes new   *
+ * cmds are assigned numbers from 0x10 upward; new prim type_ids should   *
+ * stay below 0x10 OR move to 0x81000000+ if the cmd space ever grows.    *
+ *------------------------------------------------------------------------*/
+
+/* CMD_UPDATE: deliver an opaque payload to the addressable drawable named
+ * by `id`. Sibling of DELETE — same 12-byte framing plus a `payload_size`
+ * tail whose semantics belong entirely to the targeted primitive's
+ * factory. The canvas resolves `id` to a figure_instance and calls
+ *   factory->update_instance(instance, payload, payload_size)
+ * which interprets the bytes per the prim's schema (yplot uses
+ * `[buffer_index u32][sample_offset u32][count u32][samples × f32]`).
+ *
+ * Wire layout: (type|HAS_ID_FLAG) | id | payload_size | payload[payload_size].
+ *
+ * The drawable-iterator surfaces this with command.kind=UPDATE,
+ * command.update.{id,data,size}. Canvases without an addressable model
+ * drop the record. */
+#define YETTY_YDRAW_CMD_UPDATE (YETTY_YDRAW_HAS_ID_FLAG | 0x00000010u)
+
 /* CMD_GROUP: open or re-open a named entity scope. The payload is a
  * stream of nested commands belonging to this entity.
  *

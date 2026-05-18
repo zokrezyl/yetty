@@ -451,6 +451,37 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_update(
+    struct yetty_ydraw_draw_list *buf, uint32_t target_id, const void *payload,
+    size_t payload_size)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_update: buf is NULL");
+    }
+    if (payload_size > 0 && !payload) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_update: payload NULL but size > 0");
+    }
+    if (payload_size > UINT32_MAX) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_update: payload too large");
+    }
+    /* Header (3 u32) then payload bytes, written contiguously so the
+     * iterator's [type | id | payload_size | bytes] layout holds. */
+    uint32_t header[3] = {YETTY_YDRAW_CMD_UPDATE, target_id, (uint32_t)payload_size};
+    size_t total = sizeof(header) + payload_size;
+    uint8_t *tmp = malloc(total);
+    if (!tmp) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_update: out of memory");
+    }
+    memcpy(tmp, header, sizeof(header));
+    if (payload_size > 0) {
+        memcpy(tmp + sizeof(header), payload, payload_size);
+    }
+    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, tmp, total);
+    free(tmp);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_update: add_prim failed");
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_first(
     const struct yetty_ydraw_draw_list *buf,
     const struct yetty_ydraw_flyweight_registry *reg)

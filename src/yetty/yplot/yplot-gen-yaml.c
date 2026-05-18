@@ -209,6 +209,8 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
     struct yetty_yplot_buffers bufs = {
         .bytecode = bc_buf,
         .bytecode_len = bc_count,
+        .data = NULL,
+        .data_count = 0,
     };
 
     size_t required = yetty_yplot_uniforms_serialized_size(&uniforms, &bufs);

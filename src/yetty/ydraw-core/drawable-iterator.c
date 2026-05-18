@@ -247,6 +247,27 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
         if (drawable_type == YETTY_YDRAW_CMD_DELETE) {
             /* DELETE: fixed 12-byte record, no registry/ops involvement. */
             iter->total_size = DRAWABLE_ITER_DELETE_BYTES;
+        } else if (drawable_type == YETTY_YDRAW_CMD_UPDATE) {
+            /* UPDATE: HAS_ID layout (type | id | payload_size | payload). The
+             * payload is opaque to the iter — the canvas hands it to the
+             * targeted prim's factory which interprets per its own schema. */
+            struct yetty_ycore_void_result es2 = iter_ensure_scratch(iter, 12u);
+            if (YETTY_IS_ERR(es2)) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: ensure_scratch update header", es2);
+            }
+            struct yetty_ycore_void_result pr2 = iter_pull(iter, 12u);
+            if (YETTY_IS_ERR(pr2)) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: update header pull", pr2);
+            }
+            if (iter->filled < 12u) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: truncated update header at envelope end");
+            }
+            uint32_t payload_size;
+            memcpy(&payload_size, iter->scratch + 8, sizeof(payload_size));
+            iter->total_size = 12u + payload_size;
         } else if (drawable_type == YETTY_YDRAW_CMD_GROUP) {
             /* GROUP: HAS_ID layout (type | id | payload_size | payload).
              * Size is determined by the wire bytes — no ops->size needed.
@@ -345,6 +366,15 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
         memcpy(&id, iter->scratch + 4, sizeof(id));
         iter->command.kind = YETTY_YDRAW_COMMAND_DELETE;
         iter->command.id = id;
+    } else if (drawable_type == YETTY_YDRAW_CMD_UPDATE) {
+        uint32_t id;
+        uint32_t payload_size;
+        memcpy(&id, iter->scratch + 4, sizeof(id));
+        memcpy(&payload_size, iter->scratch + 8, sizeof(payload_size));
+        iter->command.kind = YETTY_YDRAW_COMMAND_UPDATE;
+        iter->command.update.id = id;
+        iter->command.update.data = (payload_size > 0) ? (iter->scratch + 12u) : NULL;
+        iter->command.update.size = payload_size;
     } else {
         struct yetty_ydraw_drawable_flyweight_ptr_result flyweight_res =
             yetty_ydraw_flyweight_registry_get(iter->reg, drawable_type,
@@ -385,6 +415,25 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
         out_command->kind = YETTY_YDRAW_COMMAND_DELETE;
         out_command->id = id;
         return YETTY_OK(yetty_ycore_size, (size_t)DRAWABLE_ITER_DELETE_BYTES);
+    }
+
+    if (drawable_type == YETTY_YDRAW_CMD_UPDATE) {
+        if (bytes_len < 12u) {
+            return YETTY_ERR(yetty_ycore_size, "command_parse: UPDATE header truncated");
+        }
+        uint32_t id;
+        uint32_t payload_size;
+        memcpy(&id, bytes + 4, sizeof(id));
+        memcpy(&payload_size, bytes + 8, sizeof(payload_size));
+        uint32_t total = 12u + payload_size;
+        if (bytes_len < total) {
+            return YETTY_ERR(yetty_ycore_size, "command_parse: UPDATE body truncated");
+        }
+        out_command->kind = YETTY_YDRAW_COMMAND_UPDATE;
+        out_command->update.id = id;
+        out_command->update.data = (payload_size > 0) ? (bytes + 12) : NULL;
+        out_command->update.size = payload_size;
+        return YETTY_OK(yetty_ycore_size, (size_t)total);
     }
 
     if (drawable_type == YETTY_YDRAW_CMD_GROUP) {

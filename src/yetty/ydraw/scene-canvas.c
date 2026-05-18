@@ -1644,6 +1644,33 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
         return yetty_ydraw_scene_entity_delete(&sc->base, target);
     }
 
+    if (cmd->kind == YETTY_YDRAW_COMMAND_UPDATE) {
+        struct yetty_ydraw_scene_entity *target = scene_lookup_entity(sc, cmd->update.id);
+        if (!target) {
+            ydebug("scene-canvas: UPDATE id=%u: not found, ignoring", cmd->update.id);
+            return YETTY_OK_VOID();
+        }
+        if (target->figure_count == 0u || !target->figures[0]) {
+            ydebug("scene-canvas: UPDATE id=%u: no figure_instance (count=%u), ignoring",
+                   cmd->update.id, target->figure_count);
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ydraw_figure_instance *fi = target->figures[0];
+        if (!fi->factory || !fi->factory->update_instance) {
+            ydebug("scene-canvas: UPDATE id=%u: figure type 0x%08x does not implement "
+                   "update_instance",
+                   cmd->update.id, fi->type);
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ycore_void_result ur = fi->factory->update_instance(
+            fi->factory, fi, cmd->update.data, cmd->update.size);
+        if (YETTY_IS_ERR(ur)) {
+            return YETTY_ERR(yetty_ycore_void, "scene-canvas: UPDATE forward failed", ur);
+        }
+        sc->dirty = true;
+        return YETTY_OK_VOID();
+    }
+
     if (!cmd->flyweight.data) {
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: ADD with NULL flyweight data");
     }

@@ -1,25 +1,32 @@
 // YPlot Complex Primitive Shader
-// Renders plot from uniform values and bytecode in storage buffer
+// Renders plot from uniform values and a self-describing storage buffer.
 //
 // Architecture:
-//   Uniforms (binding 0): bounds, ranges, flags, function_count, colors
-//   Storage buffer (binding 1): bytecode for yfsvm interpreter
+//   Uniforms (binding 0):       bounds, ranges, flags, function_count, colors
+//   Storage  (binding 1):       bytecode + variable-count data buffers
 //
-// Generated accessors in yplot-gen.wgsl provide type-safe uniform access
+// The shader walks the storage layout at runtime — no per-instance constants
+// are baked into the WGSL, so adding/removing/resizing data buffers never
+// triggers a pipeline recompile.
 
-const YPLOT_FLAG_GRID: u32 = 1u;
-const YPLOT_FLAG_AXES: u32 = 2u;
+const YPLOT_FLAG_GRID:   u32 = 1u;
+const YPLOT_FLAG_AXES:   u32 = 2u;
 const YPLOT_FLAG_LABELS: u32 = 4u;
 
-const YPLOT_BG_COLOR: vec3<f32> = vec3<f32>(0.102, 0.102, 0.180);
+const YPLOT_BG_COLOR:   vec3<f32> = vec3<f32>(0.102, 0.102, 0.180);
 const YPLOT_GRID_COLOR: vec3<f32> = vec3<f32>(0.267, 0.267, 0.267);
 const YPLOT_AXIS_COLOR: vec3<f32> = vec3<f32>(0.667, 0.667, 0.667);
+
+// Max curves the shader will iterate. Generous static bound for WGSL —
+// the actual count is read from data; this just stops the loop from being
+// unbounded. 16 ≫ any realistic mix of expressions + buffers.
+const YPLOT_MAX_CURVES: u32 = 16u;
 
 fn yplot_unpack_color(packed: u32) -> vec3<f32> {
     return vec3<f32>(
         f32((packed >> 16u) & 0xFFu) / 255.0,
-        f32((packed >> 8u) & 0xFFu) / 255.0,
-        f32(packed & 0xFFu) / 255.0
+        f32((packed >>  8u) & 0xFFu) / 255.0,
+        f32( packed         & 0xFFu) / 255.0
     );
 }
 
@@ -35,7 +42,8 @@ fn yplot_draw_grid(bg: vec3<f32>, plotUV: vec2<f32>) -> vec3<f32> {
     return color;
 }
 
-fn yplot_draw_axes(bg: vec3<f32>, plotUV: vec2<f32>, xMin: f32, xMax: f32, yMin: f32, yMax: f32) -> vec3<f32> {
+fn yplot_draw_axes(bg: vec3<f32>, plotUV: vec2<f32>,
+                   xMin: f32, xMax: f32, yMin: f32, yMax: f32) -> vec3<f32> {
     var color = bg;
     let lineWidth = 0.008;
 
@@ -60,77 +68,104 @@ fn yplot_draw_axes(bg: vec3<f32>, plotUV: vec2<f32>, xMin: f32, xMax: f32, yMin:
     return color;
 }
 
-// Main yplot render function - called by ydraw dispatcher
-// Uses generated uniform accessors: yplot_get_*()
+// Anti-aliased horizontal line at y == yNorm (in plot UV). Returns the
+// blended foreground over `color`. Shared by expression and buffer paths.
+fn yplot_line_blend(color: vec3<f32>, plotUV_y: f32, yNorm: f32,
+                    lineWidth: f32, curveColor: vec3<f32>) -> vec3<f32> {
+    let dist = abs(plotUV_y - yNorm);
+    if (dist < lineWidth) {
+        let alpha = 1.0 - dist / lineWidth;
+        return mix(color, curveColor, alpha);
+    }
+    return color;
+}
+
+// Main yplot render function - called by ydraw dispatcher.
 fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
     // `local_pos` is ALREADY relative to the plot's top-left — fs_main has
     // subtracted bounds_x/y and discarded fragments outside [0..bounds_w] ×
     // [0..bounds_h]. Do NOT re-subtract bounds_xy here. Doing so was the
-    // historic "second plot invisible" bug: when bounds_x = 320 (right
-    // plot in a side-by-side pair), the old `local_pos.x < bounds_x` check
-    // was true for every local_pos in [0..300] and the whole plot returned 0.
+    // historic "second plot invisible" bug.
     let bounds_w = yplot_get_bounds_w();
     let bounds_h = yplot_get_bounds_h();
 
-    // Normalize to 0-1 within plot area (local_pos already in [0..bounds_*]).
     let plotUV = local_pos / vec2<f32>(bounds_w, bounds_h);
 
-    // Read plot parameters from uniforms
-    let flags = yplot_get_flags();
+    let flags      = yplot_get_flags();
     let func_count = yplot_get_function_count();
-    let xMin = yplot_get_x_min();
-    let xMax = yplot_get_x_max();
-    let yMin = yplot_get_y_min();
-    let yMax = yplot_get_y_max();
+    let xMin       = yplot_get_x_min();
+    let xMax       = yplot_get_x_max();
+    let yMin       = yplot_get_y_min();
+    let yMax       = yplot_get_y_max();
 
-    // Background
     var color = YPLOT_BG_COLOR;
 
-    // Grid
     if ((flags & YPLOT_FLAG_GRID) != 0u) {
         color = yplot_draw_grid(color, plotUV);
     }
-
-    // Axes
     if ((flags & YPLOT_FLAG_AXES) != 0u) {
         color = yplot_draw_axes(color, plotUV, xMin, xMax, yMin, yMax);
     }
 
-    // Map plotUV to data coordinates
     let dataX = mix(xMin, xMax, plotUV.x);
-    let dataY = mix(yMin, yMax, plotUV.y);
-
-    // Line width in normalized coords
+    let yRange = yMax - yMin;
     let lineWidth = 3.0 / bounds_h;
 
-    // Evaluate and render each function using bytecode from storage buffer
+    // -------- expression curves (yfsvm bytecode) -----------------------------
     if (func_count > 0u) {
         var samplers: array<f32, 8>;
         samplers[0] = dataX;
 
+        // bytecode begins at storage word 1 (word 0 is bytecode_len).
+        let bc_off = yplot_bytecode_offset();
+
         for (var fi = 0u; fi < min(func_count, 8u); fi++) {
-            let func_color_packed = yplot_get_colors(fi);
-            let func_color = yplot_unpack_color(func_color_packed);
-
-            // Evaluate function using yfsvm (bytecode is in storage_buffer starting at offset 0)
-            let y = yfsvm_execute(0u, fi, dataX, 0.0, samplers);
-
-            // Map y to plot UV
-            let yNorm = (y - yMin) / (yMax - yMin);
-            let dist = abs(plotUV.y - yNorm);
-
-            // Anti-aliased line
-            if (dist < lineWidth) {
-                let alpha = 1.0 - dist / lineWidth;
-                color = mix(color, func_color, alpha);
-            }
+            let curve_color = yplot_unpack_color(yplot_get_colors(fi));
+            let y = yfsvm_execute(bc_off, fi, dataX, 0.0, samplers);
+            let yNorm = (y - yMin) / yRange;
+            color = yplot_line_blend(color, plotUV.y, yNorm, lineWidth, curve_color);
         }
+    }
+
+    // -------- data-buffer curves --------------------------------------------
+    // Sequentially walk [data_count][len_0][samples_0...][len_1]...
+    // The shader can't binary-search since each entry's length is data-driven,
+    // but a linear walk over N≤16 entries is fine.
+    let data_count = yplot_data_count();
+    var cursor: u32 = yplot_data_count_offset() + 1u;  // first len_i
+
+    for (var bi = 0u; bi < YPLOT_MAX_CURVES; bi++) {
+        if (bi >= data_count) { break; }
+
+        let len = storage_buffer[cursor];
+        let samples_off = cursor + 1u;
+
+        if (len >= 2u) {
+            // Color slot: expressions first, then buffers, modulo 8.
+            let color_slot = (func_count + bi) % 8u;
+            let curve_color = yplot_unpack_color(yplot_get_colors(color_slot));
+
+            // Map plotUV.x → fractional sample index, lerp neighbours.
+            let idx_f   = plotUV.x * f32(len - 1u);
+            let idx     = u32(floor(idx_f));
+            let nxt     = min(idx + 1u, len - 1u);
+            let t_lerp  = fract(idx_f);
+
+            let v1 = bitcast<f32>(storage_buffer[samples_off + idx]);
+            let v2 = bitcast<f32>(storage_buffer[samples_off + nxt]);
+            let y  = mix(v1, v2, t_lerp);
+
+            let yNorm = (y - yMin) / yRange;
+            color = yplot_line_blend(color, plotUV.y, yNorm, lineWidth, curve_color);
+        }
+
+        cursor = cursor + 1u + len;
     }
 
     return vec4<f32>(color, 1.0);
 }
 
-// Vertex/Fragment entry points for standalone pipeline
+// Vertex/Fragment entry points for standalone pipeline.
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -138,15 +173,15 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
-    // Fullscreen triangle - 3 vertices cover entire screen
+    // Fullscreen triangle - 3 vertices cover entire screen.
     var pos: array<vec2<f32>, 3> = array<vec2<f32>, 3>(
         vec2<f32>(-1.0, -1.0),
-        vec2<f32>(3.0, -1.0),
-        vec2<f32>(-1.0, 3.0)
+        vec2<f32>( 3.0, -1.0),
+        vec2<f32>(-1.0,  3.0)
     );
     var uv: array<vec2<f32>, 3> = array<vec2<f32>, 3>(
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(2.0, 1.0),
+        vec2<f32>(0.0,  1.0),
+        vec2<f32>(2.0,  1.0),
         vec2<f32>(0.0, -1.0)
     );
 
@@ -162,10 +197,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // the plot's SOURCE pixel by composing TWO independent zoom transforms:
     //     visual_zoom_* : non-intrusive (Ctrl+Scroll, mouse-anchored)
     //     cell_zoom_*   : intrusive (Ctrl+Shift+Scroll, cell-size scale)
-    // Each has the same shape — source = (pane - c)/scale + c + off — so
-    // applying them in sequence gives a combined zoom whose scale is the
-    // product. SDF math runs at the final `source`, edges stay sharp at any
-    // zoom level. No bitmap stretch anywhere. That is the point of yetty.
     let vz_scale = uniforms.yplot_visual_zoom_scale;
     let vz_off   = vec2<f32>(uniforms.yplot_visual_zoom_off_x,
                              uniforms.yplot_visual_zoom_off_y);
@@ -176,10 +207,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                              uniforms.yplot_viewport_h);
     let vp_c     = vp * 0.5;
 
-    // visual_zoom is mouse-anchored around pane center (like Ctrl+Scroll).
-    // cell_zoom is structural — zooms around the pane ORIGIN (0,0) so plot
-    // positions grow the same direction as text cells growing from top-left.
-    let pane_px = in.position.xy;
+    let pane_px      = in.position.xy;
     let after_visual = (pane_px - vp_c) / max(vz_scale, 0.0001) + vp_c + vz_off;
     let source_px    = after_visual / max(cz_scale, 0.0001) + cz_off;
 
@@ -188,8 +216,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let bounds_w = yplot_get_bounds_w();
     let bounds_h = yplot_get_bounds_h();
 
-    // Cull fragments outside this plot's rect (both when zoom is identity
-    // and when zoom moves the rect partly off-screen).
     let local_pos = source_px - vec2<f32>(bounds_x, bounds_y);
     if (local_pos.x < 0.0 || local_pos.y < 0.0 ||
         local_pos.x >= bounds_w || local_pos.y >= bounds_h) {

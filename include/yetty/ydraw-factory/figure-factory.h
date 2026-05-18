@@ -97,6 +97,18 @@ struct yetty_ydraw_concrete_factory {
     void (*destroy_instance)(struct yetty_ydraw_concrete_factory *self,
                              struct yetty_ydraw_figure_instance *instance);
 
+    /* Apply a CMD_UPDATE payload to an existing instance. Optional — leave
+     * NULL on factories that don't accept incremental updates; the canvas
+     * silently drops the wire record in that case. `payload` and `size`
+     * come straight from the wire; the prim parses them per its own
+     * schema (yplot: [buffer_index u32][sample_offset u32][count u32]
+     * [samples × f32]). The instance pointer was previously returned by
+     * create_instance — the canvas resolves the wire id to it. */
+    struct yetty_ycore_void_result (*update_instance)(
+        struct yetty_ydraw_concrete_factory *self,
+        struct yetty_ydraw_figure_instance *instance,
+        const void *payload, size_t size);
+
     // Get shared RS (for buffer data access)
     struct yetty_ydraw_gpu_resource_set *(*get_shared_rs)(
         struct yetty_ydraw_concrete_factory *self);
