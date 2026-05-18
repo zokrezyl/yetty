@@ -67,6 +67,15 @@ static struct yetty_ycore_void_result bg_render(struct yetty_yrender_terminal_la
     if (!target || !target->ops || !target->ops->render_layer) {
         return YETTY_ERR(yetty_ycore_void, "background_layer: target has no render_layer");
     }
+    /* Self-gate on dirty: bg is an opaque pane-wide fill, so re-running it
+     * every frame wipes whatever the terminal layers above painted last
+     * frame and defeats terminal_render_frame's cascade dirty-skip when
+     * only the shader-glyph animation timer ticks. dirty is set on
+     * creation and on resize_grid; render-target-texture clears it after
+     * a successful pass. */
+    if (!self->dirty) {
+        return YETTY_OK_VOID();
+    }
     return target->ops->render_layer(target, self);
 }
 
