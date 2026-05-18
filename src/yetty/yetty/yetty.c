@@ -66,6 +66,10 @@ struct yetty_yetty_yetty {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat surface_format;
+    /* Present mode picked at init from surface capabilities + config.
+     * Reused on RESIZE so wgpuSurfaceConfigure doesn't silently flip
+     * back to Fifo. See initWebGPU for the selection policy. */
+    WGPUPresentMode present_mode;
 
     /* Coroutine-aware wgpu await machinery (loop-thread tick + completion
      * routing). Owned by Yetty; lifetime spans event_loop + wgpu instance. */
@@ -487,7 +491,10 @@ static struct yetty_ycore_int_result yetty_event_handler(
             config.usage = WGPUTextureUsage_RenderAttachment;
             config.width = width;
             config.height = height;
-            config.presentMode = WGPUPresentMode_Fifo;
+            /* Keep the present-mode that initWebGPU picked from the
+             * surface capabilities — re-querying caps here is fine but
+             * we already chose it once and stashed it in yetty. */
+            config.presentMode = yetty->present_mode;
             wgpuSurfaceConfigure(surface, &config);
 
             yetty->context.app_context.app_gpu_context.surface_width = width;
@@ -949,13 +956,73 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     yetty->queue = wgpuDeviceGetQueue(yetty->device);
     ydebug("initWebGPU: Queue obtained");
 
-    /* Determine surface format */
+    /* Determine surface format + pick present mode in one capabilities
+     * query. Default policy: prefer Mailbox (non-blocking, replaces the
+     * queued frame on Present) over FifoRelaxed over Fifo — the
+     * render-thread stall we keep hitting under Fifo on Wayland/Mesa-ANV
+     * is exactly what Mailbox avoids: Present never waits for the
+     * compositor to release the previous image. User override via
+     * config: rendering/present-mode = "mailbox" | "fifo-relaxed" |
+     * "fifo" | "immediate" | "auto" (auto = the policy above). */
+    yetty->present_mode = WGPUPresentMode_Fifo;
     if (surface) {
         WGPUSurfaceCapabilities caps = {0};
         wgpuSurfaceGetCapabilities(surface, yetty->adapter, &caps);
         if (caps.formatCount > 0) {
             yetty->surface_format = caps.formats[0];
         }
+
+        const char *want = yetty->context.app_context.config->ops->get_string(
+            yetty->context.app_context.config, "rendering/present-mode", "auto");
+
+        int have_fifo = 0, have_fifo_relaxed = 0, have_mailbox = 0, have_immediate = 0;
+        for (size_t i = 0; i < caps.presentModeCount; i++) {
+            switch (caps.presentModes[i]) {
+            case WGPUPresentMode_Fifo:
+                have_fifo = 1;
+                break;
+            case WGPUPresentMode_FifoRelaxed:
+                have_fifo_relaxed = 1;
+                break;
+            case WGPUPresentMode_Mailbox:
+                have_mailbox = 1;
+                break;
+            case WGPUPresentMode_Immediate:
+                have_immediate = 1;
+                break;
+            default:
+                break;
+            }
+        }
+
+        const char *picked_name = "fifo";
+        if (strcmp(want, "mailbox") == 0 && have_mailbox) {
+            yetty->present_mode = WGPUPresentMode_Mailbox;
+            picked_name = "mailbox (user)";
+        } else if (strcmp(want, "fifo-relaxed") == 0 && have_fifo_relaxed) {
+            yetty->present_mode = WGPUPresentMode_FifoRelaxed;
+            picked_name = "fifo-relaxed (user)";
+        } else if (strcmp(want, "immediate") == 0 && have_immediate) {
+            yetty->present_mode = WGPUPresentMode_Immediate;
+            picked_name = "immediate (user)";
+        } else if (strcmp(want, "fifo") == 0) {
+            yetty->present_mode = WGPUPresentMode_Fifo;
+            picked_name = "fifo (user)";
+        } else { /* auto (default) — prefer non-blocking modes */
+            if (have_mailbox) {
+                yetty->present_mode = WGPUPresentMode_Mailbox;
+                picked_name = "mailbox (auto)";
+            } else if (have_fifo_relaxed) {
+                yetty->present_mode = WGPUPresentMode_FifoRelaxed;
+                picked_name = "fifo-relaxed (auto)";
+            } else {
+                yetty->present_mode = WGPUPresentMode_Fifo;
+                picked_name = "fifo (auto — only mode available)";
+            }
+        }
+        yinfo("present mode: %s (avail: fifo=%d fifo-relaxed=%d mailbox=%d immediate=%d)",
+              picked_name, have_fifo, have_fifo_relaxed, have_mailbox, have_immediate);
+
         wgpuSurfaceCapabilitiesFreeMembers(caps);
     } else {
         yetty->surface_format = WGPUTextureFormat_BGRA8Unorm;
@@ -970,9 +1037,10 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
         surface_config.usage = WGPUTextureUsage_RenderAttachment;
         surface_config.width = yetty->context.app_context.app_gpu_context.surface_width;
         surface_config.height = yetty->context.app_context.app_gpu_context.surface_height;
-        surface_config.presentMode = WGPUPresentMode_Fifo;
+        surface_config.presentMode = yetty->present_mode;
         wgpuSurfaceConfigure(surface, &surface_config);
-        ydebug("initWebGPU: Surface configured %ux%u", surface_config.width, surface_config.height);
+        ydebug("initWebGPU: Surface configured %ux%u present_mode=%d", surface_config.width,
+               surface_config.height, (int)surface_config.presentMode);
     } else {
         ydebug("initWebGPU: No surface (headless mode)");
     }

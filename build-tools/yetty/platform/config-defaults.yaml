@@ -30,6 +30,19 @@ rendering:
   # Show FPS counter in the status bar
   show-fps: true
 
+  # Swapchain present mode for the OS window surface. Values:
+  #   "auto"          — prefer mailbox > fifo-relaxed > fifo (default).
+  #                     Mailbox keeps the loop thread unblocked: Present
+  #                     replaces the queued frame instead of waiting on
+  #                     vsync / compositor buffer release.
+  #   "mailbox"       — force mailbox if supported, else fifo.
+  #   "fifo-relaxed"  — vsync, but tears late frames (avoids the
+  #                     all-the-way-to-next-vsync wait of strict fifo).
+  #   "fifo"          — strict vsync. May park wgpuSurfacePresent on the
+  #                     render thread under some Wayland/Mesa stacks.
+  #   "immediate"     — no vsync, tearing.
+  present-mode: "auto"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Terminal Configuration
 # ─────────────────────────────────────────────────────────────────────────────
