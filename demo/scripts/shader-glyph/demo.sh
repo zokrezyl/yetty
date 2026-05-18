@@ -25,11 +25,11 @@ printf '=== SHADER-GLYPH SHOWCASE ===\n\n'
 # ---- 1. Simple animated glyphs ----
 printf 'simple animated glyphs (left to right: spinner pulse fire heart star)\n'
 for ((r = 0; r < 3; r++)); do
-    for ((i = 0; i < 6; i++)); do printf '\xee\x80\x80'; done    # spinner
-    for ((i = 0; i < 6; i++)); do printf '\xee\x80\x81'; done    # pulse
-    for ((i = 0; i < 6; i++)); do printf '\xee\x80\x83'; done    # fire
-    for ((i = 0; i < 6; i++)); do printf '\xee\x80\x85'; done    # heart
-    for ((i = 0; i < 6; i++)); do printf '\xee\x80\x8c'; done    # star
+    for ((i = 0; i < 6; i++)); do printf '\xf4\x80\x80\x80'; done    # spinner
+    for ((i = 0; i < 6; i++)); do printf '\xf4\x80\x80\x81'; done    # pulse
+    for ((i = 0; i < 6; i++)); do printf '\xf4\x80\x80\x83'; done    # fire
+    for ((i = 0; i < 6; i++)); do printf '\xf4\x80\x80\x85'; done    # heart
+    for ((i = 0; i < 6; i++)); do printf '\xf4\x80\x80\x8c'; done    # star
     printf '\n'
 done
 printf '\n'
@@ -37,33 +37,33 @@ p
 
 # ---- 2. Tile-coherent effects ----
 printf 'plasma (tile-coherent rainbow flow)\n'
-tile '\xee\x80\x87' 4 60
+tile '\xf4\x80\x80\x87' 4 60
 printf '\n'
 p
 
 printf 'wave (audio bars flowing across cells)\n'
-tile '\xee\x80\x82' 4 60
+tile '\xf4\x80\x80\x82' 4 60
 printf '\n'
 p
 
 # ---- 3. Fractal ----
 printf 'mandelbrot fractal (across all cells in this block)\n'
-tile '\xee\x83\xbd' 6 60
+tile '\xf4\x80\x83\xbd' 6 60
 printf '\n'
 p
 
 printf 'biomine (raymarched scene)\n'
-tile '\xee\x83\xbb' 6 60
+tile '\xf4\x80\x83\xbb' 6 60
 printf '\n'
 p
 
 # ---- 4. Inline ----
 printf 'inline status indicators:\n'
-printf '  Loading  '; printf '\xee\x80\x80'; printf '   data\n'
-printf '  Status   '; printf '\xee\x80\x81'; printf '   ok\n'
-printf '  Health   '; printf '\xee\x80\x85'; printf '   beating\n'
-printf '  Build    '; printf '\xee\x80\x83'; printf '   in progress\n'
-printf '  Done     '; printf '\xee\x80\x8c'; printf '   rated\n'
+printf '  Loading  '; printf '\xf4\x80\x80\x80'; printf '   data\n'
+printf '  Status   '; printf '\xf4\x80\x80\x81'; printf '   ok\n'
+printf '  Health   '; printf '\xf4\x80\x80\x85'; printf '   beating\n'
+printf '  Build    '; printf '\xf4\x80\x80\x83'; printf '   in progress\n'
+printf '  Done     '; printf '\xf4\x80\x80\x8c'; printf '   rated\n'
 printf '\n'
 
 printf '=== showcase complete - holding open ===\n'

@@ -191,6 +191,83 @@ struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(
     return YETTY_OK_VOID();
 }
 
+/* wgpuSurfacePresent variant: there is no future, just a blocking call.
+ * Worker thread runs Present, done() resumes the awaiting coroutine. The
+ * present is a no-op in webasm-land (HTML canvas page-flips on RAF), so
+ * this lives in the desktop default.c only. */
+struct ywgpu_present_ctx {
+    struct yetty_yplatform_wgpu *wgpu;
+    struct yetty_yplatform_coro *coro;
+    WGPUSurface surface;
+};
+
+static void ywgpu_present_run(void *arg)
+{
+    struct ywgpu_present_ctx *ctx = arg;
+    /* This is the blocking call we want OFF the loop thread. Under
+     * Wayland with FIFO present mode, this can stall for hundreds of
+     * milliseconds (or longer if the device is hung), and the kernel
+     * i915 hangcheck will eventually surface a VK_ERROR_DEVICE_LOST
+     * on the next vkQueueSubmit. */
+    wgpuSurfacePresent(ctx->surface);
+}
+
+static void ywgpu_present_done(void *arg)
+{
+    struct ywgpu_present_ctx *ctx = arg;
+    struct yetty_yplatform_coro *coro = ctx->coro;
+    yetty_yplatform_coro_set_status(coro, 0);
+    free(ctx);
+
+    ydebug("ywebgpu: resuming coro %u after SurfacePresent",
+           yetty_yplatform_coro_id(coro));
+    yetty_yplatform_coro_resume(coro);
+    if (yetty_yplatform_coro_is_finished(coro)) {
+        ydebug("ywebgpu: coro %u finished, destroying", yetty_yplatform_coro_id(coro));
+        yetty_yplatform_coro_destroy(coro);
+    }
+}
+
+struct yetty_ycore_void_result yetty_yplatform_wgpu_surface_present_await(
+    struct yetty_yplatform_wgpu *wgpu, WGPUSurface surface)
+{
+    if (!wgpu) {
+        return YETTY_ERR(yetty_ycore_void, "wgpu is NULL");
+    }
+    if (!surface) {
+        return YETTY_ERR(yetty_ycore_void, "surface is NULL");
+    }
+    struct yetty_yplatform_coro *self = yetty_yplatform_coro_current();
+    if (!self) {
+        return YETTY_ERR(yetty_ycore_void, "surface_present_await called outside coroutine");
+    }
+
+    struct ywgpu_present_ctx *ctx = calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "surface_present_await: ctx alloc failed");
+    }
+    ctx->wgpu = wgpu;
+    ctx->coro = self;
+    ctx->surface = surface;
+
+    ydebug("ywebgpu: surface_present_await coro=%u surface=%p",
+           yetty_yplatform_coro_id(self), (void *)surface);
+
+    struct yetty_yplatform_yworkpool_job job = {
+        .run = ywgpu_present_run,
+        .done = ywgpu_present_done,
+        .ctx = ctx,
+    };
+    struct yetty_ycore_void_result sres = yetty_yplatform_yworkpool_submit(wgpu->wait_pool, job);
+    if (!YETTY_IS_OK(sres)) {
+        free(ctx);
+        return YETTY_ERR(yetty_ycore_void, "surface_present_await: yworkpool_submit failed", sres);
+    }
+
+    yetty_yplatform_coro_yield();
+    return YETTY_OK_VOID();
+}
+
 static void queue_done_callback(WGPUQueueWorkDoneStatus status, WGPUStringView msg, void *userdata1,
                                 void *userdata2)
 {

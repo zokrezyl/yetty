@@ -6,6 +6,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/ywebgpu.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
@@ -164,12 +165,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * colour with an opaque RGBA fill before any other layer paints,
          * and the tabbar paints its own strip, so the only pixels the old
          * global Clear ever delivered to the screen were inter-pane gap
-         * pixels that nothing else overwrites. Try without and see whether
-         * any visible gap shows previous-frame ghosting; if so, re-add a
-         * scissored clear for just the gap rects, not the whole 4K. */
+         * pixels that nothing else overwrites. */
 
-        /* Render the tab strip + active workspace. Inactive workspaces hold
-         * GPU state but don't contribute to the frame. */
         ytime_start(workspace_render);
         if (yetty->tabbar) {
             struct yetty_ycore_void_result res =
@@ -180,8 +177,6 @@ static struct yetty_ycore_int_result yetty_event_handler(
         }
         ytime_report(workspace_render);
 
-        /* App-level yui on top of every terminal. ygui-produced
-         * primitives travel via memory-pty → scene ydraw-layer here. */
         if (yetty->yui) {
             struct yetty_ycore_void_result yr =
                 yetty_yui_render(yetty->yui, yetty->render_target);
@@ -191,7 +186,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
         }
 
-        /* Present the big target to surface */
+        /* Present the big target to surface. render-target-texture's
+         * present() internally spawns a "presenter" coroutine that does
+         * the wgpuSurfacePresent via the wgpu-wait pool — present()
+         * returns immediately after the submit + spawn, the actual
+         * Present blocks on the worker thread instead of here. */
         ytime_start(present);
         struct yetty_ycore_void_result res =
             yetty->render_target->ops->present(yetty->render_target);
@@ -485,6 +484,19 @@ static struct yetty_ycore_int_result yetty_event_handler(
         ydebug("yetty: RESIZE %ux%u", width, height);
 
         if (width == 0 || height == 0) {
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+
+        /* No-op fast path. Skip the whole reconfigure dance when nothing
+         * changed — first-frame RESIZE from GLFW often fires at the same
+         * size we already configured during init, and calling
+         * wgpuSurfaceConfigure while the presenter coro's worker thread
+         * is mid-wgpuSurfacePresent corrupts the swapchain (Mesa/ANV
+         * segfaults on Wayland). */
+        uint32_t cur_w = yetty->context.app_context.app_gpu_context.surface_width;
+        uint32_t cur_h = yetty->context.app_context.app_gpu_context.surface_height;
+        if (cur_w == width && cur_h == height) {
+            ydebug("yetty: RESIZE no-op (already %ux%u)", width, height);
             return YETTY_OK(yetty_ycore_int, 1);
         }
 
@@ -913,6 +925,27 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     device_desc.requiredLimits = &limits;
     device_desc.defaultQueue.label = queue_label;
     device_desc.uncapturedErrorCallbackInfo = yetty_ywebgpu_get_error_callback_info();
+    device_desc.deviceLostCallbackInfo = yetty_ywebgpu_get_device_lost_callback_info();
+
+    /* Device-scope Dawn toggles (opt-in via YETTY_DAWN_DEBUG=1). Same toggle
+     * names as instance-level — Dawn applies them at device-creation time.
+     * Static so the pointer remains valid until Dawn finishes the async
+     * RequestDevice. */
+    static const char *const dawn_device_enabled_toggles[] = {
+        "use_user_defined_labels_in_backend",
+        "disable_symbol_renaming",
+        "enable_immediate_error_handling",
+    };
+    WGPUDawnTogglesDescriptor dawn_device_toggles = {0};
+    if (getenv("YETTY_DAWN_DEBUG")) {
+        dawn_device_toggles.chain.sType = WGPUSType_DawnTogglesDescriptor;
+        dawn_device_toggles.enabledToggleCount =
+            sizeof(dawn_device_enabled_toggles) / sizeof(dawn_device_enabled_toggles[0]);
+        dawn_device_toggles.enabledToggles = dawn_device_enabled_toggles;
+        device_desc.nextInChain = &dawn_device_toggles.chain;
+        ydebug("initWebGPU: device-level Dawn debug toggles chained (%zu)",
+               dawn_device_toggles.enabledToggleCount);
+    }
 
     struct yetty_ywebgpu_device_request_state device_cb_data = {{0}, 0};
     WGPURequestDeviceCallbackInfo device_cb = {0};
@@ -1107,6 +1140,13 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
         return YETTY_ERR(yetty_ycore_void, "failed to create render target");
     }
     yetty->render_target = target_res.value;
+    /* Surface-bearing texture targets need the wgpu handle so present()
+     * can yield via yetty_yplatform_wgpu_surface_present_await instead of
+     * blocking the loop thread on wgpuSurfacePresent. Non-surface targets
+     * (layer/compositing) ignore this and never call present(). */
+    if (surface) {
+        yetty_yrender_target_texture_set_wgpu(yetty->render_target, yetty->wgpu);
+    }
     ydebug("initWebGPU: render target created %.0fx%.0f vnc=%d", vp.w, vp.h, vnc_enabled);
 
     ydebug("initWebGPU: Complete");

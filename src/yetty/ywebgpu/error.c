@@ -61,3 +61,43 @@ WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void)
     info.callback = yetty_ywebgpu_uncaptured_error_callback;
     return info;
 }
+
+void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLostReason reason,
+                                        WGPUStringView message, void *userdata1, void *userdata2)
+{
+    (void)device;
+    (void)userdata1;
+    (void)userdata2;
+    const char *reason_str = "Unknown";
+    switch (reason) {
+    case WGPUDeviceLostReason_Unknown:
+        reason_str = "Unknown";
+        break;
+    case WGPUDeviceLostReason_Destroyed:
+        reason_str = "Destroyed";
+        break;
+    case WGPUDeviceLostReason_CallbackCancelled:
+        reason_str = "CallbackCancelled";
+        break;
+    case WGPUDeviceLostReason_FailedCreation:
+        reason_str = "FailedCreation";
+        break;
+    default:
+        break;
+    }
+    char buf[512];
+    size_t len = message.length < sizeof(buf) - 1 ? message.length : sizeof(buf) - 1;
+    if (message.data && len > 0) {
+        memcpy(buf, message.data, len);
+    }
+    buf[len] = '\0';
+    yerror("WebGPU device lost (%s): %s", reason_str, buf);
+}
+
+WGPUDeviceLostCallbackInfo yetty_ywebgpu_get_device_lost_callback_info(void)
+{
+    WGPUDeviceLostCallbackInfo info = {0};
+    info.mode = WGPUCallbackMode_AllowSpontaneous;
+    info.callback = yetty_ywebgpu_device_lost_callback;
+    return info;
+}

@@ -55,6 +55,15 @@ struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(
 struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(
     struct yetty_yplatform_wgpu *wgpu, WGPUQueue queue);
 
+/* Run wgpuSurfacePresent on the wgpu-wait pool. wgpuSurfacePresent
+ * blocks under Wayland (and others) when the previous frame's GPU work
+ * hasn't completed — keeping it on the loop thread freezes the entire
+ * event loop (input, RPC, anim ticks). This variant pushes the call to
+ * a worker, yields the caller coroutine, and resumes it on the loop
+ * thread after Present returns. Must be called from inside a coroutine. */
+struct yetty_ycore_void_result yetty_yplatform_wgpu_surface_present_await(
+    struct yetty_yplatform_wgpu *wgpu, WGPUSurface surface);
+
 #ifdef __cplusplus
 }
 #endif

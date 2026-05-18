@@ -655,6 +655,21 @@ static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resourc
      * entirely; if we ever do get here with n=0 the draw becomes a no-op. */
     layer->rs.instance_count = n;
 
+    ydebug("shader-glyph: get_gpu_resource_set: cols=%u rows=%u live_cells=%zu "
+           "instances=%u cells_size=%zu instances_size=%zu",
+           cols, rows, live_cells, n, cells_size,
+           (size_t)n * sizeof(struct shader_glyph_instance));
+    if (n > 0 && n <= 4) {
+        for (uint32_t k = 0; k < n; k++) {
+            ydebug("shader-glyph: inst[%u] cell_index=%u local_id=%u", k,
+                   layer->instances[k].cell_index, layer->instances[k].local_id);
+        }
+    } else if (n > 4) {
+        ydebug("shader-glyph: inst[0]=(cell=%u,local=%u) inst[%u]=(cell=%u,local=%u)",
+               layer->instances[0].cell_index, layer->instances[0].local_id,
+               n - 1, layer->instances[n - 1].cell_index, layer->instances[n - 1].local_id);
+    }
+
     /* Update animation clock. */
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -736,13 +751,17 @@ static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_t
      * idle. Otherwise, ensure the timer is ticking at target_fps. */
     if (shader_glyph_is_empty(self)) {
         anim_timer_stop(layer);
+        ydebug("shader-glyph: render skipped (empty)");
         return YETTY_OK_VOID();
     }
     anim_timer_start(layer);
     /* dirty is set by on_anim_tick before request_render — no force-arm
      * needed here. Per-cell instanced draw fires on shader-glyph cells
      * only, so unchanged frames cost nothing on the GPU. */
-    return target->ops->render_layer(target, self);
+    ydebug("shader-glyph: render_layer ENTER instance_count=%u", layer->instance_count);
+    struct yetty_ycore_void_result r = target->ops->render_layer(target, self);
+    ydebug("shader-glyph: render_layer EXIT ok=%d", YETTY_IS_OK(r));
+    return r;
 }
 
 /* Empty when there are no shader-glyph cells in the current grid.

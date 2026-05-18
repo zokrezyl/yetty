@@ -175,22 +175,25 @@ int main(int argc, char **argv)
     int headless = vnc_headless && strcmp(vnc_headless, "true") == 0;
 
     if (!headless) {
+        /* No platform hint on linux — let GLFW 3.4 auto-pick. With
+         * GLFW_ANY_PLATFORM (the default), GLFW probes in order Wayland →
+         * X11 → NULL, so we get native Wayland when WAYLAND_DISPLAY is set
+         * and X11 (or XWayland on a Wayland session without a Wayland-
+         * capable GLFW build) as the fallback.
+         *
+         * The dawn-exotic Linux prebuilts (see build-tools/yetty/Dawn.cmake)
+         * are built with the Wayland backend enabled, so the Wayland path
+         * works end-to-end. The X11-tile renderer stays as the fallback —
+         * it's still the right path for remote sessions (VNC, ssh -X)
+         * where partial-tile blits beat full-frame surface presents. */
 #if defined(__linux__) && !defined(__ANDROID__)
-        /* On linux GLFW 3.4 picks Wayland if WAYLAND_DISPLAY is set, else X11.
-         * Native Wayland also requires the Dawn prebuilt to accept
-         * SurfaceSourceWaylandSurface — Google's official ubuntu-latest Dawn
-         * release does NOT (validation aborts with "Unsupported sType"), so on
-         * a Wayland session the surface ends up invalid and yetty renders
-         * nothing. Default to X11 (XWayland on Wayland sessions); the user can
-         * opt into native Wayland with YETTY_GLFW_PLATFORM=wayland once Dawn
-         * gains the missing backend support. */
-        const char *_yetty_glfw_platform = getenv("YETTY_GLFW_PLATFORM");
-        if (!_yetty_glfw_platform || strcmp(_yetty_glfw_platform, "x11") == 0) {
+        /* Diagnostic override: YETTY_FORCE_X11=1 forces the X11/XWayland
+         * path so the X11-tile renderer is exercised on a Wayland session
+         * (used when bisecting "Wayland surface present vs. instanced draw"
+         * bugs). Remove once the Wayland-surface path is fully stable. */
+        if (getenv("YETTY_FORCE_X11")) {
             glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-        } else if (strcmp(_yetty_glfw_platform, "wayland") == 0) {
-            glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
         }
-        /* Any other value: leave GLFW's auto-pick alone. */
 #endif
 
         if (!glfwInit()) {
@@ -268,12 +271,42 @@ int main(int argc, char **argv)
     /* WebGPU instance.
      * TimedWaitAny is required by yplatform/webgpu/default.c: GPU futures
      * are waited on with non-zero timeoutNS from worker threads, which
-     * Dawn rejects unless this feature is declared up front. */
+     * Dawn rejects unless this feature is declared up front.
+     *
+     * Dawn debug toggles (opt-in via YETTY_DAWN_DEBUG=1) — enables aggressive
+     * validation and keeps user-defined labels/symbols intact so backend
+     * errors point back to our objects. Required to chase the
+     * Wayland-direct-surface + multi-instance freeze. */
     WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
     WGPUInstanceDescriptor instance_desc = {0};
     instance_desc.requiredFeatureCount = 1;
     instance_desc.requiredFeatures = instance_features;
+
+    static const char *const dawn_enabled_toggles[] = {
+        "use_user_defined_labels_in_backend",
+        "disable_symbol_renaming",
+        "enable_immediate_error_handling",
+        "record_detailed_timing_in_trace_events",
+    };
+    WGPUDawnTogglesDescriptor dawn_toggles = {0};
+    if (getenv("YETTY_DAWN_DEBUG")) {
+        dawn_toggles.chain.sType = WGPUSType_DawnTogglesDescriptor;
+        dawn_toggles.enabledToggleCount =
+            sizeof(dawn_enabled_toggles) / sizeof(dawn_enabled_toggles[0]);
+        dawn_toggles.enabledToggles = dawn_enabled_toggles;
+        instance_desc.nextInChain = &dawn_toggles.chain;
+        yinfo("dawn: debug toggles enabled (%zu): use_user_defined_labels_in_backend, "
+              "disable_symbol_renaming, enable_immediate_error_handling, "
+              "record_detailed_timing_in_trace_events",
+              dawn_toggles.enabledToggleCount);
+    } else {
+        ydebug("dawn: debug toggles OFF (set YETTY_DAWN_DEBUG=1 to enable)");
+    }
+
+    ydebug("main: calling wgpuCreateInstance(features=%u, nextInChain=%p)",
+           (unsigned)instance_desc.requiredFeatureCount, (void *)instance_desc.nextInChain);
     WGPUInstance instance = wgpuCreateInstance(&instance_desc);
+    ydebug("main: wgpuCreateInstance returned instance=%p", (void *)instance);
     if (!instance) {
         fprintf(stderr, "Failed to create WebGPU instance\n");
         pty_factory->ops->destroy(pty_factory);

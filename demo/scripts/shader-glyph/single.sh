@@ -13,15 +13,22 @@
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/shader-glyph/single.sh
 #   ./build-desktop-ytrace-release/yetty -e 'demo/scripts/shader-glyph/single.sh spinner'
 
+# UTF-8 for U+100000 + local_id (PUA-B). Earlier the table sat at U+E000
+# in BMP PUA, which collided with Powerline/Nerd-Fonts icons — moved to
+# PUA-B (verified empty in the bundled DejaVuSansM Nerd Font) so any
+# Nerd-Font glyph the prompt draws no longer pins the shader-glyph
+# animation timer on.
+#   U+100000 → \xf4\x80\x80\x80
+#   U+1000NN → \xf4\x80\x{82 + NN/64}\x{0x80 | (NN & 63)}
 declare -A cp_for=(
-    [spinner]='\xee\x80\x80'
-    [pulse]='\xee\x80\x81'
-    [plasma]='\xee\x80\x87'
-    [heart]='\xee\x80\x85'
-    [fire]='\xee\x80\x83'
-    [star]='\xee\x80\x8c'
-    [mandelbrot]='\xee\x83\xbd'
-    [biomine]='\xee\x83\xbb'
+    [spinner]='\xf4\x80\x80\x80'
+    [pulse]='\xf4\x80\x80\x81'
+    [plasma]='\xf4\x80\x80\x87'
+    [heart]='\xf4\x80\x80\x85'
+    [fire]='\xf4\x80\x80\x83'
+    [star]='\xf4\x80\x80\x8c'
+    [mandelbrot]='\xf4\x80\x83\xbd'
+    [biomine]='\xf4\x80\x83\xbb'
 )
 
 name="${1:-plasma}"

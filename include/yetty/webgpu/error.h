@@ -31,6 +31,15 @@ void yetty_ywebgpu_uncaptured_error_callback(WGPUDevice const *device, WGPUError
 /* Get callback info struct ready to use in device descriptor */
 WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void);
 
+/* Device-lost callback — fires when Dawn invalidates the device (e.g. GPU
+ * hang, validation failure that escalated to device-loss). Plumbed in so the
+ * Wayland-direct-surface + multi-instance freeze does not just look like a
+ * silent stall. */
+void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLostReason reason,
+                                        WGPUStringView message, void *userdata1, void *userdata2);
+
+WGPUDeviceLostCallbackInfo yetty_ywebgpu_get_device_lost_callback_info(void);
+
 #ifdef __cplusplus
 }
 #endif
