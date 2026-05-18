@@ -144,6 +144,9 @@ static struct yetty_ycore_void_result binder_bind(struct yetty_yrender_gpu_resou
 static WGPURenderPipeline binder_get_pipeline(const struct yetty_yrender_gpu_resource_binder *self);
 static WGPUBuffer binder_get_quad_vertex_buffer(
     const struct yetty_yrender_gpu_resource_binder *self);
+static struct yetty_ycore_void_result binder_write_buffer_chunk(
+    struct yetty_yrender_gpu_resource_binder *self, size_t buffer_index, size_t byte_offset,
+    const void *data, size_t size);
 
 static const struct yetty_yrender_gpu_resource_binder_ops binder_ops = {
     .destroy = binder_destroy,
@@ -153,6 +156,7 @@ static const struct yetty_yrender_gpu_resource_binder_ops binder_ops = {
     .bind = binder_bind,
     .get_pipeline = binder_get_pipeline,
     .get_quad_vertex_buffer = binder_get_quad_vertex_buffer,
+    .write_buffer_chunk = binder_write_buffer_chunk,
 };
 
 /* Append shader code to merged buffer, substituting every literal
@@ -1337,6 +1341,43 @@ static WGPUBuffer binder_get_quad_vertex_buffer(
         return yetty_yrender_pipeline_get_quad_vertex_buffer(impl->external_pipeline);
     }
     return impl->quad_vertex_buffer;
+}
+
+static struct yetty_ycore_void_result binder_write_buffer_chunk(
+    struct yetty_yrender_gpu_resource_binder *self, size_t buffer_index, size_t byte_offset,
+    const void *data, size_t size)
+{
+    if (!self) {
+        return YETTY_ERR(yetty_ycore_void, "binder is null");
+    }
+    if (!data || size == 0) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_yrender_gpu_resource_binder_impl *impl =
+        (struct yetty_yrender_gpu_resource_binder_impl *)self;
+    if (!impl->finalized || !impl->storage_buffer) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "write_buffer_chunk: binder not finalized / no storage buffer");
+    }
+    if (buffer_index >= impl->flat_buffer_count) {
+        return YETTY_ERR(yetty_ycore_void, "write_buffer_chunk: buffer_index out of range");
+    }
+    struct flat_buffer *fb = &impl->flat_buffers[buffer_index];
+    /* Bounds-check against the rounded GPU slot capacity (fb->cap), not
+     * fb->src->size — the slot is what's actually allocated; the logical
+     * .size is the high-water mark of CPU-side data that's been declared. */
+    if (byte_offset + size > fb->cap) {
+        return YETTY_ERR(yetty_ycore_void, "write_buffer_chunk: chunk exceeds buffer capacity");
+    }
+    /* wgpuQueueWriteBuffer requires the size to be a multiple of 4 (COPY_SIZE
+     * alignment) and the offset to be a multiple of 4 (COPY_BUFFER_ALIGNMENT). */
+    if ((byte_offset & 3u) != 0u || (size & 3u) != 0u) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "write_buffer_chunk: offset and size must be 4-byte aligned");
+    }
+    wgpuQueueWriteBuffer(impl->queue, impl->storage_buffer, fb->mega_offset + byte_offset, data,
+                         size);
+    return YETTY_OK_VOID();
 }
 
 struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create(

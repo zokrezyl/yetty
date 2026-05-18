@@ -63,6 +63,17 @@ YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_iterator_status,
 enum yetty_ydraw_command_kind {
     YETTY_YDRAW_COMMAND_ADD,    /* operand: a drawable flyweight */
     YETTY_YDRAW_COMMAND_DELETE, /* operand: the id of the target entity */
+    YETTY_YDRAW_COMMAND_UPDATE, /* operand: target id + opaque prim payload */
+};
+
+/* CMD_UPDATE payload view: id + a slice pointing into iter scratch.
+ * Bytes belong to the targeted primitive's factory — no canvas-level
+ * interpretation. Lifetime mirrors flyweight.data: valid only until the
+ * next iter step. */
+struct yetty_ydraw_command_update {
+    uint32_t id;
+    const uint8_t *data;
+    uint32_t size;
 };
 
 /* One decoded wire command. The kind selects which union arm is valid. */
@@ -73,6 +84,8 @@ struct yetty_ydraw_command {
         struct yetty_ydraw_drawable_flyweight flyweight;
         /* kind == DELETE: the named entity to remove. */
         uint32_t id;
+        /* kind == UPDATE: target id + per-prim opaque payload. */
+        struct yetty_ydraw_command_update update;
     };
 };
 

@@ -3,7 +3,14 @@
 
 name: yplot
 type_id: 0x80000003
-description: Function plotter with yfsvm bytecode interpreter
+description: |
+  Function plotter. Renders any mix of:
+    - mathematical expressions (compiled to yfsvm bytecode, evaluated per
+      pixel on the GPU)
+    - precomputed sample buffers (f32 arrays, e.g. live audio waveforms)
+  Expressions and buffers coexist in one instance. Each curve picks its
+  color from the shared 8-slot palette: expressions consume slots
+  0..function_count-1, buffers consume slots function_count..(modulo 8).
 
 # Shader libraries (concatenated before main shader)
 libraries:
@@ -45,10 +52,32 @@ uniforms:
     type: u32
     count: 8
 
-# Variable-size buffers (serialized after uniforms)
+# Variable-size storage. Two logical buffers:
+#
+#   bytecode  : single u32 array — yfsvm program for the expressions
+#   data      : variable-count array of f32 sample buffers
+#
+# Both physically share ONE GPU storage binding (binder concatenates in
+# declaration order). The shader walks the merged layout at runtime — no
+# const offsets are baked into the WGSL, so the pipeline never recompiles
+# when an instance changes its data-buffer count or sizes.
+#
+# Storage layout (u32 words):
+#   [0]                              bytecode_len  (in u32 words)
+#   [1 .. bytecode_len]              bytecode      (yfsvm program)
+#   [bytecode_len + 1]               data_count
+#   for each data buffer i:
+#     [len_i]                                        (in f32 samples)
+#     [samples_i...]                                 (f32 bitcast u32)
 buffers:
   - name: bytecode
     element_type: u32
+    # array: false (default) — single fixed buffer
+  - name: data
+    element_type: f32
+    array: true
+    # array: true → variable-count list of buffers, count-prefixed on the
+    # wire and self-describing in the merged storage region.
 
 # YAML input mapping (array inputs -> uniform fields)
 yaml_mapping:

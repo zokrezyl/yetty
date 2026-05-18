@@ -56,63 +56,69 @@ static int parse_hex_color(const char *s, uint32_t *out)
     return 1;
 }
 
-struct yetty_ydraw_draw_list_result yetty_yplot_render(
-    const char *source, size_t len, const struct yetty_yplot_render_config *config)
+/* Fill `u` with caller config values, palette-default colors, and a
+ * compiled bytecode block from `source` (may be empty when caller only
+ * wants buffer curves). `bc_buf` / `bc_cap` is a caller-owned scratch
+ * area for the serialized yfsvm program. */
+static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
+    const char *source, size_t source_len,
+    const struct yetty_yplot_render_config *config,
+    uint32_t *bc_buf, uint32_t bc_cap,
+    struct yetty_yplot_uniforms *u, uint32_t *out_bc_len)
 {
-    if (!source && len > 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "source is NULL");
-    }
-
-    /* Resolve config defaults. */
-    struct yetty_yplot_uniforms u = {0};
-    u.bounds_x = config ? config->bounds_x : 0.0f;
-    u.bounds_y = config ? config->bounds_y : 0.0f;
-    u.bounds_w = (config && config->bounds_w > 0.0f) ? config->bounds_w : 400.0f;
-    u.bounds_h = (config && config->bounds_h > 0.0f) ? config->bounds_h : 200.0f;
+    memset(u, 0, sizeof(*u));
+    u->bounds_x = config ? config->bounds_x : 0.0f;
+    u->bounds_y = config ? config->bounds_y : 0.0f;
+    u->bounds_w = (config && config->bounds_w > 0.0f) ? config->bounds_w : 400.0f;
+    u->bounds_h = (config && config->bounds_h > 0.0f) ? config->bounds_h : 200.0f;
     if (config && (config->x_min != 0.0f || config->x_max != 0.0f)) {
-        u.x_min = config->x_min;
-        u.x_max = config->x_max;
+        u->x_min = config->x_min;
+        u->x_max = config->x_max;
     } else {
-        u.x_min = -3.14159f;
-        u.x_max = 3.14159f;
+        u->x_min = -3.14159f;
+        u->x_max = 3.14159f;
     }
     if (config && (config->y_min != 0.0f || config->y_max != 0.0f)) {
-        u.y_min = config->y_min;
-        u.y_max = config->y_max;
+        u->y_min = config->y_min;
+        u->y_max = config->y_max;
     } else {
-        u.y_min = -1.5f;
-        u.y_max = 1.5f;
+        u->y_min = -1.5f;
+        u->y_max = 1.5f;
     }
-    u.flags = config && config->flags
-                  ? config->flags
-                  : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS);
+    u->flags = config && config->flags
+                   ? config->flags
+                   : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS);
 
     for (int i = 0; i < 8; i++) {
-        u.colors[i] = YPLOT_PALETTE[i];
+        u->colors[i] = YPLOT_PALETTE[i];
     }
 
-    /* Parse expression(s) using yexpr's plot-syntax (multi-function +
-     * @<name>.color attrs). */
-    struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(source, len);
-    if (YETTY_IS_ERR(pr)) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yplot: expression parse failed", pr);
-    }
-    u.function_count = pr.value.plot.def_count;
-    if (u.function_count > 8) {
-        u.function_count = 8;
+    *out_bc_len = 0;
+    if (!source || source_len == 0) {
+        u->function_count = 0;
+        return YETTY_OK_VOID();
     }
 
-    /* Override colors from @<name>.color attrs. */
+    /* Parse expression(s) using yexpr's plot-syntax. */
+    struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(source, source_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yplot: expression parse failed");
+
+    u->function_count = pr.value.plot.def_count;
+    if (u->function_count > 8) {
+        u->function_count = 8;
+    }
+
+    /* Per-plot @<name>.color overrides. */
     for (uint32_t i = 0; i < pr.value.plot.attr_count; i++) {
         const struct yetty_yexpr_plot_attr *attr = &pr.value.plot.attrs[i];
         if (strcmp(attr->attr_name, "color") != 0) {
             continue;
         }
-        for (uint32_t j = 0; j < u.function_count; j++) {
+        for (uint32_t j = 0; j < u->function_count; j++) {
             if (strcmp(pr.value.plot.defs[j].name, attr->plot_name) == 0) {
                 uint32_t c;
                 if (parse_hex_color(attr->value, &c)) {
-                    u.colors[j] = c;
+                    u->colors[j] = c;
                 }
                 break;
             }
@@ -121,40 +127,39 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render(
 
     /* Compile to bytecode. */
     struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value.plot);
-    if (YETTY_IS_ERR(prog)) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yplot: yfsvm compile failed", prog);
-    }
-    uint32_t bc_buf[1024];
-    uint32_t bc_len = yetty_yfsvm_program_serialize(&prog.value, bc_buf, 1024);
-    if (bc_len == 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yplot: bytecode serialize failed");
-    }
-    struct yetty_yplot_buffers bufs = {.bytecode = bc_buf, .bytecode_len = bc_len};
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, prog, "yplot: yfsvm compile failed");
 
-    /* Wire bytes for the prim. */
-    size_t required = yetty_yplot_uniforms_serialized_size(&u, &bufs);
+    uint32_t bc_len = yetty_yfsvm_program_serialize(&prog.value, bc_buf, bc_cap);
+    if (bc_len == 0) {
+        return YETTY_ERR(yetty_ycore_void, "yplot: bytecode serialize failed");
+    }
+    *out_bc_len = bc_len;
+    return YETTY_OK_VOID();
+}
+
+/* Pack uniforms + buffers into a fresh ydraw buffer carrying one yplot prim. */
+static struct yetty_ydraw_draw_list_result yplot_emit_prim(
+    const struct yetty_yplot_uniforms *u, const struct yetty_yplot_buffers *bufs)
+{
+    size_t required = yetty_yplot_uniforms_serialized_size(u, bufs);
     uint8_t *drawable_buf = malloc(required);
     if (!drawable_buf) {
         return YETTY_ERR(yetty_ydraw_draw_list, "yplot: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
-        yetty_yplot_uniforms_serialize(&u, &bufs, drawable_buf, required);
+        yetty_yplot_uniforms_serialize(u, bufs, drawable_buf, required);
     if (YETTY_IS_ERR(ser)) {
         free(drawable_buf);
         return YETTY_ERR(yetty_ydraw_draw_list, "yplot: serialize failed", ser);
     }
 
-    /* Build a fresh ydraw buffer + attach the prim. Scene bounds = the
-     * yplot's own w x h (so the receiving canvas knows how much vertical
-     * space to reserve). */
     struct yetty_ydraw_draw_list_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
-        .scene_max_x = u.bounds_x + u.bounds_w,
-        .scene_max_y = u.bounds_y + u.bounds_h,
+        .scene_max_x = u->bounds_x + u->bounds_w,
+        .scene_max_y = u->bounds_y + u->bounds_h,
     };
-    struct yetty_ydraw_draw_list_result br =
-        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(drawable_buf);
         return YETTY_ERR(yetty_ydraw_draw_list, "yplot: ydraw buffer create failed", br);
@@ -167,8 +172,76 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render(
         yetty_ydraw_draw_list_destroy(br.value);
         return YETTY_ERR(yetty_ydraw_draw_list, "yplot: ydraw add_prim failed", idr);
     }
-
     return YETTY_OK(yetty_ydraw_draw_list, br.value);
+}
+
+struct yetty_ydraw_draw_list_result yetty_yplot_render(
+    const char *source, size_t len, const struct yetty_yplot_render_config *config)
+{
+    return yetty_yplot_render_with_buffers(source, len, NULL, 0, config);
+}
+
+struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
+    const char *source, size_t len,
+    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
+    const struct yetty_yplot_render_config *config)
+{
+    if (!source && len > 0) {
+        return YETTY_ERR(yetty_ydraw_draw_list, "source is NULL");
+    }
+    if (!buffers && buffer_count > 0) {
+        return YETTY_ERR(yetty_ydraw_draw_list, "buffers is NULL but buffer_count > 0");
+    }
+
+    struct yetty_yplot_uniforms u;
+    uint32_t bc_buf[1024];
+    uint32_t bc_len = 0;
+
+    struct yetty_ycore_void_result ub =
+        yplot_build_uniforms_and_bytecode(source, len, config, bc_buf,
+                                          (uint32_t)(sizeof bc_buf / sizeof bc_buf[0]),
+                                          &u, &bc_len);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_draw_list, ub, "yplot: uniforms/bytecode build failed");
+
+    /* Per-buffer color slots: expressions occupy 0..function_count-1, then
+     * buffers fill the next slots (modulo 8). Caller-supplied colors override
+     * the palette defaults already filled in by yplot_build_uniforms…. */
+    for (size_t i = 0; i < buffer_count; i++) {
+        uint32_t slot = (u.function_count + (uint32_t)i) % 8u;
+        if (buffers[i].color != 0u) {
+            u.colors[slot] = buffers[i].color;
+        }
+    }
+
+    /* Translate caller-facing buffer_input array into the wire-side
+     * data_buffer array (the wire type is a slimmer view, no color). */
+    struct yetty_yplot_data_buffer wire_bufs_stack[8];
+    struct yetty_yplot_data_buffer *wire_bufs = NULL;
+    if (buffer_count > 0) {
+        wire_bufs = (buffer_count <= 8)
+                        ? wire_bufs_stack
+                        : malloc(buffer_count * sizeof(*wire_bufs));
+        if (!wire_bufs) {
+            return YETTY_ERR(yetty_ydraw_draw_list, "yplot: buffer view alloc failed");
+        }
+        for (size_t i = 0; i < buffer_count; i++) {
+            wire_bufs[i].samples = buffers[i].samples;
+            wire_bufs[i].count = buffers[i].count;
+        }
+    }
+
+    struct yetty_yplot_buffers bufs = {
+        .bytecode = bc_len > 0 ? bc_buf : NULL,
+        .bytecode_len = bc_len,
+        .data = wire_bufs,
+        .data_count = buffer_count,
+    };
+
+    struct yetty_ydraw_draw_list_result out = yplot_emit_prim(&u, &bufs);
+    if (wire_bufs && wire_bufs != wire_bufs_stack) {
+        free(wire_bufs);
+    }
+    return out;
 }
 
 struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(

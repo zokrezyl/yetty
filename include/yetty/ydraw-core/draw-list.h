@@ -81,6 +81,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
     struct yetty_ydraw_draw_list *buf, uint32_t group_id);
 
+/* CMD_UPDATE: hand `payload` (size = `payload_size` bytes) to the prim
+ * addressed by `target_id`. Wire layout written:
+ *   [CMD_UPDATE u32][target_id u32][payload_size u32][payload bytes]
+ *
+ * The bytes are opaque at the wire / canvas level — the receiving canvas
+ * resolves target_id to a figure_instance and forwards them to the
+ * primitive's factory `update_instance` op, which interprets per the
+ * primitive's own schema. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_update(
+    struct yetty_ydraw_draw_list *buf, uint32_t target_id, const void *payload,
+    size_t payload_size);
+
 // Read-only view of the raw primitive byte stream (no scene-bounds framing,
 // just the concatenated FAM/SDF prim bytes). Used by producers that need to
 // walk their own buffer (e.g. ygui's RICH widget translating prims into the

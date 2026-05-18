@@ -23,6 +23,27 @@ struct yetty_yrender_gpu_resource_binder_ops {
                                            WGPURenderPassEncoder pass, uint32_t group_index);
     WGPURenderPipeline (*get_pipeline)(const struct yetty_yrender_gpu_resource_binder *self);
     WGPUBuffer (*get_quad_vertex_buffer)(const struct yetty_yrender_gpu_resource_binder *self);
+
+    /* Sub-region write into one of the flattened storage buffers. The
+     * binder maps (buffer_index, byte_offset) to the right slot inside the
+     * single GPU storage buffer and queues one wgpuQueueWriteBuffer — no
+     * rebind, no re-finalize, no whole-buffer re-upload.
+     *
+     * Intended for streaming updates of large per-instance data (live audio
+     * samples, scrolling time series, …) where the caller already knows
+     * exactly which bytes changed.
+     *
+     * buffer_index   index into the same flattened buffer order the shader
+     *                sees (matches the order rs->buffers[] declared them,
+     *                children-first, then parent — i.e. exactly the order
+     *                the binder collected them at finalize time).
+     * byte_offset    offset INTO that buffer (not the merged region).
+     * data, size     bytes to write.
+     */
+    struct yetty_ycore_void_result (*write_buffer_chunk)(
+        struct yetty_yrender_gpu_resource_binder *self,
+        size_t buffer_index, size_t byte_offset,
+        const void *data, size_t size);
 };
 
 struct yetty_yrender_gpu_resource_binder {
