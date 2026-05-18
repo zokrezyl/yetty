@@ -97,9 +97,27 @@ enum yetty_yui_tabbar_kind {
 struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
     struct yetty_yui_tabbar *bar, enum yetty_yui_tabbar_kind kind);
 
-/* Accessors — used by yetty.c for diagnostics and screenshot routing. */
+/* Accessors — used by yetty.c for diagnostics and screenshot routing,
+ * and by yui's ygui titlebar sync helper that mirrors the model into
+ * widgets. The "active index" is the 0-based slot in the workspaces
+ * array; the active workspace pointer is just workspaces[active]. */
 struct yetty_yui_workspace *yetty_yui_tabbar_active_workspace(const struct yetty_yui_tabbar *bar);
 size_t yetty_yui_tabbar_count(const struct yetty_yui_tabbar *bar);
+size_t yetty_yui_tabbar_active_index(const struct yetty_yui_tabbar *bar);
+
+/* Model mutators usable from outside (ygui tab-widget callbacks). All
+ * are no-ops when idx is out of range; switch_to additionally no-ops
+ * when idx is already active. */
+struct yetty_ycore_void_result yetty_yui_tabbar_switch_to(struct yetty_yui_tabbar *bar,
+                                                          size_t idx);
+struct yetty_ycore_void_result yetty_yui_tabbar_close_at(struct yetty_yui_tabbar *bar, size_t idx);
+
+/* Window-control wrappers — yui's ygui titlebar buttons (_, □, ✕)
+ * trampoline through here so the click path doesn't have to know about
+ * the platform window manager. NULL-safe; no-op when no wm is bound. */
+void yetty_yui_tabbar_iconify(struct yetty_yui_tabbar *bar);
+void yetty_yui_tabbar_toggle_maximize(struct yetty_yui_tabbar *bar);
+void yetty_yui_tabbar_close_window(struct yetty_yui_tabbar *bar);
 
 /* Callback invoked when the v-button on the tabbar is clicked. The
  * tabbar reports the on-screen anchor (the lower-left corner of the

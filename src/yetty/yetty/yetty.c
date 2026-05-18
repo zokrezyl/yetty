@@ -1369,6 +1369,10 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
             yetty_yui_tabbar_set_v_menu_callback(yetty->tabbar, yetty_on_v_menu_click, yetty);
             yetty_yui_set_connect_callback(yetty->yui, yetty_on_yui_connect, yetty);
             yetty_yui_set_split_callback(yetty->yui, yetty_on_yui_split, yetty);
+            /* Bind the tabbar model so yui's engine-pinned titlebar
+             * (≡, tabs, +, drag, _, □, ✕) renders and reconciles
+             * against the same workspace list yetty owns. */
+            yetty_yui_set_tabbar_model(yetty->yui, yetty->tabbar);
         } else {
             ywarn("yetty_create: yui create failed: %s", yr.error.msg);
             yetty_ycore_error_destroy(yr.error);

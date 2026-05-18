@@ -680,6 +680,14 @@ struct yetty_ygui_widget {
              * the same way tab-switch events do. */
             ygui_widget_change_fn on_tab_close;
             void *on_tab_close_userdata;
+            /* Optional "+" new-tab button. When `on_new_tab` is set the
+             * tabbar paints a small "+" pill right after the last tab
+             * header and routes clicks on it to the callback. NULL =
+             * no button is shown. The callback typically calls back
+             * into yetty_ygui_widget_tabbar_add_tab itself (or into a
+             * host model that owns the tab list). */
+            ygui_widget_click_fn on_new_tab;
+            void *on_new_tab_userdata;
         } tabbar;
     } data;
 };

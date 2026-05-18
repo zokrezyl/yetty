@@ -35,6 +35,8 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywebgpu/utils.h>
 
+#include "tabbar.h"
+
 struct yetty_yui {
     /* Producer-side endpoint. ygui's output flows in here via
      * pty->ops->write. */
@@ -86,6 +88,26 @@ struct yetty_yui {
     struct yetty_ygui_widget *gpu_info_textarea;
     WGPUAdapter gpu_info_adapter;
     const struct yetty_ydraw_gpu_allocator *gpu_info_allocator;
+
+    /* Bound tabbar model. The native ygui TABBAR widget (used by the
+     * yui titlebar) reads from this and calls its mutators on
+     * close-x / "+" / tab-switch. yui owns the reconciliation. */
+    struct yetty_yui_tabbar *tabbar_model;
+
+    /* Engine titlebar — flex-row hbox pinned to the top of the canvas
+     * via engine_set_titlebar. Composition:
+     *   [≡ hamburger][native TABBAR widget (flex:1)][min][max][close]
+     * The native tabbar paints its own tabs + close-x + optional "+"
+     * pill; yui keeps its tab count + active index in sync with the
+     * tabbar_model on every render. */
+    struct yetty_ygui_widget *titlebar;
+    struct yetty_ygui_widget *titlebar_hamburger;
+    struct yetty_ygui_widget *titlebar_tabbar;   /* native engine_tabbar widget */
+    struct yetty_ygui_widget *titlebar_min;
+    struct yetty_ygui_widget *titlebar_max;
+    struct yetty_ygui_widget *titlebar_close;
+    int titlebar_synced_active;
+    size_t titlebar_synced_count;
 
     /* Application statusbar — STATUSBAR widget pinned to the bottom of
      * the engine's canvas via engine_set_statusbar. The widget paints
@@ -285,6 +307,21 @@ static void yui_split_kind_action(struct yetty_ygui_widget *item, void *userdata
 static void yui_split_back_to_context(struct yetty_ygui_widget *item, void *userdata);
 static void yui_gpu_info_refresh(struct yetty_ygui_widget *button, void *userdata);
 static void yui_gpu_info_close(struct yetty_ygui_widget *button, void *userdata);
+
+/* Titlebar (ygui-driven). build runs once at yui_create when the engine
+ * is up; sync runs every render to reconcile widgets with the tabbar
+ * model. */
+static void yui_titlebar_build(struct yetty_yui *yui);
+static void yui_titlebar_sync(struct yetty_yui *yui);
+static void yui_titlebar_on_hamburger(struct yetty_ygui_widget *btn, void *userdata);
+static void yui_titlebar_on_new_tab(struct yetty_ygui_widget *btn, void *userdata);
+static void yui_titlebar_on_min(struct yetty_ygui_widget *btn, void *userdata);
+static void yui_titlebar_on_max(struct yetty_ygui_widget *btn, void *userdata);
+static void yui_titlebar_on_close_window(struct yetty_ygui_widget *btn, void *userdata);
+static void yui_titlebar_on_tab_change(struct yetty_ygui_widget *tabbar, float value,
+                                       void *userdata);
+static void yui_titlebar_on_tab_close(struct yetty_ygui_widget *tabbar, float value,
+                                      void *userdata);
 
 /* Per-kind callback bundle for split-from-context. Like s_cb_ctx but
  * stashes orientation too. Indexed [orientation 0=vertical/1=horizontal][kind]. */
@@ -694,8 +731,28 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui_active_unlock();
     ynotify_set_handler(yui_ynotify_handler, context->event_loop);
 
+    /* Build the titlebar widget tree. The tabbar model is bound later
+     * by yetty.c via yetty_yui_set_tabbar_model; sync runs each render
+     * and is a no-op until the model is non-NULL. */
+    yui_titlebar_build(yui);
+
     ydebug("yui_create: grid=%ux%u cell=%.1fx%.1f", cols, rows, cell_w, cell_h);
     return YETTY_OK(yetty_yui_ptr, yui);
+}
+
+void yetty_yui_set_tabbar_model(struct yetty_yui *yui, struct yetty_yui_tabbar *tabbar)
+{
+    if (!yui) {
+        return;
+    }
+    yui->tabbar_model = tabbar;
+    /* Reset the sync watermarks so the next render rebuilds the tab
+     * widget set against the new model. */
+    yui->titlebar_synced_active = -1;
+    yui->titlebar_synced_count = 0;
+    if (yui->engine) {
+        yetty_ygui_engine_mark_dirty(yui->engine);
+    }
 }
 
 struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
@@ -755,6 +812,13 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
     if (!yui || !yui->layer || !target) {
         return YETTY_OK_VOID();
     }
+
+    /* Reconcile the engine titlebar against the bound tabbar model
+     * before deciding to emit. Sync mutates widget state (adds/removes
+     * tab widgets, repaints active) which marks the engine dirty when
+     * something changed. Idempotent / no-op when the model and widget
+     * tree already match. */
+    yui_titlebar_sync(yui);
 
     /* Drive the producer engine when dirty. Writes the OSC frame envelope
      * into the yui_endpoint memory pty (no stdout, no b64-round-trip). */
@@ -1137,6 +1201,217 @@ static void yui_gpu_info_close(struct yetty_ygui_widget *button, void *userdata)
     }
 }
 
+/*===========================================================================
+ * Titlebar (ygui-driven)
+ *
+ * The pre-ygui tabbar painted its strip with a custom GPU pipeline. That
+ * code is gone; the strip is now a hbox pinned via the engine titlebar
+ * slot containing:
+ *   [≡ hamburger][native TABBAR widget][_][□][×]
+ * The TABBAR widget owns its own pills + per-tab close-x + optional "+"
+ * pill (built-in to the widget). yui's job is just to reconcile the
+ * tabbar's tab count + active index against the tabbar_model on every
+ * render and forward TABBAR events back to the model.
+ *===========================================================================*/
+
+/* Pixel sizes for the titlebar chrome. Picked to feel browser-y: the
+ * header strip is 32 px (the native TABBAR widget's default header_h),
+ * the hamburger / window-control buttons are square-ish 28×28 pills
+ * that match the per-tab close-x footprint. */
+#define TITLEBAR_STRIP_H 32.0f
+#define TITLEBAR_BTN_W   28.0f
+
+static void yui_titlebar_build(struct yetty_yui *yui)
+{
+    if (!yui || !yui->engine) {
+        return;
+    }
+
+    struct yetty_ygui_widget *tb =
+        yetty_ygui_engine_hbox(yui->engine, "yui_titlebar", 0, 0, 0, TITLEBAR_STRIP_H);
+    if (!tb) {
+        return;
+    }
+    /* gap:0 + tight padding so the hamburger / tabbar / window-control
+     * buttons sit flush — combined with bg_color = bg_surface on the
+     * chrome buttons below, the whole strip reads as one continuous
+     * band matching the tabbar widget's own bg. */
+    yetty_ygui_widget_apply_css(tb,
+        "display:flex;flex-direction:row;align-items:center;gap:0;padding:0 0 0 0;");
+
+    /* The tabbar widget paints its strip with theme->bg_surface
+     * (0xFF2C261E by default). Give the side buttons (hamburger +
+     * window controls) the same base color so they blend into one
+     * continuous strip — otherwise they sit on whatever bg_color
+     * the button widget happens to inherit and look detached. */
+    const uint32_t STRIP_BG = 0xFF2C261Eu;
+
+    yui->titlebar_hamburger = yetty_ygui_engine_button(
+        yui->engine, "yui_titlebar/hamburger", 0, 0, TITLEBAR_BTN_W, TITLEBAR_STRIP_H,
+        "\xE2\x89\xA1"); /* ≡ */
+    if (yui->titlebar_hamburger) {
+        yetty_ygui_widget_set_bg_color(yui->titlebar_hamburger, STRIP_BG);
+        yetty_ygui_widget_button_on_click(yui->titlebar_hamburger,
+                                          yui_titlebar_on_hamburger, yui);
+        yetty_ygui_widget_add_child(tb, yui->titlebar_hamburger);
+    }
+
+    /* Native TABBAR widget. It paints its own pills + close-x + "+"
+     * pill (we install on_new_tab below). flex:1 0 0 makes it absorb
+     * all the unused horizontal space between the hamburger and the
+     * window-control buttons. */
+    yui->titlebar_tabbar = yetty_ygui_engine_tabbar(
+        yui->engine, "yui_titlebar/tabbar", 0, 0, 0, TITLEBAR_STRIP_H);
+    if (yui->titlebar_tabbar) {
+        yetty_ygui_widget_apply_css(yui->titlebar_tabbar, "flex:1 0 0;");
+        yetty_ygui_widget_tabbar_on_change(yui->titlebar_tabbar,
+                                           yui_titlebar_on_tab_change, yui);
+        yetty_ygui_widget_tabbar_on_tab_close(yui->titlebar_tabbar,
+                                              yui_titlebar_on_tab_close, yui);
+        yetty_ygui_widget_tabbar_on_new_tab(yui->titlebar_tabbar,
+                                            yui_titlebar_on_new_tab, yui);
+        yetty_ygui_widget_add_child(tb, yui->titlebar_tabbar);
+    }
+
+    yui->titlebar_min = yetty_ygui_engine_button(
+        yui->engine, "yui_titlebar/min", 0, 0, TITLEBAR_BTN_W, TITLEBAR_STRIP_H,
+        "\xE2\x88\x92"); /* − */
+    if (yui->titlebar_min) {
+        yetty_ygui_widget_set_bg_color(yui->titlebar_min, STRIP_BG);
+        yetty_ygui_widget_button_on_click(yui->titlebar_min, yui_titlebar_on_min, yui);
+        yetty_ygui_widget_add_child(tb, yui->titlebar_min);
+    }
+    yui->titlebar_max = yetty_ygui_engine_button(
+        yui->engine, "yui_titlebar/max", 0, 0, TITLEBAR_BTN_W, TITLEBAR_STRIP_H,
+        "\xE2\x96\xA1"); /* □ */
+    if (yui->titlebar_max) {
+        yetty_ygui_widget_set_bg_color(yui->titlebar_max, STRIP_BG);
+        yetty_ygui_widget_button_on_click(yui->titlebar_max, yui_titlebar_on_max, yui);
+        yetty_ygui_widget_add_child(tb, yui->titlebar_max);
+    }
+    yui->titlebar_close = yetty_ygui_engine_button(
+        yui->engine, "yui_titlebar/close", 0, 0, TITLEBAR_BTN_W, TITLEBAR_STRIP_H,
+        "\xC3\x97"); /* × */
+    if (yui->titlebar_close) {
+        yetty_ygui_widget_set_bg_color(yui->titlebar_close, STRIP_BG);
+        yetty_ygui_widget_button_on_click(yui->titlebar_close, yui_titlebar_on_close_window,
+                                          yui);
+        yetty_ygui_widget_add_child(tb, yui->titlebar_close);
+    }
+
+    yui->titlebar = tb;
+    yui->titlebar_synced_active = -1;
+    yui->titlebar_synced_count = 0;
+    yetty_ygui_engine_set_titlebar(yui->engine, tb);
+}
+
+static void yui_titlebar_sync(struct yetty_yui *yui)
+{
+    if (!yui || !yui->titlebar_tabbar || !yui->tabbar_model) {
+        return;
+    }
+    size_t count = yetty_yui_tabbar_count(yui->tabbar_model);
+    size_t active = yetty_yui_tabbar_active_index(yui->tabbar_model);
+
+    /* Tab count drift — add or remove tabs to match the model. The
+     * tabbar widget keeps its own arrays so this is a per-delta op
+     * rather than a wipe-and-rebuild. */
+    int wcount = yetty_ygui_widget_tabbar_count(yui->titlebar_tabbar);
+    while ((size_t)wcount < count) {
+        char label[16];
+        snprintf(label, sizeof(label), "Tab %d", wcount + 1);
+        yetty_ygui_widget_tabbar_add_tab(yui->titlebar_tabbar, label);
+        wcount++;
+    }
+    while ((size_t)wcount > count) {
+        wcount--;
+        yetty_ygui_widget_tabbar_remove_tab(yui->titlebar_tabbar, wcount);
+    }
+    yui->titlebar_synced_count = count;
+
+    /* Active index drift — set_active also re-renders the active
+     * highlight + accent bar. Guard so we don't fire on_change every
+     * frame: only when the widget's current active != model's. */
+    int wactive = yetty_ygui_widget_tabbar_get_active(yui->titlebar_tabbar);
+    if (count > 0 && wactive != (int)active) {
+        yetty_ygui_widget_tabbar_set_active(yui->titlebar_tabbar, (int)active);
+    }
+    yui->titlebar_synced_active = (int)active;
+}
+
+static void yui_titlebar_on_hamburger(struct yetty_ygui_widget *btn, void *userdata)
+{
+    (void)btn;
+    yetty_yui_show_view_menu((struct yetty_yui *)userdata, 4.0f, 36.0f);
+}
+
+static void yui_titlebar_on_new_tab(struct yetty_ygui_widget *btn, void *userdata)
+{
+    (void)btn;
+    struct yetty_yui *yui = userdata;
+    if (!yui || !yui->tabbar_model) {
+        return;
+    }
+    /* Spawn a default shell tab; the next sync run will add the
+     * matching widget tab. */
+    yetty_yui_tabbar_add_workspace_of_kind(yui->tabbar_model, YETTY_YUI_TAB_SHELL);
+}
+
+static void yui_titlebar_on_min(struct yetty_ygui_widget *btn, void *userdata)
+{
+    (void)btn;
+    struct yetty_yui *yui = userdata;
+    yetty_yui_tabbar_iconify(yui ? yui->tabbar_model : NULL);
+}
+
+static void yui_titlebar_on_max(struct yetty_ygui_widget *btn, void *userdata)
+{
+    (void)btn;
+    struct yetty_yui *yui = userdata;
+    yetty_yui_tabbar_toggle_maximize(yui ? yui->tabbar_model : NULL);
+}
+
+static void yui_titlebar_on_close_window(struct yetty_ygui_widget *btn, void *userdata)
+{
+    (void)btn;
+    struct yetty_yui *yui = userdata;
+    yetty_yui_tabbar_close_window(yui ? yui->tabbar_model : NULL);
+}
+
+/* TABBAR's on_change fires after the widget has already updated its
+ * own active state; forward to the model so the workspace switches.
+ * Guard against re-entrancy by checking the model's current active —
+ * the model fires its own request_render which will re-sync the widget. */
+static void yui_titlebar_on_tab_change(struct yetty_ygui_widget *tabbar, float value,
+                                       void *userdata)
+{
+    (void)tabbar;
+    struct yetty_yui *yui = userdata;
+    if (!yui || !yui->tabbar_model) {
+        return;
+    }
+    size_t idx = (size_t)value;
+    if (idx != yetty_yui_tabbar_active_index(yui->tabbar_model)) {
+        yetty_yui_tabbar_switch_to(yui->tabbar_model, idx);
+    }
+}
+
+/* TABBAR's on_tab_close fires BEFORE the widget removes the tab
+ * (the widget's default removal is skipped when this callback is set).
+ * We close the matching workspace in the model; the next sync run
+ * mirrors the new count into the widget. */
+static void yui_titlebar_on_tab_close(struct yetty_ygui_widget *tabbar, float value,
+                                      void *userdata)
+{
+    (void)tabbar;
+    struct yetty_yui *yui = userdata;
+    if (!yui || !yui->tabbar_model) {
+        return;
+    }
+    size_t idx = (size_t)value;
+    yetty_yui_tabbar_close_at(yui->tabbar_model, idx);
+}
+
 static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata)
 {
     (void)button;
@@ -1277,10 +1552,32 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
-    /* yui only owns the pointer while a widget is up. Without an open menu /
-     * visible dialog there's nothing for the engine to hit-test — fall
-     * through so the workspace below gets the event. */
-    if (!yetty_yui_is_active(yui)) {
+    /* Two ways yui captures mouse:
+     *   (a) Globally — when a menu / dialog is open (is_active). All
+     *       mouse events route to the engine and are consumed.
+     *   (b) Locally — for clicks landing in the engine-pinned
+     *       titlebar y-range. Even without an open overlay, the
+     *       titlebar widgets (≡, tabs, +, _, □, ✕) must receive
+     *       clicks. Consume only when the engine's hit-test landed on
+     *       a widget; otherwise let the click fall through so the
+     *       tabbar's window-drag logic picks it up. */
+    int active = yetty_yui_is_active(yui);
+    int in_titlebar = 0;
+    switch (event->type) {
+    case YETTY_YCORE_MOUSE_DOWN:
+    case YETTY_YCORE_MOUSE_UP:
+    case YETTY_YCORE_MOUSE_MOVE:
+    case YETTY_YCORE_MOUSE_DRAG:
+        in_titlebar = event->mouse.y < 36.0f /* YETTY_YUI_TABBAR_HEIGHT */;
+        break;
+    default:
+        break;
+    }
+    if (!active && !in_titlebar) {
+        /* Pure-pane events (clicks in the workspace) — let the workspace
+         * handle them. Note: keyboard / text events still need to be
+         * routable when a widget is focused; today nothing in the
+         * titlebar takes keyboard input, so passing through is fine. */
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
@@ -1288,15 +1585,24 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     case YETTY_YCORE_MOUSE_DOWN:
         yetty_ygui_engine_mouse_down(yui->engine, event->mouse.x, event->mouse.y,
                                      event->mouse.button);
-        return YETTY_OK(yetty_ycore_int, 1);
+        if (active || yetty_ygui_engine_has_pressed_widget(yui->engine)) {
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        /* Titlebar click but no widget hit — fall through to tabbar's
+         * window-drag handler. */
+        return YETTY_OK(yetty_ycore_int, 0);
     case YETTY_YCORE_MOUSE_UP:
         yetty_ygui_engine_mouse_up(yui->engine, event->mouse.x, event->mouse.y,
                                    event->mouse.button);
-        return YETTY_OK(yetty_ycore_int, 1);
+        return YETTY_OK(yetty_ycore_int, active || in_titlebar ? 1 : 0);
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
         yetty_ygui_engine_mouse_move(yui->engine, event->mouse.x, event->mouse.y);
-        return YETTY_OK(yetty_ycore_int, 1);
+        /* Don't consume hover/drag through the titlebar — workspace
+         * panes still need MOVE for terminal mouse modes. Only consume
+         * when we're globally active (menu / dialog open) so the
+         * underlying panes don't see motion behind the overlay. */
+        return YETTY_OK(yetty_ycore_int, active ? 1 : 0);
     case YETTY_YCORE_KEY_DOWN:
         yetty_ygui_engine_key_down(yui->engine, event->key.key, event->key.mods);
         return YETTY_OK(yetty_ycore_int, 1);

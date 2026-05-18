@@ -1,10 +1,7 @@
-include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
-
 add_library(yetty_yui STATIC
     tile.c
     workspace.c
     tabbar.c
-    tabbar-paint.c
     yui.c
 )
 
@@ -16,7 +13,6 @@ target_include_directories(yetty_yui
         ${YETTY_ROOT}/src
     PRIVATE
         ${YETTY_ROOT}/include
-        ${INCBIN_INCLUDE_DIR}
 )
 
 target_link_libraries(yetty_yui
@@ -25,10 +21,4 @@ target_link_libraries(yetty_yui
         yetty_yui_core
         yetty_yterm
         ygui_core
-)
-
-# Embed the tabbar shader so the GPU pipeline can pick it up at runtime
-# without a separate file dependency.
-incbin_add_resources(yetty_yui
-    tabbar_shader "${CMAKE_CURRENT_SOURCE_DIR}/tabbar.wgsl"
 )

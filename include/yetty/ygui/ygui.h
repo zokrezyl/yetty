@@ -422,6 +422,12 @@ void yetty_ygui_engine_mouse_up(struct yetty_ygui_engine *engine, float x, float
                                 int button);
 void yetty_ygui_engine_mouse_move(struct yetty_ygui_engine *engine, float x, float y);
 
+/* True iff the engine currently has a widget under a held mouse button.
+ * Used by yui after engine_mouse_down to decide whether a click landed
+ * on a widget (consume) or on empty space (fall through to the host).
+ * Cleared by engine_mouse_up. */
+int yetty_ygui_engine_has_pressed_widget(const struct yetty_ygui_engine *engine);
+
 /* Direct keyboard-event injection. Same use case as the mouse variants —
  * the engine's internal dispatch routes the event to engine->focused
  * (textinput taking text, button taking Enter/Escape, …). `text_input`
@@ -777,6 +783,14 @@ void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int i
  * the `value` argument — same shape as the on_change callback. */
 void yetty_ygui_widget_tabbar_on_tab_close(struct yetty_ygui_widget *tabbar,
                                            ygui_change_callback_t callback, void *userdata);
+
+/* Optional "+" new-tab button. When `callback` is non-NULL the tabbar
+ * renders a small "+" pill at the end of the header strip and routes
+ * clicks on it to the callback. The callback is responsible for
+ * appending a new tab (via widget_tabbar_add_tab) or asking a host
+ * model to do so. Pass NULL to hide the button. */
+void yetty_ygui_widget_tabbar_on_new_tab(struct yetty_ygui_widget *tabbar,
+                                         ygui_click_callback_t callback, void *userdata);
 
 /* Uniform per-button size used by tab close 'x' and (via the window
  * widget) the hamburger menu. Useful when an app builds custom UI

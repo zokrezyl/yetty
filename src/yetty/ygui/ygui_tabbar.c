@@ -50,6 +50,14 @@ void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
 #define TABBAR_PILL_RADIUS 6.0f
 #define TABBAR_ACCENT_BAR_H 3.0f
 
+/* Preferred / minimum per-pill width. Matches typical browser tab
+ * strips: ~160 px when there's room, shrink-floor ~80 px before tabs
+ * become illegible. Tabs DO NOT stretch beyond the preferred width
+ * when there's spare room — the strip is allowed to leave a gap on
+ * the right (filled by the optional "+" pill or just empty space). */
+#define TABBAR_PILL_PREF_W 160.0f
+#define TABBAR_PILL_MIN_W  80.0f
+
 /* Per-tab close-button + window hamburger button size. Kept as
  * a public constant via ygui_internal.h's TABBAR_BUTTON_SIZE so the
  * window widget can match it without copy-pasting magic numbers. */
@@ -60,6 +68,12 @@ void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
  * hairline; visible enough to break up the surface but unobtrusive. */
 #define TABBAR_SEPARATOR_W 1.0f
 #define TABBAR_SEPARATOR_INSET_Y 6.0f
+
+/* Footprint reserved for the optional "+" new-tab pill that sits
+ * immediately after the last tab when on_new_tab is set. Matches the
+ * close-x button footprint so the right edge reads consistently. */
+#define TABBAR_NEWTAB_W 28.0f
+#define TABBAR_NEWTAB_PAD 6.0f
 
 float yetty_ygui_tabbar_button_size(void)
 {
@@ -81,12 +95,48 @@ static float tabbar_pill_width(const struct yetty_ygui_widget *self)
         return 0.0f;
     }
     float total_gap = (float)(n - 1) * TABBAR_PILL_GAP;
-    float each = (self->layout_w - total_gap) / (float)n;
-    float min_w = 80.0f;
-    if (each < min_w) {
-        each = min_w;
+    /* Reserve room for the optional "+" pill so the tabs don't share
+     * its slot. The pill itself sits in the gap after the last tab,
+     * so we subtract its full footprint (button + the gap before it). */
+    float reserved =
+        self->data.tabbar.on_new_tab ? (TABBAR_NEWTAB_W + TABBAR_PILL_GAP) : 0.0f;
+    /* Browser-style sizing: each tab gets its preferred width up to
+     * the available room. Only when n × pref + gaps exceeds the
+     * strip width does the algorithm shrink the pills uniformly. The
+     * floor is the minimum legibility width; below that the tabs
+     * stop shrinking and clip at the right edge. */
+    float avail = self->layout_w - total_gap - reserved;
+    float per_pref = TABBAR_PILL_PREF_W;
+    if (per_pref * (float)n > avail) {
+        per_pref = avail / (float)n;
     }
-    return each;
+    if (per_pref < TABBAR_PILL_MIN_W) {
+        per_pref = TABBAR_PILL_MIN_W;
+    }
+    return per_pref;
+}
+
+/* Hit rect for the "+" pill in tabbar-local coords (relative to the
+ * widget's top-left). Returns the pill's (x, y, w, h); caller must
+ * check `on_new_tab` non-NULL first. */
+static void tabbar_newtab_rect(const struct yetty_ygui_widget *self,
+                               float pill_w, float *out_x, float *out_y,
+                               float *out_w, float *out_h)
+{
+    float hh = tabbar_header_h(self);
+    float tabs_end = (float)self->data.tabbar.n_tabs * pill_w +
+                     (float)(self->data.tabbar.n_tabs - 1) * TABBAR_PILL_GAP;
+    if (self->data.tabbar.n_tabs <= 0) {
+        tabs_end = 0.0f;
+    }
+    float sz = TABBAR_BUTTON_SIZE;
+    if (sz > hh - 2 * TABBAR_NEWTAB_PAD) {
+        sz = hh - 2 * TABBAR_NEWTAB_PAD;
+    }
+    *out_w = TABBAR_NEWTAB_W;
+    *out_h = sz;
+    *out_x = tabs_end + TABBAR_PILL_GAP;
+    *out_y = (hh - sz) * 0.5f;
 }
 
 /* Per-tab close-box rect in window-local coordinates (relative to the
@@ -192,6 +242,29 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
 
         x += pw + TABBAR_PILL_GAP;
     }
+
+    /* Optional "+" new-tab pill — small rounded square just past the
+     * last tab. Same brand-accent glyph as the per-tab close 'x' so
+     * the strip's clickable affordances feel related. */
+    if (self->data.tabbar.on_new_tab) {
+        float nx, ny, nw, nh;
+        tabbar_newtab_rect(self, pw, &nx, &ny, &nw, &nh);
+        float ax = self->x + nx;
+        float ay = self->y + ny;
+        yetty_ygui_render_ctx_render_box(ctx, ax, ay, nw, nh, theme->bg_hover,
+                                         TABBAR_PILL_RADIUS * 0.5f);
+        float fs = nh * 0.85f;
+        if (fs < 12.0f) {
+            fs = 12.0f;
+        }
+        /* "+" is roughly font_size/2 wide — center it inside the pill. */
+        float gx = ax + (nw - fs * 0.5f) * 0.5f;
+        float gy = ay + (nh - fs) * 0.5f - 1.0f;
+        yetty_ygui_render_ctx_render_text(ctx, "+", gx, gy,
+                                          theme->accent ? theme->accent
+                                                        : theme->text_primary,
+                                          fs);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -209,10 +282,23 @@ static int tabbar_on_press(struct yetty_ygui_widget *self, float lx, float ly, y
     if (ly < 0 || ly > hh) {
         return 0;
     }
+    float pw = tabbar_pill_width(self);
+
+    /* "+" pill takes priority — even when there are no tabs yet, the
+     * user should be able to spawn the first one. Hit-test in tabbar-
+     * local coords. */
+    if (self->data.tabbar.on_new_tab) {
+        float nx, ny, nw, nh;
+        tabbar_newtab_rect(self, pw, &nx, &ny, &nw, &nh);
+        if (lx >= nx && lx < nx + nw && ly >= ny && ly < ny + nh) {
+            self->data.tabbar.on_new_tab(self, self->data.tabbar.on_new_tab_userdata);
+            return 1;
+        }
+    }
+
     if (self->data.tabbar.n_tabs <= 0) {
         return 0;
     }
-    float pw = tabbar_pill_width(self);
     float x = 0.0f;
     for (int i = 0; i < self->data.tabbar.n_tabs; i++) {
         if (lx >= x && lx < x + pw) {
@@ -301,6 +387,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_tabbar(struct yetty_ygui_engine *eng
     t->data.tabbar.header_h = 0.0f;
     t->data.tabbar.on_tab_close = NULL;
     t->data.tabbar.on_tab_close_userdata = NULL;
+    t->data.tabbar.on_new_tab = NULL;
+    t->data.tabbar.on_new_tab_userdata = NULL;
     t->vtable = &tabbar_vtable;
 
     t->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
@@ -507,4 +595,18 @@ void yetty_ygui_widget_tabbar_on_change(struct yetty_ygui_widget *tabbar,
     }
     tabbar->change_callback = callback;
     tabbar->change_userdata = userdata;
+}
+
+void yetty_ygui_widget_tabbar_on_new_tab(struct yetty_ygui_widget *tabbar,
+                                         ygui_click_callback_t callback, void *userdata)
+{
+    if (!tabbar || tabbar->type != YETTY_YGUI_WIDGET_TABBAR) {
+        return;
+    }
+    tabbar->data.tabbar.on_new_tab = callback;
+    tabbar->data.tabbar.on_new_tab_userdata = userdata;
+    if (tabbar->engine) {
+        tabbar->engine->dirty = 1;
+        tabbar->dirty = 1;
+    }
 }
