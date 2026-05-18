@@ -159,14 +159,14 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
         ytime_start(full_frame);
 
-        /* Clear the big target once before rendering all panes */
-        ytime_start(clear);
-        struct yetty_ycore_void_result clr_res =
-            yetty->render_target->ops->clear(yetty->render_target);
-        ytime_report(clear);
-        if (!YETTY_IS_OK(clr_res)) {
-            yerror("yetty: clear failed: %s", clr_res.error.msg);
-        }
+        /* Global clear() removed — each pane's background-layer (tile.c
+         * pane_render → background_layer.render) wipes the pane to its bg
+         * colour with an opaque RGBA fill before any other layer paints,
+         * and the tabbar paints its own strip, so the only pixels the old
+         * global Clear ever delivered to the screen were inter-pane gap
+         * pixels that nothing else overwrites. Try without and see whether
+         * any visible gap shows previous-frame ghosting; if so, re-add a
+         * scissored clear for just the gap rects, not the whole 4K. */
 
         /* Render the tab strip + active workspace. Inactive workspaces hold
          * GPU state but don't contribute to the frame. */

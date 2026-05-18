@@ -332,6 +332,7 @@ static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_t
                                                           struct yetty_ydraw_target *target);
 static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_listener *listener,
                                                   const struct yetty_yui_event *event);
+static void anim_timer_stop(struct yetty_yterm_shader_glyph_layer *layer);
 static int shader_glyph_is_empty(const struct yetty_yrender_terminal_layer *self);
 static int shader_glyph_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
 static int shader_glyph_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
@@ -623,12 +624,23 @@ static inline struct yetty_yterm_shader_glyph_layer *layer_from_listener(
 
 /* Animation tick — runs on the event-loop thread at target_fps. Schedules
  * one render; the actual draw happens when RENDER is dispatched. Returns 0
- * (not-handled) so the timer event still propagates to other listeners. */
+ * (not-handled) so the timer event still propagates to other listeners.
+ *
+ * Self-stops when the layer has gone empty. terminal_render_frame skips the
+ * layer's render() if is_empty() returns 1, so shader_glyph_render's stop
+ * path never runs once the last shader-glyph cell disappears — the timer
+ * would otherwise tick forever, re-firing request_render at 60 Hz and
+ * pinning the GPU at 100% on idle terminals. Check from here so we stop
+ * the timer regardless of whether render() ever gets called. */
 static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_listener *listener,
                                                   const struct yetty_yui_event *event)
 {
     (void)event;
     struct yetty_yterm_shader_glyph_layer *layer = layer_from_listener(listener);
+    if (shader_glyph_is_empty(&layer->base)) {
+        anim_timer_stop(layer);
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
     if (layer->base.request_render_fn) {
         struct yetty_ycore_void_result r =
             layer->base.request_render_fn(layer->base.request_render_userdata);

@@ -2,8 +2,8 @@
 
 #-----------------------------------------------------------------------------
 # Shader-glyph name lookup — tiny no-deps library so thin clients (yecho,
-# tools) can resolve "@spinner" -> U+E000 without dragging FreeType/webgpu.
-# The table is generated at configure time by scanning glyph-shaders/0xNN-*.wgsl.
+# tools) can resolve "@spinner" -> U+100000 without dragging FreeType/webgpu.
+# The table is generated at configure time by scanning glyph-shaders/0xNNNN-*.wgsl.
 #-----------------------------------------------------------------------------
 set(SHADER_GLYPH_TABLE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/shader-glyph-table.gen.h")
 

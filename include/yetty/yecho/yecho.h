@@ -31,8 +31,8 @@
  * Styled-block content is treated as plain text — nested glyphs/blocks
  * are not recursively expanded.
  *
- * Glyph names resolve via yetty_yfont_shader_glyph_codepoint() (BMP PUA
- * range, U+E000 + local_id). Unknown names land in the doc's error list
+ * Glyph names resolve via yetty_yfont_shader_glyph_codepoint() (PUA-B
+ * range, U+100000 + local_id). Unknown names land in the doc's error list
  * and render as a literal "[?name]" placeholder.
  *
  * The library emits a yetty_ydraw_draw_list (text spans for runs of

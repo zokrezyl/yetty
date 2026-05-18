@@ -26,14 +26,26 @@ extern "C" {
  *   local_id 1 -> glyph_index 0xFFFFFFFE
  *   ...
  *
- * The PUA range U+E000..U+E0FF is mapped 1:1 to local_id 0..255 by the
- * text-layer's glyph resolver (see resolve_glyph in text-layer.c). Print
- * a PUA codepoint and you get an animated shader glyph at that cell.
+ * The PUA range U+100000..U+100FFF (Supplementary PUA-B) is mapped 1:1
+ * to local_id 0..4095 by the text-layer's glyph resolver (see
+ * resolve_glyph in text-layer.c). Print a PUA codepoint and you get an
+ * animated shader glyph at that cell.
+ *
+ * Why PUA-B and not PUA-A or BMP PUA: verified against the bundled
+ * DejaVuSansM Nerd Font (13,718 codepoints in cmap) —
+ *   BMP PUA  (U+E000..U+F8FF)   : 3,488 codepoints used (Powerline +
+ *                                  Codicons + most icon blocks)
+ *   PUA-A    (U+F0000..U+FFFFD) : 6,896 codepoints used (Material Design
+ *                                  Icons U+F0001..U+F1AF0)
+ *   PUA-B    (U+100000..U+10FFFD): 0 codepoints used — empty
+ * Earlier moves into BMP PUA and PUA-A both collided: a Nerd Font icon
+ * whose codepoint matched a yetty shader local-id pinned shader-glyph
+ * `is_empty` at 0 and ran the 60 Hz animation timer indefinitely.
  */
 
 #define YETTY_SHADER_GLYPH_BASE 0x80000000u
-#define YETTY_SHADER_GLYPH_PUA_BASE 0x0000E000u
-#define YETTY_SHADER_GLYPH_PUA_END 0x0000E100u /* exclusive */
+#define YETTY_SHADER_GLYPH_PUA_BASE 0x00100000u
+#define YETTY_SHADER_GLYPH_PUA_END 0x00101000u /* exclusive — 4096-slot window */
 
 static inline int yetty_shader_glyph_is(uint32_t glyph_index)
 {
