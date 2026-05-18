@@ -418,7 +418,14 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
         wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y, (uint32_t)vp.w,
                                             (uint32_t)vp.h);
 
-        wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+        /* instance_count defaults to 1 (single full-pane quad). Layers like
+         * shader-glyph set it to the per-frame cell count for instanced
+         * draws — each instance covers one cell, vertex shader fetches the
+         * cell's position from a storage buffer indexed by instance_index.
+         * Defensive: treat 0 as "draw once" so layers that don't set the
+         * field still render. */
+        uint32_t instance_count = rs->instance_count > 0 ? rs->instance_count : 1u;
+        wgpuRenderPassEncoderDraw(pass, 6, instance_count, 0, 0);
     }
 
     wgpuRenderPassEncoderEnd(pass);

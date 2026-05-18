@@ -36,6 +36,14 @@ struct yetty_ydraw_gpu_resource_set {
 
     struct yetty_ydraw_gpu_resource_set *children[YETTY_YRENDER_RS_MAX_CHILDREN];
     size_t children_count;
+
+    /* Per-frame draw call shape. 6 vertices = full-pane quad. instance_count
+     * defaults to 1 (single full-pane draw); set higher for instanced draws
+     * such as shader-glyph's per-cell rendering, where each instance covers
+     * one cell read from a storage buffer indexed by @builtin(instance_index).
+     * Zero means "do not draw" — useful when a layer has its cell list empty
+     * for one frame. */
+    uint32_t instance_count;
 };
 
 YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_set,

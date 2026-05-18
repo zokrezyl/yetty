@@ -69,6 +69,15 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
     set_time(rs, 0.0f);
 }
 
+/* Per-instance entry uploaded to buffers[1]. One entry per shader-glyph
+ * cell visible this frame; the vertex shader fetches it by instance_index,
+ * positions a quad over the cell, and passes local_id + colors through to
+ * the fragment shader. Keeping it tiny (8 bytes) keeps the upload cheap. */
+struct shader_glyph_instance {
+    uint32_t cell_index; /* row * cols + col within the cell buffer */
+    uint32_t local_id;   /* index into the generated render_shader_glyph dispatcher */
+};
+
 /* Layer struct - embeds base as first member */
 struct yetty_yterm_shader_glyph_layer {
     struct yetty_yrender_terminal_layer base;
@@ -80,6 +89,14 @@ struct yetty_yterm_shader_glyph_layer {
     struct yetty_ydraw_gpu_resource_set rs;
     /* CPU-side animation clock origin. Time uniform is (now - t0). */
     struct timespec t0;
+
+    /* Per-frame cell instance list. Built in get_gpu_resource_set by
+     * scanning the text-layer's cell buffer for cells whose glyph_index
+     * has bit-31 set. rs.buffers[1] points here and the draw is instanced
+     * with rs.instance_count = instance_count. */
+    struct shader_glyph_instance *instances;
+    size_t instance_cap;
+    uint32_t instance_count;
 
     /* Animation timer. Drives request_render at target_fps while there's
      * any shader-glyph cell on screen; stays stopped (zero-cost) on idle
@@ -436,14 +453,23 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     /* Resource set */
     strncpy(layer->rs.namespace, "shader_glyph", YETTY_YRENDER_NAME_MAX - 1);
 
-    /* One read-only storage buffer pointing at the same vterm cell data
-     * the text-layer uploads. The binder will upload it independently,
-     * so this costs an extra copy on the upload path — acceptable for v1;
-     * sharing requires reworking the binder's de-duplication. */
-    layer->rs.buffer_count = 1;
+    /* Two read-only storage buffers:
+     *   buffers[0] "cells"      : full cell buffer (same as text-layer's),
+     *                              needed by the fragment shader for fg/bg
+     *                              colours of each rendered cell.
+     *   buffers[1] "instances"  : packed list of (cell_index, local_id) for
+     *                              every shader-glyph cell visible this frame.
+     *                              The vertex shader fetches one entry per
+     *                              draw instance and positions a quad over
+     *                              that cell, so the fragment shader only
+     *                              fires on shader-glyph pixels. */
+    layer->rs.buffer_count = 2;
     strncpy(layer->rs.buffers[0].name, "cells", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(layer->rs.buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     layer->rs.buffers[0].readonly = 1;
+    strncpy(layer->rs.buffers[1].name, "instances", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(layer->rs.buffers[1].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
+    layer->rs.buffers[1].readonly = 1;
 
     init_uniforms(&layer->rs);
     set_grid_size(&layer->rs, (float)cols, (float)rows);
@@ -515,6 +541,7 @@ static struct yetty_ycore_void_result shader_glyph_destroy(
         }
     }
     free(layer->shader_source);
+    free(layer->instances);
     free(layer);
     return YETTY_OK_VOID();
 }
@@ -577,15 +604,56 @@ static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resourc
         layer->rs.buffers[0].data = (uint8_t *)cells_data;
         layer->rs.buffers[0].size = cells_size;
     }
-    /* Always mark buffer dirty so the binder re-uploads cells every frame.
-     *
-     * Can't piggy-back on `text_layer->dirty` here: render-target-texture
-     * clears `layer->dirty` after each layer renders, and text-layer renders
-     * BEFORE shader-glyph in terminal_render_frame's loop. By the time we
-     * get here text-layer's dirty is already 0, so we'd miss content updates
-     * (the GPU stays stuck on the cell snapshot from the first frame and
-     * any glyphs printed after that never reach the layer). */
     layer->rs.buffers[0].dirty = 1;
+
+    /* Build the per-cell instance list. One pass over the cell buffer
+     * extracting (cell_index, local_id) for every cell whose glyph_index
+     * has bit-31 set. The vertex shader will fetch this and emit a quad
+     * over exactly that cell — so fragment shader fires only on shader-
+     * glyph pixels rather than every pixel of the pane. */
+    uint32_t cols = (uint32_t)layer->base.grid_size.cols;
+    uint32_t rows = (uint32_t)layer->base.grid_size.rows;
+    size_t live_cells = (size_t)cols * (size_t)rows;
+    /* vterm allocates 2*rows tall — only scan the live half (top rows×cols).
+     * The bottom half is unused for the visible screen. */
+    if (cells_size < live_cells * 12u) {
+        live_cells = cells_size / 12u;
+    }
+    const uint32_t *p = (const uint32_t *)cells_data;
+    /* Grow instances[] on demand. Worst case = grid area, but typical = a
+     * handful of cells, so this realloc is rare after warm-up. */
+    if (layer->instance_cap < live_cells) {
+        struct shader_glyph_instance *resized =
+            realloc(layer->instances, live_cells * sizeof(*resized));
+        if (resized) {
+            layer->instances = resized;
+            layer->instance_cap = live_cells;
+        }
+    }
+    uint32_t n = 0;
+    if (layer->instances) {
+        for (size_t i = 0; i < live_cells; i++) {
+            uint32_t g = p[i * 3u];
+            if (g >> 31) {
+                layer->instances[n].cell_index = (uint32_t)i;
+                /* local_id = 0xFFFFFFFF - glyph_index (matches
+                 * yetty_shader_glyph_id_from_local). */
+                layer->instances[n].local_id = 0xFFFFFFFFu - g;
+                n++;
+            }
+        }
+    }
+    layer->instance_count = n;
+
+    /* buffers[1] = instance list */
+    layer->rs.buffers[1].data = (uint8_t *)layer->instances;
+    layer->rs.buffers[1].size = (size_t)n * sizeof(struct shader_glyph_instance);
+    layer->rs.buffers[1].dirty = 1;
+
+    /* Tell render-target how many instances to draw. Zero is fine — the
+     * outer is_empty() returns 1 in that case and the layer is skipped
+     * entirely; if we ever do get here with n=0 the draw becomes a no-op. */
+    layer->rs.instance_count = n;
 
     /* Update animation clock. */
     struct timespec now;
@@ -594,9 +662,6 @@ static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resourc
         (float)(now.tv_sec - layer->t0.tv_sec) + (float)(now.tv_nsec - layer->t0.tv_nsec) * 1e-9f;
     set_time(&layer->rs, t);
 
-    /* Don't clear dirty — this is an animation layer. The renderer's
-     * `if (!layer->dirty) return` short-circuit would skip every frame
-     * after the first. shader_glyph_render re-arms dirty=1 explicitly. */
     return YETTY_OK(yetty_yrender_gpu_resource_set, &layer->rs);
 }
 
@@ -628,6 +693,11 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
         anim_timer_stop(layer);
         return YETTY_OK(yetty_ycore_int, 0);
     }
+    /* Mark dirty BEFORE requesting the render. terminal_render_frame's new
+     * dirty gate skips clean layers; without this the tick would request a
+     * render where shader-glyph then gets skipped, advancing time without
+     * actually re-painting the cells. */
+    layer->base.dirty = 1;
     if (layer->base.request_render_fn) {
         struct yetty_ycore_void_result r =
             layer->base.request_render_fn(layer->base.request_render_userdata);
@@ -666,19 +736,12 @@ static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_t
      * idle. Otherwise, ensure the timer is ticking at target_fps. */
     if (shader_glyph_is_empty(self)) {
         anim_timer_stop(layer);
-        /* Direct-render-into-big_target path: big_target is fully redrawn
-         * every frame (text Clear + ydraw/shader-glyph Load), so there's
-         * no stale shader-glyph image to evict — just skip. The old
-         * "always render" workaround was for the per-layer-RT path, which
-         * needed an explicit clear on its dedicated RT; that path is no
-         * longer used by terminal_render_frame. */
         return YETTY_OK_VOID();
     }
     anim_timer_start(layer);
-
-    /* Animations: force re-render every frame even if the cell buffer
-     * didn't change, so the time-driven shaders advance. */
-    layer->base.dirty = 1;
+    /* dirty is set by on_anim_tick before request_render — no force-arm
+     * needed here. Per-cell instanced draw fires on shader-glyph cells
+     * only, so unchanged frames cost nothing on the GPU. */
     return target->ops->render_layer(target, self);
 }
 
