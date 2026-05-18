@@ -289,19 +289,10 @@ static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
 
         /* Pane background — opaque RGBA fill across the pane viewport,
          * rendered before the view. Provides the per-pane wipe so the
-         * view's upper layers (alpha<1) don't ghost the previous frame.
-         *
-         * Gated by the layer's own dirty bit. Without this gate, the bg
-         * fill runs every frame — at 4K that's 8.3 M opaque fragments
-         * the GPU has to write — and it wipes pixels that the view's
-         * dirty cascade decided didn't need re-painting (e.g. when only
-         * the shader-glyph layer ticks), leaving the pane stuck on bg
-         * colour between view re-renders. bg only legitimately changes
-         * on pane creation / resize / colour change. */
+         * view's upper layers (alpha<1) don't ghost the previous frame. */
         struct yetty_ycore_void_result res = YETTY_OK_VOID();
         if (pane->background_layer && pane->background_layer->ops &&
-            pane->background_layer->ops->render &&
-            pane->background_layer->dirty) {
+            pane->background_layer->ops->render) {
             res = pane->background_layer->ops->render(pane->background_layer, render_target);
         }
         if (YETTY_IS_OK(res)) {

@@ -1154,6 +1154,12 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
                          yetty->context.app_context.app_gpu_context.x11_window != 0UL;
 #endif
 
+    /* set_wgpu casts straight to render_target_texture and writes to its
+     * `wgpu` field by raw offset — calling it on a VNC or X11-tile target
+     * stomps unrelated fields in those structs. Only flip this true when
+     * the chosen target is genuinely a texture target. */
+    bool target_is_texture = false;
+
     if (vnc_enabled) {
         /* VNC render target: sends frames to VNC, optionally presents to surface */
         target_res = yetty_yrender_target_vnc_create(
@@ -1172,12 +1178,14 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
                   target_res.error.msg);
             target_res = yetty_yrender_target_texture_create(
                 yetty->device, yetty->queue, yetty->surface_format, alloc_res.value, surface, vp);
+            target_is_texture = true;
         }
 #endif
     } else {
         /* Standard texture render target */
         target_res = yetty_yrender_target_texture_create(
             yetty->device, yetty->queue, yetty->surface_format, alloc_res.value, surface, vp);
+        target_is_texture = true;
     }
     if (!YETTY_IS_OK(target_res)) {
         return YETTY_ERR(yetty_ycore_void, "failed to create render target");
@@ -1187,7 +1195,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
      * can yield via yetty_yplatform_wgpu_surface_present_await instead of
      * blocking the loop thread on wgpuSurfacePresent. Non-surface targets
      * (layer/compositing) ignore this and never call present(). */
-    if (surface) {
+    if (surface && target_is_texture) {
         yetty_yrender_target_texture_set_wgpu(yetty->render_target, yetty->wgpu);
     }
     ydebug("initWebGPU: render target created %.0fx%.0f vnc=%d", vp.w, vp.h, vnc_enabled);
