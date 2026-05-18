@@ -89,11 +89,12 @@ struct yetty_yui_tabbar {
     float resize_last_x;
     float resize_last_y;
 
-    /* v-menu hook. Clicking the v-button no longer toggles an in-bar
-     * rect popup — instead the tabbar fires this callback so an external
-     * subscriber (yetty.c → yui's ygui popup_menu) can paint a proper
-     * widget-based menu on top. NULL means "no menu attached", in which
-     * case the v-button click is a no-op. */
+    /* Hamburger-menu hook. Clicking the ≡ button on the left fires this
+     * callback so an external subscriber (yetty.c → yui's ygui
+     * popup_menu) paints a widget-based menu anchored under the button.
+     * NULL means "no menu attached", in which case the click is a
+     * no-op. Field name retained for binary compatibility with the
+     * existing callback typedef. */
     yetty_yui_tabbar_v_menu_cb v_menu_cb;
     void *v_menu_userdata;
 
@@ -250,13 +251,14 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
 #define TABBAR_NEWTAB_AREA 40.0f   /* footprint reserved for the new-tab "+" pill */
 #define TABBAR_PLUS_THICKNESS 2.0f /* arm thickness of the + glyph */
 
-/* Left-edge "v" dropdown button — mirrors a typical browser's
- * hamburger / customize menu. Lives between the window's left edge and
- * the first tab. Same
- * pill footprint as the "+" button so the two read as siblings. */
-#define TABBAR_MENU_AREA 40.0f     /* width reserved for the "v" pill on the left */
-#define TABBAR_CHEVRON_LEN 10.0f   /* total span of the chevron arms */
-#define TABBAR_CHEVRON_STROKE 2.0f /* arm thickness of the chevron */
+/* Left-edge hamburger menu button — the catch-all app menu (Firefox /
+ * mobile / GNOME convention: ≡ in the top-left). Lives between the
+ * window's left edge and the first tab. Same pill footprint as the "+"
+ * button on the right so the two read as siblings. */
+#define TABBAR_MENU_AREA 40.0f         /* width reserved for the hamburger pill */
+#define TABBAR_HAMBURGER_LEN 12.0f     /* horizontal length of each bar */
+#define TABBAR_HAMBURGER_STROKE 2.0f   /* bar thickness */
+#define TABBAR_HAMBURGER_GAP 3.0f      /* vertical gap between adjacent bars (centre-to-centre - stroke) */
 
 /* Window-control buttons (minimize, maximize-toggle, close) live at the
  * far right of the strip. Each button has the same square footprint; the
@@ -513,10 +515,10 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *
 
     /* Worst-case rect count:
      *   1 strip bg + N tabs + 3 plus-button rects (pill + 2 arms)
-     *   + 3 "v" button rects (pill + 2 chevron arms)
-     *   + 3 window-button bgs + 1 (min) + 4 (max outline) + 2 (close X) = 17
-     * Total upper bound: 17 + N. Stack up to 64. */
-    size_t rect_count = 17 + bar->count;
+     *   + 4 hamburger button rects (pill + 3 bars)
+     *   + 3 window-button bgs + 1 (min) + 4 (max outline) + 2 (close X) = 18
+     * Total upper bound: 18 + N. Stack up to 64. */
+    size_t rect_count = 18 + bar->count;
     struct yetty_yui_tabbar_rect stack_rects[64];
     struct yetty_yui_tabbar_rect *rects = stack_rects;
     struct yetty_yui_tabbar_rect *heap_rects = NULL;
@@ -574,9 +576,10 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *
         r_corner = tw * 0.5f;
     }
 
-    /* 1b. "v" menu pill on the left — same footprint as the "+" pill so
-     * the two read as siblings. Chevron glyph is two short rotated rects
-     * forming a downward V, drawn in the same instanced pass. */
+    /* 1b. Hamburger menu pill on the left — same footprint as the "+"
+     * pill so the two read as siblings. Three horizontal bars centered
+     * on the pill: top, middle, bottom. Brand-mint coloured (same as
+     * the "+" arms) to read as an action surface. */
     {
         float btn = strip - top_inset - 4.0f;
         if (btn < 16.0f) {
@@ -605,41 +608,29 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *
                       .radius_bl = radius,
                   });
 
-        /* Chevron: two strokes meeting at the bottom-center of the
-         * glyph box, each rotated 45°/-45° around its own center. The
-         * chevron itself is the brand mint — it's the user-action
-         * surface, so it picks up brand accent rather than off-white. */
-        float arm_len = TABBAR_CHEVRON_LEN;
-        float arm_th = TABBAR_CHEVRON_STROKE;
+        /* Three stacked horizontal bars (hamburger glyph). Stride
+         * between bar centres is (stroke + gap); the middle bar sits
+         * exactly on the glyph centre. */
+        float bar_len = TABBAR_HAMBURGER_LEN;
+        float bar_th = TABBAR_HAMBURGER_STROKE;
+        float stride = bar_th + TABBAR_HAMBURGER_GAP;
         float cx = bx + btn * 0.5f;
         float cy = by + btn * 0.5f;
-        /* Pre-translate so each rotated arm's bottom-end lands at (cx, cy+offset). */
-        float off_x = arm_len * 0.25f; /* horizontal offset of each arm's center */
-        float off_y = 0.0f;
-        push_rect(rects, &n,
-                  (struct yetty_yui_tabbar_rect){
-                      .x = cx - off_x - arm_len * 0.5f,
-                      .y = cy + off_y - arm_th * 0.5f,
-                      .w = arm_len,
-                      .h = arm_th,
-                      .r = ACCENT_R,
-                      .g = ACCENT_G,
-                      .b = ACCENT_B,
-                      .a = 1.0f,
-                      .rotation = 0.78539816f /* +45° */
-                  });
-        push_rect(rects, &n,
-                  (struct yetty_yui_tabbar_rect){
-                      .x = cx + off_x - arm_len * 0.5f,
-                      .y = cy + off_y - arm_th * 0.5f,
-                      .w = arm_len,
-                      .h = arm_th,
-                      .r = ACCENT_R,
-                      .g = ACCENT_G,
-                      .b = ACCENT_B,
-                      .a = 1.0f,
-                      .rotation = -0.78539816f /* -45° */
-                  });
+        float bar_x = cx - bar_len * 0.5f;
+        for (int i = -1; i <= 1; i++) {
+            float bar_y = cy + (float)i * stride - bar_th * 0.5f;
+            push_rect(rects, &n,
+                      (struct yetty_yui_tabbar_rect){
+                          .x = bar_x,
+                          .y = bar_y,
+                          .w = bar_len,
+                          .h = bar_th,
+                          .r = ACCENT_R,
+                          .g = ACCENT_G,
+                          .b = ACCENT_B,
+                          .a = 1.0f,
+                      });
+        }
     }
 
     float x = TABBAR_MENU_AREA;
@@ -1145,7 +1136,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
 
     /* Strip-area MOUSE_DOWN — route by x to a button, a tab, or start a
      * window drag if it landed in empty space. Layout left → right:
-     *   [v-menu | ...tabs... | new-tab | drag space | min | max | close] */
+     *   [≡-menu | ...tabs... | new-tab | drag space | min | max | close] */
     if (in_strip && event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
         float winbtn_left = bar->width - TABBAR_WINBTN_AREA;
         /* '+' button hugs the right side of the last tab. */
@@ -1169,17 +1160,17 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                newtab_right, (void *)wm);
 
         if (event->mouse.x < TABBAR_MENU_AREA) {
-            /* "v" button — fire the v-menu callback. The actual popup
-             * lives on yui's ygui_engine; tabbar just reports the click
-             * with the anchor (lower-left of the v-button) so the
-             * subscriber can position the popup. */
+            /* Hamburger button — fire the app-menu callback. The actual
+             * popup lives on yui's ygui_engine; tabbar just reports the
+             * click with the anchor (lower-left of the pill) so the
+             * subscriber can position the menu. */
             if (bar->v_menu_cb) {
                 float anchor_x = 4.0f;
                 float anchor_y = strip;
                 bar->v_menu_cb(bar->v_menu_userdata, anchor_x, anchor_y);
-                ydebug("tabbar: v-menu callback fired at (%.1f, %.1f)", anchor_x, anchor_y);
+                ydebug("tabbar: hamburger menu fired at (%.1f, %.1f)", anchor_x, anchor_y);
             } else {
-                ydebug("tabbar: v-button click with no menu callback bound");
+                ydebug("tabbar: hamburger click with no menu callback bound");
             }
         } else if (event->mouse.x >= winbtn_left) {
             /* Slot order: minimize, maximize, close (left to right). */

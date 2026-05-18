@@ -31,6 +31,30 @@ void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
 #define MENU_SEPARATOR_H 8.0f
 #define MENU_SEPARATOR_LINE 1.0f
 
+/* Header strip (title / breadcrumb / back arrow). Same height as a row
+ * so the visual rhythm stays consistent with the items below. */
+#define MENU_HEADER_H 28.0f
+#define MENU_HEADER_SEPARATOR_H 1.0f
+
+/* `<` back-button hit area, anchored at the left of the header strip.
+ * Width chosen so the chevron has comfortable padding without eating
+ * too much of the title space. */
+#define MENU_BACK_BTN_W 32.0f
+
+static int menu_has_header(const struct yetty_ygui_widget *self)
+{
+    /* A header is rendered whenever the menu has either a title to
+     * display or a back-handler (the `<` button needs space even with
+     * no title — e.g. an unnamed drill-down level). */
+    return (self->data.popup_menu.title && self->data.popup_menu.title[0]) ||
+           self->data.popup_menu.on_back != NULL;
+}
+
+static float menu_header_h(const struct yetty_ygui_widget *self)
+{
+    return menu_has_header(self) ? (MENU_HEADER_H + MENU_HEADER_SEPARATOR_H) : 0.0f;
+}
+
 static float menu_item_h(const struct yetty_ygui_widget *self)
 {
     if (self->data.popup_menu.item_h > 0) {
@@ -39,10 +63,11 @@ static float menu_item_h(const struct yetty_ygui_widget *self)
     return MENU_DEFAULT_ITEM_H;
 }
 
-/* y-offset of item `i` from the menu's top, in menu-local coords. */
+/* y-offset of item `i` from the menu's top, in menu-local coords.
+ * The optional header strip pushes all items down by header_h. */
 static float menu_item_top(const struct yetty_ygui_widget *self, int i)
 {
-    float y = MENU_PAD_Y;
+    float y = menu_header_h(self) + MENU_PAD_Y;
     float ih = menu_item_h(self);
     for (int k = 0; k < i; k++) {
         y += self->data.popup_menu.item_labels[k] ? ih : MENU_SEPARATOR_H;
@@ -50,13 +75,14 @@ static float menu_item_top(const struct yetty_ygui_widget *self, int i)
     return y;
 }
 
-/* Total height of all rows + vertical padding. The widget's authored
- * height is kept in sync with this value via menu_resize() so the
- * surrounding layout (none today — menus are absolute-positioned) and
- * the drop-shadow extent agree on where the menu ends. */
+/* Total height of all rows + vertical padding (and the header when
+ * present). The widget's authored height is kept in sync with this
+ * value via menu_resize() so the surrounding layout (none today —
+ * menus are absolute-positioned) and the drop-shadow extent agree on
+ * where the menu ends. */
 static float menu_total_h(const struct yetty_ygui_widget *self)
 {
-    float h = 2 * MENU_PAD_Y;
+    float h = menu_header_h(self) + 2 * MENU_PAD_Y;
     float ih = menu_item_h(self);
     for (int k = 0; k < self->data.popup_menu.n_items; k++) {
         h += self->data.popup_menu.item_labels[k] ? ih : MENU_SEPARATOR_H;
@@ -108,6 +134,36 @@ static struct yetty_ycore_void_result popup_menu_render(struct yetty_ygui_widget
     float fs = theme->font_size > 0 ? theme->font_size : 14.0f;
     int hover = self->data.popup_menu.hover_index;
 
+    /* Header strip (drill-down breadcrumb / back). Painted before the
+     * item rows so they land underneath the hairline divider. */
+    if (menu_has_header(self)) {
+        float header_y = self->y;
+        /* `<` back glyph at the left when a handler is set. The render
+         * context has no rotated-box primitive — render the chevron as
+         * a text glyph instead (covers any glyph the font ships). */
+        float title_x = self->x + MENU_PAD_X;
+        if (self->data.popup_menu.on_back) {
+            float bx = self->x;
+            float ty = header_y + (MENU_HEADER_H - fs) * 0.5f;
+            yetty_ygui_render_ctx_render_text(
+                ctx, "<", bx + MENU_BACK_BTN_W * 0.5f - fs * 0.25f, ty,
+                theme->accent ? theme->accent : theme->text_primary, fs);
+            title_x = self->x + MENU_BACK_BTN_W;
+        }
+        /* Title — left-aligned right of the back button (or right of
+         * the padding when no back), vertically centred. text_muted so
+         * the breadcrumb reads as a passive label rather than a row. */
+        const char *title = self->data.popup_menu.title;
+        if (title && title[0]) {
+            float ty = header_y + (MENU_HEADER_H - fs) * 0.5f;
+            yetty_ygui_render_ctx_render_text(ctx, title, title_x, ty, theme->text_muted, fs);
+        }
+        /* Hairline separator below the header. */
+        yetty_ygui_render_ctx_render_box(ctx, self->x + 4.0f, self->y + MENU_HEADER_H,
+                                         self->w - 8.0f, MENU_HEADER_SEPARATOR_H,
+                                         theme->border_muted, 0.0f);
+    }
+
     for (int i = 0; i < self->data.popup_menu.n_items; i++) {
         const char *label = self->data.popup_menu.item_labels[i];
         if (!label) {
@@ -140,10 +196,11 @@ static struct yetty_ycore_void_result popup_menu_render(struct yetty_ygui_widget
 
 static int menu_hit_item(const struct yetty_ygui_widget *self, float ly)
 {
-    if (ly < MENU_PAD_Y || ly > self->h - MENU_PAD_Y) {
+    float header_h = menu_header_h(self);
+    if (ly < header_h + MENU_PAD_Y || ly > self->h - MENU_PAD_Y) {
         return -1;
     }
-    float y = MENU_PAD_Y;
+    float y = header_h + MENU_PAD_Y;
     float ih = menu_item_h(self);
     for (int i = 0; i < self->data.popup_menu.n_items; i++) {
         float row_h = self->data.popup_menu.item_labels[i] ? ih : MENU_SEPARATOR_H;
@@ -153,6 +210,15 @@ static int menu_hit_item(const struct yetty_ygui_widget *self, float ly)
         y += row_h;
     }
     return -1;
+}
+
+/* True if (lx, ly) lands on the header's back-button hit area. */
+static int menu_hit_back(const struct yetty_ygui_widget *self, float lx, float ly)
+{
+    if (!self->data.popup_menu.on_back || !menu_has_header(self)) {
+        return 0;
+    }
+    return lx >= 0.0f && lx < MENU_BACK_BTN_W && ly >= 0.0f && ly < MENU_HEADER_H;
 }
 
 static int popup_menu_on_press(struct yetty_ygui_widget *self, float lx, float ly,
@@ -173,14 +239,42 @@ static int popup_menu_on_press(struct yetty_ygui_widget *self, float lx, float l
         }
         return 1;
     }
+    /* Back button — fire the handler and KEEP the menu open. The
+     * handler typically calls popup_menu_clear + popup_menu_set_title +
+     * popup_menu_add_item to redraw the parent level in place. */
+    if (menu_hit_back(self, lx, ly)) {
+        ygui_widget_click_fn back_cb = self->data.popup_menu.on_back;
+        void *back_ud = self->data.popup_menu.on_back_userdata;
+        if (back_cb) {
+            back_cb(self, back_ud);
+        }
+        if (self->engine) {
+            self->engine->dirty = 1;
+            self->dirty = 1;
+        }
+        return 1;
+    }
     int idx = menu_hit_item(self, ly);
+    int is_drill = 0;
     if (idx >= 0 && self->data.popup_menu.item_callbacks[idx]) {
+        is_drill = self->data.popup_menu.item_is_drill
+                       ? self->data.popup_menu.item_is_drill[idx]
+                       : 0;
         self->data.popup_menu.item_callbacks[idx](self, self->data.popup_menu.item_userdata[idx]);
     }
-    self->flags &= ~YETTY_YGUI_FLAG_OPEN;
-    if (self->engine) {
-        self->engine->dirty = 1; self->dirty = 1;
-        yetty_ygui_internal_queue_delete_subtree_rendered(self);
+    /* Drill-down items keep the menu open so the callback's in-place
+     * repopulation is visible. Action items (and unhandled clicks in
+     * the header strip's title area) close the menu as before. */
+    if (!is_drill) {
+        self->flags &= ~YETTY_YGUI_FLAG_OPEN;
+        if (self->engine) {
+            self->engine->dirty = 1;
+            self->dirty = 1;
+            yetty_ygui_internal_queue_delete_subtree_rendered(self);
+        }
+    } else if (self->engine) {
+        self->engine->dirty = 1;
+        self->dirty = 1;
     }
     return 1;
 }
@@ -195,6 +289,8 @@ static void popup_menu_destroy(struct yetty_ygui_widget *self)
     }
     free(self->data.popup_menu.item_callbacks);
     free(self->data.popup_menu.item_userdata);
+    free(self->data.popup_menu.item_is_drill);
+    free(self->data.popup_menu.title);
 }
 
 /* Custom render_all so the menu skips the engine's spatial grid when
@@ -244,11 +340,15 @@ struct yetty_ygui_widget *yetty_ygui_engine_popup_menu(struct yetty_ygui_engine 
     m->data.popup_menu.item_labels = NULL;
     m->data.popup_menu.item_callbacks = NULL;
     m->data.popup_menu.item_userdata = NULL;
+    m->data.popup_menu.item_is_drill = NULL;
     m->data.popup_menu.n_items = 0;
     m->data.popup_menu.capacity = 0;
     m->data.popup_menu.item_h = 0.0f;
     m->data.popup_menu.modal = 0;
     m->data.popup_menu.hover_index = -1;
+    m->data.popup_menu.title = NULL;
+    m->data.popup_menu.on_back = NULL;
+    m->data.popup_menu.on_back_userdata = NULL;
     m->flags &= ~YETTY_YGUI_FLAG_OPEN; /* start closed */
     m->vtable = &popup_menu_vtable;
     /* Position is absolute — menus pop up over everything else. */
@@ -272,56 +372,109 @@ static int menu_grow(struct yetty_ygui_widget *self, int need)
         self->data.popup_menu.item_callbacks, (size_t)cap * sizeof(ygui_widget_click_fn));
     void **udata =
         (void **)realloc(self->data.popup_menu.item_userdata, (size_t)cap * sizeof(void *));
-    if (!labels || !cbs || !udata) {
+    int *drills =
+        (int *)realloc(self->data.popup_menu.item_is_drill, (size_t)cap * sizeof(int));
+    if (!labels || !cbs || !udata || !drills) {
         /* Partial grows are fine — next call retries. Free nothing. */
         if (labels) self->data.popup_menu.item_labels = labels;
         if (cbs) self->data.popup_menu.item_callbacks = cbs;
         if (udata) self->data.popup_menu.item_userdata = udata;
+        if (drills) self->data.popup_menu.item_is_drill = drills;
         return 0;
     }
     self->data.popup_menu.item_labels = labels;
     self->data.popup_menu.item_callbacks = cbs;
     self->data.popup_menu.item_userdata = udata;
+    self->data.popup_menu.item_is_drill = drills;
     self->data.popup_menu.capacity = cap;
     return 1;
+}
+
+static void menu_add_row(struct yetty_ygui_widget *menu, const char *label,
+                         ygui_click_callback_t cb, void *userdata, int is_drill)
+{
+    if (!menu || menu->type != YETTY_YGUI_WIDGET_POPUP_MENU) {
+        return;
+    }
+    if (!menu_grow(menu, menu->data.popup_menu.n_items + 1)) {
+        return;
+    }
+    int i = menu->data.popup_menu.n_items;
+    menu->data.popup_menu.item_labels[i] = label ? ygui_strdup(label) : NULL;
+    menu->data.popup_menu.item_callbacks[i] = cb;
+    menu->data.popup_menu.item_userdata[i] = userdata;
+    menu->data.popup_menu.item_is_drill[i] = is_drill;
+    menu->data.popup_menu.n_items = i + 1;
+    menu_resize(menu);
+    if (menu->engine) {
+        menu->engine->dirty = 1;
+        menu->dirty = 1;
+    }
 }
 
 void yetty_ygui_widget_popup_menu_add_item(struct yetty_ygui_widget *menu, const char *label,
                                            ygui_click_callback_t cb, void *userdata)
 {
-    if (!menu || menu->type != YETTY_YGUI_WIDGET_POPUP_MENU) {
-        return;
-    }
-    if (!menu_grow(menu, menu->data.popup_menu.n_items + 1)) {
-        return;
-    }
-    int i = menu->data.popup_menu.n_items;
-    menu->data.popup_menu.item_labels[i] = ygui_strdup(label ? label : "");
-    menu->data.popup_menu.item_callbacks[i] = cb;
-    menu->data.popup_menu.item_userdata[i] = userdata;
-    menu->data.popup_menu.n_items = i + 1;
-    menu_resize(menu);
-    if (menu->engine) {
-        menu->engine->dirty = 1; menu->dirty = 1;
-    }
+    menu_add_row(menu, label ? label : "", cb, userdata, /*is_drill=*/0);
+}
+
+void yetty_ygui_widget_popup_menu_add_drill_item(struct yetty_ygui_widget *menu,
+                                                 const char *label,
+                                                 ygui_click_callback_t cb, void *userdata)
+{
+    menu_add_row(menu, label ? label : "", cb, userdata, /*is_drill=*/1);
 }
 
 void yetty_ygui_widget_popup_menu_add_separator(struct yetty_ygui_widget *menu)
 {
+    /* Separator row: NULL label is the sentinel. is_drill is irrelevant
+     * (no callback fires) but stored as 0 for cleanliness. */
+    menu_add_row(menu, /*label=*/NULL, /*cb=*/NULL, /*userdata=*/NULL, /*is_drill=*/0);
+}
+
+void yetty_ygui_widget_popup_menu_clear(struct yetty_ygui_widget *menu)
+{
     if (!menu || menu->type != YETTY_YGUI_WIDGET_POPUP_MENU) {
         return;
     }
-    if (!menu_grow(menu, menu->data.popup_menu.n_items + 1)) {
-        return;
+    for (int i = 0; i < menu->data.popup_menu.n_items; i++) {
+        free(menu->data.popup_menu.item_labels[i]);
+        menu->data.popup_menu.item_labels[i] = NULL;
     }
-    int i = menu->data.popup_menu.n_items;
-    menu->data.popup_menu.item_labels[i] = NULL;
-    menu->data.popup_menu.item_callbacks[i] = NULL;
-    menu->data.popup_menu.item_userdata[i] = NULL;
-    menu->data.popup_menu.n_items = i + 1;
+    menu->data.popup_menu.n_items = 0;
     menu_resize(menu);
     if (menu->engine) {
-        menu->engine->dirty = 1; menu->dirty = 1;
+        menu->engine->dirty = 1;
+        menu->dirty = 1;
+    }
+}
+
+void yetty_ygui_widget_popup_menu_set_title(struct yetty_ygui_widget *menu, const char *title)
+{
+    if (!menu || menu->type != YETTY_YGUI_WIDGET_POPUP_MENU) {
+        return;
+    }
+    free(menu->data.popup_menu.title);
+    menu->data.popup_menu.title = (title && title[0]) ? ygui_strdup(title) : NULL;
+    menu_resize(menu);
+    if (menu->engine) {
+        menu->engine->dirty = 1;
+        menu->dirty = 1;
+    }
+}
+
+void yetty_ygui_widget_popup_menu_set_back(struct yetty_ygui_widget *menu,
+                                           ygui_click_callback_t on_back, void *userdata)
+{
+    if (!menu || menu->type != YETTY_YGUI_WIDGET_POPUP_MENU) {
+        return;
+    }
+    menu->data.popup_menu.on_back = on_back;
+    menu->data.popup_menu.on_back_userdata = userdata;
+    menu_resize(menu);
+    if (menu->engine) {
+        menu->engine->dirty = 1;
+        menu->dirty = 1;
     }
 }
 

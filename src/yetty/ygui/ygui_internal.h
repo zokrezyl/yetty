@@ -626,6 +626,12 @@ struct yetty_ygui_widget {
              * pure separator. */
             ygui_widget_click_fn *item_callbacks;
             void **item_userdata;
+            /* Per-row "drill" flag. When non-zero, clicking the item
+             * fires its callback BUT does not close the menu — the
+             * callback is expected to re-populate items in place
+             * (drill-down navigation pattern). Action items leave this
+             * at 0 and the menu closes after the callback. */
+            int *item_is_drill;
             int n_items;
             int capacity;
             /* Row height in pixels. 0 = derive from theme. */
@@ -634,6 +640,17 @@ struct yetty_ygui_widget {
             /* Index of the currently-hovered row (for highlight). -1
              * when the cursor isn't over any clickable row. */
             int hover_index;
+            /* Optional header rendered at the top of the menu body.
+             * `title` is the breadcrumb / path label (e.g. "Menu" or
+             * "Menu › New view"); NULL/empty means no header. When
+             * `on_back` is set a `<` chevron button is painted at the
+             * left of the header and consumes its hit area — the menu
+             * stays open and the callback re-populates the items in
+             * place (Chrome Android-style drill-down). on_back_userdata
+             * is opaque to the widget; it's forwarded as-is. */
+            char *title;
+            ygui_widget_click_fn on_back;
+            void *on_back_userdata;
         } popup_menu;
 
         struct {

@@ -698,6 +698,17 @@ struct yetty_ygui_widget *yetty_ygui_engine_popup_menu(struct yetty_ygui_engine 
 void yetty_ygui_widget_popup_menu_add_item(struct yetty_ygui_widget *menu, const char *label,
                                            ygui_click_callback_t cb, void *userdata);
 
+/* Append a drill-down item — same as add_item, but the menu STAYS OPEN
+ * after the callback returns. Used to navigate into a submenu in place:
+ * the callback typically calls popup_menu_clear + popup_menu_set_title +
+ * popup_menu_set_back + popup_menu_add_item to re-populate the menu
+ * with the child level's content. The caller is conventionally
+ * expected to render a "▸" suffix in the label so users see it's a
+ * drill-down. */
+void yetty_ygui_widget_popup_menu_add_drill_item(struct yetty_ygui_widget *menu,
+                                                 const char *label,
+                                                 ygui_click_callback_t cb, void *userdata);
+
 /* Append a non-interactive separator row (a thin divider). */
 void yetty_ygui_widget_popup_menu_add_separator(struct yetty_ygui_widget *menu);
 
@@ -705,6 +716,27 @@ void yetty_ygui_widget_popup_menu_open_at(struct yetty_ygui_widget *menu, float 
 void yetty_ygui_widget_popup_menu_close(struct yetty_ygui_widget *menu);
 void yetty_ygui_widget_popup_menu_set_modal(struct yetty_ygui_widget *menu, int modal);
 int yetty_ygui_widget_popup_menu_is_open(const struct yetty_ygui_widget *menu);
+
+/* Remove every item / separator from the menu. The geometry collapses
+ * back to header + padding. Used by drill-down menus that re-populate
+ * in place when the user navigates between levels. The menu stays open;
+ * the caller is responsible for adding the new level's items + setting
+ * the new title / back handler. */
+void yetty_ygui_widget_popup_menu_clear(struct yetty_ygui_widget *menu);
+
+/* Set the header label rendered at the top of the menu body (the
+ * "breadcrumb" line — e.g. "Menu" or "Menu › New view"). NULL/empty
+ * removes the header. The header is shown above the items and pushes
+ * the first row down by one row-height. */
+void yetty_ygui_widget_popup_menu_set_title(struct yetty_ygui_widget *menu, const char *title);
+
+/* Install the back-handler. When non-NULL, a `<` chevron button is
+ * painted at the left side of the header; clicking it fires the
+ * callback and does NOT close the menu (the callback typically calls
+ * popup_menu_clear + populates the parent level). Pass NULL to remove
+ * the back button (root level). */
+void yetty_ygui_widget_popup_menu_set_back(struct yetty_ygui_widget *menu,
+                                           ygui_click_callback_t on_back, void *userdata);
 
 /* Tabbar — browser-style tab strip across the top of the widget's box, with
  * one content panel per tab below. Only the active panel is rendered/laid

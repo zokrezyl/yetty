@@ -56,11 +56,16 @@ struct yetty_yui {
      * → SM → layer. */
     struct yetty_ygui_engine *engine;
 
-    /* The v-menu (popup) and per-view config dialogs, parked on `engine`.
-     * Menus start closed; tabbar's v-click opens v_menu, and selecting
-     * an item opens the matching dialog. Dialog widget pointers are
-     * needed so item callbacks can address-by-name. */
-    struct yetty_ygui_widget *v_menu;
+    /* Single hamburger / app menu, parked on `engine` and starting
+     * closed. Drill-down levels reuse the same popup widget — when
+     * the user clicks "New view ▸" the callback clears the items in
+     * place and re-populates with the view choices + a `<` back
+     * handler that restores the root level. The "current level" is
+     * tracked by app_menu_level so the back handler knows where to
+     * land. Dialog widget pointers are needed so item callbacks can
+     * address-by-name. */
+    struct yetty_ygui_widget *app_menu;
+    int app_menu_level; /* 0 = root, 1 = "New view" submenu */
     struct yetty_ygui_widget *dialogs[YETTY_YUI_VIEW_KIND_COUNT]; /* indexed by view_kind */
 
     /* Per-dialog textinput handles, indexed by [view_kind][field_idx]
@@ -247,6 +252,10 @@ static void yui_menu_open_dialog(struct yetty_ygui_widget *item, void *userdata)
 static void yui_menu_spawn_shell(struct yetty_ygui_widget *item, void *userdata);
 static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata);
 static void yui_dialog_cancel(struct yetty_ygui_widget *button, void *userdata);
+static void yui_app_menu_open_new_view(struct yetty_ygui_widget *item, void *userdata);
+static void yui_app_menu_back_to_root(struct yetty_ygui_widget *item, void *userdata);
+static void yui_app_menu_populate_root(struct yetty_yui *yui);
+static void yui_app_menu_populate_new_view(struct yetty_yui *yui);
 
 /* Per-callback bundle: which yui, which kind. Lives for the engine's
  * lifetime — freed in destroy. */
@@ -403,15 +412,19 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         yetty_ygui_engine_set_output_pty(yui->engine, yui->yui_endpoint);
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
 
-        /* Build the v-menu (closed at start) and one config dialog per
-         * view kind. Each dialog is positioned roughly under the v-button
-         * with a small offset so successive dialogs don't stack on top
-         * of one another. */
-        yui->v_menu = yetty_ygui_engine_popup_menu(yui->engine, "yui_v_menu",
-                                                   /*x=*/0, /*y=*/0,
-                                                   /*w=*/220);
-        if (yui->v_menu) {
-            yetty_ygui_widget_popup_menu_set_modal(yui->v_menu, 0);
+        /* Build the single hamburger / app menu, then one config dialog
+         * per view kind. The menu starts closed and at the root level;
+         * tabbar's hamburger click opens it via
+         * yetty_yui_show_view_menu, and the drill-down items swap the
+         * contents in place. Each dialog is positioned roughly under
+         * the hamburger button with a small offset so successive
+         * dialogs don't stack on top of one another. */
+        yui->app_menu = yetty_ygui_engine_popup_menu(yui->engine, "yui_app_menu",
+                                                     /*x=*/0, /*y=*/0,
+                                                     /*w=*/240);
+        yui->app_menu_level = 0;
+        if (yui->app_menu) {
+            yetty_ygui_widget_popup_menu_set_modal(yui->app_menu, 0);
         }
 
         for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
@@ -518,37 +531,10 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             }
         }
 
-        /* Populate the menu rows. SHELL spawns directly; the rest open
-         * their kind's dialog. Order chosen to match how often each is
-         * used: default shell first, exec right after, then remote
-         * transports grouped at the bottom. */
-        if (yui->v_menu) {
-            static const char *const LABELS[YETTY_YUI_VIEW_KIND_COUNT] = {
-                [YETTY_YUI_VIEW_SHELL]  = "Shell",
-                [YETTY_YUI_VIEW_EXEC]   = "Exec…",
-                [YETTY_YUI_VIEW_SSH]    = "SSH…",
-                [YETTY_YUI_VIEW_TELNET] = "Telnet…",
-                [YETTY_YUI_VIEW_YVNC]   = "yVNC…",
-            };
-            static const int MENU_ORDER[YETTY_YUI_VIEW_KIND_COUNT] = {
-                YETTY_YUI_VIEW_SHELL,
-                YETTY_YUI_VIEW_EXEC,
-                YETTY_YUI_VIEW_SSH,
-                YETTY_YUI_VIEW_TELNET,
-                YETTY_YUI_VIEW_YVNC,
-            };
-            for (int i = 0; i < YETTY_YUI_VIEW_KIND_COUNT; i++) {
-                int k = MENU_ORDER[i];
-                /* SHELL is the only no-dialog item — it dispatches via
-                 * yui_menu_spawn_shell so the connect_cb fires immediately
-                 * with VIEW_SHELL. The rest open their config dialog. */
-                ygui_click_callback_t cb = (k == YETTY_YUI_VIEW_SHELL)
-                                               ? yui_menu_spawn_shell
-                                               : yui_menu_open_dialog;
-                yetty_ygui_widget_popup_menu_add_item(yui->v_menu, LABELS[k], cb,
-                                                       &s_cb_ctx[k]);
-            }
-        }
+        /* Seed the menu at its root level. The drill-down callbacks
+         * call popup_menu_clear + the matching populate_* helper, so
+         * level transitions reuse the same single widget. */
+        yui_app_menu_populate_root(yui);
 
         /* Statusbar — STATUSBAR widget pinned to the bottom of the
          * engine canvas by engine_set_statusbar; engine_pin_bars
@@ -747,6 +733,77 @@ static void yui_dialog_cancel(struct yetty_ygui_widget *button, void *userdata)
     }
 }
 
+/* Root level: seed the menu with the top-level entries (just
+ * "New view ▸" today) and clear any back handler. Called from
+ * yetty_yui_create and from the back arrow in deeper levels. */
+static void yui_app_menu_populate_root(struct yetty_yui *yui)
+{
+    if (!yui || !yui->app_menu) {
+        return;
+    }
+    yetty_ygui_widget_popup_menu_clear(yui->app_menu);
+    yetty_ygui_widget_popup_menu_set_title(yui->app_menu, "Menu");
+    yetty_ygui_widget_popup_menu_set_back(yui->app_menu, NULL, NULL);
+    yetty_ygui_widget_popup_menu_add_drill_item(yui->app_menu, "New view  ▸",
+                                                yui_app_menu_open_new_view, yui);
+    /* Future top-level entries (Settings, Reports, About, Quit, …) hang off here. */
+    yui->app_menu_level = 0;
+}
+
+/* "New view" level: clear the menu, set the breadcrumb + a back
+ * handler, then populate with the per-view-kind action items. */
+static void yui_app_menu_populate_new_view(struct yetty_yui *yui)
+{
+    if (!yui || !yui->app_menu) {
+        return;
+    }
+    static const char *const LABELS[YETTY_YUI_VIEW_KIND_COUNT] = {
+        [YETTY_YUI_VIEW_SHELL]  = "Shell",
+        [YETTY_YUI_VIEW_EXEC]   = "Exec…",
+        [YETTY_YUI_VIEW_SSH]    = "SSH…",
+        [YETTY_YUI_VIEW_TELNET] = "Telnet…",
+        [YETTY_YUI_VIEW_YVNC]   = "yVNC…",
+    };
+    static const int MENU_ORDER[YETTY_YUI_VIEW_KIND_COUNT] = {
+        YETTY_YUI_VIEW_SHELL,
+        YETTY_YUI_VIEW_EXEC,
+        YETTY_YUI_VIEW_SSH,
+        YETTY_YUI_VIEW_TELNET,
+        YETTY_YUI_VIEW_YVNC,
+    };
+    yetty_ygui_widget_popup_menu_clear(yui->app_menu);
+    yetty_ygui_widget_popup_menu_set_title(yui->app_menu, "Menu  ›  New view");
+    yetty_ygui_widget_popup_menu_set_back(yui->app_menu, yui_app_menu_back_to_root, yui);
+    for (int i = 0; i < YETTY_YUI_VIEW_KIND_COUNT; i++) {
+        int k = MENU_ORDER[i];
+        /* SHELL is the only no-dialog item — fires the connect callback
+         * directly. The rest open their config dialog. Both are
+         * action items (the menu closes after the click). */
+        ygui_click_callback_t cb =
+            (k == YETTY_YUI_VIEW_SHELL) ? yui_menu_spawn_shell : yui_menu_open_dialog;
+        yetty_ygui_widget_popup_menu_add_item(yui->app_menu, LABELS[k], cb, &s_cb_ctx[k]);
+    }
+    yui->app_menu_level = 1;
+}
+
+/* Drill into the "New view" submenu — repopulates app_menu in place.
+ * Items added via add_drill_item keep the menu open after their
+ * callback fires, so the user sees the submenu replace the root
+ * content. */
+static void yui_app_menu_open_new_view(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    yui_app_menu_populate_new_view((struct yetty_yui *)userdata);
+}
+
+/* `<` back-handler installed on the New-view level. Returns to root by
+ * re-populating with the root content. Same in-place swap. */
+static void yui_app_menu_back_to_root(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    yui_app_menu_populate_root((struct yetty_yui *)userdata);
+}
+
 static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata)
 {
     (void)button;
@@ -777,10 +834,16 @@ static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata)
 
 void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float anchor_y)
 {
-    if (!yui || !yui->v_menu) {
+    /* "view_menu" is now the top-level app (hamburger) menu — the
+     * tabbar's hamburger callback still uses this entry point, so the
+     * name is kept for API stability. Reset to root level on every
+     * open so the user always lands at "Menu" rather than wherever
+     * they were when the menu was last closed. */
+    if (!yui || !yui->app_menu) {
         return;
     }
-    yetty_ygui_widget_popup_menu_open_at(yui->v_menu, anchor_x, anchor_y);
+    yui_app_menu_populate_root(yui);
+    yetty_ygui_widget_popup_menu_open_at(yui->app_menu, anchor_x, anchor_y);
     if (yui->engine) {
         yetty_ygui_engine_mark_dirty(yui->engine);
     }
@@ -848,7 +911,7 @@ int yetty_yui_is_active(const struct yetty_yui *yui)
     if (!yui) {
         return 0;
     }
-    if (yui->v_menu && yetty_ygui_widget_popup_menu_is_open(yui->v_menu)) {
+    if (yui->app_menu && yetty_ygui_widget_popup_menu_is_open(yui->app_menu)) {
         return 1;
     }
     for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
