@@ -8,29 +8,30 @@
  *   so the _await wrapper can yield back to the event loop while a wgpu
  *   callback is pending.
  *
- *   On webasm we don't need a stack switch at all: the wgpu _await
- *   wrappers (yplatform/webasm/ywebgpu.c) suspend the entire C call stack
- *   via Asyncify (emscripten_sleep). The browser's JS event loop pumps
- *   wgpu callbacks for free during that suspension. So "spawn + resume"
- *   collapses into "run the entry function inline"; the asyncify-suspend
- *   inside the await is what gives the JS loop air to breathe.
+ *   On webasm we don't have separate stacks, but we still need yield to
+ *   *unwind* — the wire-statemachine and ydraw layers use yield as the
+ *   "stop here, come back next envelope" signal. A pure no-op turns those
+ *   yields into infinite spin loops (scene_process_input loops until
+ *   yield, then yield does nothing, then loop again forever).
  *
- * Effect at the call site:
- *   yplatform_coro_resume blocks (asyncify-suspended) until the entry
- *   function returns. yplatform_coro_is_finished() is therefore always
- *   true after resume returns, and the caller's "if finished, destroy"
- *   branch always runs. Functionally identical to desktop for the GPU
- *   readback case, no fibers, no separate stack.
+ *   The trick: use setjmp in resume() and longjmp in yield(). The longjmp
+ *   abandons whatever frames are between yield and resume, so resume()
+ *   returns to its caller as if the entry had finished — except we leave
+ *   `finished` unset, so the next resume re-enters entry from the top.
+ *   Layer process_input loops are written so each iteration of their outer
+ *   for(;;) is a self-contained envelope (iter_init … iter_destroy, all
+ *   per-envelope locals cleaned up before yield), so re-entering from the
+ *   top is functionally equivalent to picking up after yield.
  *
- *   yplatform_coro_yield() is unused on this platform — the _await
- *   wrappers suspend via emscripten_sleep directly, not via yield. Kept
- *   as a warn-only no-op so a misuse (a non-wgpu caller wiring up yield)
- *   shows up in traces instead of silently breaking.
+ *   Asyncify (emscripten_sleep) is not used here — wgpu _await wrappers
+ *   handle their own suspension via emscripten_sleep; the coro layer
+ *   never needs to release the JS event loop itself.
  */
 
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include <setjmp.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,11 @@ struct yetty_yplatform_coro {
     unsigned int id;
     int status;
     int finished;
+    /* setjmp target inside the current resume() call. Valid only while
+     * the coro is on the stack between resume() entering and entry()
+     * returning (or yield() longjmping out). */
+    jmp_buf yield_target;
+    int yield_target_valid;
 };
 
 static struct yetty_yplatform_coro *g_current = NULL;
@@ -84,20 +90,28 @@ void yetty_yplatform_coro_resume(struct yetty_yplatform_coro *coro)
 
     struct yetty_yplatform_coro *prev = g_current;
     g_current = coro;
-    ydebug("resume coro %u (%s) — runs inline on webasm", coro->id,
-           coro->name ? coro->name : "(anon)");
-    coro->entry(coro->arg);
-    coro->finished = 1;
+    coro->yield_target_valid = 1;
+    if (setjmp(coro->yield_target) == 0) {
+        ydebug("resume coro %u (%s) — runs inline on webasm", coro->id,
+               coro->name ? coro->name : "(anon)");
+        coro->entry(coro->arg);
+        coro->finished = 1;
+        ydebug("coro %u finished (webasm)", coro->id);
+    } else {
+        ydebug("coro %u yielded (longjmp) — returning to resume caller", coro->id);
+    }
+    coro->yield_target_valid = 0;
     g_current = prev;
-    ydebug("coro %u finished (webasm)", coro->id);
 }
 
 void yetty_yplatform_coro_yield(void)
 {
-    /* On webasm the _await wrappers suspend via emscripten_sleep. yield
-     * shouldn't be reachable from any code path that's expected to work
-     * on web. */
-    ywarn("yplatform_coro_yield called on webasm — no-op");
+    struct yetty_yplatform_coro *self = g_current;
+    if (!self || !self->yield_target_valid) {
+        ywarn("yplatform_coro_yield called outside coro context — no-op");
+        return;
+    }
+    longjmp(self->yield_target, 1);
 }
 
 void yetty_yplatform_coro_destroy(struct yetty_yplatform_coro *coro)

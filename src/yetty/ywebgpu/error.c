@@ -107,13 +107,15 @@ void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLost
         memcpy(buf, message.data, len);
     }
     buf[len] = '\0';
-    yerror("WebGPU device lost (%s): %s", reason_str, buf);
 
     /* Destroyed = normal teardown when we drop our device handle, not a
      * real fault — let the cleanup path complete. Anything else (GPU
      * hung at runtime, driver crash, hot-unplug, …) we exit immediately
      * so the failure mode is visible instead of cascading. */
-    if (reason != WGPUDeviceLostReason_Destroyed) {
+    if (reason == WGPUDeviceLostReason_Destroyed) {
+        ydebug("WebGPU device lost (%s): %s", reason_str, buf);
+    } else {
+        yerror("WebGPU device lost (%s): %s", reason_str, buf);
         fprintf(stderr,
                 "\n[FATAL] WebGPU device lost (%s): %s\n"
                 "        This usually means a GPU hang — check ytrace log for the\n"

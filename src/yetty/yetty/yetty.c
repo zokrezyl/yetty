@@ -909,10 +909,12 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     device_desc.uncapturedErrorCallbackInfo = yetty_ywebgpu_get_error_callback_info();
     device_desc.deviceLostCallbackInfo = yetty_ywebgpu_get_device_lost_callback_info();
 
+#ifndef __EMSCRIPTEN__
     /* Device-scope Dawn toggles (opt-in via YETTY_DAWN_DEBUG=1). Same toggle
      * names as instance-level — Dawn applies them at device-creation time.
      * Static so the pointer remains valid until Dawn finishes the async
-     * RequestDevice. */
+     * RequestDevice. Dawn-only — the Emscripten WebGPU bindings don't ship
+     * WGPUDawnTogglesDescriptor. */
     static const char *const dawn_device_enabled_toggles[] = {
         "use_user_defined_labels_in_backend",
         "disable_symbol_renaming",
@@ -928,6 +930,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
         ydebug("initWebGPU: device-level Dawn debug toggles chained (%zu)",
                dawn_device_toggles.enabledToggleCount);
     }
+#endif
 
     struct yetty_ywebgpu_device_request_state device_cb_data = {{0}, 0};
     WGPURequestDeviceCallbackInfo device_cb = {0};

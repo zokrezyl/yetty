@@ -362,7 +362,7 @@
                 status.textContent = 'Requesting WebGPU device...';
                 const device = await adapter.requestDevice({
                     requiredLimits: {
-                        maxStorageBuffersPerShaderStage: 10,
+                        maxStorageBuffersPerShaderStage: 8,
                         maxTextureDimension2D: Math.min(16384, adapter.limits.maxTextureDimension2D),
                     }
                 });
