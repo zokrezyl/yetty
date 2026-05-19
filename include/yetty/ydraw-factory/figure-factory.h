@@ -24,6 +24,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/figure-types.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
 
@@ -53,6 +54,15 @@ struct yetty_ydraw_figure_instance {
     uint32_t rolling_row;
     void *instance_data; // type-specific, managed by concrete factory
 
+    /* Event-listener interface — every figure_instance IS-A listener.
+     * Concrete factories that want timer / mouse / keyboard ticks point
+     * `listener.handler` at their own dispatcher and register with the
+     * event loop (see `factory->event_loop`). The handler recovers the
+     * instance pointer with `container_of(l, struct
+     * yetty_ydraw_figure_instance, listener)`. Figures that don't
+     * subscribe simply leave the handler NULL — registration is opt-in. */
+    struct yetty_yevent_event_listener listener;
+
     /* Per-instance GPU resources. The factory owns the shared
      * yetty_yrender_pipeline (compiled once for the type); each instance
      * owns its own resource_set (per-instance uniform/buffer values) and
@@ -79,6 +89,21 @@ YETTY_YRESULT_DECLARE(yetty_ydraw_figure_instance_ptr,
 
 struct yetty_ydraw_concrete_factory {
     uint32_t type_id;
+
+    /* Event loop available to the factory's instances. Set by the
+     * abstract factory at registration time (mirror of what's stashed
+     * on the figure_factory). Concrete factories that need to register
+     * listeners (timers, mouse, …) use this; static-content factories
+     * (yplot, yimage, ymesh) ignore it. */
+    struct yetty_yevent_event_loop *event_loop;
+
+    /* Free-form hook-managed state for the concrete factory. Used by
+     * factories that need per-type (not per-instance) state — e.g. a
+     * shared, refcounted animation timer that every instance subscribes
+     * to. Layered above the generator's emitted factory struct so the
+     * generator doesn't have to know about each prim's lifecycle data.
+     * Allocator/free is entirely up to the hook impl. */
+    void *hook_data;
 
     // Compile pipeline (called once during registration)
     struct yetty_ycore_void_result (*compile_pipeline)(
@@ -138,12 +163,15 @@ struct yetty_ydraw_figure_factory;
 YETTY_YRESULT_DECLARE(yetty_ydraw_figure_factory_ptr,
                       struct yetty_ydraw_figure_factory *);
 
-// Create (after device/queue available) / destroy
+// Create (after device/queue available) / destroy. `event_loop` is
+// stashed on the registry and propagated to every concrete factory at
+// register time so instances can subscribe to timers / mouse / etc.
 YETTY_ANNOT_CALLER_OWNED
 struct yetty_ydraw_figure_factory_ptr_result
 yetty_ydraw_figure_factory_create(WGPUDevice device, WGPUQueue queue,
                                               WGPUTextureFormat target_format,
-                                              struct yetty_ydraw_gpu_allocator *allocator);
+                                              struct yetty_ydraw_gpu_allocator *allocator,
+                                              struct yetty_yevent_event_loop *event_loop);
 
 void yetty_ydraw_figure_factory_destroy(
     struct yetty_ydraw_figure_factory *factory YETTY_ANNOT_CALLEE_OWNED);

@@ -12,6 +12,11 @@ target_include_directories(yvideo PRIVATE
     ${YETTY_ROOT}/src
 )
 
+# minimp4 — header-only MP4 demuxer. main.c #defines MINIMP4_IMPLEMENTATION
+# so the symbols land in this translation unit; the cmake target just
+# provides the include path.
+include(${YETTY_ROOT}/build-tools/yetty/minimp4.cmake)
+
 find_package(Threads REQUIRED)
 target_link_libraries(yvideo PRIVATE
     yetty_yvideo_core
@@ -20,6 +25,7 @@ target_link_libraries(yvideo PRIVATE
     yetty_ycore
     Threads::Threads
     yetty_yplatform_core
+    minimp4
 )
 
 target_compile_features(yvideo PRIVATE c_std_11)

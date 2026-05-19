@@ -111,6 +111,13 @@ struct yetty_yevent_event_loop_ops {
     struct yetty_ycore_void_result (*register_timer_listener)(
         struct yetty_yevent_event_loop *self, yetty_yevent_timer_id id,
         struct yetty_yevent_event_listener *listener);
+    /* Remove a previously-registered timer listener. Safe to call from
+     * inside the listener's own handler (the dispatcher snapshots the
+     * listener pointer before invoking). No-op if the listener wasn't
+     * registered on this timer. */
+    struct yetty_ycore_void_result (*deregister_timer_listener)(
+        struct yetty_yevent_event_loop *self, yetty_yevent_timer_id id,
+        struct yetty_yevent_event_listener *listener);
 
     /* TCP server */
     struct yetty_yevent_tcp_server_id_result (*create_tcp_server)(

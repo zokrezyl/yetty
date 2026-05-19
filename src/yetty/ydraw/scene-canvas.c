@@ -855,7 +855,8 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
      * dispatch time. */
     struct yetty_ydraw_figure_factory_ptr_result factory_res = yetty_ydraw_figure_factory_create(
         context->gpu_context.device, context->gpu_context.queue,
-        context->gpu_context.surface_format, context->gpu_context.allocator);
+        context->gpu_context.surface_format, context->gpu_context.allocator,
+        context->event_loop);
     if (YETTY_IS_ERR(factory_res)) {
         scene_canvas_destroy_internals(sc);
         free(sc);

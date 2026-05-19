@@ -17,6 +17,11 @@ struct yetty_ydraw_figure_factory {
     WGPUQueue queue;
     WGPUTextureFormat target_format;
     struct yetty_ydraw_gpu_allocator *allocator;
+    /* Event loop shared with the host terminal. Propagated to each
+     * concrete factory at register time so instances can subscribe
+     * to timers and other events. NULL is acceptable — concrete
+     * factories that need it will gracefully degrade. */
+    struct yetty_yevent_event_loop *event_loop;
     struct yetty_ydraw_concrete_factory *factories[MAX_CONCRETE_FACTORIES];
     uint32_t count;
 };
@@ -28,7 +33,8 @@ struct yetty_ydraw_figure_factory {
 struct yetty_ydraw_figure_factory_ptr_result
 yetty_ydraw_figure_factory_create(WGPUDevice device, WGPUQueue queue,
                                               WGPUTextureFormat target_format,
-                                              struct yetty_ydraw_gpu_allocator *allocator)
+                                              struct yetty_ydraw_gpu_allocator *allocator,
+                                              struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_ydraw_figure_factory *factory =
         calloc(1, sizeof(struct yetty_ydraw_figure_factory));
@@ -40,6 +46,7 @@ yetty_ydraw_figure_factory_create(WGPUDevice device, WGPUQueue queue,
     factory->queue = queue;
     factory->target_format = target_format;
     factory->allocator = allocator;
+    factory->event_loop = event_loop;
 
     return YETTY_OK(yetty_ydraw_figure_factory_ptr, factory);
 }
@@ -78,6 +85,10 @@ struct yetty_ycore_void_result yetty_ydraw_figure_factory_register(
             return YETTY_ERR(yetty_ycore_void, "type already registered");
         }
     }
+
+    // Propagate the registry's event_loop to the concrete factory so
+    // its instances can subscribe to timers / mouse / etc.
+    concrete->event_loop = factory->event_loop;
 
     // Compile pipeline for this concrete factory
     if (concrete->compile_pipeline) {

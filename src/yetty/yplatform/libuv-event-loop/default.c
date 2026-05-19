@@ -190,6 +190,9 @@ static struct yetty_ycore_void_result libuv_destroy_timer(struct yetty_yevent_ev
 static struct yetty_ycore_void_result libuv_register_timer_listener(
     struct yetty_yevent_event_loop *self, yetty_yevent_timer_id id,
     struct yetty_yevent_event_listener *listener);
+static struct yetty_ycore_void_result libuv_deregister_timer_listener(
+    struct yetty_yevent_event_loop *self, yetty_yevent_timer_id id,
+    struct yetty_yevent_event_listener *listener);
 static struct yetty_yevent_tcp_server_id_result libuv_create_tcp_server(
     struct yetty_yevent_event_loop *self, const char *host, int port,
     const struct yetty_yevent_tcp_server_callbacks *callbacks);
@@ -227,6 +230,7 @@ static const struct yetty_yevent_event_loop_ops libuv_ops = {
     .stop_timer = libuv_stop_timer,
     .destroy_timer = libuv_destroy_timer,
     .register_timer_listener = libuv_register_timer_listener,
+    .deregister_timer_listener = libuv_deregister_timer_listener,
     .create_tcp_server = libuv_create_tcp_server,
     .start_tcp_server = libuv_start_tcp_server,
     .stop_tcp_server = libuv_stop_tcp_server,
@@ -353,13 +357,23 @@ static void on_timer(uv_timer_t *handle)
 {
     struct yetty_yplatform_timer_handle *th = handle->data;
     struct yetty_yui_event event = {0};
-    int i;
 
     event.type = YETTY_YCORE_TIMER;
     event.timer.timer_id = th->id;
 
-    for (i = 0; i < th->listener_count; i++) {
-        th->listeners[i]->handler(th->listeners[i], &event);
+    /* Snapshot the listener array so handlers can safely call
+     * register_timer_listener / deregister_timer_listener (including
+     * on themselves) without breaking our iteration. */
+    struct yetty_yevent_event_listener *snapshot[MAX_LISTENERS_PER_TIMER];
+    int n = th->listener_count;
+    if (n > MAX_LISTENERS_PER_TIMER) n = MAX_LISTENERS_PER_TIMER;
+    for (int i = 0; i < n; i++) {
+        snapshot[i] = th->listeners[i];
+    }
+    for (int i = 0; i < n; i++) {
+        if (snapshot[i] && snapshot[i]->handler) {
+            snapshot[i]->handler(snapshot[i], &event);
+        }
     }
 }
 
@@ -713,6 +727,33 @@ static struct yetty_ycore_void_result libuv_register_timer_listener(
     }
 
     th->listeners[th->listener_count++] = listener;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result libuv_deregister_timer_listener(
+    struct yetty_yevent_event_loop *self, yetty_yevent_timer_id id,
+    struct yetty_yevent_event_listener *listener)
+{
+    struct yetty_yplatform_libuv_event_loop *impl =
+        container_of(self, struct yetty_yplatform_libuv_event_loop, base);
+    struct yetty_yplatform_timer_handle *th;
+
+    if (id < 0 || id >= MAX_TIMERS || !listener) {
+        return YETTY_ERR(yetty_ycore_void, "invalid timer id or listener");
+    }
+    th = &impl->timers[id];
+    /* Linear scan, shift-on-remove. Listener counts per timer are
+     * small (≤ MAX_LISTENERS_PER_TIMER) so this is fine. */
+    for (int i = 0; i < th->listener_count; i++) {
+        if (th->listeners[i] == listener) {
+            for (int j = i + 1; j < th->listener_count; j++) {
+                th->listeners[j - 1] = th->listeners[j];
+            }
+            th->listener_count--;
+            return YETTY_OK_VOID();
+        }
+    }
+    /* Not registered — quiet no-op (caller may be over-eager on EOS). */
     return YETTY_OK_VOID();
 }
 
