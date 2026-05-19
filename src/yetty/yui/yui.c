@@ -1938,10 +1938,15 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         yetty_ygui_engine_mouse_up(yui->engine, event->mouse.x, event->mouse.y,
                                    event->mouse.button);
         yui_apply_cursor(yui);
-        /* Consume if we were the one tracking the drag (had a pressed
-         * widget before this UP) or any other overlay-style reason. */
-        return YETTY_OK(yetty_ycore_int,
-                        active || in_titlebar || has_pressed ? 1 : 0);
+        /* Consume only if a widget was actually tracking the click
+         * (had a pressed widget before this UP) or an overlay is up.
+         * Previously we also consumed every titlebar UP, but that
+         * starved tabbar.c's window-drag handler of the MOUSE_UP it
+         * needs to clear its `dragging` flag — making drag-to-move
+         * stick after release. Titlebar UPs that no widget claimed
+         * are still safely swallowed by tabbar.c's in-strip return
+         * before they can reach the workspace. */
+        return YETTY_OK(yetty_ycore_int, active || has_pressed ? 1 : 0);
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
         yetty_ygui_engine_mouse_move(yui->engine, event->mouse.x, event->mouse.y);

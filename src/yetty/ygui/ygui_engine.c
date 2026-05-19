@@ -971,6 +971,20 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
                    hit->id ? hit->id : "?", lx, ly, handled);
             if (handled) {
                 emit_event(engine, &event);
+            } else if (!hit->vtable->on_drag) {
+                /* on_press declined AND the widget has no on_drag — it's
+                 * not interested in this gesture at all. Release the
+                 * implicit press grab so MOVE/UP fall through to the
+                 * host (e.g. the tabbar widget's empty area surrenders
+                 * clicks to yui's titlebar window-drag handler).
+                 *
+                 * Widgets that return 0 from on_press but DO define
+                 * on_drag (notably the splitter — "Press alone doesn't
+                 * move; drag will pick up from here") still need the
+                 * pressed grab so subsequent MOUSE_MOVE events fire
+                 * their on_drag — those keep the grab. */
+                hit->flags &= ~YETTY_YGUI_FLAG_PRESSED;
+                engine->pressed = NULL;
             }
         }
     }
