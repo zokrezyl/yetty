@@ -129,6 +129,13 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
     struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value.plot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, prog, "yplot: yfsvm compile failed");
 
+    /* Tell the receiver to subscribe to the animation timer when the
+     * compiled program references LOAD_T. The hook reads this bit at
+     * instance_create — saves scanning the bytecode every time. */
+    if (prog.value.uses_time) {
+        u->flags |= YETTY_YPLOT_FLAG_USES_TIME;
+    }
+
     uint32_t bc_len = yetty_yfsvm_program_serialize(&prog.value, bc_buf, bc_cap);
     if (bc_len == 0) {
         return YETTY_ERR(yetty_ycore_void, "yplot: bytecode serialize failed");

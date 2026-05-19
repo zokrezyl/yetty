@@ -22,8 +22,12 @@ target_link_libraries(yetty_yplot_core PUBLIC
 # yetty_yplot — GPU pipeline (concrete factory). Pulls Dawn / WebGPU.
 # Built only when WebGPU is on; linked by the yetty server executable.
 if(YETTY_ENABLE_LIB_WEBGPU)
+    # yplot-time.c hooks the figure into the shared animation timer
+    # when the compiled bytecode references `t`/`time`. Lives next to
+    # yplot-gen.c because both need Dawn + the figure_factory headers.
     add_library(yetty_yplot STATIC
         yplot-gen.c
+        yplot-time.c
     )
 
     target_include_directories(yetty_yplot PUBLIC

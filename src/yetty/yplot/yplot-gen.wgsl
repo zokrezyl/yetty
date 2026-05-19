@@ -26,6 +26,11 @@ fn yplot_get_y_max()    -> f32 { return uniforms.yplot_y_max; }
 fn yplot_get_flags()    -> u32 { return uniforms.yplot_flags; }
 fn yplot_get_function_count() -> u32 { return uniforms.yplot_function_count; }
 
+// `time` — monotonic seconds, written CPU-side by yplot-time.c's tick
+// handler when the compiled bytecode uses LOAD_T (yfsvm `uses_time`).
+// Always present in the uniform buffer; reads 0 on static plots.
+fn yplot_get_time() -> f32 { return uniforms.yplot_time; }
+
 fn yplot_get_colors(idx: u32) -> u32 {
     // Array uniform: yplot_colors_0 through yplot_colors_7.
     // WGSL has no dynamic struct-field indexing, so switch.
