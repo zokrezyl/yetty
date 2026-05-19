@@ -56,6 +56,9 @@
 #if YETTY_HAS_YMESH
 #include <yetty/ymesh/ymesh-gen.h>
 #endif
+#if YETTY_HAS_YVIDEO
+#include <yetty/yvideo/yvideo-gen.h>
+#endif
 #if YETTY_HAS_YMSDF_GEN
 #include <yetty/ymsdf-gen/ymsdf-gen.h>
 #include <yetty/ymsdf/generator.h>
@@ -852,7 +855,8 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
      * dispatch time. */
     struct yetty_ydraw_figure_factory_ptr_result factory_res = yetty_ydraw_figure_factory_create(
         context->gpu_context.device, context->gpu_context.queue,
-        context->gpu_context.surface_format, context->gpu_context.allocator);
+        context->gpu_context.surface_format, context->gpu_context.allocator,
+        context->event_loop);
     if (YETTY_IS_ERR(factory_res)) {
         scene_canvas_destroy_internals(sc);
         free(sc);
@@ -908,6 +912,24 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
             scene_canvas_destroy_internals(sc);
             free(sc);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: ymesh register", rr);
+        }
+    }
+#endif
+#if YETTY_HAS_YVIDEO
+    {
+        struct yetty_ydraw_concrete_factory *f = yetty_yvideo_factory_create();
+        if (!f) {
+            scene_canvas_destroy_internals(sc);
+            free(sc);
+            return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: yvideo factory create");
+        }
+        struct yetty_ycore_void_result rr =
+            yetty_ydraw_figure_factory_register(sc->figure_factory, f);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_yvideo_factory_destroy(f);
+            scene_canvas_destroy_internals(sc);
+            free(sc);
+            return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: yvideo register", rr);
         }
     }
 #endif

@@ -10,7 +10,7 @@
  * the first argument to each vtable method.
  */
 
-#include <yetty/yvideo/encoder.h>
+#include <yetty/yvcodec/encoder.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -46,12 +46,12 @@ static void openh264_trace_cb(void *ctx, int level, const char *msg)
     }
 }
 
-struct yetty_yvideo_encoder {
+struct yetty_yvcodec_encoder {
     /* Handle = pointer to vtable pointer (COM-style). `ISVCEncoder` is
      * already a `const ISVCEncoderVtbl*`, so the actual encoder handle is
      * one more indirection up. Call methods as `(*h264)->Method(h264, ...)`. */
     ISVCEncoder *h264;
-    struct yetty_yvideo_encoder_config cfg;
+    struct yetty_yvcodec_encoder_config cfg;
     uint32_t frame_index;
     int force_idr;
     double start_time_sec;
@@ -64,7 +64,7 @@ struct yetty_yvideo_encoder {
     size_t out_cap;
 };
 
-void yetty_yvideo_encoder_config_defaults(struct yetty_yvideo_encoder_config *cfg, uint32_t width,
+void yetty_yvcodec_encoder_config_defaults(struct yetty_yvcodec_encoder_config *cfg, uint32_t width,
                                           uint32_t height)
 {
     if (!cfg) {
@@ -90,23 +90,23 @@ void yetty_yvideo_encoder_config_defaults(struct yetty_yvideo_encoder_config *cf
     cfg->screen_content = true;
 }
 
-struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_config_encoder_create(
-    const struct yetty_yvideo_encoder_config *cfg)
+struct yetty_yvcodec_encoder_ptr_result yetty_yvcodec_encoder_config_encoder_create(
+    const struct yetty_yvcodec_encoder_config *cfg)
 {
     if (!cfg || cfg->width == 0 || cfg->height == 0 || (cfg->width & 1) || (cfg->height & 1)) {
-        return YETTY_ERR(yetty_yvideo_encoder_ptr,
+        return YETTY_ERR(yetty_yvcodec_encoder_ptr,
                          "invalid encoder config (dims must be >0 and even)");
     }
 
-    struct yetty_yvideo_encoder *enc = calloc(1, sizeof(*enc));
+    struct yetty_yvcodec_encoder *enc = calloc(1, sizeof(*enc));
     if (!enc) {
-        return YETTY_ERR(yetty_yvideo_encoder_ptr, "encoder alloc failed");
+        return YETTY_ERR(yetty_yvcodec_encoder_ptr, "encoder alloc failed");
     }
     enc->cfg = *cfg;
 
     if (WelsCreateSVCEncoder(&enc->h264) != 0 || !enc->h264) {
         free(enc);
-        return YETTY_ERR(yetty_yvideo_encoder_ptr, "WelsCreateSVCEncoder failed");
+        return YETTY_ERR(yetty_yvcodec_encoder_ptr, "WelsCreateSVCEncoder failed");
     }
 
     WelsTraceCallback cb = openh264_trace_cb;
@@ -143,7 +143,7 @@ struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_config_encoder_creat
     if ((*enc->h264)->InitializeExt(enc->h264, &param) != 0) {
         WelsDestroySVCEncoder(enc->h264);
         free(enc);
-        return YETTY_ERR(yetty_yvideo_encoder_ptr, "InitializeExt failed");
+        return YETTY_ERR(yetty_yvcodec_encoder_ptr, "InitializeExt failed");
     }
 
     int video_format = videoFormatI420;
@@ -153,14 +153,14 @@ struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_config_encoder_creat
 
     enc->start_time_sec = yetty_yplatform_ytime_monotonic_sec();
 
-    yinfo("yvideo: encoder %ux%u @ %.1ffps, %u kbps, IDR every %u, screen=%d", cfg->width,
+    yinfo("yvcodec: encoder %ux%u @ %.1ffps, %u kbps, IDR every %u, screen=%d", cfg->width,
           cfg->height, cfg->frame_rate, cfg->bitrate / 1000, cfg->idr_interval,
           (int)cfg->screen_content);
 
-    return YETTY_OK(yetty_yvideo_encoder_ptr, enc);
+    return YETTY_OK(yetty_yvcodec_encoder_ptr, enc);
 }
 
-void yetty_yvideo_encoder_destroy(struct yetty_yvideo_encoder *enc)
+void yetty_yvcodec_encoder_destroy(struct yetty_yvcodec_encoder *enc)
 {
     if (!enc) {
         return;
@@ -174,7 +174,7 @@ void yetty_yvideo_encoder_destroy(struct yetty_yvideo_encoder *enc)
 }
 
 /* Grow the bitstream scratch buffer to at least `need` bytes. */
-static int ensure_out_cap(struct yetty_yvideo_encoder *enc, size_t need)
+static int ensure_out_cap(struct yetty_yvcodec_encoder *enc, size_t need)
 {
     if (enc->out_cap >= need) {
         return 1;
@@ -192,12 +192,12 @@ static int ensure_out_cap(struct yetty_yvideo_encoder *enc, size_t need)
     return 1;
 }
 
-struct yetty_ycore_void_result yetty_yvideo_encoder_encode(struct yetty_yvideo_encoder *enc,
+struct yetty_ycore_void_result yetty_yvcodec_encoder_encode(struct yetty_yvcodec_encoder *enc,
                                                            const uint8_t *y_plane,
                                                            const uint8_t *u_plane,
                                                            const uint8_t *v_plane,
                                                            uint32_t y_stride, uint32_t uv_stride,
-                                                           struct yetty_yvideo_encoded_frame *out)
+                                                           struct yetty_yvcodec_encoded_frame *out)
 {
     if (!enc || !enc->h264 || !y_plane || !u_plane || !v_plane || !out) {
         return YETTY_ERR(yetty_ycore_void, "null args");
@@ -263,14 +263,14 @@ struct yetty_ycore_void_result yetty_yvideo_encoder_encode(struct yetty_yvideo_e
     return YETTY_OK_VOID();
 }
 
-void yetty_yvideo_encoder_force_idr(struct yetty_yvideo_encoder *enc)
+void yetty_yvcodec_encoder_force_idr(struct yetty_yvcodec_encoder *enc)
 {
     if (enc) {
         enc->force_idr = 1;
     }
 }
 
-struct yetty_ycore_void_result yetty_yvideo_encoder_set_bitrate(struct yetty_yvideo_encoder *enc,
+struct yetty_ycore_void_result yetty_yvcodec_encoder_set_bitrate(struct yetty_yvcodec_encoder *enc,
                                                                 uint32_t bitrate)
 {
     if (!enc || !enc->h264) {
@@ -286,12 +286,12 @@ struct yetty_ycore_void_result yetty_yvideo_encoder_set_bitrate(struct yetty_yvi
     return YETTY_OK_VOID();
 }
 
-uint32_t yetty_yvideo_encoder_width(const struct yetty_yvideo_encoder *enc)
+uint32_t yetty_yvcodec_encoder_width(const struct yetty_yvcodec_encoder *enc)
 {
     return enc ? enc->cfg.width : 0;
 }
 
-uint32_t yetty_yvideo_encoder_height(const struct yetty_yvideo_encoder *enc)
+uint32_t yetty_yvcodec_encoder_height(const struct yetty_yvcodec_encoder *enc)
 {
     return enc ? enc->cfg.height : 0;
 }
@@ -300,7 +300,7 @@ uint32_t yetty_yvideo_encoder_height(const struct yetty_yvideo_encoder *enc)
  * BGRA → YUV420 (BT.709, video range). Scalar C path — sub-ms at typical
  * terminal resolutions. Ported from yetty-poc's convertBgraToYuv420Cpu.
  *-------------------------------------------------------------------------*/
-void yetty_yvideo_bgra_to_yuv420(const uint8_t *bgra, uint32_t width, uint32_t height,
+void yetty_yvcodec_bgra_to_yuv420(const uint8_t *bgra, uint32_t width, uint32_t height,
                                  uint32_t bgra_stride, uint8_t *y_plane, uint8_t *u_plane,
                                  uint8_t *v_plane, uint32_t y_stride, uint32_t uv_stride)
 {
