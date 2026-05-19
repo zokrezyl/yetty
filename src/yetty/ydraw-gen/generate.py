@@ -144,6 +144,46 @@ def yaml_factory_mode(schema):
     return 'default'
 
 
+def hooks_enabled(schema):
+    """True when the schema opts into the prim-specific hook surface
+    the factory emits. Hooks are extern decls the generated factory
+    calls at fixed points; a hand-written <name>-hooks.c implements
+    them. Keeps CPU/GPU sync (uniform names, types, offsets, buffer
+    layouts, texture descriptors) in the generated factory while
+    letting stateful prims (decoders, per-frame texture writes, …)
+    plug in without forking the generator output.
+
+    When enabled the generator emits, at the top of <name>-gen.c:
+
+      extern struct yetty_ycore_void_result <name>_hook_instance_create(
+          struct yetty_ydraw_figure_instance *instance,
+          const void *buffer_data, size_t size);
+      extern void <name>_hook_instance_destroy(
+          struct yetty_ydraw_figure_instance *instance);
+      extern struct yetty_ycore_void_result <name>_hook_instance_update(
+          struct yetty_ydraw_figure_instance *instance,
+          const void *payload, size_t size);
+      extern struct yetty_ycore_void_result <name>_hook_instance_render_pre(
+          struct yetty_ydraw_figure_instance *instance,
+          struct yetty_ydraw_target *target, float x, float y);
+
+    Insertion points:
+      create_instance — after RS clone + wire wiring, BEFORE binder
+                        ops->submit (so the hook can resize textures
+                        before atlas pack). On error returned by the
+                        hook, the standard rollback runs.
+      destroy_instance — BEFORE the binder/RS/buffer/instance frees.
+      render          — AFTER all uniform writes from the wire, BEFORE
+                        binder->update (so the hook can write the
+                        texture and set dirty=1 with the freshly
+                        decoded frame).
+      update_instance — the factory's vtable entry is set to a wrapper
+                        that forwards to the hook (one source of truth
+                        for the CMD_UPDATE schema lives in <name>-hooks.c).
+    """
+    return bool(schema.get('hooks', False))
+
+
 def generate_c_header(schema, uniforms, buffers, textures, yaml_mode):
     name = schema['name']
     NAME = name.upper()
@@ -623,6 +663,80 @@ def generate_c_source(schema, uniforms, buffers, textures):
     }}'''
     else:
         instance_resources_wiring = ''
+
+    # ------------------------------------------------------------------
+    # Hook surface — see hooks_enabled() docstring. When opted in, the
+    # generated factory delegates four lifecycle points to extern
+    # functions a hand-written <name>-hooks.c implements. The CPU/GPU
+    # wiring above stays in the generated file (single source of truth
+    # for layout); the hooks see fully-initialised structures and can
+    # add stateful logic without forking gen output.
+    # ------------------------------------------------------------------
+    use_hooks = hooks_enabled(schema)
+    if use_hooks:
+        hooks_externs = f'''
+/* Hook surface — see hooks_enabled() in ydraw-gen/generate.py. Implemented
+ * in {name}-hooks.c (hand-written). Missing symbols are a link error. */
+extern struct yetty_ycore_void_result {name}_hook_instance_create(
+    struct yetty_ydraw_figure_instance *instance,
+    const void *buffer_data, size_t size);
+extern void {name}_hook_instance_destroy(
+    struct yetty_ydraw_figure_instance *instance);
+extern struct yetty_ycore_void_result {name}_hook_instance_update(
+    struct yetty_ydraw_figure_instance *instance,
+    const void *payload, size_t size);
+extern struct yetty_ycore_void_result {name}_hook_instance_render_pre(
+    struct yetty_ydraw_figure_instance *instance,
+    struct yetty_ydraw_target *target, float x, float y);
+
+static struct yetty_ycore_void_result {name}_update_dispatch(
+    struct yetty_ydraw_concrete_factory *self,
+    struct yetty_ydraw_figure_instance *instance,
+    const void *payload, size_t size)
+{{
+    (void)self;
+    return {name}_hook_instance_update(instance, payload, size);
+}}
+'''
+        hooks_create_call = f'''
+    /* hook_instance_create runs after RS clone + wire wiring, before
+     * binder->submit. Lets the prim populate instance_data and set
+     * per-instance texture dimensions before atlas pack. */
+    {{
+        struct yetty_ycore_void_result hcr =
+            {name}_hook_instance_create(instance, buffer_data, size);
+        if (YETTY_IS_ERR(hcr)) {{
+            free(instance->resource_set);
+            free(instance->buffer_data);
+            free(instance);
+            return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+                             "{name}: hook_instance_create failed", hcr);
+        }}
+    }}
+'''
+        hooks_create_rollback = f'        {name}_hook_instance_destroy(instance);\n        '
+        hooks_destroy_call = f'    {name}_hook_instance_destroy(instance);\n'
+        hooks_render_call = f'''
+    /* hook_instance_render_pre runs after the wire→RS uniform refresh
+     * and before binder->update. The prim can write texture data,
+     * set dirty flags, or otherwise mutate the RS using the freshly
+     * decoded / state-derived inputs. */
+    {{
+        struct yetty_ycore_void_result hrr =
+            {name}_hook_instance_render_pre(self, target, x, y);
+        if (YETTY_IS_ERR(hrr))
+            return YETTY_ERR(yetty_ycore_void, "{name}: hook_render_pre failed", hrr);
+    }}
+'''
+        hooks_factory_wire = f'    factory->base.update_instance = {name}_update_dispatch;\n'
+    else:
+        hooks_externs = ''
+        hooks_create_call = ''
+        hooks_create_rollback = '        '
+        hooks_destroy_call = ''
+        hooks_render_call = ''
+        hooks_factory_wire = ''
+
     # webgpu.h is pulled in via the ydraw-factory header (server-only).
     # Wire format / type-id ranges come from ydraw-core/complex-prim-types.h.
 
@@ -652,7 +766,7 @@ def generate_c_source(schema, uniforms, buffers, textures):
 #include <stdlib.h>
 #include <string.h>
 {lib_includes}
-
+{hooks_externs}
 extern const unsigned char g{name}_shaderData[];
 extern const unsigned int g{name}_shaderSize;
 extern const unsigned char g{name}_lib_shaderData[];
@@ -777,7 +891,7 @@ static struct yetty_ycore_void_result
     rs->uniforms[1].f32 = y;
 
 {render_resources_wiring}
-
+{hooks_render_call}
     // Update the per-instance binder. Each instance has its own GPU
     // uniform_buffer / storage_buffer / bind_group, so concurrent renders
     // of multiple instances do NOT trample each other's data.
@@ -927,14 +1041,14 @@ static struct yetty_ydraw_figure_instance_ptr_result
            sizeof(struct yetty_ydraw_gpu_resource_set));
 
 {instance_resources_wiring}
-
+{hooks_create_call}
     /* Per-instance binder bound to the factory's shared pipeline. Owns
      * its OWN uniform_buffer / storage_buffer / bind_group. */
     struct yetty_yrender_gpu_resource_binder_result br =
         yetty_yrender_gpu_resource_binder_create_with_pipeline(
             factory->device, factory->queue, factory->allocator, factory->pipeline);
     if (YETTY_IS_ERR(br)) {{
-        free(instance->resource_set);
+{hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
         return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
@@ -946,7 +1060,7 @@ static struct yetty_ydraw_figure_instance_ptr_result
         instance->binder->ops->submit(instance->binder, instance->resource_set);
     if (YETTY_IS_ERR(sr)) {{
         instance->binder->ops->destroy(instance->binder);
-        free(instance->resource_set);
+{hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
         return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
@@ -956,7 +1070,7 @@ static struct yetty_ydraw_figure_instance_ptr_result
     struct yetty_ycore_void_result fr = instance->binder->ops->finalize(instance->binder);
     if (YETTY_IS_ERR(fr)) {{
         instance->binder->ops->destroy(instance->binder);
-        free(instance->resource_set);
+{hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
         return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
@@ -972,7 +1086,7 @@ static void {name}_destroy_instance(struct yetty_ydraw_concrete_factory *self,
     (void)self;
     if (!instance)
         return;
-    if (instance->binder)
+{hooks_destroy_call}    if (instance->binder)
         instance->binder->ops->destroy(instance->binder);
     free(instance->resource_set);
     free(instance->buffer_data);
@@ -1021,7 +1135,7 @@ struct yetty_ydraw_concrete_factory *yetty_{name}_factory_create(void)
     factory->base.get_pipeline = {name}_get_pipeline;
     factory->base.create_instance = {name}_create_instance;
     factory->base.destroy_instance = {name}_destroy_instance;
-    factory->base.get_shared_rs = {name}_get_shared_rs;
+{hooks_factory_wire}    factory->base.get_shared_rs = {name}_get_shared_rs;
     factory->base.set_visual_zoom = {name}_set_visual_zoom;
     factory->base.set_cell_zoom = {name}_set_cell_zoom;
 

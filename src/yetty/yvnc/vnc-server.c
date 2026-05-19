@@ -21,8 +21,8 @@
 #include <string.h>
 #include <turbojpeg.h>
 
-#ifdef YETTY_HAS_YVIDEO
-#include <yetty/yvideo/encoder.h>
+#ifdef YETTY_HAS_YVCODEC
+#include <yetty/yvcodec/encoder.h>
 #define MINIMP4_IMPLEMENTATION
 #include <minimp4.h>
 #endif
@@ -133,11 +133,11 @@ struct yetty_yvnc_server {
     /* JPEG compression */
     tjhandle jpeg_compressor;
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     /* H.264 encoding state — allocated lazily on first H.264 frame, torn
    * down on resolution change. yuv_buf is a single heap block holding the
    * three planes back-to-back at the strides below (16-byte aligned). */
-    struct yetty_yvideo_encoder *h264_encoder;
+    struct yetty_yvcodec_encoder *h264_encoder;
     uint8_t *yuv_buf;
     size_t yuv_buf_size;
     uint32_t yuv_y_stride;
@@ -457,7 +457,7 @@ static void hid_on_resize(struct yetty_yvnc_server *server, uint16_t width, uint
     hid_push_event(server, &ev);
 }
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
 /* minimp4 file-write callback. `token` is the FILE *. */
 YETTY_EXTERNAL_CALLBACK
 static int vnc_record_write_cb(int64_t offset, const void *buffer, size_t size, void *token)
@@ -499,12 +499,12 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
         yetty_yvnc_server_set_merge_rectangles(vnc_server, 1);
     }
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     /* H.264 tuning knobs — read from vnc/h264/... config keys. Each is
         * optional; the server treats zero / unset as "use encoder defaults".
-        * Setters live behind YETTY_HAS_YVIDEO (line 726+), so the calls do
+        * Setters live behind YETTY_HAS_YVCODEC (line 726+), so the calls do
         * too — otherwise this references undefined symbols when OpenH264 /
-        * yvideo is disabled (e.g. webasm). */
+        * yvcodec is disabled (e.g. webasm). */
     int h264_bps = config->ops->get_int(config, "vnc/h264/bitrate", 0);
     if (h264_bps > 0) {
         yetty_yvnc_server_set_h264_bitrate(vnc_server, (uint32_t)h264_bps);
@@ -523,7 +523,7 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
     }
 #endif
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     /* MP4 recording: --record FILE sets vnc/record-file and forces use-h264.
    * Open the file + muxer up front; the H.264 writer is set up on the first
    * encoded frame (we need the encoder dimensions for it). */
@@ -577,7 +577,7 @@ struct yetty_vnc_server_ptr_result yetty_yvnc_server_create(
     server->tcp_server_id = -1;
     server->jpeg_quality = 80;
     server->force_full_frame = 1;
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     /* -1 = "no override"; 0/1 = user set false/true. 0 would be
    * indistinguishable from "default true" if we left it as-is. */
     server->h264_cfg_screen_content = -1;
@@ -613,9 +613,9 @@ struct yetty_ycore_void_result yetty_yvnc_server_destroy(struct yetty_yvnc_serve
         tjDestroy(server->jpeg_compressor);
     }
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     if (server->h264_encoder) {
-        yetty_yvideo_encoder_destroy(server->h264_encoder);
+        yetty_yvcodec_encoder_destroy(server->h264_encoder);
     }
     free(server->yuv_buf);
 
@@ -800,7 +800,7 @@ void yetty_yvnc_server_mark_redraw_pending(struct yetty_yvnc_server *server)
     yetty_yrender_utils_tile_diff_engine_mark_redraw_pending(server->diff_engine);
 }
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
 void yetty_yvnc_server_set_h264_bitrate(struct yetty_yvnc_server *server, uint32_t bps)
 {
     if (server) {
@@ -830,7 +830,7 @@ void yetty_yvnc_server_set_h264_screen_content(struct yetty_yvnc_server *server,
 }
 #else
 /* Symbols exist unconditionally in the public header so callers don't need
- * to guard each call with #ifdef YETTY_HAS_YVIDEO. No-ops when yvideo is
+ * to guard each call with #ifdef YETTY_HAS_YVCODEC. No-ops when yvcodec is
  * disabled at build time. */
 void yetty_vnc_server_set_h264_bitrate(struct yetty_vnc_server *s, uint32_t b)
 {
@@ -1223,7 +1223,7 @@ struct yetty_ycore_void_result yetty_yvnc_server_send_frame_cpu(struct yetty_yvn
     /* Recording (record_mux non-NULL) acts as a phantom local consumer:
    * even with no TCP clients we still need the encode pipeline to run so
    * frames land in the MP4. */
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     int has_consumers =
         server && server->running && (server->client_count > 0 || server->record_mux != NULL);
 #else
@@ -1438,7 +1438,7 @@ static struct yetty_ycore_void_result encode_rect(struct yetty_yvnc_server *serv
  * Selects tile mode or rectangle mode based on server->merge_rectangles.
  *===========================================================================*/
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
 /*
  * H.264 full-frame send path. The encoder wants a contiguous BGRA framebuffer
  * → convert to YUV420 → hand to openh264 → wrap the resulting bitstream in a
@@ -1467,12 +1467,12 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
     if (!server->h264_encoder || server->h264_enc_width != enc_w ||
         server->h264_enc_height != enc_h) {
         if (server->h264_encoder) {
-            yetty_yvideo_encoder_destroy(server->h264_encoder);
+            yetty_yvcodec_encoder_destroy(server->h264_encoder);
             server->h264_encoder = NULL;
         }
 
-        struct yetty_yvideo_encoder_config cfg;
-        yetty_yvideo_encoder_config_defaults(&cfg, enc_w, enc_h);
+        struct yetty_yvcodec_encoder_config cfg;
+        yetty_yvcodec_encoder_config_defaults(&cfg, enc_w, enc_h);
 
         /* Apply user overrides from --vnc-h264-* flags or the vnc/h264/...
      * config keys. Each knob left at zero/-1 keeps the auto default. */
@@ -1489,8 +1489,8 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
             cfg.screen_content = server->h264_cfg_screen_content != 0;
         }
 
-        struct yetty_yvideo_encoder_ptr_result eres =
-            yetty_yvideo_encoder_config_encoder_create(&cfg);
+        struct yetty_yvcodec_encoder_ptr_result eres =
+            yetty_yvcodec_encoder_config_encoder_create(&cfg);
         if (!YETTY_IS_OK(eres)) {
             ywarn("VNC: H.264 encoder create failed: %s", eres.error.msg);
             /* Disable H.264 so the caller falls back to JPEG next frame. */
@@ -1525,12 +1525,12 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
     uint8_t *u_plane = y_plane + y_size;
     uint8_t *v_plane = u_plane + uv_size;
 
-    yetty_yvideo_bgra_to_yuv420(pixels, enc_w, enc_h, width * 4, y_plane, u_plane, v_plane,
+    yetty_yvcodec_bgra_to_yuv420(pixels, enc_w, enc_h, width * 4, y_plane, u_plane, v_plane,
                                 server->yuv_y_stride, server->yuv_uv_stride);
 
-    struct yetty_yvideo_encoded_frame encoded;
+    struct yetty_yvcodec_encoded_frame encoded;
     struct yetty_ycore_void_result res =
-        yetty_yvideo_encoder_encode(server->h264_encoder, y_plane, u_plane, v_plane,
+        yetty_yvcodec_encoder_encode(server->h264_encoder, y_plane, u_plane, v_plane,
                                     server->yuv_y_stride, server->yuv_uv_stride, &encoded);
     if (!YETTY_IS_OK(res)) {
         ywarn("VNC: H.264 encode failed: %s", res.error.msg);
@@ -1635,7 +1635,7 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
     server->current_stats.frames++;
     return YETTY_OK_VOID();
 }
-#endif /* YETTY_HAS_YVIDEO */
+#endif /* YETTY_HAS_YVCODEC */
 
 /*
  * Encode the current readback and ship to every client that's not currently
@@ -1708,7 +1708,7 @@ static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_y
      * always_full path starts from a clean slate. */
     memset(server->dirty_tiles, 0, num_tiles * sizeof(int));
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     /*-------------------------------------------------------------------
      * H.264 streaming mode — one stateful encoder, broadcast to all.
      * Mixing H.264 with JPEG per-tile mid-session would desynchronise the
@@ -1954,7 +1954,7 @@ struct yetty_ycore_void_result yetty_yvnc_server_send_frame_gpu(struct yetty_yvn
                                                                 WGPUTexture texture, uint32_t width,
                                                                 uint32_t height)
 {
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     int has_consumers =
         server && server->running && (server->client_count > 0 || server->record_mux != NULL);
 #else

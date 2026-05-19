@@ -20,12 +20,19 @@ target_link_libraries(yetty_ydraw PUBLIC
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMESH}>:yetty_ymesh>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>:yetty_ymsdf_gen>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_WGSL}>:yetty_ymsdf>
+    $<$<AND:$<BOOL:${YETTY_ENABLE_FEATURE_YVIDEO}>,$<BOOL:${YETTY_ENABLE_LIB_OPENH264}>>:yetty_yvideo>
 )
 
 if(YETTY_ENABLE_FEATURE_YMESH)
     target_compile_definitions(yetty_ydraw PUBLIC YETTY_HAS_YMESH=1)
 else()
     target_compile_definitions(yetty_ydraw PUBLIC YETTY_HAS_YMESH=0)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YVIDEO AND YETTY_ENABLE_LIB_OPENH264 AND YETTY_ENABLE_LIB_WEBGPU)
+    target_compile_definitions(yetty_ydraw PUBLIC YETTY_HAS_YVIDEO=1)
+else()
+    target_compile_definitions(yetty_ydraw PUBLIC YETTY_HAS_YVIDEO=0)
 endif()
 
 # YETTY_HAS_YMSDF_GEN gates ydraw-canvas.c's on-demand MSDF CDB generation

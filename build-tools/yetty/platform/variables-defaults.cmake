@@ -95,7 +95,7 @@ option(YETTY_ENABLE_FEATURE_YGRID     "ygrid — grid card"                    O
 option(YETTY_ENABLE_FEATURE_YTHORVG   "ythorvg — thorvg card"               ON)
 
 # Video / media
-option(YETTY_ENABLE_FEATURE_YVIDEO    "yvideo — video codec support"         OFF)
+option(YETTY_ENABLE_FEATURE_YVCODEC   "yvcodec — H.264 video codec support"  OFF)
 
 # Network / connectivity
 option(YETTY_ENABLE_FEATURE_YVNC       "vnc — VNC client/server"              ON)
@@ -113,6 +113,7 @@ option(YETTY_ENABLE_FEATURE_YMAZE     "ymaze — animated maze ydraw demo"    ON
 option(YETTY_ENABLE_FEATURE_YZOO      "yzoo — animated control-point zoo demo" ON)
 option(YETTY_ENABLE_FEATURE_YJUNGLE   "yjungle — incremental scene-canvas test" ON)
 option(YETTY_ENABLE_FEATURE_YMESH     "ymesh — 3D mesh complex primitive"    ON)
+option(YETTY_ENABLE_FEATURE_YVIDEO    "yvideo — video complex primitive"     ON)
 option(YETTY_ENABLE_FEATURE_YMSDF_GEN "ymsdf-gen — MSDF glyph generator"    ON)
 option(YETTY_ENABLE_FEATURE_YMSDF_WGSL "ymsdf-wgsl — GPU MSDF glyph generator" ON)
 option(YETTY_ENABLE_FEATURE_YCAT      "ycat — MIME-dispatched cat for cards"  ON)
@@ -138,6 +139,7 @@ option(YETTY_ENABLE_TOOL_YPLOT           "yplot tool"                        ON)
 option(YETTY_ENABLE_TOOL_YTOP            "ytop tool (CPU monitor)"           ON)
 option(YETTY_ENABLE_TOOL_YGREETER        "ygreeter first-contact tool"       ON)
 option(YETTY_ENABLE_TOOL_YMESH           "ymesh tool (.glb → OSC)"           ON)
+option(YETTY_ENABLE_TOOL_YVIDEO          "yvideo tool (.h264 → OSC stream)"  ON)
 option(YETTY_ENABLE_TOOL_YMAZE           "ymaze tool (animated maze → OSC)"  ON)
 option(YETTY_ENABLE_TOOL_YZOO            "yzoo tool (control-point zoo → OSC)" ON)
 option(YETTY_ENABLE_TOOL_YJUNGLE         "yjungle tool (scene-canvas test → OSC)" ON)

@@ -57,7 +57,7 @@ add_subdirectory(yevent)
 # Video codec facade (H.264 encode/decode via openh264). Must be declared
 # before yvnc so vnc-server can link against it.
 if(YETTY_ENABLE_LIB_OPENH264)
-    add_subdirectory(yvideo)
+    add_subdirectory(yvcodec)
 endif()
 
 # Coroutine wrappers (libco on desktop, emscripten_fiber_t on web)
@@ -175,8 +175,8 @@ if(YETTY_ENABLE_FEATURE_YTHORVG)
     endif()
 endif()
 
-if(YETTY_ENABLE_FEATURE_YVIDEO)
-    add_subdirectory(yvideo)
+if(YETTY_ENABLE_FEATURE_YVCODEC)
+    add_subdirectory(yvcodec)
 endif()
 
 if(YETTY_ENABLE_FEATURE_CARDS)
@@ -213,6 +213,10 @@ endif()
 
 if(YETTY_ENABLE_FEATURE_YMESH)
     add_subdirectory(ymesh)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YVIDEO)
+    add_subdirectory(yvideo)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YMAZE)

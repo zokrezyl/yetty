@@ -5,7 +5,7 @@
  * methods are called as `dec->Method(&dec, args)`.
  */
 
-#include <yetty/yvideo/decoder.h>
+#include <yetty/yvcodec/decoder.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <wels/codec_api.h>
@@ -36,7 +36,7 @@ static void openh264_trace_cb(void *ctx, int level, const char *msg)
     }
 }
 
-struct yetty_yvideo_decoder {
+struct yetty_yvcodec_decoder {
     /* Handle = pointer to vtable pointer. See note in encoder.c. */
     ISVCDecoder *h264;
 
@@ -57,7 +57,7 @@ struct yetty_yvideo_decoder {
     uint8_t *v_buf;
     size_t v_buf_cap;
 
-    struct yetty_yvideo_yuv_frame current_frame;
+    struct yetty_yvcodec_yuv_frame current_frame;
 };
 
 static int ensure_cap(uint8_t **buf, size_t *cap, size_t need)
@@ -74,16 +74,16 @@ static int ensure_cap(uint8_t **buf, size_t *cap, size_t need)
     return 1;
 }
 
-struct yetty_yvideo_decoder_ptr_result yetty_yvideo_decoder_create_h264(void)
+struct yetty_yvcodec_decoder_ptr_result yetty_yvcodec_decoder_create_h264(void)
 {
-    struct yetty_yvideo_decoder *dec = calloc(1, sizeof(*dec));
+    struct yetty_yvcodec_decoder *dec = calloc(1, sizeof(*dec));
     if (!dec) {
-        return YETTY_ERR(yetty_yvideo_decoder_ptr, "decoder alloc failed");
+        return YETTY_ERR(yetty_yvcodec_decoder_ptr, "decoder alloc failed");
     }
 
     if (WelsCreateDecoder(&dec->h264) != 0 || !dec->h264) {
         free(dec);
-        return YETTY_ERR(yetty_yvideo_decoder_ptr, "WelsCreateDecoder failed");
+        return YETTY_ERR(yetty_yvcodec_decoder_ptr, "WelsCreateDecoder failed");
     }
 
     WelsTraceCallback cb = openh264_trace_cb;
@@ -98,14 +98,14 @@ struct yetty_yvideo_decoder_ptr_result yetty_yvideo_decoder_create_h264(void)
     if ((*dec->h264)->Initialize(dec->h264, &param) != 0) {
         WelsDestroyDecoder(dec->h264);
         free(dec);
-        return YETTY_ERR(yetty_yvideo_decoder_ptr, "decoder Initialize failed");
+        return YETTY_ERR(yetty_yvcodec_decoder_ptr, "decoder Initialize failed");
     }
 
-    ydebug("yvideo: H.264 decoder initialized");
-    return YETTY_OK(yetty_yvideo_decoder_ptr, dec);
+    ydebug("yvcodec: H.264 decoder initialized");
+    return YETTY_OK(yetty_yvcodec_decoder_ptr, dec);
 }
 
-void yetty_yvideo_decoder_destroy(struct yetty_yvideo_decoder *dec)
+void yetty_yvcodec_decoder_destroy(struct yetty_yvcodec_decoder *dec)
 {
     if (!dec) {
         return;
@@ -121,7 +121,7 @@ void yetty_yvideo_decoder_destroy(struct yetty_yvideo_decoder *dec)
     free(dec);
 }
 
-struct yetty_ycore_void_result yetty_yvideo_decoder_feed(struct yetty_yvideo_decoder *dec,
+struct yetty_ycore_void_result yetty_yvcodec_decoder_feed(struct yetty_yvcodec_decoder *dec,
                                                          const uint8_t *data, size_t size)
 {
     if (!dec || !dec->h264) {
@@ -139,8 +139,8 @@ struct yetty_ycore_void_result yetty_yvideo_decoder_feed(struct yetty_yvideo_dec
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yvideo_decoder_get_frame(struct yetty_yvideo_decoder *dec,
-                                                              struct yetty_yvideo_yuv_frame *out,
+struct yetty_ycore_void_result yetty_yvcodec_decoder_get_frame(struct yetty_yvcodec_decoder *dec,
+                                                              struct yetty_yvcodec_yuv_frame *out,
                                                               bool *out_has_frame)
 {
     if (!dec || !dec->h264 || !out || !out_has_frame) {
@@ -198,14 +198,14 @@ struct yetty_ycore_void_result yetty_yvideo_decoder_get_frame(struct yetty_yvide
     dec->current_frame.v_stride = (uint32_t)uv_stride;
     dec->current_frame.width = (uint32_t)width;
     dec->current_frame.height = (uint32_t)height;
-    dec->current_frame.color_matrix = YETTY_YVIDEO_COLOR_BT709;
+    dec->current_frame.color_matrix = YETTY_YVCODEC_COLOR_BT709;
 
     *out = dec->current_frame;
     *out_has_frame = true;
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yvideo_decoder_flush(struct yetty_yvideo_decoder *dec)
+struct yetty_ycore_void_result yetty_yvcodec_decoder_flush(struct yetty_yvcodec_decoder *dec)
 {
     (void)dec;
     /* openh264 DecodeFrameNoDelay doesn't hold reordered frames; no flush
@@ -213,7 +213,7 @@ struct yetty_ycore_void_result yetty_yvideo_decoder_flush(struct yetty_yvideo_de
     return YETTY_OK_VOID();
 }
 
-void yetty_yvideo_decoder_reset(struct yetty_yvideo_decoder *dec)
+void yetty_yvcodec_decoder_reset(struct yetty_yvcodec_decoder *dec)
 {
     if (!dec) {
         return;
@@ -226,7 +226,7 @@ void yetty_yvideo_decoder_reset(struct yetty_yvideo_decoder *dec)
  * YUV420 → BGRA8. Inverse of the encoder's BGRA→YUV helper. Fixed-point,
  * full-range output. Supports BT.601 and BT.709 coefficients.
  *-------------------------------------------------------------------------*/
-void yetty_yvideo_yuv_frame_yuv420_to_bgra(const struct yetty_yvideo_yuv_frame *frame,
+void yetty_yvcodec_yuv_frame_yuv420_to_bgra(const struct yetty_yvcodec_yuv_frame *frame,
                                            uint8_t *bgra_out)
 {
     if (!frame || !bgra_out || !frame->y_plane || !frame->u_plane || !frame->v_plane) {
@@ -234,7 +234,7 @@ void yetty_yvideo_yuv_frame_yuv420_to_bgra(const struct yetty_yvideo_yuv_frame *
     }
 
     int Kr_num, Kb_num, Kgr_num, Kgb_num;
-    if (frame->color_matrix == YETTY_YVIDEO_COLOR_BT601) {
+    if (frame->color_matrix == YETTY_YVCODEC_COLOR_BT601) {
         Kr_num = 359;
         Kb_num = 454;
         Kgr_num = 183;

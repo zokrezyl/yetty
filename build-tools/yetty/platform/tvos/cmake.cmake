@@ -57,7 +57,7 @@ target_compile_definitions(yetty PRIVATE
     YETTY_USE_CORETEXT=1
     YETTY_USE_FORKPTY=0
     YETTY_HAS_VNC=1
-    YETTY_HAS_YVIDEO=1
+    YETTY_HAS_YVCODEC=1
     $<$<BOOL:${YETTY_ENABLE_LIB_TINYEMU}>:YETTY_HAS_TINYEMU=1>
     $<$<BOOL:${YETTY_ENABLE_LIB_QEMU}>:YETTY_HAS_QEMU=1>
     # CONFIG_SLIRP must be defined for temu-pty.c so its slirp_open() ifdef

@@ -13,8 +13,8 @@
 #include <string.h>
 #include <turbojpeg.h>
 
-#ifdef YETTY_HAS_YVIDEO
-#include <yetty/yvideo/decoder.h>
+#ifdef YETTY_HAS_YVCODEC
+#include <yetty/yvcodec/decoder.h>
 #endif
 
 #define RECV_BUFFER_SIZE 65536
@@ -117,10 +117,10 @@ struct yetty_yvnc_client {
     /* Tile pixel buffer */
     uint8_t *tile_pixels;
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     /* H.264 decoder — lazily created the first time we see an H.264 tile.
 	 * Also a reusable BGRA buffer for the YUV→BGRA conversion output. */
-    struct yetty_yvideo_decoder *h264_decoder;
+    struct yetty_yvcodec_decoder *h264_decoder;
     uint8_t *h264_bgra_buf;
     size_t h264_bgra_buf_size;
 #endif
@@ -235,7 +235,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client
         return YETTY_OK_VOID();
     }
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     case YETTY_YVNC_VNC_ENCODING_H264: {
         /*
 		 * Wire layout (produced by h264_send_full_frame on the server):
@@ -261,7 +261,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client
         }
 
         if (!client->h264_decoder) {
-            struct yetty_yvideo_decoder_ptr_result dres = yetty_yvideo_decoder_create_h264();
+            struct yetty_yvcodec_decoder_ptr_result dres = yetty_yvcodec_decoder_create_h264();
             if (!YETTY_IS_OK(dres)) {
                 ywarn("vnc_client: H.264 decoder create failed: %s", dres.error.msg);
                 yetty_ycore_error_destroy(dres.error);
@@ -271,16 +271,16 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client
         }
 
         struct yetty_ycore_void_result fres =
-            yetty_yvideo_decoder_feed(client->h264_decoder, nal_data, nal_size);
+            yetty_yvcodec_decoder_feed(client->h264_decoder, nal_data, nal_size);
         if (!YETTY_IS_OK(fres)) {
             ywarn("vnc_client: H.264 feed failed: %s", fres.error.msg);
             yetty_ycore_error_destroy(fres.error);
             break;
         }
 
-        struct yetty_yvideo_yuv_frame yuv;
+        struct yetty_yvcodec_yuv_frame yuv;
         bool got_frame = false;
-        fres = yetty_yvideo_decoder_get_frame(client->h264_decoder, &yuv, &got_frame);
+        fres = yetty_yvcodec_decoder_get_frame(client->h264_decoder, &yuv, &got_frame);
         if (!YETTY_IS_OK(fres)) {
             ywarn("vnc_client: H.264 decode failed: %s", fres.error.msg);
             yetty_ycore_error_destroy(fres.error);
@@ -305,7 +305,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client
             }
             client->h264_bgra_buf_size = bgra_size;
         }
-        yetty_yvideo_yuv_frame_yuv420_to_bgra(&yuv, client->h264_bgra_buf);
+        yetty_yvcodec_yuv_frame_yuv420_to_bgra(&yuv, client->h264_bgra_buf);
 
         if (client->texture && (uint16_t)yuv.width == client->width &&
             (uint16_t)yuv.height == client->height) {
@@ -813,9 +813,9 @@ struct yetty_ycore_void_result yetty_yvnc_client_destroy(struct yetty_yvnc_clien
         tjDestroy(client->jpeg_decompressor);
     }
 
-#ifdef YETTY_HAS_YVIDEO
+#ifdef YETTY_HAS_YVCODEC
     if (client->h264_decoder) {
-        yetty_yvideo_decoder_destroy(client->h264_decoder);
+        yetty_yvcodec_decoder_destroy(client->h264_decoder);
     }
     free(client->h264_bgra_buf);
 #endif

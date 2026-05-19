@@ -50,6 +50,9 @@
 #if YETTY_HAS_YMESH
 #include <yetty/ymesh/ymesh-gen.h>
 #endif
+#if YETTY_HAS_YVIDEO
+#include <yetty/yvideo/yvideo-gen.h>
+#endif
 #if YETTY_HAS_YMSDF_GEN
 #include <yetty/ymsdf-gen/ymsdf-gen.h>
 #include <yetty/ymsdf/generator.h>
@@ -561,6 +564,24 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             scrolling_canvas_destroy_internals(c);
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "ymesh register", rr);
+        }
+    }
+#endif
+#if YETTY_HAS_YVIDEO
+    {
+        struct yetty_ydraw_concrete_factory *f = yetty_yvideo_factory_create();
+        if (!f) {
+            scrolling_canvas_destroy_internals(c);
+            free(c);
+            return YETTY_ERR(yetty_ydraw_canvas_ptr, "yvideo factory create");
+        }
+        struct yetty_ycore_void_result rr =
+            yetty_ydraw_figure_factory_register(c->figure_factory, f);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_yvideo_factory_destroy(f);
+            scrolling_canvas_destroy_internals(c);
+            free(c);
+            return YETTY_ERR(yetty_ydraw_canvas_ptr, "yvideo register", rr);
         }
     }
 #endif

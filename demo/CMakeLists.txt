@@ -13,3 +13,9 @@ endif()
 # Linked against yetty_yplot_core only (no Dawn / WebGPU), so they build
 # wherever the wire-format core builds.
 add_subdirectory(yplot)
+
+# yvideo demos — same pattern: client-side tool emits yvideo SCENE_BIN
+# envelopes (INIT then a stream of CMD_UPDATE NAL chunks).
+if(YETTY_ENABLE_FEATURE_YVIDEO)
+    add_subdirectory(yvideo)
+endif()

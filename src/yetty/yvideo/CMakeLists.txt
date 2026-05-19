@@ -1,19 +1,50 @@
-# yvideo — H.264 encoder/decoder wrapping openh264.
+# yvideo — drawable video figure. Mirrors yimage's two-tier build:
 #
-# Port of yetty-poc/src/yetty/yvideo. openh264 ships both a C++ virtual-class
-# interface and a C COM-style vtable interface (`ISVCEncoder = const
-# ISVCEncoderVtbl*`) — we use the C one so these TUs stay pure C and match
-# the rest of yetty-perf.
+#   yetty_yvideo_core   — wire serializer + OSC emit. CPU-only, no Dawn.
+#                          Used by client tools / demos / cross-targets.
+#   yetty_yvideo        — server-side factory (compile/create/update/render),
+#                          pulls Dawn / WebGPU and the yvcodec H.264 decoder.
 
-add_library(yetty_yvideo STATIC
-    encoder.c
-    decoder.c
+add_library(yetty_yvideo_core STATIC
+    yvideo.c
+    yvideo-gen-wire.c
 )
 
-target_include_directories(yetty_yvideo PUBLIC
+target_include_directories(yetty_yvideo_core PUBLIC
     ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
 )
 
-target_link_libraries(yetty_yvideo PUBLIC
-    openh264
+target_link_libraries(yetty_yvideo_core PUBLIC
+    yetty_ydraw_core
+    yetty_yface
 )
+
+if(YETTY_ENABLE_LIB_WEBGPU AND YETTY_ENABLE_LIB_OPENH264)
+    # yvideo-gen.c is the generated factory (CPU/GPU sync from the schema).
+    # yvideo-hooks.c implements the four hook entry points the factory
+    # calls — schema flag `hooks: true` in yvideo.yaml turns those calls on.
+    add_library(yetty_yvideo STATIC
+        yvideo-gen.c
+        yvideo-hooks.c
+    )
+
+    target_include_directories(yetty_yvideo PUBLIC
+        ${YETTY_ROOT}/include
+        ${YETTY_ROOT}/src
+    )
+
+    target_link_libraries(yetty_yvideo PUBLIC
+        yetty_yvideo_core
+        yetty_ydraw_factory
+        yetty_yrender
+        yetty_yvcodec
+        yetty_yplatform_core
+    )
+
+    # Embed shaders via incbin — same pattern as yimage / yplot.
+    incbin_add_resources(yetty_yvideo
+        yvideo_shader "${CMAKE_CURRENT_SOURCE_DIR}/yvideo.wgsl"
+        yvideo_lib_shader "${CMAKE_CURRENT_SOURCE_DIR}/yvideo-gen.wgsl"
+    )
+endif()

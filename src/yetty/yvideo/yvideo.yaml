@@ -1,0 +1,98 @@
+# YVideo complex primitive schema
+#
+# Video playback figure. Stateful — lives across CMD_UPDATE envelopes that
+# append more NAL bytes to the H.264 stream. Modelled on yplot's
+# buffer-mode update path (same scene-canvas CMD_GROUP / CMD_UPDATE
+# machinery; same `update_instance` factory hook).
+#
+# NOTE for v1: this schema is reference documentation only. The
+# server-side factory (yvideo-gen.c) is too custom (openh264 decoder
+# lifecycle, per-frame texture upload) to fit the current generator's
+# mould, so all C/WGSL files in this directory are hand-written. Once
+# the generator gains a `host_only: true` buffer flag and a
+# customisation hook for create/update/render, this YAML can be wired
+# into ydraw-gen.
+
+name: yvideo
+type_id: 0x80000006
+description: |
+  Video playback — decoded frames from an H.264 stream rendered into
+  an AABB. INIT envelope carries uniforms + the initial NAL chunk
+  (SPS + PPS + first IDR at minimum). Subsequent CMD_UPDATE envelopes
+  carry additional NAL bytes that the factory feeds to the decoder.
+  Playback advances on wall-clock; render() picks the frame closest
+  to `now - start_monotonic_sec` and uploads it to the frame texture.
+
+yaml_factory: none
+
+# The factory IS still generated — keeping the CPU/GPU sync (uniform
+# names/types/offsets, buffer layouts, texture descriptors) in the
+# schema where it belongs. Yvideo-specific lifecycle (openh264 decoder,
+# Annex-B NAL splitter, per-frame texture upload from decoded YUV→RGBA)
+# plugs in via the hook surface the generator emits: extern decls the
+# hand-written yvideo-hooks.c implements, called at the right points
+# inside the generated factory.
+hooks: true
+
+uniforms:
+  # AABB in ydraw coords (pixels rel. cursor). bounds_x/y at offsets 0/1
+  # — overridden at render time with the post-scroll screen position.
+  - name: bounds_x
+    type: f32
+    default: 0.0
+  - name: bounds_y
+    type: f32
+    default: 0.0
+  - name: bounds_w
+    type: f32
+    default: 320.0
+  - name: bounds_h
+    type: f32
+    default: 240.0
+
+  # Source video dimensions (from the H.264 SPS).
+  - name: video_w
+    type: u32
+    default: 0
+  - name: video_h
+    type: u32
+    default: 0
+
+  # Frames per second of the source stream — drives playback timing.
+  - name: fps
+    type: f32
+    default: 30.0
+
+  # Colour matrix hint (matches yvcodec enum):
+  #   0 = BT.601, 1 = BT.709, 2 = BT.2020.
+  - name: color_matrix
+    type: u32
+    default: 1
+
+  # Flags: bit 0 = loop, bit 1 = autoplay (start at t=0 on create).
+  - name: flags
+    type: u32
+    default: 3
+
+# Append-only H.264 Annex-B byte stream. INIT envelope MUST start with
+# SPS+PPS+IDR so decode can begin immediately. Subsequent CMD_UPDATE
+# envelopes carry additional bytes the factory feeds to the decoder.
+#
+# v1 NOTE: the generator currently emits this as a GPU storage binding
+# the shader doesn't read (small waste of one bind slot + one upload at
+# init). Adding a `host_only: true` flag to ydraw-gen so the binding
+# is skipped is tracked in #198.
+buffers:
+  - name: nal_stream
+    element_type: u32
+
+# Decoded RGBA8 frame texture, width=video_w, height=video_h. Backed by
+# a factory-allocated buffer that the decoder writes into each render
+# tick. No pixels_buffer divert — texture data comes from the openh264
+# output, not from the wire.
+textures:
+  - name: frame
+    format: rgba8
+    sampler: linear
+    width_uniform: video_w
+    height_uniform: video_h
