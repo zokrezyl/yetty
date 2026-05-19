@@ -19,6 +19,14 @@ enum yetty_yevent_event_type {
     YETTY_YCORE_MOUSE_MOVE,
     YETTY_YCORE_MOUSE_DRAG,
     YETTY_YCORE_MOUSE_SCROLL,
+    /* Synthesized by the platform event loop right after a MOUSE_DOWN
+     * whose button + time + position match the prior MOUSE_DOWN within
+     * the double-click window (see os-event-loop/default.c). Payload is
+     * the second DOWN's mouse state; consumers should not also process
+     * the preceding MOUSE_DOWN as a click target if they handle
+     * double-click. GLFW gives raw button events only — this is the one
+     * place we do the timer math so widgets don't each reinvent it. */
+    YETTY_YCORE_MOUSE_DOUBLE_CLICK,
     /* Focus events */
     YETTY_YCORE_SET_FOCUS,
     /* Resize */
@@ -100,6 +108,14 @@ enum yetty_yevent_event_type {
      * drags one of the edge/corner resize handles (since GLFW_DECORATED
      * is off, the OS doesn't provide built-in resize grips). */
     YETTY_YCORE_WINDOW_RESIZE_BY,
+    /* Hand the move gesture off to the compositor (Wayland) or no-op
+     * (X11, where per-pixel WINDOW_DRAG_BY via glfwSetWindowPos works).
+     * Wayland doesn't let clients position themselves; the protocol-
+     * correct way to move a CSD window is xdg_toplevel.move(seat, serial),
+     * which lets the compositor take over the drag until release. The
+     * tabbar emits this once on the MOUSE_DOWN that starts a titlebar
+     * drag; the main-thread handler dispatches to the right backend. */
+    YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE,
     /* Must be last - used for array sizing */
     YETTY_YCORE_COUNT
 };

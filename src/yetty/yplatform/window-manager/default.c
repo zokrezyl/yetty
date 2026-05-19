@@ -14,12 +14,21 @@
 
 #include <yetty/yplatform/window-manager.h>
 #include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/wayland-move.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <GLFW/glfw3.h>
 #include <stdlib.h>
+
+/* Implemented in src/yetty/yplatform/os-event-loop/default.c. The os
+ * event loop owns the per-window state holding double-click timestamps;
+ * we ask it to drop the pairing window when a render-side WINDOW_DRAG_BY
+ * / WINDOW_RESIZE_BY / WINDOW_BEGIN_INTERACTIVE_MOVE has just moved the
+ * window — that press was a drag, not a click, and shouldn't pair into
+ * a double-click on the next press. */
+void yetty_yplatform_os_event_invalidate_click_pairing(GLFWwindow *window);
 
 struct yetty_yplatform_glfw_window_manager {
     struct yetty_yplatform_window_manager base;
@@ -98,10 +107,12 @@ static void glfw_window_manager_request_close(struct yetty_yplatform_window_mana
 static void glfw_window_manager_drag_by(struct yetty_yplatform_window_manager *self, int dx, int dy)
 {
     if (dx == 0 && dy == 0) {
+        ydebug("DRAGTRACE: drag_by called with zero delta — skipping");
         return;
     }
     struct yetty_yplatform_glfw_window_manager *m =
         container_of(self, struct yetty_yplatform_glfw_window_manager, base);
+    ydebug("DRAGTRACE: [render-thread] drag_by(dx=%d, dy=%d) -> posting WINDOW_DRAG_BY", dx, dy);
     struct yetty_yui_event ev = {.type = YETTY_YCORE_WINDOW_DRAG_BY,
                                  .window_drag = {.dx = dx, .dy = dy}};
     post_event(m, &ev);
@@ -126,6 +137,16 @@ static void glfw_window_manager_resize_by(struct yetty_yplatform_window_manager 
         container_of(self, struct yetty_yplatform_glfw_window_manager, base);
     struct yetty_yui_event ev = {.type = YETTY_YCORE_WINDOW_RESIZE_BY,
                                  .window_resize = {.dx = dx, .dy = dy}};
+    post_event(m, &ev);
+}
+
+static void glfw_window_manager_begin_interactive_move(
+    struct yetty_yplatform_window_manager *self)
+{
+    struct yetty_yplatform_glfw_window_manager *m =
+        container_of(self, struct yetty_yplatform_glfw_window_manager, base);
+    ydebug("WMOVETRACE: [render-thread] begin_interactive_move -> posting WINDOW_BEGIN_INTERACTIVE_MOVE");
+    struct yetty_yui_event ev = {.type = YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE};
     post_event(m, &ev);
 }
 
@@ -169,6 +190,14 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         break;
     }
     case YETTY_YCORE_WINDOW_DRAG_BY: {
+        /* On Wayland the compositor took over the drag at MOUSE_DOWN
+         * (see WINDOW_BEGIN_INTERACTIVE_MOVE below) — we don't get any
+         * MOUSE_MOVE events during the drag and glfwSetWindowPos is a
+         * no-op anyway. So skip the absolute-positioning path here. */
+        if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
+            yetty_yplatform_os_event_invalidate_click_pairing(m->window);
+            break;
+        }
         /* Delta comes in framebuffer pixels (mouse coords are scaled to
          * framebuffer at the input layer so hit-tests against bar->width
          * line up). glfwSetWindowPos / glfwSetWindowSize take *screen*
@@ -185,8 +214,27 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         glfwGetWindowPos(m->window, &x, &y);
         glfwSetWindowPos(m->window, x + (int)(event->window_drag.dx * sx),
                          y + (int)(event->window_drag.dy * sy));
+        /* Drag executed → the preceding MOUSE_DOWN dragged the window,
+         * so it wasn't a clean click. Tell the OS event loop to drop the
+         * double-click pairing window: a subsequent rapid press starts a
+         * fresh drag instead of mis-firing as a double-click. */
+        yetty_yplatform_os_event_invalidate_click_pairing(m->window);
         break;
     }
+    case YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE:
+        ydebug("WMOVETRACE: [main-thread] received WINDOW_BEGIN_INTERACTIVE_MOVE, "
+               "platform=%d (WAYLAND=%d, X11=%d)",
+               glfwGetPlatform(), GLFW_PLATFORM_WAYLAND, GLFW_PLATFORM_X11);
+        /* Wayland-only meaningful work. On X11 this is a no-op and the
+         * per-pixel WINDOW_DRAG_BY path handles the move via
+         * glfwSetWindowPos as before. The helper itself runtime-checks
+         * glfwGetPlatform() and returns early on non-Wayland. */
+        yetty_yplatform_wayland_begin_interactive_move(m->window);
+        /* After this point the compositor owns the drag — record that
+         * the press wasn't a clean click so the next press doesn't
+         * mis-pair as a double-click. */
+        yetty_yplatform_os_event_invalidate_click_pairing(m->window);
+        break;
     case YETTY_YCORE_SET_CURSOR: {
         int shape = event->set_cursor.shape;
         if (shape < 0 ||
@@ -229,6 +277,7 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         if (nw < 200) nw = 200;
         if (nh < 100) nh = 100;
         glfwSetWindowSize(m->window, nw, nh);
+        yetty_yplatform_os_event_invalidate_click_pairing(m->window);
         break;
     }
     default:
@@ -246,6 +295,7 @@ static const struct yetty_yplatform_window_manager_ops glfw_window_manager_ops =
     .request_close = glfw_window_manager_request_close,
     .drag_by = glfw_window_manager_drag_by,
     .resize_by = glfw_window_manager_resize_by,
+    .begin_interactive_move = glfw_window_manager_begin_interactive_move,
     .set_cursor = glfw_window_manager_set_cursor,
     .handle_event = glfw_window_manager_handle_event,
 };

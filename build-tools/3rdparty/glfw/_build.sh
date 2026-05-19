@@ -163,6 +163,38 @@ fi
 
 cp -a "$INSTALL_DIR/include/GLFW" "$STAGE/include/"
 
+# Stage GLFW's PRIVATE headers + the generated Wayland protocol headers so
+# yetty can compile a tiny helper TU against them. Reason: GLFW 3.4 does
+# not expose `xdg_toplevel` (the per-window handle), `wl_seat`, or the
+# last button serial via its public native API, but Wayland's
+# `xdg_toplevel.move(seat, serial)` is the only protocol-correct way to
+# move a CSD window. GLFW's own internal pointerHandleButton calls
+# `xdg_toplevel_move(window->wl.xdg.toplevel, _glfw.wl.seat, serial)`
+# (see src/wl_window.c:1565); we replicate that call from our window-
+# manager. To do it we need the same `_GLFWwindow` / `_GLFWlibrary`
+# struct layout the static lib was built with — hence "same headers as
+# the lib", staged here next to libglfw3.a.
+#
+# This is desktop-Linux-only (Wayland backend); the macOS/Windows
+# tarballs don't ship the private headers because no consumer needs them.
+case "$TARGET_PLATFORM" in
+linux-x86_64|linux-aarch64|linux-riscv64)
+    mkdir -p "$STAGE/include-private"
+    cp -a "$SRC_DIR/src/." "$STAGE/include-private/"
+    # The generated client-protocol headers live in BUILD_DIR/src — wayland-
+    # scanner emitted them during the configure/build phase. We need
+    # `xdg-shell-client-protocol.h` so our helper can call
+    # `xdg_toplevel_move()` (the function is a static inline in that header
+    # that wraps wl_proxy_marshal).
+    if [ -f "$BUILD_DIR/src/xdg-shell-client-protocol.h" ]; then
+        cp -a "$BUILD_DIR/src/xdg-shell-client-protocol.h" \
+            "$STAGE/include-private/"
+    else
+        echo "warning: generated xdg-shell-client-protocol.h not found in BUILD_DIR/src" >&2
+    fi
+    ;;
+esac
+
 if [ ! -f "$STAGE/lib/libglfw3.a" ] && [ ! -f "$STAGE/lib/glfw3.lib" ]; then
     echo "missing libglfw3.a / glfw3.lib in stage" >&2
     find "$INSTALL_DIR" >&2

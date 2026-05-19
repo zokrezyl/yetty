@@ -88,6 +88,45 @@ else()
     message(STATUS "glfw: prebuilt v${YETTY_3RDPARTY_glfw_VERSION} (via glfw3Config)")
 endif()
 
+# Private headers from the glfw source tree, staged into the prebuilt
+# tarball under include-private/ (see build-tools/3rdparty/glfw/_build.sh).
+# Exposed via a SEPARATE interface target so only the one TU that needs
+# them (yetty's Wayland interactive-move helper) opts in — the rest of the
+# codebase keeps using GLFW's public API. The target is created only when
+# the tarball actually contains the directory (Linux Wayland builds only;
+# macOS / Windows / mobile / web tarballs don't ship it).
+if(NOT TARGET glfw_private_headers AND EXISTS "${_GLFW_DIR}/include-private/internal.h")
+    add_library(glfw_private_headers INTERFACE IMPORTED GLOBAL)
+    set_target_properties(glfw_private_headers PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${_GLFW_DIR}/include-private"
+        # Reuses the same Wayland deps glfw already pulls in (xdg-shell
+        # protocol headers reference wl_proxy, wl_seat, etc.).
+        INTERFACE_LINK_LIBRARIES "glfw")
+    message(STATUS "glfw: private headers available at ${_GLFW_DIR}/include-private")
+endif()
+
+# yetty_yplatform_wayland_move — protocol-correct interactive window move
+# on Wayland. Lives in its own static lib so the private GLFW headers stay
+# scoped to one TU and don't pollute the rest of the codebase. When the
+# prebuilt tarball doesn't ship private headers (macOS / Windows / mobile
+# / web), the consumer falls back to a stub TU that no-ops the same
+# public function — keeps the caller (window-manager) platform-agnostic.
+if(NOT TARGET yetty_yplatform_wayland_move)
+    if(TARGET glfw_private_headers)
+        add_library(yetty_yplatform_wayland_move STATIC
+            ${YETTY_ROOT}/src/yetty/yplatform/wayland-move/default.c)
+        target_link_libraries(yetty_yplatform_wayland_move
+            PRIVATE glfw_private_headers glfw)
+    else()
+        add_library(yetty_yplatform_wayland_move STATIC
+            ${YETTY_ROOT}/src/yetty/yplatform/wayland-move/null.c)
+        target_link_libraries(yetty_yplatform_wayland_move PRIVATE glfw)
+    endif()
+    target_include_directories(yetty_yplatform_wayland_move PUBLIC
+        ${YETTY_ROOT}/include)
+    target_link_libraries(yetty_yplatform_wayland_move PUBLIC yetty_ycore)
+endif()
+
 #------------------------------------------------------------------------------
 # glfw3webgpu — adapter that creates a WGPUSurface from a glfw window.
 #------------------------------------------------------------------------------

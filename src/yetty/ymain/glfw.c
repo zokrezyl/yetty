@@ -60,9 +60,15 @@ void yetty_yplatform_destroy_window(GLFWwindow *window);
 void yetty_yplatform_get_framebuffer_size(GLFWwindow *window, int *width, int *height);
 void yetty_yplatform_get_window_size(GLFWwindow *window, int *width, int *height);
 WGPUSurface yetty_yplatform_create_surface(WGPUInstance instance, GLFWwindow *window);
-void yetty_yplatform_setup_window_callbacks(GLFWwindow *window);
+
+/* OS event loop — owns its per-window state internally and reads/writes the
+ * input pipe through the GLFW user pointer. Three calls from main: attach
+ * (create state, register callbacks), run, teardown. */
+void yetty_yplatform_setup_window_callbacks(GLFWwindow *window,
+                                            struct yetty_ycore_xthread_event_pipe *pipe);
 void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running,
                                        struct yetty_platform_clipboard_manager *cm);
+void yetty_yplatform_teardown_window_callbacks(GLFWwindow *window);
 
 /* Render thread args */
 struct yetty_yplatform_render_thread_args {
@@ -221,8 +227,6 @@ int main(int argc, char **argv)
             return 1;
         }
         ydebug("main: window created");
-        yetty_yplatform_setup_window_callbacks(window);
-        ydebug("main: window callbacks set up");
     } else {
         ydebug("main: headless mode, skipping window creation");
     }
@@ -247,7 +251,11 @@ int main(int argc, char **argv)
     }
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe = pipe_result.value;
     if (window) {
-        glfwSetWindowUserPointer(window, platform_input_pipe);
+        /* os-event-loop owns its per-window state internally and stores
+         * the pipe (plus its own bookkeeping — double-click timestamps,
+         * etc.) on the GLFW user pointer. main doesn't see it. */
+        yetty_yplatform_setup_window_callbacks(window, platform_input_pipe);
+        ydebug("main: window callbacks set up");
     }
 
     /* PTY factory */
@@ -489,7 +497,7 @@ int main(int argc, char **argv)
     pty_factory->ops->destroy(pty_factory);
     ydebug("main: pty_factory destroyed");
     if (window) {
-        glfwSetWindowUserPointer(window, NULL);
+        yetty_yplatform_teardown_window_callbacks(window);
     }
     platform_input_pipe->ops->destroy(platform_input_pipe);
     ydebug("main: platform_input_pipe destroyed");

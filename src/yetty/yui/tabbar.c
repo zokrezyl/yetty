@@ -65,6 +65,7 @@ struct yetty_yui_tabbar {
      * cursor's window-relative pos is back at the anchor, so the
      * anchor stays valid for the whole drag. */
     int dragging;
+    int drag_move_grab_sent; /* begin_interactive_move fired once for this drag */
     float drag_anchor_x;
     float drag_anchor_y;
 
@@ -594,6 +595,7 @@ static int event_y(const struct yetty_yui_event *e, float *out)
     case YETTY_YCORE_MOUSE_UP:
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
+    case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
         *out = e->mouse.y;
         return 1;
     case YETTY_YCORE_MOUSE_SCROLL:
@@ -686,10 +688,35 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
             bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
         if (wm) {
             bar->dragging = 1;
+            bar->drag_move_grab_sent = 0;
             bar->drag_anchor_x = event->mouse.x;
             bar->drag_anchor_y = event->mouse.y;
             ydebug("tabbar: drag start at (%.1f, %.1f)", event->mouse.x, event->mouse.y);
+            /* DON'T fire begin_interactive_move yet — see the MOUSE_MOVE
+             * branch below. Triggering the Wayland compositor grab on
+             * MOUSE_DOWN means a clean click (no motion) is interpreted
+             * as a zero-distance interactive move, the compositor ends
+             * the grab on release, and the second press of a real
+             * double-click never reaches us as a normal MOUSE_DOWN —
+             * killing the double-click → toggle-maximize gesture. */
         }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
+    /* Strip-area double-click → toggle window maximize. The platform
+     * event loop already paired this DOWN with the prior one (timer +
+     * position check in os-event-loop/default.c) so all we do is act on
+     * it. Cancel any drag the preceding MOUSE_DOWN started so we don't
+     * leak a dangling drag state. */
+    if (in_strip && event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK &&
+        event->mouse.button == 0 && bar->count > 0) {
+        struct yetty_yplatform_window_manager *wm =
+            bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+        if (wm && wm->ops && wm->ops->toggle_maximize) {
+            wm->ops->toggle_maximize(wm);
+        }
+        bar->dragging = 0;
+        ydebug("tabbar: double-click → toggle maximize");
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -703,6 +730,27 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         if (event->type == YETTY_YCORE_MOUSE_MOVE || event->type == YETTY_YCORE_MOUSE_DRAG) {
             int dx = (int)(event->mouse.x - bar->drag_anchor_x);
             int dy = (int)(event->mouse.y - bar->drag_anchor_y);
+            /* Drag-vs-click threshold. Below this the gesture is still
+             * potentially a click (or the first half of a double-click)
+             * — swallow the MOVE but don't move/grab the window yet.
+             * 3 px matches common desktop slop. */
+            const int DRAG_SLOP_PX = 3;
+            if (dx * dx + dy * dy < DRAG_SLOP_PX * DRAG_SLOP_PX) {
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+            if (wm && !bar->drag_move_grab_sent && wm->ops->begin_interactive_move) {
+                /* Threshold crossed — commit to a drag. On Wayland the
+                 * compositor grabs the pointer here and we won't see
+                 * further MOVE events until the user releases. On X11
+                 * it's a no-op and the per-pixel drag_by below keeps
+                 * driving glfwSetWindowPos. */
+                bar->drag_move_grab_sent = 1;
+                wm->ops->begin_interactive_move(wm);
+            }
+            ydebug("DRAGTRACE: [render-thread] tabbar MOVE during drag: "
+                   "mouse=(%.1f,%.1f) anchor=(%.1f,%.1f) dx=%d dy=%d wm=%p",
+                   event->mouse.x, event->mouse.y, bar->drag_anchor_x, bar->drag_anchor_y,
+                   dx, dy, (void *)wm);
             if (wm && (dx != 0 || dy != 0)) {
                 wm->ops->drag_by(wm, dx, dy);
                 /* Don't update the anchor: glfwSetWindowPos absolutely
@@ -713,8 +761,9 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (event->type == YETTY_YCORE_MOUSE_UP) {
-            ydebug("tabbar: drag end");
+            ydebug("tabbar: drag end (grab_sent=%d)", bar->drag_move_grab_sent);
             bar->dragging = 0;
+            bar->drag_move_grab_sent = 0;
             return YETTY_OK(yetty_ycore_int, 1);
         }
     }

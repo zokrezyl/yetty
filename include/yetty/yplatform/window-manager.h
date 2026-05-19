@@ -45,6 +45,10 @@ struct yetty_yplatform_window_manager_ops {
      * (dx, dy) screen pixels. Top-left stays fixed — only the right/bottom
      * edges move. The tabbar's edge/corner resize handles call this. */
     void (*resize_by)(struct yetty_yplatform_window_manager *self, int dx, int dy);
+    /* Hand the move gesture to the compositor (Wayland) or fall back to
+     * per-pixel drag_by (X11). Called once on the MOUSE_DOWN that starts
+     * a titlebar drag — see YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE. */
+    void (*begin_interactive_move)(struct yetty_yplatform_window_manager *self);
 
     /* Set the OS mouse cursor shape. Shape is an enum
      * yetty_ycore_cursor_shape value. Posted to output_pipe and applied
