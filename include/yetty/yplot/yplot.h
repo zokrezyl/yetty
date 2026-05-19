@@ -33,6 +33,11 @@ extern "C" {
 #define YETTY_YPLOT_FLAG_GRID 0x1u
 #define YETTY_YPLOT_FLAG_AXES 0x2u
 #define YETTY_YPLOT_FLAG_LABELS 0x4u
+/* Set by the sender when the compiled bytecode references `t`/`time`
+ * (yfsvm program's `uses_time` is true). The receiving factory
+ * subscribes the instance to the shared animation timer when this
+ * bit is set; otherwise the plot is static and no timer ticks. */
+#define YETTY_YPLOT_FLAG_USES_TIME 0x8u
 
 /* Geometry + axis configuration. NULL fields fall back to defaults. */
 struct yetty_yplot_render_config {

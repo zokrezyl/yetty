@@ -54,6 +54,17 @@ struct yetty_ydraw_figure_instance {
     uint32_t rolling_row;
     void *instance_data; // type-specific, managed by concrete factory
 
+    /* Per-instance dirty bit. The render loop renders this figure iff
+     * `dirty || force`; cleared inside the layer's render path after
+     * each render. Set by:
+     *   - the canvas when a new envelope arrives and this is a fresh
+     *     instance (so the first frame paints it),
+     *   - the figure's own event listener (timer tick, decoded frame,
+     *     mouse interaction, …) — see `listener` below.
+     * Bypasses the layer-level dirty bit so per-figure animation
+     * without text/SDF churn still gets the figure re-drawn. */
+    int dirty;
+
     /* Event-listener interface — every figure_instance IS-A listener.
      * Concrete factories that want timer / mouse / keyboard ticks point
      * `listener.handler` at their own dispatcher and register with the

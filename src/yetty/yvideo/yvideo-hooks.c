@@ -372,6 +372,9 @@ static struct yetty_ycore_int_result yvideo_on_tick(
         }
         rs->textures[0].dirty = 1;
     }
+    /* Per-figure dirty so ydraw_layer_render iterates and invokes
+     * inst->render even when the layer's own dirty bit is clean. */
+    instance->dirty = 1;
 
     struct yetty_yevent_event_loop *loop = instance->factory->event_loop;
     loop->ops->request_render(loop);

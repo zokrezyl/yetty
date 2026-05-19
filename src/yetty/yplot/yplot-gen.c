@@ -26,6 +26,14 @@
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/yfsvm/shader-rs.h>
 
+/* yplot-time.c — animates the `time` uniform when the compiled
+ * bytecode references LOAD_T. Forward-declared here instead of a
+ * header since the only call sites are below in this same TU. */
+struct yetty_ydraw_figure_instance;
+struct yetty_ycore_void_result yetty_yplot_time_attach(
+    struct yetty_ydraw_figure_instance *instance);
+void yetty_yplot_time_detach(struct yetty_ydraw_figure_instance *instance);
+
 extern const unsigned char gyplot_shaderData[];
 extern const unsigned int gyplot_shaderSize;
 extern const unsigned char gyplot_lib_shaderData[];
@@ -183,7 +191,15 @@ static void yplot_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
     strncpy(rs->uniforms[25].name, "viewport_h", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[25].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[25].f32 = 0.0f;
-    rs->uniform_count = 26;
+    /* Slot 26: `time` — server-only uniform written by yplot-time.c's
+     * tick handler when the compiled bytecode references LOAD_T. The
+     * wire format doesn't carry this; it's filled at runtime. Slot
+     * index hard-coded in YETTY_YPLOT_TIME_UNIFORM_SLOT (yplot-time.h)
+     * so both sites stay in sync. */
+    strncpy(rs->uniforms[26].name, "time", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[26].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[26].f32 = 0.0f;
+    rs->uniform_count = 27;
 
     // Setup storage buffer for buffer data
     rs->buffer_count = 1;
@@ -473,6 +489,18 @@ static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
         return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "binder finalize failed", fr);
     }
 
+    /* yplot-time.c hooks the instance into the shared animation timer
+     * iff the wire flags carry YETTY_YPLOT_FLAG_USES_TIME. No-op on
+     * static plots. Failure is non-fatal — the plot still renders, it
+     * just stays frozen at t=0. */
+    {
+        struct yetty_ycore_void_result tr = yetty_yplot_time_attach(instance);
+        if (YETTY_IS_ERR(tr)) {
+            ywarn("yplot: time-attach failed: %s", tr.error.msg);
+            yetty_ycore_error_destroy(tr.error);
+        }
+    }
+
     return YETTY_OK(yetty_ydraw_figure_instance_ptr, instance);
 }
 
@@ -512,6 +540,10 @@ static void yplot_destroy_instance(struct yetty_ydraw_concrete_factory *self,
     if (!instance) {
         return;
     }
+    /* yplot-time.c — drop the timer listener BEFORE freeing the
+     * instance struct (its embedded listener pointer is what the
+     * timer's listener-list holds). */
+    yetty_yplot_time_detach(instance);
     if (instance->binder) {
         instance->binder->ops->destroy(instance->binder);
     }

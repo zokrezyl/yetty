@@ -121,7 +121,7 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
 
         for (var fi = 0u; fi < min(func_count, 8u); fi++) {
             let curve_color = yplot_unpack_color(yplot_get_colors(fi));
-            let y = yfsvm_execute(bc_off, fi, dataX, 0.0, samplers);
+            let y = yfsvm_execute(bc_off, fi, dataX, yplot_get_time(), samplers);
             let yNorm = (y - yMin) / yRange;
             color = yplot_line_blend(color, plotUV.y, yNorm, lineWidth, curve_color);
         }

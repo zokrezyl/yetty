@@ -180,8 +180,9 @@ static struct yetty_ycore_void_result ydraw_layer_scroll(struct yetty_yrender_te
                                                          int lines);
 static struct yetty_ycore_void_result ydraw_layer_set_cursor(
     struct yetty_yrender_terminal_layer *self, int col, int row);
-static struct yetty_ycore_void_result ydraw_layer_render(struct yetty_yrender_terminal_layer *self,
-                                                         struct yetty_ydraw_target *target);
+static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_terminal_layer *self,
+                                                        struct yetty_ydraw_target *target,
+                                                        int force);
 static uint32_t ydraw_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ydraw_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
@@ -556,7 +557,8 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
             layer->canvas->ops->build_drawable_staging(layer->canvas);
         if (YETTY_IS_ERR(ps_r)) {
             return YETTY_ERR(yetty_yrender_gpu_resource_set,
-                             "ydraw_layer_get_gpu_resource_set: build_drawable_staging failed", ps_r);
+                             "ydraw_layer_get_gpu_resource_set: build_drawable_staging failed",
+                             ps_r);
         }
         const uint32_t *drawable_data = ps_r.value.data;
         uint32_t drawable_word_count = ps_r.value.word_count;
@@ -869,48 +871,81 @@ static struct yetty_ycore_void_result ydraw_layer_set_cursor(
     return YETTY_OK_VOID();
 }
 
-/* Render layer to target - simple prims + complex prims */
-static struct yetty_ycore_void_result ydraw_layer_render(struct yetty_yrender_terminal_layer *self,
-                                                         struct yetty_ydraw_target *target)
+/* Render the ydraw layer to target.
+ *
+ * Two independent dirty sources inside this layer:
+ *   1. simple prims (SDF / fonts / text-span) — driven by `self->dirty`
+ *      and the canvas's grid mutations (process_input bumps it).
+ *   2. each figure_instance — driven by `inst->dirty` (set by the
+ *      figure's own event listener or by the canvas when a fresh
+ *      envelope creates / updates it).
+ *
+ * `force` (from terminal_render_frame's cascade) forces everything
+ * regardless of dirty bits. Returns 1 iff something was actually
+ * drawn; 0 if the layer was clean and not forced and skipped
+ * entirely. Bails immediately on any inner error — never silently
+ * continues. */
+static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_terminal_layer *self,
+                                                        struct yetty_ydraw_target *target,
+                                                        int force)
 {
     struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
-
-    /* Render simple prims via render_layer */
-    struct yetty_ycore_void_result res = target->ops->render_layer(target, self);
-    if (!YETTY_IS_OK(res)) {
-        return res;
+    if (!layer->canvas || !layer->canvas->ops) {
+        return YETTY_ERR(yetty_ycore_int, "ydraw_layer_render: canvas / ops NULL");
     }
 
-    /* Render complex prims */
-    if (!layer->canvas) {
-        return YETTY_OK_VOID();
+    int drew = 0;
+
+    /* Step 1: simple prims. Iff the layer's own dirty bit or the
+     * canvas's content dirty bit is set, or we're being forced. */
+    int simple_dirty = self->dirty || layer->canvas->ops->is_dirty(layer->canvas);
+    if (simple_dirty || force) {
+        struct yetty_ycore_void_result rr = target->ops->render_layer(target, self);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr,
+                            "ydraw_layer_render: render_layer (simple prims)");
+        /* get_gpu_resource_set inside render_layer already cleared
+         * self->dirty when it rebuilt the staging — we just record
+         * that we drew. */
+        drew = 1;
     }
 
+    /* Step 2: figures. Each one decides on its own dirty bit, but
+     * `force` overrides — a lower-layer redraw clobbered our pixels
+     * in the shared big_target, so every figure must repaint. */
     uint32_t count = layer->canvas->ops->figure_count(layer->canvas);
     if (count == 0) {
-        return YETTY_OK_VOID();
+        return YETTY_OK(yetty_ycore_int, drew);
     }
-
     uint32_t row0 = layer->canvas->ops->rolling_row_0(layer->canvas);
     struct yetty_ycore_pixel_size cell_size = layer->canvas->ops->get_cell_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure_instance *inst = layer->canvas->ops->get_figure(layer->canvas, i);
-        if (!inst || !inst->render) {
+        struct yetty_ydraw_figure_instance *inst =
+            layer->canvas->ops->get_figure(layer->canvas, i);
+        if (!inst) {
+            return YETTY_ERR(yetty_ycore_int,
+                             "ydraw_layer_render: get_figure returned NULL within figure_count");
+        }
+        if (!inst->render) {
+            return YETTY_ERR(yetty_ycore_int,
+                             "ydraw_layer_render: figure_instance has no render op");
+        }
+        /* Intentional skip — not an error, just nothing to redraw. */
+        if (!inst->dirty && !force) {
             continue;
         }
-
-        /* Calculate screen position from bounds and scroll offset */
         float y_offset = (float)((int32_t)inst->rolling_row - (int32_t)row0) * cell_size.height;
         float screen_x = inst->bounds.min.x;
         float screen_y = inst->bounds.min.y + y_offset;
 
-        res = inst->render(inst, target, screen_x, screen_y);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, res,
-                            "ydraw_layer_render: complex prim render failed");
+        struct yetty_ycore_void_result rr =
+            inst->render(inst, target, screen_x, screen_y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr,
+                            "ydraw_layer_render: figure inst->render");
+        inst->dirty = 0;
+        drew = 1;
     }
-
-    return YETTY_OK_VOID();
+    return YETTY_OK(yetty_ycore_int, drew);
 }
 
 /* Selection on the ydraw layer is row-only — the column part of the

@@ -194,8 +194,9 @@ static struct yetty_ycore_void_result ymgui_set_visual_zoom(
     struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y);
 static struct yetty_yrender_gpu_resource_set_result ymgui_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal_layer *self,
-                                                   struct yetty_ydraw_target *target);
+static struct yetty_ycore_int_result ymgui_render(struct yetty_yrender_terminal_layer *self,
+                                                  struct yetty_ydraw_target *target,
+                                                  int force);
 static int ymgui_is_empty(const struct yetty_yrender_terminal_layer *self);
 static int ymgui_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
 static int ymgui_on_char(struct yetty_yrender_terminal_layer *self, uint32_t cp, int mods);
@@ -2078,17 +2079,22 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal_layer *self,
-                                                   struct yetty_ydraw_target *target)
+static struct yetty_ycore_int_result ymgui_render(struct yetty_yrender_terminal_layer *self,
+                                                  struct yetty_ydraw_target *target,
+                                                  int force)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     if (!target || !target->ops || !target->ops->get_view) {
-        return YETTY_ERR(yetty_ycore_void, "ymgui: target has no get_view");
+        return YETTY_ERR(yetty_ycore_int, "ymgui: target has no get_view");
+    }
+    /* Honour the cascade: skip when clean and not forced. */
+    if (!self->dirty && !force) {
+        return YETTY_OK(yetty_ycore_int, 0);
     }
 
     if (!l->pipeline_ready) {
         if (!build_pipeline(l)) {
-            return YETTY_ERR(yetty_ycore_void, "ymgui: pipeline build failed");
+            return YETTY_ERR(yetty_ycore_int, "ymgui: pipeline build failed");
         }
         for (size_t i = 0; i < l->card_count; i++) {
             rebuild_card_bind_group(l, l->cards[i]);
@@ -2097,7 +2103,7 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
 
     WGPUTextureView view = target->ops->get_view(target);
     if (!view) {
-        return YETTY_ERR(yetty_ycore_void, "ymgui: target view is NULL");
+        return YETTY_ERR(yetty_ycore_int, "ymgui: target view is NULL");
     }
 
     /* LoadOp_Load: every pass into the shared big target preserves prior
@@ -2180,7 +2186,7 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
         if (YETTY_IS_ERR(r)) {
             wgpuRenderPassEncoderEnd(pass);
             wgpuRenderPassEncoderRelease(pass);
-            return YETTY_ERR(yetty_ycore_void, "ymgui_render: draw_card failed", r);
+            return YETTY_ERR(yetty_ycore_int, "ymgui_render: draw_card failed", r);
         }
     }
 
@@ -2194,7 +2200,7 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
     wgpuCommandEncoderRelease(enc);
 
     self->dirty = 0;
-    return YETTY_OK_VOID();
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 /*===========================================================================

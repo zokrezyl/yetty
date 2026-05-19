@@ -16,6 +16,16 @@ description: |
 libraries:
   - yfsvm
 
+# NOTE: yplot's gen files (yplot-gen.{c,h,wgsl,wire.c}) contain hand-
+# extensions the generator can't currently produce — the `data` array
+# of buffers (yplot-gen.h:struct yetty_yplot_data_buffer), the
+# yetty_yplot_update_data_chunk impl, and a few server-side uniform
+# slots (notably `time`, populated by yplot-time.c on each timer tick
+# when the compiled bytecode references LOAD_T). Re-running
+# ydraw-gen/generate.py will WIPE those extensions; the generator
+# needs to learn about `array: true` buffers and external uniform
+# slots before regen is safe again.
+
 # Fixed-size uniforms (serialized first)
 uniforms:
   - name: bounds_x
@@ -51,6 +61,11 @@ uniforms:
   - name: colors
     type: u32
     count: 8
+
+  # NOTE: `time` is a server-side uniform — not on the wire. yplot-time.c
+  # writes it on each timer tick when YETTY_YPLOT_FLAG_USES_TIME is set
+  # on the wire `flags`. See yplot-gen.c populate_rs slot 26 + the
+  # yplot_get_time accessor in yplot-gen.wgsl.
 
 # Variable-size storage. Two logical buffers:
 #
