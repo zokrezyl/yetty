@@ -124,9 +124,20 @@ struct yetty_yterm_terminal_layer_ops {
                                                       float scale, float offset_x, float offset_y);
     struct yetty_yrender_gpu_resource_set_result (*get_gpu_resource_set)(
         const struct yetty_yrender_terminal_layer *self);
-    /* Render layer to target */
-    struct yetty_ycore_void_result (*render)(struct yetty_yrender_terminal_layer *self,
-                                             struct yetty_ydraw_target *target);
+    /* Render layer to target.
+     *
+     * `force` == 1 → a lower layer has just re-rendered into the same
+     * shared big_target, so this layer's previous-frame pixels in the
+     * regions it owns are gone. The layer MUST redraw all of its
+     * content (simple prims + every figure) regardless of dirty bits.
+     *
+     * Returns 1 if anything was actually drawn (so the caller flips
+     * its cascade flag for layers above), 0 if the layer was clean
+     * and not forced and skipped entirely. Returns an error if any
+     * inner step failed — propagate, never aggregate or silently
+     * skip. */
+    struct yetty_ycore_int_result (*render)(struct yetty_yrender_terminal_layer *self,
+                                            struct yetty_ydraw_target *target, int force);
     /* Returns 1 if layer has no content to render (skip rendering, use
    * transparent texture) */
     int (*is_empty)(const struct yetty_yrender_terminal_layer *self);

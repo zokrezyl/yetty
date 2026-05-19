@@ -61,22 +61,24 @@ static struct yetty_yrender_gpu_resource_set_result bg_get_gpu_resource_set(
     return YETTY_OK(yetty_yrender_gpu_resource_set, &layer->rs);
 }
 
-static struct yetty_ycore_void_result bg_render(struct yetty_yrender_terminal_layer *self,
-                                                struct yetty_ydraw_target *target)
+static struct yetty_ycore_int_result bg_render(struct yetty_yrender_terminal_layer *self,
+                                               struct yetty_ydraw_target *target,
+                                               int force)
 {
     if (!target || !target->ops || !target->ops->render_layer) {
-        return YETTY_ERR(yetty_ycore_void, "background_layer: target has no render_layer");
+        return YETTY_ERR(yetty_ycore_int, "background_layer: target has no render_layer");
     }
-    /* Self-gate on dirty: bg is an opaque pane-wide fill, so re-running it
-     * every frame wipes whatever the terminal layers above painted last
-     * frame and defeats terminal_render_frame's cascade dirty-skip when
-     * only the shader-glyph animation timer ticks. dirty is set on
-     * creation and on resize_grid; render-target-texture clears it after
-     * a successful pass. */
-    if (!self->dirty) {
-        return YETTY_OK_VOID();
+    /* bg is an opaque pane-wide fill; skipping when clean keeps the
+     * cascade gate working — only redraw if dirty or forced. `force`
+     * shouldn't normally be set for the background (it's at the
+     * bottom of the stack so nothing below it ever renders to
+     * cascade onto bg), but honour it for symmetry. */
+    if (!self->dirty && !force) {
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    return target->ops->render_layer(target, self);
+    struct yetty_ycore_void_result rr = target->ops->render_layer(target, self);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rr, "bg_render: target->render_layer");
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 /* Background is the pane wipe — never empty. Returning 0 keeps it in the

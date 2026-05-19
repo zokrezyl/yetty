@@ -293,7 +293,14 @@ static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
         struct yetty_ycore_void_result res = YETTY_OK_VOID();
         if (pane->background_layer && pane->background_layer->ops &&
             pane->background_layer->ops->render) {
-            res = pane->background_layer->ops->render(pane->background_layer, render_target);
+            /* yui's pane-level draw: stand-alone background pass, no
+             * cascade in flight here, so force=0. Drop the int return
+             * (only the success/failure matters at this site). */
+            struct yetty_ycore_int_result rr = pane->background_layer->ops->render(
+                pane->background_layer, render_target, /*force=*/0);
+            if (YETTY_IS_ERR(rr)) {
+                res = YETTY_ERR(yetty_ycore_void, "pane background render", rr);
+            }
         }
         if (YETTY_IS_OK(res)) {
             res = yetty_yui_view_render(pane->views[pane->view_count - 1], render_target);

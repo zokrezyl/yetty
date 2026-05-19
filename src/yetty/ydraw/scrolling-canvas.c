@@ -916,6 +916,10 @@ static struct uint32_result add_drawable_internal(
                                                        word_count * sizeof(uint32_t),
                                                        drawable_rolling_row);
         YETTY_RETURN_IF_ERR(uint32, inst_res, "add_drawable: create_instance");
+        /* Mark fresh — the FIRST render must paint this figure even
+         * though no listener has fired yet. ydraw_layer_render's
+         * figure loop gates on inst->dirty || force. */
+        inst_res.value->dirty = 1;
         struct yetty_ycore_void_result fr =
             yetty_ydraw_scrolling_grid_push_figure(c->grid, drawable_grid_line, inst_res.value);
         if (YETTY_IS_ERR(fr)) {

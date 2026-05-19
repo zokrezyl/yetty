@@ -1321,6 +1321,10 @@ static struct yetty_ycore_void_result scene_entity_add_bytes(
             entity->touched_cell_count = saved_touched_count;
             return YETTY_ERR(yetty_ycore_void, "scene-canvas: figures grow", gf);
         }
+        /* Mark fresh — the FIRST render must paint this figure even
+         * though no listener has fired yet. ydraw_layer_render's
+         * figure loop gates on inst->dirty || force. */
+        inst_res.value->dirty = 1;
         entity->figures[entity->figure_count++] = inst_res.value;
     }
 

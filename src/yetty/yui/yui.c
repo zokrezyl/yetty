@@ -1134,7 +1134,11 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
     if (yui->layer->ops->is_empty && yui->layer->ops->is_empty(yui->layer)) {
         return YETTY_OK_VOID();
     }
-    return yui->layer->ops->render(yui->layer, target);
+    /* yui-host render: no terminal cascade in flight at this caller,
+     * so force=0. Drop the int return (only success/failure matters). */
+    struct yetty_ycore_int_result rr = yui->layer->ops->render(yui->layer, target, /*force=*/0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui layer render");
+    return YETTY_OK_VOID();
 }
 
 struct yetty_platform_pty *yetty_yui_producer_pty(struct yetty_yui *yui)

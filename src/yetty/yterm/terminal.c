@@ -992,36 +992,36 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
      * sharing the big target can't stomp each other — loadOp ignores
      * scissor, so a Clear would have wiped every other pane. */
     ytime_start(layers);
-    /* Per-layer dirty gate with downstream cascade.
-     *
-     * Layers stack bottom→top (text → ydraw-scrolling → ydraw-scene →
+    /* Layers stack bottom→top (text → ydraw-scrolling → ydraw-scene →
      * shader-glyph → ymgui) and all paint into the same big_target with
-     * LoadOp_Load. Skipping a clean layer keeps last frame's pixels for
-     * it, which is correct as long as no LOWER layer re-rendered: lower
-     * layers overwrite pixels upper layers paint over, so if layer[i]
-     * re-renders, every layer[j>i] must too or its content gets wiped.
-     *
-     * The cascade flag carries that obligation forward — once any layer
-     * has rendered, every layer above must render regardless of its own
-     * dirty bit. */
-    int cascade = 0;
+     * LoadOp_Load. Each layer is asked to render unconditionally; the
+     * layer decides internally whether anything is dirty and returns 1
+     * iff it actually drew. Once any layer returns 1, every higher
+     * layer is invoked with force=1 — its previous-frame pixels in the
+     * shared big_target may have been overwritten by the lower layer's
+     * pass, so it MUST repaint them. */
+    int force = 0;
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (!layer) {
-            continue;
+            return YETTY_ERR(yetty_ycore_void,
+                             "terminal_render_frame: terminal->layers[i] is NULL");
         }
-        /* Skip layers with nothing to draw. ydraw/ymgui report empty
-         * when their canvas has no primitives — paying the binder/draw
-         * cost for them on every text-layer redraw is pure overhead. */
+        if (!layer->ops || !layer->ops->render) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "terminal_render_frame: layer has no render op");
+        }
+        /* Skip layers with nothing to draw at all (ydraw/ymgui report
+         * empty when their canvas has no primitives). is_empty is an
+         * optimisation only — a missing op is fine. */
         if (layer->ops->is_empty && layer->ops->is_empty(layer)) {
             continue;
         }
-        if (!cascade && !layer->dirty) {
-            continue;
-        }
-        cascade = 1;
-        struct yetty_ycore_void_result res = layer->ops->render(layer, target);
+        struct yetty_ycore_int_result res = layer->ops->render(layer, target, force);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "terminal_render_frame: layer render failed");
+        if (res.value == 1) {
+            force = 1;
+        }
     }
     ytime_report(layers);
 

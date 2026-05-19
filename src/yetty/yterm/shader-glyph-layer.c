@@ -417,8 +417,9 @@ static struct yetty_ycore_void_result shader_glyph_set_visual_zoom(
     struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y);
 static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
-                                                          struct yetty_ydraw_target *target);
+static struct yetty_ycore_int_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
+                                                         struct yetty_ydraw_target *target,
+                                                         int force);
 static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_listener *listener,
                                                   const struct yetty_yui_event *event);
 static void anim_timer_stop(struct yetty_yterm_shader_glyph_layer *layer);
@@ -817,8 +818,9 @@ static void anim_timer_stop(struct yetty_yterm_shader_glyph_layer *layer)
     layer->timer_running = 0;
 }
 
-static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
-                                                          struct yetty_ydraw_target *target)
+static struct yetty_ycore_int_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
+                                                         struct yetty_ydraw_target *target,
+                                                         int force)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -829,16 +831,22 @@ static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_t
     if (shader_glyph_is_empty(self)) {
         anim_timer_stop(layer);
         ydebug("shader-glyph: render skipped (empty)");
-        return YETTY_OK_VOID();
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     anim_timer_start(layer);
-    /* dirty is set by on_anim_tick before request_render — no force-arm
-     * needed here. Per-cell instanced draw fires on shader-glyph cells
-     * only, so unchanged frames cost nothing on the GPU. */
+    /* Honour the cascade: even if our own dirty isn't set (no anim
+     * tick this frame), if force=1 the big_target underneath was
+     * just rewritten by a lower layer — repaint to keep our pixels.
+     * Per-cell instanced draw fires on shader-glyph cells only, so
+     * unchanged frames cost nothing on the GPU anyway. */
+    if (!self->dirty && !force) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
     ydebug("shader-glyph: render_layer ENTER instance_count=%u", layer->instance_count);
     struct yetty_ycore_void_result r = target->ops->render_layer(target, self);
-    ydebug("shader-glyph: render_layer EXIT ok=%d", YETTY_IS_OK(r));
-    return r;
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "shader_glyph_render: target->render_layer");
+    ydebug("shader-glyph: render_layer EXIT");
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 /* Empty when there are no shader-glyph cells in the current grid.

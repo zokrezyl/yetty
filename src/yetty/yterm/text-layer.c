@@ -252,8 +252,9 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
 static int text_layer_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
 static int text_layer_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
                               int mods);
-static struct yetty_ycore_void_result text_layer_render(struct yetty_yrender_terminal_layer *self,
-                                                        struct yetty_ydraw_target *target);
+static struct yetty_ycore_int_result text_layer_render(struct yetty_yrender_terminal_layer *self,
+                                                       struct yetty_ydraw_target *target,
+                                                       int force);
 static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result text_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
@@ -1221,10 +1222,20 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
 }
 
 /* Render layer to target - delegate to render_target */
-static struct yetty_ycore_void_result text_layer_render(struct yetty_yrender_terminal_layer *self,
-                                                        struct yetty_ydraw_target *target)
+static struct yetty_ycore_int_result text_layer_render(struct yetty_yrender_terminal_layer *self,
+                                                       struct yetty_ydraw_target *target,
+                                                       int force)
 {
-    return target->ops->render_layer(target, self);
+    /* Text-layer has no per-figure granularity — one big text/SDF
+     * pass. Render iff dirty or forced. Return 1 when we drew so
+     * higher layers cascade. */
+    if (!self->dirty && !force) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_ycore_void_result rr = target->ops->render_layer(target, self);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rr, "text_layer_render: target->render_layer");
+    self->dirty = 0;
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 /* Borrow the current GPU cell buffer. Used by sibling layers (e.g. the
