@@ -4,6 +4,7 @@
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
 #include <yetty/ydraw-core/draw-list.h>
+#include <yetty/yexpr/yexpr.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
@@ -74,6 +75,13 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
 
     char exprs[YPLOT_MAX_FUNCTIONS][256] = {{0}};
     int func_count = 0;
+
+    /* New top-level `source:` key — the whole yexpr-plot text in one string.
+     * Bypasses the positional `functions:` list and goes straight through
+     * the full yexpr-plot parser, so buffer declarations / inline x=A..B /
+     * @view= / @<name>.color= all work. */
+    char source[2048] = {0};
+    int has_source = 0;
 
     char prop_key[64] = {0};
     int expect_value = 0;
@@ -168,6 +176,10 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
                 } else if (strcmp(prop_key, "show_labels") == 0) {
                     uniforms.flags =
                         (uniforms.flags & ~0x04) | ((strcmp(val, "true") == 0) ? 0x04 : 0);
+                } else if (strcmp(prop_key, "source") == 0) {
+                    strncpy(source, val, sizeof(source) - 1);
+                    source[sizeof(source) - 1] = '\0';
+                    has_source = 1;
                 }
                 expect_value = 0;
             }
@@ -179,43 +191,136 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
         yaml_event_delete(&event);
     }
 
-    uniforms.function_count = (uint32_t)func_count;
-
     uint32_t bc_buf[1024] = {0};
     size_t bc_count = 0;
 
-    if (func_count > 0) {
-        char multi_expr[2048] = {0};
-        size_t off = 0;
-        for (int i = 0; i < func_count; i++) {
-            if (i > 0 && off < sizeof(multi_expr) - 2) {
-                multi_expr[off++] = ';';
-                multi_expr[off++] = ' ';
-            }
-            size_t len = strlen(exprs[i]);
-            if (off + len < sizeof(multi_expr)) {
-                memcpy(multi_expr + off, exprs[i], len);
-                off += len;
-            }
-        }
+    /* Wire data buffers — only populated when the `source:` path supplies
+     * buffer declarations. Zero-fill scratch outlives serialization. */
+    struct yetty_yplot_data_buffer wire_bufs[8] = {0};
+    uint32_t wire_buf_count = 0;
+    float *zero_fill = NULL;
 
-        struct yetty_yfsvm_program_result prog_res =
-            yetty_yfsvm_compile_multi_expr(multi_expr, off);
-        if (YETTY_IS_OK(prog_res)) {
-            bc_count = yetty_yfsvm_program_serialize(&prog_res.value, bc_buf, 1024);
+    if (has_source) {
+        /* Full yexpr-plot parse → bytecode + data-buffer table. */
+        struct yetty_yexpr_plot_parse_result pr =
+            yetty_yexpr_parse_plot(source, strlen(source));
+        if (YETTY_IS_OK(pr)) {
+            /* Inline domain / viewport overrides whatever YAML set. */
+            if (pr.value.plot.has_x_range) {
+                uniforms.x_min = pr.value.plot.x_min;
+                uniforms.x_max = pr.value.plot.x_max;
+            }
+            if (pr.value.plot.has_y_range) {
+                uniforms.y_min = pr.value.plot.y_min;
+                uniforms.y_max = pr.value.plot.y_max;
+            }
+            if (pr.value.plot.has_view) {
+                uniforms.x_min = pr.value.plot.view_x_min;
+                uniforms.x_max = pr.value.plot.view_x_max;
+                uniforms.y_min = pr.value.plot.view_y_min;
+                uniforms.y_max = pr.value.plot.view_y_max;
+            }
+
+            uniforms.function_count = pr.value.plot.def_count;
+            if (uniforms.function_count > 8) {
+                uniforms.function_count = 8;
+            }
+
+            /* Apply @<name>.color attrs to the function slots. */
+            for (uint32_t i = 0; i < pr.value.plot.attr_count; i++) {
+                const struct yetty_yexpr_plot_attr *attr = &pr.value.plot.attrs[i];
+                if (strcmp(attr->attr_name, "color") != 0) {
+                    continue;
+                }
+                for (uint32_t j = 0; j < uniforms.function_count; j++) {
+                    if (strcmp(pr.value.plot.defs[j].name, attr->plot_name) == 0) {
+                        uniforms.colors[j] = yplot_parse_color(attr->value);
+                        break;
+                    }
+                }
+            }
+
+            /* Bytecode. */
+            struct yetty_yfsvm_program_result prog_res =
+                yetty_yfsvm_compile_multi(&pr.value.plot);
+            if (YETTY_IS_OK(prog_res)) {
+                if (prog_res.value.uses_time) {
+                    uniforms.flags |= 0x8u; /* YETTY_YPLOT_FLAG_USES_TIME */
+                }
+                bc_count = yetty_yfsvm_program_serialize(&prog_res.value, bc_buf, 1024);
+            }
+
+            /* Buffer declarations → wire data buffers. Inline values flow
+             * verbatim; size-only decls render as a flat baseline until
+             * something streams data in. */
+            uint32_t decl_count = pr.value.plot.buffer_count;
+            if (decl_count > 8) {
+                decl_count = 8;
+            }
+            size_t zero_fill_total = 0;
+            for (uint32_t i = 0; i < decl_count; i++) {
+                const struct yetty_yexpr_plot_buffer *d = &pr.value.plot.buffers[i];
+                if (d->inline_count == 0 && d->size > 0) {
+                    zero_fill_total += d->size;
+                }
+            }
+            if (zero_fill_total > 0) {
+                zero_fill = calloc(zero_fill_total, sizeof(float));
+            }
+            size_t zf_off = 0;
+            for (uint32_t i = 0; i < decl_count; i++) {
+                const struct yetty_yexpr_plot_buffer *d = &pr.value.plot.buffers[i];
+                if (d->inline_count > 0) {
+                    wire_bufs[i].samples = d->inline_values;
+                    wire_bufs[i].count = d->inline_count;
+                } else if (d->size > 0 && zero_fill) {
+                    wire_bufs[i].samples = zero_fill + zf_off;
+                    wire_bufs[i].count = d->size;
+                    zf_off += d->size;
+                }
+            }
+            wire_buf_count = decl_count;
+        }
+    } else {
+        /* Legacy `functions:` list. */
+        uniforms.function_count = (uint32_t)func_count;
+        if (func_count > 0) {
+            char multi_expr[2048] = {0};
+            size_t off = 0;
+            for (int i = 0; i < func_count; i++) {
+                if (i > 0 && off < sizeof(multi_expr) - 2) {
+                    multi_expr[off++] = ';';
+                    multi_expr[off++] = ' ';
+                }
+                size_t len = strlen(exprs[i]);
+                if (off + len < sizeof(multi_expr)) {
+                    memcpy(multi_expr + off, exprs[i], len);
+                    off += len;
+                }
+            }
+
+            struct yetty_yfsvm_program_result prog_res =
+                yetty_yfsvm_compile_multi_expr(multi_expr, off);
+            if (YETTY_IS_OK(prog_res)) {
+                if (prog_res.value.uses_time) {
+                    uniforms.flags |= 0x8u;
+                }
+                bc_count = yetty_yfsvm_program_serialize(&prog_res.value, bc_buf, 1024);
+            }
         }
     }
 
     struct yetty_yplot_buffers bufs = {
         .bytecode = bc_buf,
         .bytecode_len = bc_count,
-        .data = NULL,
-        .data_count = 0,
+        .data = wire_buf_count > 0 ? wire_bufs : NULL,
+        .data_count = wire_buf_count,
     };
 
     size_t required = yetty_yplot_uniforms_serialized_size(&uniforms, &bufs);
     uint8_t *drawable_buf = malloc(required);
     if (!drawable_buf) {
+        free(zero_fill);
         return YETTY_ERR(yetty_ycore_void, "malloc failed");
     }
 
@@ -223,12 +328,14 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
         yetty_yplot_uniforms_serialize(&uniforms, &bufs, drawable_buf, required);
     if (YETTY_IS_ERR(ser_res)) {
         free(drawable_buf);
+        free(zero_fill);
         return YETTY_ERR(yetty_ycore_void, "yplot uniforms serialize failed", ser_res);
     }
 
     struct yetty_ydraw_id_result id_res =
         yetty_ydraw_draw_list_add_prim(buffer, drawable_buf, required);
     free(drawable_buf);
+    free(zero_fill);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot yaml: add_prim failed");
     return YETTY_OK_VOID();
 }

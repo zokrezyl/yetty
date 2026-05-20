@@ -46,7 +46,7 @@ p
 # zooming into a region without resampling the expression.
 printf '\n(3) @view= zoom-in:\n'
 "$YPLOT" -w 520 -H 160 \
-    'x=-3*pi..3*pi; @view=-pi..pi,-0.5..1.5; signal=sin(x)/x; @signal.color=#74C5A5'
+    'x=-10..10; @view=-pi..pi,-0.5..1.5; signal=sin(x)/x; @signal.color=#74C5A5'
 p
 
 # (4) Wide domain with a deliberately tighter viewport. The function is
