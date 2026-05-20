@@ -57,10 +57,17 @@ elseif(APPLE)
         ${_MA_AUDIOTOOLBOX_FRAMEWORK}
         ${_MA_COREFOUNDATION_FRAMEWORK}
     )
-    if(NOT (YETTY_IOS OR YETTY_TVOS
-            OR CMAKE_SYSTEM_NAME STREQUAL "iOS"
-            OR CMAKE_SYSTEM_NAME STREQUAL "tvOS"
-            OR CMAKE_SYSTEM_NAME STREQUAL "watchOS"))
+    if(YETTY_IOS OR YETTY_TVOS
+       OR CMAKE_SYSTEM_NAME STREQUAL "iOS"
+       OR CMAKE_SYSTEM_NAME STREQUAL "tvOS"
+       OR CMAKE_SYSTEM_NAME STREQUAL "watchOS")
+        # miniaudio's CoreAudio backend on iOS/tvOS/watchOS uses
+        # AVAudioSession (categories, interruption / route-change
+        # notifications). AVFoundation is the framework that exports
+        # those Objective-C symbols.
+        find_library(_MA_AVFOUNDATION_FRAMEWORK AVFoundation REQUIRED)
+        target_link_libraries(miniaudio INTERFACE ${_MA_AVFOUNDATION_FRAMEWORK})
+    else()
         find_library(_MA_AUDIOUNIT_FRAMEWORK AudioUnit REQUIRED)
         target_link_libraries(miniaudio INTERFACE ${_MA_AUDIOUNIT_FRAMEWORK})
     endif()
