@@ -31,15 +31,6 @@ VERSION_FILE="$SCRIPT_DIR/version"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 
-# Allow an optional `-N` packaging suffix (e.g. "0.11.22-1") so we can
-# republish the same upstream miniaudio release under a fresh
-# `lib-miniaudio-<version>` tag (e.g. when the tarball layout changes).
-# UPSTREAM is the bare mackron/miniaudio tag we fetch.
-case "$VERSION" in
-    *-*) UPSTREAM="${VERSION%-*}" ;;
-    *)   UPSTREAM="$VERSION" ;;
-esac
-
 # Per-platform work dirs so concurrent matrix jobs on the same host
 # (e.g. the linux-cross matrix) don't trample each other's extract dir.
 WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-miniaudio-${TARGET_PLATFORM}}"
