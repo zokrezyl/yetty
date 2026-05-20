@@ -36,9 +36,13 @@ VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-miniaudio-${TARGET_PLATFORM}}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
 
-MINIAUDIO_URL="https://github.com/mackron/miniaudio/archive/refs/tags/${UPSTREAM}.tar.gz"
-MINIAUDIO_TARBALL="$CACHE_DIR/miniaudio-${UPSTREAM}.tar.gz"
-SRC_DIR="$WORK_DIR/miniaudio-${UPSTREAM}"
+MINIAUDIO_URL="https://github.com/mackron/miniaudio/archive/refs/tags/${VERSION}.tar.gz"
+# Distinct from the output tarball name so a cache dir shared with
+# OUTPUT_DIR doesn't shadow the upstream source archive with our staged
+# output (which previously caused the source to be silently replaced by
+# the per-platform tarball after the first run).
+MINIAUDIO_TARBALL="$CACHE_DIR/miniaudio-${VERSION}-src.tar.gz"
+SRC_DIR="$WORK_DIR/miniaudio-${VERSION}"
 STAGE="$WORK_DIR/stage"
 TARBALL="$OUTPUT_DIR/miniaudio-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
@@ -62,7 +66,7 @@ if [ ! -d "$SRC_DIR" ]; then
     echo "==> extracting -> $SRC_DIR"
     mkdir -p "$WORK_DIR/.extract-$$"
     tar -C "$WORK_DIR/.extract-$$" -xzf "$MINIAUDIO_TARBALL"
-    mv "$WORK_DIR/.extract-$$/miniaudio-${UPSTREAM}" "$SRC_DIR"
+    mv "$WORK_DIR/.extract-$$/miniaudio-${VERSION}" "$SRC_DIR"
     rmdir "$WORK_DIR/.extract-$$"
 fi
 rm -rf "$STAGE"
