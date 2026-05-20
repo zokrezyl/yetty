@@ -42,6 +42,32 @@ int yetty_yplatform_path_dirname(const char *path, char *out, size_t out_size);
  * to realpath(path, NULL); on Win32 to _fullpath(NULL, path, 0). */
 char *yetty_yplatform_path_realpath(const char *path);
 
+/* Directory iteration. Single-threaded use only — the handle is not
+ * thread-safe. Backed by opendir/readdir on POSIX and FindFirstFile /
+ * FindNextFile on Win32. */
+struct yetty_yplatform_dir;
+
+struct yetty_yplatform_dir_entry {
+    /* Basename only — no leading path. Storage owned by the handle and
+     * valid only until the next yetty_yplatform_dir_next() / _close() on
+     * the same handle. */
+    const char *name;
+    /* Non-zero if the entry is a directory. */
+    int is_dir;
+};
+
+/* Open `path` for entry iteration. Returns NULL on error. */
+struct yetty_yplatform_dir *yetty_yplatform_dir_open(const char *path);
+
+/* Read the next entry. Returns 1 and fills *out on success, 0 at
+ * end-of-directory or on error. Includes "." and ".." entries — filter
+ * at the caller. */
+int yetty_yplatform_dir_next(struct yetty_yplatform_dir *d,
+                             struct yetty_yplatform_dir_entry *out);
+
+/* Close the handle. Safe on NULL. */
+void yetty_yplatform_dir_close(struct yetty_yplatform_dir *d);
+
 #ifdef __cplusplus
 }
 #endif

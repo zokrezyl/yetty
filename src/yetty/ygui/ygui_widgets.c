@@ -6926,8 +6926,7 @@ void yetty_ygui_widget_datepicker_on_change(struct yetty_ygui_widget *widget,
  * File picker — directory listing widget.
  *===========================================================================*/
 
-#include <dirent.h>
-#include <sys/stat.h>
+#include <yetty/yplatform/fs.h>
 
 static int filepicker_entry_cmp(const void *a, const void *b)
 {
@@ -6945,15 +6944,15 @@ static void filepicker_load_dir(struct yetty_ygui_widget *self)
     self->data.filepicker.selected = -1;
     self->data.filepicker.scroll = 0;
 
-    DIR *d = opendir(self->data.filepicker.cwd);
+    struct yetty_yplatform_dir *d = yetty_yplatform_dir_open(self->data.filepicker.cwd);
     if (!d) return;
     int cap = 16, n = 0;
     char **list = (char **)malloc((size_t)cap * sizeof(char *));
-    if (!list) { closedir(d); return; }
-    struct dirent *e;
-    while ((e = readdir(d)) != NULL) {
+    if (!list) { yetty_yplatform_dir_close(d); return; }
+    struct yetty_yplatform_dir_entry e;
+    while (yetty_yplatform_dir_next(d, &e)) {
         /* Skip "." but keep ".." for navigation. */
-        if (strcmp(e->d_name, ".") == 0) continue;
+        if (strcmp(e.name, ".") == 0) continue;
         if (n == cap) {
             int nc = cap * 2;
             char **g = realloc(list, (size_t)nc * sizeof(char *));
@@ -6963,19 +6962,15 @@ static void filepicker_load_dir(struct yetty_ygui_widget *self)
         }
         /* Append "/" suffix for directories so the user can see what's
          * navigable. */
-        char fullpath[4096];
-        snprintf(fullpath, sizeof(fullpath), "%s/%s", self->data.filepicker.cwd, e->d_name);
-        struct stat st;
-        int is_dir = (stat(fullpath, &st) == 0 && S_ISDIR(st.st_mode)) ? 1 : 0;
-        size_t name_len = strlen(e->d_name);
+        size_t name_len = strlen(e.name);
         char *entry = (char *)malloc(name_len + 2);
         if (!entry) continue;
-        memcpy(entry, e->d_name, name_len);
-        if (is_dir) { entry[name_len] = '/'; entry[name_len + 1] = '\0'; }
-        else        { entry[name_len] = '\0'; }
+        memcpy(entry, e.name, name_len);
+        if (e.is_dir) { entry[name_len] = '/'; entry[name_len + 1] = '\0'; }
+        else          { entry[name_len] = '\0'; }
         list[n++] = entry;
     }
-    closedir(d);
+    yetty_yplatform_dir_close(d);
     qsort(list, (size_t)n, sizeof(char *), filepicker_entry_cmp);
     self->data.filepicker.entries = list;
     self->data.filepicker.entry_count = n;

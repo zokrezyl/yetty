@@ -1,4 +1,4 @@
-#include <yetty/yplatform/compat.h> /* dirent on POSIX, Win32 shim on MSVC */
+#include <yetty/yplatform/compat.h> /* clock_gettime shim on MSVC */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +10,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yplatform/fs.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
@@ -198,10 +199,10 @@ static int glyph_allowed(struct yetty_yconfig_config *config, const char *filena
 static struct yetty_ycore_buffer_result assemble_glyph_shaders(
     const char *glyph_dir, struct yetty_yconfig_config *config)
 {
-    DIR *d = opendir(glyph_dir);
+    struct yetty_yplatform_dir *d = yetty_yplatform_dir_open(glyph_dir);
     if (!d) {
-        ywarn("glyph-shaders: opendir(%s) failed", glyph_dir);
-        return YETTY_ERR(yetty_ycore_buffer, "glyph-shaders: opendir failed");
+        ywarn("glyph-shaders: open(%s) failed", glyph_dir);
+        return YETTY_ERR(yetty_ycore_buffer, "glyph-shaders: dir open failed");
     }
     int allow_list_size =
         config ? config->ops->get_array_count(config, "shaders/preload/glyphs") : 0;
@@ -215,9 +216,9 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(
     char prelude_names[8][128];
     size_t prelude_count = 0;
 
-    struct dirent *de;
-    while ((de = readdir(d)) != NULL) {
-        const char *name = de->d_name;
+    struct yetty_yplatform_dir_entry de;
+    while (yetty_yplatform_dir_next(d, &de)) {
+        const char *name = de.name;
         size_t len = strlen(name);
         if (len < 6) {
             continue;
@@ -288,7 +289,7 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(
         entries[n].body_size = br.value.size;
         n++;
     }
-    closedir(d);
+    yetty_yplatform_dir_close(d);
 
     qsort(entries, n, sizeof(struct yetty_yterm_glyph_entry), glyph_entry_cmp);
 
