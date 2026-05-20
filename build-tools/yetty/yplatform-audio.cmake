@@ -27,6 +27,16 @@ add_library(yetty_yplatform_audio STATIC
 target_include_directories(yetty_yplatform_audio PUBLIC
     ${YETTY_ROOT}/include
 )
+
+# Apple's miniaudio backend (CoreAudio / AudioUnit) reaches into
+# Foundation/AVFoundation via Objective-C runtime types. Compile this
+# TU as Objective-C on Apple so <Foundation/Foundation.h> resolves; on
+# every other platform the implicit C language is correct.
+if(APPLE)
+    set_source_files_properties(
+        ${YETTY_ROOT}/src/yetty/yplatform/audio/default.c
+        PROPERTIES LANGUAGE OBJC)
+endif()
 # miniaudio is PRIVATE — its symbols are owned by default.c only; the
 # public include set must not leak the implementation header.
 target_link_libraries(yetty_yplatform_audio
