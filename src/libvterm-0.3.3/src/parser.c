@@ -194,6 +194,21 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
           string_len -= 1;
         vt->parser.in_esc = false;
       }
+      /* yetty: ESC k <title> ST is the screen/tmux "set window title"
+       * extension. zsh emits it on every prompt-redraw / preexec. ESC k
+       * is not one of the standard C1 introducers (those are 0x40-0x5f);
+       * without this hook the parser silently dropped the ESC k header
+       * and then printed the title body (= the just-executed command
+       * name) as plain text at the cursor. Route it through the existing
+       * APC string-collection state so the body is captured and dropped
+       * (no apc callback is registered). */
+      else if(!vt->parser.intermedlen && c == 'k' && !IS_STRING_STATE()) {
+        c = 0x9f; /* APC */
+        c1_allowed = true;
+        if(string_len)
+          string_len -= 1;
+        vt->parser.in_esc = false;
+      }
       else {
         string_start = NULL;
         vt->parser.state = NORMAL;
