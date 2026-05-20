@@ -13,13 +13,13 @@
 #include <yetty/yterm/terminal.h>
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/yplatform/ycoroutine.h>
+#include <yetty/yplatform/thread.h>
+#include <yetty/yplatform/time.h>
 #include <yetty/webgpu/error.h>
 #include <yetty/ytrace/ytrace.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 /* Shader embedded via incbin_add_resources (stubs on Emscripten) */
 extern const unsigned char gblend_shaderData[];
@@ -37,7 +37,7 @@ extern const unsigned int gblend_shaderSize;
  * know exactly where it's stuck, but the process keeps running, the window
  * goes black, and the user is left guessing.
  *
- * The watchdog is a single background pthread that polls a monotonic
+ * The watchdog is a single background thread that polls a monotonic
  * "in-Present since" timestamp set right before the wgpuSurfacePresent
  * call. If the value stays non-zero for more than WATCHDOG_LIMIT_MS, it
  * writes a clear FATAL line to stderr (including how long Present has
@@ -47,28 +47,30 @@ extern const unsigned int gblend_shaderSize;
 
 #define PRESENT_WATCHDOG_LIMIT_MS 5000
 
-static _Atomic uint64_t g_present_started_ns = 0;
-static _Atomic int g_present_watchdog_started = 0;
+/* Heap-owned watchdog state. The owning rt holds the pointer; the thread
+ * also keeps a copy of the pointer and outlives the rt (no join path), so
+ * the struct is intentionally leaked at process exit — see
+ * present_watchdog_start. */
+struct yetty_yrender_present_watchdog {
+    _Atomic uint64_t started_ms;
+};
 
-static uint64_t monotonic_ns(void)
+static uint64_t monotonic_ms(void)
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    return (uint64_t)(yetty_yplatform_ytime_monotonic_sec() * 1000.0);
 }
 
 YETTY_EXTERNAL_CALLBACK
-static void *present_watchdog_thread(void *arg)
+static int present_watchdog_thread(void *arg)
 {
-    (void)arg;
+    struct yetty_yrender_present_watchdog *wd = arg;
     for (;;) {
-        struct timespec ts = {.tv_sec = 0, .tv_nsec = 500 * 1000 * 1000};
-        nanosleep(&ts, NULL);
-        uint64_t started = atomic_load(&g_present_started_ns);
+        yetty_yplatform_ytime_sleep_ms(500);
+        uint64_t started = atomic_load(&wd->started_ms);
         if (started == 0) {
             continue;
         }
-        uint64_t elapsed_ms = (monotonic_ns() - started) / 1000000ull;
+        uint64_t elapsed_ms = monotonic_ms() - started;
         if (elapsed_ms >= PRESENT_WATCHDOG_LIMIT_MS) {
             fprintf(stderr,
                     "\n[FATAL] wgpuSurfacePresent stuck for %llums (>%dms threshold)\n"
@@ -81,27 +83,27 @@ static void *present_watchdog_thread(void *arg)
             _Exit(5);
         }
     }
-    return NULL;
+    return 0;
 }
 
-static void start_present_watchdog_once(void)
+static struct yetty_yrender_present_watchdog *present_watchdog_start(void)
 {
-    int expected = 0;
-    if (!atomic_compare_exchange_strong(&g_present_watchdog_started, &expected, 1)) {
-        return;
+    struct yetty_yrender_present_watchdog *wd = calloc(1, sizeof(*wd));
+    if (!wd) {
+        ywarn("present watchdog: alloc failed — running without watchdog");
+        return NULL;
     }
-    pthread_t tid;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    int rc = pthread_create(&tid, &attr, present_watchdog_thread, NULL);
-    pthread_attr_destroy(&attr);
-    if (rc != 0) {
-        ywarn("present watchdog: pthread_create failed (rc=%d) — running without watchdog", rc);
-        atomic_store(&g_present_watchdog_started, 0);
-    } else {
-        yinfo("present watchdog: started, limit=%d ms", PRESENT_WATCHDOG_LIMIT_MS);
+    struct yetty_yplatform_ythread *t =
+        yetty_yplatform_ythread_create(present_watchdog_thread, wd);
+    if (!t) {
+        ywarn("present watchdog: ythread_create failed — running without watchdog");
+        free(wd);
+        return NULL;
     }
+    yinfo("present watchdog: started, limit=%d ms", PRESENT_WATCHDOG_LIMIT_MS);
+    /* `wd` and `t` are deliberately leaked: the watchdog thread holds a
+     * pointer to `wd` and runs for the rest of the process lifetime. */
+    return wd;
 }
 
 /* Per-layer binder cache entry. Each layer's resource_set tree concatenates
@@ -148,6 +150,11 @@ struct yetty_yrender_render_target_texture {
      * after wgpuSurfacePresent returns. is_busy() exposes this so the
      * RENDER event handler can skip the whole pipeline. */
     int present_in_flight;
+
+    /* Per-target present watchdog. NULL when this rt has no surface
+     * (layer and composite targets never call wgpuSurfacePresent).
+     * Heap-owned; leaked on process exit — see present_watchdog_start. */
+    struct yetty_yrender_present_watchdog *watchdog;
 
     /* Per-layer binder cache for render_layer. Lazily populated — first
      * call for a given layer creates and caches the binder. Stored as a
@@ -872,11 +879,15 @@ static void render_target_texture_present_coro(void *arg)
     /* Arm the watchdog. If wgpuSurfacePresent blocks for longer than
      * PRESENT_WATCHDOG_LIMIT_MS, the watchdog thread will write a
      * [FATAL] message naming this call and _Exit. */
-    atomic_store(&g_present_started_ns, monotonic_ns());
+    if (rt->watchdog) {
+        atomic_store(&rt->watchdog->started_ms, monotonic_ms());
+    }
     ytime_start(surface_present);
     wgpuSurfacePresent(rt->surface);
     ytime_report(surface_present);
-    atomic_store(&g_present_started_ns, 0);
+    if (rt->watchdog) {
+        atomic_store(&rt->watchdog->started_ms, 0);
+    }
     YETTY_WGPU_CHECK("present_coro:SurfacePresent");
     ydebug("present_coro: AFTER  wgpuSurfacePresent");
 
@@ -1197,11 +1208,11 @@ struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
     ydebug("yetty_yrender_target_texture_create: %.0fx%.0f at (%.0f,%.0f) format=%d surface=%p",
            viewport.w, viewport.h, viewport.x, viewport.y, format, (void *)surface);
 
-    /* Spin up the present watchdog the first time any surface-bearing
-     * texture target is created. Non-surface targets (layer/composite)
-     * never call wgpuSurfacePresent so they don't need it. */
+    /* Spin up a present watchdog for surface-bearing texture targets.
+     * Non-surface targets (layer/composite) never call wgpuSurfacePresent
+     * so they don't need one. */
     if (surface) {
-        start_present_watchdog_once();
+        rt->watchdog = present_watchdog_start();
     }
 
     return YETTY_OK(yetty_yrender_target_ptr, &rt->base);
