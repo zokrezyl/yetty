@@ -20,6 +20,13 @@ if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     list(APPEND YCAT_SOURCES handler-mermaid.c)
 endif()
 
+# Video handler (#198 item 6a). Only built when yvideo's core wire
+# emitter is available — that lib is compiled unconditionally on
+# desktop but skipped on platforms that don't enable YVIDEO.
+if(YETTY_ENABLE_FEATURE_YVIDEO)
+    list(APPEND YCAT_SOURCES handler-video.c)
+endif()
+
 #=============================================================================
 # Tree-sitter highlight queries are embedded at configure time. Each grammar
 # exports TS_QUERIES_DIR_<name> (see build-tools/yetty/libs/tree-sitter.cmake).
@@ -102,6 +109,11 @@ target_link_libraries(yetty_ycat PUBLIC
 if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     target_link_libraries(yetty_ycat PUBLIC yetty_ydiagram)
     target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_DIAGRAM=1)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YVIDEO)
+    target_link_libraries(yetty_ycat PUBLIC yetty_yvideo_core)
+    target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YVIDEO=1)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBMAGIC AND TARGET magic)

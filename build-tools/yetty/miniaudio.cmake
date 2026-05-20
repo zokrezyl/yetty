@@ -1,39 +1,57 @@
-# miniaudio - Single-header audio playback and capture library
-# Public Domain / MIT No Attribution, David Reid (mackron)
-# Cross-platform audio I/O with no external dependencies
+# miniaudio — single-header cross-platform audio I/O (mackron, MIT-0
+# / public-domain dual). Covers WASAPI / DirectSound / WinMM on Windows,
+# CoreAudio / AudioUnit on Apple, ALSA / PulseAudio / PipeWire-via-PA /
+# JACK / sndio on Linux, AAudio / OpenSL ES on Android, WebAudio on
+# Emscripten — backend picked at compile time inside the header.
+#
+# Consumes a prebuilt noarch tarball (just miniaudio.h) from the 3rdparty
+# release published by build-3rdparty-miniaudio.yml.
+#
+# Header-only: exactly one TU in the consumer must `#define
+# MINIAUDIO_IMPLEMENTATION` before `#include <miniaudio.h>`. Yetty does
+# this in src/platform/audio/miniaudio-device.c — that file is the
+# single owner of the implementation symbols.
 
-CPMAddPackage(
-    NAME miniaudio
-    GITHUB_REPOSITORY mackron/miniaudio
-    GIT_TAG master
-    DOWNLOAD_ONLY YES
-)
+include_guard(GLOBAL)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
-if(miniaudio_ADDED)
-    # Header-only library (STB-style: define MINIAUDIO_IMPLEMENTATION in one .c/.cpp)
-    add_library(miniaudio INTERFACE)
-    target_include_directories(miniaudio INTERFACE ${miniaudio_SOURCE_DIR})
-
-    # Platform-specific audio backend dependencies
-    if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
-        # Linux: needs pthread and math, plus dl for dynamic loading of backends
-        target_link_libraries(miniaudio INTERFACE pthread m dl)
-    elseif(APPLE)
-        # macOS/iOS: Core Audio frameworks
-        find_library(COREAUDIO_FRAMEWORK CoreAudio REQUIRED)
-        find_library(AUDIOUNIT_FRAMEWORK AudioUnit REQUIRED)
-        find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
-        target_link_libraries(miniaudio INTERFACE
-            ${COREAUDIO_FRAMEWORK}
-            ${AUDIOUNIT_FRAMEWORK}
-            ${COREFOUNDATION_FRAMEWORK}
-        )
-    elseif(ANDROID)
-        # Android: OpenSL ES or AAudio (linked via NDK)
-        target_link_libraries(miniaudio INTERFACE OpenSLES log)
-    elseif(WIN32)
-        # Windows: no extra libs needed (uses COM/WASAPI)
-    endif()
-
-    message(STATUS "miniaudio: Header-only audio library added")
+if(TARGET miniaudio)
+    return()
 endif()
+
+yetty_3rdparty_fetch(miniaudio _MINIAUDIO_DIR)
+
+if(NOT EXISTS "${_MINIAUDIO_DIR}/include/miniaudio.h")
+    message(FATAL_ERROR
+        "miniaudio: miniaudio.h not found in ${_MINIAUDIO_DIR}/include/ — tarball layout changed?")
+endif()
+
+add_library(miniaudio INTERFACE)
+target_include_directories(miniaudio INTERFACE "${_MINIAUDIO_DIR}/include")
+
+# Per-platform link deps the header needs at the system-call level:
+#   - Linux: pthread + math + dl (dl: dynamic-load of pulseaudio/jack at runtime)
+#   - macOS/iOS/tvOS: CoreAudio / AudioUnit / AudioToolbox / CoreFoundation
+#   - Android: OpenSLES + log (AAudio resolved via dlsym; libdl already
+#     in Bionic's default link set)
+#   - Windows: nothing extra (COM/WASAPI imports come from the toolchain)
+#   - Emscripten: nothing extra (WebAudio uses emscripten_* intrinsics)
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+    find_package(Threads REQUIRED)
+    target_link_libraries(miniaudio INTERFACE Threads::Threads m ${CMAKE_DL_LIBS})
+elseif(APPLE)
+    find_library(_MA_COREAUDIO_FRAMEWORK CoreAudio REQUIRED)
+    find_library(_MA_AUDIOUNIT_FRAMEWORK AudioUnit REQUIRED)
+    find_library(_MA_AUDIOTOOLBOX_FRAMEWORK AudioToolbox REQUIRED)
+    find_library(_MA_COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+    target_link_libraries(miniaudio INTERFACE
+        ${_MA_COREAUDIO_FRAMEWORK}
+        ${_MA_AUDIOUNIT_FRAMEWORK}
+        ${_MA_AUDIOTOOLBOX_FRAMEWORK}
+        ${_MA_COREFOUNDATION_FRAMEWORK}
+    )
+elseif(ANDROID)
+    target_link_libraries(miniaudio INTERFACE OpenSLES log)
+endif()
+
+message(STATUS "miniaudio: prebuilt @${YETTY_3RDPARTY_miniaudio_VERSION} (${_MINIAUDIO_DIR}/include/miniaudio.h)")

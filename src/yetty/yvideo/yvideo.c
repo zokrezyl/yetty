@@ -1,7 +1,8 @@
 /*
  * yvideo.c — high-level convenience wrapper around yvideo-gen's wire
  * serializer. Builds a draw_list holding one yvideo prim from raw
- * H.264 Annex-B bytes + config. Mirrors yimage.c's shape.
+ * H.264 Annex-B bytes + optional audio packets + config. v2 layout
+ * (#198 item 2).
  *
  * Senders typically wrap the returned draw_list in a CMD_GROUP(id) so
  * subsequent CMD_UPDATE envelopes can target the figure; this helper
@@ -21,14 +22,22 @@
 #include <string.h>
 
 struct yetty_ydraw_draw_list_result yetty_yvideo_render(
-    const uint8_t *nal_bytes, size_t nal_len, const struct yetty_yvideo_render_config *config)
+    const uint8_t *nal_bytes, size_t nal_len,
+    const uint8_t *audio_bytes, size_t audio_len,
+    const struct yetty_yvideo_render_config *config)
 {
     if (!config || config->video_w == 0u || config->video_h == 0u) {
         return YETTY_ERR(yetty_ydraw_draw_list,
                          "yvideo: config NULL or video_w/h == 0");
     }
+    if (config->audio_codec != 0u) {
+        if (config->audio_sample_rate == 0u || config->audio_channels == 0u) {
+            return YETTY_ERR(yetty_ydraw_draw_list,
+                             "yvideo: audio_codec set but sample_rate/channels not");
+        }
+    }
     /* nal_bytes==NULL && nal_len==0 is allowed (lets a sender open the
-     * stream and append later via CMD_UPDATE). */
+     * stream and append later via CMD_UPDATE). audio_bytes too. */
 
     struct yetty_yvideo_uniforms u = {0};
     u.bounds_x = config->bounds_x;
@@ -37,15 +46,21 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     u.bounds_h = (config->bounds_h > 0.0f) ? config->bounds_h : (float)config->video_h;
     u.video_w = config->video_w;
     u.video_h = config->video_h;
+    /* YUV 4:2:0 chroma — half-res in both dimensions. */
+    u.chroma_w = config->video_w / 2u;
+    u.chroma_h = config->video_h / 2u;
     u.fps = (config->fps > 0.0f) ? config->fps : 30.0f;
     u.color_matrix = config->color_matrix;
     u.flags = (config->flags != 0u) ? config->flags
                                     : (YETTY_YVIDEO_FLAG_LOOP | YETTY_YVIDEO_FLAG_AUTOPLAY);
+    u.audio_codec       = config->audio_codec;
+    u.audio_sample_rate = config->audio_sample_rate;
+    u.audio_channels    = config->audio_channels;
 
-    /* Pack NAL bytes into a u32-aligned buffer so the generator-emitted
-     * serializer (which speaks in u32 words) can copy them verbatim.
-     * Trailing 0..3 padding bytes are valid Annex-B padding and harmless
-     * to feed into the decoder. */
+    /* Pack each byte stream into a u32-aligned buffer. Trailing 0..3
+     * padding bytes are valid for NAL Annex-B (start codes ignored) and
+     * for length-prefixed audio packets (the parser walks packet boundaries
+     * by the leading u32 length, not by total buffer size). */
     size_t nal_words = (nal_len + 3u) / 4u;
     uint32_t *nal_words_buf = NULL;
     if (nal_len > 0u) {
@@ -58,20 +73,37 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
         }
     }
 
+    size_t audio_words = (audio_len + 3u) / 4u;
+    uint32_t *audio_words_buf = NULL;
+    if (audio_len > 0u) {
+        audio_words_buf = calloc(audio_words, sizeof(uint32_t));
+        if (!audio_words_buf) {
+            free(nal_words_buf);
+            return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: audio-pack alloc failed");
+        }
+        if (audio_bytes) {
+            memcpy(audio_words_buf, audio_bytes, audio_len);
+        }
+    }
+
     struct yetty_yvideo_buffers bufs = {
-        .nal_stream = nal_words_buf,
-        .nal_stream_len = nal_words,
+        .nal_stream       = nal_words_buf,
+        .nal_stream_len   = nal_words,
+        .audio_stream     = audio_words_buf,
+        .audio_stream_len = audio_words,
     };
 
     size_t required = yetty_yvideo_uniforms_serialized_size(&u, &bufs);
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf) {
         free(nal_words_buf);
+        free(audio_words_buf);
         return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
         yetty_yvideo_uniforms_serialize(&u, &bufs, prim_buf, required);
     free(nal_words_buf);
+    free(audio_words_buf);
     if (YETTY_IS_ERR(ser)) {
         free(prim_buf);
         return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: serialize failed", ser);

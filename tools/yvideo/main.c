@@ -609,6 +609,9 @@ static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o,
         .bounds_h = o->bounds_h > 0.0f ? o->bounds_h : (float)o->video_h,
         .video_w = o->video_w,
         .video_h = o->video_h,
+        /* v2: YUV 4:2:0 chroma planes are half-res in each axis. */
+        .chroma_w = o->video_w / 2u,
+        .chroma_h = o->video_h / 2u,
         .fps = o->fps,
         .color_matrix = 1u, /* BT.709 */
         .flags = flags,
@@ -685,13 +688,34 @@ static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o,
 static struct yetty_ycore_void_result emit_update(int stream_id, const uint8_t *bytes,
                                                   size_t len)
 {
+    /* v2 typed payload (#198 item 3): [u8 op][u8 reserved[3]][body...].
+     * Op 0x00 = APPEND_NAL — body is raw H.264 Annex-B bytes. The
+     * receiver REJECTS payloads < 4 bytes and treats the first byte as
+     * the op code, so the bare-bytes v1 path no longer works. */
+    size_t total = 4u + len;
+    uint8_t *typed = malloc(total);
+    if (!typed) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo: update typed alloc failed");
+    }
+    typed[0] = YETTY_YVIDEO_UPDATE_OP_APPEND_NAL;
+    typed[1] = 0u;
+    typed[2] = 0u;
+    typed[3] = 0u;
+    if (len > 0u) {
+        memcpy(typed + 4u, bytes, len);
+    }
+
     struct yetty_ydraw_draw_list_config dlcfg = {0};
     struct yetty_ydraw_draw_list_result dlr =
         yetty_ydraw_draw_list_config_buffer_create(&dlcfg);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dlr, "yvideo: update draw_list create");
+    if (YETTY_IS_ERR(dlr)) {
+        free(typed);
+        return YETTY_ERR(yetty_ycore_void, "yvideo: update draw_list create", dlr);
+    }
     struct yetty_ydraw_draw_list *dl = dlr.value;
     struct yetty_ycore_void_result cu =
-        yetty_ydraw_draw_list_add_cmd_update(dl, (uint32_t)stream_id, bytes, len);
+        yetty_ydraw_draw_list_add_cmd_update(dl, (uint32_t)stream_id, typed, total);
+    free(typed);
     if (YETTY_IS_ERR(cu)) {
         yetty_ydraw_draw_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "yvideo: add_cmd_update", cu);

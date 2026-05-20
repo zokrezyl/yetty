@@ -19,3 +19,11 @@ target_link_libraries(yetty_yecho PUBLIC
     # No GPU / WebGPU pull-in — yecho is strictly client-side.
     yetty_yplot_core
 )
+
+# yvideo_core is the strictly client-side bit of yvideo (wire emit only,
+# no Dawn / openh264 — those live in yetty_yvideo on the server). Link
+# it for {video: ...} block support (#198 item 6b).
+if(YETTY_ENABLE_FEATURE_YVIDEO)
+    target_link_libraries(yetty_yecho PUBLIC yetty_yvideo_core)
+    target_compile_definitions(yetty_yecho PUBLIC YETTY_YECHO_HAS_YVIDEO=1)
+endif()
