@@ -202,10 +202,11 @@ int main(void)
     yetty_ygui_engine_on_resize(g_engine, on_resize, NULL);
     yetty_ygui_engine_on_key(g_engine, on_key, NULL);
     {
-        float cw = 0, ch = 0;
-        yetty_ygui_engine_get_size(g_engine, &cw, &ch);
-        if (cw > 0 && ch > 0) {
-            yetty_ygui_widget_set_size(g_outer, cw, ch);
+        struct pixel_size_result sr = yetty_ygui_engine_get_size(g_engine);
+        if (YETTY_IS_OK(sr) && sr.value.width > 0 && sr.value.height > 0) {
+            yetty_ygui_widget_set_size(g_outer, sr.value.width, sr.value.height);
+        } else if (YETTY_IS_ERR(sr)) {
+            yetty_ycore_error_destroy(sr.error);
         }
     }
 

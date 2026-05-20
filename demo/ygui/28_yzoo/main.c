@@ -75,9 +75,13 @@ int main(int argc, char **argv)
     yetty_ygui_widget_apply_css(g_outer, "padding: 0; gap: 0; align-items: stretch;");
 
     float cw = 800, ch = 600;
-    yetty_ygui_engine_get_size(g_engine, &cw, &ch);
-    if (cw <= 0) cw = 800;
-    if (ch <= 0) ch = 600;
+    struct pixel_size_result sr = yetty_ygui_engine_get_size(g_engine);
+    if (YETTY_IS_OK(sr)) {
+        if (sr.value.width  > 0) cw = sr.value.width;
+        if (sr.value.height > 0) ch = sr.value.height;
+    } else {
+        yetty_ycore_error_destroy(sr.error);
+    }
     yetty_ygui_widget_set_size(g_outer, cw, ch);
     rebuild_zoo(cw, ch);
 

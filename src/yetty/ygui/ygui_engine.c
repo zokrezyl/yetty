@@ -464,17 +464,14 @@ void yetty_ygui_engine_set_size(struct yetty_ygui_engine *engine, float width, f
     engine->needs_full_redraw = 1;
 }
 
-void yetty_ygui_engine_get_size(const struct yetty_ygui_engine *engine, float *width, float *height)
+struct pixel_size_result yetty_ygui_engine_get_size(
+    const struct yetty_ygui_engine *engine)
 {
     if (!engine) {
-        return;
+        return YETTY_ERR(pixel_size, "engine_get_size: NULL engine");
     }
-    if (width) {
-        *width = engine->width;
-    }
-    if (height) {
-        *height = engine->height;
-    }
+    struct yetty_ycore_pixel_size size = {engine->width, engine->height};
+    return YETTY_OK(pixel_size, size);
 }
 
 void yetty_ygui_engine_set_theme(struct yetty_ygui_engine *engine, struct yetty_ygui_theme *theme)
@@ -633,14 +630,24 @@ static struct yetty_ycore_void_result engine_rebuild_with_mode(struct yetty_ygui
     return YETTY_OK_VOID();
 }
 
+/* Pure layout pass. Resolves authored geometry into live + absolute boxes
+ * for every visible widget; does not touch resize state.
+ *
+ * Earlier this function also drained a pending resize via handle_resize,
+ * but that put a user-visible side effect — firing the engine's
+ * resize_callback — behind a name that promises only layout. Because the
+ * callback is allowed to call back into engine_layout (and ygreeter does,
+ * via ygreeter_tab_viewport), and because `needs_resize` was only
+ * cleared after handle_resize returned, the second call would see the
+ * still-set flag and run handle_resize again, recursing through
+ * on_resize → tab_viewport → engine_layout → handle_resize until the
+ * stack overflowed. The dispatch belongs in engine_render (and the
+ * input-event helpers that want fresh hit-test geometry); engine_layout
+ * is now strictly the layout phase. */
 struct yetty_ycore_void_result yetty_ygui_engine_layout(struct yetty_ygui_engine *engine)
 {
     if (!engine) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_engine_layout: NULL engine");
-    }
-    if (engine->needs_resize) {
-        handle_resize(engine);
-        engine->needs_resize = 0;
     }
     return yetty_ygui_layout_compute_engine(engine);
 }

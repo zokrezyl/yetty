@@ -212,10 +212,11 @@ int main(void)
     yetty_ygui_engine_on_key(g_engine, on_key, NULL);
     /* Snap to current canvas dims in case OSC 777780 already arrived. */
     {
-        float cw = 0, ch = 0;
-        yetty_ygui_engine_get_size(g_engine, &cw, &ch);
-        if (cw > 0 && ch > 0) {
-            yetty_ygui_widget_set_size(g_row, cw, ch - HEADER_H);
+        struct pixel_size_result sr = yetty_ygui_engine_get_size(g_engine);
+        if (YETTY_IS_OK(sr) && sr.value.width > 0 && sr.value.height > 0) {
+            yetty_ygui_widget_set_size(g_row, sr.value.width, sr.value.height - HEADER_H);
+        } else if (YETTY_IS_ERR(sr)) {
+            yetty_ycore_error_destroy(sr.error);
         }
     }
 

@@ -523,17 +523,14 @@ void yetty_ygui_widget_set_position(struct yetty_ygui_widget *widget, float x, f
     }
 }
 
-void yetty_ygui_widget_get_position(const struct yetty_ygui_widget *widget, float *x, float *y)
+struct pixel_coord_result yetty_ygui_widget_get_position(
+    const struct yetty_ygui_widget *widget)
 {
     if (!widget) {
-        return;
+        return YETTY_ERR(pixel_coord, "widget_get_position: NULL widget");
     }
-    if (x) {
-        *x = widget->x;
-    }
-    if (y) {
-        *y = widget->y;
-    }
+    struct yetty_ycore_pixel_coord pos = {widget->x, widget->y};
+    return YETTY_OK(pixel_coord, pos);
 }
 
 void yetty_ygui_widget_set_size(struct yetty_ygui_widget *widget, float w, float h)
@@ -550,38 +547,41 @@ void yetty_ygui_widget_set_size(struct yetty_ygui_widget *widget, float w, float
     }
 }
 
-void yetty_ygui_widget_get_size(const struct yetty_ygui_widget *widget, float *w, float *h)
+struct pixel_size_result yetty_ygui_widget_get_size(
+    const struct yetty_ygui_widget *widget)
 {
     if (!widget) {
-        return;
+        return YETTY_ERR(pixel_size, "widget_get_size: NULL widget");
     }
     /* Report authored size — the user-visible value, stable across resizes. */
-    if (w) {
-        *w = widget->authored_w;
-    }
-    if (h) {
-        *h = widget->authored_h;
-    }
+    struct yetty_ycore_pixel_size size = {widget->authored_w, widget->authored_h};
+    return YETTY_OK(pixel_size, size);
 }
 
-void yetty_ygui_widget_get_layout_box(const struct yetty_ygui_widget *widget, float *x, float *y,
-                                      float *w, float *h)
+struct rectangle_result yetty_ygui_widget_get_layout_box(
+    const struct yetty_ygui_widget *widget)
 {
     if (!widget) {
-        return;
+        return YETTY_ERR(rectangle, "widget_get_layout_box: NULL widget");
     }
-    if (x) {
-        *x = widget->layout_x;
+    struct yetty_ycore_rectangle box = {
+        {widget->layout_x, widget->layout_y},
+        {widget->layout_x + widget->layout_w, widget->layout_y + widget->layout_h},
+    };
+    return YETTY_OK(rectangle, box);
+}
+
+struct rectangle_result yetty_ygui_widget_get_content_box(
+    const struct yetty_ygui_widget *widget)
+{
+    if (!widget) {
+        return YETTY_ERR(rectangle, "widget_get_content_box: NULL widget");
     }
-    if (y) {
-        *y = widget->layout_y;
-    }
-    if (w) {
-        *w = widget->layout_w;
-    }
-    if (h) {
-        *h = widget->layout_h;
-    }
+    struct yetty_ycore_rectangle box = {
+        {widget->content_x, widget->content_y},
+        {widget->content_x + widget->content_w, widget->content_y + widget->content_h},
+    };
+    return YETTY_OK(rectangle, box);
 }
 
 void yetty_ygui_widget_set_visible(struct yetty_ygui_widget *widget, int visible)
