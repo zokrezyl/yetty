@@ -38,6 +38,7 @@ enum yetty_ycat_type {
     YETTY_YCAT_TYPE_IMAGE,
     YETTY_YCAT_TYPE_SVG,
     YETTY_YCAT_TYPE_MERMAID,
+    YETTY_YCAT_TYPE_VIDEO,    /* H.264 Annex-B (#198 item 6) */
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type);

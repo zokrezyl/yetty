@@ -64,6 +64,15 @@ enum yetty_ycat_type yetty_ycat_type_from_mime(const char *mime)
     if (strncmp(mime, "image/", 6) == 0) {
         return YETTY_YCAT_TYPE_IMAGE;
     }
+    /* H.264 Annex-B raw bitstream — libmagic doesn't have a stable
+     * mapping for naked H.264, but if a sender hand-sets video/h264 we
+     * route it. The bytes sniff below also catches Annex-B without any
+     * MIME hint. (We don't currently demux .mp4 in ycat — that needs a
+     * minimp4 reader on the sender side first.) */
+    if (strcmp(mime, "video/h264") == 0 || strcmp(mime, "video/H264") == 0 ||
+        strcmp(mime, "video/avc") == 0  || strcmp(mime, "video/x-h264") == 0) {
+        return YETTY_YCAT_TYPE_VIDEO;
+    }
     if (strncmp(mime, "text/", 5) == 0) {
         return YETTY_YCAT_TYPE_TEXT;
     }
@@ -109,6 +118,12 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     }
     if (strcasecmp(noleading, "svg") == 0) {
         return YETTY_YCAT_TYPE_SVG;
+    }
+    /* Raw H.264 Annex-B common extensions. (.mp4 / .mov / .m4v need a
+     * demuxer we don't ship here yet — leave them unmapped for now.) */
+    if (strcasecmp(noleading, "h264") == 0 || strcasecmp(noleading, "264") == 0 ||
+        strcasecmp(noleading, "avc")  == 0 || strcasecmp(noleading, "x264") == 0) {
+        return YETTY_YCAT_TYPE_VIDEO;
     }
     if (strcasecmp(noleading, "txt") == 0) {
         return YETTY_YCAT_TYPE_TEXT;
@@ -193,19 +208,57 @@ static enum yetty_ycat_type detect_via_libmagic(const uint8_t *bytes, size_t len
  * Combined
  *===========================================================================*/
 
+/* H.264 Annex-B content sniff: at least one 00 00 (00) 01 prefix in the
+ * first 64 bytes followed by a NAL type in {7=SPS, 8=PPS, 5=IDR}. We
+ * scan up to 64 bytes — typical SPS/PPS NALs are well under that. */
+static int looks_like_h264_annex_b(const uint8_t *bytes, size_t len)
+{
+    if (!bytes || len < 5u) {
+        return 0;
+    }
+    size_t scan = len < 64u ? len : 64u;
+    for (size_t i = 0u; i + 4u < scan; i++) {
+        const uint8_t *p = bytes + i;
+        size_t nal_off = 0u;
+        if (p[0] == 0u && p[1] == 0u && p[2] == 0u && p[3] == 1u) {
+            nal_off = 4u;
+        } else if (p[0] == 0u && p[1] == 0u && p[2] == 1u) {
+            nal_off = 3u;
+        } else {
+            continue;
+        }
+        if (i + nal_off >= scan) {
+            return 0;
+        }
+        uint8_t nal_type = bytes[i + nal_off] & 0x1fu;
+        if (nal_type == 7u || nal_type == 8u || nal_type == 5u) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const char *path)
 {
     /* Extension first on types libmagic generalises away (markdown,
 	 * mermaid, and most source files → text/plain). */
     enum yetty_ycat_type by_ext = yetty_ycat_type_from_extension(path_extension(path));
     if (by_ext == YETTY_YCAT_TYPE_MARKDOWN || by_ext == YETTY_YCAT_TYPE_PDF ||
-        by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID) {
+        by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID ||
+        by_ext == YETTY_YCAT_TYPE_VIDEO) {
         return by_ext;
     }
 
     enum yetty_ycat_type by_magic = detect_via_libmagic(bytes, len);
     if (by_magic != YETTY_YCAT_TYPE_UNKNOWN && by_magic != YETTY_YCAT_TYPE_TEXT) {
         return by_magic;
+    }
+
+    /* H.264 Annex-B sniff — runs whenever libmagic gave us text/plain
+     * or unknown. The 00 00 (00) 01 prefix is rare in plain text, so
+     * false positives are vanishingly unlikely. */
+    if (looks_like_h264_annex_b(bytes, len)) {
+        return YETTY_YCAT_TYPE_VIDEO;
     }
 
 #ifdef YETTY_YCAT_HAS_DIAGRAM

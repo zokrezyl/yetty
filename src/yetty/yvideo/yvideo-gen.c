@@ -138,62 +138,82 @@ static void yvideo_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
     strncpy(rs->uniforms[5].name, "video_h", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[5].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[5].u32 = 0;
-    strncpy(rs->uniforms[6].name, "fps", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[6].type = YETTY_YRENDER_UNIFORM_F32;
+    strncpy(rs->uniforms[6].name, "chroma_w", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[6].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[6].u32 = 0;
-    strncpy(rs->uniforms[7].name, "color_matrix", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[7].name, "chroma_h", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[7].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[7].u32 = 0;
-    strncpy(rs->uniforms[8].name, "flags", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[8].type = YETTY_YRENDER_UNIFORM_U32;
+    strncpy(rs->uniforms[8].name, "fps", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[8].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[8].u32 = 0;
-    /* v2 audio uniforms — see yvideo.yaml. */
-    strncpy(rs->uniforms[9].name, "audio_codec", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[9].name, "color_matrix", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[9].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[9].u32 = 0;
-    strncpy(rs->uniforms[10].name, "audio_sample_rate", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[10].name, "flags", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[10].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[10].u32 = 0;
-    strncpy(rs->uniforms[11].name, "audio_channels", YETTY_YRENDER_NAME_MAX - 1);
+    /* v2 audio uniforms — see yvideo.yaml. */
+    strncpy(rs->uniforms[11].name, "audio_codec", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[11].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[11].u32 = 0;
-    strncpy(rs->uniforms[12].name, "visual_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[12].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[12].f32 = 1.0f;
-    strncpy(rs->uniforms[13].name, "visual_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[13].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[13].f32 = 0.0f;
-    strncpy(rs->uniforms[14].name, "visual_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[12].name, "audio_sample_rate", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[12].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[12].u32 = 0;
+    strncpy(rs->uniforms[13].name, "audio_channels", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[13].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[13].u32 = 0;
+    strncpy(rs->uniforms[14].name, "visual_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[14].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[14].f32 = 0.0f;
-    strncpy(rs->uniforms[15].name, "cell_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[14].f32 = 1.0f;
+    strncpy(rs->uniforms[15].name, "visual_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[15].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[15].f32 = 1.0f;
-    strncpy(rs->uniforms[16].name, "cell_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[15].f32 = 0.0f;
+    strncpy(rs->uniforms[16].name, "visual_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[16].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[16].f32 = 0.0f;
-    strncpy(rs->uniforms[17].name, "cell_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[17].name, "cell_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[17].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[17].f32 = 0.0f;
-    strncpy(rs->uniforms[18].name, "viewport_w", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[17].f32 = 1.0f;
+    strncpy(rs->uniforms[18].name, "cell_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[18].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[18].f32 = 0.0f;
-    strncpy(rs->uniforms[19].name, "viewport_h", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[19].name, "cell_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[19].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[19].f32 = 0.0f;
-    strncpy(rs->uniforms[20].name, "frame_region", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[20].type = YETTY_YRENDER_UNIFORM_VEC4;
-    rs->uniforms[20].vec4[0] = 0.0f;
-    rs->uniforms[20].vec4[1] = 0.0f;
-    rs->uniforms[20].vec4[2] = 1.0f;
-    rs->uniforms[20].vec4[3] = 1.0f;
-    rs->uniform_count = 21;
+    strncpy(rs->uniforms[20].name, "viewport_w", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[20].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[20].f32 = 0.0f;
+    strncpy(rs->uniforms[21].name, "viewport_h", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[21].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[21].f32 = 0.0f;
+    /* Per-texture atlas region uniforms — one vec4(u0,v0,u1,v1) each.
+     * Order matches the textures: array below: y_plane, u_plane, v_plane. */
+    strncpy(rs->uniforms[22].name, "y_plane_region", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[22].type = YETTY_YRENDER_UNIFORM_VEC4;
+    rs->uniforms[22].vec4[0] = 0.0f;
+    rs->uniforms[22].vec4[1] = 0.0f;
+    rs->uniforms[22].vec4[2] = 1.0f;
+    rs->uniforms[22].vec4[3] = 1.0f;
+    strncpy(rs->uniforms[23].name, "u_plane_region", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[23].type = YETTY_YRENDER_UNIFORM_VEC4;
+    rs->uniforms[23].vec4[0] = 0.0f;
+    rs->uniforms[23].vec4[1] = 0.0f;
+    rs->uniforms[23].vec4[2] = 1.0f;
+    rs->uniforms[23].vec4[3] = 1.0f;
+    strncpy(rs->uniforms[24].name, "v_plane_region", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[24].type = YETTY_YRENDER_UNIFORM_VEC4;
+    rs->uniforms[24].vec4[0] = 0.0f;
+    rs->uniforms[24].vec4[1] = 0.0f;
+    rs->uniforms[24].vec4[2] = 1.0f;
+    rs->uniforms[24].vec4[3] = 1.0f;
+    rs->uniform_count = 25;
 
     // Setup storage buffers — nal_stream and audio_stream. The shader
     // doesn't read either today (decode happens host-side in
     // yvideo-hooks.c); they're bound as a side-effect of the wire-format
-    // generator pattern. #198 item 1 tracks adding a `host_only` flag
-    // that elides the GPU binding.
+    // generator pattern. The `host_only` flag in ydraw-gen that would
+    // elide the GPU binding is still pending.
     rs->buffer_count = 2;
     strncpy(rs->buffers[0].name, "buffer", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(rs->buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
@@ -202,15 +222,34 @@ static void yvideo_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
     strncpy(rs->buffers[1].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     rs->buffers[1].readonly = 1;
 
-    /* Texture: frame (format=rgba8, sampler=linear) */
-    strncpy(rs->textures[0].name, "frame", YETTY_YRENDER_NAME_MAX - 1);
+    /* Three R8 plane textures — y_plane (full-res), u_plane and
+     * v_plane (chroma 4:2:0 half-res). Each carries its own atlas
+     * region uniform; the shader does the YUV→RGB matrix. Width/height
+     * placeholders (1×1) are overwritten per-instance from the wire
+     * video_w / video_h / chroma_w / chroma_h values before
+     * binder->submit so atlas packing sees real dimensions. */
+    strncpy(rs->textures[0].name, "y_plane", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(rs->textures[0].wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
-    rs->textures[0].format = WGPUTextureFormat_RGBA8Unorm;
+    rs->textures[0].format = WGPUTextureFormat_R8Unorm;
     rs->textures[0].sampler_filter = 1;
-    rs->textures[0].width = 1;   /* placeholder for pipeline compile; overwritten per-instance */
+    rs->textures[0].width = 1;
     rs->textures[0].height = 1;
     rs->textures[0].data = NULL;
-    rs->texture_count = 1;
+    strncpy(rs->textures[1].name, "u_plane", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->textures[1].wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
+    rs->textures[1].format = WGPUTextureFormat_R8Unorm;
+    rs->textures[1].sampler_filter = 1;
+    rs->textures[1].width = 1;
+    rs->textures[1].height = 1;
+    rs->textures[1].data = NULL;
+    strncpy(rs->textures[2].name, "v_plane", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->textures[2].wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
+    rs->textures[2].format = WGPUTextureFormat_R8Unorm;
+    rs->textures[2].sampler_filter = 1;
+    rs->textures[2].width = 1;
+    rs->textures[2].height = 1;
+    rs->textures[2].data = NULL;
+    rs->texture_count = 3;
 }
 
 //=============================================================================
@@ -237,33 +276,35 @@ yvideo_instance_render(struct yetty_ydraw_figure_instance *self,
     const uint32_t *data = (const uint32_t *)self->buffer_data;
     const uint32_t *payload = data + 2;  // skip type_id and payload_size
 
-    // Update uniforms from wire format (12 wire uniforms — v2 layout).
+    // Update uniforms from wire format (14 wire uniforms — v2 layout).
     rs->uniforms[0].f32 = *(float *)&payload[0];
     rs->uniforms[1].f32 = *(float *)&payload[1];
     rs->uniforms[2].f32 = *(float *)&payload[2];
     rs->uniforms[3].f32 = *(float *)&payload[3];
-    rs->uniforms[4].u32 = payload[4];
-    rs->uniforms[5].u32 = payload[5];
-    rs->uniforms[6].f32 = *(float *)&payload[6];
-    rs->uniforms[7].u32 = payload[7];
-    rs->uniforms[8].u32 = payload[8];
-    rs->uniforms[9].u32  = payload[9];   /* audio_codec */
-    rs->uniforms[10].u32 = payload[10];  /* audio_sample_rate */
-    rs->uniforms[11].u32 = payload[11];  /* audio_channels */
+    rs->uniforms[4].u32  = payload[4];   /* video_w */
+    rs->uniforms[5].u32  = payload[5];   /* video_h */
+    rs->uniforms[6].u32  = payload[6];   /* chroma_w */
+    rs->uniforms[7].u32  = payload[7];   /* chroma_h */
+    rs->uniforms[8].f32  = *(float *)&payload[8];   /* fps */
+    rs->uniforms[9].u32  = payload[9];   /* color_matrix */
+    rs->uniforms[10].u32 = payload[10];  /* flags */
+    rs->uniforms[11].u32 = payload[11];  /* audio_codec */
+    rs->uniforms[12].u32 = payload[12];  /* audio_sample_rate */
+    rs->uniforms[13].u32 = payload[13];  /* audio_channels */
 
     // Pull current zoom state from the factory into this instance's RS.
-    rs->uniforms[12].f32 =
+    rs->uniforms[14].f32 =
         factory->visual_zoom_scale > 0.0f ? factory->visual_zoom_scale : 1.0f;
-    rs->uniforms[13].f32 = factory->visual_zoom_off_x;
-    rs->uniforms[14].f32 = factory->visual_zoom_off_y;
-    rs->uniforms[15].f32 =
+    rs->uniforms[15].f32 = factory->visual_zoom_off_x;
+    rs->uniforms[16].f32 = factory->visual_zoom_off_y;
+    rs->uniforms[17].f32 =
         factory->cell_zoom_scale > 0.0f ? factory->cell_zoom_scale : 1.0f;
-    rs->uniforms[16].f32 = factory->cell_zoom_off_x;
-    rs->uniforms[17].f32 = factory->cell_zoom_off_y;
+    rs->uniforms[18].f32 = factory->cell_zoom_off_x;
+    rs->uniforms[19].f32 = factory->cell_zoom_off_y;
 
     // Visual-zoom viewport — read from the target every frame.
-    rs->uniforms[18].f32 = target->viewport.w;
-    rs->uniforms[19].f32 = target->viewport.h;
+    rs->uniforms[20].f32 = target->viewport.w;
+    rs->uniforms[21].f32 = target->viewport.h;
 
     // Override bounds_x / bounds_y with the caller-provided screen position
     // (wire bounds are the pre-scroll origin; x,y are the post-scroll pane
@@ -271,11 +312,11 @@ yvideo_instance_render(struct yetty_ydraw_figure_instance *self,
     rs->uniforms[0].f32 = x;
     rs->uniforms[1].f32 = y;
 
-    // Wire layout: 12 uniforms, then 2 buffer length fields, then both
+    // Wire layout: 14 uniforms, then 2 buffer length fields, then both
     // buffer payloads in declaration order (nal_stream then audio_stream).
-    size_t nal_words   = payload[12];
-    size_t audio_words = payload[13];
-    const uint32_t *nal_payload   = payload + 14;
+    size_t nal_words   = payload[14];
+    size_t audio_words = payload[15];
+    const uint32_t *nal_payload   = payload + 16;
     const uint32_t *audio_payload = nal_payload + nal_words;
 
     rs->buffers[0].data = (uint8_t *)nal_payload;
@@ -448,14 +489,14 @@ yvideo_create_instance(struct yetty_ydraw_concrete_factory *self,
      * buffers (if any) point into the wire bytes; textures whose
      * pixels_buffer was diverted have their data + dimensions populated
      * here BEFORE binder->submit so the first finalize sees real
-     * dimensions and atlas-packs accordingly. v2 wire layout: 12
+     * dimensions and atlas-packs accordingly. v2 wire layout: 14
      * uniform words, 2 buffer length fields, then payloads in order. */
     {
         const uint32_t *data = (const uint32_t *)instance->buffer_data;
         const uint32_t *payload = data + 2;
-        size_t nal_words   = payload[12];
-        size_t audio_words = payload[13];
-        const uint32_t *nal_payload   = payload + 14;
+        size_t nal_words   = payload[14];
+        size_t audio_words = payload[15];
+        const uint32_t *nal_payload   = payload + 16;
         const uint32_t *audio_payload = nal_payload + nal_words;
         instance->resource_set->buffers[0].data = (uint8_t *)nal_payload;
         instance->resource_set->buffers[0].size = nal_words * sizeof(uint32_t);

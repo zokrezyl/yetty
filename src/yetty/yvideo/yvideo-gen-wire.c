@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define YETTY_YVIDEO_UNIFORM_WORDS  12u
+#define YETTY_YVIDEO_UNIFORM_WORDS  14u
 #define YETTY_YVIDEO_BUFFER_LEN_FIELDS 2u
 
 size_t yetty_yvideo_uniforms_serialized_size(

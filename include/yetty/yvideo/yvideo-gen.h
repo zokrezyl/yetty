@@ -16,7 +16,9 @@ struct yetty_ydraw_concrete_factory;
 
 #define YETTY_YVIDEO_TYPE_ID 0x80000006u
 
-// Uniforms struct (goes to GPU uniform buffer)
+// Uniforms struct (goes to GPU uniform buffer). Field order must match
+// yvideo.yaml `uniforms:` 1:1 — yvideo-gen-wire.c serialises the struct
+// as raw u32 words.
 struct yetty_yvideo_uniforms {
     float bounds_x;
     float bounds_y;
@@ -24,6 +26,8 @@ struct yetty_yvideo_uniforms {
     float bounds_h;
     uint32_t video_w;
     uint32_t video_h;
+    uint32_t chroma_w;             /* = video_w / 2 for YUV 4:2:0 */
+    uint32_t chroma_h;             /* = video_h / 2 for YUV 4:2:0 */
     float fps;
     uint32_t color_matrix;
     uint32_t flags;

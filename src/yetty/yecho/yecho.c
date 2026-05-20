@@ -26,6 +26,10 @@
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yplot/yplot.h>
+#ifdef YETTY_YECHO_HAS_YVIDEO
+#include <yetty/yvideo/yvideo.h>
+#include <yetty/yvideo/yvideo-gen.h>
+#endif
 
 #include <ctype.h>
 #include <stdarg.h>
@@ -1060,12 +1064,154 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
     return YETTY_OK_VOID();
 }
 
+#ifdef YETTY_YECHO_HAS_YVIDEO
+/* yvideo block: emit a yvideo complex primitive into the ydraw buffer.
+ *
+ * Syntax:
+ *   {video; src=path.h264; w=W; h=H; fps=F; loop=0|1: }
+ *
+ * Required: `src=PATH` (raw H.264 Annex-B file, plus implicit dims
+ * since we don't ship an SPS parser yet). w/h default to 640×360 if
+ * omitted — same fallback as ycat's video handler. */
+static struct yetty_ycore_void_result render_yvideo_block(struct render_state *rs,
+                                                          const struct yetty_yecho_span *span)
+{
+    const char *src = NULL;
+    uint32_t video_w = 0u;
+    uint32_t video_h = 0u;
+    float fps = 30.0f;
+    uint32_t flags = YETTY_YVIDEO_FLAG_LOOP | YETTY_YVIDEO_FLAG_AUTOPLAY;
+    for (size_t i = 0; i < span->attr_count; i++) {
+        const char *k = span->attrs[i].key;
+        const char *v = span->attrs[i].value;
+        if (strcmp(k, "src") == 0 && v) {
+            src = v;
+        } else if (strcmp(k, "w") == 0 && v) {
+            video_w = (uint32_t)strtoul(v, NULL, 10);
+        } else if (strcmp(k, "h") == 0 && v) {
+            video_h = (uint32_t)strtoul(v, NULL, 10);
+        } else if (strcmp(k, "fps") == 0 && v) {
+            fps = strtof(v, NULL);
+        } else if (strcmp(k, "loop") == 0 && v) {
+            if (strtol(v, NULL, 10) == 0) flags &= ~YETTY_YVIDEO_FLAG_LOOP;
+        } else if (strcmp(k, "autoplay") == 0 && v) {
+            if (strtol(v, NULL, 10) == 0) flags &= ~YETTY_YVIDEO_FLAG_AUTOPLAY;
+        }
+    }
+    if (!src || !*src) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "video block: missing required src= attr");
+    }
+    if (video_w == 0u || video_h == 0u) {
+        video_w = 640u;
+        video_h = 360u;
+    }
+    video_w &= ~1u;
+    video_h &= ~1u;
+
+    FILE *f = fopen(src, "rb");
+    if (!f) {
+        return YETTY_ERR(yetty_ycore_void, "video block: cannot open src file");
+    }
+    if (fseek(f, 0L, SEEK_END) != 0) {
+        fclose(f);
+        return YETTY_ERR(yetty_ycore_void, "video block: fseek failed");
+    }
+    long sz = ftell(f);
+    rewind(f);
+    if (sz <= 0L) {
+        fclose(f);
+        return YETTY_ERR(yetty_ycore_void, "video block: empty src file");
+    }
+    uint8_t *bytes = malloc((size_t)sz);
+    if (!bytes) {
+        fclose(f);
+        return YETTY_ERR(yetty_ycore_void, "video block: bytes alloc failed");
+    }
+    if (fread(bytes, 1, (size_t)sz, f) != (size_t)sz) {
+        free(bytes);
+        fclose(f);
+        return YETTY_ERR(yetty_ycore_void, "video block: short read");
+    }
+    fclose(f);
+
+    /* Build the prim directly via the wire serializer, position it at
+     * (cursor_x, cursor_y), and add_prim into rs->buf. This is the
+     * inline-block path — same shape yplot_block uses. */
+    size_t nal_words = ((size_t)sz + 3u) / 4u;
+    uint32_t *nal_buf = NULL;
+    if (nal_words > 0u) {
+        nal_buf = calloc(nal_words, sizeof(uint32_t));
+        if (!nal_buf) {
+            free(bytes);
+            return YETTY_ERR(yetty_ycore_void, "video block: nal-pack alloc failed");
+        }
+        memcpy(nal_buf, bytes, (size_t)sz);
+    }
+    free(bytes);
+
+    struct yetty_yvideo_uniforms u = {
+        .bounds_x = rs->cursor_x,
+        .bounds_y = rs->cursor_y,
+        .bounds_w = (float)video_w,
+        .bounds_h = (float)video_h,
+        .video_w = video_w,
+        .video_h = video_h,
+        .chroma_w = video_w / 2u,
+        .chroma_h = video_h / 2u,
+        .fps = fps,
+        .color_matrix = 1u,
+        .flags = flags,
+    };
+    struct yetty_yvideo_buffers bufs = {
+        .nal_stream = nal_buf,
+        .nal_stream_len = nal_words,
+    };
+    size_t required = yetty_yvideo_uniforms_serialized_size(&u, &bufs);
+    uint8_t *prim = malloc(required);
+    if (!prim) {
+        free(nal_buf);
+        return YETTY_ERR(yetty_ycore_void, "video block: prim alloc failed");
+    }
+    struct yetty_ycore_size_result sr =
+        yetty_yvideo_uniforms_serialize(&u, &bufs, prim, required);
+    free(nal_buf);
+    if (YETTY_IS_ERR(sr)) {
+        free(prim);
+        return YETTY_ERR(yetty_ycore_void, "video block: serialize failed", sr);
+    }
+    struct yetty_ydraw_id_result idr =
+        yetty_ydraw_draw_list_add_prim(rs->buf, prim, required);
+    free(prim);
+    if (YETTY_IS_ERR(idr)) {
+        return YETTY_ERR(yetty_ycore_void, "video block: add_prim failed", idr);
+    }
+
+    /* Advance the cursor past the video. Block element: next text run
+     * starts on a fresh line below it. */
+    if (rs->cursor_x + (float)video_w > rs->scene_max_x) {
+        rs->scene_max_x = rs->cursor_x + (float)video_w;
+    }
+    rs->cursor_x = 2.0f; /* YECHO_X_ORIGIN — matches plot block */
+    rs->cursor_y += (float)video_h + rs->line_height;
+    if (rs->cursor_y > rs->scene_max_y) {
+        rs->scene_max_y = rs->cursor_y;
+    }
+    return YETTY_OK_VOID();
+}
+#endif /* YETTY_YECHO_HAS_YVIDEO */
+
 static struct yetty_ycore_void_result render_block(struct render_state *rs,
                                                    const struct yetty_yecho_span *span)
 {
     if (span_has_attr(span, "plot")) {
         return render_yplot_block(rs, span);
     }
+#ifdef YETTY_YECHO_HAS_YVIDEO
+    if (span_has_attr(span, "video")) {
+        return render_yvideo_block(rs, span);
+    }
+#endif
 
     uint32_t color = rs->default_fg;
     uint32_t bg = 0;

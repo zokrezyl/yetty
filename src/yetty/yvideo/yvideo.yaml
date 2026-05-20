@@ -50,13 +50,24 @@ uniforms:
     type: f32
     default: 240.0
 
-  # Source video dimensions (from the H.264 SPS).
+  # Source video dimensions (from the H.264 SPS). The chroma planes
+  # are video_w/2 × video_h/2 for YUV 4:2:0 — receiver computes them
+  # from these and writes the chroma_w/chroma_h uniforms before any
+  # render. Carried on the wire too so the binder/atlas can pack the
+  # right-sized U/V slices at finalize time (the binder reads from
+  # the uniform-buffer view of the same fields).
   - name: video_w
     type: u32
     default: 0
   - name: video_h
     type: u32
     default: 0
+  - name: chroma_w
+    type: u32
+    default: 0           # = video_w / 2 for 4:2:0
+  - name: chroma_h
+    type: u32
+    default: 0           # = video_h / 2 for 4:2:0
 
   # Frames per second of the source stream — drives playback timing.
   - name: fps
@@ -107,13 +118,27 @@ buffers:
   - name: audio_stream
     element_type: u32
 
-# Decoded RGBA8 frame texture, width=video_w, height=video_h. Backed by
-# a factory-allocated buffer that the decoder writes into each render
-# tick. No pixels_buffer divert — texture data comes from the openh264
-# output, not from the wire.
+# Three-plane YUV 4:2:0 (per #198 item 1 — in-shader convert):
+#   Y plane: full-res R8     (video_w × video_h)
+#   U plane: half-res R8     (chroma_w × chroma_h)
+#   V plane: half-res R8     (chroma_w × chroma_h)
+# All backed by factory-allocated buffers; the decoder pump writes the
+# openh264 plane pointers verbatim (no convert). The shader samples all
+# three at their per-plane atlas regions and runs the BT.601 / BT.709
+# matrix multiply driven by the color_matrix uniform.
 textures:
-  - name: frame
-    format: rgba8
+  - name: y_plane
+    format: r8
     sampler: linear
     width_uniform: video_w
     height_uniform: video_h
+  - name: u_plane
+    format: r8
+    sampler: linear
+    width_uniform: chroma_w
+    height_uniform: chroma_h
+  - name: v_plane
+    format: r8
+    sampler: linear
+    width_uniform: chroma_w
+    height_uniform: chroma_h

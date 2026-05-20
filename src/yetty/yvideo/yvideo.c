@@ -46,6 +46,9 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     u.bounds_h = (config->bounds_h > 0.0f) ? config->bounds_h : (float)config->video_h;
     u.video_w = config->video_w;
     u.video_h = config->video_h;
+    /* YUV 4:2:0 chroma — half-res in both dimensions. */
+    u.chroma_w = config->video_w / 2u;
+    u.chroma_h = config->video_h / 2u;
     u.fps = (config->fps > 0.0f) ? config->fps : 30.0f;
     u.color_matrix = config->color_matrix;
     u.flags = (config->flags != 0u) ? config->flags

@@ -37,6 +37,33 @@ extern "C" {
 #define YETTY_YVIDEO_FLAG_LOOP     0x1u
 #define YETTY_YVIDEO_FLAG_AUTOPLAY 0x2u
 
+/*
+ * CMD_UPDATE typed-payload op codes (v2, #198 item 3).
+ *
+ * Every CMD_UPDATE envelope sent to a yvideo figure carries a 4-byte
+ * header — [u8 op][u8 reserved[3]] — followed by op-specific body
+ * bytes. v1's bare-NAL-bytes payload was retired with v2; senders must
+ * use the typed shape.
+ *
+ *   APPEND_NAL    body = raw H.264 Annex-B bytes
+ *   APPEND_AUDIO  body = length-prefixed audio packets
+ *                        (same layout as the audio_stream buffer)
+ *   SEEK_PTS_MS   body = u32 pts_ms — decoders reset, rings cleared,
+ *                        sender should follow with bytes starting from
+ *                        an IDR at PTS=pts_ms
+ *   SET_PLAYING   body = u8 playing (1=play, 0=pause)
+ *   SET_SPEED     body = f32 speed (1.0 = normal; video clock only —
+ *                        audio still plays at 1×)
+ *   SET_LOOP      body = u8 loop (toggles the LOOP flag bit; actual
+ *                        EOS-driven looping is future work)
+ */
+#define YETTY_YVIDEO_UPDATE_OP_APPEND_NAL    0x00u
+#define YETTY_YVIDEO_UPDATE_OP_APPEND_AUDIO  0x01u
+#define YETTY_YVIDEO_UPDATE_OP_SEEK_PTS_MS   0x02u
+#define YETTY_YVIDEO_UPDATE_OP_SET_PLAYING   0x03u
+#define YETTY_YVIDEO_UPDATE_OP_SET_SPEED     0x04u
+#define YETTY_YVIDEO_UPDATE_OP_SET_LOOP      0x05u
+
 /* Geometry + playback config. NULL fields fall back to defaults. */
 struct yetty_yvideo_render_config {
     float bounds_x;     /* 0    — overridden by canvas at render time */

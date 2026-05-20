@@ -35,6 +35,12 @@ extern struct yetty_ydraw_draw_list_result yetty_ycat_handler_mermaid(
     const struct yetty_ycat_config *config);
 #endif
 
+#ifdef YETTY_YCAT_HAS_YVIDEO
+extern struct yetty_ydraw_draw_list_result yetty_ycat_handler_video(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
+#endif
+
 /* Streaming handlers (multi-envelope: PDF page-per-envelope, markdown
  * screen-height-tile-per-envelope). */
 extern struct yetty_ycore_void_result yetty_ycat_handler_markdown_streaming(
@@ -58,7 +64,7 @@ static const struct {
     {YETTY_YCAT_TYPE_UNKNOWN, "unknown"},   {YETTY_YCAT_TYPE_TEXT, "text"},
     {YETTY_YCAT_TYPE_MARKDOWN, "markdown"}, {YETTY_YCAT_TYPE_PDF, "pdf"},
     {YETTY_YCAT_TYPE_IMAGE, "image"},       {YETTY_YCAT_TYPE_SVG, "svg"},
-    {YETTY_YCAT_TYPE_MERMAID, "mermaid"},
+    {YETTY_YCAT_TYPE_MERMAID, "mermaid"},   {YETTY_YCAT_TYPE_VIDEO, "video"},
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type)
@@ -104,6 +110,9 @@ static void init_handlers(void)
     handlers[YETTY_YCAT_TYPE_SVG] = yetty_ycat_handler_svg;
 #ifdef YETTY_YCAT_HAS_DIAGRAM
     handlers[YETTY_YCAT_TYPE_MERMAID] = yetty_ycat_handler_mermaid;
+#endif
+#ifdef YETTY_YCAT_HAS_YVIDEO
+    handlers[YETTY_YCAT_TYPE_VIDEO] = yetty_ycat_handler_video;
 #endif
     handlers_streaming[YETTY_YCAT_TYPE_MARKDOWN] = yetty_ycat_handler_markdown_streaming;
     handlers_streaming[YETTY_YCAT_TYPE_PDF] = yetty_ycat_handler_pdf_streaming;

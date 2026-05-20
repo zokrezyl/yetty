@@ -28,6 +28,14 @@ fn yvideo_get_video_h() -> u32 {
     return uniforms.yvideo_video_h;
 }
 
+fn yvideo_get_chroma_w() -> u32 {
+    return uniforms.yvideo_chroma_w;
+}
+
+fn yvideo_get_chroma_h() -> u32 {
+    return uniforms.yvideo_chroma_h;
+}
+
 fn yvideo_get_fps() -> f32 {
     return uniforms.yvideo_fps;
 }
@@ -55,4 +63,3 @@ fn yvideo_get_audio_channels() -> u32 {
 
 // Buffer data is in storage_buffer (binding 1+)
 // Access via: storage_buffer[offset]
-

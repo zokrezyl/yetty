@@ -50,6 +50,19 @@
  *   --audio-sample-rate=Hz   48000 (default; Opus accepts 8/12/16/24/48 kHz)
  *   --audio-channels=N       1 or 2 (default 2)
  *   --audio-chunk=N          bytes per audio update envelope (default 16384)
+ *
+ *   Playback-control ops (#198 item 3) — all sent as typed CMD_UPDATE
+ *   envelopes alongside the byte stream:
+ *
+ *   --seek-ms=N              emit SEEK_PTS_MS right after the INIT
+ *                            envelope (test the seek+resume path)
+ *   --speed=F                emit SET_SPEED right after INIT
+ *   --start-paused           emit SET_PLAYING(0) right after INIT
+ *   --pause-after-ms=N       emit SET_PLAYING(0) N wall-clock ms into
+ *                            the stream-pump loop
+ *   --resume-after-ms=M      emit SET_PLAYING(1) M ms into the loop
+ *                            (must be > --pause-after-ms to be useful)
+ *   --loop-off               emit SET_LOOP(0) right after INIT
  */
 
 #include <yetty/ycore/result.h>
@@ -82,9 +95,8 @@ static void sleep_ms(int ms)
 }
 #endif
 
-/* Wire-format op codes — must match yvideo-hooks.c. */
-#define YVIDEO_UPDATE_OP_APPEND_NAL    0x00u
-#define YVIDEO_UPDATE_OP_APPEND_AUDIO  0x01u
+/* Op codes come from the public yvideo.h header — same symbols on both
+ * sides of the wire. */
 
 /* Audio codec id — must match yetty_yacodec_codec in
  * include/yetty/yacodec/types.h. v1 demo only ships Opus. */
@@ -108,6 +120,14 @@ struct opts {
     uint32_t audio_sample_rate;
     uint32_t audio_channels;
     int audio_chunk;
+
+    /* Playback-control flags (#198 item 3). */
+    int      seek_ms;             /* -1 = no seek */
+    float    speed;               /* 0.0 = no SET_SPEED emit */
+    int      start_paused;
+    int      pause_after_ms;      /* -1 = no mid-stream pause */
+    int      resume_after_ms;     /* -1 = no mid-stream resume */
+    int      loop_off;
 };
 
 static void usage(const char *prog)
@@ -118,7 +138,10 @@ static void usage(const char *prog)
             "         --period-ms=M --no-sleep --stream-id=I\n"
             "         --no-loop --no-autoplay\n"
             "         --audio-file=PATH --audio-sample-rate=Hz\n"
-            "         --audio-channels=N --audio-chunk=N\n",
+            "         --audio-channels=N --audio-chunk=N\n"
+            "         --seek-ms=N --speed=F --start-paused\n"
+            "         --pause-after-ms=N --resume-after-ms=M\n"
+            "         --loop-off\n",
             prog);
 }
 
@@ -157,6 +180,10 @@ static int parse_args(int argc, char **argv, struct opts *o)
     o->audio_sample_rate = 48000u;
     o->audio_channels = 2u;
     o->audio_chunk = 16384;
+    o->seek_ms = -1;
+    o->speed = 0.0f;
+    o->pause_after_ms = -1;
+    o->resume_after_ms = -1;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -190,6 +217,18 @@ static int parse_args(int argc, char **argv, struct opts *o)
             if (parse_u32(a + 17, &o->audio_channels) < 0) return -1;
         } else if (strncmp(a, "--audio-chunk=", 14) == 0) {
             if (parse_int(a + 14, &o->audio_chunk) < 0) return -1;
+        } else if (strncmp(a, "--seek-ms=", 10) == 0) {
+            if (parse_int(a + 10, &o->seek_ms) < 0) return -1;
+        } else if (strncmp(a, "--speed=", 8) == 0) {
+            if (parse_float(a + 8, &o->speed) < 0) return -1;
+        } else if (strcmp(a, "--start-paused") == 0) {
+            o->start_paused = 1;
+        } else if (strncmp(a, "--pause-after-ms=", 17) == 0) {
+            if (parse_int(a + 17, &o->pause_after_ms) < 0) return -1;
+        } else if (strncmp(a, "--resume-after-ms=", 18) == 0) {
+            if (parse_int(a + 18, &o->resume_after_ms) < 0) return -1;
+        } else if (strcmp(a, "--loop-off") == 0) {
+            o->loop_off = 1;
         } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
             usage(argv[0]);
             return 1;
@@ -264,6 +303,8 @@ static struct yetty_ycore_void_result emit_create_envelope(
         .bounds_h = o->bounds_h > 0.0f ? o->bounds_h : (float)o->video_h,
         .video_w = o->video_w,
         .video_h = o->video_h,
+        .chroma_w = o->video_w / 2u,
+        .chroma_h = o->video_h / 2u,
         .fps = o->fps,
         .color_matrix = 1u, /* BT.709 */
         .flags = flags,
@@ -451,11 +492,54 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    /* Post-INIT control envelopes (#198 item 3). Order matters: SPEED
+     * and LOOP are state-only and can go first; SEEK comes next so the
+     * stream-loop bytes that follow land in the post-seek decoder
+     * state; SET_PLAYING(0) is last so the figure is fully configured
+     * before being paused. Each ctrl envelope is its own CMD_UPDATE. */
+#define CTRL_EMIT(op, body, len, desc)                                                              \
+    do {                                                                                            \
+        struct yetty_ycore_void_result _ur =                                                        \
+            emit_update_envelope(o.stream_id, (op), (body), (len));                                 \
+        if (YETTY_IS_ERR(_ur)) {                                                                    \
+            fprintf(stderr, "video-source: " desc " failed: %s\n", _ur.error.msg);                  \
+            yetty_ycore_error_destroy(_ur.error);                                                   \
+            free(chunk); free(achunk);                                                              \
+            fclose(f); if (af) fclose(af);                                                          \
+            return 1;                                                                               \
+        }                                                                                           \
+    } while (0)
+
+    if (o.speed > 0.0f) {
+        uint8_t body[sizeof(float)];
+        memcpy(body, &o.speed, sizeof(float));
+        CTRL_EMIT(YETTY_YVIDEO_UPDATE_OP_SET_SPEED, body, sizeof(body), "SET_SPEED");
+    }
+    if (o.loop_off) {
+        uint8_t body[1] = {0u};
+        CTRL_EMIT(YETTY_YVIDEO_UPDATE_OP_SET_LOOP, body, sizeof(body), "SET_LOOP");
+    }
+    if (o.seek_ms >= 0) {
+        uint32_t pts = (uint32_t)o.seek_ms;
+        uint8_t body[sizeof(uint32_t)];
+        memcpy(body, &pts, sizeof(pts));
+        CTRL_EMIT(YETTY_YVIDEO_UPDATE_OP_SEEK_PTS_MS, body, sizeof(body), "SEEK_PTS_MS");
+    }
+    if (o.start_paused) {
+        uint8_t body[1] = {0u};
+        CTRL_EMIT(YETTY_YVIDEO_UPDATE_OP_SET_PLAYING, body, sizeof(body), "SET_PLAYING(0)");
+    }
+
     /* Stream the rest. Each tick: try to emit a NAL update + (if audio)
      * an audio update. Either side can hit EOF independently; we keep
-     * going until BOTH are done. */
+     * going until BOTH are done. While streaming, watch the elapsed
+     * wall-clock and fire one-shot pause/resume control envelopes when
+     * the configured thresholds are crossed. */
     int nal_eof = 0;
     int audio_eof = (af == NULL);
+    int pause_emitted  = 0;
+    int resume_emitted = 0;
+    int elapsed_ms = 0;
     for (;;) {
         if (!nal_eof) {
             size_t n = fread(chunk, 1, (size_t)o.chunk, f);
@@ -463,7 +547,7 @@ int main(int argc, char **argv)
                 nal_eof = 1;
             } else {
                 struct yetty_ycore_void_result ur = emit_update_envelope(
-                    o.stream_id, YVIDEO_UPDATE_OP_APPEND_NAL, chunk, n);
+                    o.stream_id, YETTY_YVIDEO_UPDATE_OP_APPEND_NAL, chunk, n);
                 if (YETTY_IS_ERR(ur)) {
                     fprintf(stderr, "video-source: NAL update failed: %s\n", ur.error.msg);
                     yetty_ycore_error_destroy(ur.error);
@@ -479,7 +563,7 @@ int main(int argc, char **argv)
                 audio_eof = 1;
             } else {
                 struct yetty_ycore_void_result ur = emit_update_envelope(
-                    o.stream_id, YVIDEO_UPDATE_OP_APPEND_AUDIO, achunk, n);
+                    o.stream_id, YETTY_YVIDEO_UPDATE_OP_APPEND_AUDIO, achunk, n);
                 if (YETTY_IS_ERR(ur)) {
                     fprintf(stderr, "video-source: audio update failed: %s\n", ur.error.msg);
                     yetty_ycore_error_destroy(ur.error);
@@ -490,8 +574,24 @@ int main(int argc, char **argv)
             }
         }
         if (nal_eof && audio_eof) break;
+
+        /* Mid-stream control: fire pause / resume when the elapsed
+         * wall-clock crosses the configured ms threshold. */
+        if (!pause_emitted && o.pause_after_ms >= 0 && elapsed_ms >= o.pause_after_ms) {
+            uint8_t body[1] = {0u};
+            CTRL_EMIT(YETTY_YVIDEO_UPDATE_OP_SET_PLAYING, body, sizeof(body), "SET_PLAYING(0)");
+            pause_emitted = 1;
+        }
+        if (!resume_emitted && o.resume_after_ms >= 0 && elapsed_ms >= o.resume_after_ms) {
+            uint8_t body[1] = {1u};
+            CTRL_EMIT(YETTY_YVIDEO_UPDATE_OP_SET_PLAYING, body, sizeof(body), "SET_PLAYING(1)");
+            resume_emitted = 1;
+        }
+
         if (!o.no_sleep) sleep_ms(o.period_ms);
+        elapsed_ms += o.period_ms;
     }
+#undef CTRL_EMIT
 
     free(chunk); free(achunk);
     fclose(f); if (af) fclose(af);
