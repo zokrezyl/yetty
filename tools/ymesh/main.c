@@ -23,22 +23,19 @@
  *     (bin) so the receiving ydraw-layer replaces instead of stacks.
  */
 
-#include <errno.h>
 #include <math.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
-#include <termios.h>
-#include <unistd.h>
 
 #include <yetty/ymesh/ymesh.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yplatform/tty.h>
 #include <yetty/yterm/osc-codes.h>
 
 /*=============================================================================
@@ -73,35 +70,6 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
     };
     return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
                          &meta, sizeof(meta), bytes, blen);
-}
-
-/*=============================================================================
- * TTY raw mode — saved + restored around the interactive loop.
- *===========================================================================*/
-
-static struct termios saved_tty;
-static int tty_active = 0;
-
-static void tty_restore(void)
-{
-    if (tty_active) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &saved_tty);
-        tty_active = 0;
-    }
-}
-
-static int tty_raw(void)
-{
-    if (!isatty(STDIN_FILENO)) return 0;
-    if (tcgetattr(STDIN_FILENO, &saved_tty) < 0) return -1;
-    struct termios raw = saved_tty;
-    cfmakeraw(&raw);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0) return -1;
-    tty_active = 1;
-    atexit(tty_restore);
-    return 0;
 }
 
 static volatile sig_atomic_t signal_quit = 0;
@@ -377,13 +345,17 @@ static int interactive_loop(struct ev_state *st)
 
     signal(SIGINT,  on_signal);
     signal(SIGTERM, on_signal);
+#ifdef SIGHUP
     signal(SIGHUP,  on_signal);
+#endif
 
-    if (tty_raw() < 0) {
+    yetty_yplatform_tty_binary_io();
+    if (yetty_yplatform_tty_set_raw() < 0) {
         fprintf(stderr, "ymesh: cannot put stdin into raw mode\n");
         yetty_yface_destroy(yface);
         return 1;
     }
+    atexit(yetty_yplatform_tty_restore);
 
     term_input_subscribe(YETTY_YMGUI_TERM_SUB_MOUSE_CLICK |
                          YETTY_YMGUI_TERM_SUB_MOUSE_MOVE  |
@@ -395,20 +367,18 @@ static int interactive_loop(struct ev_state *st)
 
     char buf[4096];
     while (!signal_quit && !st->want_quit) {
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(STDIN_FILENO, &rfds);
-        struct timeval tv = { .tv_sec = 0, .tv_usec = 100000 };  /* 100ms */
-        int rdy = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
+        int rdy = yetty_yplatform_tty_stdin_wait(100);
         if (rdy < 0) {
-            if (errno == EINTR) continue;
             break;
         }
         st->dirty = 0;
-        if (FD_ISSET(STDIN_FILENO, &rfds)) {
-            ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-            if (n > 0) (void)yetty_yface_feed_bytes(yface, buf, (size_t)n);
-            else if (n == 0 && !isatty(STDIN_FILENO)) break;
+        if (rdy > 0) {
+            int n = yetty_yplatform_tty_stdin_read(buf, sizeof(buf));
+            if (n > 0) {
+                (void)yetty_yface_feed_bytes(yface, buf, (size_t)n);
+            } else if (n == 0 && !yetty_yplatform_tty_stdin_is_tty()) {
+                break;
+            }
         }
         if (st->dirty)
             (void)redraw_and_push(st);
@@ -509,7 +479,7 @@ static void usage(FILE *out, const char *prog)
 
 int main(int argc, char **argv)
 {
-    int interactive = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
+    int interactive = yetty_yplatform_tty_stdin_is_tty() && yetty_yplatform_tty_stdout_is_tty();
     float bounds_w = 600.0f;
     float bounds_h = 600.0f;
     const char *path = NULL;

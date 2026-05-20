@@ -1223,7 +1223,7 @@ static int resolve_cmd_diff(const uint8_t *wire_body, size_t wire_remaining,
         const uint8_t *idx;
     } *inlines = NULL;
     if (inline_count) {
-        inlines = (typeof(inlines))calloc(inline_count, sizeof(*inlines));
+        inlines = calloc(inline_count, sizeof(*inlines));
         if (!inlines) {
             return -1;
         }

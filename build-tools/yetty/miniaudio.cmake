@@ -4,8 +4,11 @@
 # JACK / sndio on Linux, AAudio / OpenSL ES on Android, WebAudio on
 # Emscripten — backend picked at compile time inside the header.
 #
-# Consumes a prebuilt noarch tarball (just miniaudio.h) from the 3rdparty
-# release published by build-3rdparty-miniaudio.yml.
+# Consumes a prebuilt per-platform tarball (just miniaudio.h + LICENSE)
+# from the 3rdparty release published by build-3rdparty-miniaudio.yml.
+# The header is identical across platforms but the file is still named
+# `miniaudio-<platform>-<version>.tar.gz` so the cmake fetcher resolves
+# it uniformly with every other 3rdparty lib.
 #
 # Header-only: exactly one TU in the consumer must `#define
 # MINIAUDIO_IMPLEMENTATION` before `#include <miniaudio.h>`. Yetty does
@@ -40,16 +43,34 @@ if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     find_package(Threads REQUIRED)
     target_link_libraries(miniaudio INTERFACE Threads::Threads m ${CMAKE_DL_LIBS})
 elseif(APPLE)
+    # macOS ships AudioUnit as a separate top-level framework; on
+    # iOS/tvOS/watchOS the AudioUnit headers live inside AudioToolbox
+    # and the standalone framework doesn't exist (linker errors with
+    # "framework 'AudioUnit' not found"). Skip it on the embedded
+    # Apple OSes; AudioToolbox alone is enough for miniaudio's
+    # CoreAudio backend there.
     find_library(_MA_COREAUDIO_FRAMEWORK CoreAudio REQUIRED)
-    find_library(_MA_AUDIOUNIT_FRAMEWORK AudioUnit REQUIRED)
     find_library(_MA_AUDIOTOOLBOX_FRAMEWORK AudioToolbox REQUIRED)
     find_library(_MA_COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
     target_link_libraries(miniaudio INTERFACE
         ${_MA_COREAUDIO_FRAMEWORK}
-        ${_MA_AUDIOUNIT_FRAMEWORK}
         ${_MA_AUDIOTOOLBOX_FRAMEWORK}
         ${_MA_COREFOUNDATION_FRAMEWORK}
     )
+    if(YETTY_IOS OR YETTY_TVOS
+       OR CMAKE_SYSTEM_NAME STREQUAL "iOS"
+       OR CMAKE_SYSTEM_NAME STREQUAL "tvOS"
+       OR CMAKE_SYSTEM_NAME STREQUAL "watchOS")
+        # miniaudio's CoreAudio backend on iOS/tvOS/watchOS uses
+        # AVAudioSession (categories, interruption / route-change
+        # notifications). AVFoundation is the framework that exports
+        # those Objective-C symbols.
+        find_library(_MA_AVFOUNDATION_FRAMEWORK AVFoundation REQUIRED)
+        target_link_libraries(miniaudio INTERFACE ${_MA_AVFOUNDATION_FRAMEWORK})
+    else()
+        find_library(_MA_AUDIOUNIT_FRAMEWORK AudioUnit REQUIRED)
+        target_link_libraries(miniaudio INTERFACE ${_MA_AUDIOUNIT_FRAMEWORK})
+    endif()
 elseif(ANDROID)
     target_link_libraries(miniaudio INTERFACE OpenSLES log)
 endif()

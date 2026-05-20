@@ -66,6 +66,10 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libwebp-dev \
     zlib1g-dev \
+    # brotli CLI — used by webasm-stage-assets.cmake to pre-compress
+    # web-shipped assets. The Makefile's WEBASM_PATH only searches
+    # /usr/local/bin:/usr/bin:/bin, so brotli must be on the system PATH.
+    brotli \
     # Build systems
     meson \
     nasm \

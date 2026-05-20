@@ -36,12 +36,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <unistd.h>
 #include <errno.h>
 
 #include <yetty/ycore/util.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yplatform/tty.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/font-prim.h>
@@ -50,7 +50,11 @@
 
 static FILE *g_out = NULL; /* set in main() — defaults to stderr */
 
-static void out(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void out(const char *fmt, ...)
+#ifndef _MSC_VER
+    __attribute__((format(printf, 1, 2)))
+#endif
+    ;
 static void out(const char *fmt, ...)
 {
     va_list ap;
@@ -582,38 +586,35 @@ static int run_interpose(void)
     struct splitter s;
     splitter_init(&s, y);
 
+    /* OSC byte streams are binary — keep CR/LF unchanged on Windows. */
+    yetty_yplatform_tty_binary_io();
+    /* Unbuffered passthrough so the downstream consumer sees bytes as
+     * they arrive (matches the original raw write(STDOUT_FILENO, …)). */
+    setvbuf(stdout, NULL, _IONBF, 0);
+
     char chunk[1u << 13];
     int rc = 0;
     for (;;) {
-        ssize_t r = read(STDIN_FILENO, chunk, sizeof(chunk));
-        if (r == 0) break;
-        if (r < 0) {
-            if (errno == EINTR) continue;
-            fprintf(stderr, "interpose: stdin read: %s\n", strerror(errno));
-            rc = 1;
+        size_t r = fread(chunk, 1, sizeof(chunk), stdin);
+        if (r == 0) {
+            if (ferror(stdin) && !feof(stdin)) {
+                fprintf(stderr, "interpose: stdin read failed\n");
+                rc = 1;
+            }
             break;
         }
         /* Pass-through to stdout first so the downstream consumer sees
          * the real bytes even if our decode-side has trouble. */
-        const char *wp = chunk;
-        size_t left = (size_t)r;
-        while (left > 0) {
-            ssize_t w = write(STDOUT_FILENO, wp, left);
-            if (w < 0) {
-                if (errno == EINTR) continue;
-                fprintf(stderr, "interpose: stdout write: %s\n", strerror(errno));
-                rc = 1;
-                left = 0;
-                break;
-            }
-            wp += w;
-            left -= (size_t)w;
+        if (fwrite(chunk, 1, r, stdout) != r) {
+            fprintf(stderr, "interpose: stdout write failed\n");
+            rc = 1;
+            break;
         }
         /* Feed the splitter — best-effort; failure to grow only loses
          * decoded output, not the passthrough. */
-        if (splitter_grow(&s, s.len + (size_t)r) == 0) {
-            memcpy(s.buf + s.len, chunk, (size_t)r);
-            s.len += (size_t)r;
+        if (splitter_grow(&s, s.len + r) == 0) {
+            memcpy(s.buf + s.len, chunk, r);
+            s.len += r;
             splitter_consume(&s);
             fflush(g_out);
         }

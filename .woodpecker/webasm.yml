@@ -1,17 +1,22 @@
-# DISABLED: see linux.yml.
 labels:
   platform: linux/amd64
   backend: docker
 
 when:
   - event: [push, manual, pull_request, tag]
-    evaluate: 'false'
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: true
 
 steps:
   build:
     image: yetty-build:latest
     commands:
-      - git lfs install
-      - git lfs fetch
-      - git lfs checkout
+      # plugin-git makes a shallow, tagless clone; shared.cmake's
+      # `git describe --tags HEAD` needs a yetty-X.Y.Z tag reachable
+      # from HEAD — repair both depth and tag refs (same as linux.yml).
+      - git fetch --unshallow --tags 2>/dev/null || git fetch --tags
       - make build-webasm-ytrace-release

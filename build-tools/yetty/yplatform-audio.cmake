@@ -27,9 +27,29 @@ add_library(yetty_yplatform_audio STATIC
 target_include_directories(yetty_yplatform_audio PUBLIC
     ${YETTY_ROOT}/include
 )
+
+# Apple's miniaudio backend (CoreAudio / AudioUnit) reaches into
+# Foundation/AVFoundation via Objective-C runtime types. Compile this
+# TU as Objective-C on Apple so <Foundation/Foundation.h> resolves; on
+# every other platform the implicit C language is correct.
+if(APPLE)
+    enable_language(OBJC)
+    set_source_files_properties(
+        ${YETTY_ROOT}/src/yetty/yplatform/audio/default.c
+        PROPERTIES LANGUAGE OBJC)
+endif()
 # miniaudio is PRIVATE — its symbols are owned by default.c only; the
 # public include set must not leak the implementation header.
 target_link_libraries(yetty_yplatform_audio
     PUBLIC  yetty_ycore
     PRIVATE miniaudio
 )
+
+# default.c uses <stdatomic.h>. MSVC defines __STDC_NO_ATOMICS__ unless
+# /std:clatest (or /std:c11) and /experimental:c11atomics are passed —
+# same dance as the yetty exe target.
+if(MSVC)
+    target_compile_options(yetty_yplatform_audio PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:/std:clatest>
+        $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>)
+endif()

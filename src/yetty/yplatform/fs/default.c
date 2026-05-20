@@ -1,6 +1,7 @@
 /* fs.c - POSIX filesystem helpers */
 
 #include <yetty/yplatform/fs.h>
+#include <dirent.h>
 #include <libgen.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -76,4 +77,57 @@ char *yetty_yplatform_path_realpath(const char *path)
 {
     if (!path) return NULL;
     return realpath(path, NULL);  /* glibc/musl/BSD: NULL second arg → malloc */
+}
+
+struct yetty_yplatform_dir {
+    DIR *handle;
+    char *root;  /* kept for stat() fallback when d_type is DT_UNKNOWN */
+};
+
+struct yetty_yplatform_dir *yetty_yplatform_dir_open(const char *path)
+{
+    if (!path) return NULL;
+    DIR *h = opendir(path);
+    if (!h) return NULL;
+    struct yetty_yplatform_dir *d = calloc(1, sizeof(*d));
+    if (!d) { closedir(h); return NULL; }
+    d->handle = h;
+    size_t len = strlen(path);
+    d->root = malloc(len + 1);
+    if (!d->root) { closedir(h); free(d); return NULL; }
+    memcpy(d->root, path, len + 1);
+    return d;
+}
+
+int yetty_yplatform_dir_next(struct yetty_yplatform_dir *d,
+                             struct yetty_yplatform_dir_entry *out)
+{
+    if (!d || !out) return 0;
+    struct dirent *e = readdir(d->handle);
+    if (!e) return 0;
+    out->name = e->d_name;
+    int is_dir = 0;
+#ifdef DT_DIR
+    if (e->d_type != DT_UNKNOWN) {
+        is_dir = (e->d_type == DT_DIR) ? 1 : 0;
+    } else
+#endif
+    {
+        char p[4096];
+        int n = snprintf(p, sizeof(p), "%s/%s", d->root, e->d_name);
+        if (n > 0 && (size_t)n < sizeof(p)) {
+            struct stat st;
+            if (stat(p, &st) == 0 && S_ISDIR(st.st_mode)) is_dir = 1;
+        }
+    }
+    out->is_dir = is_dir;
+    return 1;
+}
+
+void yetty_yplatform_dir_close(struct yetty_yplatform_dir *d)
+{
+    if (!d) return;
+    if (d->handle) closedir(d->handle);
+    free(d->root);
+    free(d);
 }

@@ -39,6 +39,38 @@ YETTY_YRESULT_DECLARE(yetty_yplatform_tty_redirected, int);
 struct yetty_yplatform_tty_redirected_result
 yetty_yplatform_tty_redirect_stderr_if_shared_with_stdout(const char *basename);
 
+#include <stddef.h>
+
+/* Switch stdin/stdout to binary mode. On Windows this prevents CRT
+ * CRLF translation that would corrupt binary OSC streams. No-op on
+ * POSIX. Call once at startup before any stdio. */
+void yetty_yplatform_tty_binary_io(void);
+
+/* Non-zero if stdin / stdout refers to a terminal. */
+int yetty_yplatform_tty_stdin_is_tty(void);
+int yetty_yplatform_tty_stdout_is_tty(void);
+
+/* Switch stdin (if a tty) to raw mode — no line buffering, no echo,
+ * no Ctrl-C handling, byte-at-a-time delivery. Caller should also
+ * arrange to restore on exit (atexit / signal handler). Returns 0 on
+ * success or when stdin is not a tty; -1 on failure. */
+int yetty_yplatform_tty_set_raw(void);
+
+/* Restore stdin's pre-set_raw mode. Safe to call when set_raw was
+ * never invoked. */
+void yetty_yplatform_tty_restore(void);
+
+/* Wait up to `timeout_ms` for stdin data. Returns:
+ *    1 — data ready (call stdin_read next)
+ *    0 — timeout
+ *   -1 — error */
+int yetty_yplatform_tty_stdin_wait(unsigned timeout_ms);
+
+/* Read up to `buf_size` bytes from stdin. Caller should have called
+ * stdin_wait first. Returns bytes read, 0 on EOF, -1 on error.
+ * Transient interruptions (EINTR) are retried internally. */
+int yetty_yplatform_tty_stdin_read(void *buf, size_t buf_size);
+
 #ifdef __cplusplus
 }
 #endif

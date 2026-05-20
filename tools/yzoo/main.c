@@ -28,17 +28,16 @@
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/yterm/osc-codes.h>
 
-#include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
-#include <termios.h>
 #include <time.h>
-#include <unistd.h>
+
+#include <yetty/yplatform/compat.h> /* clock_gettime shim on MSVC */
+#include <yetty/yplatform/tty.h>
 
 /*=============================================================================
  * Output side — emit OSC envelopes via yface_emit.
@@ -106,57 +105,30 @@ static struct yetty_ycore_void_result term_input_subscribe(uint32_t flags)
 }
 
 /*=============================================================================
- * TTY raw mode + alternate screen buffer.
+ * Alternate screen buffer (raw mode is handled by the platform tty API).
  *===========================================================================*/
 
-static struct termios saved_tty;
-static int tty_active = 0;
 static int alt_screen_active = 0;
 
 static void alt_screen_leave(void)
 {
 	if (alt_screen_active) {
 		static const char seq[] = "\033[?1049l";
-		ssize_t w = write(STDOUT_FILENO, seq, sizeof(seq) - 1);
-		(void)w;
+		fwrite(seq, 1, sizeof(seq) - 1, stdout);
+		fflush(stdout);
 		alt_screen_active = 0;
 	}
 }
 
 static void alt_screen_enter(void)
 {
-	if (!isatty(STDOUT_FILENO))
+	if (!yetty_yplatform_tty_stdout_is_tty())
 		return;
 	static const char seq[] = "\033[?1049h";
-	ssize_t w = write(STDOUT_FILENO, seq, sizeof(seq) - 1);
-	(void)w;
+	fwrite(seq, 1, sizeof(seq) - 1, stdout);
+	fflush(stdout);
 	alt_screen_active = 1;
 	atexit(alt_screen_leave);
-}
-
-static void tty_restore(void)
-{
-	if (tty_active) {
-		tcsetattr(STDIN_FILENO, TCSANOW, &saved_tty);
-		tty_active = 0;
-	}
-}
-
-static int tty_raw(void)
-{
-	if (!isatty(STDIN_FILENO))
-		return 0;
-	if (tcgetattr(STDIN_FILENO, &saved_tty) < 0)
-		return -1;
-	struct termios raw = saved_tty;
-	cfmakeraw(&raw);
-	raw.c_cc[VMIN] = 0;
-	raw.c_cc[VTIME] = 0;
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0)
-		return -1;
-	tty_active = 1;
-	atexit(tty_restore);
-	return 0;
 }
 
 static volatile sig_atomic_t signal_quit = 0;
@@ -448,15 +420,19 @@ int main(int argc, char **argv)
 
 	signal(SIGINT,  on_signal);
 	signal(SIGTERM, on_signal);
+#ifdef SIGHUP
 	signal(SIGHUP,  on_signal);
+#endif
 
-	if (tty_raw() < 0) {
+	yetty_yplatform_tty_binary_io();
+	if (yetty_yplatform_tty_set_raw() < 0) {
 		fprintf(stderr, "yzoo: cannot put stdin into raw mode\n");
 		yetty_yface_destroy(yface);
 		yetty_ydraw_draw_list_destroy(app.buf);
 		yetty_yzoo_destroy(app.zoo);
 		return 1;
 	}
+	atexit(yetty_yplatform_tty_restore);
 
 	alt_screen_enter();
 
@@ -480,24 +456,18 @@ int main(int argc, char **argv)
 
 	char ibuf[4096];
 	while (!signal_quit && !app.want_quit) {
-		fd_set rfds;
-		FD_ZERO(&rfds);
-		FD_SET(STDIN_FILENO, &rfds);
-		struct timeval tv = {.tv_sec = 0, .tv_usec = 33000};
-		int rdy = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
+		int rdy = yetty_yplatform_tty_stdin_wait(33);
 		if (rdy < 0) {
-			if (errno == EINTR)
-				continue;
 			break;
 		}
-		if (rdy > 0 && FD_ISSET(STDIN_FILENO, &rfds)) {
-			ssize_t n = read(STDIN_FILENO, ibuf, sizeof(ibuf));
+		if (rdy > 0) {
+			int n = yetty_yplatform_tty_stdin_read(ibuf, sizeof(ibuf));
 			if (n > 0) {
 				struct yetty_ycore_void_result fr =
 					yetty_yface_feed_bytes(yface, ibuf, (size_t)n);
 				if (YETTY_IS_ERR(fr))
 					yetty_ycore_error_destroy(fr.error);
-			} else if (n == 0 && !isatty(STDIN_FILENO)) {
+			} else if (n == 0 && !yetty_yplatform_tty_stdin_is_tty()) {
 				break;
 			}
 		}

@@ -116,6 +116,7 @@ target_link_libraries(yetty PRIVATE
     dwrite
     ws2_32
     yetty_yplatform_core
+    yetty_yplatform_wayland_move
 )
 
 # Copy runtime assets to build directory

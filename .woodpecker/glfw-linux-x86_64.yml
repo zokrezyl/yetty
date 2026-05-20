@@ -10,10 +10,15 @@ labels:
   platform: linux/amd64
   backend: docker
 
+# Disabled — glfw prebuilt is published via .github/workflows; the
+# woodpecker workflow stays parked. Re-enable by uncommenting below.
 when:
-  - event: manual
-  - event: tag
-    ref: refs/tags/lib-glfw-*
+  - evaluate: 'false'
+
+#when:
+#  - event: manual
+#  - event: tag
+#    ref: refs/tags/lib-glfw-*
 
 clone:
   git:

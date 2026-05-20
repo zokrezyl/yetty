@@ -34,6 +34,7 @@
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/yplatform/fs.h>
 #include <yetty/ypdf/ypdf.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -44,7 +45,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 /*=============================================================================
  * pdfio glue (file + buffer entry points).
@@ -630,26 +630,31 @@ struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(
     if (!data || len == 0) {
         return NULL;
     }
-    char tmpl[] = "/tmp/yetty-ygui-ypdf-XXXXXX";
-    int fd = mkstemp(tmpl);
-    if (fd < 0) {
+    /* pdfio only opens files by path, so the buffer goes through a temp
+     * file. Original code used mkstemp + POSIX unlink-while-open; that
+     * doesn't work on Windows, so use ANSI stdio + delete after the pdf
+     * has been read and closed (build_widget_from_pdf calls
+     * pdfioFileClose before returning). */
+    char path[L_tmpnam];
+    if (!tmpnam(path)) {
         return NULL;
     }
-    size_t written = 0;
-    while (written < len) {
-        ssize_t n = write(fd, data + written, len - written);
-        if (n <= 0) {
-            close(fd);
-            unlink(tmpl);
-            return NULL;
-        }
-        written += (size_t)n;
+    FILE *fp = fopen(path, "wb");
+    if (!fp) {
+        return NULL;
     }
-    close(fd);
+    if (fwrite(data, 1, len, fp) != len) {
+        fclose(fp);
+        yetty_yplatform_unlink(path);
+        return NULL;
+    }
+    fclose(fp);
 
-    pdfio_file_t *pdf = pdfioFileOpen(tmpl, NULL, NULL, pdfio_silent, NULL);
-    unlink(tmpl);
-    return build_widget_from_pdf(engine, id, x, y, w, h, pdf);
+    pdfio_file_t *pdf = pdfioFileOpen(path, NULL, NULL, pdfio_silent, NULL);
+    struct yetty_ygui_widget *widget =
+        build_widget_from_pdf(engine, id, x, y, w, h, pdf);
+    yetty_yplatform_unlink(path);
+    return widget;
 }
 
 /*=============================================================================

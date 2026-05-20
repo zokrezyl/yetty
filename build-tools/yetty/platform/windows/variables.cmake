@@ -8,11 +8,6 @@ set(YETTY_ENABLE_LIB_QEMU    ON CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_YMSDF_GEN OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_MSDFGEN       OFF CACHE BOOL "" FORCE)
 
-# Tool drivers using POSIX termios/select — not ported to Windows.
-set(YETTY_ENABLE_TOOL_YMESH OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_TOOL_YMAZE OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_TOOL_YZOO  OFF CACHE BOOL "" FORCE)
-
 # Features/libs whose sources use POSIX APIs not yet ported to Windows.
 set(YETTY_ENABLE_FEATURE_SSH       OFF CACHE BOOL "" FORCE)  # <netdb.h>, <pthread.h>, <poll.h>
 set(YETTY_ENABLE_LIB_LIBSSH2       OFF CACHE BOOL "" FORCE)  # yssh wrapper not ported

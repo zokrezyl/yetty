@@ -1,6 +1,8 @@
 /* fs.c - Windows filesystem helpers */
 
 #include <yetty/yplatform/fs.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <direct.h>
 #include <io.h>
 #include <stdlib.h>
@@ -93,4 +95,52 @@ char *yetty_yplatform_path_realpath(const char *path)
     if (!path) return NULL;
     /* _fullpath() with NULL buffer + 0 length malloc()s the result. */
     return _fullpath(NULL, path, 0);
+}
+
+struct yetty_yplatform_dir {
+    HANDLE find;
+    WIN32_FIND_DATAA fd;
+    int started;  /* 0 = FindFirstFile result not yet returned */
+};
+
+struct yetty_yplatform_dir *yetty_yplatform_dir_open(const char *path)
+{
+    if (!path) return NULL;
+    size_t len = strlen(path);
+    char *pattern = (char *)malloc(len + 3);  /* path + optional sep + '*' + NUL */
+    if (!pattern) return NULL;
+    memcpy(pattern, path, len);
+    /* Accept both separator styles in input; always emit one before '*'. */
+    if (len == 0 || (path[len - 1] != '/' && path[len - 1] != '\\')) {
+        pattern[len++] = '\\';
+    }
+    pattern[len++] = '*';
+    pattern[len] = '\0';
+    struct yetty_yplatform_dir *d = (struct yetty_yplatform_dir *)calloc(1, sizeof(*d));
+    if (!d) { free(pattern); return NULL; }
+    d->find = FindFirstFileA(pattern, &d->fd);
+    free(pattern);
+    if (d->find == INVALID_HANDLE_VALUE) { free(d); return NULL; }
+    return d;
+}
+
+int yetty_yplatform_dir_next(struct yetty_yplatform_dir *d,
+                             struct yetty_yplatform_dir_entry *out)
+{
+    if (!d || !out || d->find == INVALID_HANDLE_VALUE) return 0;
+    if (d->started) {
+        if (!FindNextFileA(d->find, &d->fd)) return 0;
+    } else {
+        d->started = 1;
+    }
+    out->name = d->fd.cFileName;
+    out->is_dir = (d->fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? 1 : 0;
+    return 1;
+}
+
+void yetty_yplatform_dir_close(struct yetty_yplatform_dir *d)
+{
+    if (!d) return;
+    if (d->find != INVALID_HANDLE_VALUE) FindClose(d->find);
+    free(d);
 }
