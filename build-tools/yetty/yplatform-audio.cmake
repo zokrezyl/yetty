@@ -33,6 +33,7 @@ target_include_directories(yetty_yplatform_audio PUBLIC
 # TU as Objective-C on Apple so <Foundation/Foundation.h> resolves; on
 # every other platform the implicit C language is correct.
 if(APPLE)
+    enable_language(OBJC)
     set_source_files_properties(
         ${YETTY_ROOT}/src/yetty/yplatform/audio/default.c
         PROPERTIES LANGUAGE OBJC)
