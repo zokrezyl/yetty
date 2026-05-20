@@ -1228,8 +1228,13 @@ static void reposition_about_dialog(struct app *app)
     if (!app || !app->about_popup) {
         return;
     }
-    float ew = 0.0f, eh = 0.0f;
-    yetty_ygui_engine_get_size(app->engine, &ew, &eh);
+    struct pixel_size_result sr = yetty_ygui_engine_get_size(app->engine);
+    if (YETTY_IS_ERR(sr)) {
+        yetty_ycore_error_destroy(sr.error);
+        return;
+    }
+    float ew = sr.value.width;
+    float eh = sr.value.height;
     if (ew <= 0.0f || eh <= 0.0f) {
         return;
     }
@@ -1409,10 +1414,27 @@ static void ygreeter_tab_viewport(struct yetty_ygui_engine *engine,
     if (YETTY_IS_ERR(lr)) {
         yetty_ycore_error_destroy(lr.error);
     }
+    /* Use the tab panel's CONTENT box (layout_box minus padding) — that's
+     * the rectangle the rich widget will actually occupy after flex layout
+     * runs. Querying the layout box instead would include the panel's
+     * padding band, the producer would emit primitives sized to that
+     * larger rect, and they would spill out past the rich widget's edges. */
     float w = 0.0f, h = 0.0f;
-    yetty_ygui_widget_get_layout_box(tab, NULL, NULL, &w, &h);
+    struct rectangle_result br = yetty_ygui_widget_get_content_box(tab);
+    if (YETTY_IS_OK(br)) {
+        w = br.value.max.x - br.value.min.x;
+        h = br.value.max.y - br.value.min.y;
+    } else {
+        yetty_ycore_error_destroy(br.error);
+    }
     if (w < 1.0f || h < 1.0f) {
-        yetty_ygui_engine_get_size(engine, &w, &h);
+        struct pixel_size_result sr = yetty_ygui_engine_get_size(engine);
+        if (YETTY_IS_OK(sr)) {
+            w = sr.value.width;
+            h = sr.value.height;
+        } else {
+            yetty_ycore_error_destroy(sr.error);
+        }
     }
     if (w < 1.0f) w = 800.0f;
     if (h < 1.0f) h = 600.0f;
@@ -2001,9 +2023,12 @@ static void on_demo_open_menu(struct yetty_ygui_widget *btn, void *u)
     }
     /* Anchor under the trigger button so the menu is visible next to
      * the click point. */
-    float x = 0, y = 0, w = 0, h = 0;
-    yetty_ygui_widget_get_layout_box(btn, &x, &y, &w, &h);
-    yetty_ygui_widget_popup_menu_open_at(menu, x, y + h + 4);
+    struct rectangle_result br = yetty_ygui_widget_get_layout_box(btn);
+    if (YETTY_IS_ERR(br)) {
+        yetty_ycore_error_destroy(br.error);
+        return;
+    }
+    yetty_ygui_widget_popup_menu_open_at(menu, br.value.min.x, br.value.max.y + 4);
 }
 
 /* Build one collapsing_header section + add it as a child of `parent`.

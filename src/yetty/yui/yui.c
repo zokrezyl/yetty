@@ -1864,9 +1864,12 @@ float yetty_yui_statusbar_height(const struct yetty_yui *yui)
     if (!yui || !yui->statusbar) {
         return 0.0f;
     }
-    float w = 0.0f, h = 0.0f;
-    yetty_ygui_widget_get_size(yui->statusbar, &w, &h);
-    return h > 0.0f ? h : 22.0f;
+    struct pixel_size_result sr = yetty_ygui_widget_get_size(yui->statusbar);
+    if (YETTY_IS_ERR(sr)) {
+        yetty_ycore_error_destroy(sr.error);
+        return 22.0f;
+    }
+    return sr.value.height > 0.0f ? sr.value.height : 22.0f;
 }
 
 const char *yetty_yui_get_field_text(const struct yetty_yui *yui,

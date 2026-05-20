@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 /* Forward declare libuv types */
 typedef struct uv_loop_s uv_loop_t;
@@ -395,8 +396,8 @@ void yetty_ygui_engine_stop(struct yetty_ygui_engine *engine);
 
 /* Configuration */
 void yetty_ygui_engine_set_size(struct yetty_ygui_engine *engine, float width, float height);
-void yetty_ygui_engine_get_size(const struct yetty_ygui_engine *engine, float *width,
-                                float *height);
+struct pixel_size_result yetty_ygui_engine_get_size(
+    const struct yetty_ygui_engine *engine);
 void yetty_ygui_engine_set_theme(struct yetty_ygui_engine *engine, struct yetty_ygui_theme *theme);
 
 /* Keyboard callback */
@@ -852,15 +853,25 @@ const char *yetty_ygui_widget_id(const struct yetty_ygui_widget *widget);
 ygui_widget_type_t yetty_ygui_widget_type(const struct yetty_ygui_widget *widget);
 
 void yetty_ygui_widget_set_position(struct yetty_ygui_widget *widget, float x, float y);
-void yetty_ygui_widget_get_position(const struct yetty_ygui_widget *widget, float *x, float *y);
+struct pixel_coord_result yetty_ygui_widget_get_position(
+    const struct yetty_ygui_widget *widget);
 
 void yetty_ygui_widget_set_size(struct yetty_ygui_widget *widget, float w, float h);
-void yetty_ygui_widget_get_size(const struct yetty_ygui_widget *widget, float *w, float *h);
+struct pixel_size_result yetty_ygui_widget_get_size(
+    const struct yetty_ygui_widget *widget);
 
-/* Resolved (post-layout) absolute box. Valid after engine_layout() or
- * engine_render() has run. Any of x/y/w/h may be NULL. */
-void yetty_ygui_widget_get_layout_box(const struct yetty_ygui_widget *widget, float *x, float *y,
-                                      float *w, float *h);
+/* Resolved (post-layout) absolute outer box. Valid after engine_layout() or
+ * engine_render() has run. */
+struct rectangle_result yetty_ygui_widget_get_layout_box(
+    const struct yetty_ygui_widget *widget);
+
+/* Resolved (post-layout) content area — the layout box minus padding. This
+ * is the rectangle inside which the widget's children are positioned, and
+ * therefore the right "client area" to query when sizing an embedded
+ * producer (yzoo, yjungle, ...) or any other content that must fit within
+ * a container without spilling into its padding band. */
+struct rectangle_result yetty_ygui_widget_get_content_box(
+    const struct yetty_ygui_widget *widget);
 
 void yetty_ygui_widget_set_visible(struct yetty_ygui_widget *widget, int visible);
 int yetty_ygui_widget_is_visible(const struct yetty_ygui_widget *widget);

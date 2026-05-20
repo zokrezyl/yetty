@@ -464,17 +464,14 @@ void yetty_ygui_engine_set_size(struct yetty_ygui_engine *engine, float width, f
     engine->needs_full_redraw = 1;
 }
 
-void yetty_ygui_engine_get_size(const struct yetty_ygui_engine *engine, float *width, float *height)
+struct pixel_size_result yetty_ygui_engine_get_size(
+    const struct yetty_ygui_engine *engine)
 {
     if (!engine) {
-        return;
+        return YETTY_ERR(pixel_size, "engine_get_size: NULL engine");
     }
-    if (width) {
-        *width = engine->width;
-    }
-    if (height) {
-        *height = engine->height;
-    }
+    struct yetty_ycore_pixel_size size = {engine->width, engine->height};
+    return YETTY_OK(pixel_size, size);
 }
 
 void yetty_ygui_engine_set_theme(struct yetty_ygui_engine *engine, struct yetty_ygui_theme *theme)

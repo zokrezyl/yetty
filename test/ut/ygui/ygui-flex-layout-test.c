@@ -67,6 +67,21 @@ static void run_layout(struct yetty_ygui_engine *engine)
     }
 }
 
+/* Unwrap helper — tests are run after a successful layout pass, the widget
+ * pointers are non-NULL, so a Result error here is a test-infrastructure
+ * failure. Abort loudly instead of polluting every assertion with the
+ * check. */
+static struct yetty_ycore_rectangle layout_box(const struct yetty_ygui_widget *w)
+{
+    struct rectangle_result r = yetty_ygui_widget_get_layout_box(w);
+    if (YETTY_IS_ERR(r)) {
+        fprintf(stderr, "layout_box: NULL widget\n");
+        yetty_ycore_error_destroy(r.error);
+        exit(4);
+    }
+    return r.value;
+}
+
 /* Test 1: row with three children, middle has flex_grow=1.
  *   container 0..400, padding=0, gap=10
  *   child A: authored_w=50, child B: authored_w=50 grow=1, child C: authored_w=50
@@ -92,20 +107,17 @@ static void test_row_grow(void)
 
     run_layout(e);
 
-    float ax, ay, aw, ah;
-    yetty_ygui_widget_get_layout_box(a, &ax, &ay, &aw, &ah);
-    ASSERT_NEAR("A.x", ax, 0.0f);
-    ASSERT_NEAR("A.w", aw, 50.0f);
+    struct yetty_ycore_rectangle ab = layout_box(a);
+    ASSERT_NEAR("A.x", ab.min.x, 0.0f);
+    ASSERT_NEAR("A.w", ab.max.x - ab.min.x, 50.0f);
 
-    float bx, by, bw, bh;
-    yetty_ygui_widget_get_layout_box(b, &bx, &by, &bw, &bh);
-    ASSERT_NEAR("B.x", bx, 60.0f);
-    ASSERT_NEAR("B.w", bw, 280.0f);
+    struct yetty_ycore_rectangle bb = layout_box(b);
+    ASSERT_NEAR("B.x", bb.min.x, 60.0f);
+    ASSERT_NEAR("B.w", bb.max.x - bb.min.x, 280.0f);
 
-    float cx, cy, cw, ch;
-    yetty_ygui_widget_get_layout_box(c, &cx, &cy, &cw, &ch);
-    ASSERT_NEAR("C.x", cx, 350.0f);
-    ASSERT_NEAR("C.w", cw, 50.0f);
+    struct yetty_ycore_rectangle cb = layout_box(c);
+    ASSERT_NEAR("C.x", cb.min.x, 350.0f);
+    ASSERT_NEAR("C.w", cb.max.x - cb.min.x, 50.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -129,12 +141,11 @@ static void test_column_stretch(void)
 
     run_layout(e);
 
-    float ax, ay, aw, ah;
-    yetty_ygui_widget_get_layout_box(a, &ax, &ay, &aw, &ah);
-    ASSERT_NEAR("A.x (absolute)", ax, 10.0f);
-    ASSERT_NEAR("A.y (absolute)", ay, 20.0f);
-    ASSERT_NEAR("A.w (stretched)", aw, 200.0f);
-    ASSERT_NEAR("A.h (authored)", ah, 40.0f);
+    struct yetty_ycore_rectangle ab = layout_box(a);
+    ASSERT_NEAR("A.x (absolute)", ab.min.x, 10.0f);
+    ASSERT_NEAR("A.y (absolute)", ab.min.y, 20.0f);
+    ASSERT_NEAR("A.w (stretched)", ab.max.x - ab.min.x, 200.0f);
+    ASSERT_NEAR("A.h (authored)", ab.max.y - ab.min.y, 40.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -163,16 +174,13 @@ static void test_justify_space_between(void)
 
     run_layout(e);
 
-    float ax, ay, aw, ah;
-    yetty_ygui_widget_get_layout_box(a, &ax, &ay, &aw, &ah);
-    float bx, by, bw, bh;
-    yetty_ygui_widget_get_layout_box(b, &bx, &by, &bw, &bh);
-    float cx, cy, cw, ch;
-    yetty_ygui_widget_get_layout_box(c, &cx, &cy, &cw, &ch);
+    struct yetty_ycore_rectangle ab = layout_box(a);
+    struct yetty_ycore_rectangle bb = layout_box(b);
+    struct yetty_ycore_rectangle cb = layout_box(c);
 
-    ASSERT_NEAR("A.x", ax, 0.0f);
-    ASSERT_NEAR("B.x", bx, 250.0f);
-    ASSERT_NEAR("C.x", cx, 500.0f);
+    ASSERT_NEAR("A.x", ab.min.x, 0.0f);
+    ASSERT_NEAR("B.x", bb.min.x, 250.0f);
+    ASSERT_NEAR("C.x", cb.min.x, 500.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -195,10 +203,9 @@ static void test_padding(void)
 
     run_layout(e);
 
-    float ax, ay;
-    yetty_ygui_widget_get_layout_box(a, &ax, &ay, NULL, NULL);
-    ASSERT_NEAR("A.x (padded)", ax, 20.0f);
-    ASSERT_NEAR("A.y (padded)", ay, 5.0f);
+    struct yetty_ycore_rectangle ab = layout_box(a);
+    ASSERT_NEAR("A.x (padded)", ab.min.x, 20.0f);
+    ASSERT_NEAR("A.y (padded)", ab.min.y, 5.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -215,20 +222,18 @@ static void test_manual_no_drift(void)
     struct yetty_ygui_widget *btn = yetty_ygui_engine_button(e, "btn", 37, 91, 60, 22, "btn");
 
     run_layout(e);
-    float x1, y1, w1, h1;
-    yetty_ygui_widget_get_layout_box(btn, &x1, &y1, &w1, &h1);
-    ASSERT_NEAR("btn.x first", x1, 37.0f);
-    ASSERT_NEAR("btn.y first", y1, 91.0f);
-    ASSERT_NEAR("btn.w first", w1, 60.0f);
-    ASSERT_NEAR("btn.h first", h1, 22.0f);
+    struct yetty_ycore_rectangle b1 = layout_box(btn);
+    ASSERT_NEAR("btn.x first", b1.min.x, 37.0f);
+    ASSERT_NEAR("btn.y first", b1.min.y, 91.0f);
+    ASSERT_NEAR("btn.w first", b1.max.x - b1.min.x, 60.0f);
+    ASSERT_NEAR("btn.h first", b1.max.y - b1.min.y, 22.0f);
 
     run_layout(e);
-    float x2, y2, w2, h2;
-    yetty_ygui_widget_get_layout_box(btn, &x2, &y2, &w2, &h2);
-    ASSERT_NEAR("btn.x second", x2, 37.0f);
-    ASSERT_NEAR("btn.y second", y2, 91.0f);
-    ASSERT_NEAR("btn.w second", w2, 60.0f);
-    ASSERT_NEAR("btn.h second", h2, 22.0f);
+    struct yetty_ycore_rectangle b2 = layout_box(btn);
+    ASSERT_NEAR("btn.x second", b2.min.x, 37.0f);
+    ASSERT_NEAR("btn.y second", b2.min.y, 91.0f);
+    ASSERT_NEAR("btn.w second", b2.max.x - b2.min.x, 60.0f);
+    ASSERT_NEAR("btn.h second", b2.max.y - b2.min.y, 22.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -256,17 +261,16 @@ static void test_position_absolute(void)
 
     run_layout(e);
 
-    float ax, bx, abs_x, abs_y;
-    yetty_ygui_widget_get_layout_box(a, &ax, NULL, NULL, NULL);
-    yetty_ygui_widget_get_layout_box(b, &bx, NULL, NULL, NULL);
-    yetty_ygui_widget_get_layout_box(abs_btn, &abs_x, &abs_y, NULL, NULL);
+    struct yetty_ycore_rectangle ab = layout_box(a);
+    struct yetty_ycore_rectangle bb = layout_box(b);
+    struct yetty_ycore_rectangle abs_b = layout_box(abs_btn);
 
     /* Flex children are unaffected by the absolute one. */
-    ASSERT_NEAR("A.x", ax, 0.0f);
-    ASSERT_NEAR("B.x", bx, 100.0f);
+    ASSERT_NEAR("A.x", ab.min.x, 0.0f);
+    ASSERT_NEAR("B.x", bb.min.x, 100.0f);
     /* Absolute child sits at row.content + (200, 80). */
-    ASSERT_NEAR("abs.x", abs_x, 200.0f);
-    ASSERT_NEAR("abs.y", abs_y, 80.0f);
+    ASSERT_NEAR("abs.x", abs_b.min.x, 200.0f);
+    ASSERT_NEAR("abs.y", abs_b.min.y, 80.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -286,9 +290,8 @@ static void test_basis_percent(void)
     yetty_ygui_widget_set_flex_basis_percent(a, 25.0f);
 
     run_layout(e);
-    float aw = 0;
-    yetty_ygui_widget_get_layout_box(a, NULL, NULL, &aw, NULL);
-    ASSERT_NEAR("A.w (25% of 400)", aw, 100.0f);
+    struct yetty_ycore_rectangle ab = layout_box(a);
+    ASSERT_NEAR("A.w (25% of 400)", ab.max.x - ab.min.x, 100.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -316,19 +319,17 @@ static void test_flex_wrap(void)
     yetty_ygui_widget_add_child(row, c);
 
     run_layout(e);
-    float ay = 0, by = 0, cy = 0;
-    float ax = 0, bx = 0, cx = 0;
-    yetty_ygui_widget_get_layout_box(a, &ax, &ay, NULL, NULL);
-    yetty_ygui_widget_get_layout_box(b, &bx, &by, NULL, NULL);
-    yetty_ygui_widget_get_layout_box(c, &cx, &cy, NULL, NULL);
+    struct yetty_ycore_rectangle ab = layout_box(a);
+    struct yetty_ycore_rectangle bb = layout_box(b);
+    struct yetty_ycore_rectangle cb = layout_box(c);
 
     /* A and B fit on line 1 at y=0 */
-    ASSERT_NEAR("A.y", ay, 0.0f);
-    ASSERT_NEAR("B.y", by, 0.0f);
+    ASSERT_NEAR("A.y", ab.min.y, 0.0f);
+    ASSERT_NEAR("B.y", bb.min.y, 0.0f);
     /* C wraps to line 2: y = first line cross_size = 30 */
-    ASSERT_NEAR("C.y (wrapped)", cy, 30.0f);
+    ASSERT_NEAR("C.y (wrapped)", cb.min.y, 30.0f);
     /* C is back at the start of the main axis */
-    ASSERT_NEAR("C.x", cx, 0.0f);
+    ASSERT_NEAR("C.x", cb.min.x, 0.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -360,14 +361,13 @@ static void test_css_apply(void)
     yetty_ygui_widget_apply_css(a, "flex: 0 0 80px;"); /* 80px basis, no grow */
 
     run_layout(e);
-    float ax = 0, bx = 0, aw = 0;
-    yetty_ygui_widget_get_layout_box(a, &ax, NULL, &aw, NULL);
-    yetty_ygui_widget_get_layout_box(b, &bx, NULL, NULL, NULL);
+    struct yetty_ycore_rectangle ab = layout_box(a);
+    struct yetty_ycore_rectangle bb = layout_box(b);
 
     /* total fixed = 80 + 50 + 10 gap = 140. center => leading = (400-140)/2 = 130. */
-    ASSERT_NEAR("A.x (center)", ax, 130.0f);
-    ASSERT_NEAR("A.w (basis 80px)", aw, 80.0f);
-    ASSERT_NEAR("B.x", bx, 130.0f + 80.0f + 10.0f);
+    ASSERT_NEAR("A.x (center)", ab.min.x, 130.0f);
+    ASSERT_NEAR("A.w (basis 80px)", ab.max.x - ab.min.x, 80.0f);
+    ASSERT_NEAR("B.x", bb.min.x, 130.0f + 80.0f + 10.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -386,10 +386,9 @@ static void test_width_percent_manual(void)
     yetty_ygui_widget_set_size_percent(c, 50.0f, 0.0f);
 
     run_layout(e);
-    float cw = 0;
-    yetty_ygui_widget_get_layout_box(c, NULL, NULL, &cw, NULL);
+    struct yetty_ycore_rectangle cb = layout_box(c);
     /* Panel content_w == 200 (no padding). 50% = 100. */
-    ASSERT_NEAR("C.w (50% of 200)", cw, 100.0f);
+    ASSERT_NEAR("C.w (50% of 200)", cb.max.x - cb.min.x, 100.0f);
 
     yetty_ygui_engine_destroy(e);
 }
@@ -433,13 +432,11 @@ static void test_tree_node_basic(void)
 
     /* The leaf's absolute layout_x should be at least node.layout_x +
      * default indent (20px). y should be below the header (>= 24). */
-    float leaf_x, leaf_y;
-    yetty_ygui_widget_get_layout_box(leaf, &leaf_x, &leaf_y, NULL, NULL);
-    float node_x, node_y;
-    yetty_ygui_widget_get_layout_box(node, &node_x, &node_y, NULL, NULL);
+    struct yetty_ycore_rectangle leaf_b = layout_box(leaf);
+    struct yetty_ycore_rectangle node_b = layout_box(node);
 
-    float dx = leaf_x - node_x;
-    float dy = leaf_y - node_y;
+    float dx = leaf_b.min.x - node_b.min.x;
+    float dy = leaf_b.min.y - node_b.min.y;
     if (dx < 18.0f) {
         fprintf(stderr, "FAIL indent dx = %.2f, expected >= 18\n", dx);
         g_failures++;
