@@ -24,6 +24,7 @@ enum yetty_yexpr_token_type {
     YETTY_YEXPR_TOK_EQUALS,
     YETTY_YEXPR_TOK_AT,
     YETTY_YEXPR_TOK_DOT,
+    YETTY_YEXPR_TOK_DOTDOT,
     YETTY_YEXPR_TOK_SEMICOLON,
     YETTY_YEXPR_TOK_EOF,
     YETTY_YEXPR_TOK_ERROR,
@@ -202,6 +203,11 @@ static struct yetty_yexpr_token lex_next(struct yetty_yexpr_lexer *lex)
         lex_advance(lex);
         return lex_make(YETTY_YEXPR_TOK_AT, start, 1);
     case '.':
+        if (lex_peek_next(lex) == '.') {
+            lex_advance(lex);
+            lex_advance(lex);
+            return lex_make(YETTY_YEXPR_TOK_DOTDOT, start, 2);
+        }
         lex_advance(lex);
         return lex_make(YETTY_YEXPR_TOK_DOT, start, 1);
     case ';':
@@ -590,6 +596,154 @@ static struct yetty_yexpr_node *parse_bare_expr_from_ident(struct yetty_yexpr_pa
     return expr;
 }
 
+/* Parse `N[kKmM]?` into uint32. Returns 0 on success, -1 on bad input. */
+static int parse_size_with_suffix(const char *s, uint32_t *out)
+{
+    char *endp = NULL;
+    unsigned long v = strtoul(s, &endp, 10);
+    if (!endp || endp == s) {
+        return -1;
+    }
+    if (*endp == 'k' || *endp == 'K') {
+        v *= 1024u;
+        endp++;
+    } else if (*endp == 'm' || *endp == 'M') {
+        v *= 1024u * 1024u;
+        endp++;
+    }
+    if (*endp != '\0') {
+        return -1;
+    }
+    *out = (uint32_t)v;
+    return 0;
+}
+
+/* Locate (or create) a buffer decl by name. */
+static struct yetty_yexpr_plot_buffer *plot_buffer_find_or_create(
+    struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot, const char *name)
+{
+    for (uint32_t i = 0; i < plot->buffer_count; i++) {
+        if (strcmp(plot->buffers[i].name, name) == 0) {
+            return &plot->buffers[i];
+        }
+    }
+    if (plot->buffer_count >= YETTY_YEXPR_MAX_PLOT_BUFFERS) {
+        p->error = "too many buffer declarations";
+        return NULL;
+    }
+    struct yetty_yexpr_plot_buffer *b = &plot->buffers[plot->buffer_count++];
+    memset(b, 0, sizeof(*b));
+    strncpy(b->name, name, YETTY_YEXPR_MAX_NAME_LEN - 1);
+    b->name[YETTY_YEXPR_MAX_NAME_LEN - 1] = '\0';
+    return b;
+}
+
+/* Parse `A..B` after the LHS of an `=`. Both sides may be numbers or
+ * unary-minus / identifier (pi, -pi, etc.) — we resolve common constants
+ * inline. Returns 0/1 to mean failure/success. */
+static int parse_range_value(struct yetty_yexpr_parser *p, float *lo, float *hi)
+{
+    /* Reuse parse_unary to handle -pi / -1.5 / pi gracefully, then evaluate
+     * the resulting tiny AST. */
+    struct yetty_yexpr_node *lo_node = parse_unary(p);
+    if (!lo_node) {
+        return 0;
+    }
+    if (!parser_match(p, YETTY_YEXPR_TOK_DOTDOT)) {
+        p->error = "expected '..' in range";
+        return 0;
+    }
+    struct yetty_yexpr_node *hi_node = parse_unary(p);
+    if (!hi_node) {
+        return 0;
+    }
+
+    /* Evaluate constant range bounds. */
+    struct yetty_yexpr_node *bounds[2] = {lo_node, hi_node};
+    float out[2];
+    for (int i = 0; i < 2; i++) {
+        const struct yetty_yexpr_node *n = bounds[i];
+        float sign = 1.0f;
+        if (n->type == YETTY_YEXPR_UNARY_OP && n->unary.op == YETTY_YEXPR_OP_NEG) {
+            sign = -1.0f;
+            n = n->unary.operand;
+        }
+        if (n->type == YETTY_YEXPR_NUMBER) {
+            out[i] = sign * (float)n->number;
+        } else if (n->type == YETTY_YEXPR_IDENTIFIER) {
+            const char *id = n->ident;
+            if (strcmp(id, "pi") == 0 || strcmp(id, "PI") == 0) {
+                out[i] = sign * 3.14159265358979323846f;
+            } else if (strcmp(id, "tau") == 0 || strcmp(id, "TAU") == 0) {
+                out[i] = sign * 6.28318530717958647693f;
+            } else if (strcmp(id, "e") == 0 || strcmp(id, "E") == 0) {
+                out[i] = sign * 2.71828182845904523536f;
+            } else {
+                p->error = "range bound must be a numeric constant";
+                return 0;
+            }
+        } else {
+            p->error = "range bound must be a numeric constant";
+            return 0;
+        }
+    }
+    *lo = out[0];
+    *hi = out[1];
+    return 1;
+}
+
+static int parse_view_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot)
+{
+    /* '@' already consumed; current token is "view". Expect: view = X1..X2 , Y1..Y2 */
+    parser_advance(p); /* consume "view" */
+    if (!parser_match(p, YETTY_YEXPR_TOK_EQUALS)) {
+        p->error = "expected '=' after @view";
+        return -1;
+    }
+    float xlo, xhi, ylo, yhi;
+    if (!parse_range_value(p, &xlo, &xhi)) {
+        return -1;
+    }
+    if (!parser_match(p, YETTY_YEXPR_TOK_COMMA)) {
+        p->error = "expected ',' between x and y ranges in @view";
+        return -1;
+    }
+    if (!parse_range_value(p, &ylo, &yhi)) {
+        return -1;
+    }
+    plot->view_x_min = xlo;
+    plot->view_x_max = xhi;
+    plot->view_y_min = ylo;
+    plot->view_y_max = yhi;
+    plot->has_view = 1;
+    return 0;
+}
+
+/* Parse comma-separated numeric values after `=`. Stops at ';' or EOF.
+ * Returns 0 if any values were read, -1 on parse error. */
+static int parse_inline_values(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_buffer *buf)
+{
+    for (;;) {
+        /* Allow unary-minus prefix. */
+        float sign = 1.0f;
+        if (parser_match(p, YETTY_YEXPR_TOK_MINUS)) {
+            sign = -1.0f;
+        }
+        if (!parser_check(p, YETTY_YEXPR_TOK_NUMBER)) {
+            p->error = "expected numeric value in @<buf>.values list";
+            return -1;
+        }
+        if (buf->inline_count < YETTY_YEXPR_MAX_INLINE_VALUES) {
+            buf->inline_values[buf->inline_count++] = sign * (float)p->current.num_value;
+        }
+        parser_advance(p);
+        if (!parser_match(p, YETTY_YEXPR_TOK_COMMA)) {
+            break;
+        }
+    }
+    return 0;
+}
+
 static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot)
 {
     parser_advance(p); /* consume '@' */
@@ -598,6 +752,12 @@ static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot
         p->error = "expected identifier after '@'";
         return -1;
     }
+
+    /* Special case: @view = X1..X2 , Y1..Y2 — no dot, no nested name. */
+    if (p->current.len == 4 && memcmp(p->current.start, "view", 4) == 0) {
+        return parse_view_attr(p, plot);
+    }
+
     char plot_name[YETTY_YEXPR_MAX_NAME_LEN];
     token_to_str(&p->current, plot_name, sizeof(plot_name));
     parser_advance(p);
@@ -620,9 +780,64 @@ static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot
         return -1;
     }
 
+    /* Buffer-property attrs: route to the buffer table. */
+    int is_size = strcmp(attr_name, "size") == 0;
+    int is_values = strcmp(attr_name, "values") == 0;
+
+    /* The attr targets a known buffer declaration? */
+    struct yetty_yexpr_plot_buffer *target = NULL;
+    if (is_size || is_values) {
+        for (uint32_t i = 0; i < plot->buffer_count; i++) {
+            if (strcmp(plot->buffers[i].name, plot_name) == 0) {
+                target = &plot->buffers[i];
+                break;
+            }
+        }
+    }
+
+    if (target && is_size) {
+        if (!parser_check(p, YETTY_YEXPR_TOK_NUMBER) &&
+            !parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER)) {
+            p->error = "expected size value";
+            return -1;
+        }
+        char size_buf[32];
+        size_t copy_len =
+            p->current.len < sizeof(size_buf) - 1 ? p->current.len : sizeof(size_buf) - 1;
+        memcpy(size_buf, p->current.start, copy_len);
+        size_buf[copy_len] = '\0';
+        if (parse_size_with_suffix(size_buf, &target->size) < 0) {
+            p->error = "invalid size value";
+            return -1;
+        }
+        target->has_size = 1;
+        parser_advance(p);
+        return 0;
+    }
+
+    if (target && is_values) {
+        /* Three forms: bare '=' (payload), '="file"' (file), '=v1,v2,…' (inline). */
+        if (parser_check(p, YETTY_YEXPR_TOK_STRING)) {
+            size_t copy_len = p->current.len < sizeof(target->file_path) - 1
+                                  ? p->current.len
+                                  : sizeof(target->file_path) - 1;
+            memcpy(target->file_path, p->current.start, copy_len);
+            target->file_path[copy_len] = '\0';
+            parser_advance(p);
+            return 0;
+        }
+        if (parser_check(p, YETTY_YEXPR_TOK_NUMBER) || parser_check(p, YETTY_YEXPR_TOK_MINUS)) {
+            return parse_inline_values(p, target);
+        }
+        /* No value → payload mode. */
+        target->wants_payload = 1;
+        return 0;
+    }
+
+    /* Generic attribute fallthrough (e.g., color). */
     char value[64] = {0};
     if (parser_check(p, YETTY_YEXPR_TOK_HEX_COLOR) || parser_check(p, YETTY_YEXPR_TOK_STRING) ||
-        parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER)) {
+        parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER) || parser_check(p, YETTY_YEXPR_TOK_NUMBER)) {
         size_t copy_len = p->current.len < sizeof(value) - 1 ? p->current.len : sizeof(value) - 1;
         memcpy(value, p->current.start, copy_len);
         value[copy_len] = '\0';
@@ -711,21 +926,69 @@ struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, 
                 break;
             }
         } else if (parser_check(&p, YETTY_YEXPR_TOK_IDENTIFIER)) {
-            /* Could be: name = expr  OR  bare expression */
+            /* Could be: name=buffer   (declaration)
+             *           name=A..B     (x/y domain or generic range)
+             *           name=expr     (function definition)
+             *           bare expression */
             const char *name = p.current.start;
             size_t name_len = p.current.len;
             parser_advance(&p);
 
             if (parser_match(&p, YETTY_YEXPR_TOK_EQUALS)) {
+                char name_buf[YETTY_YEXPR_MAX_NAME_LEN];
+                size_t copy_len = name_len < sizeof(name_buf) - 1 ? name_len : sizeof(name_buf) - 1;
+                memcpy(name_buf, name, copy_len);
+                name_buf[copy_len] = '\0';
+
+                /* `name = buffer` — buffer-input declaration. The bare
+                 * identifier "buffer" is the discriminator. */
+                if (parser_check(&p, YETTY_YEXPR_TOK_IDENTIFIER) &&
+                    p.current.len == 6 && memcmp(p.current.start, "buffer", 6) == 0) {
+                    parser_advance(&p);
+                    if (!plot_buffer_find_or_create(&p, &res.plot, name_buf)) {
+                        break;
+                    }
+                    parser_match(&p, YETTY_YEXPR_TOK_SEMICOLON);
+                    continue;
+                }
+
+                /* `name = A..B` — range. Recognised only for x / y today. */
+                int is_x = (strcmp(name_buf, "x") == 0);
+                int is_y = (strcmp(name_buf, "y") == 0);
+                if (is_x || is_y) {
+                    /* Look ahead: only commit to range parsing if a `..`
+                     * follows the first unary value. Otherwise this is a
+                     * plain `x = expr` def (rare but legal). */
+                    size_t saved_pos = p.lex.pos;
+                    struct yetty_yexpr_token saved_cur = p.current;
+                    uint32_t saved_arena = res.arena.count;
+
+                    float lo, hi;
+                    if (parse_range_value(&p, &lo, &hi)) {
+                        if (is_x) {
+                            res.plot.x_min = lo;
+                            res.plot.x_max = hi;
+                            res.plot.has_x_range = 1;
+                        } else {
+                            res.plot.y_min = lo;
+                            res.plot.y_max = hi;
+                            res.plot.has_y_range = 1;
+                        }
+                        parser_match(&p, YETTY_YEXPR_TOK_SEMICOLON);
+                        continue;
+                    }
+                    /* Roll back to try as a regular expression. */
+                    p.lex.pos = saved_pos;
+                    p.current = saved_cur;
+                    res.arena.count = saved_arena;
+                    p.error = NULL;
+                }
+
                 /* Named definition: name = expr */
                 struct yetty_yexpr_node *expr = parse_expr(&p);
                 if (!expr) {
                     break;
                 }
-                char name_buf[YETTY_YEXPR_MAX_NAME_LEN];
-                size_t copy_len = name_len < sizeof(name_buf) - 1 ? name_len : sizeof(name_buf) - 1;
-                memcpy(name_buf, name, copy_len);
-                name_buf[copy_len] = '\0';
                 if (add_plot_def(&p, &res.plot, name_buf, expr) < 0) {
                     break;
                 }

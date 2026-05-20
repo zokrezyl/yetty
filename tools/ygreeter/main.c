@@ -264,10 +264,114 @@ static const struct nav_entry WELCOME_NAV[] = {
     "        - expr: \"exp(-x*x/4) * sin(3*x)\"\n"                                                 \
     "          color: \"#74c0fc\"\n"
 
+/* The entries below use the new top-level `source:` YAML key, which feeds
+ * the whole yexpr-plot text into the parser in one go — so `name=buffer`
+ * declarations, inline `x=A..B` / `@view=` framing, and `@<name>.color=`
+ * overrides all work. The legacy `functions:` list is bypassed. */
+
+#define PLOT_INLINE_BUFFER                                                                         \
+    "body:\n"                                                                                      \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 36]\n"                                                                   \
+    "      content: \"inline buffer: 8 samples spread over x\"\n"                                  \
+    "      font-size: 22\n"                                                                        \
+    "      color: \"#ffffff\"\n"                                                                   \
+    "  - yplot:\n"                                                                                 \
+    "      position: [16, 80]\n"                                                                   \
+    "      size: [460, 280]\n"                                                                     \
+    "      x_range: [0, 1]\n"                                                                      \
+    "      y_range: [-1, 1]\n"                                                                     \
+    "      show_grid: true\n"                                                                      \
+    "      show_axes: true\n"                                                                      \
+    "      show_labels: true\n"                                                                    \
+    "      source: \"data=buffer; @data.size=8; "                                                  \
+    "@data.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; @data.color=#74C5A5\"\n"
+
+#define PLOT_BUFFER_MODULATED                                                                      \
+    "body:\n"                                                                                      \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 36]\n"                                                                   \
+    "      content: \"envelope(x) * sin(x*60)\"\n"                                                 \
+    "      font-size: 22\n"                                                                        \
+    "      color: \"#ffffff\"\n"                                                                   \
+    "  - yplot:\n"                                                                                 \
+    "      position: [16, 80]\n"                                                                   \
+    "      size: [460, 280]\n"                                                                     \
+    "      x_range: [0, 1]\n"                                                                      \
+    "      y_range: [-1.1, 1.1]\n"                                                                 \
+    "      show_grid: true\n"                                                                      \
+    "      show_axes: true\n"                                                                      \
+    "      show_labels: true\n"                                                                    \
+    "      source: \"envelope=buffer; @envelope.size=8; "                                          \
+    "@envelope.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; "                                             \
+    "pulse=envelope(x)*sin(x*60); "                                                                \
+    "@envelope.color=#364A47; @pulse.color=#74C5A5\"\n"
+
+#define PLOT_ADSR_HARMONICS                                                                        \
+    "body:\n"                                                                                      \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 36]\n"                                                                   \
+    "      content: \"ADSR envelope x three harmonics\"\n"                                         \
+    "      font-size: 22\n"                                                                        \
+    "      color: \"#ffffff\"\n"                                                                   \
+    "  - yplot:\n"                                                                                 \
+    "      position: [16, 80]\n"                                                                   \
+    "      size: [460, 280]\n"                                                                     \
+    "      x_range: [0, 1]\n"                                                                      \
+    "      y_range: [-1.1, 1.1]\n"                                                                 \
+    "      show_grid: true\n"                                                                      \
+    "      show_axes: true\n"                                                                      \
+    "      show_labels: true\n"                                                                    \
+    "      source: \"env=buffer; @env.size=16; "                                                   \
+    "@env.values=0,0.4,0.8,1,0.95,0.85,0.75,0.65,0.55,0.45,0.35,0.25,0.18,0.12,0.06,0; "           \
+    "h1=env(x)*sin(x*6); h2=env(x)*sin(x*12); h3=env(x)*sin(x*24); "                               \
+    "@env.color=#364A47; @h1.color=#FF6B6B; @h2.color=#FFE66D; @h3.color=#74C5A5\"\n"
+
+#define PLOT_TRAVELLING_PHASE                                                                      \
+    "body:\n"                                                                                      \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 36]\n"                                                                   \
+    "      content: \"static envelope x travelling phase (time)\"\n"                               \
+    "      font-size: 22\n"                                                                        \
+    "      color: \"#ffffff\"\n"                                                                   \
+    "  - yplot:\n"                                                                                 \
+    "      position: [16, 80]\n"                                                                   \
+    "      size: [460, 280]\n"                                                                     \
+    "      x_range: [0, 1]\n"                                                                      \
+    "      y_range: [-1.1, 1.1]\n"                                                                 \
+    "      show_grid: true\n"                                                                      \
+    "      show_axes: true\n"                                                                      \
+    "      show_labels: true\n"                                                                    \
+    "      source: \"env=buffer; @env.size=12; "                                                   \
+    "@env.values=0,0.3,0.7,1,0.95,0.85,0.7,0.5,0.3,0.15,0.05,0; "                                  \
+    "travel=env(x)*sin(x*40 - time*4); "                                                           \
+    "@env.color=#5A8979; @travel.color=#74C5A5\"\n"
+
+#define PLOT_DOMAIN_VIEW                                                                           \
+    "body:\n"                                                                                      \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 36]\n"                                                                   \
+    "      content: \"inline x=-3pi..3pi, view zoomed to -pi..pi\"\n"                              \
+    "      font-size: 22\n"                                                                        \
+    "      color: \"#ffffff\"\n"                                                                   \
+    "  - yplot:\n"                                                                                 \
+    "      position: [16, 80]\n"                                                                   \
+    "      size: [460, 280]\n"                                                                     \
+    "      show_grid: true\n"                                                                      \
+    "      show_axes: true\n"                                                                      \
+    "      show_labels: true\n"                                                                    \
+    "      source: \"x=-10..10; @view=-pi..pi,-0.5..1.5; "                                        \
+    "signal=sin(x)/x; @signal.color=#74C5A5\"\n"
+
 static const struct nav_entry PLOT_NAV[] = {
     {"Trigonometry", PLOT_TRIG},
     {"Polynomial", PLOT_PARABOLA},
     {"Damped wave", PLOT_DECAY},
+    {"Inline buffer", PLOT_INLINE_BUFFER},
+    {"Buffer x carrier", PLOT_BUFFER_MODULATED},
+    {"ADSR harmonics", PLOT_ADSR_HARMONICS},
+    {"Travelling phase", PLOT_TRAVELLING_PHASE},
+    {"Domain & view", PLOT_DOMAIN_VIEW},
 };
 
 /* =========================================================================

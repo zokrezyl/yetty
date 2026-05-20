@@ -59,12 +59,15 @@ static int parse_hex_color(const char *s, uint32_t *out)
 /* Fill `u` with caller config values, palette-default colors, and a
  * compiled bytecode block from `source` (may be empty when caller only
  * wants buffer curves). `bc_buf` / `bc_cap` is a caller-owned scratch
- * area for the serialized yfsvm program. */
+ * area for the serialized yfsvm program. The parsed plot expression is
+ * also handed back to the caller in `*out_plot` so it can synthesise
+ * data buffers from `name=buffer` declarations. */
 static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
     const char *source, size_t source_len,
     const struct yetty_yplot_render_config *config,
     uint32_t *bc_buf, uint32_t bc_cap,
-    struct yetty_yplot_uniforms *u, uint32_t *out_bc_len)
+    struct yetty_yplot_uniforms *u, uint32_t *out_bc_len,
+    struct yetty_yexpr_plot_parse_output *out_plot)
 {
     memset(u, 0, sizeof(*u));
     u->bounds_x = config ? config->bounds_x : 0.0f;
@@ -94,6 +97,9 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
     }
 
     *out_bc_len = 0;
+    if (out_plot) {
+        memset(out_plot, 0, sizeof(*out_plot));
+    }
     if (!source || source_len == 0) {
         u->function_count = 0;
         return YETTY_OK_VOID();
@@ -102,6 +108,28 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
     /* Parse expression(s) using yexpr's plot-syntax. */
     struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(source, source_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yplot: expression parse failed");
+    if (out_plot) {
+        *out_plot = pr.value;
+    }
+
+    /* Domain / viewport overrides come from inline `x=A..B` etc. The
+     * @view= viewport currently rebinds the static domain — the shader
+     * doesn't yet animate zoom from this, but the override still gives
+     * a useful initial framing for the first frame. */
+    if (pr.value.plot.has_x_range) {
+        u->x_min = pr.value.plot.x_min;
+        u->x_max = pr.value.plot.x_max;
+    }
+    if (pr.value.plot.has_y_range) {
+        u->y_min = pr.value.plot.y_min;
+        u->y_max = pr.value.plot.y_max;
+    }
+    if (pr.value.plot.has_view) {
+        u->x_min = pr.value.plot.view_x_min;
+        u->x_max = pr.value.plot.view_x_max;
+        u->y_min = pr.value.plot.view_y_min;
+        u->y_max = pr.value.plot.view_y_max;
+    }
 
     u->function_count = pr.value.plot.def_count;
     if (u->function_count > 8) {
@@ -125,7 +153,9 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
         }
     }
 
-    /* Compile to bytecode. */
+    /* Compile to bytecode. The compile_multi entry threads the plot
+     * expression's buffer table into the codegen so f(x) calls resolve
+     * to LOAD_S against the buffer's slot. */
     struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value.plot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, prog, "yplot: yfsvm compile failed");
 
@@ -203,37 +233,91 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
     struct yetty_yplot_uniforms u;
     uint32_t bc_buf[1024];
     uint32_t bc_len = 0;
+    struct yetty_yexpr_plot_parse_output parsed = {0};
 
     struct yetty_ycore_void_result ub =
         yplot_build_uniforms_and_bytecode(source, len, config, bc_buf,
                                           (uint32_t)(sizeof bc_buf / sizeof bc_buf[0]),
-                                          &u, &bc_len);
+                                          &u, &bc_len, &parsed);
     YETTY_RETURN_IF_ERR(yetty_ydraw_draw_list, ub, "yplot: uniforms/bytecode build failed");
 
-    /* Per-buffer color slots: expressions occupy 0..function_count-1, then
-     * buffers fill the next slots (modulo 8). Caller-supplied colors override
-     * the palette defaults already filled in by yplot_build_uniforms…. */
-    for (size_t i = 0; i < buffer_count; i++) {
-        uint32_t slot = (u.function_count + (uint32_t)i) % 8u;
-        if (buffers[i].color != 0u) {
-            u.colors[slot] = buffers[i].color;
-        }
+    /* Buffer slots come from TWO sources, layered in this order so that
+     * sampler-slot indices match what the compiler emitted:
+     *   1) declarations from source (`f=buffer; @f.size=N; @f.values=…`)
+     *      — slot index == declaration order, matching compiler's LOAD_S idx
+     *   2) caller-supplied data buffers via the API — appended after */
+    uint32_t decl_count = parsed.plot.buffer_count;
+    if (decl_count > 8) {
+        decl_count = 8;
     }
+    size_t total_bufs = (size_t)decl_count + buffer_count;
 
-    /* Translate caller-facing buffer_input array into the wire-side
-     * data_buffer array (the wire type is a slimmer view, no color). */
     struct yetty_yplot_data_buffer wire_bufs_stack[8];
     struct yetty_yplot_data_buffer *wire_bufs = NULL;
-    if (buffer_count > 0) {
-        wire_bufs = (buffer_count <= 8)
-                        ? wire_bufs_stack
-                        : malloc(buffer_count * sizeof(*wire_bufs));
+    /* Zero-fill scratch — declarations without inline values render as a
+     * flat baseline until their owner streams in real data. Allocated as
+     * one slab and aliased to per-decl spans, freed at the end. */
+    float *zero_fill = NULL;
+    size_t zero_fill_total = 0;
+
+    if (total_bufs > 0) {
+        wire_bufs = (total_bufs <= 8) ? wire_bufs_stack
+                                      : malloc(total_bufs * sizeof(*wire_bufs));
         if (!wire_bufs) {
             return YETTY_ERR(yetty_ydraw_draw_list, "yplot: buffer view alloc failed");
         }
+
+        /* First pass: how much zero-fill do we need? */
+        for (uint32_t i = 0; i < decl_count; i++) {
+            const struct yetty_yexpr_plot_buffer *d = &parsed.plot.buffers[i];
+            if (d->inline_count == 0 && d->size > 0) {
+                zero_fill_total += d->size;
+            }
+        }
+        if (zero_fill_total > 0) {
+            zero_fill = calloc(zero_fill_total, sizeof(float));
+            if (!zero_fill) {
+                if (wire_bufs != wire_bufs_stack) {
+                    free(wire_bufs);
+                }
+                return YETTY_ERR(yetty_ydraw_draw_list, "yplot: zero-fill alloc failed");
+            }
+        }
+
+        /* Second pass: populate wire entries for declarations. */
+        size_t zf_off = 0;
+        for (uint32_t i = 0; i < decl_count; i++) {
+            const struct yetty_yexpr_plot_buffer *d = &parsed.plot.buffers[i];
+            if (d->inline_count > 0) {
+                wire_bufs[i].samples = d->inline_values;
+                wire_bufs[i].count = d->inline_count;
+            } else if (d->size > 0) {
+                wire_bufs[i].samples = zero_fill + zf_off;
+                wire_bufs[i].count = d->size;
+                zf_off += d->size;
+            } else {
+                /* No values, no size — render a degenerate two-zero buffer
+                 * so the shader's >=2 check is satisfied and the curve is
+                 * a flat baseline until the owner sets it up. */
+                wire_bufs[i].samples = NULL;
+                wire_bufs[i].count = 0;
+            }
+        }
+
+        /* Caller-supplied buffers append after declarations. */
         for (size_t i = 0; i < buffer_count; i++) {
-            wire_bufs[i].samples = buffers[i].samples;
-            wire_bufs[i].count = buffers[i].count;
+            wire_bufs[decl_count + i].samples = buffers[i].samples;
+            wire_bufs[decl_count + i].count = buffers[i].count;
+        }
+    }
+
+    /* Per-buffer color slots: expressions occupy 0..function_count-1, then
+     * buffers (declarations first, then API) fill the next slots (mod 8).
+     * Caller-supplied colors override the palette defaults already filled. */
+    for (size_t i = 0; i < buffer_count; i++) {
+        uint32_t slot = (u.function_count + (uint32_t)decl_count + (uint32_t)i) % 8u;
+        if (buffers[i].color != 0u) {
+            u.colors[slot] = buffers[i].color;
         }
     }
 
@@ -241,13 +325,14 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
         .bytecode = bc_len > 0 ? bc_buf : NULL,
         .bytecode_len = bc_len,
         .data = wire_bufs,
-        .data_count = buffer_count,
+        .data_count = total_bufs,
     };
 
     struct yetty_ydraw_draw_list_result out = yplot_emit_prim(&u, &bufs);
     if (wire_bufs && wire_bufs != wire_bufs_stack) {
         free(wire_bufs);
     }
+    free(zero_fill);
     return out;
 }
 
