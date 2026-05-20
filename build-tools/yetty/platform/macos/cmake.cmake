@@ -101,6 +101,7 @@ target_link_libraries(yetty PRIVATE
     yetty_telnet
     yetty_yco
     yetty_yplatform_core
+    yetty_yplatform_wayland_move
 )
 
 # Copy runtime assets to build directory

@@ -46,6 +46,15 @@ if(YETTY_ENABLE_LIB_WEBGPU)
         BLEND_SHADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/blend.wgsl"
     )
 
+    # render-target-texture.c uses <stdatomic.h> for the present watchdog.
+    # MSVC defines __STDC_NO_ATOMICS__ unless /std:clatest (or /std:c11) and
+    # /experimental:c11atomics are passed. Same flags as the yetty exe target.
+    if(MSVC)
+        target_compile_options(yetty_yrender PRIVATE
+            $<$<COMPILE_LANGUAGE:C>:/std:clatest>
+            $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>)
+    endif()
+
     target_link_libraries(yetty_yrender PUBLIC yetty_yrender_core)
 
     if(YETTY_YRENDER_X11_TILE)
