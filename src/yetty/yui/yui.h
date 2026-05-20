@@ -118,6 +118,16 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui);
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
                                                 struct yetty_ydraw_target *target);
 
+/* True iff the yui scene-canvas needs to repaint this frame — its ygui
+ * engine has pending widget mutations (tabbar reconcile, dialog
+ * visibility, statusbar text, menu open/close, …) that yui_render
+ * hasn't drained yet. yetty's RENDER handler reads this BEFORE
+ * tabbar_render so it can force every pane underneath to redraw — any
+ * pixels the chrome is about to vacate would otherwise show its
+ * previous frame. Cheap query (one bit on the engine). 0 when yui is
+ * NULL. */
+int yetty_yui_is_dirty(const struct yetty_yui *yui);
+
 /* Update the scene-canvas grid to match a new framebuffer size. Called
  * from the RESIZE handler. Cell stride stays as set at create time. */
 struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t surface_w,

@@ -89,11 +89,22 @@ static int bg_is_empty(const struct yetty_yrender_terminal_layer *self)
     return 0;
 }
 
+/* The bg layer's only dirty source is its own base bit (set on
+ * create/resize). Stale pixels from a higher layer moving don't make bg
+ * itself dirty — they make a higher layer dirty, and the terminal's
+ * two-pass scan force-renders every layer (including this one) when
+ * anything is dirty, which is exactly what wipes the stale region. */
+static int bg_is_dirty(const struct yetty_yrender_terminal_layer *self)
+{
+    return self->dirty;
+}
+
 static const struct yetty_yterm_terminal_layer_ops bg_ops = {
     .destroy = bg_destroy,
     .resize_grid = bg_resize_grid,
     .get_gpu_resource_set = bg_get_gpu_resource_set,
     .render = bg_render,
+    .is_dirty = bg_is_dirty,
     .is_empty = bg_is_empty,
     /* The rest stay NULL — terminal.c null-checks before invoking. */
 };

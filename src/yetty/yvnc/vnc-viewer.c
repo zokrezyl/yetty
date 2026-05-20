@@ -29,7 +29,7 @@ struct yetty_yvnc_viewer {
 
 static struct yetty_ycore_void_result vnc_viewer_view_destroy(struct yetty_yui_view *view);
 static struct yetty_ycore_void_result vnc_viewer_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target);
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target, int force_redraw);
 static struct yetty_ycore_void_result vnc_viewer_view_set_bounds(struct yetty_yui_view *view,
                                                                  struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result vnc_viewer_view_on_event(struct yetty_yui_view *view,
@@ -101,9 +101,13 @@ static struct yetty_ycore_void_result vnc_viewer_view_destroy(struct yetty_yui_v
 }
 
 static struct yetty_ycore_void_result vnc_viewer_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target)
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target, int force_redraw)
 {
     struct yetty_yvnc_viewer *viewer = (struct yetty_yvnc_viewer *)view;
+    /* The VNC viewer always uploads the latest received framebuffer
+     * into its texture and blits it; there's no internal dirty gate
+     * for force_redraw to override, so the signal is ignored here. */
+    (void)force_redraw;
 
     ydebug("vnc_viewer_render: client=%p", (void *)viewer->client);
 

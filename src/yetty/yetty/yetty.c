@@ -164,10 +164,21 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
         ytime_start(full_frame);
 
+        /* Probe the yui scene-canvas BEFORE the panes draw. If yui has
+         * pending chrome mutations (tab add/remove, dialog toggle,
+         * statusbar update, menu open, splitter move) it'll paint over
+         * the pane areas later this frame — the pixels it vacates would
+         * otherwise show the previous frame's chrome. Forcing every
+         * pane to redraw makes the bottom layers wipe those regions
+         * before yui composites on top. Read once here; yui_render's
+         * own sync runs again (idempotent) and emits + drains the OSC
+         * frame. */
+        int yui_force = yetty_yui_is_dirty(yetty->yui);
+
         ytime_start(workspace_render);
         if (yetty->tabbar) {
             struct yetty_ycore_void_result res =
-                yetty_yui_tabbar_render(yetty->tabbar, yetty->render_target);
+                yetty_yui_tabbar_render(yetty->tabbar, yetty->render_target, yui_force);
             if (!YETTY_IS_OK(res)) {
                 yerror("yetty: tabbar render failed: %s", res.error.msg);
             }

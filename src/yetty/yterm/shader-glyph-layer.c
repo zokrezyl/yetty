@@ -424,6 +424,7 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
                                                   const struct yetty_yui_event *event);
 static void anim_timer_stop(struct yetty_yterm_shader_glyph_layer *layer);
 static int shader_glyph_is_empty(const struct yetty_yrender_terminal_layer *self);
+static int shader_glyph_is_dirty(const struct yetty_yrender_terminal_layer *self);
 static int shader_glyph_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
 static int shader_glyph_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
                                 int mods);
@@ -439,6 +440,7 @@ static const struct yetty_yterm_terminal_layer_ops shader_glyph_layer_ops = {
     .set_visual_zoom = shader_glyph_set_visual_zoom,
     .get_gpu_resource_set = shader_glyph_get_gpu_resource_set,
     .render = shader_glyph_render,
+    .is_dirty = shader_glyph_is_dirty,
     .is_empty = shader_glyph_is_empty,
     .on_key = shader_glyph_on_key,
     .on_char = shader_glyph_on_char,
@@ -877,6 +879,17 @@ static int shader_glyph_is_empty(const struct yetty_yrender_terminal_layer *self
         found |= (int)(g >> 31);
     }
     return found ? 0 : 1;
+}
+
+/* The anim timer sets self->dirty every tick while we have shader-glyph
+ * cells on screen, so this is the only bit shader_glyph_render reads
+ * (force aside). Empty grids report not-dirty so the timer can idle. */
+static int shader_glyph_is_dirty(const struct yetty_yrender_terminal_layer *self)
+{
+    if (shader_glyph_is_empty(self)) {
+        return 0;
+    }
+    return self->dirty;
 }
 
 static int shader_glyph_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods)

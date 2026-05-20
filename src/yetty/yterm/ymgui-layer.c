@@ -198,6 +198,7 @@ static struct yetty_ycore_int_result ymgui_render(struct yetty_yrender_terminal_
                                                   struct yetty_ydraw_target *target,
                                                   int force);
 static int ymgui_is_empty(const struct yetty_yrender_terminal_layer *self);
+static int ymgui_is_dirty(const struct yetty_yrender_terminal_layer *self);
 static int ymgui_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
 static int ymgui_on_char(struct yetty_yrender_terminal_layer *self, uint32_t cp, int mods);
 static struct yetty_ycore_void_result ymgui_scroll(struct yetty_yrender_terminal_layer *self,
@@ -214,6 +215,7 @@ static const struct yetty_yterm_terminal_layer_ops ymgui_ops = {
     .set_visual_zoom = ymgui_set_visual_zoom,
     .get_gpu_resource_set = ymgui_get_gpu_resource_set,
     .render = ymgui_render,
+    .is_dirty = ymgui_is_dirty,
     .is_empty = ymgui_is_empty,
     .on_key = ymgui_on_key,
     .on_char = ymgui_on_char,
@@ -2220,6 +2222,12 @@ static int ymgui_is_empty(const struct yetty_yrender_terminal_layer *self)
         }
     }
     return 1;
+}
+
+/* Single-bit dirty source: ymgui_render only checks self->dirty. Mirror it. */
+static int ymgui_is_dirty(const struct yetty_yrender_terminal_layer *self)
+{
+    return self->dirty;
 }
 
 /* Keyboard routing happens in terminal.c (terminal owns emit_yface and

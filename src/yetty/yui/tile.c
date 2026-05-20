@@ -28,7 +28,8 @@ struct yetty_yui_tile {
 struct yetty_yui_tile_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yui_tile *self);
     struct yetty_ycore_void_result (*render)(struct yetty_yui_tile *self,
-                                             struct yetty_ydraw_target *render_target);
+                                             struct yetty_ydraw_target *render_target,
+                                             int force_redraw);
     struct yetty_ycore_void_result (*set_bounds)(struct yetty_yui_tile *self,
                                                  struct yetty_yui_rect bounds);
     struct yetty_ycore_int_result (*on_event)(struct yetty_yui_tile *self,
@@ -93,19 +94,20 @@ static struct yetty_ycore_void_result split_destroy(struct yetty_yui_tile *self)
 }
 
 static struct yetty_ycore_void_result split_render(struct yetty_yui_tile *self,
-                                                   struct yetty_ydraw_target *render_target)
+                                                   struct yetty_ydraw_target *render_target,
+                                                   int force_redraw)
 {
     struct yetty_yui_split *split = (struct yetty_yui_split *)self;
     struct yetty_ycore_void_result res;
 
     if (split->first) {
-        res = yetty_yui_tile_render(split->first, render_target);
+        res = yetty_yui_tile_render(split->first, render_target, force_redraw);
         if (YETTY_IS_ERR(res)) {
             return res;
         }
     }
     if (split->second) {
-        res = yetty_yui_tile_render(split->second, render_target);
+        res = yetty_yui_tile_render(split->second, render_target, force_redraw);
         if (YETTY_IS_ERR(res)) {
             return res;
         }
@@ -269,7 +271,8 @@ static struct yetty_ycore_void_result pane_destroy(struct yetty_yui_tile *self)
 }
 
 static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
-                                                  struct yetty_ydraw_target *render_target)
+                                                  struct yetty_ydraw_target *render_target,
+                                                  int force_redraw)
 {
     struct yetty_yui_pane *pane = (struct yetty_yui_pane *)self;
 
@@ -294,16 +297,20 @@ static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
         if (pane->background_layer && pane->background_layer->ops &&
             pane->background_layer->ops->render) {
             /* yui's pane-level draw: stand-alone background pass, no
-             * cascade in flight here, so force=0. Drop the int return
-             * (only the success/failure matters at this site). */
+             * cascade in flight here. force=force_redraw so the global
+             * yui-dirty signal also wipes this pane's background fill,
+             * covering whatever the yui scene-canvas (cards, dialogs)
+             * used to paint inside the pane's region. Drop the int
+             * return (only success/failure matters at this site). */
             struct yetty_ycore_int_result rr = pane->background_layer->ops->render(
-                pane->background_layer, render_target, /*force=*/0);
+                pane->background_layer, render_target, force_redraw);
             if (YETTY_IS_ERR(rr)) {
                 res = YETTY_ERR(yetty_ycore_void, "pane background render", rr);
             }
         }
         if (YETTY_IS_OK(res)) {
-            res = yetty_yui_view_render(pane->views[pane->view_count - 1], render_target);
+            res = yetty_yui_view_render(pane->views[pane->view_count - 1], render_target,
+                                        force_redraw);
         }
 
         render_target->viewport = saved_vp;
@@ -385,7 +392,8 @@ struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *til
 }
 
 struct yetty_ycore_void_result yetty_yui_tile_render(struct yetty_yui_tile *tile,
-                                                     struct yetty_ydraw_target *render_target)
+                                                     struct yetty_ydraw_target *render_target,
+                                                     int force_redraw)
 {
     if (!tile) {
         return YETTY_ERR(yetty_ycore_void, "tile is NULL");
@@ -393,7 +401,7 @@ struct yetty_ycore_void_result yetty_yui_tile_render(struct yetty_yui_tile *tile
     if (!tile->ops || !tile->ops->render) {
         return YETTY_ERR(yetty_ycore_void, "render not implemented");
     }
-    return tile->ops->render(tile, render_target);
+    return tile->ops->render(tile, render_target, force_redraw);
 }
 
 struct yetty_ycore_void_result yetty_yui_tile_set_bounds(struct yetty_yui_tile *tile,

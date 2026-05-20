@@ -64,8 +64,12 @@ struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(
 
 struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar *bar);
 
+/* force_redraw is the global "yui scene-canvas is dirty this frame"
+ * signal coming from yetty_event_handler — propagated down to every
+ * pane's terminal_render_frame so panes wipe stale pixels left behind
+ * by yui chrome that's about to repaint. */
 struct yetty_ycore_void_result yetty_yui_tabbar_render(
-    struct yetty_yui_tabbar *bar, struct yetty_ydraw_target *render_target);
+    struct yetty_yui_tabbar *bar, struct yetty_ydraw_target *render_target, int force_redraw);
 
 struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *bar, float width,
                                                        float height);

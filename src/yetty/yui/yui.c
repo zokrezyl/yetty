@@ -1162,9 +1162,20 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
     if (yui->layer->ops->is_empty && yui->layer->ops->is_empty(yui->layer)) {
         return YETTY_OK_VOID();
     }
-    /* yui-host render: no terminal cascade in flight at this caller,
-     * so force=0. Drop the int return (only success/failure matters). */
-    struct yetty_ycore_int_result rr = yui->layer->ops->render(yui->layer, target, /*force=*/0);
+    /* The yui scene-canvas is the topmost paint in the frame — every
+     * pane has already painted into the shared big_target with
+     * LoadOp_Load before us, and any pane that drew this frame wiped
+     * its area (background-layer is a full opaque pane fill), which
+     * also wipes whatever yui chrome we painted into that area last
+     * frame. RENDER events fire only when something is dirty, so when
+     * we get here at least one of {yui itself, some pane} was dirty;
+     * in either case the chrome region of big_target has been
+     * disturbed, and we must repaint our cached content unconditionally
+     * to keep it on screen. Pre-fix this was force=0 and the chrome
+     * flickered on every pane redraw (cursor blink, mouse move
+     * provoking ymgui repaint, …). Drop the int return (success /
+     * failure is all that matters at this site). */
+    struct yetty_ycore_int_result rr = yui->layer->ops->render(yui->layer, target, /*force=*/1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui layer render");
     return YETTY_OK_VOID();
 }
@@ -1172,6 +1183,25 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
 struct yetty_platform_pty *yetty_yui_producer_pty(struct yetty_yui *yui)
 {
     return yui ? yui->yui_endpoint : NULL;
+}
+
+int yetty_yui_is_dirty(const struct yetty_yui *yui)
+{
+    if (!yui) {
+        return 0;
+    }
+    /* Reconcile so the engine dirty bit reflects pending tabbar /
+     * splitter mutations BEFORE the panes render. Without this, a tab
+     * added between frames wouldn't appear dirty until yui_render's own
+     * sync — too late for the pane underneath to know to wipe. Casts
+     * away const: the sync mutates the widget tree but no caller-
+     * observable state on the yui handle itself. Both syncs are
+     * idempotent; yui_render calls them again and the second pass is a
+     * no-op. */
+    struct yetty_yui *mut = (struct yetty_yui *)yui;
+    yui_titlebar_sync(mut);
+    yui_splitters_sync(mut);
+    return mut->engine ? yetty_ygui_engine_is_dirty(mut->engine) : 0;
 }
 
 /*===========================================================================

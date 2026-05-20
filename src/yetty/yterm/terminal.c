@@ -35,7 +35,7 @@
 /* Forward declarations for view ops */
 static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view);
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target);
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target, int force_redraw);
 static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,
                                                                struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
@@ -128,7 +128,7 @@ struct yetty_yterm_terminal {
 /* Forward declarations */
 static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterm_terminal *terminal);
 static struct yetty_ycore_void_result terminal_render_frame(
-    struct yetty_yterm_terminal *terminal, struct yetty_ydraw_target *target);
+    struct yetty_yterm_terminal *terminal, struct yetty_ydraw_target *target, int force_redraw);
 
 /* PTY pipe alloc callback — provides buffer for uv_pipe_t reads.
  * One reusable per-terminal buffer, lazily allocated. 64KB matches
@@ -988,9 +988,17 @@ static struct yetty_ycore_int_result terminal_event_handler(
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-/* Render a frame using layered rendering */
+/* Render a frame using layered rendering.
+ *
+ * force_redraw: 1 when the root render (yetty_event_handler) detected
+ * the yui scene-canvas is dirty this frame — the yui's chrome (cards,
+ * dialogs, titlebar drag) is about to repaint and any pixels it
+ * vacates would otherwise show its previous frame's content. Treated
+ * the same as "any of our own layers is dirty": the two-pass scan
+ * below seeds force=1 and every layer in this pane redraws. */
 static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_terminal *terminal,
-                                                            struct yetty_ydraw_target *target)
+                                                            struct yetty_ydraw_target *target,
+                                                            int force_redraw)
 {
     if (terminal->shutting_down) {
         ydebug("terminal_render_frame: shutting down, skipping render");
@@ -1016,15 +1024,42 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
      * sharing the big target can't stomp each other — loadOp ignores
      * scissor, so a Clear would have wiped every other pane. */
     ytime_start(layers);
-    /* Layers stack bottom→top (text → ydraw-scrolling → ydraw-scene →
-     * shader-glyph → ymgui) and all paint into the same big_target with
-     * LoadOp_Load. Each layer is asked to render unconditionally; the
-     * layer decides internally whether anything is dirty and returns 1
-     * iff it actually drew. Once any layer returns 1, every higher
-     * layer is invoked with force=1 — its previous-frame pixels in the
-     * shared big_target may have been overwritten by the lower layer's
-     * pass, so it MUST repaint them. */
-    int force = 0;
+    /* Layers stack bottom→top (background → text → ydraw-scrolling →
+     * ydraw-scene → shader-glyph → ymgui) and all paint into the same
+     * big_target with LoadOp_Load — pixels persist frame to frame.
+     *
+     * Two passes:
+     *
+     *   1. Scan every layer's is_dirty. If ANY layer is dirty, start the
+     *      render pass with force=1 — every layer below the dirty one
+     *      must repaint so the dirty layer's old pixels are covered
+     *      (e.g. ymgui window moves: ymgui is dirty, background + text
+     *      + ydraw underneath must repaint the region the window
+     *      vacated, otherwise the old window silhouette stays painted).
+     *
+     *   2. Render bottom→top. Each layer's render still returns 1 iff it
+     *      drew, which propagates `force` upward to layers that might
+     *      not have looked dirty themselves but whose pixels were just
+     *      overwritten by a lower repaint.
+     *
+     * The asymmetry the previous single-pass missed: `force` only flowed
+     * low→high. A dirty top layer never invalidated the layers below it,
+     * so its stale pixels survived. */
+    int force = force_redraw;
+    for (size_t i = 0; !force && i < terminal->layer_count; i++) {
+        struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
+        if (!layer) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "terminal_render_frame: terminal->layers[i] is NULL");
+        }
+        if (layer->ops && layer->ops->is_empty && layer->ops->is_empty(layer)) {
+            continue;
+        }
+        if (layer->ops && layer->ops->is_dirty && layer->ops->is_dirty(layer)) {
+            force = 1;
+        }
+    }
+
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (!layer) {
@@ -1515,11 +1550,11 @@ static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_vie
 }
 
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target)
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target, int force_redraw)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 
-    return terminal_render_frame(terminal, render_target);
+    return terminal_render_frame(terminal, render_target, force_redraw);
 }
 
 static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,

@@ -35,9 +35,10 @@ struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_work
  * auto-allocated fallback). 0 when NULL. */
 yetty_ycore_object_id yetty_yui_workspace_id(const struct yetty_yui_workspace *ws);
 
-/* Core operations */
+/* Core operations. force_redraw forwarded to tile_render — see
+ * yetty_yui_tile_render. */
 struct yetty_ycore_void_result yetty_yui_workspace_render(
-    struct yetty_yui_workspace *ws, struct yetty_ydraw_target *render_target);
+    struct yetty_yui_workspace *ws, struct yetty_ydraw_target *render_target, int force_redraw);
 
 struct yetty_ycore_void_result yetty_yui_workspace_resize(struct yetty_yui_workspace *ws,
                                                           float width, float height);

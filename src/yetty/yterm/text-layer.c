@@ -348,6 +348,13 @@ static int text_layer_is_empty(const struct yetty_yrender_terminal_layer *self)
     return 0;
 }
 
+/* Mirrors the dirty check inside text_layer_render — single-pass over the
+ * whole grid, so the base dirty bit is the only state that matters. */
+static int text_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
+{
+    return self->dirty;
+}
+
 /*=============================================================================
  * Scrollback arena
  *
@@ -675,6 +682,7 @@ static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
     .set_visual_zoom = text_layer_set_visual_zoom,
     .get_gpu_resource_set = text_layer_get_gpu_resource_set,
     .render = text_layer_render,
+    .is_dirty = text_layer_is_dirty,
     .is_empty = text_layer_is_empty,
     .on_key = text_layer_on_key,
     .on_char = text_layer_on_char,

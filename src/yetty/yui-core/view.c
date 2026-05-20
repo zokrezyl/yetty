@@ -36,7 +36,8 @@ struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yui_view *vie
 }
 
 struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yui_view *view,
-                                                     struct yetty_ydraw_target *render_target)
+                                                     struct yetty_ydraw_target *render_target,
+                                                     int force_redraw)
 {
     if (!view) {
         return YETTY_ERR(yetty_ycore_void, "view is NULL");
@@ -44,7 +45,7 @@ struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yui_view *view
     if (!view->ops || !view->ops->render) {
         return YETTY_ERR(yetty_ycore_void, "render not implemented");
     }
-    return view->ops->render(view, render_target);
+    return view->ops->render(view, render_target, force_redraw);
 }
 
 struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yui_view *view,
