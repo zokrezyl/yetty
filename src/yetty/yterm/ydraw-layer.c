@@ -176,6 +176,7 @@ static int ydraw_layer_on_key(struct yetty_yrender_terminal_layer *self, int key
 static int ydraw_layer_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
                                int mods);
 static int ydraw_layer_is_empty(const struct yetty_yrender_terminal_layer *self);
+static int ydraw_layer_is_dirty(const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ydraw_layer_scroll(struct yetty_yrender_terminal_layer *self,
                                                          int lines);
 static struct yetty_ycore_void_result ydraw_layer_set_cursor(
@@ -264,6 +265,7 @@ static const struct yetty_yterm_terminal_layer_ops ydraw_layer_ops = {
     .set_visual_zoom = ydraw_layer_set_visual_zoom,
     .get_gpu_resource_set = ydraw_layer_get_gpu_resource_set,
     .render = ydraw_layer_render,
+    .is_dirty = ydraw_layer_is_dirty,
     .is_empty = ydraw_layer_is_empty,
     .on_key = ydraw_layer_on_key,
     .on_char = ydraw_layer_on_char,
@@ -734,6 +736,34 @@ static int ydraw_layer_is_empty(const struct yetty_yrender_terminal_layer *self)
     }
 
     return layer->canvas->ops->drawable_count(layer->canvas) == 0;
+}
+
+/* Mirrors every dirty source ydraw_layer_render reads: the base bit, the
+ * canvas's content dirty bit (simple prims), and any figure_instance with
+ * its own dirty bit set. Must stay in sync with the two-step render — if a
+ * new dirty source is added there, add it here too. */
+static int ydraw_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
+{
+    const struct yetty_yterm_ydraw_layer *layer = (const struct yetty_yterm_ydraw_layer *)self;
+
+    if (self->dirty) {
+        return 1;
+    }
+    if (!layer->canvas || !layer->canvas->ops) {
+        return 0;
+    }
+    if (layer->canvas->ops->is_dirty(layer->canvas)) {
+        return 1;
+    }
+    uint32_t count = layer->canvas->ops->figure_count(layer->canvas);
+    for (uint32_t i = 0; i < count; i++) {
+        struct yetty_ydraw_figure_instance *inst =
+            layer->canvas->ops->get_figure(layer->canvas, i);
+        if (inst && inst->dirty) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /* Scroll - called when another layer scrolls */

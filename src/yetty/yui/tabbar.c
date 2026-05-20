@@ -175,7 +175,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
  * to the engine titlebar slot — see yui.c::yui_titlebar_build. */
 
 struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *bar,
-                                                       struct yetty_ydraw_target *render_target)
+                                                       struct yetty_ydraw_target *render_target,
+                                                       int force_redraw)
 {
     if (!bar) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_render: NULL");
@@ -192,7 +193,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *
      * slot. */
     struct yetty_yui_workspace *ws = bar->workspaces[bar->active];
     if (ws) {
-        struct yetty_ycore_void_result r = yetty_yui_workspace_render(ws, render_target);
+        struct yetty_ycore_void_result r =
+            yetty_yui_workspace_render(ws, render_target, force_redraw);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "tabbar_render: workspace render failed");
     }
     return YETTY_OK_VOID();

@@ -53,9 +53,11 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
 
 struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *tile);
 
-/* Tile operations */
+/* Tile operations. force_redraw=1 means a global condition (yui scene-
+ * canvas dirty) invalidates pixels under this subtree; every pane must
+ * repaint regardless of its own dirty bits. */
 struct yetty_ycore_void_result yetty_yui_tile_render(
-    struct yetty_yui_tile *tile, struct yetty_ydraw_target *render_target);
+    struct yetty_yui_tile *tile, struct yetty_ydraw_target *render_target, int force_redraw);
 
 struct yetty_ycore_void_result yetty_yui_tile_set_bounds(struct yetty_yui_tile *tile,
                                                          struct yetty_yui_rect bounds);

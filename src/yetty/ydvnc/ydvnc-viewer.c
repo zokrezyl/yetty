@@ -143,9 +143,12 @@ static struct yetty_ycore_void_result viewer_destroy(struct yetty_yui_view *view
 }
 
 static struct yetty_ycore_void_result viewer_render(struct yetty_yui_view *view,
-                                                    struct yetty_ydraw_target *render_target)
+                                                    struct yetty_ydraw_target *render_target,
+                                                    int force_redraw)
 {
     struct yetty_ydvnc_viewer *v = (struct yetty_ydvnc_viewer *)view;
+    /* Direct framebuffer blit each frame, no internal dirty gate. */
+    (void)force_redraw;
 
     if (!v->client || !yetty_ydvnc_rfb_client_is_connected(v->client)) {
         return YETTY_OK_VOID();

@@ -146,6 +146,15 @@ struct yetty_yterm_terminal_layer_ops {
      * skip. */
     struct yetty_ycore_int_result (*render)(struct yetty_yrender_terminal_layer *self,
                                             struct yetty_ydraw_target *target, int force);
+    /* Returns 1 if the layer has anything to repaint this frame — its own
+     * dirty bit, a dirty sub-canvas, or any dirty figure/widget the layer
+     * owns. Used by the terminal's pre-render scan: if any layer reports
+     * dirty, every layer is invoked with force=1, so stale pixels from a
+     * higher layer's old position (e.g. a moved ymgui window) get covered
+     * by the lower layers underneath. Must mirror the conditions the
+     * layer's render method itself checks — anything that would make
+     * render redraw must also flip is_dirty. */
+    int (*is_dirty)(const struct yetty_yrender_terminal_layer *self);
     /* Returns 1 if layer has no content to render (skip rendering, use
    * transparent texture) */
     int (*is_empty)(const struct yetty_yrender_terminal_layer *self);

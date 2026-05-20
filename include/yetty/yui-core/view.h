@@ -31,11 +31,20 @@ struct yetty_yui_rect {
 /* Result types */
 YETTY_YRESULT_DECLARE(yetty_yui_view_ptr, struct yetty_yui_view *);
 
-/* View ops vtable */
+/* View ops vtable.
+ *
+ * render(force_redraw): force_redraw=1 means the root (yetty_event_handler)
+ * detected a global condition that invalidates pixels under this view —
+ * typically the yui scene-canvas (tabbar/cards/dialogs) is dirty and
+ * about to repaint, which would leave stale pixels in the regions it
+ * vacates. The view must repaint its full contents regardless of any
+ * internal dirty bits. Forwarded down to terminal_render_frame's
+ * two-pass force gate. */
 struct yetty_yui_view_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yui_view *self);
     struct yetty_ycore_void_result (*render)(struct yetty_yui_view *self,
-                                             struct yetty_ydraw_target *render_target);
+                                             struct yetty_ydraw_target *render_target,
+                                             int force_redraw);
     struct yetty_ycore_void_result (*set_bounds)(struct yetty_yui_view *self,
                                                  struct yetty_yui_rect bounds);
     struct yetty_ycore_int_result (*on_event)(struct yetty_yui_view *self,
@@ -53,7 +62,7 @@ struct yetty_yui_view {
 struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yui_view *view);
 
 struct yetty_ycore_void_result yetty_yui_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target);
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target, int force_redraw);
 
 struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yui_view *view,
                                                          struct yetty_yui_rect bounds);
