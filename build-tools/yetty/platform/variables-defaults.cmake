@@ -43,6 +43,10 @@ option(YETTY_ENABLE_LIB_DAV1D       "dav1d — AV1 decoder"                   OF
 set(YETTY_ENABLE_LIB_OPENH264 ON CACHE BOOL "openh264 — H.264 codec" FORCE)
 set(YETTY_ENABLE_LIB_MINIMP4  ON CACHE BOOL "minimp4 — MP4 container" FORCE)
 
+# Audio
+option(YETTY_ENABLE_LIB_MINIAUDIO   "miniaudio — cross-platform audio I/O"  ON)
+option(YETTY_ENABLE_LIB_LIBOPUS     "libopus — Opus audio codec"            ON)
+
 # Misc
 option(YETTY_ENABLE_LIB_TREESITTER  "tree-sitter — source code parsing"     ON)
 option(YETTY_ENABLE_LIB_WASM3       "wasm3 — WASM interpreter"              OFF)
@@ -96,6 +100,7 @@ option(YETTY_ENABLE_FEATURE_YTHORVG   "ythorvg — thorvg card"               ON
 
 # Video / media
 option(YETTY_ENABLE_FEATURE_YVCODEC   "yvcodec — H.264 video codec support"  OFF)
+option(YETTY_ENABLE_FEATURE_YACODEC   "yacodec — audio codec support (Opus)" ON)
 
 # Network / connectivity
 option(YETTY_ENABLE_FEATURE_YVNC       "vnc — VNC client/server"              ON)

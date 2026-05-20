@@ -48,12 +48,23 @@ struct yetty_yvideo_render_config {
     float fps;          /* 30.0 — playback rate */
     uint32_t color_matrix; /* 1 (BT.709) */
     uint32_t flags;     /* default LOOP|AUTOPLAY */
+
+    /* v2 audio (per #198 item 2). audio_codec=0 → video-only; the
+     * audio_bytes pointer/len pair is ignored in that case. */
+    uint32_t audio_codec;       /* yetty_yacodec_codec enum: 0=none 1=opus */
+    uint32_t audio_sample_rate; /* required if audio_codec!=0 — 48000 typical */
+    uint32_t audio_channels;    /* 1 or 2 */
 };
 
 /*
  * Build a draw_list holding ONE yvideo complex prim that carries the
- * supplied NAL bytes as its initial chunk. The caller owns the returned
- * buffer and frees it with yetty_ydraw_draw_list_destroy.
+ * supplied NAL bytes as its initial chunk + (optionally) the initial
+ * audio packets. The caller owns the returned buffer and frees it with
+ * yetty_ydraw_draw_list_destroy.
+ *
+ * `audio_bytes` carries length-prefixed audio packets (each: u32
+ * length followed by `length` bytes; the v2 audio_stream buffer
+ * layout). NULL/0 when audio_codec=0.
  *
  * The first envelope a sender ships should typically wrap this prim in
  * a CMD_GROUP(id) so subsequent CMD_UPDATE envelopes can target it; the
@@ -62,6 +73,7 @@ struct yetty_yvideo_render_config {
  */
 struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     const uint8_t *nal_bytes, size_t nal_len,
+    const uint8_t *audio_bytes, size_t audio_len,
     const struct yetty_yvideo_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).

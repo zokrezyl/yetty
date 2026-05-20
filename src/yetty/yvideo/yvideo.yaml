@@ -74,6 +74,20 @@ uniforms:
     type: u32
     default: 3
 
+  # v2 audio uniforms (added per #198 item 2). audio_codec=0 means
+  # video-only; the figure skips audio decode/playback entirely.
+  - name: audio_codec
+    type: u32
+    default: 0           # 0=none 1=opus 2=vorbis 3=flac 4=mp3 5=wav
+
+  - name: audio_sample_rate
+    type: u32
+    default: 0           # Hz; Opus accepts 8000/12000/16000/24000/48000
+
+  - name: audio_channels
+    type: u32
+    default: 0           # 1 = mono, 2 = stereo
+
 # Append-only H.264 Annex-B byte stream. INIT envelope MUST start with
 # SPS+PPS+IDR so decode can begin immediately. Subsequent CMD_UPDATE
 # envelopes carry additional bytes the factory feeds to the decoder.
@@ -82,8 +96,15 @@ uniforms:
 # the shader doesn't read (small waste of one bind slot + one upload at
 # init). Adding a `host_only: true` flag to ydraw-gen so the binding
 # is skipped is tracked in #198.
+#
+# v2 adds `audio_stream` — interleaved length-prefixed audio packets
+# (each: u32 length, then `length` bytes padded to u32 alignment). The
+# codec is identified by the `audio_codec` uniform. Senders that don't
+# carry audio set `audio_codec=0` and ship a zero-length audio_stream.
 buffers:
   - name: nal_stream
+    element_type: u32
+  - name: audio_stream
     element_type: u32
 
 # Decoded RGBA8 frame texture, width=video_w, height=video_h. Backed by

@@ -42,6 +42,17 @@ if(YETTY_ENABLE_LIB_WEBGPU AND YETTY_ENABLE_LIB_OPENH264)
         yetty_yplatform_core
     )
 
+    # v2 audio (#198 item 2). Gate so a build with audio disabled still
+    # compiles the video-only path — yvideo-hooks.c just doesn't get
+    # called with audio_codec!=0 in that case (and the linker would
+    # error on the missing symbols if it tried).
+    if(YETTY_ENABLE_FEATURE_YACODEC AND YETTY_ENABLE_LIB_LIBOPUS AND YETTY_ENABLE_LIB_MINIAUDIO)
+        target_link_libraries(yetty_yvideo PUBLIC
+            yetty_yacodec
+            yetty_yplatform_audio
+        )
+    endif()
+
     # Embed shaders via incbin — same pattern as yimage / yplot.
     incbin_add_resources(yetty_yvideo
         yvideo_shader "${CMAKE_CURRENT_SOURCE_DIR}/yvideo.wgsl"

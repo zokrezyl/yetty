@@ -40,6 +40,19 @@ fn yvideo_get_flags() -> u32 {
     return uniforms.yvideo_flags;
 }
 
+// v2 audio uniforms.
+fn yvideo_get_audio_codec() -> u32 {
+    return uniforms.yvideo_audio_codec;
+}
+
+fn yvideo_get_audio_sample_rate() -> u32 {
+    return uniforms.yvideo_audio_sample_rate;
+}
+
+fn yvideo_get_audio_channels() -> u32 {
+    return uniforms.yvideo_audio_channels;
+}
+
 // Buffer data is in storage_buffer (binding 1+)
 // Access via: storage_buffer[offset]
 
