@@ -14,6 +14,11 @@ struct yetty_yfsvm_builder {
     uint32_t current_func_start;
     uint16_t reg_alloc; /* bitmask of allocated registers */
     const char *error;
+
+    /* When compiling within a plot context, this points to the plot's
+     * buffer table so `name(x)` calls can resolve to LOAD_S against the
+     * buffer's sampler slot. NULL for single-expression compiles. */
+    const struct yetty_yexpr_plot_expr *plot_ctx;
 };
 
 static void builder_init(struct yetty_yfsvm_builder *b, struct yetty_yfsvm_program *prog)
@@ -257,6 +262,34 @@ static uint8_t compile_call(struct yetty_yfsvm_builder *b, const struct yetty_ye
     const char *name = node->call.name;
     uint32_t argc = node->call.arg_count;
 
+    /* Named-buffer call: `f(x)` where `f` is declared as `f=buffer` — emits
+     * LOAD_S against the buffer's slot. Plot ordering defines the slot: the
+     * declaration index in `plot_ctx->buffers` is the sampler index. The
+     * argument is discarded (the shader samples by normalised plotUV.x). */
+    if (b->plot_ctx) {
+        for (uint32_t i = 0; i < b->plot_ctx->buffer_count; i++) {
+            if (strcmp(name, b->plot_ctx->buffers[i].name) == 0) {
+                if (i > 7) {
+                    b->error = "buffer slot out of range";
+                    return 0;
+                }
+                /* Compile and discard the argument so any side-effecting
+                 * subexpression (e.g. `f(x + 1)`) still type-checks; the VM
+                 * has no side effects, so this just allocates and frees. */
+                if (argc >= 1) {
+                    uint8_t arg = compile_node(b, node->call.args[0]);
+                    if (b->error) {
+                        return 0;
+                    }
+                    builder_free_reg(b, arg);
+                }
+                uint8_t reg = builder_alloc_reg(b);
+                builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_LOAD_S, reg, 0, 0, (uint16_t)i));
+                return reg;
+            }
+        }
+    }
+
     if (argc == 1) {
         uint8_t arg = compile_node(b, node->call.args[0]);
         if (b->error) {
@@ -439,6 +472,7 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi(
     for (uint32_t i = 0; i < plot->def_count; i++) {
         struct yetty_yfsvm_builder b;
         builder_init(&b, &prog);
+        b.plot_ctx = plot;
         builder_begin_function(&b);
 
         uint8_t result_reg = compile_node(&b, plot->defs[i].expression);

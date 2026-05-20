@@ -25,6 +25,7 @@
 #include <yetty/yexpr/yexpr.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/yplot/yplot-gen.h>
+#include <yetty/yplot/yplot.h>
 
 #include <ctype.h>
 #include <stdarg.h>
@@ -925,6 +926,23 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
         return YETTY_ERR(yetty_ycore_void, "plot parse failed", pr);
     }
 
+    /* Inline ranges from the source override yecho's xrange=/yrange= attrs
+     * (the source is closer to the author's intent). */
+    if (pr.value.plot.has_x_range) {
+        u.x_min = pr.value.plot.x_min;
+        u.x_max = pr.value.plot.x_max;
+    }
+    if (pr.value.plot.has_y_range) {
+        u.y_min = pr.value.plot.y_min;
+        u.y_max = pr.value.plot.y_max;
+    }
+    if (pr.value.plot.has_view) {
+        u.x_min = pr.value.plot.view_x_min;
+        u.x_max = pr.value.plot.view_x_max;
+        u.y_min = pr.value.plot.view_y_min;
+        u.y_max = pr.value.plot.view_y_max;
+    }
+
     u.function_count = pr.value.plot.def_count;
     if (u.function_count > 8) {
         u.function_count = 8;
@@ -960,26 +978,73 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
         return YETTY_ERR(yetty_ycore_void, "yfsvm_program_serialize failed");
     }
 
+    if (prog.value.uses_time) {
+        u.flags |= YETTY_YPLOT_FLAG_USES_TIME;
+    }
+
+    /* Buffer declarations from source → wire data buffers. Inline values
+     * stream through as-is; size-only declarations get zero-filled scratch
+     * (rendered as a flat baseline until streamed). */
+    uint32_t decl_count = pr.value.plot.buffer_count;
+    if (decl_count > 8) {
+        decl_count = 8;
+    }
+    struct yetty_yplot_data_buffer wire_bufs[8] = {0};
+    float *zero_fill = NULL;
+    size_t zero_fill_total = 0;
+    for (uint32_t i = 0; i < decl_count; i++) {
+        const struct yetty_yexpr_plot_buffer *d = &pr.value.plot.buffers[i];
+        if (d->inline_count == 0 && d->size > 0) {
+            zero_fill_total += d->size;
+        }
+    }
+    if (zero_fill_total > 0) {
+        zero_fill = calloc(zero_fill_total, sizeof(float));
+        if (!zero_fill) {
+            return YETTY_ERR(yetty_ycore_void, "yplot zero-fill alloc failed");
+        }
+    }
+    size_t zf_off = 0;
+    for (uint32_t i = 0; i < decl_count; i++) {
+        const struct yetty_yexpr_plot_buffer *d = &pr.value.plot.buffers[i];
+        if (d->inline_count > 0) {
+            wire_bufs[i].samples = d->inline_values;
+            wire_bufs[i].count = d->inline_count;
+        } else if (d->size > 0) {
+            wire_bufs[i].samples = zero_fill + zf_off;
+            wire_bufs[i].count = d->size;
+            zf_off += d->size;
+        } else {
+            wire_bufs[i].samples = NULL;
+            wire_bufs[i].count = 0;
+        }
+    }
+
     struct yetty_yplot_buffers bufs = {
         .bytecode = bc_buf,
         .bytecode_len = bc_len,
+        .data = decl_count > 0 ? wire_bufs : NULL,
+        .data_count = decl_count,
     };
 
     size_t required = yetty_yplot_uniforms_serialized_size(&u, &bufs);
     uint8_t *drawable_buf = malloc(required);
     if (!drawable_buf) {
+        free(zero_fill);
         return YETTY_ERR(yetty_ycore_void, "yplot prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
         yetty_yplot_uniforms_serialize(&u, &bufs, drawable_buf, required);
     if (YETTY_IS_ERR(ser)) {
         free(drawable_buf);
+        free(zero_fill);
         return YETTY_ERR(yetty_ycore_void, "yplot_serialize failed", ser);
     }
 
     struct yetty_ydraw_id_result idr =
         yetty_ydraw_draw_list_add_prim(rs->buf, drawable_buf, required);
     free(drawable_buf);
+    free(zero_fill);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "yplot add_prim failed");
 
     /* Advance the cursor past the plot. The plot is a block element; the

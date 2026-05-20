@@ -111,11 +111,44 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
     let yRange = yMax - yMin;
     let lineWidth = 3.0 / bounds_h;
 
+    // -------- pre-sample data buffers into the sampler array ---------------
+    // Expressions that reference `f(x)` (where f was declared as `f=buffer`)
+    // compile to LOAD_S against the buffer's slot. Walk the buffers ONCE,
+    // fill samplers[i] with the linear-interpolated sample at plotUV.x.
+    let data_count = yplot_data_count();
+    var samplers: array<f32, 8>;
+    samplers[0] = dataX; // legacy default for @buffer1 in expressions w/o data
+    {
+        var cursor: u32 = yplot_data_count_offset() + 1u;
+        for (var bi = 0u; bi < YPLOT_MAX_CURVES; bi++) {
+            if (bi >= data_count) { break; }
+            let len = storage_buffer[cursor];
+            let samples_off = cursor + 1u;
+            if (len >= 2u && bi < 8u) {
+                let idx_f   = plotUV.x * f32(len - 1u);
+                let idx     = u32(floor(idx_f));
+                let nxt     = min(idx + 1u, len - 1u);
+                let t_lerp  = fract(idx_f);
+                let v1 = bitcast<f32>(storage_buffer[samples_off + idx]);
+                let v2 = bitcast<f32>(storage_buffer[samples_off + nxt]);
+                let sv = mix(v1, v2, t_lerp);
+                switch (bi) {
+                    case 0u: { samplers[0] = sv; }
+                    case 1u: { samplers[1] = sv; }
+                    case 2u: { samplers[2] = sv; }
+                    case 3u: { samplers[3] = sv; }
+                    case 4u: { samplers[4] = sv; }
+                    case 5u: { samplers[5] = sv; }
+                    case 6u: { samplers[6] = sv; }
+                    default: { samplers[7] = sv; }
+                }
+            }
+            cursor = cursor + 1u + len;
+        }
+    }
+
     // -------- expression curves (yfsvm bytecode) -----------------------------
     if (func_count > 0u) {
-        var samplers: array<f32, 8>;
-        samplers[0] = dataX;
-
         // bytecode begins at storage word 1 (word 0 is bytecode_len).
         let bc_off = yplot_bytecode_offset();
 
@@ -131,35 +164,36 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
     // Sequentially walk [data_count][len_0][samples_0...][len_1]...
     // The shader can't binary-search since each entry's length is data-driven,
     // but a linear walk over N≤16 entries is fine.
-    let data_count = yplot_data_count();
-    var cursor: u32 = yplot_data_count_offset() + 1u;  // first len_i
+    {
+        var cursor: u32 = yplot_data_count_offset() + 1u;  // first len_i
 
-    for (var bi = 0u; bi < YPLOT_MAX_CURVES; bi++) {
-        if (bi >= data_count) { break; }
+        for (var bi = 0u; bi < YPLOT_MAX_CURVES; bi++) {
+            if (bi >= data_count) { break; }
 
-        let len = storage_buffer[cursor];
-        let samples_off = cursor + 1u;
+            let len = storage_buffer[cursor];
+            let samples_off = cursor + 1u;
 
-        if (len >= 2u) {
-            // Color slot: expressions first, then buffers, modulo 8.
-            let color_slot = (func_count + bi) % 8u;
-            let curve_color = yplot_unpack_color(yplot_get_colors(color_slot));
+            if (len >= 2u) {
+                // Color slot: expressions first, then buffers, modulo 8.
+                let color_slot = (func_count + bi) % 8u;
+                let curve_color = yplot_unpack_color(yplot_get_colors(color_slot));
 
-            // Map plotUV.x → fractional sample index, lerp neighbours.
-            let idx_f   = plotUV.x * f32(len - 1u);
-            let idx     = u32(floor(idx_f));
-            let nxt     = min(idx + 1u, len - 1u);
-            let t_lerp  = fract(idx_f);
+                // Map plotUV.x → fractional sample index, lerp neighbours.
+                let idx_f   = plotUV.x * f32(len - 1u);
+                let idx     = u32(floor(idx_f));
+                let nxt     = min(idx + 1u, len - 1u);
+                let t_lerp  = fract(idx_f);
 
-            let v1 = bitcast<f32>(storage_buffer[samples_off + idx]);
-            let v2 = bitcast<f32>(storage_buffer[samples_off + nxt]);
-            let y  = mix(v1, v2, t_lerp);
+                let v1 = bitcast<f32>(storage_buffer[samples_off + idx]);
+                let v2 = bitcast<f32>(storage_buffer[samples_off + nxt]);
+                let y  = mix(v1, v2, t_lerp);
 
-            let yNorm = (y - yMin) / yRange;
-            color = yplot_line_blend(color, plotUV.y, yNorm, lineWidth, curve_color);
+                let yNorm = (y - yMin) / yRange;
+                color = yplot_line_blend(color, plotUV.y, yNorm, lineWidth, curve_color);
+            }
+
+            cursor = cursor + 1u + len;
         }
-
-        cursor = cursor + 1u + len;
     }
 
     return vec4<f32>(color, 1.0);

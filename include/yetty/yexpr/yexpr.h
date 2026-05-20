@@ -104,6 +104,8 @@ struct yetty_yexpr_arena {
 
 #define YETTY_YEXPR_MAX_PLOT_DEFS 16
 #define YETTY_YEXPR_MAX_PLOT_ATTRS 32
+#define YETTY_YEXPR_MAX_PLOT_BUFFERS 8
+#define YETTY_YEXPR_MAX_INLINE_VALUES 64
 
 struct yetty_yexpr_plot_def {
     char name[YETTY_YEXPR_MAX_NAME_LEN];
@@ -116,11 +118,41 @@ struct yetty_yexpr_plot_attr {
     char value[64];
 };
 
+/* One named buffer declaration: `f=buffer; @f.size=N; @f.values=...`.
+ * The compiler treats f(x) as a sampler-load against this buffer's slot. */
+struct yetty_yexpr_plot_buffer {
+    char name[YETTY_YEXPR_MAX_NAME_LEN];
+    uint32_t size;                   /* explicit @f.size — 0 ⇒ unset */
+    uint8_t has_size;                /* size came from @f.size, not values */
+
+    /* @f.values=… — three variants distinguished by these flags:
+     *   inline_count > 0           : inline_values[0..inline_count] are the data
+     *   wants_payload (count==0)   : @f.values= (bare) → expect from payload
+     *   file_path[0] != 0          : @f.values="file" → load from file */
+    float inline_values[YETTY_YEXPR_MAX_INLINE_VALUES];
+    uint32_t inline_count;
+    uint8_t wants_payload;
+    char file_path[64];
+};
+
 struct yetty_yexpr_plot_expr {
     struct yetty_yexpr_plot_def defs[YETTY_YEXPR_MAX_PLOT_DEFS];
     uint32_t def_count;
     struct yetty_yexpr_plot_attr attrs[YETTY_YEXPR_MAX_PLOT_ATTRS];
     uint32_t attr_count;
+    struct yetty_yexpr_plot_buffer buffers[YETTY_YEXPR_MAX_PLOT_BUFFERS];
+    uint32_t buffer_count;
+
+    /* x=A..B / y=A..B — domain (evaluation range). */
+    float x_min, x_max;
+    float y_min, y_max;
+    uint8_t has_x_range;
+    uint8_t has_y_range;
+
+    /* @view=X1..X2,Y1..Y2 — initial viewport. */
+    float view_x_min, view_x_max;
+    float view_y_min, view_y_max;
+    uint8_t has_view;
 };
 
 /*=============================================================================
