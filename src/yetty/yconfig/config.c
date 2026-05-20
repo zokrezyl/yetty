@@ -71,6 +71,9 @@ static struct yetty_yconfig_config *config_get_node(const struct yetty_yconfig_c
 static int config_get_array_count(const struct yetty_yconfig_config *self, const char *path);
 static const char *config_get_array_item(const struct yetty_yconfig_config *self, const char *path,
                                          int index, const char *default_value);
+static int config_get_child_count(const struct yetty_yconfig_config *self, const char *path);
+static const char *config_get_child_key(const struct yetty_yconfig_config *self, const char *path,
+                                        int index);
 static struct yetty_ycore_void_result config_get_shell_argv(const struct yetty_yconfig_config *self,
                                                             struct yetty_yconfig_shell_argv *out);
 
@@ -84,6 +87,8 @@ static const struct yetty_yconfig_config_ops config_ops = {
     .get_node = config_get_node,
     .get_array_count = config_get_array_count,
     .get_array_item = config_get_array_item,
+    .get_child_count = config_get_child_count,
+    .get_child_key = config_get_child_key,
     .get_shell_argv = config_get_shell_argv,
     .use_damage_tracking = config_use_damage_tracking,
     .show_fps = config_show_fps,
@@ -658,6 +663,9 @@ static int subnode_get_array_count(const struct yetty_yconfig_config *self, cons
 static const char *subnode_get_array_item(const struct yetty_yconfig_config *self,
                                           const char *path, int index,
                                           const char *default_value);
+static int subnode_get_child_count(const struct yetty_yconfig_config *self, const char *path);
+static const char *subnode_get_child_key(const struct yetty_yconfig_config *self,
+                                         const char *path, int index);
 
 static const struct yetty_yconfig_config_ops subnode_ops = {
     .destroy = subnode_destroy,
@@ -669,6 +677,8 @@ static const struct yetty_yconfig_config_ops subnode_ops = {
     .get_node = subnode_get_node,
     .get_array_count = subnode_get_array_count,
     .get_array_item = subnode_get_array_item,
+    .get_child_count = subnode_get_child_count,
+    .get_child_key = subnode_get_child_key,
     .get_shell_argv = NULL,
     .use_damage_tracking = NULL,
     .show_fps = NULL,
@@ -717,6 +727,23 @@ static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_
 
     struct config_node *node = node_find_child(parent, key);
     return create_subconfig(node);
+}
+
+/* Resolve a slash-path to a config_node. NULL, empty, or "/" returns
+ * `root` itself (the implicit top-of-tree). For any other path we
+ * reuse navigate_path's parent+leaf-key split and look up the leaf
+ * child by name. Returns NULL if any path segment is missing. */
+static struct config_node *resolve_node(struct config_node *root, const char *path)
+{
+    if (!path || !path[0] || (path[0] == '/' && !path[1])) {
+        return root;
+    }
+    char key[MAX_KEY_LEN] = {0};
+    struct config_node *parent = navigate_path(root, path, key);
+    if (!parent) {
+        return NULL;
+    }
+    return node_find_child(parent, key);
 }
 
 /* Array accessors (root and subnode flavours).
@@ -771,6 +798,24 @@ static const char *config_get_array_item(const struct yetty_yconfig_config *self
     return node_array_item(node_find_child(parent, key), index, default_value);
 }
 
+static int config_get_child_count(const struct yetty_yconfig_config *self, const char *path)
+{
+    struct config_impl *impl = container_of(self, struct config_impl, base);
+    struct config_node *node = resolve_node(impl->root, path);
+    return node ? node->child_count : 0;
+}
+
+static const char *config_get_child_key(const struct yetty_yconfig_config *self, const char *path,
+                                        int index)
+{
+    struct config_impl *impl = container_of(self, struct config_impl, base);
+    struct config_node *node = resolve_node(impl->root, path);
+    if (!node || index < 0 || index >= node->child_count) {
+        return NULL;
+    }
+    return node->children[index]->key;
+}
+
 static int subnode_get_array_count(const struct yetty_yconfig_config *self, const char *path)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
@@ -793,6 +838,24 @@ static const char *subnode_get_array_item(const struct yetty_yconfig_config *sel
         return default_value;
     }
     return node_array_item(node_find_child(parent, key), index, default_value);
+}
+
+static int subnode_get_child_count(const struct yetty_yconfig_config *self, const char *path)
+{
+    struct config_subnode *sub = (struct config_subnode *)self;
+    struct config_node *node = resolve_node(sub->node, path);
+    return node ? node->child_count : 0;
+}
+
+static const char *subnode_get_child_key(const struct yetty_yconfig_config *self,
+                                         const char *path, int index)
+{
+    struct config_subnode *sub = (struct config_subnode *)self;
+    struct config_node *node = resolve_node(sub->node, path);
+    if (!node || index < 0 || index >= node->child_count) {
+        return NULL;
+    }
+    return node->children[index]->key;
 }
 
 /* Store platform paths */

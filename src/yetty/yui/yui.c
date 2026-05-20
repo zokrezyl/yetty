@@ -40,6 +40,7 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/window-manager.h>
 
+#include "config-dialog.h"
 #include "tabbar.h"
 
 struct yetty_yui {
@@ -93,6 +94,13 @@ struct yetty_yui {
     struct yetty_ygui_widget *gpu_info_textarea;
     WGPUAdapter gpu_info_adapter;
     const struct yetty_ydraw_gpu_allocator *gpu_info_allocator;
+
+    /* Settings dialog — opened from the hamburger menu's and context
+     * menu's "Settings…" item. Two-pane window (config tree on the
+     * left, selected branch's leaves on the right); construction +
+     * tree walking + the on-toggle handler all live in config-dialog.c
+     * so this file doesn't grow another 80 lines of widget tree. */
+    struct yetty_yui_config_dialog *config_dialog;
 
     /* Bound tabbar model. The native ygui TABBAR widget (used by the
      * yui titlebar) reads from this and calls its mutators on
@@ -344,6 +352,7 @@ static void yui_split_kind_action(struct yetty_ygui_widget *item, void *userdata
 static void yui_split_back_to_context(struct yetty_ygui_widget *item, void *userdata);
 static void yui_gpu_info_refresh(struct yetty_ygui_widget *button, void *userdata);
 static void yui_gpu_info_close(struct yetty_ygui_widget *button, void *userdata);
+static void yui_app_menu_open_settings(struct yetty_ygui_widget *item, void *userdata);
 
 /* Titlebar (ygui-driven). build runs once at yui_create when the engine
  * is up; sync runs every render to reconcile widgets with the tabbar
@@ -724,6 +733,20 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             }
         }
 
+        /* Settings dialog — widget tree + tree-walk + on_toggle handler
+         * all live in config-dialog.c. Construction is best-effort: a
+         * failure here is logged but doesn't abort yui_create (the user
+         * just doesn't get a Settings dialog). */
+        struct yetty_yui_config_dialog_ptr_result cdr =
+            yetty_yui_config_dialog_create(yui->engine,
+                                           context->app_context.config);
+        if (YETTY_IS_OK(cdr)) {
+            yui->config_dialog = cdr.value;
+        } else {
+            ywarn("yui_create: config_dialog create: %s", cdr.error.msg);
+            yetty_ycore_error_destroy(cdr.error);
+        }
+
         /* Seed the menu at its root level. The drill-down callbacks
          * call popup_menu_clear + the matching populate_* helper, so
          * level transitions reuse the same single widget. */
@@ -819,6 +842,11 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         }
         yui->engine = NULL;
     }
+    /* config_dialog's widgets are owned by the engine (just destroyed
+     * above); free only the per-dialog bookkeeping (bundle array +
+     * struct). NULL-safe. */
+    yetty_yui_config_dialog_destroy(yui->config_dialog);
+    yui->config_dialog = NULL;
     if (yui->sm) {
         struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_destroy(yui->sm);
         if (!YETTY_IS_OK(r)) {
@@ -1221,7 +1249,8 @@ static void yui_app_menu_populate_root(struct yetty_yui *yui)
     yetty_ygui_widget_popup_menu_add_separator(yui->app_menu);
     yetty_ygui_widget_popup_menu_add_item(yui->app_menu, "GPU info…",
                                           yui_app_menu_open_gpu_info, yui);
-    /* Future top-level entries (Settings, Reports, About, Quit, …) hang off here. */
+    yetty_ygui_widget_popup_menu_add_item(yui->app_menu, "Settings…",
+                                          yui_app_menu_open_settings, yui);
     yui->app_menu_level = 0;
 }
 
@@ -1294,6 +1323,8 @@ static void yui_app_menu_populate_context_root(struct yetty_yui *yui)
     yetty_ygui_widget_popup_menu_set_back(yui->app_menu, NULL, NULL);
     yetty_ygui_widget_popup_menu_add_item(yui->app_menu, "GPU info…",
                                           yui_app_menu_open_gpu_info, yui);
+    yetty_ygui_widget_popup_menu_add_item(yui->app_menu, "Settings…",
+                                          yui_app_menu_open_settings, yui);
     yetty_ygui_widget_popup_menu_add_separator(yui->app_menu);
     yetty_ygui_widget_popup_menu_add_drill_item(yui->app_menu, "Split vertically  ▸",
                                                 yui_context_open_split_vertical, yui);
@@ -1492,6 +1523,16 @@ static void yui_gpu_info_close(struct yetty_ygui_widget *button, void *userdata)
     if (yui->engine) {
         yetty_ygui_engine_mark_dirty(yui->engine);
     }
+}
+
+static void yui_app_menu_open_settings(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    struct yetty_yui *yui = userdata;
+    if (!yui) {
+        return;
+    }
+    yetty_yui_config_dialog_show(yui->config_dialog);
 }
 
 /*===========================================================================
@@ -1833,6 +1874,9 @@ int yetty_yui_is_active(const struct yetty_yui *yui)
         }
     }
     if (yui->gpu_info_dialog && yetty_ygui_widget_is_visible(yui->gpu_info_dialog)) {
+        return 1;
+    }
+    if (yetty_yui_config_dialog_is_visible(yui->config_dialog)) {
         return 1;
     }
     return 0;
