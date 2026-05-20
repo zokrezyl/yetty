@@ -2,6 +2,7 @@
 
 #include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ynotify/ynotify.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty-pipe-source.h>
 #include <yetty/ytrace/ytrace.h>
@@ -99,6 +100,8 @@ static struct yetty_ycore_void_result webasm_register_timer_listener(
     struct yetty_yevent_event_listener *listener);
 YETTY_EXTERNAL_CALLBACK
 static void webasm_request_render(struct yetty_yevent_event_loop *self);
+static void webasm_post_fatal_error(struct yetty_yevent_event_loop *self,
+                                    struct yetty_ycore_error error);
 static void process_pty_data(struct yetty_yplatform_pty_pipe_handle *ph);
 
 static const struct yetty_yevent_event_loop_ops webasm_ops = {
@@ -118,6 +121,7 @@ static const struct yetty_yevent_event_loop_ops webasm_ops = {
     .destroy_timer = webasm_destroy_timer,
     .register_timer_listener = webasm_register_timer_listener,
     .request_render = webasm_request_render,
+    .post_fatal_error = webasm_post_fatal_error,
 };
 
 /* Main loop tick - processes input events, PTY data, and fires timers */
@@ -551,6 +555,28 @@ static void webasm_request_render(struct yetty_yevent_event_loop *self)
     webasm_dispatch(self, &event);
 
     (void)impl;
+}
+
+/* Surface a fatal error from an external-callback boundary. Mirrors the
+ * libuv-event-loop semantics: ownership of `error` transfers here. We
+ * route the top message through ynotify so the user sees it in the
+ * ygui notification widget (yui_ynotify_handler is the registered sink),
+ * dump the full cause chain to stderr for the trace, free the chain,
+ * and stop the tick so we don't keep firing on broken state. The
+ * emscripten main loop is NOT cancelled — leaving the page alive lets
+ * the user read the on-screen notification. */
+static void webasm_post_fatal_error(struct yetty_yevent_event_loop *self,
+                                    struct yetty_ycore_error error)
+{
+    struct yetty_yplatform_webasm_event_loop *impl =
+        container_of(self, struct yetty_yplatform_webasm_event_loop, base);
+
+    const char *top = error.msg ? error.msg : "(no message)";
+    ynotify(YETTY_YNOTIFY_ERROR, "fatal: %s", top);
+    yetty_ycore_error_print(stderr, "webasm event loop fatal", error);
+    yetty_ycore_error_destroy(error);
+
+    impl->running = 0;
 }
 
 /* Factory */
