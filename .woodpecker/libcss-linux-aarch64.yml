@@ -5,10 +5,15 @@ labels:
   platform: linux/arm64
   backend: docker
 
+# Disabled — libcss prebuilt is published via .github/workflows; the
+# woodpecker workflow stays parked. Re-enable by uncommenting below.
 when:
-  - event: manual
-  - event: tag
-    ref: refs/tags/lib-libcss-*
+  - evaluate: 'false'
+
+#when:
+#  - event: manual
+#  - event: tag
+#    ref: refs/tags/lib-libcss-*
 
 clone:
   git:

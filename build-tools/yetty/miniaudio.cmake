@@ -43,16 +43,27 @@ if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     find_package(Threads REQUIRED)
     target_link_libraries(miniaudio INTERFACE Threads::Threads m ${CMAKE_DL_LIBS})
 elseif(APPLE)
+    # macOS ships AudioUnit as a separate top-level framework; on
+    # iOS/tvOS/watchOS the AudioUnit headers live inside AudioToolbox
+    # and the standalone framework doesn't exist (linker errors with
+    # "framework 'AudioUnit' not found"). Skip it on the embedded
+    # Apple OSes; AudioToolbox alone is enough for miniaudio's
+    # CoreAudio backend there.
     find_library(_MA_COREAUDIO_FRAMEWORK CoreAudio REQUIRED)
-    find_library(_MA_AUDIOUNIT_FRAMEWORK AudioUnit REQUIRED)
     find_library(_MA_AUDIOTOOLBOX_FRAMEWORK AudioToolbox REQUIRED)
     find_library(_MA_COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
     target_link_libraries(miniaudio INTERFACE
         ${_MA_COREAUDIO_FRAMEWORK}
-        ${_MA_AUDIOUNIT_FRAMEWORK}
         ${_MA_AUDIOTOOLBOX_FRAMEWORK}
         ${_MA_COREFOUNDATION_FRAMEWORK}
     )
+    if(NOT (YETTY_IOS OR YETTY_TVOS
+            OR CMAKE_SYSTEM_NAME STREQUAL "iOS"
+            OR CMAKE_SYSTEM_NAME STREQUAL "tvOS"
+            OR CMAKE_SYSTEM_NAME STREQUAL "watchOS"))
+        find_library(_MA_AUDIOUNIT_FRAMEWORK AudioUnit REQUIRED)
+        target_link_libraries(miniaudio INTERFACE ${_MA_AUDIOUNIT_FRAMEWORK})
+    endif()
 elseif(ANDROID)
     target_link_libraries(miniaudio INTERFACE OpenSLES log)
 endif()
