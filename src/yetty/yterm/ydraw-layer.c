@@ -188,6 +188,8 @@ static struct yetty_ycore_void_result ydraw_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
 static struct yetty_ycore_void_result ydraw_layer_set_alt_screen(
     struct yetty_yrender_terminal_layer *self, int active);
+static struct yetty_ycore_void_result ydraw_layer_clear_screen(
+    struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ydraw_layer_set_selection(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t anchor_row, uint32_t anchor_col,
     uint32_t head_row, uint32_t head_col);
@@ -270,6 +272,7 @@ static const struct yetty_yterm_terminal_layer_ops ydraw_layer_ops = {
     .get_live_anchor = ydraw_layer_get_live_anchor,
     .set_view_top = ydraw_layer_set_view_top,
     .set_alt_screen = ydraw_layer_set_alt_screen,
+    .clear_screen = ydraw_layer_clear_screen,
     .set_selection = ydraw_layer_set_selection,
     .get_selection_text = ydraw_layer_get_selection_text,
 };
@@ -850,6 +853,33 @@ static struct yetty_ycore_void_result ydraw_layer_set_alt_screen(
     }
 
     ydebug("ydraw: alt_screen=%d", wanted);
+    return YETTY_OK_VOID();
+}
+
+/* Full-screen erase (CSI 2J / 3J) on the active screen — wipe the
+ * scene-kind canvas that's currently bound. The scrolling-kind canvas
+ * is for the ydraw OSC stream (ycat images / plots) and is not in scope
+ * for the libvterm grid erase — clearing it disturbs the layer's
+ * cursor/rolling state and breaks the post-feed dirty handshake that
+ * drives subsequent renders. Only the scene canvas (where ygui/ygreeter
+ * lives) needs to be flushed on full-screen erase. No request_render
+ * here either: terminal_pty_pipe_read's after-feed check already pumps
+ * a render when text-layer is dirty, which it is by the time we get
+ * here (the matching on_damage from erase_user fires just before). */
+static struct yetty_ycore_void_result ydraw_layer_clear_screen(
+    struct yetty_yrender_terminal_layer *self)
+{
+    struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
+    if (layer->kind != YETTY_YDRAW_LAYER_KIND_SCENE) {
+        return YETTY_OK_VOID();
+    }
+    if (!layer->canvas) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result r = layer->canvas->ops->clear(layer->canvas);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw_layer_clear_screen: canvas clear failed");
+    layer->base.dirty = 1;
+    ydebug("ydraw scene: clear_screen");
     return YETTY_OK_VOID();
 }
 

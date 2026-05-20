@@ -73,6 +73,14 @@ typedef struct yetty_ycore_void_result (*yetty_yterm_emit_osc_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yterm_alt_screen_fn)(
     int active, void *userdata);
 
+/* Clear-screen callback - fired by the text-layer when libvterm processes
+ * a full-screen erase (CSI 2J / 3J) on the currently active screen. The
+ * terminal forwards via each layer's clear_screen op; the layer is expected
+ * to wipe the active half of its content (primary or alternate — the layer
+ * already tracks which is current via set_alt_screen). */
+typedef struct yetty_ycore_void_result (*yetty_yterm_clear_screen_fn)(
+    void *userdata);
+
 /* Layer ops */
 struct yetty_yterm_terminal_layer_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yrender_terminal_layer *self);
@@ -170,6 +178,13 @@ struct yetty_yterm_terminal_layer_ops {
    * (text-layer, since libvterm itself owns the swap) may leave NULL. */
     struct yetty_ycore_void_result (*set_alt_screen)(struct yetty_yrender_terminal_layer *self,
                                                      int active);
+    /* Full-screen erase on the currently active screen (CSI 2J / 3J).
+     * The layer should wipe the active half of its content; the
+     * alt/primary split is already encoded in the layer's own state.
+     * Optional — text-layer leaves NULL (libvterm clears its own
+     * cells); layers that hold orthogonal state (ydraw canvas,
+     * future ypaint) implement this. */
+    struct yetty_ycore_void_result (*clear_screen)(struct yetty_yrender_terminal_layer *self);
     /* Selection — clipboard copy + highlight rendering.
      *
      * The selection has cell precision: an anchor (the cell the user
@@ -239,6 +254,11 @@ struct yetty_yrender_terminal_layer {
    * each layer's set_alt_screen op. */
     yetty_yterm_alt_screen_fn alt_screen_fn;
     void *alt_screen_userdata;
+    /* Clear-screen callback - set by creator. Fired by the text-layer
+   * when libvterm reports a full-screen erase. The terminal hooks this
+   * and broadcasts via each layer's clear_screen op. */
+    yetty_yterm_clear_screen_fn clear_screen_fn;
+    void *clear_screen_userdata;
 };
 
 /* Terminal context - contains yetty context plus terminal-owned objects */

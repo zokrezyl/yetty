@@ -421,6 +421,12 @@ typedef struct {
   int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   int (*sb_clear)(void* user);
+  /* yetty: surfaces the state-level erase signal up to screen consumers.
+   * Fires after the screen has cleared the affected cells. Layers above
+   * the text grid (ypaint / scene canvas) use this to wipe their own
+   * content on full-screen erases — damage doesn't distinguish a real
+   * erase from any other cell rewrite. */
+  int (*erase)(VTermRect rect, int selective, void *user);
 } VTermScreenCallbacks;
 
 /* yetty: added resolver and user params for glyph index resolution */
