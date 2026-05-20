@@ -70,6 +70,17 @@ struct yetty_yconfig_config_ops {
     const char *(*get_array_item)(const struct yetty_yconfig_config *self, const char *path,
                                   int index, const char *default_value);
 
+    /* Generic child iteration for mapping-style nodes. get_child_count
+     * returns the number of direct children at `path` (0 for leaves /
+     * missing paths). get_child_key returns the key string of the i-th
+     * child, or NULL if `index` is out of range. Pass NULL or "" for
+     * `path` to address the root. The returned key pointer is owned by
+     * the config; do not free, do not assume it survives a config
+     * mutation. */
+    int (*get_child_count)(const struct yetty_yconfig_config *self, const char *path);
+    const char *(*get_child_key)(const struct yetty_yconfig_config *self, const char *path,
+                                 int index);
+
     /* Resolve shell argv for execvp.
      *
      * If shell/command is set (via -e), tokenize it into argv (no shell

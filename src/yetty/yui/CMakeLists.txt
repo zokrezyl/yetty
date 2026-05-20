@@ -2,6 +2,7 @@ add_library(yetty_yui STATIC
     tile.c
     workspace.c
     tabbar.c
+    config-dialog.c
     yui.c
 )
 
