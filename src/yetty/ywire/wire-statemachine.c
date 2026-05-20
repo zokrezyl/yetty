@@ -35,6 +35,16 @@ enum scan_state {
     SCAN_OSC_BODY_ESC,   /* saw ESC inside body; next byte decides terminator */
 };
 
+/* OSC string terminators (ECMA-48 / xterm):
+ *   BEL — single-byte terminator (xterm extension; what most clients send)
+ *   ST  — two-byte `ESC \` (the standards-compliant 7-bit form)
+ * Used by the OSC scanner to end the code/args/body region. */
+enum osc_term {
+    OSC_BEL     = '\007',
+    OSC_ST_ESC  = '\033',
+    OSC_ST_TAIL = '\\',
+};
+
 struct osc_handler {
     int code;
     struct yetty_yrender_terminal_layer *layer;
@@ -488,17 +498,17 @@ static struct yetty_ycore_void_result body_pump(
         int hit_terminator = 0;
         while (batch_n < sizeof(batch) && statemachine->read_pos < statemachine->write_pos) {
             uint8_t c = ring_at(statemachine, statemachine->read_pos);
-            if (c == '\007') {
+            if (c == OSC_BEL) {
                 statemachine->read_pos++;
                 hit_terminator = 1;
                 break;
             }
-            if (c == '\033') {
+            if (c == OSC_ST_ESC) {
                 if (statemachine->read_pos + 1 >= statemachine->write_pos) {
                     /* Don't know yet — leave ESC for next pump. */
                     goto out;
                 }
-                if (ring_at(statemachine, statemachine->read_pos + 1) == '\\') {
+                if (ring_at(statemachine, statemachine->read_pos + 1) == OSC_ST_TAIL) {
                     statemachine->read_pos += 2;
                     hit_terminator = 1;
                     break;
@@ -1003,7 +1013,29 @@ static void sm_coro_entry(void *arg)
 
             case SCAN_OSC_CODE: {
                 if (sm->read_pos >= sm->write_pos) goto wait_more;
-                uint8_t c = ring_at(sm, sm->read_pos++);
+                /* OSC terminator (BEL or ST) may end the sequence here for
+                 * OSCs with no args/body. Without this, BEL falls through
+                 * to the "malformed" path (OK for BEL) but ST's `ESC \`
+                 * pair is mishandled and the SM ends up stuck. */
+                uint8_t c = ring_at(sm, sm->read_pos);
+                if (c == OSC_BEL) {
+                    sm->read_pos++;
+                    sm->state = SCAN_RAW;
+                    sm->current_code = 0;
+                    envelope_reset(sm);
+                    break;
+                }
+                if (c == OSC_ST_ESC) {
+                    if (sm->read_pos + 1 >= sm->write_pos) goto wait_more;
+                    if (ring_at(sm, sm->read_pos + 1) == OSC_ST_TAIL) {
+                        sm->read_pos += 2;
+                        sm->state = SCAN_RAW;
+                        sm->current_code = 0;
+                        envelope_reset(sm);
+                        break;
+                    }
+                }
+                sm->read_pos++;
                 if (c >= '0' && c <= '9') {
                     sm->current_code = sm->current_code * 10 + (int)(c - '0');
                 } else if (c == ';') {
@@ -1017,7 +1049,31 @@ static void sm_coro_entry(void *arg)
 
             case SCAN_OSC_ARGS: {
                 if (sm->read_pos >= sm->write_pos) goto wait_more;
-                uint8_t c = ring_at(sm, sm->read_pos++);
+                /* Same terminator handling as OSC_CODE — OSCs with code+args
+                 * but no body terminate here. nvim's OSC 11;?\a (query the
+                 * background colour) is the canonical case: without this,
+                 * BEL gets stashed into args_b64 like any other byte and the
+                 * SM stays in OSC_ARGS, silently swallowing every subsequent
+                 * byte instead of dispatching them to the default layer. */
+                uint8_t c = ring_at(sm, sm->read_pos);
+                if (c == OSC_BEL) {
+                    sm->read_pos++;
+                    sm->state = SCAN_RAW;
+                    sm->current_code = 0;
+                    envelope_reset(sm);
+                    break;
+                }
+                if (c == OSC_ST_ESC) {
+                    if (sm->read_pos + 1 >= sm->write_pos) goto wait_more;
+                    if (ring_at(sm, sm->read_pos + 1) == OSC_ST_TAIL) {
+                        sm->read_pos += 2;
+                        sm->state = SCAN_RAW;
+                        sm->current_code = 0;
+                        envelope_reset(sm);
+                        break;
+                    }
+                }
+                sm->read_pos++;
                 if (c == ';') {
                     decode_args_slot(sm);
                     sm->current_layer = find_layer(sm, sm->current_code);
@@ -1034,17 +1090,17 @@ static void sm_coro_entry(void *arg)
                     /* No registered layer — drain body to terminator. */
                     while (!sm->terminator_seen && sm->read_pos < sm->write_pos) {
                         uint8_t c = ring_at(sm, sm->read_pos++);
-                        if (c == '\007') {
+                        if (c == OSC_BEL) {
                             sm->terminator_seen = 1;
                             break;
                         }
-                        if (c == '\033') {
+                        if (c == OSC_ST_ESC) {
                             if (sm->read_pos >= sm->write_pos) {
                                 sm->state = SCAN_OSC_BODY_ESC;
                                 sm->read_pos--;
                                 goto wait_more;
                             }
-                            if (ring_at(sm, sm->read_pos) == '\\') {
+                            if (ring_at(sm, sm->read_pos) == OSC_ST_TAIL) {
                                 sm->read_pos++;
                                 sm->terminator_seen = 1;
                                 break;

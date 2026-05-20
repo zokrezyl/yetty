@@ -714,6 +714,30 @@ static struct yetty_ycore_void_result terminal_alt_screen_callback(int active, v
     return YETTY_OK_VOID();
 }
 
+/* yetty_yterm_clear_screen_fn impl — full-screen erase from text-layer.
+ * Each layer's clear_screen wipes the active half (primary or alt — the
+ * layer's own alt-screen swap state already encodes which). No explicit
+ * request_render here: this is invoked from inside libvterm's input
+ * processing on the same feed that's about to fire on_damage for the
+ * erased cells, and terminal_pty_pipe_read's after-feed dirty check
+ * pumps the render. Calling request_render here causes a premature
+ * frame that consumes text-layer dirty before subsequent in-feed
+ * damages can accumulate. */
+static struct yetty_ycore_void_result terminal_clear_screen_callback(void *userdata)
+{
+    struct yetty_yterm_terminal *terminal = userdata;
+    ydebug("terminal: clear_screen (broadcasting to %zu layers)", terminal->layer_count);
+    for (size_t i = 0; i < terminal->layer_count; i++) {
+        struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
+        if (layer && layer->ops && layer->ops->clear_screen) {
+            struct yetty_ycore_void_result r = layer->ops->clear_screen(layer);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                                "terminal_clear_screen_callback: layer clear_screen failed");
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
 /* yetty_yterm_request_render_fn impl — called when a layer needs a
  * render frame. */
 static struct yetty_ycore_void_result terminal_request_render_callback(void *userdata)
@@ -1147,6 +1171,10 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * this when libvterm processes DEC ?1047/?1049/?47. */
     text_layer_res.value->alt_screen_fn = terminal_alt_screen_callback;
     text_layer_res.value->alt_screen_userdata = terminal;
+    /* Clear-screen callback — text-layer's erase hook fires this when
+     * libvterm processes a full-screen CSI ED. */
+    text_layer_res.value->clear_screen_fn = terminal_clear_screen_callback;
+    text_layer_res.value->clear_screen_userdata = terminal;
     struct yetty_ycore_void_result add_r =
         yetty_yterm_terminal_layer_add(terminal, text_layer_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,

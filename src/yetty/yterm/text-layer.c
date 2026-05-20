@@ -271,6 +271,7 @@ static int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user
 static int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user);
 static int on_sb_popline(int cols, VTermScreenCell *cells, void *user);
 static int on_settermprop(VTermProp prop, VTermValue *val, void *user);
+static int on_erase(VTermRect rect, int selective, void *user);
 
 /* Glyph resolver — called by vterm for every codepoint. Signature
  * dictated by libvterm (VTermResolveGlyphFunc, returns VTermResolvedGlyph),
@@ -696,6 +697,7 @@ static VTermScreenCallbacks screen_callbacks = {
     .sb_pushline = on_sb_pushline,
     .sb_popline = on_sb_popline,
     .sb_clear = NULL,
+    .erase = on_erase,
 };
 
 /* libvterm settermprop callback. Signature dictated by libvterm
@@ -1276,6 +1278,42 @@ static int on_damage(VTermRect rect, void *user)
     ydebug("on_damage: rect(%d,%d)-(%d,%d) -> dirty=1", rect.start_row, rect.start_col,
            rect.end_row, rect.end_col);
     text_layer->base.dirty = 1;
+    return 1;
+}
+
+/* libvterm state-level erase, routed through screen — fires on CSI ED/EL.
+ * libvterm has already cleared the affected cells; we only forward the
+ * full-screen erase up to the terminal so non-text layers (ydraw scene
+ * canvas etc.) can wipe their own content. Partial erases (single line,
+ * cursor-to-end) don't translate to scene-canvas semantics and are
+ * ignored here. */
+YETTY_EXTERNAL_CALLBACK
+static int on_erase(VTermRect rect, int selective, void *user)
+{
+    struct yetty_yterm_terminal_text_layer *layer = user;
+    (void)selective;
+    if (!layer) {
+        return 1;
+    }
+
+    int full_rows = (rect.start_row == 0 && rect.end_row >= (int)layer->base.grid_size.rows);
+    int full_cols = (rect.start_col == 0 && rect.end_col >= (int)layer->base.grid_size.cols);
+    if (!(full_rows && full_cols)) {
+        return 1;
+    }
+
+    if (layer->base.clear_screen_fn) {
+        struct yetty_ycore_void_result r =
+            layer->base.clear_screen_fn(layer->base.clear_screen_userdata);
+        if (YETTY_IS_ERR(r)) {
+            yerror("text_layer on_erase: clear_screen_fn failed: %s", r.error.msg);
+            if (YETTY_IS_OK(layer->pending_error)) {
+                layer->pending_error = r;
+            } else {
+                yetty_ycore_error_destroy(r.error);
+            }
+        }
+    }
     return 1;
 }
 
