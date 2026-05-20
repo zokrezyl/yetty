@@ -1512,10 +1512,21 @@ static void yzoo_anim_attach(struct yzoo_anim *a, struct yetty_ygui_engine *engi
 }
 
 /* Make sure the producer + rich widget exist at the tab's CURRENT
- * resolved size. No-op when already attached at the same size; rebuilds
- * when the size has changed (e.g. after a window resize) or when
- * nothing has been attached yet. Safe to call from on_tab_change and
- * on_resize. */
+ * resolved size. Three paths:
+ *
+ *   - Already attached at the right size → no-op.
+ *   - Already attached at a different size → notify the producer via
+ *     yetty_yzoo_set_scene_size and update the raw/flat buffer scene
+ *     bounds. NO widget tree mutation. This is the resize path; the
+ *     standalone yzoo tool follows the same pattern (see tools/yzoo).
+ *   - Not attached yet (first activation of the tab) → full attach.
+ *
+ * The earlier code re-ran the full attach on every size change, which
+ * meant tearing down + re-adding the rich widget from inside on_resize.
+ * Mutating the widget tree while the engine is dispatching its own
+ * resize event was the source of the crashes. set_scene_size keeps the
+ * tree stable; the next yzoo_render call refills the buffer at the new
+ * scene size on its own. */
 static void yzoo_anim_ensure_attached(struct yzoo_anim *a)
 {
     if (!a || !a->engine || !a->tab) {
@@ -1524,6 +1535,21 @@ static void yzoo_anim_ensure_attached(struct yzoo_anim *a)
     float w = 0.0f, h = 0.0f;
     ygreeter_tab_viewport(a->engine, a->tab, &w, &h);
     if (a->rich && a->scene_w == w && a->scene_h == h) {
+        return;
+    }
+    if (a->rich && a->zoo && a->raw && a->flat) {
+        struct yetty_ycore_void_result r = yetty_yzoo_set_scene_size(a->zoo, w, h);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+        a->scene_w = w;
+        a->scene_h = h;
+        yetty_ydraw_draw_list_set_scene_bounds(a->raw,  0.0f, 0.0f, w, h);
+        yetty_ydraw_draw_list_set_scene_bounds(a->flat, 0.0f, 0.0f, w, h);
+        /* Force the rich widget to repaint the resized scene on the next
+         * frame; the buffer pointer hasn't changed, so set_buffer's
+         * dirty-flip is what tells the engine the contents moved. */
+        yetty_ygui_widget_rich_set_buffer(a->rich, a->flat);
         return;
     }
     yzoo_anim_attach(a, a->engine, a->tab, w, h);
@@ -1818,6 +1844,13 @@ static void yj_anim_attach(struct yjungle_anim *a, struct yetty_ygui_engine *eng
     yj_anim_tick(a); /* first-ever tick — emits CMD_ZERO + initial chain */
 }
 
+/* Same shape as yzoo_anim_ensure_attached above — resize path is
+ * yetty_yjungle_set_scene_size + buffer-bounds update, NOT a tear-down
+ * and rebuild of the widget tree. See that function's comment for why
+ * the previous full-attach-on-resize approach was crashing. yjungle is
+ * an incremental producer, so the existing chain state is preserved
+ * across the resize; only future segments will respect the new bounds.
+ * That mirrors the standalone yjungle tool (tools/yjungle/main.c). */
 static void yj_anim_ensure_attached(struct yjungle_anim *a)
 {
     if (!a || !a->engine || !a->tab) {
@@ -1826,6 +1859,18 @@ static void yj_anim_ensure_attached(struct yjungle_anim *a)
     float w = 0.0f, h = 0.0f;
     ygreeter_tab_viewport(a->engine, a->tab, &w, &h);
     if (a->rich && a->scene_w == w && a->scene_h == h) {
+        return;
+    }
+    if (a->rich && a->jungle && a->acc && a->flat) {
+        struct yetty_ycore_void_result r = yetty_yjungle_set_scene_size(a->jungle, w, h);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+        a->scene_w = w;
+        a->scene_h = h;
+        yetty_ydraw_draw_list_set_scene_bounds(a->acc,  0.0f, 0.0f, w, h);
+        yetty_ydraw_draw_list_set_scene_bounds(a->flat, 0.0f, 0.0f, w, h);
+        yetty_ygui_widget_rich_set_buffer(a->rich, a->flat);
         return;
     }
     yj_anim_attach(a, a->engine, a->tab, w, h);
@@ -1903,22 +1948,21 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
      * (cheap no-op for inactive tabs whose size happened to stay the
      * same). Only the currently-running anim needs a refresh — others
      * lazily re-attach the next time their tab is activated. */
+    /* Already-attached producers (visible OR invisible — the rich widget
+     * persists across tab switches) get notified of the new viewport via
+     * set_scene_size; ensure_attached takes the resize-only branch in
+     * that case. We deliberately do NOT first-time-attach from on_resize:
+     * widget tree mutation while the engine is dispatching its resize
+     * event is what was crashing. First-time attach stays gated on tab
+     * activation (set_running → ensure_attached). */
 #ifdef YGREETER_HAS_YZOO
-    if (app->yzoo.running) {
+    if (app->yzoo.rich) {
         yzoo_anim_ensure_attached(&app->yzoo);
-    } else if (app->yzoo.rich) {
-        /* Tab not currently visible — drop the now-stale widget so the
-         * next activation builds fresh against the new viewport. */
-        yzoo_anim_drop_widgets(&app->yzoo);
-        yzoo_anim_drop_producer(&app->yzoo);
     }
 #endif
 #ifdef YGREETER_HAS_YJUNGLE
-    if (app->yjungle.running) {
+    if (app->yjungle.rich) {
         yj_anim_ensure_attached(&app->yjungle);
-    } else if (app->yjungle.rich) {
-        yj_anim_drop_widgets(&app->yjungle);
-        yj_anim_drop_producer(&app->yjungle);
     }
 #endif
 }

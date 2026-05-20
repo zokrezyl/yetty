@@ -219,83 +219,6 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
 }
 
 /*=============================================================================
- * Widget-local clip — drops primitives whose anchor falls outside the rich
- * widget's resolved layout box.
- *
- * Producers like yzoo / yjungle can emit primitives at scene coordinates
- * outside their declared scene_w × scene_h (e.g. yzoo's drift cull is keyed
- * on an unclamped margin while the drawn marker is clamped to 12 px, so a
- * control point can sit dozens of pixels off the scene before being culled
- * — and its marker, plus any curve segment passing through it, paints
- * outside). Without a real scissor stage in the WGSL pipeline, the only
- * deterministic guard the rich widget can offer is "drop primitives that
- * don't anchor inside my box".
- *
- * The anchor is the primitive's position field as documented for translate_*
- * above (SDF center for fixed-size SDFs, payload[2..3] for FAM/complex).
- * Returns 0 for primitive types that have no usable position (CMD, FONT) —
- * the caller keeps those.
- *===========================================================================*/
-
-static int prim_local_anchor(const uint32_t *prim, size_t bytes, float *out_x, float *out_y)
-{
-    if (bytes < sizeof(uint32_t)) {
-        return 0;
-    }
-    uint32_t type = prim[0];
-    size_t words = bytes / sizeof(uint32_t);
-    const float *fprim = (const float *)prim;
-
-    if (type < 0x00010000u) {
-        return 0;
-    }
-    if (yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) > 0u) {
-        size_t shift = (type & YETTY_YDRAW_HAS_ID_FLAG) ? 1u : 0u;
-        size_t geom = 5u + shift;
-        if (words < geom + 2u) {
-            return 0;
-        }
-        /* For SDF_SEGMENT geom is the start point; the end point lives at
-         * geom+2/geom+3. Use the midpoint so a segment with one endpoint
-         * inside survives. */
-        if (RICH_TYPE_BASE(type) == YETTY_YSDF_SEGMENT && words >= geom + 4u) {
-            *out_x = 0.5f * (fprim[geom + 0] + fprim[geom + 2]);
-            *out_y = 0.5f * (fprim[geom + 1] + fprim[geom + 3]);
-            return 1;
-        }
-        *out_x = fprim[geom + 0];
-        *out_y = fprim[geom + 1];
-        return 1;
-    }
-    if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-        if (words < 4) {
-            return 0;
-        }
-        *out_x = fprim[2];
-        *out_y = fprim[3];
-        return 1;
-    }
-    if (type >= 0x80000000u) {
-        /* Complex prim: payload[2..3] is bounds_x/y, payload[4..5] usually
-         * bounds_w/h — anchor on the bbox centre when present, else on the
-         * top-left. */
-        if (words >= 6) {
-            *out_x = fprim[2] + 0.5f * fprim[4];
-            *out_y = fprim[3] + 0.5f * fprim[5];
-            return 1;
-        }
-        if (words >= 4) {
-            *out_x = fprim[2];
-            *out_y = fprim[3];
-            return 1;
-        }
-        return 0;
-    }
-    /* FONT flyweight — no position. */
-    return 0;
-}
-
-/*=============================================================================
  * Render: translate each prim in the source buffer by the widget's
  * absolute layout box and append it to the engine's frame buffer.
  *
@@ -336,9 +259,6 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
     uint8_t *heap = NULL;
     size_t heap_cap = 0;
 
-    float lw = self->layout_w;
-    float lh = self->layout_h;
-
     int n_prims = 0;
     while (remaining >= sizeof(uint32_t)) {
         size_t s = rich_drawable_size((const uint32_t *)p, remaining);
@@ -348,24 +268,6 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
             ydebug("rich_render break — malformed/zero size");
             break; /* malformed — bail rather than risk overruns */
         }
-
-        /* Widget-local clip. Producer-emitted primitives anchored outside
-         * the rich widget's resolved box are dropped before they get
-         * translated onto the canvas. Without this guard, yzoo / yjungle
-         * etc. can paint over neighbouring widgets (tabbar, menubar) any
-         * time their internal cull/clip is looser than the actual drawn
-         * extent. See prim_local_anchor for the per-type anchor rule. */
-        float ax = 0.0f, ay = 0.0f;
-        if (prim_local_anchor((const uint32_t *)p, s, &ax, &ay)) {
-            if (ax < 0.0f || ax > lw || ay < 0.0f || ay > lh) {
-                ydebug("rich_render drop prim#%d type=0x%x anchor=(%.1f,%.1f) box=(%.1fx%.1f)",
-                       n_prims, t, ax, ay, lw, lh);
-                p += s;
-                remaining -= s;
-                continue;
-            }
-        }
-
         uint8_t *work = stack;
         if (s > sizeof(stack)) {
             if (s > heap_cap) {
