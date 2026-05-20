@@ -4,8 +4,11 @@
 # JACK / sndio on Linux, AAudio / OpenSL ES on Android, WebAudio on
 # Emscripten — backend picked at compile time inside the header.
 #
-# Consumes a prebuilt noarch tarball (just miniaudio.h) from the 3rdparty
-# release published by build-3rdparty-miniaudio.yml.
+# Consumes a prebuilt per-platform tarball (just miniaudio.h + LICENSE)
+# from the 3rdparty release published by build-3rdparty-miniaudio.yml.
+# The header is identical across platforms but the file is still named
+# `miniaudio-<platform>-<version>.tar.gz` so the cmake fetcher resolves
+# it uniformly with every other 3rdparty lib.
 #
 # Header-only: exactly one TU in the consumer must `#define
 # MINIAUDIO_IMPLEMENTATION` before `#include <miniaudio.h>`. Yetty does

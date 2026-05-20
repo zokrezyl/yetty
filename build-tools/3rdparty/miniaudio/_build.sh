@@ -1,23 +1,28 @@
 #!/bin/bash
-# Builds the noarch miniaudio tarball — fetches the single-header
-# miniaudio.h from mackron/miniaudio@<version> and packages it. No
-# compilation: yetty's main build #defines MINIAUDIO_IMPLEMENTATION in
-# exactly one TU (src/platform/audio/miniaudio-device.c) and includes
-# the header — same STB-style pattern used by stb_image / minimp4 in
-# this repo.
+# Stages a per-platform miniaudio tarball. miniaudio is a single-header
+# library — the same miniaudio.h serves every backend (WASAPI on Windows,
+# CoreAudio on Apple, ALSA / PulseAudio on Linux, AAudio / OpenSL ES on
+# Android, WebAudio on Emscripten); the backend is selected inside the
+# header at compile time. We still publish one tarball per TARGET_PLATFORM
+# so the file naming matches every other 3rdparty producer in this tree
+# (lz4, bzip2, etc.) and cmake's yetty_3rdparty_fetch can resolve
+# `miniaudio-<platform>-<version>.tar.gz` uniformly.
 #
 # Required env:
-#   OUTPUT_DIR  where the tarball is written
+#   TARGET_PLATFORM  used as the platform slug in the output tarball name
+#   OUTPUT_DIR       where the tarball is written
 #
 # Version: this directory's `version` file holds the bare X.Y.Z tag
 # (mackron/miniaudio publishes tags as "0.11.22" — no `v` prefix).
 #
 # Output tarball layout (consumed by build-tools/yetty/miniaudio.cmake):
 #   include/miniaudio.h
+#   share/licenses/miniaudio/LICENSE
 
 set -Eeuo pipefail
 trap 'rc=$?; echo "FAILED: rc=$rc line=$LINENO source=${BASH_SOURCE[0]} cmd: $BASH_COMMAND" >&2' ERR
 
+: "${TARGET_PLATFORM:?TARGET_PLATFORM is required}"
 : "${OUTPUT_DIR:?OUTPUT_DIR is required}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -26,14 +31,25 @@ VERSION_FILE="$SCRIPT_DIR/version"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 
-WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-miniaudio}"
+# Allow an optional `-N` packaging suffix (e.g. "0.11.22-1") so we can
+# republish the same upstream miniaudio release under a fresh
+# `lib-miniaudio-<version>` tag (e.g. when the tarball layout changes).
+# UPSTREAM is the bare mackron/miniaudio tag we fetch.
+case "$VERSION" in
+    *-*) UPSTREAM="${VERSION%-*}" ;;
+    *)   UPSTREAM="$VERSION" ;;
+esac
+
+# Per-platform work dirs so concurrent matrix jobs on the same host
+# (e.g. the linux-cross matrix) don't trample each other's extract dir.
+WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-miniaudio-${TARGET_PLATFORM}}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
 
-MINIAUDIO_URL="https://github.com/mackron/miniaudio/archive/refs/tags/${VERSION}.tar.gz"
-MINIAUDIO_TARBALL="$CACHE_DIR/miniaudio-${VERSION}.tar.gz"
-SRC_DIR="$WORK_DIR/miniaudio-${VERSION}"
+MINIAUDIO_URL="https://github.com/mackron/miniaudio/archive/refs/tags/${UPSTREAM}.tar.gz"
+MINIAUDIO_TARBALL="$CACHE_DIR/miniaudio-${UPSTREAM}.tar.gz"
+SRC_DIR="$WORK_DIR/miniaudio-${UPSTREAM}"
 STAGE="$WORK_DIR/stage"
-TARBALL="$OUTPUT_DIR/miniaudio-${VERSION}.tar.gz"
+TARBALL="$OUTPUT_DIR/miniaudio-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
@@ -55,7 +71,7 @@ if [ ! -d "$SRC_DIR" ]; then
     echo "==> extracting -> $SRC_DIR"
     mkdir -p "$WORK_DIR/.extract-$$"
     tar -C "$WORK_DIR/.extract-$$" -xzf "$MINIAUDIO_TARBALL"
-    mv "$WORK_DIR/.extract-$$/miniaudio-${VERSION}" "$SRC_DIR"
+    mv "$WORK_DIR/.extract-$$/miniaudio-${UPSTREAM}" "$SRC_DIR"
     rmdir "$WORK_DIR/.extract-$$"
 fi
 rm -rf "$STAGE"
@@ -75,6 +91,6 @@ echo "==> packaging -> $TARBALL"
 tar -C "$STAGE" -czf "$TARBALL" .
 
 echo ""
-echo "miniaudio ${VERSION} (noarch) ready:"
+echo "miniaudio ${VERSION} (${TARGET_PLATFORM}) ready:"
 ls -lh "$TARBALL"
 tar -tzf "$TARBALL"

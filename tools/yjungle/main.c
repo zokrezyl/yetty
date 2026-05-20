@@ -401,7 +401,9 @@ int main(int argc, char **argv)
 
     signal(SIGINT,  on_signal);
     signal(SIGTERM, on_signal);
+#ifdef SIGHUP
     signal(SIGHUP,  on_signal);
+#endif
 
     yetty_yplatform_tty_binary_io();
     if (yetty_yplatform_tty_set_raw() < 0) {

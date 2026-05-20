@@ -1,15 +1,17 @@
 name: Build 3rdparty — miniaudio
 
 # miniaudio (mackron/miniaudio) — single-header public-domain (MIT-0)
-# audio I/O. Platform-independent (.noarch) — one tarball serves every
-# yetty target; per-platform backend selection happens inside the header
-# at compile time. Triggered on `lib-miniaudio-<version>` tags. Version
-# source of truth: build-tools/3rdparty/miniaudio/version.
+# audio I/O. The header is identical across platforms (the backend —
+# WASAPI / CoreAudio / ALSA / PulseAudio / AAudio / OpenSL ES / WebAudio
+# — is selected inside the header at compile time), but we still publish
+# one tarball per TARGET_PLATFORM so every 3rdparty fetch follows the
+# same `<lib>-<platform>-<version>.tar.gz` naming the cmake fetcher
+# expects. Triggered on `lib-miniaudio-<version>` tags. Version source
+# of truth: build-tools/3rdparty/miniaudio/version.
 
 on:
   push:
-    tags:
-      - 'lib-miniaudio-*'
+    tags: ['lib-miniaudio-*']
   workflow_dispatch: {}
 
 permissions:
@@ -29,31 +31,90 @@ jobs:
           V="$(tr -d '[:space:]' < build-tools/3rdparty/miniaudio/version)"
           [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            REF="${GITHUB_REF#refs/tags/}"
-            EXPECT="lib-miniaudio-$V"
-            if [ "$REF" != "$EXPECT" ]; then
-              echo "tag $REF does not match version file ($EXPECT)" >&2
-              exit 1
-            fi
+            REF="${GITHUB_REF#refs/tags/}"; EXPECT="lib-miniaudio-$V"
+            [ "$REF" = "$EXPECT" ] || { echo "tag $REF != $EXPECT" >&2; exit 1; }
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=lib-miniaudio-$V" >> "$GITHUB_OUTPUT"
 
-  build:
+  build-linux-cross:
     needs: resolve
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-x86_64, linux-aarch64, linux-riscv64, android-arm64-v8a, android-x86_64, webasm, webasm-mt]
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
-        with:
-          extra-conf: |
-            experimental-features = nix-command flakes
+        with: { extra-conf: "experimental-features = nix-command flakes" }
       - run: mkdir -p out
-      - run: |
-          OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/miniaudio/build.sh
+      - run: TARGET_PLATFORM="${{ matrix.target }}" OUTPUT_DIR="$PWD/out" ./build-tools/3rdparty/miniaudio/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/miniaudio-*.tar.gz
+          files: out/miniaudio-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-arm64:
+    needs: resolve
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix: { target: [macos-arm64, ios-arm64, tvos-arm64] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with: { extra-conf: "experimental-features = nix-command flakes" }
+      - run: mkdir -p out
+      - run: TARGET_PLATFORM="${{ matrix.target }}" OUTPUT_DIR="$PWD/out" ./build-tools/3rdparty/miniaudio/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/miniaudio-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-x86_64:
+    needs: resolve
+    runs-on: macos-15-intel
+    strategy:
+      fail-fast: false
+      matrix: { target: [macos-x86_64, ios-x86_64, tvos-x86_64] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with: { extra-conf: "experimental-features = nix-command flakes" }
+      - run: mkdir -p out
+      - run: TARGET_PLATFORM="${{ matrix.target }}" OUTPUT_DIR="$PWD/out" ./build-tools/3rdparty/miniaudio/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/miniaudio-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  # Windows: header-only library — staging only needs curl + tar, no
+  # MSVC. Still produced on a native windows-x86_64 runner so the
+  # matrix mirrors every other 3rdparty producer.
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build miniaudio for ${{ matrix.target }}
+        shell: bash
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          OUTPUT_DIR="$(pwd)/out" ./build-tools/3rdparty/miniaudio/build.sh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/miniaudio-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
