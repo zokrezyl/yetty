@@ -198,12 +198,14 @@ option(YETTY_BUILD_YGUI_SHARED "Build a libygui.so for FFI consumers" ON)
 if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
     if(WIN32)
         set(_YGUI_PLATFORM_SOURCES
+            ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
             ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
             ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
             ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
         )
     else()
         set(_YGUI_PLATFORM_SOURCES
+            ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
             ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
             ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
             ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
