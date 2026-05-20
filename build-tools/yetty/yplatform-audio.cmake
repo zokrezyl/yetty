@@ -33,3 +33,12 @@ target_link_libraries(yetty_yplatform_audio
     PUBLIC  yetty_ycore
     PRIVATE miniaudio
 )
+
+# default.c uses <stdatomic.h>. MSVC defines __STDC_NO_ATOMICS__ unless
+# /std:clatest (or /std:c11) and /experimental:c11atomics are passed —
+# same dance as the yetty exe target.
+if(MSVC)
+    target_compile_options(yetty_yplatform_audio PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:/std:clatest>
+        $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>)
+endif()
