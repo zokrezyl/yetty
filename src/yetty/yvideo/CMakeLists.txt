@@ -8,6 +8,7 @@
 add_library(yetty_yvideo_core STATIC
     yvideo.c
     yvideo-gen-wire.c
+    yvideo-mp4.c
 )
 
 target_include_directories(yetty_yvideo_core PUBLIC
@@ -19,6 +20,21 @@ target_link_libraries(yetty_yvideo_core PUBLIC
     yetty_ydraw_core
     yetty_yface
 )
+
+# yvideo-mp4.c is single source of truth for sender-side MP4 →
+# Annex-B + SPS dimension extraction (yetty_yvideo_render_from_mp4_*
+# in yvideo-mp4.h). The TU always builds; minimp4 + the
+# YETTY_HAVE_MINIMP4 define wire the real implementation in. When
+# minimp4 is off the same TU emits stub implementations that return
+# ERR, so the public ABI stays stable across platforms and consumers
+# (ygui_yvideo, tools/yvideo, ...) don't need their own #ifdef.
+#
+# Future work: move execution server-side (see yvideo-mp4.h comment).
+if(YETTY_ENABLE_LIB_MINIMP4)
+    include(${YETTY_ROOT}/build-tools/yetty/minimp4.cmake)
+    target_link_libraries(yetty_yvideo_core PUBLIC minimp4)
+    target_compile_definitions(yetty_yvideo_core PRIVATE YETTY_HAVE_MINIMP4)
+endif()
 
 if(YETTY_ENABLE_LIB_WEBGPU AND YETTY_ENABLE_LIB_OPENH264)
     # yvideo-gen.c is the generated factory (CPU/GPU sync from the schema).

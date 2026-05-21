@@ -25,6 +25,9 @@
  *   Plots   — yplot demos (sin/cos, parabola, decay, ...).
  *   Images  — image rendering placeholders; nodes that have a path bound
  *             load via yimage YAML.
+ *   Video   — one yvideo prim sourced from assets/yetty-unchained-2.mp4,
+ *             demuxed via minimp4. Decoding (openh264) runs on the
+ *             receiving terminal, not in ygreeter itself.
  *   Code    — colourised code snippets (text spans coloured by token
  *             class — mirrors what `ycat --ts` produces, just authored
  *             inline so we don't pull in tree-sitter for the v1 tool).
@@ -35,10 +38,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <yetty/yplatform/fs.h>   /* path_dirname, path_realpath, file_is_regular */
-#include <yetty/yplatform/term.h> /* term_get_size */
-#include <yetty/yplatform/tty.h>  /* stderr-rerouting probe */
+#include <yetty/yplatform/fs.h>    /* path_dirname, path_realpath, file_is_regular */
+#include <yetty/yplatform/paths.h> /* get_data_dir */
+#include <yetty/yplatform/term.h>  /* term_get_size */
+#include <yetty/yplatform/tty.h>   /* stderr-rerouting probe */
+#include "embedded-assets.h"       /* incbin-extracted assets at <data_dir>/ */
 #include <yetty/ygui/ygui.h>
+#include <yetty/ygui/ygui_yimage.h>
+#include <yetty/ygui/ygui_yplot.h>
 #ifdef YGREETER_HAS_YBROWSER
 #include <yetty/ygui/ygui_ybrowser.h>
 #endif
@@ -55,6 +62,9 @@
 #ifdef YGREETER_HAS_YJUNGLE
 #include <yetty/ygui/ygui_yjungle.h>
 #include <yetty/yjungle/yjungle.h>
+#endif
+#ifdef YGREETER_HAS_YVIDEO
+#include <yetty/ygui/ygui_yvideo.h>
 #endif
 #include <yetty/ytrace/ytrace.h>
 
@@ -97,20 +107,25 @@ struct nav_entry {
     "      font-size: 18\n"                                                                        \
     "      color: \"#9ad7ff\"\n"                                                                   \
     "  - text:\n"                                                                                  \
-    "      position: [24, 140]\n"                                                                  \
+    "      position: [24, 128]\n"                                                                  \
+    "      content: \"This screen is just a greeter — a short intro tour.\"\n"                     \
+    "      font-size: 14\n"                                                                        \
+    "      color: \"#cccccc\"\n"                                                                   \
+    "  - text:\n"                                                                                  \
+    "      position: [24, 152]\n"                                                                  \
+    "      content: \"Your terminal is waiting behind it; close the greeter to use it.\"\n"        \
+    "      font-size: 14\n"                                                                        \
+    "      color: \"#cccccc\"\n"                                                                   \
+    "  - text:\n"                                                                                  \
+    "      position: [24, 196]\n"                                                                  \
     "      content: \"Plots, images, rich docs — all next to your shell.\"\n"                      \
     "      font-size: 16\n"                                                                        \
     "      color: \"#cccccc\"\n"                                                                   \
     "  - text:\n"                                                                                  \
-    "      position: [24, 170]\n"                                                                  \
+    "      position: [24, 226]\n"                                                                  \
     "      content: \"Switch tabs to see what the GPU layer can do.\"\n"                           \
     "      font-size: 16\n"                                                                        \
-    "      color: \"#cccccc\"\n"                                                                   \
-    "  - text:\n"                                                                                  \
-    "      position: [24, 220]\n"                                                                  \
-    "      content: \"Press 'q' to quit.\"\n"                                                      \
-    "      font-size: 14\n"                                                                        \
-    "      color: \"#888888\"\n"
+    "      color: \"#cccccc\"\n"
 
 #define WELCOME_QUICKSTART                                                                         \
     "body:\n"                                                                                      \
@@ -197,182 +212,99 @@ static const struct nav_entry WELCOME_NAV[] = {
 /* =========================================================================
  * Plots tab content.
  *
- * Several yplot demos showing increasingly busy compositions. The yplot
- * complex prim takes its bounds inside the buffer's coordinate system;
- * the rich widget translates those bounds by the widget's resolved
- * layout box, so authoring is purely widget-local.
+ * Drives the Plots tab through the ygui_yplot widget — one rich surface
+ * per tab, content swapped via yetty_ygui_widget_yplot_set_source on
+ * each nav click. The data tables below carry the yexpr-plot source
+ * string + range / flags per entry; load_entry dispatches to the
+ * widget when the tab kind is TAB_KIND_PLOTS.
+ *
+ * Static const data lives inside accessor functions (not file scope)
+ * so the loader can read it without exposing program-lifetime symbols.
  * ========================================================================= */
 
-#define PLOT_TRIG                                                                                  \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"sin(x+t) and cos(x+t)\"\n"                                                   \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [-6.2832, 6.2832]\n"                                                           \
-    "      y_range: [-1.5, 1.5]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      functions:\n"                                                                           \
-    "        - expr: \"sin(x+t)\"\n"                                                               \
-    "          color: \"#ff6b6b\"\n"                                                               \
-    "        - expr: \"cos(x+t)\"\n"                                                               \
-    "          color: \"#4ecdc4\"\n"
-
-#define PLOT_PARABOLA                                                                              \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"x*x  and  2*x + 1\"\n"                                                       \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [-5, 5]\n"                                                                     \
-    "      y_range: [-2, 12]\n"                                                                    \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      functions:\n"                                                                           \
-    "        - expr: \"x*x\"\n"                                                                    \
-    "          color: \"#ffe66d\"\n"                                                               \
-    "        - expr: \"2*x + 1\"\n"                                                                \
-    "          color: \"#aa96da\"\n"
-
-#define PLOT_DECAY                                                                                 \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"exp(-x*x/4) * sin(3*x)\"\n"                                                  \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [-6, 6]\n"                                                                     \
-    "      y_range: [-1.2, 1.2]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      functions:\n"                                                                           \
-    "        - expr: \"exp(-x*x/4) * sin(3*x)\"\n"                                                 \
-    "          color: \"#74c0fc\"\n"
-
-/* The entries below use the new top-level `source:` YAML key, which feeds
- * the whole yexpr-plot text into the parser in one go — so `name=buffer`
- * declarations, inline `x=A..B` / `@view=` framing, and `@<name>.color=`
- * overrides all work. The legacy `functions:` list is bypassed. */
-
-#define PLOT_INLINE_BUFFER                                                                         \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"inline buffer: 8 samples spread over x\"\n"                                  \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [0, 1]\n"                                                                      \
-    "      y_range: [-1, 1]\n"                                                                     \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"data=buffer; @data.size=8; "                                                  \
-    "@data.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; @data.color=#74C5A5\"\n"
-
-#define PLOT_BUFFER_MODULATED                                                                      \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"envelope(x) * sin(x*60)\"\n"                                                 \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [0, 1]\n"                                                                      \
-    "      y_range: [-1.1, 1.1]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"envelope=buffer; @envelope.size=8; "                                          \
-    "@envelope.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; "                                             \
-    "pulse=envelope(x)*sin(x*60); "                                                                \
-    "@envelope.color=#364A47; @pulse.color=#74C5A5\"\n"
-
-#define PLOT_ADSR_HARMONICS                                                                        \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"ADSR envelope x three harmonics\"\n"                                         \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [0, 1]\n"                                                                      \
-    "      y_range: [-1.1, 1.1]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"env=buffer; @env.size=16; "                                                   \
-    "@env.values=0,0.4,0.8,1,0.95,0.85,0.75,0.65,0.55,0.45,0.35,0.25,0.18,0.12,0.06,0; "           \
-    "h1=env(x)*sin(x*6); h2=env(x)*sin(x*12); h3=env(x)*sin(x*24); "                               \
-    "@env.color=#364A47; @h1.color=#FF6B6B; @h2.color=#FFE66D; @h3.color=#74C5A5\"\n"
-
-#define PLOT_TRAVELLING_PHASE                                                                      \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"static envelope x travelling phase (time)\"\n"                               \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [0, 1]\n"                                                                      \
-    "      y_range: [-1.1, 1.1]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"env=buffer; @env.size=12; "                                                   \
-    "@env.values=0,0.3,0.7,1,0.95,0.85,0.7,0.5,0.3,0.15,0.05,0; "                                  \
-    "travel=env(x)*sin(x*40 - time*4); "                                                           \
-    "@env.color=#5A8979; @travel.color=#74C5A5\"\n"
-
-#define PLOT_DOMAIN_VIEW                                                                           \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"inline x=-3pi..3pi, view zoomed to -pi..pi\"\n"                              \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"x=-10..10; @view=-pi..pi,-0.5..1.5; "                                        \
-    "signal=sin(x)/x; @signal.color=#74C5A5\"\n"
-
-static const struct nav_entry PLOT_NAV[] = {
-    {"Trigonometry", PLOT_TRIG},
-    {"Polynomial", PLOT_PARABOLA},
-    {"Damped wave", PLOT_DECAY},
-    {"Inline buffer", PLOT_INLINE_BUFFER},
-    {"Buffer x carrier", PLOT_BUFFER_MODULATED},
-    {"ADSR harmonics", PLOT_ADSR_HARMONICS},
-    {"Travelling phase", PLOT_TRAVELLING_PHASE},
-    {"Domain & view", PLOT_DOMAIN_VIEW},
+struct plot_entry {
+    const char *label;
+    const char *source;
+    float x_min, x_max, y_min, y_max;
+    uint32_t flags;
 };
+
+#define PLOT_FLAGS_AXES                                                                            \
+    (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS)
+
+/* Per-entry data accessor. `*out_count` is filled with the entry count
+ * when non-NULL. Returns NULL for out-of-range idx so callers can bail
+ * cleanly. */
+static const struct plot_entry *plot_entry_at(int idx, int *out_count)
+{
+    static const struct plot_entry data[] = {
+        {"Trigonometry",
+         "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4",
+         -6.2832f, 6.2832f, -1.5f, 1.5f, PLOT_FLAGS_AXES},
+
+        {"Polynomial",
+         "f=x*x; g=2*x+1; @f.color=#ffe66d; @g.color=#aa96da",
+         -5.0f, 5.0f, -2.0f, 12.0f, PLOT_FLAGS_AXES},
+
+        {"Damped wave",
+         "f=exp(-x*x/4)*sin(3*x); @f.color=#74c0fc",
+         -6.0f, 6.0f, -1.2f, 1.2f, PLOT_FLAGS_AXES},
+
+        {"Inline buffer",
+         "data=buffer; @data.size=8; "
+         "@data.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; @data.color=#74C5A5",
+         0.0f, 1.0f, -1.0f, 1.0f, PLOT_FLAGS_AXES},
+
+        {"Buffer x carrier",
+         "envelope=buffer; @envelope.size=8; "
+         "@envelope.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; "
+         "pulse=envelope(x)*sin(x*60); "
+         "@envelope.color=#364A47; @pulse.color=#74C5A5",
+         0.0f, 1.0f, -1.1f, 1.1f, PLOT_FLAGS_AXES},
+
+        {"ADSR harmonics",
+         "env=buffer; @env.size=16; "
+         "@env.values=0,0.4,0.8,1,0.95,0.85,0.75,0.65,0.55,0.45,0.35,0.25,0.18,0.12,0.06,0; "
+         "h1=env(x)*sin(x*6); h2=env(x)*sin(x*12); h3=env(x)*sin(x*24); "
+         "@env.color=#364A47; @h1.color=#FF6B6B; @h2.color=#FFE66D; @h3.color=#74C5A5",
+         0.0f, 1.0f, -1.1f, 1.1f, PLOT_FLAGS_AXES},
+
+        {"Travelling phase",
+         "env=buffer; @env.size=12; "
+         "@env.values=0,0.3,0.7,1,0.95,0.85,0.7,0.5,0.3,0.15,0.05,0; "
+         "travel=env(x)*sin(x*40 - time*4); "
+         "@env.color=#5A8979; @travel.color=#74C5A5",
+         0.0f, 1.0f, -1.1f, 1.1f, PLOT_FLAGS_AXES},
+
+        {"Domain & view",
+         "x=-10..10; @view=-pi..pi,-0.5..1.5; "
+         "signal=sin(x)/x; @signal.color=#74C5A5",
+         /* x_min/x_max ignored because source overrides via x=A..B + @view */
+         0.0f, 0.0f, 0.0f, 0.0f, PLOT_FLAGS_AXES},
+    };
+    int n = (int)(sizeof(data) / sizeof(data[0]));
+    if (out_count) *out_count = n;
+    if (idx < 0 || idx >= n) return NULL;
+    return &data[idx];
+}
+
+/* Nav rows for the Plots tab — labels only; the plot content comes
+ * from plot_entry_at() under TAB_KIND_PLOTS dispatch. */
+static const struct nav_entry *plot_nav_entries(int *out_count)
+{
+    static const struct nav_entry data[] = {
+        {"Trigonometry", NULL},
+        {"Polynomial", NULL},
+        {"Damped wave", NULL},
+        {"Inline buffer", NULL},
+        {"Buffer x carrier", NULL},
+        {"ADSR harmonics", NULL},
+        {"Travelling phase", NULL},
+        {"Domain & view", NULL},
+    };
+    if (out_count) *out_count = (int)(sizeof(data) / sizeof(data[0]));
+    return data;
+}
 
 /* =========================================================================
  * Images tab content.
@@ -415,13 +347,13 @@ static const struct nav_entry PLOT_NAV[] = {
     "      font-size: 16\n"                                                                        \
     "      color: \"#666e85\"\n"
 
-/* Placeholder YAML for an image row when its file isn't on disk. The
- * Images tab's nav entries are built at startup from whatever
- * docs/logo-*.jpeg files exist, so the placeholder is only seen when
- * a probe failed mid-way through. */
+/* Placeholder YAML for an image row when its file isn't on disk.
+ * Embedded logos are extracted to <data_dir>/logo-N.jpeg on first run;
+ * the dev fallback walks up from argv[0] to <repo>/assets/logo-N.jpeg.
+ * Only seen when both probes failed. */
 #define IMAGE_FALLBACK_YAML                                                                        \
     IMAGE_PLACEHOLDER_FOR("Image not found",                                                       \
-                          "ygreeter probes docs/logo-*.jpeg relative to the executable.")
+                          "ygreeter probes logo-*.jpeg in the data dir.")
 
 /* Heap-owned: built at startup from discover_logo_images(), freed
  * before exit. Parallel arrays — entry N's label is g_image_nav[N],
@@ -429,56 +361,6 @@ static const struct nav_entry PLOT_NAV[] = {
 static struct nav_entry *g_image_nav = NULL;
 static char **g_image_paths = NULL;
 static int g_image_path_count = 0;
-
-/* Build a ydraw buffer holding ONE yimage prim plus a TEXT_SPAN title.
- * The ydraw-yaml parser doesn't support `yimage:` blocks today
- * (yaml_factory: none in yimage.yaml), so we go through yimage's C API
- * directly and append the title via the buffer's add_text helper.
- *
- * Caller owns the returned buffer; ownership is transferred to the rich
- * widget when handed off via set_buffer. */
-#include <yetty/yimage/yimage.h>
-
-static struct yetty_ydraw_draw_list *build_image_buffer(const char *title, const char *path)
-{
-    ydebug("build_image_buffer: ENTER title='%s' path='%s'", title ? title : "(null)",
-           path ? path : "(null)");
-    /* Image bounds: position 80 (same y-clearance the plot tab uses
-     * over its 22pt title so the heading isn't covered) and 2× the
-     * previous draw area so the bundled logos render at a respectable
-     * size on a typical card. */
-    struct yetty_yimage_render_config cfg = {
-        .bounds_x = 16.0f,
-        .bounds_y = 80.0f,
-        .bounds_w = 920.0f,
-        .bounds_h = 640.0f,
-    };
-    struct yetty_ydraw_draw_list_result r = yetty_yimage_render_path(path, &cfg);
-    if (YETTY_IS_ERR(r)) {
-        ydebug("build_image_buffer: yimage_render_path FAILED: %s", r.error.msg);
-        yetty_ycore_error_destroy(r.error);
-        return NULL;
-    }
-    ydebug("build_image_buffer: yimage_render_path OK, buf=%p", (void *)r.value);
-    /* Title TEXT_SPAN drawn above the image. The buffer's add_text takes
-     * a yetty_ycore_buffer view so we wrap the literal in place. */
-    if (title && *title) {
-        struct yetty_ycore_buffer text_view = {
-            .data = (uint8_t *)title,
-            .size = strlen(title),
-            .capacity = strlen(title),
-        };
-        struct yetty_ycore_void_result tr =
-            yetty_ydraw_draw_list_add_text(r.value, 16.0f, 36.0f, &text_view, 22.0f,
-                                           /*color (ABGR)=*/0xFFFFFFFFu, /*layer=*/0,
-                                           /*font_id=*/-1, /*rotation=*/0.0f);
-        if (YETTY_IS_ERR(tr)) {
-            yetty_ycore_error_destroy(tr.error);
-            /* keep the image even if the title failed */
-        }
-    }
-    return r.value;
-}
 
 static int path_exists(const char *path)
 {
@@ -489,9 +371,9 @@ static int path_exists(const char *path)
 }
 
 /* Resolve a path relative to argv[0]'s directory walking up `levels`
- * times. Used to locate bundled assets (assets/logo.jpeg, docs/logo.jpeg)
- * regardless of where the user invokes the binary from. Returns a
- * malloc'd path or NULL. */
+ * times. Used to locate bundled assets (assets/logo.jpeg,
+ * assets/yetty-unchained-2.mp4, ...) regardless of where the user
+ * invokes the binary from. Returns a malloc'd path or NULL. */
 static char *resolve_relative_to_exe(const char *argv0, int up_levels, const char *suffix)
 {
     if (!argv0) {
@@ -528,15 +410,9 @@ static char *resolve_relative_to_exe(const char *argv0, int up_levels, const cha
     return out;
 }
 
-/* Try to find a bundled image to use for the Images tab. Probe order:
- *   1. $YGREETER_IMAGE (caller override)
- *   2. <repo>/assets/logo.jpeg
- *   3. <repo>/docs/logo-1.jpeg ... logo-4.jpeg
- *   4. <repo>/assets/apple-touch-icon.jpg
- *
- * The "repo root" is derived from argv[0]. With a CMake build the
- * binary sits at <repo>/build-X/tools/ygreeter/ygreeter — that's 4
- * dirname() calls away from the assets/. An installed layout may be
+/* Find a bundled file by walking up from argv[0]. With a CMake build
+ * the binary sits at <repo>/build-X/tools/ygreeter/ygreeter — that's 4
+ * dirname() calls away from the repo root. An installed layout may be
  * shallower; we try a couple of plausible levels until one resolves. */
 static char *find_repo_image(const char *argv0, const char *relative)
 {
@@ -551,7 +427,41 @@ static char *find_repo_image(const char *argv0, const char *relative)
     return NULL;
 }
 
-/* Discover every docs/logo-N.jpeg that exists relative to the binary
+/* Asset resolution for a standalone-redistributable ygreeter.
+ *
+ *   1. <data_dir>/<basename> — where embedded-assets.c writes everything
+ *      at first run. This is the path that survives `scp ygreeter remote:`
+ *      (the binary carries its own assets via incbin).
+ *   2. argv0-relative <repo_root>/<dev_rel> — dev-loop fallback so an
+ *      uninstalled build run straight out of build-X/tools/ygreeter/
+ *      still finds the asset in the working tree.
+ *
+ * `basename` is the flat name embedded-assets.c writes to the data dir
+ * (e.g. "logo-1.jpeg", "yetty-unchained-2.mp4", "README.md"); `dev_rel`
+ * is the repo-relative path (e.g. "assets/logo-1.jpeg",
+ * "demo/ygui/26_ybrowser/sample.html"). Caller owns the returned string;
+ * NULL when neither resolves. */
+static char *locate_asset(const char *argv0, const char *basename, const char *dev_rel)
+{
+    const char *data_dir = yetty_yplatform_get_data_dir();
+    if (data_dir && *data_dir && basename && *basename) {
+        size_t need = strlen(data_dir) + 1 + strlen(basename) + 1;
+        char *p = (char *)malloc(need);
+        if (p) {
+            snprintf(p, need, "%s/%s", data_dir, basename);
+            if (path_exists(p)) {
+                return p;
+            }
+            free(p);
+        }
+    }
+    if (argv0 && dev_rel && *dev_rel) {
+        return find_repo_image(argv0, dev_rel);
+    }
+    return NULL;
+}
+
+/* Discover every assets/logo-N.jpeg that exists relative to the binary
  * and populate g_image_paths / g_image_nav. One nav entry per file so
  * the Images tab's left rail flexes from 1 to N rows depending on how
  * many bundled logos are shipped. The yaml field is the fallback
@@ -560,7 +470,7 @@ static char *find_repo_image(const char *argv0, const char *relative)
 static void discover_logo_images(const char *argv0)
 {
     /* Probe a generous upper bound on logo numbers. The repo currently
-     * ships logo-1..logo-4 in docs/, but a future build might add
+     * ships logo-1..logo-4 in assets/, but a future build might add
      * more — we stop at the first miss after at least one hit, with
      * a hard ceiling so a broken numbering scheme can't loop. */
     enum { MAX_LOGOS = 32 };
@@ -573,9 +483,11 @@ static void discover_logo_images(const char *argv0)
         paths_tmp[count++] = strdup(env);
     }
     for (int i = 1; i <= MAX_LOGOS && count < MAX_LOGOS; i++) {
-        char rel[64];
-        snprintf(rel, sizeof(rel), "docs/logo-%d.jpeg", i);
-        char *p = find_repo_image(argv0, rel);
+        char basename[32];
+        char dev_rel[64];
+        snprintf(basename, sizeof(basename), "logo-%d.jpeg", i);
+        snprintf(dev_rel, sizeof(dev_rel), "assets/%s", basename);
+        char *p = locate_asset(argv0, basename, dev_rel);
         if (!p) {
             /* allow gaps in numbering up to logo-8 before giving up */
             if (i > 8) {
@@ -584,13 +496,6 @@ static void discover_logo_images(const char *argv0)
             continue;
         }
         paths_tmp[count++] = p;
-    }
-    /* assets/logo.jpeg as a final fallback when nothing else resolved */
-    if (count == 0) {
-        char *p = find_repo_image(argv0, "assets/logo.jpeg");
-        if (p) {
-            paths_tmp[count++] = p;
-        }
     }
     if (count == 0) {
         return;
@@ -633,6 +538,65 @@ static void free_image_nav(void)
     g_image_nav = NULL;
     g_image_path_count = 0;
 }
+
+/* =========================================================================
+ * Video tab — yvideo showcase.
+ *
+ * Source is assets/yetty-unchained-2.mp4 relative to the binary; the MP4
+ * is handed to the ygui_yvideo widget which demuxes via
+ * yetty_yvideo_render_from_mp4_file (yetty_yvideo_core / yvideo-mp4.h).
+ * Decoding runs on the receiving terminal, not in ygreeter.
+ *
+ * The yvideo prim is heavy (multi-MB H.264 stream plus a per-frame
+ * GPU upload) and its decoder loop runs unconditionally as long as the
+ * prim exists on the receiving scene-canvas. So the tab follows the
+ * same activate-on-show / deactivate-on-hide lifecycle the yzoo and
+ * yjungle tabs use: state lives on `struct yvideo_tab` (owned by
+ * struct app), and `on_tab_change` flips `set_active` so the prim is
+ * built when the tab is visible and torn back down to the placeholder
+ * the moment the user switches away.
+ * ========================================================================= */
+
+#define VIDEO_PLACEHOLDER_YAML                                                                     \
+    "body:\n"                                                                                      \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 36]\n"                                                                   \
+    "      content: \"Yvideo showcase\"\n"                                                         \
+    "      font-size: 22\n"                                                                        \
+    "      color: \"#ffffff\"\n"                                                                   \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 84]\n"                                                                   \
+    "      content: \"Plays assets/yetty-unchained-2.mp4 via the yvideo primitive.\"\n"            \
+    "      font-size: 14\n"                                                                        \
+    "      color: \"#bbbbbb\"\n"                                                                   \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 112]\n"                                                                  \
+    "      content: \"File not found, or this build is missing yvideo / openh264.\"\n"             \
+    "      font-size: 14\n"                                                                        \
+    "      color: \"#888888\"\n"                                                                   \
+    "  - box:\n"                                                                                   \
+    "      position: [16, 150]\n"                                                                  \
+    "      size: [460, 240]\n"                                                                     \
+    "      fill: \"#1f2330\"\n"                                                                    \
+    "      stroke: \"#2c3447\"\n"                                                                  \
+    "      stroke-width: 2\n"                                                                      \
+    "      round: 8\n"                                                                             \
+    "  - text:\n"                                                                                  \
+    "      position: [180, 280]\n"                                                                 \
+    "      content: \"[ video would render here ]\"\n"                                             \
+    "      font-size: 16\n"                                                                        \
+    "      color: \"#666e85\"\n"
+
+#ifdef YGREETER_HAS_YVIDEO
+struct yvideo_tab {
+    struct yetty_ygui_engine *engine;
+    struct yetty_ygui_widget *tab;        /* tab panel (parent of `rich`) */
+    struct yetty_ygui_widget *rich;       /* sole child filling the tab */
+    char *path;                           /* resolved mp4 path, or NULL */
+    int   tab_index;                      /* -1 = tab absent / closed */
+    bool  active;                         /* true while the tab is visible */
+};
+#endif
 
 /* =========================================================================
  * Code tab content.
@@ -810,11 +774,34 @@ static const struct nav_entry CODE_NAV[] = {
  * row resolves to its tab + index via `rebind_*` userdata so we can
  * swap the rich content.
  * ========================================================================= */
+/* How load_entry interprets an entry click for this tab.
+ *
+ *   TAB_KIND_YAML    — entries[i].yaml drives yetty_ygui_widget_rich_set_yaml.
+ *                      Default for Welcome / Code / future YAML-driven tabs.
+ *   TAB_KIND_PLOTS   — entries[i] supplies the label only; the plot source
+ *                      string + render_config come from plot_entries() at the
+ *                      same index, fed to yetty_ygui_widget_yplot_set_source.
+ *   TAB_KIND_IMAGES  — the path comes from g_image_paths[i], fed to
+ *                      yetty_ygui_widget_yimage_set_file. The widget owns
+ *                      the same rich surface, so the same widget pointer
+ *                      handles every entry. */
+enum tab_kind {
+    TAB_KIND_YAML = 0,
+    TAB_KIND_PLOTS,
+    TAB_KIND_IMAGES,
+};
+
 struct tab_state {
     struct yetty_ygui_widget *nav_list;
     struct yetty_ygui_widget *rich;
     const struct nav_entry *entries;
     int n_entries;
+    enum tab_kind kind;
+    /* Last entry handed to load_entry. on_resize re-runs load_entry
+     * against this index so the yplot / yimage prims rebuild at the
+     * new widget size — they bake bounds at render-time, so without
+     * a re-render they stay locked at the construction-time size. */
+    int last_entry;
 };
 
 /* The Images tab uses g_image_paths[entry_index] (built at startup
@@ -842,10 +829,10 @@ static int g_yjungle_tab_index = -1;
 #endif
 
 #if defined(YGREETER_HAS_YZOO) || defined(YGREETER_HAS_YJUNGLE)
-#include <time.h>
 #include <uv.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
+#include <yetty/yplatform/time.h>
 
 /* Linked from libygui_yzoo / libygui_yjungle (same symbol, exported by
  * both since ygui_flatten.c is compiled into each). Walks a draw_list,
@@ -859,69 +846,51 @@ struct yetty_ycore_void_result yetty_ygui_flatten_draw_list(
 
 static uint64_t ygreeter_mono_ms(void)
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)(ts.tv_nsec / 1000000);
+    return (uint64_t)(yetty_yplatform_ytime_monotonic_sec() * 1000.0);
 }
 #endif
 
 #ifdef YGREETER_HAS_YZOO
-/* yzoo is a per-frame-FULL-state producer: yzoo_render() clears the
- * supplied buffer and writes CMD_ZERO + all current primitives. So
- * one yzoo_render → flatten → rich_set_buffer cycle per tick. */
+/* The dedicated ygui_yzoo widget owns the producer, the buffers, and
+ * the scene-size mechanics. This shim just owns the libuv timer and a
+ * pointer to the widget; ticks forward to the widget. */
 struct yzoo_anim {
-    struct yetty_ygui_engine     *engine;
-    struct yetty_yzoo            *zoo;
-    struct yetty_ydraw_draw_list *raw;   /* what yzoo_render writes into */
-    struct yetty_ydraw_draw_list *flat;  /* owned by rich widget once attached */
-    struct yetty_ygui_widget     *rich;
-    struct yetty_ygui_widget     *tab;
-    uv_timer_t                    timer;
-    bool                          timer_inited;
-    bool                          running;
-    uint32_t                      seed;
-    float                         scene_w;
-    float                         scene_h;
-    uint64_t                      start_ms;
+    struct yetty_ygui_engine *engine;
+    struct yetty_ygui_widget *widget;
+    struct yetty_ygui_widget *tab;
+    uv_timer_t                timer;
+    bool                      timer_inited;
+    bool                      running;
+    uint32_t                  seed;
+    uint64_t                  last_tick_ms;
 };
 #endif
 
 #ifdef YGREETER_HAS_YJUNGLE
-/* yjungle is an INCREMENTAL producer: each tick emits CMD_ZERO (only on
- * the first tick), CMD_DELETE(old_id) and CMD_GROUP(new_id) for the
- * segments that changed this event. We maintain a parallel `live[]`
- * array of top-level segment records (id + raw GROUP bytes) so we can
- * reconstruct the current scene on demand without re-implementing
- * scene-canvas state. */
-struct yj_live_seg {
-    uint32_t id;
-    uint8_t *bytes; /* full CMD_GROUP record (12-byte header + payload) */
-    size_t   size;
-};
-
+/* Same shape — the dedicated ygui_yjungle widget owns everything
+ * substantial. The shim owns the timer + a widget pointer. */
 struct yjungle_anim {
-    struct yetty_ygui_engine     *engine;
-    struct yetty_yjungle         *jungle;
-    struct yetty_ydraw_draw_list *delta; /* what yjungle_tick writes into */
-    struct yetty_ydraw_draw_list *acc;   /* rebuilt each tick from live[] */
-    struct yetty_ydraw_draw_list *flat;  /* owned by rich widget once attached */
-    struct yetty_ygui_widget     *rich;
-    struct yetty_ygui_widget     *tab;
-    uv_timer_t                    timer;
-    bool                          timer_inited;
-    bool                          running;
-    uint32_t                      seed;
-    float                         scene_w;
-    float                         scene_h;
-    uint64_t                      start_ms;
-    struct yj_live_seg           *live;
-    size_t                        n_live;
-    size_t                        cap_live;
+    struct yetty_ygui_engine *engine;
+    struct yetty_ygui_widget *widget;
+    struct yetty_ygui_widget *tab;
+    uv_timer_t                timer;
+    bool                      timer_inited;
+    bool                      running;
+    uint32_t                  seed;
+    uint64_t                  start_ms;
 };
 #endif
 
 /* Forward decls — bodies live just before on_resize, but on_tab_close
  * / on_tab_change (defined earlier in the file) need to call them. */
+#ifdef YGREETER_HAS_YVIDEO
+static void yvideo_tab_init(struct yvideo_tab *v, const char *argv0);
+static void yvideo_tab_attach(struct yvideo_tab *v, struct yetty_ygui_engine *engine,
+                              struct yetty_ygui_widget *tab_panel, int tab_index);
+static void yvideo_tab_set_active(struct yvideo_tab *v, bool active);
+static void yvideo_tab_on_tab_closed(struct yvideo_tab *v);
+static void yvideo_tab_shutdown(struct yvideo_tab *v);
+#endif
 #ifdef YGREETER_HAS_YZOO
 static void yzoo_anim_set_running(struct yzoo_anim *a, bool run);
 static void yzoo_anim_on_tab_closed(struct yzoo_anim *a);
@@ -952,6 +921,9 @@ struct app {
 #endif
 #ifdef YGREETER_HAS_YJUNGLE
     struct yjungle_anim yjungle;
+#endif
+#ifdef YGREETER_HAS_YVIDEO
+    struct yvideo_tab video;
 #endif
 };
 
@@ -1018,20 +990,74 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
     if (entry_index < 0 || entry_index >= t->n_entries) {
         return;
     }
-    /* Images tab: pick the per-entry file from g_image_paths and build
-     * a fresh ydraw buffer (yimage prim + title TEXT_SPAN). Falls
-     * through to the placeholder YAML when nothing was discovered or
-     * the file decode failed. */
-    if (tab_index == g_images_tab_index && entry_index < g_image_path_count && g_image_paths &&
-        g_image_paths[entry_index]) {
-        struct yetty_ydraw_draw_list *buf =
-            build_image_buffer(t->entries[entry_index].label, g_image_paths[entry_index]);
-        if (buf) {
-            yetty_ygui_widget_rich_set_buffer(t->rich, buf);
-            return;
+    t->last_entry = entry_index;
+
+    /* The yplot / yimage producers bake bounds at render-time from
+     * the widget's resolved content box. Force a layout pass so the
+     * box is populated before set_* runs — without this, an entry
+     * loaded during build_tab_body (before engine_run) renders at the
+     * 400×200 fallback and stays that size forever. */
+    if (t->kind == TAB_KIND_PLOTS || t->kind == TAB_KIND_IMAGES) {
+        struct yetty_ycore_void_result lr = yetty_ygui_engine_layout(app->engine);
+        if (YETTY_IS_ERR(lr)) {
+            yetty_ycore_error_destroy(lr.error);
         }
     }
+
+    switch (t->kind) {
+    case TAB_KIND_PLOTS: {
+        /* yexpr-plot source + ranges live next to the labels in
+         * plot_entry_at(); the widget swaps its prim in place. */
+        const struct plot_entry *pe = plot_entry_at(entry_index, NULL);
+        if (!pe) return;
+        struct yetty_yplot_render_config cfg = {
+            .x_min = pe->x_min,
+            .x_max = pe->x_max,
+            .y_min = pe->y_min,
+            .y_max = pe->y_max,
+            .flags = pe->flags,
+        };
+        struct yetty_ycore_void_result r =
+            yetty_ygui_widget_yplot_set_source(t->rich, pe->source, 0, &cfg);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+        return;
+    }
+
+    case TAB_KIND_IMAGES: {
+        /* The yimage widget rebuilds + swaps the prim from the path.
+         * No YAML fallback — the content widget is a yimage, not a
+         * rich widget; on a path miss we just clear so it paints
+         * nothing. The fallback nav entry is built only when there
+         * are zero discovered logos, so a path miss past that point
+         * means a genuine I/O error. */
+        if (entry_index < g_image_path_count && g_image_paths &&
+            g_image_paths[entry_index]) {
+            struct yetty_ycore_void_result r =
+                yetty_ygui_widget_yimage_set_file(t->rich, g_image_paths[entry_index]);
+            if (YETTY_IS_OK(r)) {
+                return;
+            }
+            yetty_ycore_error_destroy(r.error);
+        }
+        struct yetty_ycore_void_result cr =
+            yetty_ygui_widget_yimage_set_file(t->rich, NULL);
+        if (YETTY_IS_ERR(cr)) {
+            yetty_ycore_error_destroy(cr.error);
+        }
+        return;
+    }
+
+    case TAB_KIND_YAML:
+    default:
+        break;
+    }
+
     const char *yaml = yaml_for(t, entry_index);
+    if (!yaml) {
+        return;
+    }
     struct yetty_ycore_void_result r = yetty_ygui_widget_rich_set_yaml(t->rich, yaml, strlen(yaml));
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
@@ -1113,6 +1139,20 @@ static void on_tab_close(struct yetty_ygui_widget *tabbar, float value, void *us
         }
     }
 
+#ifdef YGREETER_HAS_YVIDEO
+    /* Same bookkeeping for the Video tab — when it's the one being
+     * closed, tear down the per-tab state (drops the playback prim
+     * and clears stale widget handles); when it's a tab AFTER the
+     * Video tab, shift our cached index down by one. */
+    if (app->video.tab_index >= 0) {
+        if (idx == app->video.tab_index) {
+            yvideo_tab_on_tab_closed(&app->video);
+        } else if (idx < app->video.tab_index) {
+            app->video.tab_index--;
+        }
+    }
+#endif
+
     /* Same bookkeeping for the yzoo / yjungle showcase tabs — drop our
      * dangling widget/tab pointers when the tab itself goes away,
      * otherwise the next resize-driven rebuild would chase a freed
@@ -1149,12 +1189,25 @@ static void on_tab_change(struct yetty_ygui_widget *tabbar, float value, void *u
     (void)tabbar;
     struct app *app = (struct app *)userdata;
     int idx = (int)value;
+
     /* Default: load the first entry of the newly-active tab — only
-     * applies to the first 4 tabs (Welcome / Plots / Images / Code),
-     * which are the ones that use the nav+rich pattern. */
-    if (idx >= 0 && idx < 4) {
+     * applies to the nav+rich tabs (Welcome / Plots / Images / Code).
+     * The Video tab between Images and Code does not use nav+rich;
+     * its slot in app->tabs[] is empty so load_entry early-returns on
+     * n_entries == 0 for that index. */
+    if (idx >= 0 && idx < 5) {
         load_entry(app, idx, 0);
     }
+
+#ifdef YGREETER_HAS_YVIDEO
+    /* Drive the Video tab's playback prim from the tab-change event,
+     * same shape as the yzoo / yjungle set_running calls below. The
+     * helper builds the yvideo prim on activation and resets the
+     * widget to the placeholder on deactivation, so the receiving
+     * scene-canvas's decoder + per-frame GPU upload only run while
+     * the user is actually looking at the tab. */
+    yvideo_tab_set_active(&app->video, idx == app->video.tab_index);
+#endif
     /* Drive the yzoo / yjungle animation timers based on which tab is
      * now active. Pausing on tab-switch keeps idle CPU low; resuming
      * picks the producer's internal clock back up where it left off. */
@@ -1347,212 +1400,53 @@ static void build_about_dialog(struct app *app)
 #ifdef YGREETER_HAS_YZOO
 static void yzoo_anim_tick(struct yzoo_anim *a)
 {
-    if (!a || !a->zoo || !a->raw || !a->flat || !a->rich) {
+    if (!a || !a->widget) {
         return;
     }
-    float t = (float)((double)(ygreeter_mono_ms() - a->start_ms) / 1000.0);
-    struct yetty_ycore_void_result rr = yetty_yzoo_render(a->zoo, a->raw, t);
+    uint64_t now = ygreeter_mono_ms();
+    float dt = a->last_tick_ms ? (float)((double)(now - a->last_tick_ms) / 1000.0) : 0.033f;
+    a->last_tick_ms = now;
+    struct yetty_ycore_void_result rr = yetty_ygui_widget_yzoo_tick(a->widget, dt);
     if (YETTY_IS_ERR(rr)) {
         yetty_ycore_error_destroy(rr.error);
-        return;
     }
-    /* The flat buffer is owned by the rich widget; clear + refill, then
-     * re-set so the widget's dirty bit flips. */
-    yetty_ydraw_draw_list_clear(a->flat);
-    yetty_ydraw_draw_list_set_scene_bounds(a->flat, 0.0f, 0.0f, a->scene_w, a->scene_h);
-    struct yetty_ycore_void_result fr = yetty_ygui_flatten_draw_list(a->flat, a->raw);
-    if (YETTY_IS_ERR(fr)) {
-        yetty_ycore_error_destroy(fr.error);
-        return;
-    }
-    yetty_ygui_widget_rich_set_buffer(a->rich, a->flat);
 }
 
 YETTY_EXTERNAL_CALLBACK
 static void on_yzoo_timer(uv_timer_t *t) { yzoo_anim_tick((struct yzoo_anim *)t->data); }
 
-static void yzoo_anim_drop_producer(struct yzoo_anim *a)
-{
-    if (a->zoo) {
-        yetty_yzoo_destroy(a->zoo);
-        a->zoo = NULL;
-    }
-    if (a->raw) {
-        yetty_ydraw_draw_list_destroy(a->raw);
-        a->raw = NULL;
-    }
-}
-
-static void yzoo_anim_drop_widgets(struct yzoo_anim *a)
-{
-    if (a->rich) {
-        /* Removing the rich widget also frees the flat buffer it owns
-         * via the engine's widget teardown. Null both so a re-attach
-         * starts from a clean slate. */
-        yetty_ygui_widget_remove(a->rich);
-        a->rich = NULL;
-        a->flat = NULL;
-    }
-}
-
-/* Look up the tab's resolved content area. The tabbar puts its tabs
- * inside the window body (between the menubar + statusbar chrome and
- * the tab strip itself), so the engine canvas size is NOT the right
- * scene size for yzoo / yjungle — using it would generate primitives
- * for a scene larger than the actual viewport, with most of the content
- * spilling off-pane.
- *
- * The resolved layout box is only valid after engine_layout (or
- * engine_render) has computed it, so we trigger a layout pass first.
- * Fallback to engine size if the tab is somehow zero-sized (e.g. the
- * tab hasn't been activated yet on backends that defer panel layout). */
-static void ygreeter_tab_viewport(struct yetty_ygui_engine *engine,
-                                  struct yetty_ygui_widget *tab,
-                                  float *out_w, float *out_h)
-{
-    struct yetty_ycore_void_result lr = yetty_ygui_engine_layout(engine);
-    if (YETTY_IS_ERR(lr)) {
-        yetty_ycore_error_destroy(lr.error);
-    }
-    /* Use the tab panel's CONTENT box (layout_box minus padding) — that's
-     * the rectangle the rich widget will actually occupy after flex layout
-     * runs. Querying the layout box instead would include the panel's
-     * padding band, the producer would emit primitives sized to that
-     * larger rect, and they would spill out past the rich widget's edges. */
-    float w = 0.0f, h = 0.0f;
-    struct rectangle_result br = yetty_ygui_widget_get_content_box(tab);
-    if (YETTY_IS_OK(br)) {
-        w = br.value.max.x - br.value.min.x;
-        h = br.value.max.y - br.value.min.y;
-    } else {
-        yetty_ycore_error_destroy(br.error);
-    }
-    if (w < 1.0f || h < 1.0f) {
-        struct pixel_size_result sr = yetty_ygui_engine_get_size(engine);
-        if (YETTY_IS_OK(sr)) {
-            w = sr.value.width;
-            h = sr.value.height;
-        } else {
-            yetty_ycore_error_destroy(sr.error);
-        }
-    }
-    if (w < 1.0f) w = 800.0f;
-    if (h < 1.0f) h = 600.0f;
-    *out_w = w;
-    *out_h = h;
-}
-
 static void yzoo_anim_init(struct yzoo_anim *a, struct yetty_ygui_engine *engine,
                            struct yetty_ygui_widget *tab, uint32_t seed)
 {
-    /* Stash the addressables. Producer + widget creation is deferred
-     * to yzoo_anim_ensure_attached so the scene can be built at the
-     * tab's actual resolved size (which isn't known until the engine
-     * has run at least one layout pass). */
+    /* Defer widget creation — the tab's resolved size isn't known
+     * until the first layout pass. ensure_attached fills it in. */
     a->engine = engine;
     a->tab = tab;
     a->seed = seed;
 }
 
-static void yzoo_anim_attach(struct yzoo_anim *a, struct yetty_ygui_engine *engine,
-                             struct yetty_ygui_widget *tab, float w, float h)
+static void yzoo_anim_ensure_attached(struct yzoo_anim *a)
 {
-    yzoo_anim_drop_widgets(a);
-    yzoo_anim_drop_producer(a);
-    a->engine = engine;
-    a->tab = tab;
-    a->scene_w = w;
-    a->scene_h = h;
-
-    struct yetty_yzoo_config cfg = yetty_yzoo_config_default();
-    cfg.scene_width = w;
-    cfg.scene_height = h;
-    struct yetty_yzoo_ptr_result zr = yetty_yzoo_create(&cfg, a->seed);
-    if (YETTY_IS_ERR(zr)) {
-        yetty_ycore_error_destroy(zr.error);
+    if (!a || !a->engine || !a->tab || a->widget) {
         return;
     }
-    a->zoo = zr.value;
-    struct yetty_ydraw_draw_list_config bc = {
-        .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = w, .scene_max_y = h,
-    };
-    struct yetty_ydraw_draw_list_result rr = yetty_ydraw_draw_list_config_buffer_create(&bc);
-    if (YETTY_IS_ERR(rr)) {
-        yetty_ycore_error_destroy(rr.error);
-        yzoo_anim_drop_producer(a);
+    /* The widget itself handles resize via set_scene_size; we just
+     * need it to exist inside the tab so flex layout sizes it to
+     * the tab's content area. */
+    a->widget = yetty_ygui_engine_yzoo(a->engine, "yzoo_view",
+                                       0, 0, 0, 0, /*config=*/NULL, a->seed);
+    if (!a->widget) {
         return;
     }
-    a->raw = rr.value;
-    struct yetty_ydraw_draw_list_result fr = yetty_ydraw_draw_list_config_buffer_create(&bc);
-    if (YETTY_IS_ERR(fr)) {
-        yetty_ycore_error_destroy(fr.error);
-        yzoo_anim_drop_producer(a);
-        return;
-    }
-    a->flat = fr.value;
-    a->rich = yetty_ygui_engine_rich(engine, "yzoo_view", 0, 0, w, h);
-    if (!a->rich) {
-        yetty_ydraw_draw_list_destroy(a->flat);
-        a->flat = NULL;
-        yzoo_anim_drop_producer(a);
-        return;
-    }
-    yetty_ygui_widget_apply_css(a->rich, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(tab, a->rich);
-    yetty_ygui_widget_rich_set_buffer(a->rich, a->flat); /* widget owns flat */
-
-    a->start_ms = ygreeter_mono_ms();
+    yetty_ygui_widget_apply_css(a->widget, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_widget_add_child(a->tab, a->widget);
     if (!a->timer_inited) {
-        uv_loop_t *loop = yetty_ygui_engine_get_loop(engine);
+        uv_loop_t *loop = yetty_ygui_engine_get_loop(a->engine);
         uv_timer_init(loop, &a->timer);
         a->timer.data = a;
         a->timer_inited = true;
     }
-    yzoo_anim_tick(a); /* initial frame so the tab isn't blank */
-}
-
-/* Make sure the producer + rich widget exist at the tab's CURRENT
- * resolved size. Three paths:
- *
- *   - Already attached at the right size → no-op.
- *   - Already attached at a different size → notify the producer via
- *     yetty_yzoo_set_scene_size and update the raw/flat buffer scene
- *     bounds. NO widget tree mutation. This is the resize path; the
- *     standalone yzoo tool follows the same pattern (see tools/yzoo).
- *   - Not attached yet (first activation of the tab) → full attach.
- *
- * The earlier code re-ran the full attach on every size change, which
- * meant tearing down + re-adding the rich widget from inside on_resize.
- * Mutating the widget tree while the engine is dispatching its own
- * resize event was the source of the crashes. set_scene_size keeps the
- * tree stable; the next yzoo_render call refills the buffer at the new
- * scene size on its own. */
-static void yzoo_anim_ensure_attached(struct yzoo_anim *a)
-{
-    if (!a || !a->engine || !a->tab) {
-        return;
-    }
-    float w = 0.0f, h = 0.0f;
-    ygreeter_tab_viewport(a->engine, a->tab, &w, &h);
-    if (a->rich && a->scene_w == w && a->scene_h == h) {
-        return;
-    }
-    if (a->rich && a->zoo && a->raw && a->flat) {
-        struct yetty_ycore_void_result r = yetty_yzoo_set_scene_size(a->zoo, w, h);
-        if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
-        }
-        a->scene_w = w;
-        a->scene_h = h;
-        yetty_ydraw_draw_list_set_scene_bounds(a->raw,  0.0f, 0.0f, w, h);
-        yetty_ydraw_draw_list_set_scene_bounds(a->flat, 0.0f, 0.0f, w, h);
-        /* Force the rich widget to repaint the resized scene on the next
-         * frame; the buffer pointer hasn't changed, so set_buffer's
-         * dirty-flip is what tells the engine the contents moved. */
-        yetty_ygui_widget_rich_set_buffer(a->rich, a->flat);
-        return;
-    }
-    yzoo_anim_attach(a, a->engine, a->tab, w, h);
+    a->last_tick_ms = 0;
 }
 
 static void yzoo_anim_set_running(struct yzoo_anim *a, bool run)
@@ -1565,7 +1459,6 @@ static void yzoo_anim_set_running(struct yzoo_anim *a, bool run)
         if (!a->timer_inited || a->running) {
             return;
         }
-        /* ~30 fps — same cadence the standalone yzoo tool runs at. */
         uv_timer_start(&a->timer, on_yzoo_timer, /*initial=*/0, /*repeat=*/33);
         a->running = true;
     } else if (a->timer_inited && a->running) {
@@ -1577,14 +1470,10 @@ static void yzoo_anim_set_running(struct yzoo_anim *a, bool run)
 static void yzoo_anim_on_tab_closed(struct yzoo_anim *a)
 {
     yzoo_anim_set_running(a, false);
-    /* The tab tree owns the rich widget (and through it the flat
-     * buffer) — they're already freed by tabbar_remove_tab when we
-     * get here. Just clear our pointers so the next attach starts
-     * fresh, and drop the producer-side state we still own. */
-    a->rich = NULL;
-    a->flat = NULL;
+    /* The tab tree owns the widget — already freed by
+     * tabbar_remove_tab by the time we get here. */
+    a->widget = NULL;
     a->tab = NULL;
-    yzoo_anim_drop_producer(a);
 }
 
 static void yzoo_anim_shutdown(struct yzoo_anim *a)
@@ -1600,172 +1489,26 @@ static void yzoo_anim_shutdown(struct yzoo_anim *a)
         a->timer_inited = false;
         a->running = false;
     }
-    /* rich + flat are torn down with the engine; producer / raw we own. */
-    yzoo_anim_drop_producer(a);
-    a->rich = NULL;
-    a->flat = NULL;
+    a->widget = NULL;
 }
 #endif /* YGREETER_HAS_YZOO */
 
 #ifdef YGREETER_HAS_YJUNGLE
-static void yj_live_clear(struct yjungle_anim *a)
-{
-    for (size_t i = 0; i < a->n_live; i++) {
-        free(a->live[i].bytes);
-    }
-    a->n_live = 0;
-}
-
-static void yj_live_remove(struct yjungle_anim *a, uint32_t id)
-{
-    for (size_t i = 0; i < a->n_live; i++) {
-        if (a->live[i].id == id) {
-            free(a->live[i].bytes);
-            a->live[i] = a->live[a->n_live - 1];
-            a->n_live--;
-            return;
-        }
-    }
-}
-
-static int yj_live_append(struct yjungle_anim *a, uint32_t id, const uint8_t *src, size_t size)
-{
-    if (a->n_live == a->cap_live) {
-        size_t nc = a->cap_live ? a->cap_live * 2 : 64;
-        struct yj_live_seg *nl = (struct yj_live_seg *)realloc(a->live, nc * sizeof(*nl));
-        if (!nl) {
-            return -1;
-        }
-        a->live = nl;
-        a->cap_live = nc;
-    }
-    uint8_t *copy = (uint8_t *)malloc(size);
-    if (!copy) {
-        return -1;
-    }
-    memcpy(copy, src, size);
-    a->live[a->n_live].id = id;
-    a->live[a->n_live].bytes = copy;
-    a->live[a->n_live].size = size;
-    a->n_live++;
-    return 0;
-}
-
-/* Parse one tick's delta records, mutating the live[] mirror. The wire
- * layouts are the same the receiver's scene-canvas processes, so this
- * is the minimum subset of process_group_body needed to keep a flat
- * view of the chain alive across deltas. */
-static void yj_apply_delta(struct yjungle_anim *a)
-{
-    const uint8_t *bytes = (const uint8_t *)yetty_ydraw_draw_list_data(a->delta);
-    size_t len = yetty_ydraw_draw_list_size(a->delta);
-    if (!bytes || len == 0) {
-        return;
-    }
-    size_t off = 0;
-    while (off + sizeof(uint32_t) <= len) {
-        uint32_t type = *(const uint32_t *)(bytes + off);
-        if (type == YETTY_YDRAW_CMD_ZERO) {
-            yj_live_clear(a);
-            if (off + 8 > len) break;
-            off += 8;
-            continue;
-        }
-        if (type == YETTY_YDRAW_CMD_DELETE) {
-            if (off + 12 > len) break;
-            uint32_t id = ((const uint32_t *)(bytes + off))[1];
-            yj_live_remove(a, id);
-            off += 12;
-            continue;
-        }
-        if (type == YETTY_YDRAW_CMD_GROUP) {
-            if (off + 12 > len) break;
-            uint32_t id = ((const uint32_t *)(bytes + off))[1];
-            uint32_t payload_size = ((const uint32_t *)(bytes + off))[2];
-            size_t total = (size_t)12 + payload_size;
-            if (off + total > len) break;
-            if (yj_live_append(a, id, bytes + off, total) != 0) {
-                return;
-            }
-            off += total;
-            continue;
-        }
-        break; /* unknown record — bail rather than skid through */
-    }
-}
-
 static void yj_anim_tick(struct yjungle_anim *a)
 {
-    if (!a || !a->jungle || !a->delta || !a->acc || !a->flat || !a->rich) {
+    if (!a || !a->widget) {
         return;
     }
     uint64_t now = ygreeter_mono_ms() - a->start_ms;
-    struct yetty_ycore_void_result tr = yetty_yjungle_tick(a->jungle, a->delta, now);
-    if (YETTY_IS_ERR(tr)) {
-        yetty_ycore_error_destroy(tr.error);
-        return;
+    struct yetty_ycore_void_result rr = yetty_ygui_widget_yjungle_tick(a->widget, now);
+    if (YETTY_IS_ERR(rr)) {
+        yetty_ycore_error_destroy(rr.error);
     }
-    /* Quiet tick — yjungle had no event scheduled this poll. The wire
-     * buffer is empty; nothing to repaint. */
-    if (yetty_ydraw_draw_list_size(a->delta) == 0u) {
-        return;
-    }
-    yj_apply_delta(a);
-
-    /* Pack live segments back into an accumulator buffer the flatten
-     * helper can chew on, then flatten paint-only into flat for the
-     * rich widget. */
-    yetty_ydraw_draw_list_clear(a->acc);
-    yetty_ydraw_draw_list_set_scene_bounds(a->acc, 0.0f, 0.0f, a->scene_w, a->scene_h);
-    for (size_t i = 0; i < a->n_live; i++) {
-        struct yetty_ydraw_id_result ar =
-            yetty_ydraw_draw_list_add_prim(a->acc, a->live[i].bytes, a->live[i].size);
-        if (YETTY_IS_ERR(ar)) {
-            yetty_ycore_error_destroy(ar.error);
-            return;
-        }
-    }
-    yetty_ydraw_draw_list_clear(a->flat);
-    yetty_ydraw_draw_list_set_scene_bounds(a->flat, 0.0f, 0.0f, a->scene_w, a->scene_h);
-    struct yetty_ycore_void_result fr = yetty_ygui_flatten_draw_list(a->flat, a->acc);
-    if (YETTY_IS_ERR(fr)) {
-        yetty_ycore_error_destroy(fr.error);
-        return;
-    }
-    yetty_ygui_widget_rich_set_buffer(a->rich, a->flat);
 }
 
 YETTY_EXTERNAL_CALLBACK
 static void on_yj_timer(uv_timer_t *t) { yj_anim_tick((struct yjungle_anim *)t->data); }
 
-static void yj_anim_drop_producer(struct yjungle_anim *a)
-{
-    if (a->jungle) {
-        yetty_yjungle_destroy(a->jungle);
-        a->jungle = NULL;
-    }
-    if (a->delta) {
-        yetty_ydraw_draw_list_destroy(a->delta);
-        a->delta = NULL;
-    }
-    if (a->acc) {
-        yetty_ydraw_draw_list_destroy(a->acc);
-        a->acc = NULL;
-    }
-    yj_live_clear(a);
-}
-
-static void yj_anim_drop_widgets(struct yjungle_anim *a)
-{
-    if (a->rich) {
-        yetty_ygui_widget_remove(a->rich);
-        a->rich = NULL;
-        a->flat = NULL;
-    }
-}
-
-/* Deferred-attach counterpart to yzoo_anim_init — see the equivalent
- * yzoo_anim_init comment. */
 static void yj_anim_init(struct yjungle_anim *a, struct yetty_ygui_engine *engine,
                          struct yetty_ygui_widget *tab, uint32_t seed)
 {
@@ -1774,106 +1517,31 @@ static void yj_anim_init(struct yjungle_anim *a, struct yetty_ygui_engine *engin
     a->seed = seed;
 }
 
-static void yj_anim_attach(struct yjungle_anim *a, struct yetty_ygui_engine *engine,
-                           struct yetty_ygui_widget *tab, float w, float h)
+static void yj_anim_ensure_attached(struct yjungle_anim *a)
 {
-    yj_anim_drop_widgets(a);
-    yj_anim_drop_producer(a);
-    a->engine = engine;
-    a->tab = tab;
-    a->scene_w = w;
-    a->scene_h = h;
-
+    if (!a || !a->engine || !a->tab || a->widget) {
+        return;
+    }
+    /* Match demo/ygui/27_yjungle's bigger initial chain so the tab
+     * isn't sparse on first paint. */
     struct yetty_yjungle_config cfg = yetty_yjungle_config_default();
-    /* Match demo/ygui/27_yjungle's bigger initial chain so the tab isn't
-     * sparse on first paint. Event cadence stays at the library default
-     * so growth / replacement happens at a watchable rate. */
-    cfg.scene_width = w;
-    cfg.scene_height = h;
     cfg.initial_chain_length = 20;
     cfg.max_depth = 2;
     cfg.group_prob_depth0 = 0.4f;
-    struct yetty_yjungle_ptr_result jr = yetty_yjungle_create(&cfg, a->seed);
-    if (YETTY_IS_ERR(jr)) {
-        yetty_ycore_error_destroy(jr.error);
+    a->widget = yetty_ygui_engine_yjungle(a->engine, "yjungle_view",
+                                          0, 0, 0, 0, &cfg, a->seed);
+    if (!a->widget) {
         return;
     }
-    a->jungle = jr.value;
-    struct yetty_ydraw_draw_list_config bc = {
-        .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = w, .scene_max_y = h,
-    };
-    struct yetty_ydraw_draw_list_result dr = yetty_ydraw_draw_list_config_buffer_create(&bc);
-    if (YETTY_IS_ERR(dr)) {
-        yetty_ycore_error_destroy(dr.error);
-        yj_anim_drop_producer(a);
-        return;
-    }
-    a->delta = dr.value;
-    struct yetty_ydraw_draw_list_result acr = yetty_ydraw_draw_list_config_buffer_create(&bc);
-    if (YETTY_IS_ERR(acr)) {
-        yetty_ycore_error_destroy(acr.error);
-        yj_anim_drop_producer(a);
-        return;
-    }
-    a->acc = acr.value;
-    struct yetty_ydraw_draw_list_result fr = yetty_ydraw_draw_list_config_buffer_create(&bc);
-    if (YETTY_IS_ERR(fr)) {
-        yetty_ycore_error_destroy(fr.error);
-        yj_anim_drop_producer(a);
-        return;
-    }
-    a->flat = fr.value;
-    a->rich = yetty_ygui_engine_rich(engine, "yjungle_view", 0, 0, w, h);
-    if (!a->rich) {
-        yetty_ydraw_draw_list_destroy(a->flat);
-        a->flat = NULL;
-        yj_anim_drop_producer(a);
-        return;
-    }
-    yetty_ygui_widget_apply_css(a->rich, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(tab, a->rich);
-    yetty_ygui_widget_rich_set_buffer(a->rich, a->flat); /* widget owns flat */
-
-    a->start_ms = ygreeter_mono_ms();
+    yetty_ygui_widget_apply_css(a->widget, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_widget_add_child(a->tab, a->widget);
     if (!a->timer_inited) {
-        uv_loop_t *loop = yetty_ygui_engine_get_loop(engine);
+        uv_loop_t *loop = yetty_ygui_engine_get_loop(a->engine);
         uv_timer_init(loop, &a->timer);
         a->timer.data = a;
         a->timer_inited = true;
     }
-    yj_anim_tick(a); /* first-ever tick — emits CMD_ZERO + initial chain */
-}
-
-/* Same shape as yzoo_anim_ensure_attached above — resize path is
- * yetty_yjungle_set_scene_size + buffer-bounds update, NOT a tear-down
- * and rebuild of the widget tree. See that function's comment for why
- * the previous full-attach-on-resize approach was crashing. yjungle is
- * an incremental producer, so the existing chain state is preserved
- * across the resize; only future segments will respect the new bounds.
- * That mirrors the standalone yjungle tool (tools/yjungle/main.c). */
-static void yj_anim_ensure_attached(struct yjungle_anim *a)
-{
-    if (!a || !a->engine || !a->tab) {
-        return;
-    }
-    float w = 0.0f, h = 0.0f;
-    ygreeter_tab_viewport(a->engine, a->tab, &w, &h);
-    if (a->rich && a->scene_w == w && a->scene_h == h) {
-        return;
-    }
-    if (a->rich && a->jungle && a->acc && a->flat) {
-        struct yetty_ycore_void_result r = yetty_yjungle_set_scene_size(a->jungle, w, h);
-        if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
-        }
-        a->scene_w = w;
-        a->scene_h = h;
-        yetty_ydraw_draw_list_set_scene_bounds(a->acc,  0.0f, 0.0f, w, h);
-        yetty_ydraw_draw_list_set_scene_bounds(a->flat, 0.0f, 0.0f, w, h);
-        yetty_ygui_widget_rich_set_buffer(a->rich, a->flat);
-        return;
-    }
-    yj_anim_attach(a, a->engine, a->tab, w, h);
+    a->start_ms = ygreeter_mono_ms();
 }
 
 static void yj_anim_set_running(struct yjungle_anim *a, bool run)
@@ -1886,9 +1554,6 @@ static void yj_anim_set_running(struct yjungle_anim *a, bool run)
         if (!a->timer_inited || a->running) {
             return;
         }
-        /* Poll at 100 ms. yjungle's events are scheduled in 500–2000 ms
-         * windows so most polls are quiet (no-op); the timer just gives
-         * the producer a chance to fire on time. */
         uv_timer_start(&a->timer, on_yj_timer, /*initial=*/0, /*repeat=*/100);
         a->running = true;
     } else if (a->timer_inited && a->running) {
@@ -1900,10 +1565,8 @@ static void yj_anim_set_running(struct yjungle_anim *a, bool run)
 static void yj_anim_on_tab_closed(struct yjungle_anim *a)
 {
     yj_anim_set_running(a, false);
-    a->rich = NULL;
-    a->flat = NULL;
+    a->widget = NULL;
     a->tab = NULL;
-    yj_anim_drop_producer(a);
 }
 
 static void yj_anim_shutdown(struct yjungle_anim *a)
@@ -1919,15 +1582,89 @@ static void yj_anim_shutdown(struct yjungle_anim *a)
         a->timer_inited = false;
         a->running = false;
     }
-    yj_anim_drop_producer(a);
-    free(a->live);
-    a->live = NULL;
-    a->n_live = 0;
-    a->cap_live = 0;
-    a->rich = NULL;
-    a->flat = NULL;
+    a->widget = NULL;
 }
 #endif /* YGREETER_HAS_YJUNGLE */
+
+#ifdef YGREETER_HAS_YVIDEO
+/* yvideo_tab_init — resolve the bundled MP4 path once. Heap-owned;
+ * freed by yvideo_tab_shutdown. */
+static void yvideo_tab_init(struct yvideo_tab *v, const char *argv0)
+{
+    v->engine = NULL;
+    v->tab = NULL;
+    v->rich = NULL;
+    v->path = locate_asset(argv0, "yetty-unchained-2.mp4", "assets/yetty-unchained-2.mp4");
+    v->tab_index = -1;
+    v->active = false;
+}
+
+/* yvideo_tab_attach — build the tab body: a single yvideo widget
+ * filling the panel. The H.264 stream isn't materialised here; that
+ * happens when set_active(true) fires, so the decoder + per-frame
+ * GPU upload don't start until the user actually views the tab. */
+static void yvideo_tab_attach(struct yvideo_tab *v, struct yetty_ygui_engine *engine,
+                              struct yetty_ygui_widget *tab_panel, int tab_index)
+{
+    v->engine = engine;
+    v->tab = tab_panel;
+    v->tab_index = tab_index;
+    v->active = false;
+    /* Empty yvideo widget — set_active will load the MP4 source. */
+    v->rich = yetty_ygui_engine_yvideo_from_mp4_bytes(
+        engine, "video_yvideo", 0, 0, 0, 0,
+        /*mp4_bytes=*/NULL, /*mp4_len=*/0, /*overrides=*/NULL);
+    if (!v->rich) {
+        return;
+    }
+    yetty_ygui_widget_apply_css(v->rich, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_widget_add_child(tab_panel, v->rich);
+}
+
+/* yvideo_tab_set_active — activate / deactivate playback. On activate,
+ * hand the bundled MP4 to the ygui_yvideo widget — it demuxes via
+ * yetty_yvideo_render_from_mp4_file (yetty_yvideo_core) and attaches
+ * the resulting yvideo prim. On deactivate, clear the prim so the
+ * receiving scene-canvas tears down the decoder + GPU upload — the
+ * playback loop runs server-side, so the only way to pause it from
+ * here is to remove the prim from the widget's draw_list. */
+static void yvideo_tab_set_active(struct yvideo_tab *v, bool active)
+{
+    if (!v || !v->rich || v->active == active) {
+        return;
+    }
+    v->active = active;
+    if (active && v->path) {
+        struct yetty_ycore_void_result r =
+            yetty_ygui_widget_yvideo_set_mp4_file(v->rich, v->path, NULL);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+        return;
+    }
+    struct yetty_ycore_void_result r = yetty_ygui_widget_yvideo_clear(v->rich);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
+
+/* yvideo_tab_on_tab_closed — the tabbar already owns the widgets and
+ * is about to free them when we get here. Clear handles + active
+ * flag; the heap-owned path stays alive until program shutdown. */
+static void yvideo_tab_on_tab_closed(struct yvideo_tab *v)
+{
+    v->tab = NULL;
+    v->rich = NULL;
+    v->tab_index = -1;
+    v->active = false;
+}
+
+static void yvideo_tab_shutdown(struct yvideo_tab *v)
+{
+    free(v->path);
+    v->path = NULL;
+}
+#endif /* YGREETER_HAS_YVIDEO */
 
 static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float pw, float ph,
                       void *u)
@@ -1948,23 +1685,36 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
      * (cheap no-op for inactive tabs whose size happened to stay the
      * same). Only the currently-running anim needs a refresh — others
      * lazily re-attach the next time their tab is activated. */
-    /* Already-attached producers (visible OR invisible — the rich widget
-     * persists across tab switches) get notified of the new viewport via
-     * set_scene_size; ensure_attached takes the resize-only branch in
-     * that case. We deliberately do NOT first-time-attach from on_resize:
-     * widget tree mutation while the engine is dispatching its resize
-     * event is what was crashing. First-time attach stays gated on tab
-     * activation (set_running → ensure_attached). */
-#ifdef YGREETER_HAS_YZOO
-    if (app->yzoo.rich) {
-        yzoo_anim_ensure_attached(&app->yzoo);
+    /* yzoo / yjungle widgets self-resize on their next render — the
+     * widget's render hook compares layout_w/h against last_w/h and
+     * calls set_scene_size when they differ, so on_resize doesn't
+     * need to do anything for them. */
+
+    /* Re-render Plots / Images tabs so the yplot / yimage prims pick
+     * up the new widget content-box size. The producers bake bounds
+     * at render-time, so without this they stay locked at the
+     * construction-time size — the user sees a small plot stuck in
+     * the corner of the flex-grown rich widget. Run a layout pass
+     * first so the content box query inside load_entry returns the
+     * new dimensions. */
+    {
+        struct yetty_ycore_void_result lr = yetty_ygui_engine_layout(e);
+        if (YETTY_IS_ERR(lr)) {
+            yetty_ycore_error_destroy(lr.error);
+        }
+        int max = (int)(sizeof(app->tabs) / sizeof(app->tabs[0]));
+        for (int i = 0; i < max; i++) {
+            struct tab_state *t = &app->tabs[i];
+            if (!t->rich || t->last_entry < 0) continue;
+            if (t->kind == TAB_KIND_PLOTS || t->kind == TAB_KIND_IMAGES) {
+                load_entry(app, i, t->last_entry);
+            }
+        }
     }
-#endif
-#ifdef YGREETER_HAS_YJUNGLE
-    if (app->yjungle.rich) {
-        yj_anim_ensure_attached(&app->yjungle);
-    }
-#endif
+
+    /* yvideo / yplot / yimage widgets self-resize: the render hook
+     * compares layout_w/h against last_w/h and rebuilds the prim on
+     * mismatch, so on_resize doesn't need to call into them. */
 }
 
 /* =========================================================================
@@ -1982,7 +1732,7 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
 static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
                                                 struct yetty_ygui_widget *tab_panel,
                                                 const struct nav_entry *entries, int n_entries,
-                                                const char *id_prefix)
+                                                const char *id_prefix, enum tab_kind kind)
 {
     char id_buf[128];
     snprintf(id_buf, sizeof(id_buf), "%s_body", id_prefix);
@@ -2013,9 +1763,27 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
         }
     }
 
-    /* Build the rich surface. */
+    /* Build the content surface. The widget type is dictated by the
+     * tab kind so producer setters (yplot_set_source, yimage_set_file)
+     * land on the right widget. YAML tabs use a rich widget; plots /
+     * images get dedicated producer widgets. */
     snprintf(id_buf, sizeof(id_buf), "%s_rich", id_prefix);
-    struct yetty_ygui_widget *rich = yetty_ygui_engine_rich(app->engine, id_buf, 0, 0, 0, 0);
+    struct yetty_ygui_widget *rich = NULL;
+    switch (kind) {
+    case TAB_KIND_PLOTS:
+        rich = yetty_ygui_engine_yplot_from_source(
+            app->engine, id_buf, 0, 0, 0, 0,
+            /*source=*/NULL, 0, /*config=*/NULL);
+        break;
+    case TAB_KIND_IMAGES:
+        rich = yetty_ygui_engine_yimage_from_file(
+            app->engine, id_buf, 0, 0, 0, 0, /*path=*/NULL);
+        break;
+    case TAB_KIND_YAML:
+    default:
+        rich = yetty_ygui_engine_rich(app->engine, id_buf, 0, 0, 0, 0);
+        break;
+    }
     yetty_ygui_widget_apply_css(rich, "flex: 1 0 0; align-self: stretch;");
     yetty_ygui_widget_add_child(body, rich);
 
@@ -2024,6 +1792,8 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
     app->tabs[tab_index].rich = rich;
     app->tabs[tab_index].entries = entries;
     app->tabs[tab_index].n_entries = n_entries;
+    app->tabs[tab_index].kind = kind;
+    app->tabs[tab_index].last_entry = -1;
 
     /* Load entry 0 by default so the right pane isn't empty at startup. */
     if (n_entries > 0) {
@@ -2260,6 +2030,56 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
         yetty_ygui_widget_add_child(sec, step);
     }
 
+    /* ---- Media (yplot / yimage / yvideo) ----
+     *
+     * One sample of each producer widget so the Elements tab has a
+     * runnable demo of the same APIs the Plots / Images / Video tabs
+     * use. Each widget is a thin wrapper over a rich surface; what
+     * you see here is exactly what the dedicated tabs render after
+     * their nav-click dispatch. */
+    {
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_media", "Media", 0);
+        if (!sec) {
+            return;
+        }
+        /* yplot — quick sin/cos so the GPU evaluator visibly ticks. */
+        {
+            struct yetty_yplot_render_config cfg = {
+                .x_min = -6.2832f, .x_max = 6.2832f,
+                .y_min = -1.5f,    .y_max = 1.5f,
+                .flags = PLOT_FLAGS_AXES,
+            };
+            struct yetty_ygui_widget *plot = yetty_ygui_engine_yplot_from_source(
+                app->engine, "el_yplot", 24, 0, 460, 200,
+                "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4",
+                0, &cfg);
+            if (plot) {
+                yetty_ygui_widget_add_child(sec, plot);
+            }
+        }
+        /* yimage — the first discovered logo (matches the Images tab). */
+        if (g_image_path_count > 0 && g_image_paths && g_image_paths[0]) {
+            struct yetty_ygui_widget *img = yetty_ygui_engine_yimage_from_file(
+                app->engine, "el_yimage", 24, 0, 320, 200, g_image_paths[0]);
+            if (img) {
+                yetty_ygui_widget_add_child(sec, img);
+            }
+        }
+        /* yvideo — same MP4 the Video tab plays (when available). The
+         * widget owns its decode lifecycle on the receiving canvas; the
+         * Elements tab is rarely the active one so the autoplay is
+         * cheap. */
+#ifdef YGREETER_HAS_YVIDEO
+        if (app->video.path) {
+            struct yetty_ygui_widget *vid = yetty_ygui_engine_yvideo_from_mp4_file(
+                app->engine, "el_yvideo", 24, 0, 480, 270, app->video.path, NULL);
+            if (vid) {
+                yetty_ygui_widget_add_child(sec, vid);
+            }
+        }
+#endif
+    }
+
     /* ---- Lists & trees ---- */
     {
         struct yetty_ygui_widget *sec = make_section(app, root, "el_lists", "Lists & Trees", 0);
@@ -2437,6 +2257,12 @@ int main(int argc, char **argv)
      * Windows impl is a no-op (no PTY-share scenario there). */
     yetty_yplatform_tty_redirect_stderr_if_shared_with_stdout("ygreeter");
 
+    /* First-run extraction of embedded assets (logos, video, README,
+     * sample.html, PDF) into the platform data dir. No-op when the build
+     * lacks incbin support (dev builds) or the marker shows this
+     * yetty-X.Y.Z build already extracted. */
+    (void)ygreeter_embedded_assets_extract(yetty_yplatform_get_data_dir());
+
     if (yetty_ygui_init() != 0) {
         fprintf(stdout, "ygreeter: ygui_init failed (run inside a real terminal)\n");
         return 1;
@@ -2524,32 +2350,54 @@ int main(int argc, char **argv)
     /* Welcome */
     struct yetty_ygui_widget *welcome = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Welcome");
     build_tab_body(&app, 0, welcome, WELCOME_NAV,
-                   (int)(sizeof(WELCOME_NAV) / sizeof(WELCOME_NAV[0])), "welcome");
+                   (int)(sizeof(WELCOME_NAV) / sizeof(WELCOME_NAV[0])), "welcome",
+                   TAB_KIND_YAML);
 
-    /* Plots */
-    struct yetty_ygui_widget *plots = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Plots");
-    build_tab_body(&app, 1, plots, PLOT_NAV, (int)(sizeof(PLOT_NAV) / sizeof(PLOT_NAV[0])),
-                   "plots");
+    /* Plots — driven by the ygui_yplot widget. Labels come from
+     * plot_nav_entries(); the yexpr-plot source + render config come
+     * from plot_entry_at() under TAB_KIND_PLOTS dispatch in load_entry. */
+    {
+        struct yetty_ygui_widget *plots = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Plots");
+        int plot_count = 0;
+        const struct nav_entry *plot_nav = plot_nav_entries(&plot_count);
+        build_tab_body(&app, 1, plots, plot_nav, plot_count, "plots", TAB_KIND_PLOTS);
+    }
 
-    /* Images tab — nav rows built dynamically from docs/logo-*.jpeg
-     * so the rail grows with the bundled asset count. Falls back to
+    /* Images tab — nav rows built dynamically from assets/logo-*.jpeg
+     * so the rail grows with the bundled asset count. Driven by the
+     * ygui_yimage widget via TAB_KIND_IMAGES dispatch. Falls back to
      * the placeholder YAML row when no logo files are found. */
     discover_logo_images(argv[0]);
     struct yetty_ygui_widget *images = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Images");
     if (g_image_path_count > 0) {
-        build_tab_body(&app, g_images_tab_index, images, g_image_nav, g_image_path_count, "images");
+        build_tab_body(&app, g_images_tab_index, images, g_image_nav, g_image_path_count, "images",
+                       TAB_KIND_IMAGES);
     } else {
         /* No bundled images located — single placeholder row so the
          * tab isn't empty and the hint text is visible. */
         static const struct nav_entry fallback[] = {
             {"Logo", IMAGE_FALLBACK_YAML},
         };
-        build_tab_body(&app, g_images_tab_index, images, fallback, 1, "images");
+        build_tab_body(&app, g_images_tab_index, images, fallback, 1, "images",
+                       TAB_KIND_IMAGES);
     }
+
+#ifdef YGREETER_HAS_YVIDEO
+    /* Video tab — yvideo prim sourced from assets/yetty-unchained-2.mp4.
+     * State lives on app.video; same activate-on-show / deactivate-on-
+     * hide lifecycle as the yzoo / yjungle tabs. */
+    yvideo_tab_init(&app.video, argv[0]);
+    struct yetty_ygui_widget *video_tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Video");
+    int video_idx = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
+    yvideo_tab_attach(&app.video, app.engine, video_tab, video_idx);
+#endif
 
     /* Code */
     struct yetty_ygui_widget *code = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Code");
-    build_tab_body(&app, 3, code, CODE_NAV, (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code");
+    int code_tab_index = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
+    build_tab_body(&app, code_tab_index, code, CODE_NAV,
+                   (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code",
+                   TAB_KIND_YAML);
 
     /* Elements — single tab gathering every ygui widget under
      * collapsing-header sections, so the tabbar doesn't grow one tab
@@ -2597,7 +2445,7 @@ int main(int argc, char **argv)
      * without the dependency). */
 #ifdef YGREETER_HAS_YMARKDOWN
     {
-        char *md_path = find_repo_image(argv[0], "README.md");
+        char *md_path = locate_asset(argv[0], "README.md", "README.md");
         if (md_path) {
             struct yetty_ygui_widget *tab =
                 yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
@@ -2613,7 +2461,8 @@ int main(int argc, char **argv)
 #endif
 #ifdef YGREETER_HAS_YBROWSER
     {
-        char *html_path = find_repo_image(argv[0], "demo/ygui/26_ybrowser/sample.html");
+        char *html_path =
+            locate_asset(argv[0], "sample.html", "demo/ygui/26_ybrowser/sample.html");
         if (html_path) {
             struct yetty_ygui_widget *tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
             struct yetty_ygui_widget *w = yetty_ygui_engine_ybrowser_from_file(
@@ -2628,9 +2477,11 @@ int main(int argc, char **argv)
 #endif
 #ifdef YGREETER_HAS_YPDF
     {
-        /* Prefer the comprehensive PDF — falls back to pdf-sample if the
-         * larger one isn't shipped. */
-        char *pdf_path = find_repo_image(argv[0], "test/ut/ypdf/test-comprehensive.pdf");
+        /* Embedded under the flat name "pdf-sample.pdf" regardless of
+         * which source PDF the build picked up; the dev fallback tries
+         * the comprehensive one first and then the smaller sample. */
+        char *pdf_path = locate_asset(argv[0], "pdf-sample.pdf",
+                                      "test/ut/ypdf/test-comprehensive.pdf");
         if (!pdf_path) {
             pdf_path = find_repo_image(argv[0], "test/ut/ypdf/pdf-sample.pdf");
         }
@@ -2662,6 +2513,9 @@ int main(int argc, char **argv)
     yetty_ygui_engine_run(app.engine);
 
     free_image_nav();
+#ifdef YGREETER_HAS_YVIDEO
+    yvideo_tab_shutdown(&app.video);
+#endif
     free_row_links();
     /* Stop timers and free producer state BEFORE the engine teardown —
      * the engine teardown closes the loop the timers are attached to. */

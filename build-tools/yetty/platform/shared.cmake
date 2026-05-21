@@ -589,9 +589,6 @@ function(yetty_embed_assets TARGET)
     target_compile_definitions(${TARGET} PRIVATE
         YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
-    # Copy logo
-    file(COPY "${YETTY_ROOT}/docs/logo-2.jpeg" DESTINATION "${EMBED_DATA_DIR}")
-
     # Collect shaders from module locations
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")

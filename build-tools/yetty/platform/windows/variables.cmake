@@ -19,7 +19,12 @@ set(YETTY_ENABLE_FEATURE_DEMO      OFF CACHE BOOL "" FORCE)  # hardcodes shared/
 set(YETTY_ENABLE_TOOL_YDOC         OFF CACHE BOOL "" FORCE)  # poll.h, termios.h, unistd.h
 set(YETTY_ENABLE_TOOL_YSHEET       OFF CACHE BOOL "" FORCE)  # uses yrich-runner (POSIX TTY)
 set(YETTY_ENABLE_TOOL_YSLIDE       OFF CACHE BOOL "" FORCE)  # uses yrich-runner (POSIX TTY)
-set(YETTY_ENABLE_TOOL_YGREETER     OFF CACHE BOOL "" FORCE)  # STDOUT/STDERR_FILENO + struct stat (unistd.h, sys/stat.h)
+# ygreeter re-enabled — the POSIX uses that originally blocked the
+# Windows build (STDOUT/STDERR_FILENO via unistd.h, raw struct stat)
+# were removed when main.c migrated to the yplatform fs/tty shims, and
+# embedded-assets.c carries its own _MSC_VER S_ISDIR/S_ISREG fallbacks.
+# Asset embedding routes through incbin.cmake's MSVC RCDATA path, same
+# as yetty proper.
 set(YETTY_ENABLE_LIB_LIBMAGIC      OFF CACHE BOOL "" FORCE)  # autotools-only; no MSVC port
 set(YETTY_ENABLE_LIB_LIBCURL       OFF CACHE BOOL "" FORCE)  # no Windows consumer yet
 set(YETTY_ENABLE_FEATURE_YLEXBOR   OFF CACHE BOOL "" FORCE)  # GCC array initializers + POSIX <strings.h>

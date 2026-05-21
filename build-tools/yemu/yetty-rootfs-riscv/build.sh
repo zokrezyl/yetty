@@ -107,24 +107,37 @@ for b in "${BINARIES[@]}"; do
 done
 
 #-----------------------------------------------------------------------------
-# Step 2 — Stage /yetty/{bin,repo} content on the host.
+# Step 2 — Stage user-prefix binaries and the explorable repo tree.
+#
+# Layout:
+#   /home/yetty/.local/bin/    — riscv64 tools (per-user XDG bin prefix).
+#                                Each tool carries its own assets via
+#                                incbin and extracts them on first run
+#                                into /home/yetty/.local/share/<tool>,
+#                                so each binary is standalone-redistributable.
+#   /yetty/repo                — `git archive HEAD` of this rev, kept for
+#                                the user to explore additional demos +
+#                                source code that the embedded assets
+#                                don't cover.
 #-----------------------------------------------------------------------------
 
 STAGE="$WORK_DIR/stage"
 rm -rf "$STAGE"
-mkdir -p "$STAGE/yetty/bin" "$STAGE/yetty/repo"
+BIN_STAGE="$STAGE/home/yetty/.local/bin"
+REPO_STAGE="$STAGE/yetty/repo"
+mkdir -p "$BIN_STAGE" "$REPO_STAGE"
 
-echo "==> staging riscv64 binaries"
+echo "==> staging riscv64 binaries to /home/yetty/.local/bin"
 for b in "${BINARIES[@]}"; do
-    cp "$b" "$STAGE/yetty/bin/"
+    cp "$b" "$BIN_STAGE/"
 done
 
-echo "==> staging git archive HEAD"
-git -C "$REPO_ROOT" archive HEAD | tar -x -C "$STAGE/yetty/repo"
+echo "==> staging git archive HEAD to /yetty/repo"
+git -C "$REPO_ROOT" archive HEAD | tar -x -C "$REPO_STAGE"
 # Drop heavy already-compressed assets brotli can't shrink (matches the
 # old make-riscv-disk.sh exclusions: ~21 MiB GIF + ~10 MiB raw TTFs).
-rm -f "$STAGE/yetty/repo/docs/pres.gif"
-rm -f "$STAGE/yetty/repo/assets/fonts/"*.ttf 2>/dev/null || true
+rm -f "$REPO_STAGE/docs/pres.gif"
+rm -f "$REPO_STAGE/assets/fonts/"*.ttf 2>/dev/null || true
 
 #-----------------------------------------------------------------------------
 # Step 3 — Fetch the pristine alpine-extended-disk rootfs.
@@ -145,8 +158,9 @@ PRISTINE_IMG="$WORK_DIR/alpine-extended-rootfs.img"
 brotli -d -f -o "$PRISTINE_IMG" "$PRISTINE_BR"
 
 #-----------------------------------------------------------------------------
-# Step 4 — Copy pristine to final image, grow enough to fit /yetty,
-# inject /yetty via debugfs.
+# Step 4 — Copy pristine to final image, grow enough to fit the staged
+# trees, inject /yetty/repo (root-owned) and /home/yetty (yetty-owned)
+# via debugfs.
 #-----------------------------------------------------------------------------
 
 FINAL_IMG="$WORK_DIR/yetty-rootfs-riscv.img"
@@ -165,20 +179,29 @@ truncate -s "${TARGET_MIB}M" "$FINAL_IMG"
 e2fsck_ok "$FINAL_IMG"
 resize2fs "$FINAL_IMG"
 
-echo "==> injecting /yetty (bin+repo) into image"
-inject_tree "$FINAL_IMG" "$STAGE/yetty" /yetty
+echo "==> injecting /yetty/repo (root-owned, browsable)"
+inject_tree "$FINAL_IMG" "$REPO_STAGE" /yetty/repo
+
+# Per-user bin prefix. inject_tree set_inode_field's every prefix
+# component (/home, /home/yetty, /home/yetty/.local, …) — pass uid/gid
+# 1000:1000 so /home/yetty stays writable by the yetty user (otherwise
+# the tools couldn't create ~/.local/share/yetty at first run).
+echo "==> injecting /home/yetty/.local/bin (yetty-owned)"
+inject_tree "$FINAL_IMG" "$STAGE/home/yetty" /home/yetty 1000 1000
 
 # Layer the yetty-rootfs-riscv-specific fs/ overlay onto the pristine
-# (e.g. /home/yetty/.bash_profile pointing at /yetty/bin/ygreeter, which
-# only exists on the merged image). Files in this overlay overwrite
-# whatever alpine-extended-disk ships at the same paths — that's the
-# point of putting these customizations in the merger instead of bumping
-# alpine-extended-disk for every shell-side tweak.
+# (e.g. /home/yetty/.bash_profile launching ~/.local/bin/ygreeter).
+# Scoped per top-level area so each subtree gets the right ownership —
+# inject_tree set_inode_field's every prefix component, so a single
+# "/" injection with uid=1000 would clobber /home (or anything else
+# above the actual file) to yetty-owned.
 OVERLAY_DIR="$SCRIPT_DIR/fs"
-if [ -d "$OVERLAY_DIR" ] && [ -n "$(LC_ALL=C find "$OVERLAY_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-    echo "==> overlaying yetty-rootfs-riscv/fs onto image"
-    inject_tree "$FINAL_IMG" "$OVERLAY_DIR" /
+if [ -d "$OVERLAY_DIR/home/yetty" ]; then
+    echo "==> overlaying fs/home/yetty/ onto /home/yetty (yetty-owned)"
+    inject_tree "$FINAL_IMG" "$OVERLAY_DIR/home/yetty" /home/yetty 1000 1000
 fi
+# Future: add per-area branches here (e.g. fs/etc/ → /etc with uid 0)
+# when the overlay grows beyond /home/yetty.
 
 #-----------------------------------------------------------------------------
 # Step 5 — Shrink to minimum size, brotli-compress, package.
@@ -209,9 +232,15 @@ yetty-rootfs-riscv $VERSION
 git-rev: $GIT_REV
 base: alpine-extended-disk $ALPINE_EXT_VER
 contains: yetty-rootfs-riscv.img.br (brotli q$BROTLI_QUALITY of an ext4 image)
-  /                    — pristine alpine-extended-disk rootfs
-  /yetty/bin           — riscv64 demos + tools, cross-compiled at this rev
-  /yetty/repo          — \`git archive HEAD\` of this rev
+  /                              — pristine alpine-extended-disk rootfs
+  /home/yetty/.local/bin/        — riscv64 tools (per-user XDG prefix);
+                                   each binary embeds its own assets via
+                                   incbin and extracts to
+                                   /home/yetty/.local/share/<tool>/ on
+                                   first run — standalone-redistributable
+  /yetty/repo                    — \`git archive HEAD\` of this rev, kept
+                                   for the user to explore further demos
+                                   and source code
 mount in guest:
   brotli -d yetty-rootfs-riscv.img.br -o yetty-rootfs-riscv.img
   mount -o loop yetty-rootfs-riscv.img /mnt

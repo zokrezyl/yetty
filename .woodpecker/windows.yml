@@ -21,3 +21,28 @@ steps:
       # already applied via windows/cmake.cmake; YETTY_ENABLE_TOOL_QA is forced
       # OFF in windows/variables.cmake.
       - call build-tools\windows\build.bat release
+
+  # Workspace lives under %TEMP%\woodpecker-local-NNN and gets cleaned
+  # when the pipeline ends. The local backend ALSO sandboxes %USERPROFILE%
+  # into that same temp tree (so a step can't pollute the real home), so
+  # %USERPROFILE%-relative paths don't survive cleanup either — use the
+  # absolute agent-user home explicitly. CI_PIPELINE_NUMBER is the
+  # per-repo sequential number Woodpecker injects into every step.
+  archive:
+    image: cmd
+    when:
+      status: [success]
+    commands:
+      - set "DEST=C:\Users\misi\woodpecker-artifacts\windows\%CI_PIPELINE_NUMBER%"
+      - mkdir "%DEST%" 2>nul
+      - copy /Y build-windows-ytrace-release\yetty.exe "%DEST%\"
+      - copy /Y build-windows-ytrace-release\tools\ygreeter\ygreeter.exe "%DEST%\"
+      # Dawn (WebGPU) redistributables — d3dcompiler_47, dxil, dxcompiler,
+      # vulkan-1, webgpu_dawn. yetty.exe LoadLibrary()'s these at startup;
+      # without them next to the .exe Dawn fails CreateDevice with
+      # ERROR_INVALID_PARAMETER (Windows error 87) and the process aborts
+      # before the RPC listener even binds. Flat-copy every DLL produced
+      # under the build tree so we pick them up regardless of which
+      # subdir CMake stages them in.
+      - for /r build-windows-ytrace-release %%f in (*.dll) do @copy /Y "%%f" "%DEST%\" >nul
+      - dir "%DEST%"

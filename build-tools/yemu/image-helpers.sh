@@ -40,17 +40,24 @@ inject_file() {
     rm -f "$script"
 }
 
-# inject_tree IMG SRC_DIR DST_DIR
+# inject_tree IMG SRC_DIR DST_DIR [UID] [GID]
 #
 # Inject everything under SRC_DIR (host path) into IMG at DST_DIR (image
 # absolute path). Directories created with host mode-bits (regular-dir
 # bit set), files with regular+host mode bits, symlinks copied verbatim.
-# All entries owned uid=0 gid=0 regardless of host owner. Pure debugfs.
+# All entries — including every component of the DST_DIR prefix chain
+# — owned by UID:GID (default 0:0). Pure debugfs.
+#
+# When injecting under /home/<user> use the matching uid/gid so the
+# parent dir stays writable by that user — debugfs's set_inode_field
+# fires unconditionally on each prefix component, so a default uid=0
+# call would clobber the user's home-dir ownership and the user could
+# no longer create dotfiles / XDG dirs at runtime.
 #
 # Whitespace in paths is rejected up-front — debugfs's command parser
 # does not quote-handle reliably across versions.
 inject_tree() {
-    local img="$1" src="$2" dst="$3"
+    local img="$1" src="$2" dst="$3" uid="${4:-0}" gid="${5:-0}"
 
     # Strip trailing slash from dst so callers can pass "/" for "root" and
     # we still produce sane "/path" rather than "//path" entries. (Linux
@@ -76,8 +83,8 @@ inject_tree() {
             [ -z "$comp" ] && continue
             prefix="$prefix/$comp"
             printf 'mkdir %s\n' "$prefix"
-            printf 'set_inode_field %s uid 0\n' "$prefix"
-            printf 'set_inode_field %s gid 0\n' "$prefix"
+            printf 'set_inode_field %s uid %d\n' "$prefix" "$uid"
+            printf 'set_inode_field %s gid %d\n' "$prefix" "$gid"
             printf 'set_inode_field %s mode 040755\n' "$prefix"
         done
         IFS="$oldifs"
@@ -112,8 +119,8 @@ inject_tree() {
                     return 1
                     ;;
             esac
-            printf 'set_inode_field %s uid 0\n' "$imgp"
-            printf 'set_inode_field %s gid 0\n' "$imgp"
+            printf 'set_inode_field %s uid %d\n' "$imgp" "$uid"
+            printf 'set_inode_field %s gid %d\n' "$imgp" "$gid"
         done
     } > "$script"
 

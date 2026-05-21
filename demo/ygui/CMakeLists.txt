@@ -15,6 +15,7 @@ add_library(demo_ygui_support OBJECT
 )
 target_include_directories(demo_ygui_support PUBLIC ${YETTY_ROOT}/include)
 
+add_subdirectory(00_simple)
 add_subdirectory(01_button_test)
 add_subdirectory(02_coord_debug)
 add_subdirectory(03_all_widgets)

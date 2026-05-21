@@ -289,7 +289,7 @@ static struct yetty_ycore_void_result ymesh_compute_3d_uniforms(const float bbox
 }
 
 static struct yetty_ycore_void_result ymesh_instance_render(
-    struct yetty_ydraw_figure_instance *self, struct yetty_ydraw_target *target,
+    struct yetty_ydraw_figure *self, struct yetty_ydraw_target *target,
     float x, float y)
 {
     if (!self || !self->buffer_data || !self->factory) {
@@ -674,6 +674,10 @@ static struct yetty_ycore_void_result ymesh_compile_pipeline(
     return YETTY_OK_VOID();
 }
 
+/* Forward decl — vtable definition lives below; create_instance just
+ * needs its address. */
+static const struct yetty_ydraw_figure_ops ymesh_figure_ops;
+
 static WGPURenderPipeline ymesh_get_pipeline(struct yetty_ydraw_concrete_factory *self)
 {
     /* Returned only for informational use by the abstract factory. The
@@ -730,17 +734,17 @@ static void ymesh_instance_data_destroy(struct ymesh_instance_data *d)
     free(d);
 }
 
-static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
+static struct yetty_ydraw_figure_ptr_result ymesh_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_figure)) {
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "ymesh: invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_raw_figure)) {
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "ymesh: invalid buffer data");
     }
 
     struct yetty_ymesh_factory *factory = ymesh_factory_from_base(self);
     if (!factory->initialized) {
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "ymesh: factory not initialized");
     }
 
@@ -773,10 +777,10 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
     uint32_t icount = payload[17];
     uint32_t isize = payload[18];
     if (isize != 4 && isize != 2) {
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "ymesh: bad index_size");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "ymesh: bad index_size");
     }
     if (vcount == 0 || icount == 0) {
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "ymesh: empty mesh");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "ymesh: empty mesh");
     }
 
     const float *positions = (const float *)(payload + 19);
@@ -784,22 +788,22 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
     const void *indices = (const void *)(normals + vcount * 3);
 
     /* Allocate instance + per-instance data. */
-    struct yetty_ydraw_figure_instance *inst =
-        calloc(1, sizeof(struct yetty_ydraw_figure_instance));
+    struct yetty_ydraw_figure *inst =
+        calloc(1, sizeof(struct yetty_ydraw_figure));
     if (!inst) {
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "ymesh: inst alloc failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "ymesh: inst alloc failed");
     }
     struct ymesh_instance_data *d = calloc(1, sizeof(struct ymesh_instance_data));
     if (!d) {
         free(inst);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "ymesh: data alloc failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "ymesh: data alloc failed");
     }
 
     inst->buffer_data = malloc(size);
     if (!inst->buffer_data) {
         free(d);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "ymesh: wire copy failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "ymesh: wire copy failed");
     }
     memcpy(inst->buffer_data, buffer_data, size);
     inst->buffer_size = size;
@@ -807,9 +811,10 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
     inst->factory = self;
     inst->rolling_row = rolling_row;
     inst->render = ymesh_instance_render;
+    inst->ops = &ymesh_figure_ops;
     inst->instance_data = d;
 
-    struct rectangle_result aabb_res = yetty_ydraw_figure_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_raw_figure_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         inst->bounds = aabb_res.value;
     }
@@ -830,7 +835,7 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "ymesh: vertex/index buffer alloc failed");
     }
 
@@ -846,7 +851,7 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
             ymesh_instance_data_destroy(d);
             free(inst->buffer_data);
             free(inst);
-            return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+            return YETTY_ERR(yetty_ydraw_figure_ptr,
                              "ymesh: line index alloc failed");
         }
         if (isize == 4) {
@@ -881,7 +886,7 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
             ymesh_instance_data_destroy(d);
             free(inst->buffer_data);
             free(inst);
-            return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+            return YETTY_ERR(yetty_ydraw_figure_ptr,
                              "ymesh: line index buffer alloc failed");
         }
     }
@@ -912,7 +917,7 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "ymesh: offscreen tex alloc failed");
     }
     d->color_view = wgpuTextureCreateView(d->color_tex, NULL);
@@ -942,7 +947,7 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "ymesh: uniform buffer alloc failed");
     }
 
@@ -981,25 +986,38 @@ static struct yetty_ydraw_figure_instance_ptr_result ymesh_create_instance(
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "ymesh: bind group create failed");
     }
 
     yinfo("ymesh: instance created vcount=%u icount=%u off=%ux%u", vcount, icount, d->off_w,
           d->off_h);
-    return YETTY_OK(yetty_ydraw_figure_instance_ptr, inst);
+    return YETTY_OK(yetty_ydraw_figure_ptr, inst);
 }
 
-static void ymesh_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                   struct yetty_ydraw_figure_instance *instance)
+static void ymesh_instance_destroy(struct yetty_ydraw_figure *instance)
 {
-    (void)self;
     if (!instance) {
         return;
     }
     ymesh_instance_data_destroy((struct ymesh_instance_data *)instance->instance_data);
     free(instance->buffer_data);
     free(instance);
+}
+
+/* ymesh's vtable — no update path; the wire never carries CMD_UPDATE
+ * for mesh figures. */
+static const struct yetty_ydraw_figure_ops ymesh_figure_ops = {
+    .destroy = ymesh_instance_destroy,
+    .update  = NULL,
+};
+
+/* Legacy factory adapter — see yplot / yvideo equivalents. */
+static void ymesh_destroy_instance(struct yetty_ydraw_concrete_factory *self,
+                                   struct yetty_ydraw_figure *instance)
+{
+    (void)self;
+    ymesh_instance_destroy(instance);
 }
 
 static struct yetty_ydraw_gpu_resource_set *ymesh_get_shared_rs(

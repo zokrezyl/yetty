@@ -28,8 +28,8 @@ extern "C" {
 
 struct yetty_ydraw_canvas;
 struct yetty_ydraw_canvas_ops;
-struct yetty_ydraw_figure_factory;
-struct yetty_ydraw_figure_instance;
+struct yetty_ydraw_raw_figure_factory;
+struct yetty_ydraw_figure;
 struct yetty_ydraw_flyweight_registry;
 struct yetty_ydraw_font;
 struct yetty_ywire_wire_statemachine;
@@ -138,12 +138,12 @@ struct yetty_ydraw_canvas_ops {
     /* Flyweight registry / complex-prim factory accessors. */
     const struct yetty_ydraw_flyweight_registry *(*get_flyweight_registry)(
         const struct yetty_ydraw_canvas *canvas);
-    struct yetty_ydraw_figure_factory *(*get_figure_factory)(
+    struct yetty_ydraw_raw_figure_factory *(*get_figure_factory)(
         const struct yetty_ydraw_canvas *canvas);
 
     /* Complex drawable access (for atlas rendering). */
     uint32_t (*figure_count)(const struct yetty_ydraw_canvas *canvas);
-    struct yetty_ydraw_figure_instance *(*get_figure)(const struct yetty_ydraw_canvas *canvas,
+    struct yetty_ydraw_figure *(*get_figure)(const struct yetty_ydraw_canvas *canvas,
                                                       uint32_t index);
 
     /* Glyph iteration. Does work + invokes the visitor — must surface

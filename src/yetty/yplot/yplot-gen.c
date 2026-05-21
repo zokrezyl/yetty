@@ -29,10 +29,10 @@
 /* yplot-time.c — animates the `time` uniform when the compiled
  * bytecode references LOAD_T. Forward-declared here instead of a
  * header since the only call sites are below in this same TU. */
-struct yetty_ydraw_figure_instance;
+struct yetty_ydraw_figure;
 struct yetty_ycore_void_result yetty_yplot_time_attach(
-    struct yetty_ydraw_figure_instance *instance);
-void yetty_yplot_time_detach(struct yetty_ydraw_figure_instance *instance);
+    struct yetty_ydraw_figure *instance);
+void yetty_yplot_time_detach(struct yetty_ydraw_figure *instance);
 
 extern const unsigned char gyplot_shaderData[];
 extern const unsigned int gyplot_shaderSize;
@@ -214,7 +214,7 @@ static void yplot_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
 //=============================================================================
 
 static struct yetty_ycore_void_result yplot_instance_render(
-    struct yetty_ydraw_figure_instance *self, struct yetty_ydraw_target *target,
+    struct yetty_ydraw_figure *self, struct yetty_ydraw_target *target,
     float x, float y)
 {
     if (!self || !self->buffer_data || !self->factory) {
@@ -324,9 +324,19 @@ static struct yetty_ycore_void_result yplot_instance_render(
         return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
     }
 
-    wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, target->viewport.w, target->viewport.h, 0.0f,
-                                     1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, (uint32_t)target->viewport.w,
+    /* The pane's render target may sit at a non-zero offset inside the
+     * big surface (e.g. yui pushes the terminal pane down by the titlebar
+     * height). The layer's simple-prim pass already draws to
+     * (vp.x, vp.y, vp.w, vp.h); yplot must use the same rect, otherwise
+     * its fullscreen triangle covers a different region of the framebuffer
+     * than the rest of the layer and the FS would compare canvas-local
+     * bounds against the wrong coordinate system — see yplot.wgsl
+     * pane_pixel comment for the matching shader-side fix. */
+    wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
+                                     target->viewport.w, target->viewport.h, 0.0f, 1.0f);
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)target->viewport.x,
+                                        (uint32_t)target->viewport.y,
+                                        (uint32_t)target->viewport.w,
                                         (uint32_t)target->viewport.h);
 
     float w = self->bounds.max.x - self->bounds.min.x;
@@ -392,30 +402,34 @@ static WGPURenderPipeline yplot_get_pipeline(struct yetty_ydraw_concrete_factory
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
 
-static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
+/* Forward decl — vtable definition lives below, after the instance
+ * method bodies; create_instance just needs its address. */
+static const struct yetty_ydraw_figure_ops yplot_figure_ops;
+
+static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_figure)) {
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_raw_figure)) {
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
     }
 
     struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     if (!factory->pipeline) {
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "yplot factory pipeline not compiled");
     }
 
-    struct yetty_ydraw_figure_instance *instance =
-        calloc(1, sizeof(struct yetty_ydraw_figure_instance));
+    struct yetty_ydraw_figure *instance =
+        calloc(1, sizeof(struct yetty_ydraw_figure));
     if (!instance) {
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "allocation failed");
     }
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "buffer alloc failed");
     }
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -423,8 +437,9 @@ static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
     instance->factory = self;
     instance->rolling_row = rolling_row;
     instance->render = yplot_instance_render;
+    instance->ops = &yplot_figure_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_figure_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_raw_figure_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         instance->bounds = aabb_res.value;
     }
@@ -436,7 +451,7 @@ static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
     if (!instance->resource_set) {
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "rs alloc failed");
     }
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_ydraw_gpu_resource_set));
@@ -465,7 +480,7 @@ static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "instance binder create failed", br);
     }
     instance->binder = br.value;
@@ -477,7 +492,7 @@ static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "binder submit failed", sr);
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "binder submit failed", sr);
     }
 
     struct yetty_ycore_void_result fr = instance->binder->ops->finalize(instance->binder);
@@ -486,7 +501,7 @@ static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "binder finalize failed", fr);
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "binder finalize failed", fr);
     }
 
     /* yplot-time.c hooks the instance into the shared animation timer
@@ -501,7 +516,7 @@ static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
         }
     }
 
-    return YETTY_OK(yetty_ydraw_figure_instance_ptr, instance);
+    return YETTY_OK(yetty_ydraw_figure_ptr, instance);
 }
 
 /* CMD_UPDATE payload schema (defined by yplot):
@@ -510,33 +525,45 @@ static struct yetty_ydraw_figure_instance_ptr_result yplot_create_instance(
  *   u32 count          — number of f32 samples
  *   f32 samples[count] — new sample values
  * Total header = 12 bytes, plus count * 4 bytes of samples. */
-static struct yetty_ycore_void_result yplot_update_instance(
-    struct yetty_ydraw_concrete_factory *self, struct yetty_ydraw_figure_instance *instance,
-    const void *payload, size_t size)
+/* Adapter: legacy update_instance signature → new ops->update.
+ *
+ * The wire payload yplot accepts is:
+ *   [u32 buffer_index][u32 sample_offset][u32 count][f32 samples × count]
+ *
+ * Under the generic CMD_UPDATE dispatcher in scene-canvas, the first
+ * u32 of the payload is peeled off as `target_field` (= buffer_index
+ * here); the rest is handed in as `body` / `body_size`. So `body`
+ * starts at `sample_offset` and yplot decodes:
+ *   target_field        = buffer_index
+ *   body[0..3]          = u32 sample_offset
+ *   body[4..7]          = u32 count
+ *   body[8..]           = f32 samples[count]
+ */
+static struct yetty_ycore_void_result yplot_instance_update(
+    struct yetty_ydraw_figure *instance,
+    uint32_t target_field,
+    const void *body, size_t body_size)
 {
-    (void)self;
     if (!instance) {
-        return YETTY_ERR(yetty_ycore_void, "yplot update_instance: instance NULL");
+        return YETTY_ERR(yetty_ycore_void, "yplot update: instance NULL");
     }
-    if (!payload || size < 12u) {
-        return YETTY_ERR(yetty_ycore_void, "yplot update_instance: payload header truncated");
+    if (!body || body_size < 8u) {
+        return YETTY_ERR(yetty_ycore_void, "yplot update: body header truncated");
     }
-    const uint32_t *header = (const uint32_t *)payload;
-    uint32_t buffer_index = header[0];
-    uint32_t sample_offset = header[1];
-    uint32_t count = header[2];
-    size_t expected = 12u + (size_t)count * sizeof(float);
-    if (size < expected) {
-        return YETTY_ERR(yetty_ycore_void, "yplot update_instance: payload samples truncated");
+    const uint32_t *header = (const uint32_t *)body;
+    uint32_t sample_offset = header[0];
+    uint32_t count = header[1];
+    size_t expected = 8u + (size_t)count * sizeof(float);
+    if (body_size < expected) {
+        return YETTY_ERR(yetty_ycore_void, "yplot update: body samples truncated");
     }
-    const float *samples = (const float *)((const uint8_t *)payload + 12u);
-    return yetty_yplot_update_data_chunk(instance, buffer_index, sample_offset, samples, count);
+    const float *samples = (const float *)((const uint8_t *)body + 8u);
+    return yetty_yplot_update_data_chunk(instance, /*buffer_index=*/target_field,
+                                         sample_offset, samples, count);
 }
 
-static void yplot_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                   struct yetty_ydraw_figure_instance *instance)
+static void yplot_instance_destroy(struct yetty_ydraw_figure *instance)
 {
-    (void)self;
     if (!instance) {
         return;
     }
@@ -550,6 +577,38 @@ static void yplot_destroy_instance(struct yetty_ydraw_concrete_factory *self,
     free(instance->resource_set);
     free(instance->buffer_data);
     free(instance);
+}
+
+/* Vtable installed on every yplot figure_instance at create time. */
+static const struct yetty_ydraw_figure_ops yplot_figure_ops = {
+    .destroy = yplot_instance_destroy,
+    .update  = yplot_instance_update,
+};
+
+/* Legacy factory adapters — kept so the abstract factory's
+ * update_instance / destroy_instance pointers still resolve. The
+ * scene-canvas's UPDATE dispatch routes through fi->ops->update
+ * directly, so these are only reached by callers that still go
+ * through the old factory path. Will be removed once the factory
+ * struct loses those slots. */
+static struct yetty_ycore_void_result yplot_update_instance(
+    struct yetty_ydraw_concrete_factory *self, struct yetty_ydraw_figure *instance,
+    const void *payload, size_t size)
+{
+    (void)self;
+    if (!payload || size < 4u) {
+        return YETTY_ERR(yetty_ycore_void, "yplot update_instance: payload header truncated");
+    }
+    uint32_t target_field = ((const uint32_t *)payload)[0];
+    return yplot_instance_update(instance, target_field,
+                                 (const uint8_t *)payload + 4u, size - 4u);
+}
+
+static void yplot_destroy_instance(struct yetty_ydraw_concrete_factory *self,
+                                   struct yetty_ydraw_figure *instance)
+{
+    (void)self;
+    yplot_instance_destroy(instance);
 }
 
 static struct yetty_ydraw_gpu_resource_set *yplot_get_shared_rs(
@@ -626,7 +685,7 @@ void yetty_yplot_factory_destroy(struct yetty_ydraw_concrete_factory *self)
 //=============================================================================
 
 struct yetty_ycore_void_result yetty_yplot_update_data_chunk(
-    struct yetty_ydraw_figure_instance *instance,
+    struct yetty_ydraw_figure *instance,
     uint32_t buffer_index, uint32_t sample_offset,
     const float *data, size_t count)
 {

@@ -32,6 +32,7 @@
 #include <yetty/ysdf/types.gen.h>
 
 #include <yetty/yplatform/time.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <math.h>
 #include <stdbool.h>
@@ -367,11 +368,34 @@ static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segmen
 static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list *buf,
                                                     uint32_t z_order, int variant,
                                                     float ax, float ay, float r,
-                                                    uint32_t color);
+                                                    uint32_t color,
+                                                    float scene_w, float scene_h);
+
+/* yjungle authors prims in the widget's client-area coordinate system —
+ * (0,0) to (scene_width, scene_height). random_next_point used to pick
+ * endpoints with an off-canvas margin so chain segments could spill
+ * out — that's incompatible with "the receiver doesn't clip". Every
+ * emit point now checks its full AABB and skips anything that would
+ * leave the box. */
+static inline float yj_min2(float a, float b) { return a < b ? a : b; }
+static inline float yj_max2(float a, float b) { return a > b ? a : b; }
+static inline float yj_min3(float a, float b, float c)
+{ return yj_min2(yj_min2(a, b), c); }
+static inline float yj_max3(float a, float b, float c)
+{ return yj_max2(yj_max2(a, b), c); }
+
+static int yjungle_aabb_in_bounds(float x0, float y0, float x1, float y1,
+                                  float scene_w, float scene_h)
+{
+    if (x0 < 0.0f || y0 < 0.0f) return 0;
+    if (x1 > scene_w || y1 > scene_h) return 0;
+    return 1;
+}
 
 static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_list *buf,
                                                       uint32_t z_order,
-                                                      const struct yjungle_segment *seg)
+                                                      const struct yjungle_segment *seg,
+                                                      float scene_w, float scene_h)
 {
     float sx = seg->start_x, sy = seg->start_y;
     float ex = seg->end_x,   ey = seg->end_y;
@@ -398,6 +422,16 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
     switch (choice) {
     case 0: {
         /* Plain stroked line, start→end. */
+        float half = stroke * 0.5f;
+        float ax0 = yj_min2(sx, ex) - half;
+        float ay0 = yj_min2(sy, ey) - half;
+        float ax1 = yj_max2(sx, ex) + half;
+        float ay1 = yj_max2(sy, ey) + half;
+        if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
+            ydebug("yjungle: skip LINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
+                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            return YETTY_OK_VOID();
+        }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
         return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke, &g);
     }
@@ -405,6 +439,15 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         /* Capsule = thick rounded line from start to end. */
         float radius = stroke * 1.5f;
         if (radius < 2.0f) radius = 2.0f;
+        float ax0 = yj_min2(sx, ex) - radius;
+        float ay0 = yj_min2(sy, ey) - radius;
+        float ax1 = yj_max2(sx, ex) + radius;
+        float ay1 = yj_max2(sy, ey) + radius;
+        if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
+            ydebug("yjungle: skip CAPSULE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
+                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            return YETTY_OK_VOID();
+        }
         struct yetty_ysdf_capsule g = {sx, sy, ex, ey, radius};
         return yetty_ydraw_draw_list_add_cmd_add_capsule(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
@@ -413,6 +456,16 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
          * axis-aligned and has no rotation parameter, so we approximate
          * with a stroked segment of larger thickness — same chain
          * semantics but visually distinct from case 0. */
+        float half = stroke * 1.5f;
+        float ax0 = yj_min2(sx, ex) - half;
+        float ay0 = yj_min2(sy, ey) - half;
+        float ax1 = yj_max2(sx, ex) + half;
+        float ay1 = yj_max2(sy, ey) + half;
+        if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
+            ydebug("yjungle: skip ROTBOX aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
+                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            return YETTY_OK_VOID();
+        }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
         return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color,
                                                           stroke * 3.0f, &g);
@@ -423,6 +476,15 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         float off = length * 0.25f;
         float tx = (sx + ex) * 0.5f + px * off;
         float ty = (sy + ey) * 0.5f + py * off;
+        float ax0 = yj_min3(sx, ex, tx);
+        float ay0 = yj_min3(sy, ey, ty);
+        float ax1 = yj_max3(sx, ex, tx);
+        float ay1 = yj_max3(sy, ey, ty);
+        if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
+            ydebug("yjungle: skip TRI aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
+                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            return YETTY_OK_VOID();
+        }
         struct yetty_ysdf_triangle g = {sx, sy, ex, ey, tx, ty};
         return yetty_ydraw_draw_list_add_cmd_add_triangle(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
@@ -430,6 +492,16 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         /* Spine + bead. Emit the spine first (lower z_order? no — the
          * receiver paints in submission order for ties, so the bead
          * landing AFTER the spine sits on top, which is what we want). */
+        float half = stroke * 0.5f;
+        float ax0 = yj_min2(sx, ex) - half;
+        float ay0 = yj_min2(sy, ey) - half;
+        float ax1 = yj_max2(sx, ex) + half;
+        float ay1 = yj_max2(sy, ey) + half;
+        if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
+            ydebug("yjungle: skip SPINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
+                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            return YETTY_OK_VOID();
+        }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
         struct yetty_ycore_void_result sr =
             yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke, &g);
@@ -440,7 +512,8 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         float bead = stroke * 3.0f;
         if (bead < 5.0f) bead = 5.0f;
         if (bead > length * 0.4f) bead = length * 0.4f;
-        return emit_bead_at(buf, z_order + 1u, choice, sx, sy, bead, color);
+        return emit_bead_at(buf, z_order + 1u, choice, sx, sy, bead, color,
+                            scene_w, scene_h);
     }
     }
 }
@@ -452,8 +525,18 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
 static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list *buf,
                                                     uint32_t z_order, int variant,
                                                     float ax, float ay, float r,
-                                                    uint32_t color)
+                                                    uint32_t color,
+                                                    float scene_w, float scene_h)
 {
+    /* All 18 bead variants fit inside a (1.5r × 1.5r) box centred at
+     * (ax, ay) — rhombus/ellipse use up to 1.2r on one axis, the rest
+     * stay within r. Use 1.5r as a safe over-approximation. */
+    float ext = r * 1.5f;
+    if (!yjungle_aabb_in_bounds(ax - ext, ay - ext, ax + ext, ay + ext, scene_w, scene_h)) {
+        ydebug("yjungle: skip BEAD variant=%d pos=(%.1f,%.1f) r=%.1f scene=%.1fx%.1f",
+               variant, ax, ay, r, scene_w, scene_h);
+        return YETTY_OK_VOID();
+    }
     switch (variant % 18) {
     case 0: {
         struct yetty_ysdf_circle g = {ax, ay, r};
@@ -549,7 +632,8 @@ static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list 
 
 static struct yetty_ycore_void_result emit_segment_subtree(
     struct yetty_ydraw_draw_list *buf, const struct yjungle_segment *seg,
-    uint32_t *z_order_counter)
+    uint32_t *z_order_counter,
+    float scene_w, float scene_h)
 {
     struct yetty_ydraw_id_result br =
         yetty_ydraw_draw_list_begin_group(buf, seg->group_id);
@@ -559,12 +643,13 @@ static struct yetty_ycore_void_result emit_segment_subtree(
     if (seg->is_group) {
         for (uint32_t i = 0; i < seg->children_count; i++) {
             struct yetty_ycore_void_result cr =
-                emit_segment_subtree(buf, &seg->children[i], z_order_counter);
+                emit_segment_subtree(buf, &seg->children[i], z_order_counter,
+                                     scene_w, scene_h);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "yjungle: child emit");
         }
     } else {
         struct yetty_ycore_void_result pr =
-            emit_primitive(buf, (*z_order_counter)++, seg);
+            emit_primitive(buf, (*z_order_counter)++, seg, scene_w, scene_h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yjungle: primitive emit");
     }
 
@@ -712,7 +797,8 @@ static struct yetty_ycore_void_result do_extend(struct yetty_yjungle *j,
     j->cursor_x = ex;
     j->cursor_y = ey;
 
-    return emit_segment_subtree(buf, seg, z_order_counter);
+    return emit_segment_subtree(buf, seg, z_order_counter,
+                                j->config.scene_width, j->config.scene_height);
 }
 
 /* Replace a randomly-picked existing segment in place. The new segment
@@ -742,7 +828,8 @@ static struct yetty_ycore_void_result do_replace(struct yetty_yjungle *j,
     memset(seg, 0, sizeof(*seg));
     generate_subtree_into(j, seg, sx, sy, ex, ey, 0u);
 
-    return emit_segment_subtree(buf, seg, z_order_counter);
+    return emit_segment_subtree(buf, seg, z_order_counter,
+                                j->config.scene_width, j->config.scene_height);
 }
 
 struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,

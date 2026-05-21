@@ -668,6 +668,22 @@ static void layout_widget(struct yetty_ygui_widget *w, float parent_abs_x, float
     float pad_r = w->layout.padding_right;
     float pad_t = w->layout.padding_top;
     float pad_b = w->layout.padding_bottom;
+    /* Clamp effective padding so the content box never extends past the
+     * widget's own layout box. Without this, a widget whose authored
+     * padding exceeds its resolved size (e.g. a tabbar with padding_top
+     * = header strip height squeezed below the strip height by a tight
+     * parent) reports content_y > layout_y + layout_h — siblings then
+     * see child widgets rendered outside the parent and overlapping. */
+    if (pad_l + pad_r > resolved_w) {
+        float scale = resolved_w / (pad_l + pad_r);
+        pad_l *= scale;
+        pad_r *= scale;
+    }
+    if (pad_t + pad_b > resolved_h) {
+        float scale = resolved_h / (pad_t + pad_b);
+        pad_t *= scale;
+        pad_b *= scale;
+    }
     w->content_x = w->layout_x + pad_l;
     w->content_y = w->layout_y + pad_t;
     w->content_w = resolved_w - pad_l - pad_r;

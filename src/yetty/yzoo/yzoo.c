@@ -18,6 +18,7 @@
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ysdf/funcs.gen.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yetty/ysdf/types.gen.h>
 
 #include <yetty/yplatform/time.h>
@@ -585,13 +586,43 @@ static uint32_t yzoo_emit_curve(struct yetty_ydraw_draw_list *buf, uint32_t z_or
 
 /*=============================================================================
  * Frame builder.
+ *
+ * yzoo authors prims in the widget's client-area coordinate system —
+ * `(0, 0)` to `(scene_width, scene_height)`. Control points drift outward
+ * over time via `scale = exp(growth_rate * age)` so positions (and shapes
+ * built on top of them: markers, line endpoints, curve control points)
+ * are not guaranteed to stay inside the scene. We do NOT clip on the
+ * receiver — the contract is "the producer authors prims that fit". So
+ * before every emit we check the prim's full extent against the scene
+ * box and skip anything that would spill out the left/top/right/bottom.
  *===========================================================================*/
+
+static int yzoo_aabb_in_bounds(const struct yetty_yzoo *z,
+                               float x0, float y0, float x1, float y1)
+{
+    /* Half-open on the high edge; matches the SDF shader's `>=` discard
+     * convention for complex prims. The check is conservative: any prim
+     * whose AABB touches the outside fails. */
+    if (x0 < 0.0f || y0 < 0.0f) return 0;
+    if (x1 > z->config.scene_width)  return 0;
+    if (y1 > z->config.scene_height) return 0;
+    return 1;
+}
+
+static inline float yzoo_min2(float a, float b) { return a < b ? a : b; }
+static inline float yzoo_max2(float a, float b) { return a > b ? a : b; }
+static inline float yzoo_min3(float a, float b, float c)
+{ return yzoo_min2(yzoo_min2(a, b), c); }
+static inline float yzoo_max3(float a, float b, float c)
+{ return yzoo_max2(yzoo_max2(a, b), c); }
 
 static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
                                                        struct yetty_ydraw_draw_list *buf,
                                                        float time)
 {
     uint32_t zo = 0;
+    uint32_t emitted = 0;
+    uint32_t skipped = 0;
 
     /* Connections: curves / lines / shapes. */
     for (uint32_t i = 0; i < z->conn_len; i++) {
@@ -622,13 +653,40 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
             float mid_y = (pa.y + pb.y) * 0.5f;
             float ctrl_x = mid_x + perp_x * curv * len * 0.5f;
             float ctrl_y = mid_y + perp_y * curv * len * 0.5f;
+            /* Quadratic bezier stays inside the convex hull of its three
+             * control points; pad by half the stroke for the segment's
+             * perpendicular extent. */
+            float half = c->stroke_width * 0.5f;
+            float ax0 = yzoo_min3(pa.x, pb.x, ctrl_x) - half;
+            float ay0 = yzoo_min3(pa.y, pb.y, ctrl_y) - half;
+            float ax1 = yzoo_max3(pa.x, pb.x, ctrl_x) + half;
+            float ay1 = yzoo_max3(pa.y, pb.y, ctrl_y) + half;
+            if (!yzoo_aabb_in_bounds(z, ax0, ay0, ax1, ay1)) {
+                ydebug("yzoo: skip CURVE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
+                       ax0, ay0, ax1, ay1, z->config.scene_width, z->config.scene_height);
+                skipped++;
+                break;
+            }
             zo = yzoo_emit_curve(buf, zo, pa.x, pa.y, ctrl_x, ctrl_y, pb.x, pb.y, c->stroke_width,
                                  color, z->config.bezier_segments);
+            emitted++;
             break;
         }
         case 1: {
+            float half = c->stroke_width * 0.5f;
+            float ax0 = yzoo_min2(pa.x, pb.x) - half;
+            float ay0 = yzoo_min2(pa.y, pb.y) - half;
+            float ax1 = yzoo_max2(pa.x, pb.x) + half;
+            float ay1 = yzoo_max2(pa.y, pb.y) + half;
+            if (!yzoo_aabb_in_bounds(z, ax0, ay0, ax1, ay1)) {
+                ydebug("yzoo: skip LINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
+                       ax0, ay0, ax1, ay1, z->config.scene_width, z->config.scene_height);
+                skipped++;
+                break;
+            }
             struct yetty_ysdf_segment g = {pa.x, pa.y, pb.x, pb.y};
             yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, zo++, 0u, color, c->stroke_width, &g);
+            emitted++;
             break;
         }
         case 2: {
@@ -641,7 +699,21 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
             if (size < 3.0f) {
                 size = 3.0f;
             }
+            /* yzoo_emit_shape draws variously-shaped SDFs at (mid_x, mid_y)
+             * with `size` as the dominant half-extent. Rhombus uses 1.4*size
+             * on y, so use 1.5*size as a safe over-approximation for the
+             * AABB on both axes. */
+            float ext = size * 1.5f;
+            if (!yzoo_aabb_in_bounds(z, mid_x - ext, mid_y - ext,
+                                        mid_x + ext, mid_y + ext)) {
+                ydebug("yzoo: skip SHAPE choice=%d mid=(%.1f,%.1f) ext=%.1f scene=%.1fx%.1f",
+                       c->shape_choice, mid_x, mid_y, ext,
+                       z->config.scene_width, z->config.scene_height);
+                skipped++;
+                break;
+            }
             yzoo_emit_shape(buf, zo++, c->shape_choice, mid_x, mid_y, size, color);
+            emitted++;
             break;
         }
         default:
@@ -668,10 +740,22 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
             marker_size = 12.0f;
         }
 
+        if (!yzoo_aabb_in_bounds(z, p.x - marker_size, p.y - marker_size,
+                                    p.x + marker_size, p.y + marker_size)) {
+            ydebug("yzoo: skip MARKER pos=(%.1f,%.1f) r=%.1f scene=%.1fx%.1f",
+                   p.x, p.y, marker_size,
+                   z->config.scene_width, z->config.scene_height);
+            skipped++;
+            continue;
+        }
         struct yetty_ysdf_circle g = {p.x, p.y, marker_size};
         yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, zo++, color, 0u, 0.0f, &g);
+        emitted++;
     }
 
+    ydebug("yzoo_build_prims: cps=%u conns=%u scene=%.1fx%.1f emitted=%u skipped=%u",
+           z->cp_len, z->conn_len, z->config.scene_width, z->config.scene_height,
+           emitted, skipped);
     return YETTY_OK_VOID();
 }
 

@@ -228,44 +228,35 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
  * need to walk their own buffers (this widget is the motivating case).
  *===========================================================================*/
 
-static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self,
-                                                  struct yetty_ygui_render_ctx *ctx)
+/* Walk every prim in `src`, translate by (dx, dy), append to
+ * `ctx->buffer`. Shared between rich_render and every per-producer
+ * widget (yimage / yplot / yvideo / yzoo / yjungle) so they all share
+ * one rendering substrate without going through rich. */
+struct yetty_ycore_void_result yetty_ygui_internal_emit_buffer_translated(
+    struct yetty_ygui_render_ctx *ctx,
+    const struct yetty_ydraw_draw_list *src,
+    float dx, float dy)
 {
-    ydebug("rich_render enter id=%s buf=%p ctx=%p ctx_buf=%p",
-           self->id ? self->id : "?", (void *)self->data.rich.buffer, (void *)ctx,
-           ctx ? (void *)ctx->buffer : NULL);
-    if (!self->data.rich.buffer || !ctx || !ctx->buffer) {
-        ydebug("rich_render bail (null) id=%s", self->id ? self->id : "?");
+    if (!ctx || !ctx->buffer || !src) {
         return YETTY_OK_VOID();
     }
-    const uint8_t *src_data =
-        (const uint8_t *)yetty_ydraw_draw_list_data(self->data.rich.buffer);
-    size_t src_size = yetty_ydraw_draw_list_size(self->data.rich.buffer);
-    ydebug("rich_render id=%s src=%p size=%zu layout=(%.1f,%.1f)",
-           self->id ? self->id : "?", (const void *)src_data, src_size,
-           self->layout_x, self->layout_y);
+    const uint8_t *src_data = (const uint8_t *)yetty_ydraw_draw_list_data(src);
+    size_t src_size = yetty_ydraw_draw_list_size(src);
     if (!src_data || src_size == 0) {
         return YETTY_OK_VOID();
     }
 
-    float dx = self->layout_x;
-    float dy = self->layout_y;
-
     const uint8_t *p = src_data;
     size_t remaining = src_size;
-    /* Working buffer reused across prims (max prim size in this tier is
-     * a few hundred bytes; allocate generously and reuse). */
+    /* Working buffer reused across prims (max prim size in this tier
+     * is a few hundred bytes; allocate generously and reuse). */
     uint8_t stack[4096];
     uint8_t *heap = NULL;
     size_t heap_cap = 0;
 
-    int n_prims = 0;
     while (remaining >= sizeof(uint32_t)) {
         size_t s = rich_drawable_size((const uint32_t *)p, remaining);
-        uint32_t t = ((const uint32_t *)p)[0];
-        ydebug("rich_render prim#%d type=0x%x size=%zu rem=%zu", n_prims, t, s, remaining);
         if (s == 0 || s > remaining) {
-            ydebug("rich_render break — malformed/zero size");
             break; /* malformed — bail rather than risk overruns */
         }
         uint8_t *work = stack;
@@ -274,7 +265,8 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
                 uint8_t *grown = (uint8_t *)realloc(heap, s);
                 if (!grown) {
                     free(heap);
-                    return YETTY_ERR(yetty_ycore_void, "rich_render: oom");
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "emit_buffer_translated: oom");
                 }
                 heap = grown;
                 heap_cap = s;
@@ -282,21 +274,44 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
             work = heap;
         }
         memcpy(work, p, s);
+        uint32_t pre_t = ((uint32_t *)work)[0];
+        /* For complex prims (high bit set) the bounds_x/y live at
+         * float[2]/[3]. For SDF prims the geometry centre lives at
+         * float[5]/[6] (after [type, z, fill, stroke, sw]). Log both
+         * so we can see which slot actually got translated. */
+        size_t wc = s / sizeof(float);
+        float pre_b23x  = (wc > 3)  ? ((float *)work)[2] : 0.0f;
+        float pre_b23y  = (wc > 3)  ? ((float *)work)[3] : 0.0f;
+        float pre_sdfx  = (wc > 6)  ? ((float *)work)[5] : 0.0f;
+        float pre_sdfy  = (wc > 6)  ? ((float *)work)[6] : 0.0f;
         translate_prim((uint32_t *)work, s, dx, dy);
+        float post_b23x = (wc > 3)  ? ((float *)work)[2] : 0.0f;
+        float post_b23y = (wc > 3)  ? ((float *)work)[3] : 0.0f;
+        float post_sdfx = (wc > 6)  ? ((float *)work)[5] : 0.0f;
+        float post_sdfy = (wc > 6)  ? ((float *)work)[6] : 0.0f;
+        ydebug("emit_buffer_translated: type=0x%08x size=%zu dx=%.1f dy=%.1f bounds[2,3]: pre=(%.1f,%.1f) post=(%.1f,%.1f) sdf[5,6]: pre=(%.1f,%.1f) post=(%.1f,%.1f)",
+               pre_t, s, dx, dy,
+               pre_b23x, pre_b23y, post_b23x, post_b23y,
+               pre_sdfx, pre_sdfy, post_sdfx, post_sdfy);
         struct yetty_ydraw_id_result r =
             yetty_ydraw_draw_list_add_prim(ctx->buffer, work, s);
         if (YETTY_IS_ERR(r)) {
             free(heap);
-            return YETTY_ERR(yetty_ycore_void, "rich_render: add_prim failed", r);
+            return YETTY_ERR(yetty_ycore_void,
+                             "emit_buffer_translated: add_prim failed", r);
         }
         p += s;
         remaining -= s;
-        n_prims++;
     }
-    ydebug("rich_render exit id=%s n_prims=%d remaining=%zu",
-           self->id ? self->id : "?", n_prims, remaining);
     free(heap);
     return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self,
+                                                  struct yetty_ygui_render_ctx *ctx)
+{
+    return yetty_ygui_internal_emit_buffer_translated(
+        ctx, self->data.rich.buffer, self->layout_x, self->layout_y);
 }
 
 static void rich_destroy(struct yetty_ygui_widget *self)
