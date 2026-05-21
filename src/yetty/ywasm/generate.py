@@ -462,6 +462,61 @@ _RE_STRUCT_DEF = re.compile(r"typedef\s+struct\s+(WGPU\w+)\s*\{")
 _RE_CALLBACK_TYPEDEF = re.compile(
     r"typedef\s+(\w+)\s+\(\s*\*\s*(WGPU\w+Callback)\s*\)\s*\(([^)]*)\)"
 )
+_RE_STYPE_ENUM_VALUE = re.compile(r"WGPUSType_(\w+)\s*=\s*0x[0-9A-Fa-f]+")
+
+
+# ---------------------------------------------------------------------------
+# Field overrides — info that lives in dawn.json (the canonical IDL) but
+# not in webgpu.h. Tiny, explicit, and per-field so a future webgpu.h
+# update that renames or moves a field will surface a build failure rather
+# than silently mis-encoding bytes.
+
+# Pointer fields whose array length isn't carried on the wire — it's a
+# documented constant. Key: (struct_name, field_name) → element count.
+FIXED_LEN_PTR_FIELDS: dict[tuple[str, str], int] = {
+    ("WGPUExternalTextureDescriptor", "yuvToRgbConversionMatrix"): 12,
+    ("WGPUExternalTextureDescriptor", "srcTransferFunctionParameters"): 7,
+    ("WGPUExternalTextureDescriptor", "dstTransferFunctionParameters"): 7,
+    ("WGPUExternalTextureDescriptor", "gamutConversionMatrix"): 9,
+    ("WGPUCopyTextureForBrowserOptions", "srcTransferFunctionParameters"): 7,
+    ("WGPUCopyTextureForBrowserOptions", "conversionMatrix"): 9,
+    ("WGPUCopyTextureForBrowserOptions", "dstTransferFunctionParameters"): 7,
+}
+
+# Pointer fields that share their length with another count field in
+# the same struct (`length: "fooCount"` in dawn.json — multiple arrays
+# bound to the same count). Key: (struct_name, field_name) → count
+# field name. The encoder/decoder treats these as array_items keyed off
+# the named count.
+SHARED_COUNT_PTR_FIELDS: dict[tuple[str, str], str] = {
+    ("WGPUSharedBufferMemoryBeginAccessDescriptor", "signaledValues"): "fenceCount",
+    ("WGPUSharedBufferMemoryEndAccessState", "signaledValues"): "fenceCount",
+    ("WGPUSharedTextureMemoryBeginAccessDescriptor", "signaledValues"): "fenceCount",
+    ("WGPUSharedTextureMemoryEndAccessState", "signaledValues"): "fenceCount",
+}
+
+
+def parse_stype_to_struct(src: str,
+                          struct_fields: dict[str, list[tuple[str, str]]]
+                          ) -> dict[str, str]:
+    """Return {sType_name: struct_name} for every WGPUSType_X enum value
+    whose matching WGPUX struct actually starts with `WGPUChainedStruct
+    chain;`. The codegen uses this to dispatch on `nextInChain->sType`
+    and pick the right encoder/decoder. Structs that share the sType
+    naming convention but aren't chain links (e.g. plain "Properties"
+    outputs that have no chain header) are excluded."""
+    out: dict[str, str] = {}
+    for m in _RE_STYPE_ENUM_VALUE.finditer(src):
+        base = m.group(1)
+        struct_name = "WGPU" + base
+        fields = struct_fields.get(struct_name)
+        if not fields:
+            continue
+        ft, fn = fields[0]
+        first_type = " ".join(ft.replace("const", "").split())
+        if first_type == "WGPUChainedStruct" and fn == "chain":
+            out["WGPUSType_" + base] = struct_name
+    return out
 
 
 def parse_callbacks(src: str) -> dict[str, tuple[str, list[tuple[str, str]]]]:
@@ -629,9 +684,42 @@ def classify_struct_fields(name: str, struct_fields: dict[str, list[tuple[str, s
         if cleaned == "WGPUStringView":
             out.append({"kind": "stringview", "ctype": "WGPUStringView", "fname": fname})
             continue
+        # WGPUChainedStruct by value — the chain header that lets a
+        # struct sit on someone else's `nextInChain`. The outer chain
+        # walker handles `.next` and `.sType`; the inner encoder/decoder
+        # skips this field entirely.
+        if cleaned == "WGPUChainedStruct":
+            out.append({"kind": "embedded_chain", "ctype": cleaned, "fname": fname})
+            continue
+        # By-value CallbackInfo — function pointer + opaque userdata
+        # don't survive a process hop. We skip on the wire and zero on
+        # decode; if the surrounding method actually needs callbacks,
+        # it goes through the (cb, user) pair the codegen injects on
+        # methods carrying a CallbackInfo *arg*.
+        if cleaned.endswith("CallbackInfo") and cleaned in struct_fields:
+            out.append({"kind": "embedded_callback_info", "ctype": cleaned,
+                        "fname": fname})
+            continue
         if "*" in cleaned:
             pointee = cleaned.replace("*", " ").strip()
             pointee = " ".join(pointee.split())
+            # Pointer field with a known constant length (dawn.json says
+            # 9, 12, etc.). We emit a present flag + N elements on the
+            # wire and keep encode/decode shape independent of the
+            # implicit count.
+            n = FIXED_LEN_PTR_FIELDS.get((name, fname))
+            if n is not None:
+                out.append({"kind": "fixed_array", "ctype": pointee,
+                            "fname": fname, "length": n})
+                continue
+            # Pointer field that piggy-backs on another count field in
+            # the same struct (multi-array sharing one length).
+            shared = SHARED_COUNT_PTR_FIELDS.get((name, fname))
+            if shared is not None:
+                out.append({"kind": "array_items", "ctype": pointee,
+                            "fname": fname, "count_name": shared,
+                            "items_type": pointee})
+                continue
             out.append({"kind": "ptr_nullable", "ctype": pointee, "fname": fname})
             continue
         # Defer scalar/handle/struct classification — done in
@@ -659,6 +747,15 @@ def field_kind_in_ctx(field: dict, handle_types: set[str], aliases: dict[str, st
                 return "ptr_nonpod"
             if t in handle_types:
                 return "unsupported"  # rare; WGPU_NULLABLE handle is taken as scalar=0 above
+            return "unsupported"
+        if field["kind"] == "fixed_array":
+            t = field["ctype"]
+            if t in handle_types:
+                return "fixed_array_handle"
+            if t in pod_structs:
+                return "fixed_array_pod"
+            if t in _POD_SCALARS or t in aliases:
+                return "fixed_array_scalar"
             return "unsupported"
         if field["kind"] == "array_items":
             t = field["items_type"]
@@ -689,6 +786,7 @@ def field_kind_in_ctx(field: dict, handle_types: set[str], aliases: dict[str, st
 def is_encodable_struct(name: str, struct_fields: dict[str, list[tuple[str, str]]],
                         handle_types: set[str], aliases: dict[str, str],
                         pod_structs: set[str], struct_names: set[str],
+                        callback_infos: set[str],
                         cache: dict[str, bool], depth: int = 0) -> bool:
     """Whether we can emit encode/decode for this struct. Tentative-true
     during recursion to break cycles."""
@@ -708,7 +806,8 @@ def is_encodable_struct(name: str, struct_fields: dict[str, list[tuple[str, str]
                 continue
             if t in struct_names:
                 if not is_encodable_struct(t, struct_fields, handle_types, aliases,
-                                           pod_structs, struct_names, cache, depth + 1):
+                                           pod_structs, struct_names, callback_infos,
+                                           cache, depth + 1):
                     ok = False
                     break
                 continue
@@ -720,7 +819,8 @@ def is_encodable_struct(name: str, struct_fields: dict[str, list[tuple[str, str]
                 continue
             if t in struct_names:
                 if not is_encodable_struct(t, struct_fields, handle_types, aliases,
-                                           pod_structs, struct_names, cache, depth + 1):
+                                           pod_structs, struct_names, callback_infos,
+                                           cache, depth + 1):
                     ok = False
                     break
                 continue
@@ -732,13 +832,21 @@ def is_encodable_struct(name: str, struct_fields: dict[str, list[tuple[str, str]
                 continue
             if t in struct_names:
                 if not is_encodable_struct(t, struct_fields, handle_types, aliases,
-                                           pod_structs, struct_names, cache, depth + 1):
+                                           pod_structs, struct_names, callback_infos,
+                                           cache, depth + 1):
                     ok = False
                     break
                 continue
             ok = False
             break
-        if f["kind"] in ("array_count", "stringview", "next_in_chain"):
+        if f["kind"] == "fixed_array":
+            t = f["ctype"]
+            if t in _POD_SCALARS or t in aliases or t in pod_structs or t in handle_types:
+                continue
+            ok = False
+            break
+        if f["kind"] in ("array_count", "stringview", "next_in_chain",
+                         "embedded_chain", "embedded_callback_info"):
             continue
         # any other unknown
         ok = False
@@ -766,7 +874,9 @@ def emit_struct_encoder_decoder(name: str, struct_fields: dict[str, list[tuple[s
 def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, str]]],
                            handle_types: set[str], aliases: dict[str, str],
                            pod_structs: set[str], struct_names: set[str],
-                           encodable: set[str]) -> list[str]:
+                           encodable: set[str],
+                           chainable: dict[str, str] | None = None) -> list[str]:
+    chainable = chainable or {}
     fields = classify_struct_fields(name, struct_fields)
     body: list[str] = []
 
@@ -799,9 +909,45 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
             body.append("        }")
             body.append("    }")
         elif k == "next_in_chain":
-            body.append("    { uint8_t _none = 0; struct yetty_ycore_void_result _r = "
-                        "yetty_ycore_buffer_write(out, &_none, 1); "
-                        "if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            # Walk the chain. Each link: tag=1 (1 byte) + sType (4 bytes)
+            # + payload length (4 bytes, set after encode) + payload bytes.
+            # Terminate with tag=0. Each known sType encodes via the
+            # matching struct's full encoder; the encoder skips the
+            # struct's `WGPUChainedStruct chain` header (classified as
+            # embedded_chain) so we don't write sType twice.
+            body.append("    {")
+            body.append(f"        const WGPUChainedStruct *_ch = src->{fn};")
+            body.append("        while (_ch) {")
+            body.append("            uint8_t _tag = 1;")
+            body.append("            { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(out, &_tag, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            body.append("            uint32_t _st = (uint32_t)_ch->sType;")
+            body.append("            { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(out, &_st, sizeof(_st)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            body.append("            size_t _len_off = out->size;")
+            body.append("            uint32_t _len_placeholder = 0;")
+            body.append("            { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(out, &_len_placeholder, sizeof(_len_placeholder)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            body.append("            size_t _body_off = out->size;")
+            body.append("            switch (_st) {")
+            for stype, struct in sorted(chainable.items()):
+                body.append(f"            case (uint32_t){stype}: ywasm_encode_{struct}((const {struct} *)_ch, out); break;")
+            body.append("            default: break;")
+            body.append("            }")
+            body.append("            uint32_t _len = (uint32_t)(out->size - _body_off);")
+            body.append("            if (out->data) memcpy((uint8_t *)out->data + _len_off, &_len, sizeof(_len));")
+            body.append("            _ch = _ch->next;")
+            body.append("        }")
+            body.append("        uint8_t _term = 0;")
+            body.append("        { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(out, &_term, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            body.append("    }")
+        elif k == "embedded_chain":
+            # Header for an extension struct sitting in someone else's
+            # nextInChain. The outer walker wrote (tag, sType, length);
+            # the body skips this field. Nothing on the wire.
+            pass
+        elif k == "embedded_callback_info":
+            # Function pointer + opaque userdata can't survive a process
+            # hop. Skip on the wire; the matching decoder zeroes the
+            # field so server-side Dawn sees an empty CallbackInfo.
+            pass
         elif k in ("ptr_pod", "ptr_nonpod"):
             body.append("    {")
             body.append(f"        uint8_t _present = src->{fn} ? 1u : 0u;")
@@ -833,6 +979,19 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
             cnt = f["count_name"]
             body.append(f"    for (size_t _i = 0; _i < (size_t)src->{cnt}; ++_i)")
             body.append(f"        ywasm_encode_{f['items_type']}(&src->{fn}[_i], out);")
+        elif k in ("fixed_array_scalar", "fixed_array_pod", "fixed_array_handle"):
+            # 1-byte present flag + N elements (count from the IDL,
+            # baked into the codec). Handles NULL pointers cleanly so
+            # nullable Dawn fields round-trip.
+            n = f["length"]
+            elem_t = f["ctype"]
+            body.append(f"    {{ uint8_t _p = src->{fn} ? 1u : 0u; "
+                        f"struct yetty_ycore_void_result _r = "
+                        f"yetty_ycore_buffer_write(out, &_p, 1); "
+                        f"if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }}")
+            body.append(f"    if (src->{fn}) {{ struct yetty_ycore_void_result _r = "
+                        f"yetty_ycore_buffer_write(out, src->{fn}, sizeof({elem_t}) * {n}); "
+                        f"if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }}")
         else:
             body.append(f"    /* unsupported field {fn}: kind={k} */")
     body.append("}")
@@ -872,12 +1031,46 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
             body.append("        }")
             body.append("    }")
         elif k == "next_in_chain":
+            # Read chain links: tag (1) + sType (4) + length (4) + body.
+            # Known sTypes get arena-allocated and decoded via the
+            # matching struct's full decoder (which skips its embedded
+            # `chain` field). Unknown sTypes skip `length` bytes.
             body.append("    {")
-            body.append("        uint8_t _flag = 0;")
-            body.append("        if (*rem < 1) return 0;")
-            body.append("        _flag = **src; *src += 1; *rem -= 1;")
-            body.append(f"        out->{fn} = NULL; (void)_flag;")
+            body.append(f"        out->{fn} = NULL;")
+            body.append(f"        WGPUChainedStruct **_pp = (WGPUChainedStruct **)&out->{fn};")
+            body.append("        while (1) {")
+            body.append("            if (*rem < 1) return 0;")
+            body.append("            uint8_t _tag = **src; *src += 1; *rem -= 1;")
+            body.append("            if (_tag == 0) break;")
+            body.append("            if (*rem < sizeof(uint32_t) + sizeof(uint32_t)) return 0;")
+            body.append("            uint32_t _st; memcpy(&_st, *src, sizeof(_st)); *src += sizeof(_st); *rem -= sizeof(_st);")
+            body.append("            uint32_t _bl; memcpy(&_bl, *src, sizeof(_bl)); *src += sizeof(_bl); *rem -= sizeof(_bl);")
+            body.append("            if (_bl > *rem) return 0;")
+            body.append("            const uint8_t *_body_p = *src; size_t _body_rem = _bl;")
+            body.append("            switch (_st) {")
+            for stype, struct in sorted(chainable.items()):
+                body.append(f"            case (uint32_t){stype}: {{")
+                body.append(f"                {struct} *_link = ({struct} *)ywasm_arena_alloc(arena, sizeof(*_link));")
+                body.append( "                if (!_link) return 0;")
+                body.append(f"                memset(_link, 0, sizeof(*_link));")
+                body.append(f"                _link->chain.sType = {stype};")
+                body.append(f"                if (!ywasm_decode_{struct}(&_body_p, &_body_rem, _link, arena)) return 0;")
+                body.append( "                *_pp = (WGPUChainedStruct *)_link; _pp = &(*_pp)->next;")
+                body.append( "                break;")
+                body.append( "            }")
+            body.append("            default: /* unknown sType: skip body */ break;")
+            body.append("            }")
+            body.append("            *src += _bl; *rem -= _bl;")
+            body.append("        }")
             body.append("    }")
+        elif k == "embedded_chain":
+            # Outer walker already wrote (tag, sType, length); skip here.
+            body.append(f"    out->{fn}.next = NULL;")
+        elif k == "embedded_callback_info":
+            # Wire carries nothing; zero on decode so Dawn sees an
+            # empty CallbackInfo. Surrounding method handles real
+            # callbacks via the (cb, user) pair if needed.
+            body.append(f"    memset(&out->{fn}, 0, sizeof(out->{fn}));")
         elif k in ("ptr_pod", "ptr_nonpod"):
             body.append("    {")
             body.append("        uint8_t _present = 0;")
@@ -927,6 +1120,21 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
             body.append("        }")
             body.append(f"        out->{fn} = _arr;")
             body.append("    }")
+        elif k in ("fixed_array_scalar", "fixed_array_pod", "fixed_array_handle"):
+            n = f["length"]
+            elem_t = f["ctype"]
+            body.append("    {")
+            body.append("        if (*rem < 1) return 0;")
+            body.append("        uint8_t _p = **src; *src += 1; *rem -= 1;")
+            body.append(f"        if (_p) {{")
+            body.append(f"            size_t _nb = sizeof({elem_t}) * {n};")
+            body.append(f"            if (*rem < _nb) return 0;")
+            body.append(f"            {elem_t} *_arr = ({elem_t} *)ywasm_arena_alloc(arena, _nb);")
+            body.append(f"            if (!_arr) return 0;")
+            body.append(f"            memcpy(_arr, *src, _nb); *src += _nb; *rem -= _nb;")
+            body.append(f"            out->{fn} = _arr;")
+            body.append(f"        }} else {{ out->{fn} = NULL; }}")
+            body.append("    }")
         else:
             body.append(f"    /* unsupported field {fn}: kind={k} */ return 0;")
     body.append("    return 1;")
@@ -936,7 +1144,9 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
 
 
 def emit_client_struct_decoder_body(name: str, struct_fields, handle_types, aliases,
-                                    pod_structs, struct_names, encodable) -> list[str]:
+                                    pod_structs, struct_names, encodable,
+                                    chainable: dict[str, str] | None = None) -> list[str]:
+    chainable = chainable or {}
     """Mirror of the server arena-based decoder, but uses malloc for
     inner pointers. The companion ywasm_client_free_<Name> walks the
     same shape and free()s every allocation."""
@@ -972,9 +1182,41 @@ def emit_client_struct_decoder_body(name: str, struct_fields, handle_types, alia
             body.append("        }")
             body.append("    }")
         elif k == "next_in_chain":
-            body.append("    { uint8_t _flag = 0; if (*rem < 1) return 0; "
-                        "_flag = **src; *src += 1; *rem -= 1; (void)_flag; "
-                        f"out->{fn} = NULL; }}")
+            # Mirror of the server decoder, but uses malloc instead of
+            # arena. Each known sType decodes via the matching client
+            # decoder (which skips its embedded `chain` field). Unknown
+            # sTypes skip their (length-prefixed) body.
+            body.append("    {")
+            body.append(f"        out->{fn} = NULL;")
+            body.append(f"        WGPUChainedStruct **_pp = (WGPUChainedStruct **)&out->{fn};")
+            body.append("        while (1) {")
+            body.append("            if (*rem < 1) return 0;")
+            body.append("            uint8_t _tag = **src; *src += 1; *rem -= 1;")
+            body.append("            if (_tag == 0) break;")
+            body.append("            if (*rem < sizeof(uint32_t) + sizeof(uint32_t)) return 0;")
+            body.append("            uint32_t _st; memcpy(&_st, *src, sizeof(_st)); *src += sizeof(_st); *rem -= sizeof(_st);")
+            body.append("            uint32_t _bl; memcpy(&_bl, *src, sizeof(_bl)); *src += sizeof(_bl); *rem -= sizeof(_bl);")
+            body.append("            if (_bl > *rem) return 0;")
+            body.append("            const uint8_t *_body_p = *src; size_t _body_rem = _bl;")
+            body.append("            switch (_st) {")
+            for stype, struct in sorted(chainable.items()):
+                body.append(f"            case (uint32_t){stype}: {{")
+                body.append(f"                {struct} *_link = ({struct} *)calloc(1, sizeof(*_link));")
+                body.append( "                if (!_link) return 0;")
+                body.append(f"                _link->chain.sType = {stype};")
+                body.append(f"                if (!ywasm_client_decode_{struct}(&_body_p, &_body_rem, _link)) {{ free(_link); return 0; }}")
+                body.append( "                *_pp = (WGPUChainedStruct *)_link; _pp = &(*_pp)->next;")
+                body.append( "                break;")
+                body.append( "            }")
+            body.append("            default: /* unknown sType: skip body */ break;")
+            body.append("            }")
+            body.append("            *src += _bl; *rem -= _bl;")
+            body.append("        }")
+            body.append("    }")
+        elif k == "embedded_chain":
+            body.append(f"    out->{fn}.next = NULL;")
+        elif k == "embedded_callback_info":
+            body.append(f"    memset(&out->{fn}, 0, sizeof(out->{fn}));")
         elif k in ("ptr_pod", "ptr_nonpod"):
             body.append("    {")
             body.append("        uint8_t _present = 0;")
@@ -1023,6 +1265,21 @@ def emit_client_struct_decoder_body(name: str, struct_fields, handle_types, alia
             body.append("        }")
             body.append(f"        out->{fn} = _arr;")
             body.append("    }")
+        elif k in ("fixed_array_scalar", "fixed_array_pod", "fixed_array_handle"):
+            n = f["length"]
+            elem_t = f["ctype"]
+            body.append("    {")
+            body.append("        if (*rem < 1) return 0;")
+            body.append("        uint8_t _p = **src; *src += 1; *rem -= 1;")
+            body.append(f"        if (_p) {{")
+            body.append(f"            size_t _nb = sizeof({elem_t}) * {n};")
+            body.append(f"            if (*rem < _nb) return 0;")
+            body.append(f"            {elem_t} *_arr = ({elem_t} *)malloc(_nb);")
+            body.append(f"            if (!_arr) return 0;")
+            body.append(f"            memcpy(_arr, *src, _nb); *src += _nb; *rem -= _nb;")
+            body.append(f"            out->{fn} = _arr;")
+            body.append(f"        }} else {{ out->{fn} = NULL; }}")
+            body.append("    }")
         else:
             body.append("    return 0;  /* unsupported field */")
     body.append("    return 1;")
@@ -1032,7 +1289,9 @@ def emit_client_struct_decoder_body(name: str, struct_fields, handle_types, alia
 
 
 def emit_client_struct_freer_body(name: str, struct_fields, handle_types, aliases,
-                                  pod_structs, struct_names, encodable) -> list[str]:
+                                  pod_structs, struct_names, encodable,
+                                  chainable: dict[str, str] | None = None) -> list[str]:
+    chainable = chainable or {}
     """Walk the struct and free every malloc'd inner pointer that the
     client decoder produced. Mirrors the decoder's allocation pattern."""
     fields = classify_struct_fields(name, struct_fields)
@@ -1065,7 +1324,28 @@ def emit_client_struct_freer_body(name: str, struct_fields, handle_types, aliase
             body.append(f"            ywasm_client_free_{it_t}((({it_t} *)s->{fn}) + _i);")
             body.append(f"        free((void *)s->{fn}); s->{fn} = NULL;")
             body.append("    }")
-        # scalar / handle / struct_pod / array_count / next_in_chain — nothing to free
+        elif k in ("fixed_array_scalar", "fixed_array_pod", "fixed_array_handle"):
+            body.append(f"    if (s->{fn}) {{ free((void *)s->{fn}); s->{fn} = NULL; }}")
+        elif k == "next_in_chain":
+            # Walk chain links the client decoder malloc'd. Dispatch on
+            # sType, recurse into the matching struct's freer to release
+            # its inner pointers, then free the link itself.
+            body.append("    {")
+            body.append(f"        WGPUChainedStruct *_ch = (WGPUChainedStruct *)s->{fn};")
+            body.append("        while (_ch) {")
+            body.append("            WGPUChainedStruct *_next = _ch->next;")
+            body.append("            switch ((uint32_t)_ch->sType) {")
+            for stype, struct in sorted(chainable.items()):
+                body.append(f"            case (uint32_t){stype}: ywasm_client_free_{struct}(({struct} *)_ch); break;")
+            body.append("            default: break;")
+            body.append("            }")
+            body.append("            free(_ch);")
+            body.append("            _ch = _next;")
+            body.append("        }")
+            body.append(f"        s->{fn} = NULL;")
+            body.append("    }")
+        # scalar / handle / struct_pod / array_count / embedded_chain
+        # / embedded_callback_info — nothing to free
     body.append("}")
     body.append("")
     return body
@@ -1151,15 +1431,30 @@ def classify_arg(arg_type: str, handle_types: set[str], aliases: dict[str, str],
 
 
 def classify_return(ret_type: str, handle_types: set[str]) -> str:
-    """One of: 'void', 'handle', 'value'. 'value' means the call returns
-    a scalar/status that would need a sync-reply path on the client —
-    currently unimplemented, so such methods stay as stubs."""
+    """One of: 'void', 'handle', 'opaque_handle', 'value'.
+
+       'handle'         — typed WGPUFoo handle return (already in the
+                          handle table on Dawn's side; we mirror the
+                          token to the client).
+       'opaque_handle'  — `void *`, `void const *`, or `WGPUProc`. Dawn
+                          owns the bytes (mapped-buffer ranges, proc
+                          pointers, …); we register the pointer in the
+                          server-side handle table and ship a u64 token
+                          to the client just like a typed handle.
+       'value'          — POD scalar / status enum / WGPUFuture.
+       'void'           — nothing returned."""
     t = ret_type.replace("WGPU_NULLABLE", "").strip()
     t = " ".join(t.split())
     if t == "void":
         return "void"
     if t in handle_types:
         return "handle"
+    # `void *`, `void const *`, function-pointer typedef (WGPUProc).
+    pointee_compact = " ".join(t.replace("*", " ").replace("const", " ").split())
+    if "*" in t and pointee_compact == "void":
+        return "opaque_handle"
+    if t == "WGPUProc":
+        return "opaque_handle"
     return "value"
 
 
@@ -1264,6 +1559,7 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
     handle_array_at: dict[int, tuple[str, str, str]] = {}
     scalar_array_at: dict[int, tuple[str, str, str]] = {}    # idx → (count_name, items_name, elem_type)
     byte_array_at:   dict[int, tuple[str, str]] = {}         # idx → (size_name, data_name) — data at idx
+    out_byte_array_at: dict[int, tuple[str, str]] = {}       # idx → (size_name, data_name) — server-fills bytes
     byte_size_at:    set[int] = set()                        # indices used as the paired size
 
     SCALAR_ARRAY_ELEMS = {"uint32_t", "uint64_t", "int32_t", "int64_t", "float"}
@@ -1314,6 +1610,13 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
             byte_array_at[i] = (an2, an1)
             byte_size_at.add(i + 1)
             continue
+        # void *X + size_t Y (server-fills output bytes, reverse order).
+        # E.g. wgpuBufferReadMappedRange(buf, off, void *data, size_t size).
+        if _is_void_ptr(at1) and ("const" not in at1) and _is_size_like(at2, an2) \
+                and "size" in an2.lower():
+            out_byte_array_at[i] = (an2, an1)
+            byte_size_at.add(i + 1)
+            continue
 
     classified: list[tuple[str, str, str]] = []  # (kind, ctype, arg_name)
     byte_size_for_data: dict[str, str] = {}
@@ -1344,12 +1647,29 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
             classified.append(("array_count", "", size_n))
             classified.append(("byte_array", "uint8_t", data_n))
             continue
+        if idx in out_byte_array_at:
+            size_n, data_n = out_byte_array_at[idx]
+            # Server allocates a scratch buffer of `size` bytes, hands it
+            # to Dawn, and ships the bytes back inside the REPLY payload
+            # (alongside any value-return / out_struct fields). Client
+            # writes them into the caller's void* buffer.
+            classified.append(("array_count", "", size_n))
+            classified.append(("out_byte_array", "uint8_t", data_n))
+            continue
         kind, resolved = classify_arg(at, handle_types, aliases, struct_names,
                                       pod_structs, encodable, callback_infos)
+        # Bare `void *` / `void const *` / WGPUProc argument — treat as
+        # an opaque handle token. The server-side lookup goes through the
+        # same handle table Dawn uses for typed WGPU* pointers.
+        if kind == "pointer" and resolved == "void":
+            kind = "opaque_handle"
+        elif kind in ("unknown", "scalar") and resolved == "WGPUProc":
+            kind = "opaque_handle"
         if kind not in ("handle", "scalar", "struct_pod", "pointer_to_pod",
                         "pointer_to_encodable", "stringview", "out_struct",
                         "callback_info", "scalar_array", "byte_array",
-                        "handle_array", "array_count") or not an:
+                        "out_byte_array", "handle_array", "array_count",
+                        "opaque_handle") or not an:
             ok_for_real_body = False
         classified.append((kind, resolved, an))
 
@@ -1390,6 +1710,13 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
         if kind == "handle":
             wire_args.append({
                 "name": an, "ctype": "u64", "wgpu_kind": "in_handle",
+                "wgpu_type": ctype,
+            })
+        elif kind == "opaque_handle":
+            # Same wire shape as a typed handle: u64 token, server-side
+            # resolved through the shared handle table.
+            wire_args.append({
+                "name": an, "ctype": "u64", "wgpu_kind": "opaque_in_handle",
                 "wgpu_type": ctype,
             })
         elif kind == "scalar":
@@ -1446,6 +1773,18 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
                 "wgpu_kind": "handle_array", "wgpu_type": ctype,
                 "in_blob": True,
             })
+        elif kind == "byte_array":
+            wire_args.append({
+                "name": an, "ctype": "uint8_t",
+                "wgpu_kind": "byte_array", "wgpu_type": ctype,
+                "in_blob": True,
+            })
+        elif kind == "scalar_array":
+            wire_args.append({
+                "name": an, "ctype": ctype,
+                "wgpu_kind": "scalar_array", "wgpu_type": ctype,
+                "in_blob": True,
+            })
         elif kind == "out_struct":
             # Server fills this struct, encodes it into the REPLY
             # payload; client decodes back into the user's pointer.
@@ -1453,6 +1792,16 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
             wire_args.append({
                 "name": an, "ctype": ctype,
                 "wgpu_kind": "out_struct", "wgpu_type": ctype,
+                "in_blob": True,
+            })
+        elif kind == "out_byte_array":
+            # Server fills `count` bytes (count from the paired
+            # array_count, sent on input). The reply payload carries
+            # the bytes back; the client wrapper copies them into the
+            # caller's void* buffer.
+            wire_args.append({
+                "name": an, "ctype": "uint8_t",
+                "wgpu_kind": "out_byte_array", "wgpu_type": ctype,
                 "in_blob": True,
             })
         elif kind == "callback_info":
@@ -1471,7 +1820,7 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
                 "ctype": "u64", "wgpu_kind": "opaque", "wgpu_type": ctype,
             })
 
-    if ret_kind == "handle":
+    if ret_kind in ("handle", "opaque_handle"):
         wire_args.append({
             "name": "result_handle", "ctype": "u64", "wgpu_kind": "out_handle",
             "wgpu_type": ret_type,
@@ -1487,7 +1836,7 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
     if not wire_args:
         wire_args.append({"name": "_reserved", "ctype": "u32"})
 
-    if ret_kind == "handle":
+    if ret_kind in ("handle", "opaque_handle"):
         spec_returns = "handle"
     elif ret_kind == "value" and value_return_supported:
         spec_returns = "value"
@@ -1528,7 +1877,8 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
     call_args: list[str] = []
     call_arg_by_name: dict[str, str] = {}
     has_var = any(k in ("pointer_to_encodable", "stringview",
-                         "array_count", "handle_array", "out_struct")
+                         "array_count", "handle_array", "out_struct",
+                         "scalar_array", "byte_array", "out_byte_array")
                   for k, _, _ in classified)
     has_cb = any(k == "callback_info" for k, _, _ in classified)
     if has_var:
@@ -1544,6 +1894,15 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
                 f"        if (!{local})" + (" { ywasm_arena_free(&_arena); " if has_var else " ") +
                 f"return YETTY_YWASM_REPLY_VALIDATION_ERROR;" + (" }" if has_var else ""))
             call_args.append(local); call_arg_by_name[an] = local
+        elif kind == "opaque_handle":
+            # Bare `void *` arg — token in the same handle table as the
+            # typed WGPU* handles. NULL token = NULL pointer (legitimate
+            # for nullable args), no validation error.
+            local = f"_h_{an}"
+            body_lines.append(
+                f"        void *{local} = a->{an} ? ywasm_server_handle_get(ctx, a->{an}) : NULL;")
+            call_args.append(f"({ctype} *){local}")
+            call_arg_by_name[an] = f"({ctype} *){local}"
         elif kind == "struct_pod":
             call_args.append(f"a->{an}"); call_arg_by_name[an] = f"a->{an}"
         elif kind == "pointer_to_pod":
@@ -1691,6 +2050,21 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
             body_lines.append(f"            _bytes_{an} = _buf;")
             body_lines.append("        }")
             call_args.append(f"_bytes_{an}"); call_arg_by_name[an] = f"_bytes_{an}"
+        elif kind == "out_byte_array":
+            # Server-fills bytes (e.g. wgpuBufferReadMappedRange). Allocate
+            # a scratch buffer of `count` bytes from the arena; Dawn fills
+            # it; the post-call reply path ships the bytes back inline.
+            prev = next((c for c in reversed(classified[:-1])
+                         if c[0] == "array_count"), None)
+            count_var = f"_ac_{prev[2]}" if prev else "0"
+            body_lines.append(f"        void *_obytes_{an} = NULL;")
+            body_lines.append(f"        size_t _obytes_{an}_n = (size_t){count_var};")
+            body_lines.append(f"        if (_obytes_{an}_n > 0) {{")
+            body_lines.append(f"            _obytes_{an} = ywasm_arena_alloc(&_arena, _obytes_{an}_n);")
+            body_lines.append(f"            if (!_obytes_{an}) {{ ywasm_arena_free(&_arena); "
+                              f"return YETTY_YWASM_REPLY_INTERNAL; }}")
+            body_lines.append("        }")
+            call_args.append(f"_obytes_{an}"); call_arg_by_name[an] = f"_obytes_{an}"
         else:  # scalar
             call_args.append(f"({ctype})a->{an}"); call_arg_by_name[an] = f"({ctype})a->{an}"
 
@@ -1709,8 +2083,11 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
     call_expr = f"{name}({', '.join(ordered)})"
     cleanup = "ywasm_arena_free(&_arena); " if has_var else ""
 
-    # Collect out-struct args for reply payload encoding.
+    # Collect server-fills args for reply payload encoding. Order in
+    # the reply payload: value-return (if any) → out_byte_arrays →
+    # out_structs. Client decoder reads in the same order.
     out_structs = [(c, an) for k, c, an in classified if k == "out_struct"]
+    out_byte_arrays = [an for k, _c, an in classified if k == "out_byte_array"]
 
     if has_cb:
         # The trampoline emits the REPLY when Dawn fires; we just
@@ -1719,9 +2096,9 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
         if has_var:
             body_lines.append("        ywasm_arena_free(&_arena);")
         body_lines.append("        return YWASM_DISPATCH_DEFERRED;")
-    elif out_structs:
-        # Call the method, then encode (return value if any) +
-        # (each output struct) into a single reply payload. Return
+    elif out_structs or out_byte_arrays:
+        # Call the method, then encode (return value if any) + each
+        # server-fills slot into a single reply payload. Return
         # DEFERRED so the dispatcher doesn't emit a second REPLY.
         if ret_kind == "void":
             body_lines.append(f"        {call_expr};")
@@ -1732,6 +2109,11 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
             body_lines.append("        { struct yetty_ycore_void_result _r = "
                               "yetty_ycore_buffer_write(&_reply_buf, &_result, sizeof(_result));"
                               " if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+        for an in out_byte_arrays:
+            body_lines.append(f"        if (_obytes_{an}_n > 0 && _obytes_{an}) {{ "
+                              f"struct yetty_ycore_void_result _r = "
+                              f"yetty_ycore_buffer_write(&_reply_buf, _obytes_{an}, _obytes_{an}_n); "
+                              f"if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }}")
         for c, an in out_structs:
             body_lines.append(f"        ywasm_encode_{c}(&_out_{an}, &_reply_buf);")
         # Server-side cleanup: Dawn may have allocated inner pointers
@@ -1767,6 +2149,21 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
         body_lines.append("                                    &_result, sizeof(_result));")
         body_lines.append("        if (YETTY_IS_ERR(_e)) yetty_ycore_error_destroy(_e.error);")
         body_lines.append("        return YWASM_DISPATCH_DEFERRED;")
+    elif ret_kind == "opaque_handle":
+        # `void *` / `void const *` / WGPUProc — Dawn owns the bytes.
+        # Register the bare pointer in the handle table and ship the
+        # token. Failure → NULL ptr is *not* an error: many entry points
+        # (mapped-range queries, GetProcAddress) legitimately return
+        # NULL to signal "not available". Client gets 0 in that case.
+        bare_ret = ret_type.replace("WGPU_NULLABLE", "").strip()
+        bare_ret = " ".join(bare_ret.split())
+        body_lines.append(f"        {bare_ret} _result = {call_expr};")
+        body_lines.append(f"        {cleanup}")
+        body_lines.append("        if (!_result) return YETTY_YWASM_REPLY_OK;")
+        body_lines.append("        struct yetty_ycore_void_result _r =")
+        body_lines.append("            ywasm_server_handle_set(ctx, a->result_handle, (void *)_result);")
+        body_lines.append("        if (YETTY_IS_ERR(_r)) { yetty_ycore_error_destroy(_r.error); return YETTY_YWASM_REPLY_INTERNAL; }")
+        body_lines.append("        return YETTY_YWASM_REPLY_OK;")
     else:  # handle
         bare_ret = ret_type.replace("WGPU_NULLABLE", "").strip()
         bare_ret = " ".join(bare_ret.split())
@@ -1787,13 +2184,24 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
     # If this method has an output struct, mark it for the dyn-reply
     # path — the REPLY payload is variable-length (status + encoded
     # struct). The client wrapper uses blocking_dyn.
-    has_out_struct = any(k == "out_struct" for k, _, _ in classified)
+    # Set when the reply payload is variable-length — either an out_struct
+    # encoded into the reply, OR a server-fills byte array shipped back.
+    has_out_struct = any(k in ("out_struct", "out_byte_array")
+                         for k, _, _ in classified)
+    # User-facing wrapper takes args in original C declaration order
+    # (matching webgpu.h), not wire order. Wire order may differ when
+    # byte_array detection inserts a size-count before the data ptr.
+    # callback_info args are replaced by the cb/user pair.
+    kind_by_name = {an_: kind_ for kind_, _, an_ in classified}
+    client_param_order = [an for at, an in args
+                          if kind_by_name.get(an) != "callback_info"]
     spec: dict = {
         "name": name,
         "args": wire_args,
         "returns": spec_returns,
         "auto": True,
         "server_body": "\n".join(body_lines),
+        "client_param_order": client_param_order,
     }
     if spec_returns == "value":
         spec["return_ctype"] = value_return_ctype
@@ -1902,6 +2310,11 @@ def merge_with_auto(curated: list[dict], header_path: pathlib.Path) -> list[dict
         if cb:
             cb_info_to_cb[sn_name] = cb
     callback_infos = set(cb_info_to_cb.keys())
+    # sType -> struct: every chain-able extension struct discovered in
+    # the WGPUSType enum that has a matching WGPUFoo with a leading
+    # `WGPUChainedStruct chain;` field. The nextInChain encoder/decoder/
+    # freer dispatches off this map.
+    stype_to_struct = parse_stype_to_struct(src, struct_fields)
     pod_cache: dict[str, bool] = {}
     pod_structs = {
         n for n in struct_names
@@ -1911,8 +2324,14 @@ def merge_with_auto(curated: list[dict], header_path: pathlib.Path) -> list[dict
     encodable = {
         n for n in struct_names
         if is_encodable_struct(n, struct_fields, handle_types, aliases,
-                               pod_structs, struct_names, enc_cache)
+                               pod_structs, struct_names, callback_infos,
+                               enc_cache)
     }
+    # Restrict the chain dispatch to sTypes whose struct we can actually
+    # encode/decode. Unknown sTypes still survive on the wire — the
+    # encoder writes a tag+sType+length=0 and the decoder skips by
+    # length — but they don't get a real codec body emitted.
+    chainable = {st: s for st, s in stype_to_struct.items() if s in encodable}
     discovered = parse_methods_from_header(src)
     curated_names = {m["name"] for m in curated}
     auto = []
@@ -1935,6 +2354,8 @@ def merge_with_auto(curated: list[dict], header_path: pathlib.Path) -> list[dict
         "aliases": aliases,
         "pod_structs": pod_structs,
         "struct_names": struct_names,
+        "callback_infos": callback_infos,
+        "chainable": chainable,
     }})
     # Assign sequential ids starting at 200 to leave room for hand-pinned
     # curated entries 1-199 and yetty meta-methods at 100+.
@@ -2002,7 +2423,11 @@ def emit_methods_h(methods: list[dict]) -> str:
         # arg (we mark is_async=True for those). Don't inject twice.
         cb_already = is_async
         params: list[str] = ["struct yetty_ywasm_client *c"]
-        for a in m["args"]:
+        args_by_name = {a["name"]: a for a in m["args"]}
+        order = m.get("client_param_order")
+        iter_args = ([args_by_name[n] for n in order if n in args_by_name]
+                     if order else m["args"])
+        for a in iter_args:
             kind = a.get("wgpu_kind")
             if kind in ("out_handle", "present_flag", "callback_info"):
                 continue
@@ -2018,8 +2443,12 @@ def emit_methods_h(methods: list[dict]) -> str:
                 params.append(f"{a['ctype']} const *{a['name']}")
             elif kind == "byte_array":
                 params.append(f"void const *{a['name']}")
+            elif kind == "out_byte_array":
+                params.append(f"void *{a['name']}")
             elif kind == "out_struct":
                 params.append(f"{to_c_type(a['ctype'])} *{a['name']}")
+            elif kind == "opaque_in_handle":
+                params.append(f"uint64_t {a['name']}")
             else:
                 params.append(f"{to_c_type(a['ctype'])} {a['name']}")
         if cb_already:
@@ -2065,11 +2494,13 @@ def _emit_codec_runtime_decls(lines: list[str], codec_meta: dict | None, side: s
 def _emit_codec_bodies(lines: list[str], codec_meta: dict | None, side: str) -> None:
     if not codec_meta:
         return
+    chainable = codec_meta.get("chainable", {})
     for n in codec_meta["encodable"]:
         body = emit_struct_codec_body(
             n, codec_meta["struct_fields"], codec_meta["handle_types"],
             codec_meta["aliases"], codec_meta["pod_structs"],
-            codec_meta["struct_names"], set(codec_meta["encodable"]))
+            codec_meta["struct_names"], set(codec_meta["encodable"]),
+            chainable)
         joined = "\n".join(body)
         encoder_src, decoder_src = joined.split(f"int ywasm_decode_{n}(", 1)
         decoder_src = "int ywasm_decode_" + n + "(" + decoder_src
@@ -2078,18 +2509,34 @@ def _emit_codec_bodies(lines: list[str], codec_meta: dict | None, side: str) -> 
             cd_lines = emit_client_struct_decoder_body(
                 n, codec_meta["struct_fields"], codec_meta["handle_types"],
                 codec_meta["aliases"], codec_meta["pod_structs"],
-                codec_meta["struct_names"], set(codec_meta["encodable"]))
+                codec_meta["struct_names"], set(codec_meta["encodable"]),
+                chainable)
             lines.append("\n".join(cd_lines))
             cf_lines = emit_client_struct_freer_body(
                 n, codec_meta["struct_fields"], codec_meta["handle_types"],
                 codec_meta["aliases"], codec_meta["pod_structs"],
-                codec_meta["struct_names"], set(codec_meta["encodable"]))
+                codec_meta["struct_names"], set(codec_meta["encodable"]),
+                chainable)
             lines.append("\n".join(cf_lines))
         else:
             # Server needs both: encoder (for output struct → reply) and
             # decoder (for descriptor input args).
             lines.append(encoder_src)
             lines.append(decoder_src)
+
+
+def _pair_out_byte_arrays(args: list[dict]) -> list[tuple[str, str]]:
+    """Walk the wire_args in order, pair each out_byte_array with the
+    most-recent preceding array_count. Returns [(data_name, count_name), ...]."""
+    out: list[tuple[str, str]] = []
+    last_count: str | None = None
+    for a in args:
+        k = a.get("wgpu_kind")
+        if k == "array_count":
+            last_count = a["name"]
+        elif k == "out_byte_array" and last_count is not None:
+            out.append((a["name"], last_count))
+    return out
 
 
 def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
@@ -2132,8 +2579,23 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
         # handle_array exposes (size_t count, T const *items) — both
         # appear in the user signature but neither in the args struct.
         params: list[str] = ["struct yetty_ywasm_client *c"]
-        var_args: list[dict] = []  # in declaration order
+        var_args: list[dict] = []  # in wire order (matches server decode)
+        # Wire-order pass: collect var_args (encoded into _body in this
+        # order, matches server-side decode order in classified).
         for a in m["args"]:
+            kind = a.get("wgpu_kind")
+            if kind in ("pointer_to_encodable", "stringview", "array_count",
+                        "handle_array", "scalar_array", "byte_array",
+                        "out_byte_array", "out_struct"):
+                var_args.append(a)
+        # User-facing param order: original C arg declaration order.
+        # callback_info args are replaced by the (cb, user) pair injected
+        # below for async methods.
+        args_by_name = {a["name"]: a for a in m["args"]}
+        order = m.get("client_param_order")
+        iter_args = ([args_by_name[n] for n in order if n in args_by_name]
+                     if order else m["args"])
+        for a in iter_args:
             kind = a.get("wgpu_kind")
             if kind in ("out_handle", "present_flag", "callback_info"):
                 continue
@@ -2141,19 +2603,22 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                 params.append(f"{to_c_type(a['ctype'])} const *{a['name']}")
             elif kind == "pointer_to_encodable":
                 params.append(f"{to_c_type(a['ctype'])} const *{a['name']}")
-                var_args.append(a)
             elif kind == "stringview":
                 params.append(f"WGPUStringView {a['name']}")
-                var_args.append(a)
             elif kind == "array_count":
                 params.append(f"size_t {a['name']}")
-                var_args.append(a)
             elif kind == "handle_array":
                 params.append(f"{a['ctype']} const *{a['name']}")
-                var_args.append(a)
+            elif kind == "scalar_array":
+                params.append(f"{a['ctype']} const *{a['name']}")
+            elif kind == "byte_array":
+                params.append(f"void const *{a['name']}")
+            elif kind == "out_byte_array":
+                params.append(f"void *{a['name']}")
             elif kind == "out_struct":
                 params.append(f"{to_c_type(a['ctype'])} *{a['name']}")
-                var_args.append(a)
+            elif kind == "opaque_in_handle":
+                params.append(f"uint64_t {a['name']}")
             else:
                 params.append(f"{to_c_type(a['ctype'])} {a['name']}")
         if is_async:
@@ -2181,7 +2646,7 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
             kind = a.get("wgpu_kind")
             if kind in ("out_handle", "present_flag", "pointer_to_encodable",
                         "stringview", "array_count", "handle_array",
-                        "scalar_array", "byte_array",
+                        "scalar_array", "byte_array", "out_byte_array",
                         "out_struct", "callback_info"):
                 continue
             if kind == "pointer_to_pod":
@@ -2221,6 +2686,28 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                         lines.append("        if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error);")
                         lines.append("    }")
                     continue
+                if k == "scalar_array":
+                    cnt = next((x["name"] for x in reversed(var_args)
+                                if x["wgpu_kind"] == "array_count"), None)
+                    elem_ct = a["ctype"]
+                    if cnt:
+                        lines.append(f"    if ((size_t){cnt} > 0 && {an}) {{")
+                        lines.append(f"        struct yetty_ycore_void_result _r = "
+                                     f"yetty_ycore_buffer_write(&_body, {an}, "
+                                     f"(size_t){cnt} * sizeof({elem_ct}));")
+                        lines.append("        if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error);")
+                        lines.append("    }")
+                    continue
+                if k == "byte_array":
+                    cnt = next((x["name"] for x in reversed(var_args)
+                                if x["wgpu_kind"] == "array_count"), None)
+                    if cnt:
+                        lines.append(f"    if ((size_t){cnt} > 0 && {an}) {{")
+                        lines.append(f"        struct yetty_ycore_void_result _r = "
+                                     f"yetty_ycore_buffer_write(&_body, {an}, (size_t){cnt});")
+                        lines.append("        if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error);")
+                        lines.append("    }")
+                    continue
                 if k == "pointer_to_encodable":
                     lines.append(f"    {{ uint8_t _f = {an} ? 1u : 0u; "
                                  f"struct yetty_ycore_void_result _r = "
@@ -2243,9 +2730,13 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                     lines.append("    }")
             has_out_struct = m.get("has_out_struct", False)
             out_struct_args = [a for a in m["args"] if a.get("wgpu_kind") == "out_struct"]
+            # Pair each out_byte_array with the array_count that precedes
+            # it in wire order — the client already has that count as a
+            # function parameter.
+            out_bytes = _pair_out_byte_arrays(m["args"])
             if has_out_struct:
-                # Variable-size reply: status (if value-return) + each
-                # output struct encoded in declaration order.
+                # Variable-size reply: status (if value-return) +
+                # out_byte_arrays + out_structs, in that order.
                 lines.append("    uint8_t *_reply_buf = NULL;")
                 lines.append("    size_t _reply_len = 0;")
                 lines.append("    { struct yetty_ycore_void_result _r = "
@@ -2263,6 +2754,12 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                     lines.append("    if (_rrem >= sizeof(_result)) { "
                                  "memcpy(&_result, _rp, sizeof(_result)); "
                                  "_rp += sizeof(_result); _rrem -= sizeof(_result); }")
+                for data_n, count_n in out_bytes:
+                    lines.append(f"    if ({data_n} && (size_t){count_n} > 0 && "
+                                 f"_rrem >= (size_t){count_n}) {{")
+                    lines.append(f"        memcpy({data_n}, _rp, (size_t){count_n});")
+                    lines.append(f"        _rp += (size_t){count_n}; _rrem -= (size_t){count_n};")
+                    lines.append("    }")
                 for oa in out_struct_args:
                     lines.append(f"    if ({oa['name']}) (void)ywasm_client_decode_"
                                  f"{oa['ctype']}(&_rp, &_rrem, {oa['name']});")
