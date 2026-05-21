@@ -10,7 +10,14 @@ set(_yrdawn_server_src ${YETTY_ROOT}/src/yetty/yrdawn/server-dispatch.gen.c)
 # HELLO/CMD/BYE, so the wire stays alive and the absence is visible
 # to the client. Linux / macOS / Windows Dawn prebuilts export the
 # full surface so they keep the real dispatcher.
-if(ANDROID OR YETTY_ANDROID OR YETTY_IOS OR YETTY_TVOS)
+#
+# Emscripten is also routed to the stub: a webasm yetty is the *client*
+# end of the bridge (it's the thing remoted INTO from a desktop yetty),
+# so it never hosts the server. Compiling the real dispatcher under
+# emcc additionally hits incompatible-pointer-types hard errors against
+# emscripten's stricter clang — sidestepping that by stubbing is cleaner
+# than disabling the diagnostic on dead code.
+if(ANDROID OR YETTY_ANDROID OR YETTY_IOS OR YETTY_TVOS OR EMSCRIPTEN)
     set(_yrdawn_server_src ${YETTY_ROOT}/src/yetty/yrdawn/server-dispatch-stub.c)
 endif()
 
