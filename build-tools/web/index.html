@@ -18,9 +18,37 @@
             overflow: hidden;
             background: #0f0f23;
         }
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+        #topbar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 4px 12px;
+            background: #141A1F;
+            border-bottom: 1px solid #364A47;
+            color: #9FA7A8;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #topbar a {
+            color: #6BA892;
+            text-decoration: none;
+        }
+        #topbar a:hover { color: #74C5A5; }
+        #topbar .sep { color: #364A47; }
         #canvas-container {
+            flex: 1 1 auto;
+            min-height: 0;
             width: 100%;
-            height: 100%;
             position: relative;
         }
         canvas {
@@ -168,6 +196,11 @@
     </style>
 </head>
 <body>
+    <div id="topbar">
+        <a href="https://github.com/zokrezyl/yetty" target="_blank" rel="noopener">github.com/zokrezyl/yetty</a>
+        <span class="sep">·</span>
+        <a href="https://github.com/zokrezyl/yetty/releases/tag/@YETTY_RELEASE_TAG@" target="_blank" rel="noopener">@YETTY_RELEASE_TAG@</a>
+    </div>
     <div id="canvas-container">
         <canvas id="canvas" width="1024" height="768" tabindex="0"></canvas>
         <!-- Boot console — populated by yettyStatus.append() from

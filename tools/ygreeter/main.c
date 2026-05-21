@@ -25,6 +25,9 @@
  *   Plots   — yplot demos (sin/cos, parabola, decay, ...).
  *   Images  — image rendering placeholders; nodes that have a path bound
  *             load via yimage YAML.
+ *   Video   — one yvideo prim sourced from assets/yetty-unchained-2.mp4,
+ *             demuxed via minimp4. Decoding (openh264) runs on the
+ *             receiving terminal, not in ygreeter itself.
  *   Code    — colourised code snippets (text spans coloured by token
  *             class — mirrors what `ycat --ts` produces, just authored
  *             inline so we don't pull in tree-sitter for the v1 tool).
@@ -35,9 +38,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <yetty/yplatform/fs.h>   /* path_dirname, path_realpath, file_is_regular */
-#include <yetty/yplatform/term.h> /* term_get_size */
-#include <yetty/yplatform/tty.h>  /* stderr-rerouting probe */
+#include <yetty/yplatform/fs.h>    /* path_dirname, path_realpath, file_is_regular */
+#include <yetty/yplatform/paths.h> /* get_data_dir */
+#include <yetty/yplatform/term.h>  /* term_get_size */
+#include <yetty/yplatform/tty.h>   /* stderr-rerouting probe */
+#include "embedded-assets.h"       /* incbin-extracted assets at <data_dir>/ */
 #include <yetty/ygui/ygui.h>
 #ifdef YGREETER_HAS_YBROWSER
 #include <yetty/ygui/ygui_ybrowser.h>
@@ -55,6 +60,9 @@
 #ifdef YGREETER_HAS_YJUNGLE
 #include <yetty/ygui/ygui_yjungle.h>
 #include <yetty/yjungle/yjungle.h>
+#endif
+#ifdef YGREETER_HAS_YVIDEO
+#include <yetty/ygui/ygui_yvideo.h>
 #endif
 #include <yetty/ytrace/ytrace.h>
 
@@ -97,20 +105,25 @@ struct nav_entry {
     "      font-size: 18\n"                                                                        \
     "      color: \"#9ad7ff\"\n"                                                                   \
     "  - text:\n"                                                                                  \
-    "      position: [24, 140]\n"                                                                  \
+    "      position: [24, 128]\n"                                                                  \
+    "      content: \"This screen is just a greeter — a short intro tour.\"\n"                     \
+    "      font-size: 14\n"                                                                        \
+    "      color: \"#cccccc\"\n"                                                                   \
+    "  - text:\n"                                                                                  \
+    "      position: [24, 152]\n"                                                                  \
+    "      content: \"Your terminal is waiting behind it; close the greeter to use it.\"\n"        \
+    "      font-size: 14\n"                                                                        \
+    "      color: \"#cccccc\"\n"                                                                   \
+    "  - text:\n"                                                                                  \
+    "      position: [24, 196]\n"                                                                  \
     "      content: \"Plots, images, rich docs — all next to your shell.\"\n"                      \
     "      font-size: 16\n"                                                                        \
     "      color: \"#cccccc\"\n"                                                                   \
     "  - text:\n"                                                                                  \
-    "      position: [24, 170]\n"                                                                  \
+    "      position: [24, 226]\n"                                                                  \
     "      content: \"Switch tabs to see what the GPU layer can do.\"\n"                           \
     "      font-size: 16\n"                                                                        \
-    "      color: \"#cccccc\"\n"                                                                   \
-    "  - text:\n"                                                                                  \
-    "      position: [24, 220]\n"                                                                  \
-    "      content: \"Press 'q' to quit.\"\n"                                                      \
-    "      font-size: 14\n"                                                                        \
-    "      color: \"#888888\"\n"
+    "      color: \"#cccccc\"\n"
 
 #define WELCOME_QUICKSTART                                                                         \
     "body:\n"                                                                                      \
@@ -415,13 +428,13 @@ static const struct nav_entry PLOT_NAV[] = {
     "      font-size: 16\n"                                                                        \
     "      color: \"#666e85\"\n"
 
-/* Placeholder YAML for an image row when its file isn't on disk. The
- * Images tab's nav entries are built at startup from whatever
- * docs/logo-*.jpeg files exist, so the placeholder is only seen when
- * a probe failed mid-way through. */
+/* Placeholder YAML for an image row when its file isn't on disk.
+ * Embedded logos are extracted to <data_dir>/logo-N.jpeg on first run;
+ * the dev fallback walks up from argv[0] to <repo>/assets/logo-N.jpeg.
+ * Only seen when both probes failed. */
 #define IMAGE_FALLBACK_YAML                                                                        \
     IMAGE_PLACEHOLDER_FOR("Image not found",                                                       \
-                          "ygreeter probes docs/logo-*.jpeg relative to the executable.")
+                          "ygreeter probes logo-*.jpeg in the data dir.")
 
 /* Heap-owned: built at startup from discover_logo_images(), freed
  * before exit. Parallel arrays — entry N's label is g_image_nav[N],
@@ -489,9 +502,9 @@ static int path_exists(const char *path)
 }
 
 /* Resolve a path relative to argv[0]'s directory walking up `levels`
- * times. Used to locate bundled assets (assets/logo.jpeg, docs/logo.jpeg)
- * regardless of where the user invokes the binary from. Returns a
- * malloc'd path or NULL. */
+ * times. Used to locate bundled assets (assets/logo.jpeg,
+ * assets/yetty-unchained-2.mp4, ...) regardless of where the user
+ * invokes the binary from. Returns a malloc'd path or NULL. */
 static char *resolve_relative_to_exe(const char *argv0, int up_levels, const char *suffix)
 {
     if (!argv0) {
@@ -528,15 +541,9 @@ static char *resolve_relative_to_exe(const char *argv0, int up_levels, const cha
     return out;
 }
 
-/* Try to find a bundled image to use for the Images tab. Probe order:
- *   1. $YGREETER_IMAGE (caller override)
- *   2. <repo>/assets/logo.jpeg
- *   3. <repo>/docs/logo-1.jpeg ... logo-4.jpeg
- *   4. <repo>/assets/apple-touch-icon.jpg
- *
- * The "repo root" is derived from argv[0]. With a CMake build the
- * binary sits at <repo>/build-X/tools/ygreeter/ygreeter — that's 4
- * dirname() calls away from the assets/. An installed layout may be
+/* Find a bundled file by walking up from argv[0]. With a CMake build
+ * the binary sits at <repo>/build-X/tools/ygreeter/ygreeter — that's 4
+ * dirname() calls away from the repo root. An installed layout may be
  * shallower; we try a couple of plausible levels until one resolves. */
 static char *find_repo_image(const char *argv0, const char *relative)
 {
@@ -551,7 +558,41 @@ static char *find_repo_image(const char *argv0, const char *relative)
     return NULL;
 }
 
-/* Discover every docs/logo-N.jpeg that exists relative to the binary
+/* Asset resolution for a standalone-redistributable ygreeter.
+ *
+ *   1. <data_dir>/<basename> — where embedded-assets.c writes everything
+ *      at first run. This is the path that survives `scp ygreeter remote:`
+ *      (the binary carries its own assets via incbin).
+ *   2. argv0-relative <repo_root>/<dev_rel> — dev-loop fallback so an
+ *      uninstalled build run straight out of build-X/tools/ygreeter/
+ *      still finds the asset in the working tree.
+ *
+ * `basename` is the flat name embedded-assets.c writes to the data dir
+ * (e.g. "logo-1.jpeg", "yetty-unchained-2.mp4", "README.md"); `dev_rel`
+ * is the repo-relative path (e.g. "assets/logo-1.jpeg",
+ * "demo/ygui/26_ybrowser/sample.html"). Caller owns the returned string;
+ * NULL when neither resolves. */
+static char *locate_asset(const char *argv0, const char *basename, const char *dev_rel)
+{
+    const char *data_dir = yetty_yplatform_get_data_dir();
+    if (data_dir && *data_dir && basename && *basename) {
+        size_t need = strlen(data_dir) + 1 + strlen(basename) + 1;
+        char *p = (char *)malloc(need);
+        if (p) {
+            snprintf(p, need, "%s/%s", data_dir, basename);
+            if (path_exists(p)) {
+                return p;
+            }
+            free(p);
+        }
+    }
+    if (argv0 && dev_rel && *dev_rel) {
+        return find_repo_image(argv0, dev_rel);
+    }
+    return NULL;
+}
+
+/* Discover every assets/logo-N.jpeg that exists relative to the binary
  * and populate g_image_paths / g_image_nav. One nav entry per file so
  * the Images tab's left rail flexes from 1 to N rows depending on how
  * many bundled logos are shipped. The yaml field is the fallback
@@ -560,7 +601,7 @@ static char *find_repo_image(const char *argv0, const char *relative)
 static void discover_logo_images(const char *argv0)
 {
     /* Probe a generous upper bound on logo numbers. The repo currently
-     * ships logo-1..logo-4 in docs/, but a future build might add
+     * ships logo-1..logo-4 in assets/, but a future build might add
      * more — we stop at the first miss after at least one hit, with
      * a hard ceiling so a broken numbering scheme can't loop. */
     enum { MAX_LOGOS = 32 };
@@ -573,9 +614,11 @@ static void discover_logo_images(const char *argv0)
         paths_tmp[count++] = strdup(env);
     }
     for (int i = 1; i <= MAX_LOGOS && count < MAX_LOGOS; i++) {
-        char rel[64];
-        snprintf(rel, sizeof(rel), "docs/logo-%d.jpeg", i);
-        char *p = find_repo_image(argv0, rel);
+        char basename[32];
+        char dev_rel[64];
+        snprintf(basename, sizeof(basename), "logo-%d.jpeg", i);
+        snprintf(dev_rel, sizeof(dev_rel), "assets/%s", basename);
+        char *p = locate_asset(argv0, basename, dev_rel);
         if (!p) {
             /* allow gaps in numbering up to logo-8 before giving up */
             if (i > 8) {
@@ -584,13 +627,6 @@ static void discover_logo_images(const char *argv0)
             continue;
         }
         paths_tmp[count++] = p;
-    }
-    /* assets/logo.jpeg as a final fallback when nothing else resolved */
-    if (count == 0) {
-        char *p = find_repo_image(argv0, "assets/logo.jpeg");
-        if (p) {
-            paths_tmp[count++] = p;
-        }
     }
     if (count == 0) {
         return;
@@ -633,6 +669,65 @@ static void free_image_nav(void)
     g_image_nav = NULL;
     g_image_path_count = 0;
 }
+
+/* =========================================================================
+ * Video tab — yvideo showcase.
+ *
+ * Source is assets/yetty-unchained-2.mp4 relative to the binary; the MP4
+ * is handed to the ygui_yvideo widget which demuxes via
+ * yetty_yvideo_render_from_mp4_file (yetty_yvideo_core / yvideo-mp4.h).
+ * Decoding runs on the receiving terminal, not in ygreeter.
+ *
+ * The yvideo prim is heavy (multi-MB H.264 stream plus a per-frame
+ * GPU upload) and its decoder loop runs unconditionally as long as the
+ * prim exists on the receiving scene-canvas. So the tab follows the
+ * same activate-on-show / deactivate-on-hide lifecycle the yzoo and
+ * yjungle tabs use: state lives on `struct yvideo_tab` (owned by
+ * struct app), and `on_tab_change` flips `set_active` so the prim is
+ * built when the tab is visible and torn back down to the placeholder
+ * the moment the user switches away.
+ * ========================================================================= */
+
+#define VIDEO_PLACEHOLDER_YAML                                                                     \
+    "body:\n"                                                                                      \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 36]\n"                                                                   \
+    "      content: \"Yvideo showcase\"\n"                                                         \
+    "      font-size: 22\n"                                                                        \
+    "      color: \"#ffffff\"\n"                                                                   \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 84]\n"                                                                   \
+    "      content: \"Plays assets/yetty-unchained-2.mp4 via the yvideo primitive.\"\n"            \
+    "      font-size: 14\n"                                                                        \
+    "      color: \"#bbbbbb\"\n"                                                                   \
+    "  - text:\n"                                                                                  \
+    "      position: [16, 112]\n"                                                                  \
+    "      content: \"File not found, or this build is missing yvideo / openh264.\"\n"             \
+    "      font-size: 14\n"                                                                        \
+    "      color: \"#888888\"\n"                                                                   \
+    "  - box:\n"                                                                                   \
+    "      position: [16, 150]\n"                                                                  \
+    "      size: [460, 240]\n"                                                                     \
+    "      fill: \"#1f2330\"\n"                                                                    \
+    "      stroke: \"#2c3447\"\n"                                                                  \
+    "      stroke-width: 2\n"                                                                      \
+    "      round: 8\n"                                                                             \
+    "  - text:\n"                                                                                  \
+    "      position: [180, 280]\n"                                                                 \
+    "      content: \"[ video would render here ]\"\n"                                             \
+    "      font-size: 16\n"                                                                        \
+    "      color: \"#666e85\"\n"
+
+#ifdef YGREETER_HAS_YVIDEO
+struct yvideo_tab {
+    struct yetty_ygui_engine *engine;
+    struct yetty_ygui_widget *tab;        /* tab panel (parent of `rich`) */
+    struct yetty_ygui_widget *rich;       /* sole child filling the tab */
+    char *path;                           /* resolved mp4 path, or NULL */
+    int   tab_index;                      /* -1 = tab absent / closed */
+    bool  active;                         /* true while the tab is visible */
+};
+#endif
 
 /* =========================================================================
  * Code tab content.
@@ -922,6 +1017,14 @@ struct yjungle_anim {
 
 /* Forward decls — bodies live just before on_resize, but on_tab_close
  * / on_tab_change (defined earlier in the file) need to call them. */
+#ifdef YGREETER_HAS_YVIDEO
+static void yvideo_tab_init(struct yvideo_tab *v, const char *argv0);
+static void yvideo_tab_attach(struct yvideo_tab *v, struct yetty_ygui_engine *engine,
+                              struct yetty_ygui_widget *tab_panel, int tab_index);
+static void yvideo_tab_set_active(struct yvideo_tab *v, bool active);
+static void yvideo_tab_on_tab_closed(struct yvideo_tab *v);
+static void yvideo_tab_shutdown(struct yvideo_tab *v);
+#endif
 #ifdef YGREETER_HAS_YZOO
 static void yzoo_anim_set_running(struct yzoo_anim *a, bool run);
 static void yzoo_anim_on_tab_closed(struct yzoo_anim *a);
@@ -952,6 +1055,9 @@ struct app {
 #endif
 #ifdef YGREETER_HAS_YJUNGLE
     struct yjungle_anim yjungle;
+#endif
+#ifdef YGREETER_HAS_YVIDEO
+    struct yvideo_tab video;
 #endif
 };
 
@@ -1113,6 +1219,20 @@ static void on_tab_close(struct yetty_ygui_widget *tabbar, float value, void *us
         }
     }
 
+#ifdef YGREETER_HAS_YVIDEO
+    /* Same bookkeeping for the Video tab — when it's the one being
+     * closed, tear down the per-tab state (drops the playback prim
+     * and clears stale widget handles); when it's a tab AFTER the
+     * Video tab, shift our cached index down by one. */
+    if (app->video.tab_index >= 0) {
+        if (idx == app->video.tab_index) {
+            yvideo_tab_on_tab_closed(&app->video);
+        } else if (idx < app->video.tab_index) {
+            app->video.tab_index--;
+        }
+    }
+#endif
+
     /* Same bookkeeping for the yzoo / yjungle showcase tabs — drop our
      * dangling widget/tab pointers when the tab itself goes away,
      * otherwise the next resize-driven rebuild would chase a freed
@@ -1149,12 +1269,25 @@ static void on_tab_change(struct yetty_ygui_widget *tabbar, float value, void *u
     (void)tabbar;
     struct app *app = (struct app *)userdata;
     int idx = (int)value;
+
     /* Default: load the first entry of the newly-active tab — only
-     * applies to the first 4 tabs (Welcome / Plots / Images / Code),
-     * which are the ones that use the nav+rich pattern. */
-    if (idx >= 0 && idx < 4) {
+     * applies to the nav+rich tabs (Welcome / Plots / Images / Code).
+     * The Video tab between Images and Code does not use nav+rich;
+     * its slot in app->tabs[] is empty so load_entry early-returns on
+     * n_entries == 0 for that index. */
+    if (idx >= 0 && idx < 5) {
         load_entry(app, idx, 0);
     }
+
+#ifdef YGREETER_HAS_YVIDEO
+    /* Drive the Video tab's playback prim from the tab-change event,
+     * same shape as the yzoo / yjungle set_running calls below. The
+     * helper builds the yvideo prim on activation and resets the
+     * widget to the placeholder on deactivation, so the receiving
+     * scene-canvas's decoder + per-frame GPU upload only run while
+     * the user is actually looking at the tab. */
+    yvideo_tab_set_active(&app->video, idx == app->video.tab_index);
+#endif
     /* Drive the yzoo / yjungle animation timers based on which tab is
      * now active. Pausing on tab-switch keeps idle CPU low; resuming
      * picks the producer's internal clock back up where it left off. */
@@ -1929,6 +2062,95 @@ static void yj_anim_shutdown(struct yjungle_anim *a)
 }
 #endif /* YGREETER_HAS_YJUNGLE */
 
+#ifdef YGREETER_HAS_YVIDEO
+/* yvideo_tab_init — resolve the bundled MP4 path once. Heap-owned;
+ * freed by yvideo_tab_shutdown. */
+static void yvideo_tab_init(struct yvideo_tab *v, const char *argv0)
+{
+    v->engine = NULL;
+    v->tab = NULL;
+    v->rich = NULL;
+    v->path = locate_asset(argv0, "yetty-unchained-2.mp4", "assets/yetty-unchained-2.mp4");
+    v->tab_index = -1;
+    v->active = false;
+}
+
+/* yvideo_tab_attach — build the tab body: a single rich widget filling
+ * the panel, holding the placeholder YAML. The yvideo prim itself
+ * isn't materialised here — that only happens when set_active(true)
+ * fires, so the H.264 decoder + per-frame GPU upload don't start
+ * until the user actually views the tab. */
+static void yvideo_tab_attach(struct yvideo_tab *v, struct yetty_ygui_engine *engine,
+                              struct yetty_ygui_widget *tab_panel, int tab_index)
+{
+    v->engine = engine;
+    v->tab = tab_panel;
+    v->tab_index = tab_index;
+    v->active = false;
+    v->rich = yetty_ygui_engine_rich(engine, "video_rich", 0, 0, 0, 0);
+    if (!v->rich) {
+        return;
+    }
+    yetty_ygui_widget_apply_css(v->rich, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_widget_add_child(tab_panel, v->rich);
+    const char *yaml = VIDEO_PLACEHOLDER_YAML;
+    struct yetty_ycore_void_result r =
+        yetty_ygui_widget_rich_set_yaml(v->rich, yaml, strlen(yaml));
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
+
+/* yvideo_tab_set_active — activate / deactivate playback. On activate,
+ * hand the bundled MP4 to the ygui_yvideo widget — it demuxes via
+ * yetty_yvideo_render_from_mp4_file (yetty_yvideo_core) and attaches
+ * the resulting yvideo prim to the rich surface. On deactivate, swap
+ * back to the placeholder YAML so the receiving scene-canvas tears
+ * down the decoder + GPU upload — the playback loop runs server-side,
+ * so the only way to pause it from here is to remove the prim from
+ * the widget's draw_list. */
+static void yvideo_tab_set_active(struct yvideo_tab *v, bool active)
+{
+    if (!v || !v->rich || v->active == active) {
+        return;
+    }
+    v->active = active;
+    if (active && v->path) {
+        struct yetty_ycore_void_result r =
+            yetty_ygui_widget_yvideo_set_mp4_file(v->rich, v->path, NULL);
+        if (YETTY_IS_OK(r)) {
+            return;
+        }
+        /* Demux / SPS / render failed (missing asset, no minimp4, ...)
+         * — fall through to the placeholder so the hint text is shown. */
+        yetty_ycore_error_destroy(r.error);
+    }
+    const char *yaml = VIDEO_PLACEHOLDER_YAML;
+    struct yetty_ycore_void_result r =
+        yetty_ygui_widget_rich_set_yaml(v->rich, yaml, strlen(yaml));
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
+
+/* yvideo_tab_on_tab_closed — the tabbar already owns the widgets and
+ * is about to free them when we get here. Clear handles + active
+ * flag; the heap-owned path stays alive until program shutdown. */
+static void yvideo_tab_on_tab_closed(struct yvideo_tab *v)
+{
+    v->tab = NULL;
+    v->rich = NULL;
+    v->tab_index = -1;
+    v->active = false;
+}
+
+static void yvideo_tab_shutdown(struct yvideo_tab *v)
+{
+    free(v->path);
+    v->path = NULL;
+}
+#endif /* YGREETER_HAS_YVIDEO */
+
 static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float pw, float ph,
                       void *u)
 {
@@ -2437,6 +2659,12 @@ int main(int argc, char **argv)
      * Windows impl is a no-op (no PTY-share scenario there). */
     yetty_yplatform_tty_redirect_stderr_if_shared_with_stdout("ygreeter");
 
+    /* First-run extraction of embedded assets (logos, video, README,
+     * sample.html, PDF) into the platform data dir. No-op when the build
+     * lacks incbin support (dev builds) or the marker shows this
+     * yetty-X.Y.Z build already extracted. */
+    (void)ygreeter_embedded_assets_extract(yetty_yplatform_get_data_dir());
+
     if (yetty_ygui_init() != 0) {
         fprintf(stdout, "ygreeter: ygui_init failed (run inside a real terminal)\n");
         return 1;
@@ -2531,7 +2759,7 @@ int main(int argc, char **argv)
     build_tab_body(&app, 1, plots, PLOT_NAV, (int)(sizeof(PLOT_NAV) / sizeof(PLOT_NAV[0])),
                    "plots");
 
-    /* Images tab — nav rows built dynamically from docs/logo-*.jpeg
+    /* Images tab — nav rows built dynamically from assets/logo-*.jpeg
      * so the rail grows with the bundled asset count. Falls back to
      * the placeholder YAML row when no logo files are found. */
     discover_logo_images(argv[0]);
@@ -2547,9 +2775,21 @@ int main(int argc, char **argv)
         build_tab_body(&app, g_images_tab_index, images, fallback, 1, "images");
     }
 
+#ifdef YGREETER_HAS_YVIDEO
+    /* Video tab — yvideo prim sourced from assets/yetty-unchained-2.mp4.
+     * State lives on app.video; same activate-on-show / deactivate-on-
+     * hide lifecycle as the yzoo / yjungle tabs. */
+    yvideo_tab_init(&app.video, argv[0]);
+    struct yetty_ygui_widget *video_tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Video");
+    int video_idx = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
+    yvideo_tab_attach(&app.video, app.engine, video_tab, video_idx);
+#endif
+
     /* Code */
     struct yetty_ygui_widget *code = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Code");
-    build_tab_body(&app, 3, code, CODE_NAV, (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code");
+    int code_tab_index = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
+    build_tab_body(&app, code_tab_index, code, CODE_NAV,
+                   (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code");
 
     /* Elements — single tab gathering every ygui widget under
      * collapsing-header sections, so the tabbar doesn't grow one tab
@@ -2597,7 +2837,7 @@ int main(int argc, char **argv)
      * without the dependency). */
 #ifdef YGREETER_HAS_YMARKDOWN
     {
-        char *md_path = find_repo_image(argv[0], "README.md");
+        char *md_path = locate_asset(argv[0], "README.md", "README.md");
         if (md_path) {
             struct yetty_ygui_widget *tab =
                 yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
@@ -2613,7 +2853,8 @@ int main(int argc, char **argv)
 #endif
 #ifdef YGREETER_HAS_YBROWSER
     {
-        char *html_path = find_repo_image(argv[0], "demo/ygui/26_ybrowser/sample.html");
+        char *html_path =
+            locate_asset(argv[0], "sample.html", "demo/ygui/26_ybrowser/sample.html");
         if (html_path) {
             struct yetty_ygui_widget *tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
             struct yetty_ygui_widget *w = yetty_ygui_engine_ybrowser_from_file(
@@ -2628,9 +2869,11 @@ int main(int argc, char **argv)
 #endif
 #ifdef YGREETER_HAS_YPDF
     {
-        /* Prefer the comprehensive PDF — falls back to pdf-sample if the
-         * larger one isn't shipped. */
-        char *pdf_path = find_repo_image(argv[0], "test/ut/ypdf/test-comprehensive.pdf");
+        /* Embedded under the flat name "pdf-sample.pdf" regardless of
+         * which source PDF the build picked up; the dev fallback tries
+         * the comprehensive one first and then the smaller sample. */
+        char *pdf_path = locate_asset(argv[0], "pdf-sample.pdf",
+                                      "test/ut/ypdf/test-comprehensive.pdf");
         if (!pdf_path) {
             pdf_path = find_repo_image(argv[0], "test/ut/ypdf/pdf-sample.pdf");
         }
@@ -2662,6 +2905,9 @@ int main(int argc, char **argv)
     yetty_ygui_engine_run(app.engine);
 
     free_image_nav();
+#ifdef YGREETER_HAS_YVIDEO
+    yvideo_tab_shutdown(&app.video);
+#endif
     free_row_links();
     /* Stop timers and free producer state BEFORE the engine teardown —
      * the engine teardown closes the loop the timers are attached to. */

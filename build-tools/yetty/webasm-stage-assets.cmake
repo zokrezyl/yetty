@@ -12,7 +12,6 @@
 # Layout under ${CMAKE_BINARY_DIR}/yetty-assets/ :
 #
 #   data/
-#     logo-2.jpeg.br
 #     shaders/*.wgsl.br
 #     fonts/*.ttf.br
 #     msdf-fonts/*.cdb.br        (already brotli'd by upstream — copied)
@@ -137,10 +136,6 @@ function(yetty_stage_webasm_assets)
     set(_MANIFEST_URLS "")
     set(_MANIFEST_DESTS "")
     set(_MANIFEST_BROTLI "")
-
-    # Logo (mirror incbin: under data/, brotli'd).
-    _stage_one("${YETTY_ROOT}/docs/logo-2.jpeg"
-               "data" "logo-2.jpeg" TRUE "/data")
 
     # Shaders — same set as yetty_embed_assets (shared.cmake lines 413-446).
     foreach(_SHADER

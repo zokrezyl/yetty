@@ -16,8 +16,17 @@ if [ -f ~/.bashrc ]; then
     . ~/.bashrc
 fi
 
-# Unified-rootfs layout: yetty binaries are baked directly into the image
-# at /yetty/{bin,repo}, not on a separate /opt/yetty mount.
-if [ -z "${YGREETER_SKIP:-}" ] && [ -x /yetty/bin/ygreeter ]; then
-    /yetty/bin/ygreeter
+# Yetty tools live under XDG-conventional ~/.local/bin (per-user prefix);
+# the same layout the user would get from a packaging step. Each tool
+# carries its own assets via incbin and extracts them into
+# ~/.local/share/yetty on first run, so the binary is standalone-
+# redistributable.
+case ":$PATH:" in
+    *:"$HOME/.local/bin":*) ;;
+    *) PATH="$HOME/.local/bin:$PATH" ;;
+esac
+export PATH
+
+if [ -z "${YGREETER_SKIP:-}" ] && [ -x "$HOME/.local/bin/ygreeter" ]; then
+    "$HOME/.local/bin/ygreeter"
 fi
