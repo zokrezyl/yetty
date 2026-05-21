@@ -345,6 +345,25 @@ static struct yetty_ycore_void_result terminal_layer_emit_osc(
     return YETTY_OK_VOID();
 }
 
+/* Forward the layer's "switch PTY to raw / restore" intent to the
+ * platform PTY backend. ywasm-layer calls this on HELLO/BYE so the
+ * bridge protocol bytes don't get mangled by any cooked-mode hop
+ * between yetty and the demo (ssh, screen, tmux, the user's local
+ * shell). Backends without termios (memory-pty, webasm) leave the
+ * ops NULL and we silently skip — no-op is the right behaviour. */
+static struct yetty_ycore_void_result terminal_set_pty_raw(int enable, void *userdata)
+{
+    struct yetty_yterm_terminal *terminal = userdata;
+    if (!terminal || !terminal->context.pty || !terminal->context.pty->ops)
+        return YETTY_OK_VOID();
+    if (enable) {
+        if (!terminal->context.pty->ops->set_raw) return YETTY_OK_VOID();
+        return terminal->context.pty->ops->set_raw(terminal->context.pty);
+    }
+    if (!terminal->context.pty->ops->restore_termios) return YETTY_OK_VOID();
+    return terminal->context.pty->ops->restore_termios(terminal->context.pty);
+}
+
 /* Card-aware mouse forwarding. Each emit carries a card_id and
  * card-local pixel coords. card_id=0 means "no card here" — clients
  * use that to clear their hover state. */
@@ -1362,6 +1381,8 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     ywasm_res.value->emit_osc_userdata = terminal;
     ywasm_res.value->request_render_fn = terminal_request_render_callback;
     ywasm_res.value->request_render_userdata = terminal;
+    ywasm_res.value->set_pty_raw_fn = terminal_set_pty_raw;
+    ywasm_res.value->set_pty_raw_userdata = terminal;
 
     rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_HELLO,
                                                 ywasm_res.value);
