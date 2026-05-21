@@ -1,6 +1,6 @@
 # yetty_yplatform_audio — cross-platform audio playback device.
 #
-# Same shape as yetty_yplatform_wayland_move: a standalone static lib
+# Same shape as yetty_yplatform_move_resize: a standalone static lib
 # living under src/yetty/yplatform/audio/, that confines a heavyweight
 # single-header dependency (miniaudio here, glfw's private headers
 # there) to one TU. Consumers (yetty_yvideo, future yacodec demos)

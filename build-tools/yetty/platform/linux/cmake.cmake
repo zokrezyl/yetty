@@ -154,7 +154,7 @@ target_link_libraries(yetty PRIVATE
     rt
     util
     yetty_yplatform_core
-    yetty_yplatform_wayland_move
+    yetty_yplatform_move_resize
 )
 
 # Copy runtime assets to build directory

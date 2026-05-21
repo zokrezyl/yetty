@@ -14,7 +14,7 @@
 
 #include <yetty/yplatform/window-manager.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/wayland-move.h>
+#include <yetty/yplatform/move-resize.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>

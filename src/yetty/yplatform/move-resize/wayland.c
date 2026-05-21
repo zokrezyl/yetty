@@ -1,5 +1,5 @@
 /*
- * wayland-move/default.c — protocol-correct interactive window move on
+ * move-resize/wayland.c — protocol-correct interactive window move on
  * Wayland.
  *
  * Wayland deliberately hides window position from clients: glfwSetWindowPos
