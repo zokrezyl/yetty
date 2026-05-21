@@ -208,11 +208,21 @@ void yetty_ydraw_figure_destroy(
         return;
     }
 
+    /* Preferred path: dispatch through the per-instance vtable. The
+     * factory is out of the runtime call path. */
+    if (instance->ops && instance->ops->destroy) {
+        instance->ops->destroy(instance);
+        return;
+    }
+
+    /* Legacy fallback — only reached if a figure type was created
+     * without wiring its ops table (would be a bug; every concrete
+     * factory should set instance->ops in create_instance). */
     if (instance->factory && instance->factory->destroy_instance) {
         instance->factory->destroy_instance(instance->factory, instance);
-    } else {
-        // Fallback if no concrete factory or no destroy_instance
-        free(instance->buffer_data);
-        free(instance);
+        return;
     }
+
+    free(instance->buffer_data);
+    free(instance);
 }

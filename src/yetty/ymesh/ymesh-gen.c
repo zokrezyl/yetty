@@ -674,6 +674,10 @@ static struct yetty_ycore_void_result ymesh_compile_pipeline(
     return YETTY_OK_VOID();
 }
 
+/* Forward decl — vtable definition lives below; create_instance just
+ * needs its address. */
+static const struct yetty_ydraw_figure_ops ymesh_figure_ops;
+
 static WGPURenderPipeline ymesh_get_pipeline(struct yetty_ydraw_concrete_factory *self)
 {
     /* Returned only for informational use by the abstract factory. The
@@ -807,6 +811,7 @@ static struct yetty_ydraw_figure_ptr_result ymesh_create_instance(
     inst->factory = self;
     inst->rolling_row = rolling_row;
     inst->render = ymesh_instance_render;
+    inst->ops = &ymesh_figure_ops;
     inst->instance_data = d;
 
     struct rectangle_result aabb_res = yetty_ydraw_raw_figure_aabb(buffer_data);
@@ -990,16 +995,29 @@ static struct yetty_ydraw_figure_ptr_result ymesh_create_instance(
     return YETTY_OK(yetty_ydraw_figure_ptr, inst);
 }
 
-static void ymesh_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                   struct yetty_ydraw_figure *instance)
+static void ymesh_instance_destroy(struct yetty_ydraw_figure *instance)
 {
-    (void)self;
     if (!instance) {
         return;
     }
     ymesh_instance_data_destroy((struct ymesh_instance_data *)instance->instance_data);
     free(instance->buffer_data);
     free(instance);
+}
+
+/* ymesh's vtable — no update path; the wire never carries CMD_UPDATE
+ * for mesh figures. */
+static const struct yetty_ydraw_figure_ops ymesh_figure_ops = {
+    .destroy = ymesh_instance_destroy,
+    .update  = NULL,
+};
+
+/* Legacy factory adapter — see yplot / yvideo equivalents. */
+static void ymesh_destroy_instance(struct yetty_ydraw_concrete_factory *self,
+                                   struct yetty_ydraw_figure *instance)
+{
+    (void)self;
+    ymesh_instance_destroy(instance);
 }
 
 static struct yetty_ydraw_gpu_resource_set *ymesh_get_shared_rs(

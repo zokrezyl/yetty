@@ -324,6 +324,10 @@ static struct yetty_ycore_void_result yimage_compile_pipeline(
     return YETTY_OK_VOID();
 }
 
+/* Forward decl — vtable definition lives below; create_instance just
+ * needs its address. */
+static const struct yetty_ydraw_figure_ops yimage_figure_ops;
+
 static WGPURenderPipeline yimage_get_pipeline(struct yetty_ydraw_concrete_factory *self)
 {
     struct yetty_yimage_factory *factory = yetty_yimage_factory_from_base(self);
@@ -361,6 +365,7 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
     instance->factory = self;
     instance->rolling_row = rolling_row;
     instance->render = yimage_instance_render;
+    instance->ops = &yimage_figure_ops;
 
     struct rectangle_result aabb_res = yetty_ydraw_raw_figure_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
@@ -449,10 +454,8 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
     return YETTY_OK(yetty_ydraw_figure_ptr, instance);
 }
 
-static void yimage_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                    struct yetty_ydraw_figure *instance)
+static void yimage_instance_destroy(struct yetty_ydraw_figure *instance)
 {
-    (void)self;
     if (!instance) {
         return;
     }
@@ -462,6 +465,22 @@ static void yimage_destroy_instance(struct yetty_ydraw_concrete_factory *self,
     free(instance->resource_set);
     free(instance->buffer_data);
     free(instance);
+}
+
+/* yimage's vtable — no update path; the wire never carries CMD_UPDATE
+ * for image figures (the widget swaps the whole prim via set_buffer
+ * if the image source changes). */
+static const struct yetty_ydraw_figure_ops yimage_figure_ops = {
+    .destroy = yimage_instance_destroy,
+    .update  = NULL,
+};
+
+/* Legacy factory adapter — see yplot / yvideo equivalents. */
+static void yimage_destroy_instance(struct yetty_ydraw_concrete_factory *self,
+                                    struct yetty_ydraw_figure *instance)
+{
+    (void)self;
+    yimage_instance_destroy(instance);
 }
 
 static struct yetty_ydraw_gpu_resource_set *yimage_get_shared_rs(

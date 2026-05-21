@@ -42,10 +42,56 @@ struct yetty_ydraw_target;
 struct yetty_ydraw_gpu_allocator;
 
 //=============================================================================
+// Per-instance vtable
+//
+// Each concrete figure type (yplot / yvideo / yimage / ymesh) exposes a
+// single static const ops table and points `figure->ops` at it during
+// create_instance. Runtime method calls (update, destroy) go through
+// `fi->ops->X(fi, ...)` — no factory in the call path. The factory
+// keeps its role as a one-time registry: register pipeline, mint
+// instances. After create, the factory back-pointer on the instance is
+// only used for shared GPU state (pipeline, zoom uniforms), not for
+// method dispatch.
+//
+// `update` payload shape:
+//   `target_field` carries the schema-level slot id (which buffer /
+//   uniform / texture region inside this figure). Codegen knows the
+//   slot ids; on the wire the scene-canvas peels off the first u32
+//   from the CMD_UPDATE payload and passes it as `target_field`,
+//   leaving the rest of the bytes as `body`. The dispatcher inside
+//   each figure's update method interprets `body` per slot semantics
+//   (a buffer-slice body is `[u32 offset][u32 count][bytes]`, a
+//   uniform body is the new scalar, etc.).
+//=============================================================================
+
+struct yetty_ydraw_figure_ops {
+    /* Destroy: tear down GPU resources + free the instance. Called
+     * via yetty_ydraw_figure_destroy(). Must release everything the
+     * figure owns; the caller frees nothing after. */
+    void (*destroy)(struct yetty_ydraw_figure *self);
+
+    /* Apply a CMD_UPDATE addressed to this instance. `target_field`
+     * is the first u32 of the wire payload; `body`/`body_size` is
+     * the rest. NULL on figures that don't accept incremental
+     * updates — the scene-canvas drops the wire record silently in
+     * that case. */
+    struct yetty_ycore_void_result (*update)(
+        struct yetty_ydraw_figure *self,
+        uint32_t target_field,
+        const void *body, size_t body_size);
+};
+
+//=============================================================================
 // Instance - per primitive occurrence, stored in grid
 //=============================================================================
 
 struct yetty_ydraw_figure {
+    /* Per-instance vtable. Shared across all instances of one
+     * concrete type — pointer to a static const ops table. Method
+     * dispatch (update / destroy) goes through here; the factory is
+     * out of the runtime path. NULL until create_instance wires it. */
+    const struct yetty_ydraw_figure_ops *ops;
+
     uint32_t type;
     struct yetty_ydraw_concrete_factory *factory; // back-pointer
     uint8_t *buffer_data;

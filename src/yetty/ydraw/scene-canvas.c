@@ -1172,6 +1172,97 @@ static struct yetty_ycore_void_result on_fresh_cell(void *user, uint32_t row, ui
 }
 
 /*===========================================================================
+ * Re-grid after attribute change
+ *===========================================================================*/
+
+/* After CMD_UPDATE mutates a figure's bounds, we need to re-place its
+ * entity in the spatial grid so spatial queries stay accurate.
+ *
+ * v1 limitation: assumes the entity has ONE drawable — the figure
+ * whose bounds moved. Multi-prim entities (e.g. CMD_GROUP wrapping a
+ * figure alongside SDF siblings) would lose the siblings on re-grid;
+ * for those, walk prims[] and re-insert each in turn (with each
+ * prim's own AABB). That walk is follow-up work — every figure
+ * widget we ship today (yvideo / yplot / yimage / ymesh) wraps a
+ * single prim, so v1 covers the real cases.
+ *
+ * Returns OK on no-op (no grid configured yet, off-screen new AABB,
+ * empty entity). The grid drop is unconditional — if the new
+ * insertion fails the entity ends up ungridded until the next add,
+ * which is the same failure mode the original add path has. */
+static struct yetty_ycore_void_result scene_entity_regrid_after_update(
+    struct scene_canvas *sc, struct yetty_ydraw_scene_entity *entity,
+    struct yetty_ycore_rectangle new_aabb)
+{
+    if (!sc || !entity) {
+        return YETTY_ERR(yetty_ycore_void, "scene-canvas: regrid: null arg");
+    }
+    if (sc->cell_size.width <= 0.0f || sc->cell_size.height <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    if (sc->grid_size.rows == 0 || sc->grid_size.cols == 0) {
+        return YETTY_OK_VOID();
+    }
+    if (entity->drawable_count == 0) {
+        return YETTY_OK_VOID();
+    }
+
+    if (new_aabb.min.y > new_aabb.max.y) {
+        float tmp = new_aabb.min.y;
+        new_aabb.min.y = new_aabb.max.y;
+        new_aabb.max.y = tmp;
+    }
+
+    float cell_w = sc->cell_size.width;
+    float cell_h = sc->cell_size.height;
+    uint32_t rows = sc->grid_size.rows;
+    uint32_t cols = sc->grid_size.cols;
+
+    /* Drop the entity from every cell it currently lives in. */
+    for (uint32_t i = 0; i < entity->touched_cell_count; i++) {
+        yetty_ydraw_scene_grid_drop_at(sc->grid, entity->touched_cells[i].row,
+                                       entity->touched_cells[i].col, entity->slot);
+    }
+    entity->touched_cell_count = 0;
+
+    /* If the new AABB is entirely off-screen we're done — the entity
+     * stays in the canvas but has no grid presence (matches the add
+     * path's clipping behaviour). */
+    if (new_aabb.max.y < 0.0f || new_aabb.max.x < 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    if (new_aabb.min.y >= (float)rows * cell_h ||
+        new_aabb.min.x >= (float)cols * cell_w) {
+        return YETTY_OK_VOID();
+    }
+    if (new_aabb.min.y < 0.0f) new_aabb.min.y = 0.0f;
+    if (new_aabb.min.x < 0.0f) new_aabb.min.x = 0.0f;
+
+    uint32_t row_max = (uint32_t)floorf(new_aabb.max.y / cell_h);
+    if (row_max >= rows) row_max = rows - 1;
+    uint32_t row_min = (uint32_t)floorf(new_aabb.min.y / cell_h);
+    if (row_min > row_max) return YETTY_OK_VOID();
+    uint32_t col_max = (uint32_t)floorf(new_aabb.max.x / cell_w);
+    if (col_max >= cols) col_max = cols - 1;
+    uint32_t col_min = (uint32_t)floorf(new_aabb.min.x / cell_w);
+    if (col_min > col_max) return YETTY_OK_VOID();
+
+    /* Pre-grow touched_cells so on_fresh_cell stays infallible. */
+    uint64_t rect = (uint64_t)(row_max - row_min + 1) * (col_max - col_min + 1);
+    struct yetty_ycore_void_result gtr = grow_touched(
+        &entity->touched_cells, &entity->touched_cell_capacity, (uint32_t)rect);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gtr, "scene-canvas: regrid touched grow");
+
+    struct fresh_ctx ctx = {.entity = entity};
+    struct yetty_ycore_void_result ir = yetty_ydraw_scene_grid_insert(
+        sc->grid, entity->slot, entity->external_id, /*local_idx=*/0u,
+        row_min, row_max, col_min, col_max, on_fresh_cell, &ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "scene-canvas: regrid grid_insert");
+
+    return YETTY_OK_VOID();
+}
+
+/*===========================================================================
  * Add drawable
  *===========================================================================*/
 
@@ -1682,17 +1773,54 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
             return YETTY_OK_VOID();
         }
         struct yetty_ydraw_figure *fi = target->figures[0];
-        if (!fi->factory || !fi->factory->update_instance) {
-            ydebug("scene-canvas: UPDATE id=%u: figure type 0x%08x does not implement "
-                   "update_instance",
+        if (!fi->ops || !fi->ops->update) {
+            ydebug("scene-canvas: UPDATE id=%u: figure type 0x%08x has no ops->update",
                    cmd->update.id, fi->type);
             return YETTY_OK_VOID();
         }
-        struct yetty_ycore_void_result ur = fi->factory->update_instance(
-            fi->factory, fi, cmd->update.data, cmd->update.size);
+        /* Wire payload: [u32 target_field][body bytes…]. The first
+         * u32 names the slot inside the figure (which buffer / which
+         * uniform / which op); the rest is interpreted by the figure
+         * per slot semantics. */
+        if (cmd->update.size < sizeof(uint32_t)) {
+            ydebug("scene-canvas: UPDATE id=%u: payload < 4 bytes (no target_field)",
+                   cmd->update.id);
+            return YETTY_OK_VOID();
+        }
+        uint32_t target_field = ((const uint32_t *)cmd->update.data)[0];
+        const void *body = (const uint8_t *)cmd->update.data + sizeof(uint32_t);
+        size_t body_size = cmd->update.size - sizeof(uint32_t);
+        struct yetty_ycore_void_result ur =
+            fi->ops->update(fi, target_field, body, body_size);
         if (YETTY_IS_ERR(ur)) {
             return YETTY_ERR(yetty_ycore_void, "scene-canvas: UPDATE forward failed", ur);
         }
+
+        /* The figure's `ops->update` is free to mutate any of its wire
+         * fields, including the bounds floats at the standard offsets.
+         * Re-read the AABB and, if it moved, re-place the entity in
+         * the spatial grid + refresh the cached bounds. Cost when
+         * nothing moved is one memcpy + four float compares — cheap. */
+        struct rectangle_result aabb_res =
+            yetty_ydraw_raw_figure_aabb(fi->buffer_data);
+        if (YETTY_IS_OK(aabb_res)) {
+            struct yetty_ycore_rectangle new_aabb = aabb_res.value;
+            if (new_aabb.min.x != fi->bounds.min.x ||
+                new_aabb.min.y != fi->bounds.min.y ||
+                new_aabb.max.x != fi->bounds.max.x ||
+                new_aabb.max.y != fi->bounds.max.y) {
+                struct yetty_ycore_void_result rr =
+                    scene_entity_regrid_after_update(sc, target, new_aabb);
+                if (YETTY_IS_OK(rr)) {
+                    fi->bounds = new_aabb;
+                } else {
+                    yetty_ycore_error_destroy(rr.error);
+                }
+            }
+        } else {
+            yetty_ycore_error_destroy(aabb_res.error);
+        }
+
         sc->dirty = true;
         return YETTY_OK_VOID();
     }
