@@ -113,6 +113,25 @@ typedef enum {
      * visible pages translated by (widget_origin + page_y - scroll_y).
      * See yetty/ygui/ygui_ypdf.h for construction + scroll API. */
     YETTY_YGUI_WIDGET_YPDF,
+    /* Image surface — own widget type; owns the source path and
+     * rebuilds the yimage prim from the current resolved layout box
+     * on every render where the box changed. No piggyback on rich:
+     * the widget fits its client area because the producer is called
+     * with the size layout actually resolved. */
+    YETTY_YGUI_WIDGET_YIMAGE,
+    /* Plot surface — same shape as YIMAGE: owns expression source +
+     * data buffers, rebuilds the yplot prim per render at the
+     * current resolved box. */
+    YETTY_YGUI_WIDGET_YPLOT,
+    /* Video surface — owns the H.264 NAL stream + render config,
+     * rebuilds the yvideo prim per render at the current resolved
+     * box. */
+    YETTY_YGUI_WIDGET_YVIDEO,
+    /* Yzoo / yjungle showcase widgets — own their producer instance
+     * + per-instance state, drive a render-time rebuild against the
+     * current resolved box. */
+    YETTY_YGUI_WIDGET_YZOO,
+    YETTY_YGUI_WIDGET_YJUNGLE,
     /* Single-select group of radio buttons. Tracks which child radio
      * is currently selected; clicking another radio in the group
      * deselects the prior one. Fires on_change(group, index) when

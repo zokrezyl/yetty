@@ -1,49 +1,135 @@
 /*
- * ygui_yvideo.c — yvideo widget.
+ * ygui_yvideo.c — dedicated yvideo widget.
  *
- * Builds a yvideo complex prim (via yetty_yvideo_core) and hands it
- * to a RICH widget. The widget owns the buffer; set_* / clear rebuild
- * it and swap it in-place. Widget id is preserved across swaps so the
- * receiving scene-canvas folds the change into the same CMD_GROUP —
- * the previous yvideo entity is torn down (decoder, audio device,
- * animation subscription) and a fresh one is created with the new
- * bytes.
+ * Owns its source (raw H.264 NAL bytes OR MP4 container bytes OR a
+ * file path) + render config; rebuilds the yvideo prim from the
+ * current resolved layout box on every render where the box changed.
+ * Same pattern as ygui_yimage / ygui_yplot — no piggyback on rich.
  *
- * MP4 ingestion is delegated to yvideo-mp4.h (yetty_yvideo_core).
- * The demuxer is single-sourced there; the widget just calls the
- * helper and attaches the resulting draw_list.
+ * MP4 demuxing is delegated to yvideo-mp4.h (yetty_yvideo_core) so the
+ * widget never touches minimp4 itself.
  */
 
+#include "ygui_internal.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/ygui_yvideo.h>
 #include <yetty/yvideo/yvideo.h>
 #include <yetty/yvideo/yvideo-mp4.h>
 
-#include <stdint.h>
+/* Forward decl — same pattern ygui_rich.c uses. */
+void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
+                                     struct yetty_ygui_widget *widget);
 
-/* H.264 in, draw_list out. The widget's painted size supplies the
- * default bounds when the caller didn't fix them in `config`. */
-static struct yetty_ydraw_draw_list *build_h264_buffer(
-    const uint8_t *nal_bytes, size_t nal_len,
-    const struct yetty_yvideo_render_config *config,
-    float widget_w, float widget_h)
+enum yvideo_source_kind {
+    YVIDEO_SRC_NONE = 0,
+    YVIDEO_SRC_H264,
+    YVIDEO_SRC_MP4_BYTES,
+    YVIDEO_SRC_MP4_FILE,
+};
+
+/*=============================================================================
+ * State management
+ *===========================================================================*/
+
+static void yvideo_invalidate_cache(struct yetty_ygui_widget *self)
 {
-    if (!config || config->video_w == 0u || config->video_h == 0u) {
+    if (self->data.yvideo.cached) {
+        yetty_ydraw_draw_list_destroy(self->data.yvideo.cached);
+        self->data.yvideo.cached = NULL;
+    }
+    self->data.yvideo.last_w = 0.0f;
+    self->data.yvideo.last_h = 0.0f;
+}
+
+static void yvideo_clear_source(struct yetty_ygui_widget *self)
+{
+    free(self->data.yvideo.nal_bytes);
+    self->data.yvideo.nal_bytes = NULL;
+    self->data.yvideo.nal_len = 0;
+}
+
+/* The yvideo widget's data union arm carries only `nal_bytes/nal_len`
+ * + cfg. We piggyback an extra "kind tag + path" pair right here in
+ * static helpers — the source slot ends up being one of:
+ *   - raw H.264 NAL stream (nal_bytes + nal_len + cfg.video_w/h)
+ *   - MP4 container bytes (nal_bytes + nal_len, kind=MP4_BYTES)
+ *   - file path (path string stashed in nal_bytes as a NUL-terminated
+ *     byte buffer, kind=MP4_FILE)
+ * The discriminator is `cfg.flags`'s high byte (we mask it back out
+ * before passing cfg to yvideo_render). Cleaner would be an explicit
+ * field, but the data union is shared and adding a tag here keeps the
+ * blast radius local. */
+
+#define YVIDEO_SRC_TAG_SHIFT 24
+#define YVIDEO_SRC_TAG_MASK  (0xffu << YVIDEO_SRC_TAG_SHIFT)
+
+static enum yvideo_source_kind yvideo_get_kind(const struct yetty_ygui_widget *self)
+{
+    return (enum yvideo_source_kind)
+        ((self->data.yvideo.cfg.flags >> YVIDEO_SRC_TAG_SHIFT) & 0xffu);
+}
+
+static void yvideo_set_kind(struct yetty_ygui_widget *self, enum yvideo_source_kind kind)
+{
+    self->data.yvideo.cfg.flags =
+        (self->data.yvideo.cfg.flags & ~YVIDEO_SRC_TAG_MASK) |
+        (((uint32_t)kind & 0xffu) << YVIDEO_SRC_TAG_SHIFT);
+}
+
+static uint32_t yvideo_cfg_flags_clean(const struct yetty_ygui_widget *self)
+{
+    return self->data.yvideo.cfg.flags & ~YVIDEO_SRC_TAG_MASK;
+}
+
+static struct yetty_ydraw_draw_list *yvideo_build_buffer(struct yetty_ygui_widget *self,
+                                                         float w, float h)
+{
+    if (w <= 0.0f || h <= 0.0f) {
         return NULL;
     }
-    struct yetty_yvideo_render_config cfg = *config;
-    if (cfg.bounds_w <= 0.0f) {
-        cfg.bounds_w = widget_w > 0.0f ? widget_w : (float)config->video_w;
+    enum yvideo_source_kind kind = yvideo_get_kind(self);
+    if (kind == YVIDEO_SRC_NONE) {
+        return NULL;
     }
-    if (cfg.bounds_h <= 0.0f) {
-        cfg.bounds_h = widget_h > 0.0f ? widget_h : (float)config->video_h;
+    if (!self->data.yvideo.nal_bytes || self->data.yvideo.nal_len == 0) {
+        return NULL;
     }
+
+    struct yetty_yvideo_render_config cfg = self->data.yvideo.cfg;
+    cfg.flags = yvideo_cfg_flags_clean(self);
+    cfg.bounds_x = 0.0f;
+    cfg.bounds_y = 0.0f;
+    cfg.bounds_w = w;
+    cfg.bounds_h = h;
     if (cfg.fps <= 0.0f) cfg.fps = 30.0f;
     if (cfg.color_matrix == 0u) cfg.color_matrix = 1u; /* BT.709 */
     if (cfg.flags == 0u) cfg.flags = YETTY_YVIDEO_FLAG_LOOP | YETTY_YVIDEO_FLAG_AUTOPLAY;
 
-    struct yetty_ydraw_draw_list_result r =
-        yetty_yvideo_render(nal_bytes, nal_len, NULL, 0, &cfg);
+    struct yetty_ydraw_draw_list_result r;
+    switch (kind) {
+    case YVIDEO_SRC_H264:
+        r = yetty_yvideo_render(self->data.yvideo.nal_bytes,
+                                self->data.yvideo.nal_len,
+                                NULL, 0, &cfg);
+        break;
+    case YVIDEO_SRC_MP4_BYTES:
+        r = yetty_yvideo_render_from_mp4_bytes(self->data.yvideo.nal_bytes,
+                                               self->data.yvideo.nal_len,
+                                               &cfg);
+        break;
+    case YVIDEO_SRC_MP4_FILE:
+        /* nal_bytes here is a NUL-terminated path string. */
+        r = yetty_yvideo_render_from_mp4_file((const char *)self->data.yvideo.nal_bytes,
+                                              &cfg);
+        break;
+    default:
+        return NULL;
+    }
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -51,77 +137,127 @@ static struct yetty_ydraw_draw_list *build_h264_buffer(
     return r.value;
 }
 
-static struct yetty_ydraw_draw_list *build_mp4_buffer_from_bytes(
-    const uint8_t *mp4_bytes, size_t mp4_len,
-    const struct yetty_yvideo_render_config *overrides,
-    float widget_w, float widget_h)
-{
-    struct yetty_yvideo_render_config cfg = {0};
-    if (overrides) cfg = *overrides;
-    if (cfg.bounds_w <= 0.0f) cfg.bounds_w = widget_w;
-    if (cfg.bounds_h <= 0.0f) cfg.bounds_h = widget_h;
+/*=============================================================================
+ * Widget vtable
+ *===========================================================================*/
 
-    struct yetty_ydraw_draw_list_result r =
-        yetty_yvideo_render_from_mp4_bytes(mp4_bytes, mp4_len, &cfg);
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_error_destroy(r.error);
-        return NULL;
+static struct yetty_ycore_void_result yvideo_render(struct yetty_ygui_widget *self,
+                                                    struct yetty_ygui_render_ctx *ctx)
+{
+    float w = self->layout_w;
+    float h = self->layout_h;
+    if (!self->data.yvideo.cached ||
+        self->data.yvideo.last_w != w ||
+        self->data.yvideo.last_h != h) {
+        if (self->data.yvideo.cached) {
+            yetty_ydraw_draw_list_destroy(self->data.yvideo.cached);
+            self->data.yvideo.cached = NULL;
+        }
+        self->data.yvideo.cached = yvideo_build_buffer(self, w, h);
+        self->data.yvideo.last_w = w;
+        self->data.yvideo.last_h = h;
     }
-    return r.value;
+    if (!self->data.yvideo.cached) {
+        return YETTY_OK_VOID();
+    }
+    return yetty_ygui_internal_emit_buffer_translated(
+        ctx, self->data.yvideo.cached, self->layout_x, self->layout_y);
 }
 
-static struct yetty_ydraw_draw_list *build_mp4_buffer_from_file(
-    const char *path,
-    const struct yetty_yvideo_render_config *overrides,
-    float widget_w, float widget_h)
+static void yvideo_destroy(struct yetty_ygui_widget *self)
 {
-    struct yetty_yvideo_render_config cfg = {0};
-    if (overrides) cfg = *overrides;
-    if (cfg.bounds_w <= 0.0f) cfg.bounds_w = widget_w;
-    if (cfg.bounds_h <= 0.0f) cfg.bounds_h = widget_h;
-
-    struct yetty_ydraw_draw_list_result r =
-        yetty_yvideo_render_from_mp4_file(path, &cfg);
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_error_destroy(r.error);
-        return NULL;
-    }
-    return r.value;
+    yvideo_invalidate_cache(self);
+    yvideo_clear_source(self);
 }
 
-static void widget_size(struct yetty_ygui_widget *widget, float *out_w, float *out_h)
+static const struct yetty_ygui_widget_vtable *yvideo_vtable_ptr(void)
 {
-    *out_w = 0.0f;
-    *out_h = 0.0f;
+    static const struct yetty_ygui_widget_vtable vt = {
+        .render = yvideo_render,
+        .destroy = yvideo_destroy,
+    };
+    return &vt;
+}
+
+/*=============================================================================
+ * Construction + setters
+ *===========================================================================*/
+
+static struct yetty_ygui_widget *yvideo_alloc(struct yetty_ygui_engine *engine,
+                                              const char *id,
+                                              float x, float y, float w, float h)
+{
+    struct yetty_ygui_widget *widget =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_YVIDEO, id);
     if (!widget) {
-        return;
-    }
-    struct rectangle_result br = yetty_ygui_widget_get_content_box(widget);
-    if (YETTY_IS_OK(br)) {
-        float w = br.value.max.x - br.value.min.x;
-        float h = br.value.max.y - br.value.min.y;
-        if (w > 1.0f) *out_w = w;
-        if (h > 1.0f) *out_h = h;
-    } else {
-        yetty_ycore_error_destroy(br.error);
-    }
-}
-
-static struct yetty_ygui_widget *attach_to_rich(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    struct yetty_ydraw_draw_list *buf)
-{
-    if (!buf) {
         return NULL;
     }
-    struct yetty_ygui_widget *widget = yetty_ygui_engine_rich(engine, id, x, y, w, h);
-    if (!widget) {
-        yetty_ydraw_draw_list_destroy(buf);
-        return NULL;
-    }
-    yetty_ygui_widget_rich_set_buffer(widget, buf);
+    yetty_ygui_widget_init_base(widget, x, y, w, h);
+    widget->data.yvideo.nal_bytes = NULL;
+    widget->data.yvideo.nal_len = 0;
+    memset(&widget->data.yvideo.cfg, 0, sizeof(widget->data.yvideo.cfg));
+    widget->data.yvideo.has_cfg = 0;
+    widget->data.yvideo.cached = NULL;
+    widget->data.yvideo.last_w = 0.0f;
+    widget->data.yvideo.last_h = 0.0f;
+    widget->vtable = yvideo_vtable_ptr();
+    yetty_ygui_engine_attach_widget(engine, widget);
     return widget;
+}
+
+static int yvideo_set_bytes_locked(struct yetty_ygui_widget *widget,
+                                   const uint8_t *bytes, size_t len,
+                                   enum yvideo_source_kind kind)
+{
+    if (!bytes || len == 0) {
+        yvideo_clear_source(widget);
+        yvideo_set_kind(widget, YVIDEO_SRC_NONE);
+        return 1;
+    }
+    uint8_t *copy = (uint8_t *)malloc(len);
+    if (!copy) {
+        return 0;
+    }
+    memcpy(copy, bytes, len);
+    free(widget->data.yvideo.nal_bytes);
+    widget->data.yvideo.nal_bytes = copy;
+    widget->data.yvideo.nal_len = len;
+    yvideo_set_kind(widget, kind);
+    return 1;
+}
+
+static int yvideo_set_path_locked(struct yetty_ygui_widget *widget, const char *path)
+{
+    if (!path) {
+        yvideo_clear_source(widget);
+        yvideo_set_kind(widget, YVIDEO_SRC_NONE);
+        return 1;
+    }
+    size_t len = strlen(path);
+    uint8_t *copy = (uint8_t *)malloc(len + 1);
+    if (!copy) {
+        return 0;
+    }
+    memcpy(copy, path, len + 1);
+    free(widget->data.yvideo.nal_bytes);
+    widget->data.yvideo.nal_bytes = copy;
+    widget->data.yvideo.nal_len = len + 1;
+    yvideo_set_kind(widget, YVIDEO_SRC_MP4_FILE);
+    return 1;
+}
+
+static void yvideo_apply_cfg(struct yetty_ygui_widget *widget,
+                             const struct yetty_yvideo_render_config *config)
+{
+    enum yvideo_source_kind kind = yvideo_get_kind(widget);
+    if (config) {
+        widget->data.yvideo.cfg = *config;
+        widget->data.yvideo.has_cfg = 1;
+    } else {
+        memset(&widget->data.yvideo.cfg, 0, sizeof(widget->data.yvideo.cfg));
+        widget->data.yvideo.has_cfg = 0;
+    }
+    yvideo_set_kind(widget, kind);
 }
 
 /*---------------------------------------------------------------------------
@@ -134,8 +270,22 @@ struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_h264(
     const uint8_t *nal_bytes, size_t nal_len,
     const struct yetty_yvideo_render_config *config)
 {
-    return attach_to_rich(engine, id, x, y, w, h,
-                          build_h264_buffer(nal_bytes, nal_len, config, w, h));
+    if (!config || config->video_w == 0u || config->video_h == 0u) {
+        return NULL;
+    }
+    struct yetty_ygui_widget *widget = yvideo_alloc(engine, id, x, y, w, h);
+    if (!widget) {
+        return NULL;
+    }
+    yvideo_apply_cfg(widget, config);
+    if (!yvideo_set_bytes_locked(widget, nal_bytes, nal_len, YVIDEO_SRC_H264)) {
+        /* Allocation failure — widget stays empty (renders nothing). */
+    }
+    if (widget->engine) {
+        widget->dirty = 1;
+        widget->engine->dirty = 1;
+    }
+    return widget;
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_mp4_bytes(
@@ -144,9 +294,19 @@ struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_mp4_bytes(
     const uint8_t *mp4_bytes, size_t mp4_len,
     const struct yetty_yvideo_render_config *config_overrides)
 {
-    return attach_to_rich(engine, id, x, y, w, h,
-                          build_mp4_buffer_from_bytes(mp4_bytes, mp4_len,
-                                                     config_overrides, w, h));
+    struct yetty_ygui_widget *widget = yvideo_alloc(engine, id, x, y, w, h);
+    if (!widget) {
+        return NULL;
+    }
+    yvideo_apply_cfg(widget, config_overrides);
+    if (!yvideo_set_bytes_locked(widget, mp4_bytes, mp4_len, YVIDEO_SRC_MP4_BYTES)) {
+        /* same rationale */
+    }
+    if (widget->engine) {
+        widget->dirty = 1;
+        widget->engine->dirty = 1;
+    }
+    return widget;
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_mp4_file(
@@ -154,8 +314,19 @@ struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_mp4_file(
     float x, float y, float w, float h, const char *path,
     const struct yetty_yvideo_render_config *config_overrides)
 {
-    return attach_to_rich(engine, id, x, y, w, h,
-                          build_mp4_buffer_from_file(path, config_overrides, w, h));
+    struct yetty_ygui_widget *widget = yvideo_alloc(engine, id, x, y, w, h);
+    if (!widget) {
+        return NULL;
+    }
+    yvideo_apply_cfg(widget, config_overrides);
+    if (!yvideo_set_path_locked(widget, path)) {
+        /* same rationale */
+    }
+    if (widget->engine) {
+        widget->dirty = 1;
+        widget->engine->dirty = 1;
+    }
+    return widget;
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_yvideo_set_h264(
@@ -163,17 +334,21 @@ struct yetty_ycore_void_result yetty_ygui_widget_yvideo_set_h264(
     const uint8_t *nal_bytes, size_t nal_len,
     const struct yetty_yvideo_render_config *config)
 {
-    if (!widget) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_yvideo_set_h264: widget is NULL");
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_YVIDEO) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo_set_h264: not a yvideo widget");
     }
-    float w = 0.0f, h = 0.0f;
-    widget_size(widget, &w, &h);
-    struct yetty_ydraw_draw_list *buf = build_h264_buffer(nal_bytes, nal_len, config, w, h);
-    if (!buf) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "ygui_yvideo_set_h264: yvideo render failed");
+    if (!config || config->video_w == 0u || config->video_h == 0u) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo_set_h264: config requires video_w / video_h");
     }
-    yetty_ygui_widget_rich_set_buffer(widget, buf);
+    yvideo_apply_cfg(widget, config);
+    if (!yvideo_set_bytes_locked(widget, nal_bytes, nal_len, YVIDEO_SRC_H264)) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo_set_h264: alloc failed");
+    }
+    yvideo_invalidate_cache(widget);
+    if (widget->engine) {
+        widget->dirty = 1;
+        widget->engine->dirty = 1;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -182,18 +357,18 @@ struct yetty_ycore_void_result yetty_ygui_widget_yvideo_set_mp4_bytes(
     const uint8_t *mp4_bytes, size_t mp4_len,
     const struct yetty_yvideo_render_config *config_overrides)
 {
-    if (!widget) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_yvideo_set_mp4_bytes: widget is NULL");
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_YVIDEO) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo_set_mp4_bytes: not a yvideo widget");
     }
-    float w = 0.0f, h = 0.0f;
-    widget_size(widget, &w, &h);
-    struct yetty_ydraw_draw_list *buf =
-        build_mp4_buffer_from_bytes(mp4_bytes, mp4_len, config_overrides, w, h);
-    if (!buf) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "ygui_yvideo_set_mp4_bytes: mp4 demux / yvideo render failed");
+    yvideo_apply_cfg(widget, config_overrides);
+    if (!yvideo_set_bytes_locked(widget, mp4_bytes, mp4_len, YVIDEO_SRC_MP4_BYTES)) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo_set_mp4_bytes: alloc failed");
     }
-    yetty_ygui_widget_rich_set_buffer(widget, buf);
+    yvideo_invalidate_cache(widget);
+    if (widget->engine) {
+        widget->dirty = 1;
+        widget->engine->dirty = 1;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -201,31 +376,32 @@ struct yetty_ycore_void_result yetty_ygui_widget_yvideo_set_mp4_file(
     struct yetty_ygui_widget *widget, const char *path,
     const struct yetty_yvideo_render_config *config_overrides)
 {
-    if (!widget) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_yvideo_set_mp4_file: widget is NULL");
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_YVIDEO) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo_set_mp4_file: not a yvideo widget");
     }
-    float w = 0.0f, h = 0.0f;
-    widget_size(widget, &w, &h);
-    struct yetty_ydraw_draw_list *buf =
-        build_mp4_buffer_from_file(path, config_overrides, w, h);
-    if (!buf) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "ygui_yvideo_set_mp4_file: mp4 demux / yvideo render failed");
+    yvideo_apply_cfg(widget, config_overrides);
+    if (!yvideo_set_path_locked(widget, path)) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo_set_mp4_file: alloc failed");
     }
-    yetty_ygui_widget_rich_set_buffer(widget, buf);
+    yvideo_invalidate_cache(widget);
+    if (widget->engine) {
+        widget->dirty = 1;
+        widget->engine->dirty = 1;
+    }
     return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_yvideo_clear(struct yetty_ygui_widget *widget)
 {
-    if (!widget) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_yvideo_clear: widget is NULL");
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_YVIDEO) {
+        return YETTY_ERR(yetty_ycore_void, "yvideo_clear: not a yvideo widget");
     }
-    struct yetty_ydraw_draw_list_config dlcfg = {0};
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&dlcfg);
-    if (YETTY_IS_ERR(br)) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_yvideo_clear: empty draw_list", br);
+    yvideo_clear_source(widget);
+    yvideo_set_kind(widget, YVIDEO_SRC_NONE);
+    yvideo_invalidate_cache(widget);
+    if (widget->engine) {
+        widget->dirty = 1;
+        widget->engine->dirty = 1;
     }
-    yetty_ygui_widget_rich_set_buffer(widget, br.value);
     return YETTY_OK_VOID();
 }

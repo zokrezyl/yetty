@@ -9,6 +9,10 @@
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yplot/yplot.h>
+#include <yetty/yvideo/yvideo.h>
+#include <yetty/yzoo/yzoo.h>
+#include <yetty/yjungle/yjungle.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -572,6 +576,101 @@ struct yetty_ygui_widget {
             struct yetty_ydraw_draw_list *buffer;
         } rich;
 
+        /* Producer-widget shared shape: every per-feature widget
+         * (yimage / yplot / yvideo / yzoo / yjungle) owns its source
+         * state and a cache of the last-built prim. The render hook
+         * checks (layout_w, layout_h) against (last_w, last_h); if
+         * they differ or `cached` is NULL, it asks the producer for
+         * a fresh draw_list at the current size. Same code path each
+         * frame whether the widget is being painted for the first
+         * time or after a resize. */
+        struct {
+            /* One of these two is set; the other is NULL. */
+            char    *path;        /* heap-owned mp4/image file path */
+            uint8_t *data;        /* heap-owned in-memory image bytes */
+            size_t   data_len;
+
+            struct yetty_ydraw_draw_list *cached;
+            float    last_w;
+            float    last_h;
+        } yimage;
+
+        struct {
+            char *source;                            /* yexpr-plot text */
+            size_t source_len;
+            struct yetty_yplot_render_config cfg;    /* x/y range, flags */
+            int has_cfg;
+            /* Optional data buffers (live audio scopes etc.). The
+             * caller's f32 sample arrays are copied so the widget can
+             * hand them straight back to yplot_render on every
+             * rebuild without burdening the caller. */
+            struct yplot_buffer_slot {
+                float    *samples;     /* heap-owned copy */
+                size_t    count;
+                uint32_t  color;
+            } *buffers;
+            size_t buffer_count;
+
+            struct yetty_ydraw_draw_list *cached;
+            float    last_w;
+            float    last_h;
+        } yplot;
+
+        struct {
+            /* The wire NAL bytes (heap-owned). When this is set the
+             * render config carries the SPS dims + fps etc. */
+            uint8_t *nal_bytes;
+            size_t   nal_len;
+            struct yetty_yvideo_render_config cfg;
+            int has_cfg;
+
+            struct yetty_ydraw_draw_list *cached;
+            float    last_w;
+            float    last_h;
+        } yvideo;
+
+        /* yzoo: snapshot-style producer driven by host ticks. Each
+         * widget owns its yzoo instance + a flattened paint buffer
+         * for the most recent tick. The render hook calls
+         * yetty_yzoo_set_scene_size when layout_w/h changes and
+         * repaints from the cached flat buffer. */
+        struct {
+            struct yetty_yzoo            *producer;
+            struct yetty_ydraw_draw_list *raw;   /* yzoo_render target */
+            struct yetty_ydraw_draw_list *flat;  /* flattened render output */
+            struct yetty_yzoo_config cfg;
+            int has_cfg;
+            uint32_t seed;
+            float t_seconds;                     /* virtual playback clock */
+            float last_w;
+            float last_h;
+        } yzoo;
+
+        /* yjungle: incremental producer driven by host ticks. The
+         * widget mirrors the on-wire CMD_ZERO/CMD_DELETE/CMD_GROUP
+         * delta stream into a `live[]` segment map; on every tick it
+         * rebuilds an accumulator buffer from `live[]` and flattens
+         * into `flat` for paint. */
+        struct {
+            struct yetty_yjungle         *producer;
+            struct yetty_ydraw_draw_list *delta;
+            struct yetty_ydraw_draw_list *acc;
+            struct yetty_ydraw_draw_list *flat;
+            struct yetty_yjungle_config cfg;
+            int has_cfg;
+            uint32_t seed;
+            uint64_t t0_ms;                      /* start of monotonic clock */
+            struct yjungle_live_seg {
+                uint32_t id;
+                uint8_t *bytes;
+                size_t   size;
+            } *live;
+            size_t live_count;
+            size_t live_cap;
+            float last_w;
+            float last_h;
+        } yjungle;
+
         struct {
             /* Per-page sub-buffers; each is in page-local coordinates
              * (page origin at 0, 0). Allocated by the ypdf widget
@@ -1065,6 +1164,15 @@ void yetty_ygui_internal_queue_delete_subtree_rendered(struct yetty_ygui_widget 
  * widget). Used by popup / popup_menu when opening so the menu / dialog
  * is never occluded by widgets that happen to be later in the chain. */
 void yetty_ygui_internal_bring_to_front(struct yetty_ygui_widget *w);
+
+/* Walk every prim in `src`, translate by (dx, dy), append to
+ * `ctx->buffer`. Shared between rich_render and every per-producer
+ * widget (yimage / yplot / yvideo / yzoo / yjungle). */
+struct yetty_ydraw_draw_list;
+struct yetty_ycore_void_result yetty_ygui_internal_emit_buffer_translated(
+    struct yetty_ygui_render_ctx *ctx,
+    const struct yetty_ydraw_draw_list *src,
+    float dx, float dy);
 
 /* Internal helpers shared between the ygui-core (libuv-free) and the
  * libuv-driven runtime in ygui_engine_uv.c. Not part of the public API

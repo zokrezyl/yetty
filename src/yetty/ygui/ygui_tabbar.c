@@ -170,6 +170,23 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
     }
     const struct yetty_ygui_theme *theme = ctx->theme;
     float hh = tabbar_header_h(self);
+    ydebug("tabbar_render id=%s self=(x=%.1f y=%.1f w=%.1f h=%.1f) layout=(%.1f,%.1f %.1fx%.1f) content=(%.1f,%.1f %.1fx%.1f) pad_top=%.1f hh=%.1f offset=(%.1f,%.1f) n_tabs=%d active=%d",
+           self->id ? self->id : "?",
+           self->x, self->y, self->w, self->h,
+           self->layout_x, self->layout_y, self->layout_w, self->layout_h,
+           self->content_x, self->content_y, self->content_w, self->content_h,
+           self->layout.padding_top, hh, ctx->offset_x, ctx->offset_y,
+           self->data.tabbar.n_tabs, self->data.tabbar.active);
+    for (int pi = 0; pi < self->data.tabbar.n_tabs; pi++) {
+        struct yetty_ygui_widget *panel = self->data.tabbar.panels[pi];
+        if (panel) {
+            ydebug("tabbar_render: panel[%d] id=%s vis=%d layout=(%.1f,%.1f %.1fx%.1f) rel=(%.1f,%.1f %.1fx%.1f)",
+                   pi, panel->id ? panel->id : "?",
+                   (panel->flags & YETTY_YGUI_FLAG_VISIBLE) ? 1 : 0,
+                   panel->layout_x, panel->layout_y, panel->layout_w, panel->layout_h,
+                   panel->x, panel->y, panel->w, panel->h);
+        }
+    }
 
     /* Strip background — a flat band the width of the widget. */
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, hh, theme->bg_surface, 0.0f);
