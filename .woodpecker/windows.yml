@@ -21,3 +21,17 @@ steps:
       # already applied via windows/cmake.cmake; YETTY_ENABLE_TOOL_QA is forced
       # OFF in windows/variables.cmake.
       - call build-tools\windows\build.bat release
+
+  # Workspace lives under %TEMP%\woodpecker-local-NNN and gets cleaned
+  # when the pipeline ends — copy the binaries somewhere persistent
+  # before that happens. CI_PIPELINE_NUMBER is the per-repo sequential
+  # number Woodpecker injects into every step.
+  archive:
+    image: cmd
+    when:
+      status: [success]
+    commands:
+      - set "DEST=%USERPROFILE%\woodpecker-artifacts\windows\%CI_PIPELINE_NUMBER%"
+      - mkdir "%DEST%" 2>nul
+      - copy /Y build-windows-ytrace-release\yetty.exe "%DEST%\"
+      - copy /Y build-windows-ytrace-release\tools\ygreeter\ygreeter.exe "%DEST%\"
