@@ -18,7 +18,7 @@ file(MAKE_DIRECTORY ${TVOS_ASSETS_DIR})
 # tvOS-specific override is needed later, add it under yplatform/tvos/ and
 # branch here on YETTY_TVOS.
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/ymain/ios-tvos.m
+    ${YETTY_ROOT}/src/yetty/yinit/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c

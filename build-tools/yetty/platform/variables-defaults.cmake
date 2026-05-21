@@ -102,6 +102,7 @@ option(YETTY_ENABLE_FEATURE_YTHORVG   "ythorvg — thorvg card"               ON
 # Video / media
 option(YETTY_ENABLE_FEATURE_YVCODEC   "yvcodec — H.264 video codec support"  OFF)
 option(YETTY_ENABLE_FEATURE_YACODEC   "yacodec — audio codec support (Opus)" ON)
+option(YETTY_ENABLE_FEATURE_YAUDIO    "yaudio — offline audio analysis (WAV, intervals)" ON)
 
 # Network / connectivity
 option(YETTY_ENABLE_FEATURE_YVNC       "vnc — VNC client/server"              ON)
@@ -148,6 +149,7 @@ option(YETTY_ENABLE_TOOL_YTOP            "ytop tool (CPU monitor)"           ON)
 option(YETTY_ENABLE_TOOL_YGREETER        "ygreeter first-contact tool"       ON)
 option(YETTY_ENABLE_TOOL_YMESH           "ymesh tool (.glb → OSC)"           ON)
 option(YETTY_ENABLE_TOOL_YVIDEO          "yvideo tool (.h264 → OSC stream)"  ON)
+option(YETTY_ENABLE_TOOL_YAUDIO_INTERVALS "yaudio-intervals tool (WAV energy interval finder)" ON)
 option(YETTY_ENABLE_TOOL_YMAZE           "ymaze tool (animated maze → OSC)"  ON)
 option(YETTY_ENABLE_TOOL_YZOO            "yzoo tool (control-point zoo → OSC)" ON)
 option(YETTY_ENABLE_TOOL_YJUNGLE         "yjungle tool (scene-canvas test → OSC)" ON)

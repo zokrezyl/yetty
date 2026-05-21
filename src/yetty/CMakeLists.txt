@@ -187,6 +187,10 @@ if(YETTY_ENABLE_FEATURE_YACODEC AND YETTY_ENABLE_LIB_LIBOPUS)
     add_subdirectory(yacodec)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YAUDIO)
+    add_subdirectory(yaudio)
+endif()
+
 if(YETTY_ENABLE_FEATURE_CARDS)
     add_subdirectory(cards)
 endif()

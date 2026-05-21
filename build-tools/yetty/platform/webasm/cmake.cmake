@@ -18,7 +18,7 @@ set(YETTY_SHADERS_DIR "/assets/shaders" CACHE STRING "Shader directory path")
 
 # Platform sources
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/ymain/webasm.c
+    ${YETTY_ROOT}/src/yetty/yinit/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c

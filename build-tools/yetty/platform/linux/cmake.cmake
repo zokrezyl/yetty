@@ -52,6 +52,7 @@ endif()
 # carry transitive deps (libuv, glfw3webgpu, yetty_telnet) that need
 # the main yetty target's include/link set to resolve.
 set(YETTY_PLATFORM_SOURCES
+    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
     ${YETTY_ROOT}/src/yetty/ymain/glfw.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
