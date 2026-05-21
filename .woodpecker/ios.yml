@@ -19,14 +19,15 @@ steps:
       - cmake -B build-ios-ytrace-release -G Ninja -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DCMAKE_BUILD_TYPE=Release -DYETTY_IOS=ON -DYETTY_ENABLE_TOOL_QA=OFF -S .
       - cmake --build build-ios-ytrace-release --config Release --parallel 4
 
-  # ygreeter is gated off on iOS (POSIX TTY assumptions) so the copy may
-  # silently skip it. yetty itself is the main artifact.
+  # See macos.yml for the absolute-path rationale (the local backend
+  # sandboxes $HOME into the per-pipeline temp tree). ygreeter is gated
+  # off on iOS (POSIX TTY assumptions) so its copy silently skips.
   archive:
     image: bash
     when:
       status: [success]
     commands:
-      - DEST="$HOME/woodpecker-artifacts/ios/$CI_PIPELINE_NUMBER"
+      - DEST="/Users/mihaly.elekes/woodpecker-artifacts/ios/$CI_PIPELINE_NUMBER"
       - mkdir -p "$DEST"
       - cp build-ios-ytrace-release/yetty "$DEST/" 2>/dev/null || true
       - cp build-ios-ytrace-release/tools/ygreeter/ygreeter "$DEST/" 2>/dev/null || true

@@ -18,15 +18,16 @@ steps:
       - git lfs checkout
       - make build-desktop-ytrace-release
 
-  # Workspace gets cleaned post-pipeline — copy binaries to a persistent
-  # location under $HOME keyed by the per-repo CI_PIPELINE_NUMBER that
-  # Woodpecker injects.
+  # Workspace gets cleaned post-pipeline. The local backend ALSO
+  # sandboxes $HOME into the per-pipeline temp tree (a $HOME-relative
+  # path won't outlive the pipeline), so use the absolute agent-user
+  # home explicitly.
   archive:
     image: bash
     when:
       status: [success]
     commands:
-      - DEST="$HOME/woodpecker-artifacts/macos/$CI_PIPELINE_NUMBER"
+      - DEST="/Users/mihaly.elekes/woodpecker-artifacts/macos/$CI_PIPELINE_NUMBER"
       - mkdir -p "$DEST"
       - cp build-desktop-ytrace-release/yetty "$DEST/"
       - cp build-desktop-ytrace-release/tools/ygreeter/ygreeter "$DEST/"

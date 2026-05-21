@@ -23,15 +23,17 @@ steps:
       - call build-tools\windows\build.bat release
 
   # Workspace lives under %TEMP%\woodpecker-local-NNN and gets cleaned
-  # when the pipeline ends — copy the binaries somewhere persistent
-  # before that happens. CI_PIPELINE_NUMBER is the per-repo sequential
-  # number Woodpecker injects into every step.
+  # when the pipeline ends. The local backend ALSO sandboxes %USERPROFILE%
+  # into that same temp tree (so a step can't pollute the real home), so
+  # %USERPROFILE%-relative paths don't survive cleanup either — use the
+  # absolute agent-user home explicitly. CI_PIPELINE_NUMBER is the
+  # per-repo sequential number Woodpecker injects into every step.
   archive:
     image: cmd
     when:
       status: [success]
     commands:
-      - set "DEST=%USERPROFILE%\woodpecker-artifacts\windows\%CI_PIPELINE_NUMBER%"
+      - set "DEST=C:\Users\misi\woodpecker-artifacts\windows\%CI_PIPELINE_NUMBER%"
       - mkdir "%DEST%" 2>nul
       - copy /Y build-windows-ytrace-release\yetty.exe "%DEST%\"
       - copy /Y build-windows-ytrace-release\tools\ygreeter\ygreeter.exe "%DEST%\"
