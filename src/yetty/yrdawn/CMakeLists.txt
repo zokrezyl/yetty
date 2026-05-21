@@ -20,6 +20,19 @@ add_library(yetty_yrdawn STATIC
     client-stubs.gen.c
 )
 
+# Emscripten's clang treats incompatible-pointer-types as a hard error;
+# Dawn-targeted clangs only warn. The codegen produces `char *` for
+# struct members typed `const char *const *` (e.g.
+# WGPUDawnTogglesDescriptor::enabledToggles) — same code, same Dawn
+# headers, only emcc rejects it. Downgrade on webasm to match the
+# behaviour of every other host until the codegen is fixed.
+if(EMSCRIPTEN)
+    target_compile_options(yetty_yrdawn PRIVATE
+        -Wno-error=incompatible-pointer-types
+        -Wno-incompatible-pointer-types
+    )
+endif()
+
 target_include_directories(yetty_yrdawn BEFORE PUBLIC
     # OUR committed webgpu.h MUST be searched first — it's the canonical
     # type surface the bridge protocol is built against. Every Dawn

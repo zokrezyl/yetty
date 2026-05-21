@@ -27,9 +27,12 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#ifdef __EMSCRIPTEN__
-#error "Do not include this header. Emscripten already provides headers needed for WebGPU."
-#endif
+// NOTE (yetty): the upstream Dawn header guards itself off emscripten
+// with `#error "Do not include this header..."` because Emscripten
+// ships its own slimmer WebGPU surface. The whole purpose of pinning
+// this header in our tree (see include/yetty/yrdawn/CMakeLists.txt) is
+// that the bridge wire format binds to ONE struct layout across every
+// host — including webasm. The guard is intentionally removed.
 
 #ifndef WEBGPU_H_
 #define WEBGPU_H_
