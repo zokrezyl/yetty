@@ -1918,8 +1918,10 @@ int yetty_yui_is_active(const struct yetty_yui *yui)
 /* Pick the OS cursor shape for the current engine state. Drag in
  * progress (pressed != NULL) wins over hover so the cursor stays the
  * resize shape even if the user's pointer momentarily strays off the
- * splitter bar mid-drag. */
-static int yui_compute_cursor_shape(const struct yetty_yui *yui)
+ * splitter bar mid-drag. (mouse_x, mouse_y) feed the tabbar edge-band
+ * check — passed in instead of cached so one mouse event drives exactly
+ * one cursor decision (no stale state, no race). */
+static int yui_compute_cursor_shape(const struct yetty_yui *yui, float mouse_x, float mouse_y)
 {
     if (!yui || !yui->engine) {
         return YETTY_YCORE_CURSOR_DEFAULT;
@@ -1928,10 +1930,7 @@ static int yui_compute_cursor_shape(const struct yetty_yui *yui)
     if (!w) {
         w = yetty_ygui_engine_hovered_widget(yui->engine);
     }
-    if (!w) {
-        return YETTY_YCORE_CURSOR_DEFAULT;
-    }
-    if (yetty_ygui_widget_get_type(w) == YETTY_YGUI_WIDGET_SPLITTER) {
+    if (w && yetty_ygui_widget_get_type(w) == YETTY_YGUI_WIDGET_SPLITTER) {
         int axis = yetty_ygui_widget_splitter_get_axis(w);
         /* axis: 1 = row-bar (vertical bar splitting side-by-side panes)
          *   → user resizes the horizontal extent → ↔ HRESIZE cursor.
@@ -1940,15 +1939,25 @@ static int yui_compute_cursor_shape(const struct yetty_yui *yui)
         return axis == 1 ? YETTY_YCORE_CURSOR_HRESIZE
                          : YETTY_YCORE_CURSOR_VRESIZE;
     }
+    /* No splitter under the cursor — consult the tabbar's invisible
+     * edge-resize bands. tabbar_model is bound after yui_create via
+     * yetty_yui_set_tabbar_model; before that it's NULL and the helper
+     * returns DEFAULT, which is correct (no resize possible yet). */
+    if (yui->tabbar_model) {
+        int edge_shape = yetty_yui_tabbar_edge_cursor_at(yui->tabbar_model, mouse_x, mouse_y);
+        if (edge_shape != YETTY_YCORE_CURSOR_DEFAULT) {
+            return edge_shape;
+        }
+    }
     return YETTY_YCORE_CURSOR_DEFAULT;
 }
 
-static void yui_apply_cursor(struct yetty_yui *yui)
+static void yui_apply_cursor(struct yetty_yui *yui, float mouse_x, float mouse_y)
 {
     if (!yui || !yui->ctx) {
         return;
     }
-    int shape = yui_compute_cursor_shape(yui);
+    int shape = yui_compute_cursor_shape(yui, mouse_x, mouse_y);
     if (shape == yui->last_cursor_shape) {
         return; /* nothing to do */
     }
@@ -2008,7 +2017,7 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     case YETTY_YCORE_MOUSE_DOWN:
         yetty_ygui_engine_mouse_down(yui->engine, event->mouse.x, event->mouse.y,
                                      event->mouse.button);
-        yui_apply_cursor(yui);
+        yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
         if (active || yetty_ygui_engine_has_pressed_widget(yui->engine)) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
@@ -2018,7 +2027,7 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     case YETTY_YCORE_MOUSE_UP:
         yetty_ygui_engine_mouse_up(yui->engine, event->mouse.x, event->mouse.y,
                                    event->mouse.button);
-        yui_apply_cursor(yui);
+        yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
         /* Consume only if a widget was actually tracking the click
          * (had a pressed widget before this UP) or an overlay is up.
          * Previously we also consumed every titlebar UP, but that
@@ -2031,7 +2040,7 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
         yetty_ygui_engine_mouse_move(yui->engine, event->mouse.x, event->mouse.y);
-        yui_apply_cursor(yui);
+        yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
         /* Consume during an active drag (a splitter or other widget
          * holds the press) so the workspace below doesn't also see
          * the motion. Hover-only moves still pass through so terminal

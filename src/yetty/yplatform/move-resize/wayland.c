@@ -1,5 +1,5 @@
 /*
- * wayland-move/default.c — protocol-correct interactive window move on
+ * move-resize/wayland.c — protocol-correct interactive window move on
  * Wayland.
  *
  * Wayland deliberately hides window position from clients: glfwSetWindowPos
@@ -95,4 +95,45 @@ void yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
     ydebug("wayland-move: xdg_toplevel_move(toplevel=%p, seat=%p, serial=%u)",
            (void *)toplevel, (void *)_glfw.wl.seat, (unsigned)_glfw.wl.serial);
     xdg_toplevel_move(toplevel, _glfw.wl.seat, _glfw.wl.serial);
+}
+
+void yetty_yplatform_wayland_begin_interactive_resize(GLFWwindow *handle,
+                                                       unsigned int edge)
+{
+    if (!handle || edge == 0) {
+        return;
+    }
+    if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) {
+        ydebug("wayland-resize: not Wayland (platform=%d), no-op", glfwGetPlatform());
+        return;
+    }
+
+    _GLFWwindow *window = (_GLFWwindow *)handle;
+
+    if (!_glfw.wl.seat) {
+        ydebug("wayland-resize: no wl_seat — bailing");
+        return;
+    }
+
+    /* Same toplevel-resolution dance as the move helper: direct xdg-shell
+     * or libdecor frame, whichever is non-NULL. See the move function for
+     * why both paths exist. */
+    struct xdg_toplevel *toplevel = window->wl.xdg.toplevel;
+    if (!toplevel && window->wl.libdecor.frame &&
+        _glfw.wl.libdecor.libdecor_frame_get_xdg_toplevel_) {
+        toplevel = libdecor_frame_get_xdg_toplevel(window->wl.libdecor.frame);
+        ydebug("wayland-resize: via libdecor frame=%p -> toplevel=%p",
+               (void *)window->wl.libdecor.frame, (void *)toplevel);
+    }
+    if (!toplevel) {
+        ydebug("wayland-resize: no xdg_toplevel reachable — bailing");
+        return;
+    }
+
+    /* edge values match the xdg_toplevel.resize_edge wire enum exactly
+     * (1=top, 2=bottom, 4=left, 8=right; corners are bitwise OR). Pass
+     * straight through to the compositor. */
+    ydebug("wayland-resize: xdg_toplevel_resize(toplevel=%p, seat=%p, serial=%u, edge=%u)",
+           (void *)toplevel, (void *)_glfw.wl.seat, (unsigned)_glfw.wl.serial, edge);
+    xdg_toplevel_resize(toplevel, _glfw.wl.seat, _glfw.wl.serial, edge);
 }

@@ -993,6 +993,17 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
                 hit->flags &= ~YETTY_YGUI_FLAG_PRESSED;
                 engine->pressed = NULL;
             }
+        } else if (!hit->vtable || !hit->vtable->on_drag) {
+            /* Widget has no on_press AND no on_drag — purely visual
+             * (e.g. the engine statusbar, label-only widgets). Without
+             * this release, the implicit grab above would make
+             * yui_on_event report has_pressed_widget == true and consume
+             * the MOUSE_DOWN, so clicks landing on a purely-visual widget
+             * that overlays another region (statusbar over the window's
+             * bottom resize-grip band) never reach the host. Symmetric
+             * with the on_press-declined branch above. */
+            hit->flags &= ~YETTY_YGUI_FLAG_PRESSED;
+            engine->pressed = NULL;
         }
     }
 }

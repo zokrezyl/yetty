@@ -116,8 +116,31 @@ enum yetty_yevent_event_type {
      * tabbar emits this once on the MOUSE_DOWN that starts a titlebar
      * drag; the main-thread handler dispatches to the right backend. */
     YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE,
+    /* Same shape as BEGIN_INTERACTIVE_MOVE but for resize: the compositor
+     * (Wayland) grabs the pointer and resizes the window from `edge` until
+     * release. The tabbar emits this once on the MOUSE_DOWN that lands in
+     * an edge/corner band, after the drag-slop threshold is crossed; the
+     * main-thread handler dispatches to the right backend (no-op on X11,
+     * where per-pixel WINDOW_RESIZE_BY via glfwSetWindowSize works). */
+    YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_RESIZE,
     /* Must be last - used for array sizing */
     YETTY_YCORE_COUNT
+};
+
+/* Edge bitmask for WINDOW_BEGIN_INTERACTIVE_RESIZE. Values mirror the
+ * xdg-shell wire protocol (xdg_toplevel.resize_edge) so the Wayland
+ * helper can pass them through unchanged; the same constants are mapped
+ * onto the relevant axes on other backends if/when they grow support. */
+enum yetty_ycore_resize_edge {
+    YETTY_YCORE_RESIZE_EDGE_NONE         = 0,
+    YETTY_YCORE_RESIZE_EDGE_TOP          = 1,
+    YETTY_YCORE_RESIZE_EDGE_BOTTOM       = 2,
+    YETTY_YCORE_RESIZE_EDGE_LEFT         = 4,
+    YETTY_YCORE_RESIZE_EDGE_TOP_LEFT     = 5,
+    YETTY_YCORE_RESIZE_EDGE_BOTTOM_LEFT  = 6,
+    YETTY_YCORE_RESIZE_EDGE_RIGHT        = 8,
+    YETTY_YCORE_RESIZE_EDGE_TOP_RIGHT    = 9,
+    YETTY_YCORE_RESIZE_EDGE_BOTTOM_RIGHT = 10,
 };
 
 struct yetty_ycore_event_key {
@@ -317,6 +340,12 @@ struct yetty_ycore_event_window_resize {
     int dy;
 };
 
+/* Carries the edge mask for WINDOW_BEGIN_INTERACTIVE_RESIZE. Holds an
+ * `enum yetty_ycore_resize_edge` value. */
+struct yetty_ycore_event_window_begin_resize {
+    int edge;
+};
+
 struct yetty_yui_event {
     enum yetty_yevent_event_type type;
     union {
@@ -349,6 +378,7 @@ struct yetty_yui_event {
         struct yetty_ycore_event_screenshot screenshot;
         struct yetty_ycore_event_window_drag window_drag;
         struct yetty_ycore_event_window_resize window_resize;
+        struct yetty_ycore_event_window_begin_resize window_begin_resize;
     };
     void *payload; /* optional heap-allocated data (copy/paste text) */
 };
