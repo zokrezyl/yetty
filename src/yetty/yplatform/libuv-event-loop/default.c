@@ -8,6 +8,7 @@
 
 #include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ynotify/ynotify.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty-pipe-source.h>
 #include <yetty/ytrace/ytrace.h>
@@ -150,13 +151,6 @@ struct yetty_yplatform_libuv_event_loop {
     uv_signal_t sigint_handle;
     uv_signal_t sigterm_handle;
 #endif
-
-    /* Set by post_fatal_error from any thread / callback. The loop tears
-     * itself down (uv_stop); libuv_start checks this on exit and returns
-     * an error wrapping the stashed chain. msg is a string literal; cause
-     * is the heap chain transferred from the caller. */
-    int                       fatal_set;       /* 0/1, set under post_mutex */
-    struct yetty_ycore_error  fatal_error;
 };
 
 /* Forward declarations */
@@ -414,23 +408,6 @@ static struct yetty_ycore_void_result libuv_start(struct yetty_yevent_event_loop
     struct yetty_yplatform_libuv_event_loop *impl =
         container_of(self, struct yetty_yplatform_libuv_event_loop, base);
     int r = uv_run(impl->loop, UV_RUN_DEFAULT);
-
-    /* Fatal error stashed during the run takes precedence over uv_run's
-     * own return: external callbacks (libuv read/write, signal handlers)
-     * have no Result to propagate, so they call post_fatal_error which
-     * stops the loop and parks the error chain here for surfacing. */
-    if (impl->fatal_set) {
-        impl->fatal_set = 0;
-        /* Synthesise a Result that carries the stashed chain. Build it
-         * as if YETTY_ERR_3 were composing it: msg = the stashed top,
-         * cause = the stashed chain head. */
-        struct yetty_ycore_void_result out = {
-            .ok = 0,
-            .error = impl->fatal_error,
-        };
-        impl->fatal_error = (struct yetty_ycore_error){0};
-        return out;
-    }
 
     if (r < 0) {
         return YETTY_ERR(yetty_ycore_void, "uv_run failed");
@@ -798,38 +775,18 @@ static void libuv_post_to_loop(struct yetty_yevent_event_loop *self, void (*fn)(
     uv_async_send(&impl->post_async);
 }
 
-/* Trampoline for post_to_loop: call uv_stop on the loop thread. */
-static void uv_stop_trampoline(void *arg)
-{
-    uv_stop((uv_loop_t *)arg);
-}
-
-/* post_fatal_error — stash, mark, stop the loop. Thread-safe (uses
- * post_mutex). MOVES the error chain into the loop; caller must not
- * destroy. Second and subsequent calls free their own chain. */
+/* Surface a callback-boundary error as a user-visible notification. The
+ * chain is rendered into a single card on the ynotify stack and freed
+ * here. The loop keeps running — the user reads the card and decides
+ * what to do next. MOVES ownership of `error`; caller must not destroy. */
 static void libuv_post_fatal_error(struct yetty_yevent_event_loop *self,
                                    struct yetty_ycore_error error)
 {
-    struct yetty_yplatform_libuv_event_loop *impl =
-        container_of(self, struct yetty_yplatform_libuv_event_loop, base);
-
-    uv_mutex_lock(&impl->post_mutex);
-    int already_set = impl->fatal_set;
-    if (!already_set) {
-        impl->fatal_error = error;
-        impl->fatal_set = 1;
-    }
-    uv_mutex_unlock(&impl->post_mutex);
-
-    if (already_set) {
-        /* Lost the race — drop the duplicate. */
-        yetty_ycore_error_destroy(error);
-        return;
-    }
-
-    /* uv_stop is documented thread-unsafe; route through post_to_loop so
-     * the actual uv_stop call lands on the loop thread. */
-    libuv_post_to_loop(self, uv_stop_trampoline, impl->loop);
+    (void)self;
+    char buf[1024];
+    yetty_ycore_error_snprint(buf, sizeof(buf), error);
+    ynotify(YETTY_YNOTIFY_ERROR, "%s", buf);
+    yetty_ycore_error_destroy(error);
 }
 
 /* TCP Server & Client */

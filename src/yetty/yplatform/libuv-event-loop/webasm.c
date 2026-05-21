@@ -557,26 +557,18 @@ static void webasm_request_render(struct yetty_yevent_event_loop *self)
     (void)impl;
 }
 
-/* Surface a fatal error from an external-callback boundary. Mirrors the
- * libuv-event-loop semantics: ownership of `error` transfers here. We
- * route the top message through ynotify so the user sees it in the
- * ygui notification widget (yui_ynotify_handler is the registered sink),
- * dump the full cause chain to stderr for the trace, free the chain,
- * and stop the tick so we don't keep firing on broken state. The
- * emscripten main loop is NOT cancelled — leaving the page alive lets
- * the user read the on-screen notification. */
+/* Surface a callback-boundary error as a user-visible notification. The
+ * chain is rendered into a single card on the ynotify stack and freed
+ * here. The tick keeps running so the user can read the card. MOVES
+ * ownership of `error`; caller must not destroy. */
 static void webasm_post_fatal_error(struct yetty_yevent_event_loop *self,
                                     struct yetty_ycore_error error)
 {
-    struct yetty_yplatform_webasm_event_loop *impl =
-        container_of(self, struct yetty_yplatform_webasm_event_loop, base);
-
-    const char *top = error.msg ? error.msg : "(no message)";
-    ynotify(YETTY_YNOTIFY_ERROR, "fatal: %s", top);
-    yetty_ycore_error_print(stderr, "webasm event loop fatal", error);
+    (void)self;
+    char buf[1024];
+    yetty_ycore_error_snprint(buf, sizeof(buf), error);
+    ynotify(YETTY_YNOTIFY_ERROR, "%s", buf);
     yetty_ycore_error_destroy(error);
-
-    impl->running = 0;
 }
 
 /* Factory */
