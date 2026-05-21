@@ -59,7 +59,7 @@ struct yetty_ydraw_flyweight_registry_ptr_result yetty_ydraw_flyweight_create(vo
 
     // Complex prim handler (types >= 0x80000000)
     struct yetty_ycore_void_result r_complex = yetty_ydraw_flyweight_registry_add(
-        reg, YETTY_YDRAW_COMPLEX_TYPE_BASE, 0xFFFFFFFF, yetty_ydraw_figure_handler);
+        reg, YETTY_YDRAW_COMPLEX_TYPE_BASE, 0xFFFFFFFF, yetty_ydraw_raw_figure_handler);
     if (YETTY_IS_ERR(r_complex)) {
         yetty_ydraw_flyweight_registry_destroy(reg);
         return YETTY_ERR(yetty_ydraw_flyweight_registry_ptr,

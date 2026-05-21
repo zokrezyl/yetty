@@ -250,9 +250,9 @@ static struct yetty_ycore_void_result ydraw_layer_set_visual_zoom(
      * ydraw-layer shader. Push the zoom into every concrete factory's shared
      * uniforms so each type's shader can apply the same transform. */
     if (layer->canvas) {
-        struct yetty_ydraw_figure_factory *f =
+        struct yetty_ydraw_raw_figure_factory *f =
             layer->canvas->ops->get_figure_factory(layer->canvas);
-        yetty_ydraw_figure_factory_set_visual_zoom(f, scale, off_x, off_y);
+        yetty_ydraw_raw_figure_factory_set_visual_zoom(f, scale, off_x, off_y);
     }
     return YETTY_OK_VOID();
 }
@@ -530,8 +530,8 @@ static struct yetty_ycore_void_result ydraw_layer_resize_grid(
     float base_h = layer->initial_cell_size.height;
     float cz = (base_h > 0.0f) ? (cell_size.height / base_h) : 1.0f;
     set_cell_zoom(&layer->rs, cz, 0.0f, 0.0f);
-    struct yetty_ydraw_figure_factory *ff = layer->canvas->ops->get_figure_factory(layer->canvas);
-    yetty_ydraw_figure_factory_set_cell_zoom(ff, cz, 0.0f, 0.0f);
+    struct yetty_ydraw_raw_figure_factory *ff = layer->canvas->ops->get_figure_factory(layer->canvas);
+    yetty_ydraw_raw_figure_factory_set_cell_zoom(ff, cz, 0.0f, 0.0f);
 
     self->dirty = 1;
 
@@ -757,7 +757,7 @@ static int ydraw_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
     }
     uint32_t count = layer->canvas->ops->figure_count(layer->canvas);
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure_instance *inst =
+        struct yetty_ydraw_figure *inst =
             layer->canvas->ops->get_figure(layer->canvas, i);
         if (inst && inst->dirty) {
             return 1;
@@ -980,7 +980,7 @@ static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_ter
     struct yetty_ycore_pixel_size cell_size = layer->canvas->ops->get_cell_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure_instance *inst =
+        struct yetty_ydraw_figure *inst =
             layer->canvas->ops->get_figure(layer->canvas, i);
         if (!inst) {
             return YETTY_ERR(yetty_ycore_int,

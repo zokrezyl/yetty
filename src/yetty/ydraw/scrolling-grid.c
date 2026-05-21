@@ -93,7 +93,7 @@ struct grid_line {
     uint32_t font_count;
     uint32_t font_capacity;
 
-    struct yetty_ydraw_figure_instance **figures;
+    struct yetty_ydraw_figure **figures;
     uint32_t figure_count;
     uint32_t figure_capacity;
 };
@@ -197,7 +197,7 @@ static struct yetty_ycore_void_result grid_line_free(
     line->font_count = 0;
     line->font_capacity = 0;
     for (uint32_t i = 0; i < line->figure_count; i++) {
-        yetty_ydraw_figure_instance_destroy(line->figures[i]);
+        yetty_ydraw_figure_destroy(line->figures[i]);
     }
     free(line->figures);
     line->figures = NULL;
@@ -387,7 +387,7 @@ uint32_t yetty_ydraw_scrolling_grid_figure_count_in_window(
     return count;
 }
 
-struct yetty_ydraw_figure_instance *yetty_ydraw_scrolling_grid_figure_in_window(
+struct yetty_ydraw_figure *yetty_ydraw_scrolling_grid_figure_in_window(
     const struct yetty_ydraw_scrolling_grid *grid, uint32_t top, uint32_t end, uint32_t index)
 {
     if (!grid) return NULL;
@@ -644,7 +644,7 @@ static struct yetty_ycore_void_result grid_evict_line(
     grid->sb_offsets[idx] = (uint32_t)enc.value;
 
     /* Save figures and font handles before grid_line_free wipes them. */
-    struct yetty_ydraw_figure_instance **saved_cp = line->figures;
+    struct yetty_ydraw_figure **saved_cp = line->figures;
     uint32_t saved_cp_count = line->figure_count;
     uint32_t saved_cp_cap = line->figure_capacity;
     line->figures = NULL;
@@ -688,7 +688,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_evict_scrollback(
              * (could be restored), preserving figures + font attachments. */
             struct grid_line *line = &grid->lines[i];
             if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
-                struct yetty_ydraw_figure_instance **saved_cp = line->figures;
+                struct yetty_ydraw_figure **saved_cp = line->figures;
                 uint32_t saved_cp_count = line->figure_count;
                 uint32_t saved_cp_cap = line->figure_capacity;
                 line->figures = NULL;
@@ -768,7 +768,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx,
-    struct yetty_ydraw_figure_instance *figure)
+    struct yetty_ydraw_figure *figure)
 {
     if (!grid || line_idx >= grid->lines_count) {
         return YETTY_ERR(yetty_ycore_void, "push_figure: line_idx out of range");
@@ -776,8 +776,8 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
     struct grid_line *line = &grid->lines[line_idx];
     if (line->figure_count >= line->figure_capacity) {
         uint32_t new_cap = line->figure_capacity == 0 ? 4 : line->figure_capacity * 2;
-        struct yetty_ydraw_figure_instance **grown = realloc(
-            line->figures, new_cap * sizeof(struct yetty_ydraw_figure_instance *));
+        struct yetty_ydraw_figure **grown = realloc(
+            line->figures, new_cap * sizeof(struct yetty_ydraw_figure *));
         if (!grown) {
             return YETTY_ERR(yetty_ycore_void, "push_figure: realloc failed");
         }

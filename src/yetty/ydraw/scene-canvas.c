@@ -137,7 +137,7 @@ struct yetty_ydraw_scene_entity {
      * prims[] — only figure-typed drawables produce instances. Each entry
      * owns its GPU resource set and is destroyed in entity_clear_in_place
      * and entity_free_storage. */
-    struct yetty_ydraw_figure_instance **figures;
+    struct yetty_ydraw_figure **figures;
     uint32_t figure_count;
     uint32_t figure_capacity;
 };
@@ -202,7 +202,7 @@ struct scene_canvas {
      * parser. The factory builds figure instances (yplot/yimage/ymesh)
      * for figure-typed drawables. */
     struct yetty_ydraw_flyweight_registry *flyweight_registry;
-    struct yetty_ydraw_figure_factory *figure_factory;
+    struct yetty_ydraw_raw_figure_factory *figure_factory;
 
     /* Per-envelope render-request hook. scene_process_input runs as a
      * long-lived layer coro; it never returns to ydraw_layer_process_input
@@ -321,7 +321,7 @@ static struct yetty_ycore_void_result grow_touched(struct scene_touched_cell **a
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result grow_figures(struct yetty_ydraw_figure_instance ***arr,
+static struct yetty_ycore_void_result grow_figures(struct yetty_ydraw_figure ***arr,
                                                    uint32_t *cap, uint32_t need)
 {
     if (need <= *cap) {
@@ -331,8 +331,8 @@ static struct yetty_ycore_void_result grow_figures(struct yetty_ydraw_figure_ins
     while (new_cap < need) {
         new_cap *= 2;
     }
-    struct yetty_ydraw_figure_instance **grown =
-        realloc(*arr, new_cap * sizeof(struct yetty_ydraw_figure_instance *));
+    struct yetty_ydraw_figure **grown =
+        realloc(*arr, new_cap * sizeof(struct yetty_ydraw_figure *));
     if (!grown) {
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: figures grow failed");
     }
@@ -409,7 +409,7 @@ static void entity_free_storage(struct yetty_ydraw_scene_entity *e)
 {
     for (uint32_t i = 0; i < e->figure_count; i++) {
         if (e->figures[i]) {
-            yetty_ydraw_figure_instance_destroy(e->figures[i]);
+            yetty_ydraw_figure_destroy(e->figures[i]);
         }
     }
     free(e->figures);
@@ -561,7 +561,7 @@ static void entity_clear_in_place(struct scene_canvas *sc, struct yetty_ydraw_sc
      * reuse on the next re-emit of this entity. */
     for (uint32_t i = 0; i < e->figure_count; i++) {
         if (e->figures[i]) {
-            yetty_ydraw_figure_instance_destroy(e->figures[i]);
+            yetty_ydraw_figure_destroy(e->figures[i]);
             e->figures[i] = NULL;
         }
     }
@@ -769,7 +769,7 @@ static void scene_canvas_destroy_internals(struct scene_canvas *sc)
     sc->font_map = NULL;
     sc->font_map_capacity = 0;
     if (sc->figure_factory) {
-        yetty_ydraw_figure_factory_destroy(sc->figure_factory);
+        yetty_ydraw_raw_figure_factory_destroy(sc->figure_factory);
         sc->figure_factory = NULL;
     }
     if (sc->flyweight_registry) {
@@ -853,7 +853,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
     /* Figure factory + built-in concrete factories (yplot, yimage, ymesh).
      * Figures arriving on the wire route through this factory at
      * dispatch time. */
-    struct yetty_ydraw_figure_factory_ptr_result factory_res = yetty_ydraw_figure_factory_create(
+    struct yetty_ydraw_raw_figure_factory_ptr_result factory_res = yetty_ydraw_raw_figure_factory_create(
         context->gpu_context.device, context->gpu_context.queue,
         context->gpu_context.surface_format, context->gpu_context.allocator,
         context->event_loop);
@@ -873,7 +873,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: yplot factory create");
         }
         struct yetty_ycore_void_result rr =
-            yetty_ydraw_figure_factory_register(sc->figure_factory, f);
+            yetty_ydraw_raw_figure_factory_register(sc->figure_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yplot_factory_destroy(f);
             scene_canvas_destroy_internals(sc);
@@ -889,7 +889,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: yimage factory create");
         }
         struct yetty_ycore_void_result rr =
-            yetty_ydraw_figure_factory_register(sc->figure_factory, f);
+            yetty_ydraw_raw_figure_factory_register(sc->figure_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yimage_factory_destroy(f);
             scene_canvas_destroy_internals(sc);
@@ -906,7 +906,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: ymesh factory create");
         }
         struct yetty_ycore_void_result rr =
-            yetty_ydraw_figure_factory_register(sc->figure_factory, f);
+            yetty_ydraw_raw_figure_factory_register(sc->figure_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_ymesh_factory_destroy(f);
             scene_canvas_destroy_internals(sc);
@@ -924,7 +924,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: yvideo factory create");
         }
         struct yetty_ycore_void_result rr =
-            yetty_ydraw_figure_factory_register(sc->figure_factory, f);
+            yetty_ydraw_raw_figure_factory_register(sc->figure_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yvideo_factory_destroy(f);
             scene_canvas_destroy_internals(sc);
@@ -1291,8 +1291,8 @@ static struct yetty_ycore_void_result scene_entity_add_bytes(
      * If the canvas was created without a factory (test mode), skip:
      * the bytes are still committed, but no GPU resources exist to bind. */
     if (sc->figure_factory && yetty_ydraw_is_figure(data[0])) {
-        struct yetty_ydraw_figure_instance_ptr_result inst_res =
-            yetty_ydraw_figure_factory_create_instance(sc->figure_factory, data,
+        struct yetty_ydraw_figure_ptr_result inst_res =
+            yetty_ydraw_raw_figure_factory_create_instance(sc->figure_factory, data,
                                                        word_count * sizeof(uint32_t),
                                                        /*rolling_row=*/0u);
         if (YETTY_IS_ERR(inst_res)) {
@@ -1311,7 +1311,7 @@ static struct yetty_ycore_void_result scene_entity_add_bytes(
                                                          &entity->figure_capacity,
                                                          entity->figure_count + 1u);
         if (YETTY_IS_ERR(gf)) {
-            yetty_ydraw_figure_instance_destroy(inst_res.value);
+            yetty_ydraw_figure_destroy(inst_res.value);
             for (uint32_t i = saved_touched_count; i < entity->touched_cell_count; i++) {
                 yetty_ydraw_scene_grid_drop_at(sc->grid, entity->touched_cells[i].row,
                                                entity->touched_cells[i].col, entity->slot);
@@ -1681,7 +1681,7 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
                    cmd->update.id, target->figure_count);
             return YETTY_OK_VOID();
         }
-        struct yetty_ydraw_figure_instance *fi = target->figures[0];
+        struct yetty_ydraw_figure *fi = target->figures[0];
         if (!fi->factory || !fi->factory->update_instance) {
             ydebug("scene-canvas: UPDATE id=%u: figure type 0x%08x does not implement "
                    "update_instance",
@@ -2072,7 +2072,7 @@ static const struct yetty_ydraw_flyweight_registry *scene_get_flyweight_registry
     return base ? as_scene_const(base)->flyweight_registry : NULL;
 }
 
-static struct yetty_ydraw_figure_factory *scene_get_figure_factory(
+static struct yetty_ydraw_raw_figure_factory *scene_get_figure_factory(
     const struct yetty_ydraw_canvas *base)
 {
     return base ? as_scene_const(base)->figure_factory : NULL;
@@ -2093,7 +2093,7 @@ static uint32_t scene_figure_count(const struct yetty_ydraw_canvas *base)
     return total;
 }
 
-static struct yetty_ydraw_figure_instance *scene_get_figure(const struct yetty_ydraw_canvas *base,
+static struct yetty_ydraw_figure *scene_get_figure(const struct yetty_ydraw_canvas *base,
                                                             uint32_t index)
 {
     if (!base) {

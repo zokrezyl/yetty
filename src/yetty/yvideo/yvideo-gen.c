@@ -28,20 +28,20 @@
 /* Hook surface — see hooks_enabled() in ydraw-gen/generate.py. Implemented
  * in yvideo-hooks.c (hand-written). Missing symbols are a link error. */
 extern struct yetty_ycore_void_result yvideo_hook_instance_create(
-    struct yetty_ydraw_figure_instance *instance,
+    struct yetty_ydraw_figure *instance,
     const void *buffer_data, size_t size);
 extern void yvideo_hook_instance_destroy(
-    struct yetty_ydraw_figure_instance *instance);
+    struct yetty_ydraw_figure *instance);
 extern struct yetty_ycore_void_result yvideo_hook_instance_update(
-    struct yetty_ydraw_figure_instance *instance,
+    struct yetty_ydraw_figure *instance,
     const void *payload, size_t size);
 extern struct yetty_ycore_void_result yvideo_hook_instance_render_pre(
-    struct yetty_ydraw_figure_instance *instance,
+    struct yetty_ydraw_figure *instance,
     struct yetty_ydraw_target *target, float x, float y);
 
 static struct yetty_ycore_void_result yvideo_update_dispatch(
     struct yetty_ydraw_concrete_factory *self,
-    struct yetty_ydraw_figure_instance *instance,
+    struct yetty_ydraw_figure *instance,
     const void *payload, size_t size)
 {
     (void)self;
@@ -258,7 +258,7 @@ static void yvideo_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
 //=============================================================================
 
 static struct yetty_ycore_void_result
-yvideo_instance_render(struct yetty_ydraw_figure_instance *self,
+yvideo_instance_render(struct yetty_ydraw_figure *self,
                        struct yetty_ydraw_target *target, float x, float y)
 {
     if (!self || !self->buffer_data || !self->factory)
@@ -440,27 +440,27 @@ static WGPURenderPipeline yvideo_get_pipeline(struct yetty_ydraw_concrete_factor
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
 
-static struct yetty_ydraw_figure_instance_ptr_result
+static struct yetty_ydraw_figure_ptr_result
 yvideo_create_instance(struct yetty_ydraw_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_figure))
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_raw_figure))
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
 
     struct yetty_yvideo_factory *factory = yetty_yvideo_factory_from_base(self);
     if (!factory->pipeline)
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "yvideo factory pipeline not compiled");
 
-    struct yetty_ydraw_figure_instance *instance =
-        calloc(1, sizeof(struct yetty_ydraw_figure_instance));
+    struct yetty_ydraw_figure *instance =
+        calloc(1, sizeof(struct yetty_ydraw_figure));
     if (!instance)
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "allocation failed");
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "buffer alloc failed");
     }
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -469,7 +469,7 @@ yvideo_create_instance(struct yetty_ydraw_concrete_factory *self,
     instance->rolling_row = rolling_row;
     instance->render = yvideo_instance_render;
 
-    struct rectangle_result aabb_res = yetty_ydraw_figure_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_raw_figure_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res))
         instance->bounds = aabb_res.value;
 
@@ -480,7 +480,7 @@ yvideo_create_instance(struct yetty_ydraw_concrete_factory *self,
     if (!instance->resource_set) {
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "rs alloc failed");
     }
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_ydraw_gpu_resource_set));
@@ -516,7 +516,7 @@ yvideo_create_instance(struct yetty_ydraw_concrete_factory *self,
             free(instance->resource_set);
             free(instance->buffer_data);
             free(instance);
-            return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+            return YETTY_ERR(yetty_ydraw_figure_ptr,
                              "yvideo: hook_instance_create failed", hcr);
         }
     }
@@ -531,7 +531,7 @@ yvideo_create_instance(struct yetty_ydraw_concrete_factory *self,
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "instance binder create failed", br);
     }
     instance->binder = br.value;
@@ -544,7 +544,7 @@ yvideo_create_instance(struct yetty_ydraw_concrete_factory *self,
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "binder submit failed", sr);
     }
 
@@ -555,15 +555,15 @@ yvideo_create_instance(struct yetty_ydraw_concrete_factory *self,
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_ptr,
                          "binder finalize failed", fr);
     }
 
-    return YETTY_OK(yetty_ydraw_figure_instance_ptr, instance);
+    return YETTY_OK(yetty_ydraw_figure_ptr, instance);
 }
 
 static void yvideo_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                    struct yetty_ydraw_figure_instance *instance)
+                                    struct yetty_ydraw_figure *instance)
 {
     (void)self;
     if (!instance)
