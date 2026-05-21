@@ -22,8 +22,8 @@ if(YETTY_ENABLE_TOOL_YECHO)
     add_subdirectory(yecho)
 endif()
 
-if(YETTY_ENABLE_TOOL_YWASM_DEMO)
-    add_subdirectory(ywasm-demo)
+if(YETTY_ENABLE_TOOL_YRDAWN_DEMO)
+    add_subdirectory(yrdawn-demo)
 endif()
 
 if(YETTY_ENABLE_TOOL_YPLOT)

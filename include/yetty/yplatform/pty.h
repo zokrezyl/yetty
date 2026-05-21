@@ -25,7 +25,7 @@ struct yetty_platform_pty_ops {
     struct yetty_ycore_void_result (*stop)(struct yetty_platform_pty *self);
     struct yetty_platform_pty_pipe_source *(*pipe_source)(struct yetty_platform_pty *self);
     /* Save current termios and switch the slave to raw (no ICANON, no
-     * ECHO, no OPOST). Used by the ywasm-layer while a bridge session
+     * ECHO, no OPOST). Used by the yrdawn-layer while a bridge session
      * is active so demo bytes flow through any intermediate hops
      * (e.g. ssh) without line-discipline mangling. NULL = optional;
      * backends without termios (memory-pty, webasm pipe) can leave it

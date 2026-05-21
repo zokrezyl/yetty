@@ -9,8 +9,8 @@ if(YETTY_ENABLE_FEATURE_YMGUI)
     add_subdirectory(ymgui)
 endif()
 
-if(YETTY_ENABLE_FEATURE_YWASM)
-    add_subdirectory(ywasm)
+if(YETTY_ENABLE_FEATURE_YRDAWN)
+    add_subdirectory(yrdawn)
 endif()
 
 # yplot demos — pure CPU client tools that emit yplot OSC envelopes.

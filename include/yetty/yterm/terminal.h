@@ -258,7 +258,7 @@ struct yetty_yrender_terminal_layer {
     yetty_yterm_emit_osc_fn emit_osc_fn;
     void *emit_osc_userdata;
     /* PTY termios mode-switch callbacks - set by creator. Optional.
-   * The ywasm-layer flips to raw mode on HELLO so the bridge protocol
+   * The yrdawn-layer flips to raw mode on HELLO so the bridge protocol
    * survives any cooked-mode hop between yetty and the remote demo
    * (ssh, screen, …) and restores on BYE / destroy. enable=1 → raw,
    * enable=0 → restore previously-saved termios. */

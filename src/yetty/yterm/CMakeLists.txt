@@ -3,8 +3,8 @@ add_library(yetty_yterm
     text-layer.c
     ydraw-layer.c
     ymgui-layer.c
-    ywasm-layer.c
-    ${YETTY_ROOT}/src/yetty/ywasm/server-dispatch.gen.c
+    yrdawn-layer.c
+    ${YETTY_ROOT}/src/yetty/yrdawn/server-dispatch.gen.c
     shader-glyph-layer.c
     background-layer.c
     osc-args.c
@@ -23,7 +23,7 @@ target_link_libraries(yetty_yterm
     yetty_yui_core
     yetty_yface
     yetty_ywire
-    yetty_ywasm
+    yetty_yrdawn
     lz4_static
 )
 
