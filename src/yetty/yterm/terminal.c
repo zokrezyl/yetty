@@ -12,6 +12,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/ywasm/wire.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
@@ -21,6 +22,7 @@
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yterm/ymgui-layer.h>
+#include <yetty/yterm/ywasm-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
@@ -1327,6 +1329,39 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ymgui layer for YMGUI_OSC_CS_TERM_INPUT_SUB failed");
     ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
+
+    /* ywasm layer (WebGPU-over-OSC bridge — remote wasm process renders
+     * here as if our Dawn were its local GPU). */
+    struct yetty_yterm_terminal_layer_result ywasm_res = yetty_yterm_ywasm_layer_create(
+        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height,
+        yetty_context);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ywasm_res,
+                        "terminal_create: ywasm layer create failed");
+    add_r = yetty_yterm_terminal_layer_add(terminal, ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
+                        "terminal_create: terminal_layer_add(ywasm) failed");
+    ywasm_res.value->emit_osc_fn = terminal_layer_emit_osc;
+    ywasm_res.value->emit_osc_userdata = terminal;
+    ywasm_res.value->request_render_fn = terminal_request_render_callback;
+    ywasm_res.value->request_render_userdata = terminal;
+
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_HELLO,
+                                                ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ywasm layer for YETTY_YWASM_OSC_CS_HELLO failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_CMD,
+                                                ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ywasm layer for YETTY_YWASM_OSC_CS_CMD failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_BULK,
+                                                ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ywasm layer for YETTY_YWASM_OSC_CS_BULK failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_BYE,
+                                                ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ywasm layer for YETTY_YWASM_OSC_CS_BYE failed");
+    ydebug("terminal_create: ywasm layer registered for OSC 620000-620003");
 
     /* Create render targets for each layer */
     const struct yetty_yetty_app_gpu_context *app_gpu = &yetty_context->gpu_context.app_gpu_context;

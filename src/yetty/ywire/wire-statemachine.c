@@ -138,7 +138,13 @@ struct yetty_ywire_wire_statemachine {
     /* Per-layer coroutine table. One entry per unique registered
      * layer (default or OSC). Lookup is linear in the layer pointer;
      * N is small (a handful at most). */
-    struct layer_coro *layer_coros;
+    /* Array of POINTERS to heap-allocated layer_coro structs. The
+     * struct itself must not be relocatable, because each spawned
+     * coro stores its layer_coro pointer in its closure — a realloc
+     * of the storage would silently free-after-use every prior
+     * layer's coro state. Indirection costs one extra deref but
+     * keeps the structs stable across grow. */
+    struct layer_coro **layer_coros;
     size_t layer_coro_count;
     size_t layer_coro_cap;
 };
@@ -658,8 +664,8 @@ static struct layer_coro *find_layer_coro(
 {
     if (!layer) return NULL;
     for (size_t i = 0; i < sm->layer_coro_count; i++) {
-        if (sm->layer_coros[i].layer == layer) {
-            return &sm->layer_coros[i];
+        if (sm->layer_coros[i]->layer == layer) {
+            return sm->layer_coros[i];
         }
     }
     return NULL;
@@ -678,13 +684,14 @@ static struct layer_coro *get_or_spawn_layer_coro(
 
     if (sm->layer_coro_count == sm->layer_coro_cap) {
         size_t nc = sm->layer_coro_cap ? sm->layer_coro_cap * 2 : 4;
-        struct layer_coro *grown =
-            realloc(sm->layer_coros, nc * sizeof(struct layer_coro));
+        struct layer_coro **grown =
+            realloc(sm->layer_coros, nc * sizeof(struct layer_coro *));
         if (!grown) return NULL;
         sm->layer_coros = grown;
         sm->layer_coro_cap = nc;
     }
-    struct layer_coro *lc = &sm->layer_coros[sm->layer_coro_count];
+    struct layer_coro *lc = calloc(1, sizeof(struct layer_coro));
+    if (!lc) return NULL;
     lc->layer  = layer;
     lc->sm     = sm;
     lc->result = YETTY_OK_VOID();
@@ -692,10 +699,11 @@ static struct layer_coro *get_or_spawn_layer_coro(
         layer_coro_entry, lc, 1024 * 1024, "wire-layer");
     if (YETTY_IS_ERR(spawn_res)) {
         yetty_ycore_error_destroy(spawn_res.error);
+        free(lc);
         return NULL;
     }
     lc->coro = spawn_res.value;
-    sm->layer_coro_count++;
+    sm->layer_coros[sm->layer_coro_count++] = lc;
     return lc;
 }
 
@@ -757,10 +765,13 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
      * driving each coro to a forced exit, which would require unwind
      * hooks we don't have in C.) */
     for (size_t i = 0; i < statemachine->layer_coro_count; i++) {
-        if (statemachine->layer_coros[i].coro) {
-            yetty_yplatform_coro_destroy(statemachine->layer_coros[i].coro);
-            statemachine->layer_coros[i].coro = NULL;
+        if (!statemachine->layer_coros[i])
+            continue;
+        if (statemachine->layer_coros[i]->coro) {
+            yetty_yplatform_coro_destroy(statemachine->layer_coros[i]->coro);
+            statemachine->layer_coros[i]->coro = NULL;
         }
+        free(statemachine->layer_coros[i]);
     }
     free(statemachine->layer_coros);
     statemachine->layer_coros = NULL;

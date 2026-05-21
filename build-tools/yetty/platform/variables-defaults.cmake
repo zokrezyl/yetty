@@ -84,6 +84,7 @@ option(YETTY_ENABLE_FEATURE_MSDF_GEN  "ymsdf-gen — MSDF font generator"       
 option(YETTY_ENABLE_FEATURE_YECHO     "yecho — echo/display"                 ON)
 option(YETTY_ENABLE_FEATURE_YGUI      "ygui — pure-C widget library"          ON)
 option(YETTY_ENABLE_FEATURE_YMGUI     "ymgui — Dear ImGui ↔ yetty bridge"    ON)
+option(YETTY_ENABLE_FEATURE_YWASM     "ywasm — WebGPU-over-OSC bridge"        ON)
 
 # Drawing / rendering
 option(YETTY_ENABLE_FEATURE_YDRAW_ZOO "ydraw-zoo — ydraw demo shapes"        OFF)
@@ -140,6 +141,7 @@ option(YETTY_ENABLE_TOOL_YDRAW_GENERATOR "ydraw-generator tool"              OFF
 option(YETTY_ENABLE_TOOL_YDRAW_BENCH    "ydraw-bench tool"                 ON)
 option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
 option(YETTY_ENABLE_TOOL_YECHO           "yecho tool"                        ON)
+option(YETTY_ENABLE_TOOL_YWASM_DEMO       "ywasm-demo tool (bridge smoke test)" ON)
 option(YETTY_ENABLE_TOOL_YPLOT           "yplot tool"                        ON)
 option(YETTY_ENABLE_TOOL_YTOP            "ytop tool (CPU monitor)"           ON)
 option(YETTY_ENABLE_TOOL_YGREETER        "ygreeter first-contact tool"       ON)
