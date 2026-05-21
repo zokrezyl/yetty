@@ -44,6 +44,8 @@
 #include <yetty/yplatform/tty.h>   /* stderr-rerouting probe */
 #include "embedded-assets.h"       /* incbin-extracted assets at <data_dir>/ */
 #include <yetty/ygui/ygui.h>
+#include <yetty/ygui/ygui_yimage.h>
+#include <yetty/ygui/ygui_yplot.h>
 #ifdef YGREETER_HAS_YBROWSER
 #include <yetty/ygui/ygui_ybrowser.h>
 #endif
@@ -210,182 +212,99 @@ static const struct nav_entry WELCOME_NAV[] = {
 /* =========================================================================
  * Plots tab content.
  *
- * Several yplot demos showing increasingly busy compositions. The yplot
- * complex prim takes its bounds inside the buffer's coordinate system;
- * the rich widget translates those bounds by the widget's resolved
- * layout box, so authoring is purely widget-local.
+ * Drives the Plots tab through the ygui_yplot widget — one rich surface
+ * per tab, content swapped via yetty_ygui_widget_yplot_set_source on
+ * each nav click. The data tables below carry the yexpr-plot source
+ * string + range / flags per entry; load_entry dispatches to the
+ * widget when the tab kind is TAB_KIND_PLOTS.
+ *
+ * Static const data lives inside accessor functions (not file scope)
+ * so the loader can read it without exposing program-lifetime symbols.
  * ========================================================================= */
 
-#define PLOT_TRIG                                                                                  \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"sin(x+t) and cos(x+t)\"\n"                                                   \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [-6.2832, 6.2832]\n"                                                           \
-    "      y_range: [-1.5, 1.5]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      functions:\n"                                                                           \
-    "        - expr: \"sin(x+t)\"\n"                                                               \
-    "          color: \"#ff6b6b\"\n"                                                               \
-    "        - expr: \"cos(x+t)\"\n"                                                               \
-    "          color: \"#4ecdc4\"\n"
-
-#define PLOT_PARABOLA                                                                              \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"x*x  and  2*x + 1\"\n"                                                       \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [-5, 5]\n"                                                                     \
-    "      y_range: [-2, 12]\n"                                                                    \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      functions:\n"                                                                           \
-    "        - expr: \"x*x\"\n"                                                                    \
-    "          color: \"#ffe66d\"\n"                                                               \
-    "        - expr: \"2*x + 1\"\n"                                                                \
-    "          color: \"#aa96da\"\n"
-
-#define PLOT_DECAY                                                                                 \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"exp(-x*x/4) * sin(3*x)\"\n"                                                  \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [-6, 6]\n"                                                                     \
-    "      y_range: [-1.2, 1.2]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      functions:\n"                                                                           \
-    "        - expr: \"exp(-x*x/4) * sin(3*x)\"\n"                                                 \
-    "          color: \"#74c0fc\"\n"
-
-/* The entries below use the new top-level `source:` YAML key, which feeds
- * the whole yexpr-plot text into the parser in one go — so `name=buffer`
- * declarations, inline `x=A..B` / `@view=` framing, and `@<name>.color=`
- * overrides all work. The legacy `functions:` list is bypassed. */
-
-#define PLOT_INLINE_BUFFER                                                                         \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"inline buffer: 8 samples spread over x\"\n"                                  \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [0, 1]\n"                                                                      \
-    "      y_range: [-1, 1]\n"                                                                     \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"data=buffer; @data.size=8; "                                                  \
-    "@data.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; @data.color=#74C5A5\"\n"
-
-#define PLOT_BUFFER_MODULATED                                                                      \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"envelope(x) * sin(x*60)\"\n"                                                 \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [0, 1]\n"                                                                      \
-    "      y_range: [-1.1, 1.1]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"envelope=buffer; @envelope.size=8; "                                          \
-    "@envelope.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; "                                             \
-    "pulse=envelope(x)*sin(x*60); "                                                                \
-    "@envelope.color=#364A47; @pulse.color=#74C5A5\"\n"
-
-#define PLOT_ADSR_HARMONICS                                                                        \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"ADSR envelope x three harmonics\"\n"                                         \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [0, 1]\n"                                                                      \
-    "      y_range: [-1.1, 1.1]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"env=buffer; @env.size=16; "                                                   \
-    "@env.values=0,0.4,0.8,1,0.95,0.85,0.75,0.65,0.55,0.45,0.35,0.25,0.18,0.12,0.06,0; "           \
-    "h1=env(x)*sin(x*6); h2=env(x)*sin(x*12); h3=env(x)*sin(x*24); "                               \
-    "@env.color=#364A47; @h1.color=#FF6B6B; @h2.color=#FFE66D; @h3.color=#74C5A5\"\n"
-
-#define PLOT_TRAVELLING_PHASE                                                                      \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"static envelope x travelling phase (time)\"\n"                               \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      x_range: [0, 1]\n"                                                                      \
-    "      y_range: [-1.1, 1.1]\n"                                                                 \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"env=buffer; @env.size=12; "                                                   \
-    "@env.values=0,0.3,0.7,1,0.95,0.85,0.7,0.5,0.3,0.15,0.05,0; "                                  \
-    "travel=env(x)*sin(x*40 - time*4); "                                                           \
-    "@env.color=#5A8979; @travel.color=#74C5A5\"\n"
-
-#define PLOT_DOMAIN_VIEW                                                                           \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"inline x=-3pi..3pi, view zoomed to -pi..pi\"\n"                              \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - yplot:\n"                                                                                 \
-    "      position: [16, 80]\n"                                                                   \
-    "      size: [460, 280]\n"                                                                     \
-    "      show_grid: true\n"                                                                      \
-    "      show_axes: true\n"                                                                      \
-    "      show_labels: true\n"                                                                    \
-    "      source: \"x=-10..10; @view=-pi..pi,-0.5..1.5; "                                        \
-    "signal=sin(x)/x; @signal.color=#74C5A5\"\n"
-
-static const struct nav_entry PLOT_NAV[] = {
-    {"Trigonometry", PLOT_TRIG},
-    {"Polynomial", PLOT_PARABOLA},
-    {"Damped wave", PLOT_DECAY},
-    {"Inline buffer", PLOT_INLINE_BUFFER},
-    {"Buffer x carrier", PLOT_BUFFER_MODULATED},
-    {"ADSR harmonics", PLOT_ADSR_HARMONICS},
-    {"Travelling phase", PLOT_TRAVELLING_PHASE},
-    {"Domain & view", PLOT_DOMAIN_VIEW},
+struct plot_entry {
+    const char *label;
+    const char *source;
+    float x_min, x_max, y_min, y_max;
+    uint32_t flags;
 };
+
+#define PLOT_FLAGS_AXES                                                                            \
+    (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS)
+
+/* Per-entry data accessor. `*out_count` is filled with the entry count
+ * when non-NULL. Returns NULL for out-of-range idx so callers can bail
+ * cleanly. */
+static const struct plot_entry *plot_entry_at(int idx, int *out_count)
+{
+    static const struct plot_entry data[] = {
+        {"Trigonometry",
+         "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4",
+         -6.2832f, 6.2832f, -1.5f, 1.5f, PLOT_FLAGS_AXES},
+
+        {"Polynomial",
+         "f=x*x; g=2*x+1; @f.color=#ffe66d; @g.color=#aa96da",
+         -5.0f, 5.0f, -2.0f, 12.0f, PLOT_FLAGS_AXES},
+
+        {"Damped wave",
+         "f=exp(-x*x/4)*sin(3*x); @f.color=#74c0fc",
+         -6.0f, 6.0f, -1.2f, 1.2f, PLOT_FLAGS_AXES},
+
+        {"Inline buffer",
+         "data=buffer; @data.size=8; "
+         "@data.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; @data.color=#74C5A5",
+         0.0f, 1.0f, -1.0f, 1.0f, PLOT_FLAGS_AXES},
+
+        {"Buffer x carrier",
+         "envelope=buffer; @envelope.size=8; "
+         "@envelope.values=0,0.3,0.6,0.9,0.6,0,-0.4,-0.2; "
+         "pulse=envelope(x)*sin(x*60); "
+         "@envelope.color=#364A47; @pulse.color=#74C5A5",
+         0.0f, 1.0f, -1.1f, 1.1f, PLOT_FLAGS_AXES},
+
+        {"ADSR harmonics",
+         "env=buffer; @env.size=16; "
+         "@env.values=0,0.4,0.8,1,0.95,0.85,0.75,0.65,0.55,0.45,0.35,0.25,0.18,0.12,0.06,0; "
+         "h1=env(x)*sin(x*6); h2=env(x)*sin(x*12); h3=env(x)*sin(x*24); "
+         "@env.color=#364A47; @h1.color=#FF6B6B; @h2.color=#FFE66D; @h3.color=#74C5A5",
+         0.0f, 1.0f, -1.1f, 1.1f, PLOT_FLAGS_AXES},
+
+        {"Travelling phase",
+         "env=buffer; @env.size=12; "
+         "@env.values=0,0.3,0.7,1,0.95,0.85,0.7,0.5,0.3,0.15,0.05,0; "
+         "travel=env(x)*sin(x*40 - time*4); "
+         "@env.color=#5A8979; @travel.color=#74C5A5",
+         0.0f, 1.0f, -1.1f, 1.1f, PLOT_FLAGS_AXES},
+
+        {"Domain & view",
+         "x=-10..10; @view=-pi..pi,-0.5..1.5; "
+         "signal=sin(x)/x; @signal.color=#74C5A5",
+         /* x_min/x_max ignored because source overrides via x=A..B + @view */
+         0.0f, 0.0f, 0.0f, 0.0f, PLOT_FLAGS_AXES},
+    };
+    int n = (int)(sizeof(data) / sizeof(data[0]));
+    if (out_count) *out_count = n;
+    if (idx < 0 || idx >= n) return NULL;
+    return &data[idx];
+}
+
+/* Nav rows for the Plots tab — labels only; the plot content comes
+ * from plot_entry_at() under TAB_KIND_PLOTS dispatch. */
+static const struct nav_entry *plot_nav_entries(int *out_count)
+{
+    static const struct nav_entry data[] = {
+        {"Trigonometry", NULL},
+        {"Polynomial", NULL},
+        {"Damped wave", NULL},
+        {"Inline buffer", NULL},
+        {"Buffer x carrier", NULL},
+        {"ADSR harmonics", NULL},
+        {"Travelling phase", NULL},
+        {"Domain & view", NULL},
+    };
+    if (out_count) *out_count = (int)(sizeof(data) / sizeof(data[0]));
+    return data;
+}
 
 /* =========================================================================
  * Images tab content.
@@ -442,56 +361,6 @@ static const struct nav_entry PLOT_NAV[] = {
 static struct nav_entry *g_image_nav = NULL;
 static char **g_image_paths = NULL;
 static int g_image_path_count = 0;
-
-/* Build a ydraw buffer holding ONE yimage prim plus a TEXT_SPAN title.
- * The ydraw-yaml parser doesn't support `yimage:` blocks today
- * (yaml_factory: none in yimage.yaml), so we go through yimage's C API
- * directly and append the title via the buffer's add_text helper.
- *
- * Caller owns the returned buffer; ownership is transferred to the rich
- * widget when handed off via set_buffer. */
-#include <yetty/yimage/yimage.h>
-
-static struct yetty_ydraw_draw_list *build_image_buffer(const char *title, const char *path)
-{
-    ydebug("build_image_buffer: ENTER title='%s' path='%s'", title ? title : "(null)",
-           path ? path : "(null)");
-    /* Image bounds: position 80 (same y-clearance the plot tab uses
-     * over its 22pt title so the heading isn't covered) and 2× the
-     * previous draw area so the bundled logos render at a respectable
-     * size on a typical card. */
-    struct yetty_yimage_render_config cfg = {
-        .bounds_x = 16.0f,
-        .bounds_y = 80.0f,
-        .bounds_w = 920.0f,
-        .bounds_h = 640.0f,
-    };
-    struct yetty_ydraw_draw_list_result r = yetty_yimage_render_path(path, &cfg);
-    if (YETTY_IS_ERR(r)) {
-        ydebug("build_image_buffer: yimage_render_path FAILED: %s", r.error.msg);
-        yetty_ycore_error_destroy(r.error);
-        return NULL;
-    }
-    ydebug("build_image_buffer: yimage_render_path OK, buf=%p", (void *)r.value);
-    /* Title TEXT_SPAN drawn above the image. The buffer's add_text takes
-     * a yetty_ycore_buffer view so we wrap the literal in place. */
-    if (title && *title) {
-        struct yetty_ycore_buffer text_view = {
-            .data = (uint8_t *)title,
-            .size = strlen(title),
-            .capacity = strlen(title),
-        };
-        struct yetty_ycore_void_result tr =
-            yetty_ydraw_draw_list_add_text(r.value, 16.0f, 36.0f, &text_view, 22.0f,
-                                           /*color (ABGR)=*/0xFFFFFFFFu, /*layer=*/0,
-                                           /*font_id=*/-1, /*rotation=*/0.0f);
-        if (YETTY_IS_ERR(tr)) {
-            yetty_ycore_error_destroy(tr.error);
-            /* keep the image even if the title failed */
-        }
-    }
-    return r.value;
-}
 
 static int path_exists(const char *path)
 {
@@ -905,11 +774,29 @@ static const struct nav_entry CODE_NAV[] = {
  * row resolves to its tab + index via `rebind_*` userdata so we can
  * swap the rich content.
  * ========================================================================= */
+/* How load_entry interprets an entry click for this tab.
+ *
+ *   TAB_KIND_YAML    — entries[i].yaml drives yetty_ygui_widget_rich_set_yaml.
+ *                      Default for Welcome / Code / future YAML-driven tabs.
+ *   TAB_KIND_PLOTS   — entries[i] supplies the label only; the plot source
+ *                      string + render_config come from plot_entries() at the
+ *                      same index, fed to yetty_ygui_widget_yplot_set_source.
+ *   TAB_KIND_IMAGES  — the path comes from g_image_paths[i], fed to
+ *                      yetty_ygui_widget_yimage_set_file. The widget owns
+ *                      the same rich surface, so the same widget pointer
+ *                      handles every entry. */
+enum tab_kind {
+    TAB_KIND_YAML = 0,
+    TAB_KIND_PLOTS,
+    TAB_KIND_IMAGES,
+};
+
 struct tab_state {
     struct yetty_ygui_widget *nav_list;
     struct yetty_ygui_widget *rich;
     const struct nav_entry *entries;
     int n_entries;
+    enum tab_kind kind;
 };
 
 /* The Images tab uses g_image_paths[entry_index] (built at startup
@@ -1124,20 +1011,52 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
     if (entry_index < 0 || entry_index >= t->n_entries) {
         return;
     }
-    /* Images tab: pick the per-entry file from g_image_paths and build
-     * a fresh ydraw buffer (yimage prim + title TEXT_SPAN). Falls
-     * through to the placeholder YAML when nothing was discovered or
-     * the file decode failed. */
-    if (tab_index == g_images_tab_index && entry_index < g_image_path_count && g_image_paths &&
-        g_image_paths[entry_index]) {
-        struct yetty_ydraw_draw_list *buf =
-            build_image_buffer(t->entries[entry_index].label, g_image_paths[entry_index]);
-        if (buf) {
-            yetty_ygui_widget_rich_set_buffer(t->rich, buf);
-            return;
+
+    switch (t->kind) {
+    case TAB_KIND_PLOTS: {
+        /* yexpr-plot source + ranges live next to the labels in
+         * plot_entry_at(); the widget swaps its prim in place. */
+        const struct plot_entry *pe = plot_entry_at(entry_index, NULL);
+        if (!pe) return;
+        struct yetty_yplot_render_config cfg = {
+            .x_min = pe->x_min,
+            .x_max = pe->x_max,
+            .y_min = pe->y_min,
+            .y_max = pe->y_max,
+            .flags = pe->flags,
+        };
+        struct yetty_ycore_void_result r =
+            yetty_ygui_widget_yplot_set_source(t->rich, pe->source, 0, &cfg);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
         }
+        return;
     }
+
+    case TAB_KIND_IMAGES: {
+        /* The yimage widget rebuilds + swaps the prim from the path. */
+        if (entry_index < g_image_path_count && g_image_paths &&
+            g_image_paths[entry_index]) {
+            struct yetty_ycore_void_result r =
+                yetty_ygui_widget_yimage_set_file(t->rich, g_image_paths[entry_index]);
+            if (YETTY_IS_OK(r)) {
+                return;
+            }
+            yetty_ycore_error_destroy(r.error);
+        }
+        /* Fall through to YAML placeholder when the path didn't resolve. */
+        break;
+    }
+
+    case TAB_KIND_YAML:
+    default:
+        break;
+    }
+
     const char *yaml = yaml_for(t, entry_index);
+    if (!yaml) {
+        return;
+    }
     struct yetty_ycore_void_result r = yetty_ygui_widget_rich_set_yaml(t->rich, yaml, strlen(yaml));
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
@@ -2204,7 +2123,7 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
 static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
                                                 struct yetty_ygui_widget *tab_panel,
                                                 const struct nav_entry *entries, int n_entries,
-                                                const char *id_prefix)
+                                                const char *id_prefix, enum tab_kind kind)
 {
     char id_buf[128];
     snprintf(id_buf, sizeof(id_buf), "%s_body", id_prefix);
@@ -2246,6 +2165,7 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
     app->tabs[tab_index].rich = rich;
     app->tabs[tab_index].entries = entries;
     app->tabs[tab_index].n_entries = n_entries;
+    app->tabs[tab_index].kind = kind;
 
     /* Load entry 0 by default so the right pane isn't empty at startup. */
     if (n_entries > 0) {
@@ -2752,27 +2672,36 @@ int main(int argc, char **argv)
     /* Welcome */
     struct yetty_ygui_widget *welcome = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Welcome");
     build_tab_body(&app, 0, welcome, WELCOME_NAV,
-                   (int)(sizeof(WELCOME_NAV) / sizeof(WELCOME_NAV[0])), "welcome");
+                   (int)(sizeof(WELCOME_NAV) / sizeof(WELCOME_NAV[0])), "welcome",
+                   TAB_KIND_YAML);
 
-    /* Plots */
-    struct yetty_ygui_widget *plots = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Plots");
-    build_tab_body(&app, 1, plots, PLOT_NAV, (int)(sizeof(PLOT_NAV) / sizeof(PLOT_NAV[0])),
-                   "plots");
+    /* Plots — driven by the ygui_yplot widget. Labels come from
+     * plot_nav_entries(); the yexpr-plot source + render config come
+     * from plot_entry_at() under TAB_KIND_PLOTS dispatch in load_entry. */
+    {
+        struct yetty_ygui_widget *plots = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Plots");
+        int plot_count = 0;
+        const struct nav_entry *plot_nav = plot_nav_entries(&plot_count);
+        build_tab_body(&app, 1, plots, plot_nav, plot_count, "plots", TAB_KIND_PLOTS);
+    }
 
     /* Images tab — nav rows built dynamically from assets/logo-*.jpeg
-     * so the rail grows with the bundled asset count. Falls back to
+     * so the rail grows with the bundled asset count. Driven by the
+     * ygui_yimage widget via TAB_KIND_IMAGES dispatch. Falls back to
      * the placeholder YAML row when no logo files are found. */
     discover_logo_images(argv[0]);
     struct yetty_ygui_widget *images = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Images");
     if (g_image_path_count > 0) {
-        build_tab_body(&app, g_images_tab_index, images, g_image_nav, g_image_path_count, "images");
+        build_tab_body(&app, g_images_tab_index, images, g_image_nav, g_image_path_count, "images",
+                       TAB_KIND_IMAGES);
     } else {
         /* No bundled images located — single placeholder row so the
          * tab isn't empty and the hint text is visible. */
         static const struct nav_entry fallback[] = {
             {"Logo", IMAGE_FALLBACK_YAML},
         };
-        build_tab_body(&app, g_images_tab_index, images, fallback, 1, "images");
+        build_tab_body(&app, g_images_tab_index, images, fallback, 1, "images",
+                       TAB_KIND_IMAGES);
     }
 
 #ifdef YGREETER_HAS_YVIDEO
@@ -2789,7 +2718,8 @@ int main(int argc, char **argv)
     struct yetty_ygui_widget *code = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Code");
     int code_tab_index = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
     build_tab_body(&app, code_tab_index, code, CODE_NAV,
-                   (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code");
+                   (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code",
+                   TAB_KIND_YAML);
 
     /* Elements — single tab gathering every ygui widget under
      * collapsing-header sections, so the tabbar doesn't grow one tab

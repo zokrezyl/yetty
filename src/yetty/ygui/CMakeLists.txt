@@ -31,6 +31,9 @@ set(YGUI_CORE_SOURCES
     ygui_layout.c
     ygui_css.c
     ygui_notify.c
+    ygui_yimage.c
+    ygui_yplot.c
+    ygui_yvideo.c
 )
 
 # Static-only YAML convenience layer for the RICH widget — same gating
@@ -59,6 +62,9 @@ target_link_libraries(ygui_core PUBLIC
     yetty_yfont_core  # raster-font-from-file for text measurement
     yetty_ydraw_yaml # rich widget's create_from_yaml -> ydraw_yaml_parse
     yetty_yplatform_core # ytime monotonic clock for notification TTL
+    yetty_yimage_core # ygui_yimage widget — stb_image decode + yimage prim
+    yetty_yplot_core  # ygui_yplot widget — yplot prim serializer
+    yetty_yvideo_core # ygui_yvideo widget — yvideo prim serializer (+ MP4 helper)
 )
 
 set_target_properties(ygui_core PROPERTIES
@@ -122,17 +128,6 @@ if(YETTY_ENABLE_FEATURE_YMARKDOWN)
     install(TARGETS ygui_ymarkdown ARCHIVE DESTINATION lib)
 endif()
 
-if(YETTY_ENABLE_FEATURE_YIMAGE)
-    add_library(ygui_yimage STATIC ygui_yimage.c)
-    target_include_directories(ygui_yimage PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${YETTY_ROOT}/include
-    )
-    target_link_libraries(ygui_yimage PUBLIC ygui_core yetty_yimage_core)
-    set_target_properties(ygui_yimage PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    install(TARGETS ygui_yimage ARCHIVE DESTINATION lib)
-endif()
-
 if(YETTY_ENABLE_FEATURE_YPDF)
     add_library(ygui_ypdf STATIC ygui_ypdf.c)
     target_include_directories(ygui_ypdf PUBLIC
@@ -182,6 +177,8 @@ install(FILES
     ${YETTY_ROOT}/include/yetty/ygui/ygui_ybrowser.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_ymarkdown.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_yimage.h
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_yplot.h
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_yvideo.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_yjungle.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_yzoo.h
     DESTINATION include/yetty/ygui
@@ -230,6 +227,9 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         yetty_ycore
         yetty_yface
         yetty_yfont_core
+        yetty_yimage_core
+        yetty_yplot_core
+        yetty_yvideo_core
         uv_a
     )
 

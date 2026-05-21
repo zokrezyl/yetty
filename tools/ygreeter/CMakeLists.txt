@@ -22,12 +22,12 @@ target_include_directories(ygreeter PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-# ygui carries ydraw-core + ysdf + ycore + yface + yfont_core + the
-# ydraw-yaml dep needed by rich's create_from_yaml. yetty_yimage_core
-# is added on top so we can call yetty_yimage_render_path() — the
-# yimage YAML factory isn't wired (yaml_factory: none) so we build the
-# image-bearing buffer programmatically and hand it to rich_set_buffer.
-target_link_libraries(ygreeter PRIVATE ygui yetty_yimage_core yetty_yplatform_core)
+# ygui carries everything ygreeter needs: ydraw-core, ysdf, ycore,
+# yface, yfont_core, ydraw-yaml (rich's create_from_yaml), plus the
+# yplot / yimage / yvideo prim serializers used by the embedded
+# ygui_yplot / ygui_yimage / ygui_yvideo widgets. yplatform_core
+# stays explicit — ygreeter calls yetty_yplatform_* directly.
+target_link_libraries(ygreeter PRIVATE ygui yetty_yplatform_core)
 
 # Video tab — drives the ygui_yvideo widget. The widget lives inside
 # ygui_core now (yetty_yvideo_core + yvideo-mp4.c are PUBLIC link

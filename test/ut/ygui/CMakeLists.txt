@@ -22,3 +22,15 @@ target_include_directories(ygui-flex-layout-test PRIVATE
 target_link_libraries(ygui-flex-layout-test PRIVATE
     ygui yetty_ycore m)
 add_test(NAME ygui_flex_layout COMMAND ygui-flex-layout-test)
+
+add_executable(ygui-yplot-test
+    ygui-yplot-test.c
+    ${YGUI_TEST_SHIM_SOURCES}
+)
+target_include_directories(ygui-yplot-test PRIVATE
+    ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
+)
+target_link_libraries(ygui-yplot-test PRIVATE
+    ygui yetty_ycore m)
+add_test(NAME ygui_yplot COMMAND ygui-yplot-test)
