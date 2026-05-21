@@ -829,10 +829,10 @@ static int g_yjungle_tab_index = -1;
 #endif
 
 #if defined(YGREETER_HAS_YZOO) || defined(YGREETER_HAS_YJUNGLE)
-#include <time.h>
 #include <uv.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
+#include <yetty/yplatform/time.h>
 
 /* Linked from libygui_yzoo / libygui_yjungle (same symbol, exported by
  * both since ygui_flatten.c is compiled into each). Walks a draw_list,
@@ -846,9 +846,7 @@ struct yetty_ycore_void_result yetty_ygui_flatten_draw_list(
 
 static uint64_t ygreeter_mono_ms(void)
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)(ts.tv_nsec / 1000000);
+    return (uint64_t)(yetty_yplatform_ytime_monotonic_sec() * 1000.0);
 }
 #endif
 
