@@ -67,6 +67,13 @@ void yetty_ycore_error_destroy(struct yetty_ycore_error err);
 void yetty_ycore_error_print(FILE *out, const char *headline,
                              struct yetty_ycore_error err);
 
+/* Format the error and its cause chain into `buf`. Same content as
+ * yetty_ycore_error_print but written into a caller-supplied buffer, and
+ * with no trailing newline. Truncates safely if the chain would overflow.
+ * Returns the number of bytes written (excluding the terminating NUL). */
+size_t yetty_ycore_error_snprint(char *buf, size_t bufsize,
+                                 struct yetty_ycore_error err);
+
 /* Create success result (void) */
 #define YETTY_OK_VOID() ((struct yetty_ycore_void_result){.ok = 1, .value = 0})
 

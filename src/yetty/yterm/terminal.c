@@ -188,10 +188,9 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
         struct yetty_ycore_void_result fr =
             yetty_ywire_wire_statemachine_feed(terminal->sm, buf, (size_t)nread);
         if (YETTY_IS_ERR(fr)) {
-            /* libuv-callback boundary: no Result to propagate. Park the
-             * error on the event loop; libuv_start will surface it from
-             * its own return, which yetty_run propagates to main.
-             * Build via YETTY_ERR so the loop frame gets file/line/func. */
+            /* libuv-callback boundary: no Result to propagate. Surface
+             * the chain as a ynotify card; the loop keeps running. Build
+             * via YETTY_ERR so this frame gets file/line/func. */
             struct yetty_ycore_void_result wrap = YETTY_ERR(
                 yetty_ycore_void,
                 "terminal_pty_pipe_read: wire_statemachine_feed failed", fr);

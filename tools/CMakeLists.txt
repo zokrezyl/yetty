@@ -22,6 +22,10 @@ if(YETTY_ENABLE_TOOL_YECHO)
     add_subdirectory(yecho)
 endif()
 
+if(YETTY_ENABLE_TOOL_GEN_ERROR)
+    add_subdirectory(gen-error)
+endif()
+
 if(YETTY_ENABLE_TOOL_YRDAWN_DEMO)
     add_subdirectory(yrdawn-demo)
 endif()

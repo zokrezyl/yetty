@@ -864,6 +864,21 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
             struct yetty_ycore_void_result r = statemachine->sm_result;
             yetty_yplatform_coro_destroy(statemachine->sm_coro);
             statemachine->sm_coro = NULL;
+
+            /* Respawn so the SM survives the error. The previous scanner
+             * exited mid-sequence, so reset the framing state too — the
+             * leftover body bytes get treated as raw text on the next
+             * resume, which is the safest "keep going" behaviour. */
+            statemachine->state = SCAN_RAW;
+            statemachine->current_code = 0;
+            statemachine->args_b64_len = 0;
+            envelope_reset(statemachine);
+            struct yplatform_coro_ptr_result sp =
+                yetty_yplatform_coro_spawn(sm_coro_entry, statemachine,
+                                           1024 * 1024, "wire-sm");
+            if (YETTY_IS_OK(sp)) {
+                statemachine->sm_coro = sp.value;
+            }
             return r;
         }
     }
@@ -1087,6 +1102,23 @@ static void sm_coro_entry(void *arg)
                 sm->read_pos++;
                 if (c == ';') {
                     decode_args_slot(sm);
+                    /* Test hook: OSC 99099 synthesises a multi-frame error
+                     * chain so the post_fatal_error → ynotify path can be
+                     * exercised end-to-end from a child process. Used by
+                     * tools/gen-error. The chain has three levels to make
+                     * the rendered card show every cause-by link. */
+                    if (sm->current_code == 99099) {
+                        struct yetty_ycore_void_result inner =
+                            YETTY_ERR(yetty_ycore_void,
+                                      "test trigger: inner cause");
+                        struct yetty_ycore_void_result mid =
+                            YETTY_ERR(yetty_ycore_void,
+                                      "test trigger: middle wrap", inner);
+                        sm->sm_result = YETTY_ERR(
+                            yetty_ycore_void,
+                            "test trigger: synthetic OSC 99099 error", mid);
+                        return;
+                    }
                     sm->current_layer = find_layer(sm, sm->current_code);
                     sm->state = SCAN_OSC_BODY;
                 } else if (sm->args_b64_len < sizeof(sm->args_b64)) {
