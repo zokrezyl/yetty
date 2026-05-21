@@ -12,6 +12,8 @@
 #include <yetty/ygui/ygui_yplot.h>
 #include <yetty/yplot/yplot.h>
 
+#include <string.h>
+
 /* Fall-back default size — matches the documented yplot defaults
  * (yplot.h "400 — width in pixels" / "200 — height in pixels"). Used
  * when neither the caller's config nor a resolved layout box give us
@@ -39,10 +41,18 @@ static struct yetty_ydraw_draw_list *build_buffer(
     if (cfg.bounds_h <= 0.0f) {
         cfg.bounds_h = widget_h > 0.0f ? widget_h : YGUI_YPLOT_DEFAULT_H;
     }
-    /* yetty_yplot_render treats NULL source as an empty string; we
-     * normalise so the buffer-only mode (source_len = 0) still works. */
+    /* Normalise the source pair: NULL source → empty buffer-only
+     * input; non-NULL with source_len == 0 → auto-strlen (standard C
+     * convention so callers can pass a literal without re-counting). */
     const char *src = source ? source : "";
-    size_t src_len = source ? source_len : 0u;
+    size_t src_len;
+    if (!source) {
+        src_len = 0u;
+    } else if (source_len == 0u) {
+        src_len = strlen(source);
+    } else {
+        src_len = source_len;
+    }
 
     struct yetty_ydraw_draw_list_result r;
     if (buffers && buffer_count > 0) {

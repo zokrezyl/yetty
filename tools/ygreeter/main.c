@@ -797,6 +797,11 @@ struct tab_state {
     const struct nav_entry *entries;
     int n_entries;
     enum tab_kind kind;
+    /* Last entry handed to load_entry. on_resize re-runs load_entry
+     * against this index so the yplot / yimage prims rebuild at the
+     * new widget size — they bake bounds at render-time, so without
+     * a re-render they stay locked at the construction-time size. */
+    int last_entry;
 };
 
 /* The Images tab uses g_image_paths[entry_index] (built at startup
@@ -1010,6 +1015,19 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
     struct tab_state *t = &app->tabs[tab_index];
     if (entry_index < 0 || entry_index >= t->n_entries) {
         return;
+    }
+    t->last_entry = entry_index;
+
+    /* The yplot / yimage producers bake bounds at render-time from
+     * the widget's resolved content box. Force a layout pass so the
+     * box is populated before set_* runs — without this, an entry
+     * loaded during build_tab_body (before engine_run) renders at the
+     * 400×200 fallback and stays that size forever. */
+    if (t->kind == TAB_KIND_PLOTS || t->kind == TAB_KIND_IMAGES) {
+        struct yetty_ycore_void_result lr = yetty_ygui_engine_layout(app->engine);
+        if (YETTY_IS_ERR(lr)) {
+            yetty_ycore_error_destroy(lr.error);
+        }
     }
 
     switch (t->kind) {
@@ -2106,6 +2124,43 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
         yj_anim_ensure_attached(&app->yjungle);
     }
 #endif
+
+    /* Re-render Plots / Images tabs so the yplot / yimage prims pick
+     * up the new widget content-box size. The producers bake bounds
+     * at render-time, so without this they stay locked at the
+     * construction-time size — the user sees a small plot stuck in
+     * the corner of the flex-grown rich widget. Run a layout pass
+     * first so the content box query inside load_entry returns the
+     * new dimensions. */
+    {
+        struct yetty_ycore_void_result lr = yetty_ygui_engine_layout(e);
+        if (YETTY_IS_ERR(lr)) {
+            yetty_ycore_error_destroy(lr.error);
+        }
+        int max = (int)(sizeof(app->tabs) / sizeof(app->tabs[0]));
+        for (int i = 0; i < max; i++) {
+            struct tab_state *t = &app->tabs[i];
+            if (!t->rich || t->last_entry < 0) continue;
+            if (t->kind == TAB_KIND_PLOTS || t->kind == TAB_KIND_IMAGES) {
+                load_entry(app, i, t->last_entry);
+            }
+        }
+    }
+
+    /* yvideo widget rebuilds its prim at the rich widget's current
+     * content box. Re-trigger only when the Video tab is active —
+     * yvideo_tab_set_active is the canonical path through the
+     * widget's set_mp4_file, which handles the demux + resize in
+     * one call. */
+#ifdef YGREETER_HAS_YVIDEO
+    if (app->video.active && app->video.rich && app->video.path) {
+        struct yetty_ycore_void_result r =
+            yetty_ygui_widget_yvideo_set_mp4_file(app->video.rich, app->video.path, NULL);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+    }
+#endif
 }
 
 /* =========================================================================
@@ -2166,6 +2221,7 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
     app->tabs[tab_index].entries = entries;
     app->tabs[tab_index].n_entries = n_entries;
     app->tabs[tab_index].kind = kind;
+    app->tabs[tab_index].last_entry = -1;
 
     /* Load entry 0 by default so the right pane isn't empty at startup. */
     if (n_entries > 0) {
@@ -2400,6 +2456,56 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
             yetty_ygui_engine_stepper(app->engine, "el_steps", 24, 0, 360, 56, steps, 3);
         yetty_ygui_widget_stepper_set_current(step, 1);
         yetty_ygui_widget_add_child(sec, step);
+    }
+
+    /* ---- Media (yplot / yimage / yvideo) ----
+     *
+     * One sample of each producer widget so the Elements tab has a
+     * runnable demo of the same APIs the Plots / Images / Video tabs
+     * use. Each widget is a thin wrapper over a rich surface; what
+     * you see here is exactly what the dedicated tabs render after
+     * their nav-click dispatch. */
+    {
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_media", "Media", 0);
+        if (!sec) {
+            return;
+        }
+        /* yplot — quick sin/cos so the GPU evaluator visibly ticks. */
+        {
+            struct yetty_yplot_render_config cfg = {
+                .x_min = -6.2832f, .x_max = 6.2832f,
+                .y_min = -1.5f,    .y_max = 1.5f,
+                .flags = PLOT_FLAGS_AXES,
+            };
+            struct yetty_ygui_widget *plot = yetty_ygui_engine_yplot_from_source(
+                app->engine, "el_yplot", 24, 0, 460, 200,
+                "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4",
+                0, &cfg);
+            if (plot) {
+                yetty_ygui_widget_add_child(sec, plot);
+            }
+        }
+        /* yimage — the first discovered logo (matches the Images tab). */
+        if (g_image_path_count > 0 && g_image_paths && g_image_paths[0]) {
+            struct yetty_ygui_widget *img = yetty_ygui_engine_yimage_from_file(
+                app->engine, "el_yimage", 24, 0, 320, 200, g_image_paths[0]);
+            if (img) {
+                yetty_ygui_widget_add_child(sec, img);
+            }
+        }
+        /* yvideo — same MP4 the Video tab plays (when available). The
+         * widget owns its decode lifecycle on the receiving canvas; the
+         * Elements tab is rarely the active one so the autoplay is
+         * cheap. */
+#ifdef YGREETER_HAS_YVIDEO
+        if (app->video.path) {
+            struct yetty_ygui_widget *vid = yetty_ygui_engine_yvideo_from_mp4_file(
+                app->engine, "el_yvideo", 24, 0, 480, 270, app->video.path, NULL);
+            if (vid) {
+                yetty_ygui_widget_add_child(sec, vid);
+            }
+        }
+#endif
     }
 
     /* ---- Lists & trees ---- */

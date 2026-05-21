@@ -39,9 +39,10 @@ struct yetty_ygui_engine;
 struct yetty_ygui_widget;
 
 /* Build a yplot widget from an expression source. `source` is borrowed
- * — only read during the call, not retained. `config` may be NULL to
- * use yplot's defaults. NULL is returned on parse / serialize failure
- * or OOM. */
+ * — only read during the call, not retained. `source_len == 0` with
+ * a non-NULL `source` is treated as "auto-strlen" (standard C
+ * convention). `config` may be NULL to use yplot's defaults. NULL is
+ * returned on parse / serialize failure or OOM. */
 struct yetty_ygui_widget *yetty_ygui_engine_yplot_from_source(
     struct yetty_ygui_engine *engine, const char *id,
     float x, float y, float w, float h,
