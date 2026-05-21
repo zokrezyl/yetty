@@ -4,6 +4,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -100,6 +101,13 @@ static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *
 
     written = write(pty->pty_master, data, len);
     if (written < 0) {
+        /* Non-blocking master fills its kernel buffer on a large
+         * write; the caller (terminal_yface_emit) loops on a 0 return
+         * with a brief backoff, so EAGAIN / EWOULDBLOCK are normal
+         * here, not an error. */
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+            return YETTY_OK(yetty_ycore_size, 0);
+        }
         return YETTY_ERR(yetty_ycore_size, "write to pty failed");
     }
 

@@ -6,6 +6,24 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <yetty/ywasm/client.h>
+
+int demo_quit_flag = 0;
+
+static void demo_on_key(void *user, uint32_t kind, int32_t key, int32_t mods,
+                        uint32_t codepoint)
+{
+    (void)user; (void)key; (void)mods;
+    if (kind == 2 /* YETTY_YWASM_INPUT_KEY_CHAR */ && codepoint == 'q')
+        demo_quit_flag = 1;
+}
+
+void demo_install_quit_on_q(struct yetty_ywasm_client *c)
+{
+    if (!c) return;
+    yetty_ywasm_client_set_input_key_cb(c, demo_on_key, NULL);
+}
+
 void demo_raw_stdin(void)
 {
     struct termios t;

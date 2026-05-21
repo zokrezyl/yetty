@@ -31,7 +31,14 @@ struct yetty_yterm_ywasm_layer {
     struct yetty_yrender_terminal_layer base;
 
     /* GPU context — used by the render path and by the codegen-emitted
-     * dispatcher once it starts driving Dawn. */
+     * dispatcher once it starts driving Dawn. The bridge shares yetty's
+     * Dawn instance / adapter / device / queue instead of creating its
+     * own — a second in-process Dawn instance deadlocks Vulkan during
+     * pipeline creation. The shared model also lets resources created
+     * via the bridge (textures, buffers) be used directly by yetty's
+     * render path without cross-instance copy. */
+    WGPUInstance instance;
+    WGPUAdapter adapter;
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat target_format;
@@ -642,6 +649,23 @@ static struct ywasm_handle_entry *handle_find(struct yetty_yterm_ywasm_layer *l,
     return NULL;
 }
 
+void *ywasm_server_get_shared_instance(void *ctx)
+{
+    return ((struct yetty_yterm_ywasm_layer *)ctx)->instance;
+}
+void *ywasm_server_get_shared_adapter(void *ctx)
+{
+    return ((struct yetty_yterm_ywasm_layer *)ctx)->adapter;
+}
+void *ywasm_server_get_shared_device(void *ctx)
+{
+    return ((struct yetty_yterm_ywasm_layer *)ctx)->device;
+}
+void *ywasm_server_get_shared_queue(void *ctx)
+{
+    return ((struct yetty_yterm_ywasm_layer *)ctx)->queue;
+}
+
 void *ywasm_server_handle_get(void *ctx, uint64_t handle)
 {
     if (!ctx || handle == YETTY_YWASM_HANDLE_NULL)
@@ -1009,6 +1033,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ywasm_layer_create(
     l->base.cell_size.width = cell_width;
     l->base.cell_size.height = cell_height;
 
+    l->instance = context->gpu_context.app_gpu_context.instance;
+    l->adapter = context->gpu_context.adapter;
     l->device = context->gpu_context.device;
     l->queue = context->gpu_context.queue;
     l->target_format = context->gpu_context.surface_format;

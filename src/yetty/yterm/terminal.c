@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/pty-pipe-source.h>
@@ -302,12 +303,29 @@ static struct yetty_ycore_void_result terminal_yface_emit(
 
     struct yetty_ycore_buffer *out = yetty_yface_out_buf(terminal->emit_yface);
     if (out && out->size) {
-        struct yetty_ycore_size_result pwr =
-            terminal_pty_write_raw(terminal, (const char *)out->data, out->size);
-        if (YETTY_IS_ERR(pwr)) {
-            yetty_ycore_buffer_clear(out);
-            return YETTY_ERR(yetty_ycore_void,
-                             "terminal_yface_emit: pty_write_raw failed", pwr);
+        /* Loop until every byte is on the PTY. The backend's write op
+         * is non-looping — one write(2) per call — so a short write
+         * (typical when the PTY's kernel buffer fills) drops the tail
+         * unless we keep going. Single-shot is fine for small OSC
+         * messages but the bridge's REPLY payloads carry up to a
+         * full readback buffer of pixels. */
+        size_t off = 0;
+        while (off < out->size) {
+            struct yetty_ycore_size_result pwr = terminal_pty_write_raw(
+                terminal, (const char *)out->data + off, out->size - off);
+            if (YETTY_IS_ERR(pwr)) {
+                yetty_ycore_buffer_clear(out);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "terminal_yface_emit: pty_write_raw failed", pwr);
+            }
+            if (pwr.value == 0) {
+                /* EAGAIN territory — back off briefly so we don't spin
+                 * the main thread while the kernel drains the buffer. */
+                struct timespec ts = {.tv_sec = 0, .tv_nsec = 100000L};
+                (void)nanosleep(&ts, NULL);
+                continue;
+            }
+            off += pwr.value;
         }
         yetty_ycore_buffer_clear(out);
     }

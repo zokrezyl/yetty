@@ -23,6 +23,20 @@
 extern "C" {
 #endif
 
+/* Accessors for the shared yetty Dawn objects. The bridge does NOT
+ * spin up its own Dawn instance — it would deadlock against yetty's
+ * instance on Vulkan during pipeline creation. Instead, the curated
+ * wgpuCreateInstance / RequestAdapter / RequestDevice / GetQueue
+ * server bodies fetch yetty's own handles via these getters, AddRef
+ * them, and stash them in the handle table. Every Buffer / Texture
+ * / Pipeline / etc the bridge then creates is on yetty's Dawn device,
+ * so its outputs can be sampled directly by the layer's render pass
+ * without a cross-instance copy. */
+void *ywasm_server_get_shared_instance(void *ctx);
+void *ywasm_server_get_shared_adapter(void *ctx);
+void *ywasm_server_get_shared_device(void *ctx);
+void *ywasm_server_get_shared_queue(void *ctx);
+
 /* Handle-table accessors implemented by the layer. ptr is the WGPU*
  * object Dawn returned (opaque to the dispatcher). NULL return =
  * handle unknown (the dispatcher will surface YWASM_ERR_UNKNOWN_HANDLE). */
