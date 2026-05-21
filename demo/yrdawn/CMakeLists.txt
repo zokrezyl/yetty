@@ -5,6 +5,14 @@
 # Shared support: ytrace + the few platform glue symbols ytrace needs.
 # An OBJECT library compiled once and linked into every demo exec, same
 # pattern demo/ygui uses.
+#
+# Skipped on Windows: every demo's main.c puts stdin into POSIX raw mode
+# via termios so OSC envelopes from the parent yetty arrive byte-for-byte.
+# Windows has no termios; the corresponding ConPTY-aware variant is not
+# in scope for the cross-build matrix.
+if(WIN32)
+    return()
+endif()
 
 add_library(demo_yrdawn_support OBJECT
     common.c

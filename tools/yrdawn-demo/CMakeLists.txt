@@ -4,6 +4,16 @@
 # yetty's yrdawn-layer over stdin/stdout. Built when
 # YETTY_ENABLE_TOOL_YRDAWN_DEMO is ON; the tools/CMakeLists.txt guard
 # selects.
+#
+# Skipped on Windows: the demo flips its stdin into POSIX raw mode via
+# termios so OSC envelopes from the parent yetty pass through
+# byte-for-byte. Windows has no termios; running the demo there would
+# need a ConPTY-aware variant, and it isn't a hard requirement for the
+# Windows pipeline (the server-side bridge is what matters there).
+
+if(WIN32)
+    return()
+endif()
 
 add_executable(yrdawn-demo
     main.c
