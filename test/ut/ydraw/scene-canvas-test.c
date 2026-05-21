@@ -256,11 +256,11 @@ static void test_root_entity(void)
 {
     fprintf(stderr, "[T1] root entity\n");
     struct yetty_ydraw_canvas *c = make_canvas();
-    struct yetty_ydraw_scene_entity *root = yetty_ydraw_scene_canvas_root(c);
+    struct yetty_ydraw_drawable *root = yetty_ydraw_scene_canvas_root(c);
     ASSERT_TRUE(root != NULL, "root should not be NULL");
 
     /* lookup by id 0 returns root. */
-    struct yetty_ydraw_scene_entity *by_zero = yetty_ydraw_scene_entity_lookup(c, 0);
+    struct yetty_ydraw_drawable *by_zero = yetty_ydraw_drawable_lookup(c, 0);
     ASSERT_TRUE(by_zero == root, "lookup(0) should return root");
 
     destroy_canvas(c);
@@ -273,22 +273,22 @@ static void test_entity_create_lookup_delete(void)
     struct yetty_ydraw_canvas *c = make_canvas();
 
     /* Initially no entity with id=42. */
-    ASSERT_TRUE(yetty_ydraw_scene_entity_lookup(c, 42) == NULL, "lookup(42) initially NULL");
+    ASSERT_TRUE(yetty_ydraw_drawable_lookup(c, 42) == NULL, "lookup(42) initially NULL");
 
     /* Create entity 42 as child of root. */
-    struct yetty_ydraw_scene_entity_ptr_result er =
-        yetty_ydraw_scene_entity_create(c, NULL, 42);
+    struct yetty_ydraw_drawable_ptr_result er =
+        yetty_ydraw_drawable_create_group(c, NULL, 42);
     ASSERT_OK(er);
-    struct yetty_ydraw_scene_entity *e = er.value;
+    struct yetty_ydraw_drawable *e = er.value;
     ASSERT_TRUE(e != NULL, "entity must not be NULL");
 
     /* Lookup finds it. */
-    ASSERT_TRUE(yetty_ydraw_scene_entity_lookup(c, 42) == e, "lookup(42) finds created entity");
+    ASSERT_TRUE(yetty_ydraw_drawable_lookup(c, 42) == e, "lookup(42) finds created entity");
 
     /* Delete and verify gone. */
-    struct yetty_ycore_void_result dr = yetty_ydraw_scene_entity_delete(c, e);
+    struct yetty_ycore_void_result dr = yetty_ydraw_drawable_delete(c, e);
     ASSERT_OK(dr);
-    ASSERT_TRUE(yetty_ydraw_scene_entity_lookup(c, 42) == NULL, "lookup(42) NULL after delete");
+    ASSERT_TRUE(yetty_ydraw_drawable_lookup(c, 42) == NULL, "lookup(42) NULL after delete");
 
     destroy_canvas(c);
 }
@@ -299,12 +299,12 @@ static void test_duplicate_id_rejected(void)
     fprintf(stderr, "[T3] duplicate id rejected\n");
     struct yetty_ydraw_canvas *c = make_canvas();
 
-    struct yetty_ydraw_scene_entity_ptr_result r1 =
-        yetty_ydraw_scene_entity_create(c, NULL, 7);
+    struct yetty_ydraw_drawable_ptr_result r1 =
+        yetty_ydraw_drawable_create_group(c, NULL, 7);
     ASSERT_OK(r1);
 
-    struct yetty_ydraw_scene_entity_ptr_result r2 =
-        yetty_ydraw_scene_entity_create(c, NULL, 7);
+    struct yetty_ydraw_drawable_ptr_result r2 =
+        yetty_ydraw_drawable_create_group(c, NULL, 7);
     ASSERT_ERR(r2);
 
     destroy_canvas(c);
@@ -316,15 +316,15 @@ static void test_id_reuse_after_delete(void)
     fprintf(stderr, "[T4] id reusable after delete\n");
     struct yetty_ydraw_canvas *c = make_canvas();
 
-    struct yetty_ydraw_scene_entity_ptr_result r1 =
-        yetty_ydraw_scene_entity_create(c, NULL, 99);
+    struct yetty_ydraw_drawable_ptr_result r1 =
+        yetty_ydraw_drawable_create_group(c, NULL, 99);
     ASSERT_OK(r1);
 
-    struct yetty_ycore_void_result dr = yetty_ydraw_scene_entity_delete(c, r1.value);
+    struct yetty_ycore_void_result dr = yetty_ydraw_drawable_delete(c, r1.value);
     ASSERT_OK(dr);
 
-    struct yetty_ydraw_scene_entity_ptr_result r2 =
-        yetty_ydraw_scene_entity_create(c, NULL, 99);
+    struct yetty_ydraw_drawable_ptr_result r2 =
+        yetty_ydraw_drawable_create_group(c, NULL, 99);
     ASSERT_OK(r2);
 
     destroy_canvas(c);
@@ -338,28 +338,28 @@ static void test_entity_add_prim_then_clear(void)
     struct yetty_ydraw_canvas *c = make_canvas();
     struct yetty_ydraw_flyweight_registry *reg = make_registry();
 
-    struct yetty_ydraw_scene_entity_ptr_result er =
-        yetty_ydraw_scene_entity_create(c, NULL, 1);
+    struct yetty_ydraw_drawable_ptr_result er =
+        yetty_ydraw_drawable_create_group(c, NULL, 1);
     ASSERT_OK(er);
-    struct yetty_ydraw_scene_entity *e = er.value;
+    struct yetty_ydraw_drawable *e = er.value;
 
     struct yetty_ydraw_draw_list *cb = make_circle_buffer(100.0f, 100.0f, 20.0f);
     ASSERT_TRUE(cb != NULL, "circle buffer alloc");
     struct yetty_ydraw_drawable_flyweight fw;
     ASSERT_EQ_U(get_first_drawable_flyweight(cb, reg, &fw), 0);
 
-    struct yetty_ycore_void_result ar = yetty_ydraw_scene_entity_add_prim(c, e, &fw);
+    struct yetty_ycore_void_result ar = yetty_ydraw_drawable_add_prim(c, e, &fw);
     ASSERT_OK(ar);
 
     /* drawable count should have ticked up by 1. */
     ASSERT_EQ_U(c->ops->drawable_count(c), 1);
 
-    struct yetty_ycore_void_result clr = yetty_ydraw_scene_entity_clear(c, e);
+    struct yetty_ycore_void_result clr = yetty_ydraw_drawable_clear(c, e);
     ASSERT_OK(clr);
     ASSERT_EQ_U(c->ops->drawable_count(c), 0);
 
     /* Entity still exists (clear doesn't delete it). */
-    ASSERT_TRUE(yetty_ydraw_scene_entity_lookup(c, 1) == e, "entity survives clear");
+    ASSERT_TRUE(yetty_ydraw_drawable_lookup(c, 1) == e, "entity survives clear");
 
     yetty_ydraw_draw_list_destroy(cb);
     yetty_ydraw_flyweight_registry_destroy(reg);
@@ -373,21 +373,21 @@ static void test_delete_removes_prims(void)
     struct yetty_ydraw_canvas *c = make_canvas();
     struct yetty_ydraw_flyweight_registry *reg = make_registry();
 
-    struct yetty_ydraw_scene_entity_ptr_result er =
-        yetty_ydraw_scene_entity_create(c, NULL, 1);
+    struct yetty_ydraw_drawable_ptr_result er =
+        yetty_ydraw_drawable_create_group(c, NULL, 1);
     ASSERT_OK(er);
 
     struct yetty_ydraw_draw_list *cb = make_circle_buffer(200.0f, 200.0f, 30.0f);
     struct yetty_ydraw_drawable_flyweight fw;
     ASSERT_EQ_U(get_first_drawable_flyweight(cb, reg, &fw), 0);
-    struct yetty_ycore_void_result ar = yetty_ydraw_scene_entity_add_prim(c, er.value, &fw);
+    struct yetty_ycore_void_result ar = yetty_ydraw_drawable_add_prim(c, er.value, &fw);
     ASSERT_OK(ar);
     ASSERT_EQ_U(c->ops->drawable_count(c), 1);
 
-    struct yetty_ycore_void_result dr = yetty_ydraw_scene_entity_delete(c, er.value);
+    struct yetty_ycore_void_result dr = yetty_ydraw_drawable_delete(c, er.value);
     ASSERT_OK(dr);
     ASSERT_EQ_U(c->ops->drawable_count(c), 0);
-    ASSERT_TRUE(yetty_ydraw_scene_entity_lookup(c, 1) == NULL, "lookup gone after delete");
+    ASSERT_TRUE(yetty_ydraw_drawable_lookup(c, 1) == NULL, "lookup gone after delete");
 
     yetty_ydraw_draw_list_destroy(cb);
     yetty_ydraw_flyweight_registry_destroy(reg);
@@ -405,19 +405,19 @@ static void test_add_delete_churn_no_leak(void)
 
     /* Warmup so first-iteration lazy allocs don't pollute the baseline. */
     for (int w = 0; w < 50; w++) {
-        struct yetty_ydraw_scene_entity_ptr_result er =
-            yetty_ydraw_scene_entity_create(c, NULL, 1u);
+        struct yetty_ydraw_drawable_ptr_result er =
+            yetty_ydraw_drawable_create_group(c, NULL, 1u);
         if (YETTY_IS_OK(er)) {
             struct yetty_ydraw_draw_list *cb = make_circle_buffer(50.0f, 50.0f, 10.0f);
             struct yetty_ydraw_drawable_flyweight fw;
             if (cb && get_first_drawable_flyweight(cb, reg, &fw) == 0) {
                 struct yetty_ycore_void_result ar =
-                    yetty_ydraw_scene_entity_add_prim(c, er.value, &fw);
+                    yetty_ydraw_drawable_add_prim(c, er.value, &fw);
                 if (YETTY_IS_ERR(ar)) yetty_ycore_error_destroy(ar.error);
             }
             yetty_ydraw_draw_list_destroy(cb);
             struct yetty_ycore_void_result dr =
-                yetty_ydraw_scene_entity_delete(c, er.value);
+                yetty_ydraw_drawable_delete(c, er.value);
             if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
         } else {
             yetty_ycore_error_destroy(er.error);
@@ -428,19 +428,19 @@ static void test_add_delete_churn_no_leak(void)
      * across 5000 churns. Real growth would be on the order of
      * MBs-per-cycle if the slot/arena recycling were broken. */
     RSS_STABLE_OR_FAIL(5000, 250, 1u << 20, {
-        struct yetty_ydraw_scene_entity_ptr_result er =
-            yetty_ydraw_scene_entity_create(c, NULL, 1u);
+        struct yetty_ydraw_drawable_ptr_result er =
+            yetty_ydraw_drawable_create_group(c, NULL, 1u);
         if (YETTY_IS_OK(er)) {
             struct yetty_ydraw_draw_list *cb = make_circle_buffer(50.0f, 50.0f, 10.0f);
             struct yetty_ydraw_drawable_flyweight fw;
             if (cb && get_first_drawable_flyweight(cb, reg, &fw) == 0) {
                 struct yetty_ycore_void_result ar =
-                    yetty_ydraw_scene_entity_add_prim(c, er.value, &fw);
+                    yetty_ydraw_drawable_add_prim(c, er.value, &fw);
                 if (YETTY_IS_ERR(ar)) yetty_ycore_error_destroy(ar.error);
             }
             yetty_ydraw_draw_list_destroy(cb);
             struct yetty_ycore_void_result dr =
-                yetty_ydraw_scene_entity_delete(c, er.value);
+                yetty_ydraw_drawable_delete(c, er.value);
             if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
         } else {
             yetty_ycore_error_destroy(er.error);
@@ -482,8 +482,8 @@ static void test_idle_rebuild_no_growth(void)
     for (uint32_t i = 0; i < 30; i++) {
         struct timespec ts0, ts1;
         clock_gettime(CLOCK_MONOTONIC, &ts0);
-        struct yetty_ydraw_scene_entity_ptr_result er =
-            yetty_ydraw_scene_entity_create(c, NULL, 100u + i);
+        struct yetty_ydraw_drawable_ptr_result er =
+            yetty_ydraw_drawable_create_group(c, NULL, 100u + i);
         clock_gettime(CLOCK_MONOTONIC, &ts1);
         long us_create = (ts1.tv_sec - ts0.tv_sec) * 1000000L
                          + (ts1.tv_nsec - ts0.tv_nsec) / 1000L;
@@ -501,7 +501,7 @@ static void test_idle_rebuild_no_growth(void)
 
         clock_gettime(CLOCK_MONOTONIC, &ts0);
         struct yetty_ycore_void_result ar =
-            yetty_ydraw_scene_entity_add_prim(c, er.value, &fw);
+            yetty_ydraw_drawable_add_prim(c, er.value, &fw);
         clock_gettime(CLOCK_MONOTONIC, &ts1);
         long us_addprim = (ts1.tv_sec - ts0.tv_sec) * 1000000L
                           + (ts1.tv_nsec - ts0.tv_nsec) / 1000L;
@@ -580,15 +580,15 @@ static void test_modify_rebuild_loop_no_growth(void)
 
     /* Initial scene. */
     for (uint32_t i = 0; i < 10; i++) {
-        struct yetty_ydraw_scene_entity_ptr_result er =
-            yetty_ydraw_scene_entity_create(c, NULL, 200u + i);
+        struct yetty_ydraw_drawable_ptr_result er =
+            yetty_ydraw_drawable_create_group(c, NULL, 200u + i);
         ASSERT_OK(er);
         struct yetty_ydraw_draw_list *cb =
             make_circle_buffer(60.0f + (float)i * 12.0f, 150.0f, 5.0f);
         struct yetty_ydraw_drawable_flyweight fw;
         ASSERT_EQ_U(get_first_drawable_flyweight(cb, reg, &fw), 0);
         struct yetty_ycore_void_result ar =
-            yetty_ydraw_scene_entity_add_prim(c, er.value, &fw);
+            yetty_ydraw_drawable_add_prim(c, er.value, &fw);
         ASSERT_OK(ar);
         yetty_ydraw_draw_list_destroy(cb);
     }
@@ -601,8 +601,8 @@ static void test_modify_rebuild_loop_no_growth(void)
     RSS_STABLE_OR_FAIL(3000, 200, 2u << 20, {
         /* Replace entity 200 + (i%10): delete then create-with-prim. */
         uint32_t victim_external_id = 200u + (_i % 10u);
-        struct yetty_ydraw_scene_entity *victim =
-            yetty_ydraw_scene_entity_lookup(c, victim_external_id);
+        struct yetty_ydraw_drawable *victim =
+            yetty_ydraw_drawable_lookup(c, victim_external_id);
         /* Skip if a previous cycle already replaced this slot — the new
          * id is next_id-1 at this point and we'd need to track it. The
          * simpler invariant: track the latest id for each slot via the
@@ -610,20 +610,20 @@ static void test_modify_rebuild_loop_no_growth(void)
          * external_id (200..209) on iteration 0, then incrementally. */
         if (victim) {
             struct yetty_ycore_void_result _dr =
-                yetty_ydraw_scene_entity_delete(c, victim);
+                yetty_ydraw_drawable_delete(c, victim);
             if (YETTY_IS_ERR(_dr)) yetty_ycore_error_destroy(_dr.error);
         }
         /* Re-create with a fresh id mapped to the same slot in the
          * chain. */
-        struct yetty_ydraw_scene_entity_ptr_result _er =
-            yetty_ydraw_scene_entity_create(c, NULL, victim ? victim_external_id : next_id++);
+        struct yetty_ydraw_drawable_ptr_result _er =
+            yetty_ydraw_drawable_create_group(c, NULL, victim ? victim_external_id : next_id++);
         if (YETTY_IS_OK(_er)) {
             struct yetty_ydraw_draw_list *_cb =
                 make_circle_buffer(60.0f + (float)(_i % 10u) * 12.0f, 150.0f, 5.0f);
             struct yetty_ydraw_drawable_flyweight _fw;
             if (_cb && get_first_drawable_flyweight(_cb, reg, &_fw) == 0) {
                 struct yetty_ycore_void_result _ar =
-                    yetty_ydraw_scene_entity_add_prim(c, _er.value, &_fw);
+                    yetty_ydraw_drawable_add_prim(c, _er.value, &_fw);
                 if (YETTY_IS_ERR(_ar)) yetty_ycore_error_destroy(_ar.error);
             }
             yetty_ydraw_draw_list_destroy(_cb);

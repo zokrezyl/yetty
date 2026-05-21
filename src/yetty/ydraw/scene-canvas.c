@@ -110,13 +110,21 @@ struct id_index_entry {
 #define SCENE_ID_INDEX_EMPTY     0u
 #define SCENE_ID_INDEX_TOMBSTONE UINT64_MAX
 
-struct yetty_ydraw_scene_entity {
-    uint64_t external_id;
-    uint32_t slot;
-    uint32_t parent_slot;
-    bool in_use;
-    uint32_t next_free;
-
+/* GROUP body.
+ *
+ * Carries the fields that only make sense when a drawable is a GROUP:
+ * child slot list, the per-group arena holding flyweight wire bytes,
+ * the placement records pointing into the arena, the touched-cells
+ * list tracking grid membership, and the live figure-instance array.
+ *
+ * For non-GROUP drawables (FLYWEIGHT, FIGURE) the corresponding union
+ * arm in `struct yetty_ydraw_drawable.body` carries the bare body
+ * payload instead.
+ *
+ * Field names left unchanged from the original entity struct so the
+ * existing access patterns survive the move with a single
+ * find-replace; only the access shape (entity->body.group.X) changes. */
+struct yetty_ydraw_drawable_group {
     uint32_t *children;
     uint32_t children_count;
     uint32_t children_capacity;
@@ -133,13 +141,43 @@ struct yetty_ydraw_scene_entity {
     uint32_t touched_cell_count;
     uint32_t touched_cell_capacity;
 
-    /* Per-entity live figure instances. Parallel to (but not 1:1 with)
-     * prims[] — only figure-typed drawables produce instances. Each entry
-     * owns its GPU resource set and is destroyed in entity_clear_in_place
-     * and entity_free_storage. */
     struct yetty_ydraw_figure **figures;
     uint32_t figure_count;
     uint32_t figure_capacity;
+};
+
+/* Polymorphic drawable record.
+ *
+ * Slot identity (slot / parent_slot / in_use / next_free) is shared
+ * across all classes. The body union is class-specific:
+ *   GROUP      → body.group         (heap allocations inside the
+ *                                    drawable_group are class-owned)
+ *   FLYWEIGHT  → body.flyweight     (heap-owned uint32_t * — the
+ *                                    prim's wire bytes; size derived
+ *                                    from data[0] / data[1])
+ *   FIGURE     → body.figure        (struct yetty_ydraw_figure * —
+ *                                    the runtime figure instance with
+ *                                    its ops vtable)
+ *
+ * v1: only the GROUP arm is populated by the wire path. Each
+ * CMD_GROUP creates a GROUP drawable with its inline body; paint
+ * prims still pack into that group's body.arena / body.prims /
+ * body.figures. The FLYWEIGHT and FIGURE arms exist so the public
+ * polymorphic shape is in place; populating them requires the
+ * follow-up sub-step that gives each paint prim its own slot. */
+struct yetty_ydraw_drawable {
+    enum yetty_ydraw_drawable_class drawable_class;
+    uint64_t external_id;
+    uint32_t slot;
+    uint32_t parent_slot;
+    bool in_use;
+    uint32_t next_free;
+
+    union {
+        struct yetty_ydraw_drawable_group group;
+        uint32_t *flyweight;
+        struct yetty_ydraw_figure *figure;
+    } body;
 };
 
 struct scene_canvas {
@@ -177,7 +215,7 @@ struct scene_canvas {
      * which made every alloc consume an entire doubling step (1 → 2 →
      * 4 → 8 …) even when the caller only wanted one slot — so creating N
      * entities took O(2^N) work. The split keeps growth amortized O(N). */
-    struct yetty_ydraw_scene_entity *entities;
+    struct yetty_ydraw_drawable *entities;
     uint32_t entity_capacity;
     uint32_t entity_high_water;
     uint32_t free_slot_head;
@@ -348,7 +386,7 @@ static struct yetty_ycore_void_result grow_figures(struct yetty_ydraw_figure ***
  * Entity slot allocator
  *===========================================================================*/
 
-static void entity_init_empty(struct yetty_ydraw_scene_entity *e, uint32_t slot)
+static void entity_init_empty(struct yetty_ydraw_drawable *e, uint32_t slot)
 {
     memset(e, 0, sizeof(*e));
     e->slot = slot;
@@ -366,8 +404,8 @@ static struct yetty_ycore_void_result scene_grow_entities(struct scene_canvas *s
     while (new_cap < need) {
         new_cap *= 2;
     }
-    struct yetty_ydraw_scene_entity *grown =
-        realloc(sc->entities, new_cap * sizeof(struct yetty_ydraw_scene_entity));
+    struct yetty_ydraw_drawable *grown =
+        realloc(sc->entities, new_cap * sizeof(struct yetty_ydraw_drawable));
     if (!grown) {
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: entities grow failed");
     }
@@ -405,28 +443,28 @@ static struct yetty_ycore_void_result scene_alloc_slot(struct scene_canvas *sc, 
     return YETTY_OK_VOID();
 }
 
-static void entity_free_storage(struct yetty_ydraw_scene_entity *e)
+static void entity_free_storage(struct yetty_ydraw_drawable *e)
 {
-    for (uint32_t i = 0; i < e->figure_count; i++) {
-        if (e->figures[i]) {
-            yetty_ydraw_figure_destroy(e->figures[i]);
+    for (uint32_t i = 0; i < e->body.group.figure_count; i++) {
+        if (e->body.group.figures[i]) {
+            yetty_ydraw_figure_destroy(e->body.group.figures[i]);
         }
     }
-    free(e->figures);
-    free(e->arena);
-    free(e->prims);
-    free(e->touched_cells);
-    free(e->children);
-    e->arena = NULL;
-    e->arena_count = e->arena_capacity = 0;
-    e->prims = NULL;
-    e->drawable_count = e->drawable_capacity = 0;
-    e->touched_cells = NULL;
-    e->touched_cell_count = e->touched_cell_capacity = 0;
-    e->children = NULL;
-    e->children_count = e->children_capacity = 0;
-    e->figures = NULL;
-    e->figure_count = e->figure_capacity = 0;
+    free(e->body.group.figures);
+    free(e->body.group.arena);
+    free(e->body.group.prims);
+    free(e->body.group.touched_cells);
+    free(e->body.group.children);
+    e->body.group.arena = NULL;
+    e->body.group.arena_count = e->body.group.arena_capacity = 0;
+    e->body.group.prims = NULL;
+    e->body.group.drawable_count = e->body.group.drawable_capacity = 0;
+    e->body.group.touched_cells = NULL;
+    e->body.group.touched_cell_count = e->body.group.touched_cell_capacity = 0;
+    e->body.group.children = NULL;
+    e->body.group.children_count = e->body.group.children_capacity = 0;
+    e->body.group.figures = NULL;
+    e->body.group.figure_count = e->body.group.figure_capacity = 0;
 }
 
 /*===========================================================================
@@ -534,7 +572,7 @@ static uint32_t id_index_lookup(const struct scene_canvas *sc, uint64_t external
 
 static void scene_release_slot(struct scene_canvas *sc, uint32_t slot)
 {
-    struct yetty_ydraw_scene_entity *e = &sc->entities[slot];
+    struct yetty_ydraw_drawable *e = &sc->entities[slot];
     if (e->external_id != 0) {
         id_index_remove(sc, e->external_id);
     }
@@ -550,25 +588,25 @@ static void scene_release_slot(struct scene_canvas *sc, uint32_t slot)
  * Entity clear — detach this entity's buckets from every touched cell.
  *===========================================================================*/
 
-static void entity_clear_in_place(struct scene_canvas *sc, struct yetty_ydraw_scene_entity *e)
+static void entity_clear_in_place(struct scene_canvas *sc, struct yetty_ydraw_drawable *e)
 {
-    for (uint32_t i = 0; i < e->touched_cell_count; i++) {
-        yetty_ydraw_scene_grid_drop_at(sc->grid, e->touched_cells[i].row, e->touched_cells[i].col,
+    for (uint32_t i = 0; i < e->body.group.touched_cell_count; i++) {
+        yetty_ydraw_scene_grid_drop_at(sc->grid, e->body.group.touched_cells[i].row, e->body.group.touched_cells[i].col,
                                        e->slot);
     }
     /* Figures own GPU resources — must be destroyed on clear, not just
      * reset like the byte-arena. The figures[] buffer itself is kept for
      * reuse on the next re-emit of this entity. */
-    for (uint32_t i = 0; i < e->figure_count; i++) {
-        if (e->figures[i]) {
-            yetty_ydraw_figure_destroy(e->figures[i]);
-            e->figures[i] = NULL;
+    for (uint32_t i = 0; i < e->body.group.figure_count; i++) {
+        if (e->body.group.figures[i]) {
+            yetty_ydraw_figure_destroy(e->body.group.figures[i]);
+            e->body.group.figures[i] = NULL;
         }
     }
-    e->figure_count = 0;
-    e->touched_cell_count = 0;
-    e->arena_count = 0;
-    e->drawable_count = 0;
+    e->body.group.figure_count = 0;
+    e->body.group.touched_cell_count = 0;
+    e->body.group.arena_count = 0;
+    e->body.group.drawable_count = 0;
     sc->dirty = true;
 }
 
@@ -803,9 +841,14 @@ static struct yetty_ydraw_canvas_ptr_result scene_canvas_alloc_core(void)
         free(sc);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: root reserve failed", gr);
     }
+    /* Implicit ROOT GROUP. drawable_class == GROUP (0 = the default
+     * from entity_init_empty's memset). external_id 0 is reserved
+     * for this — any drawable emitted without a CMD_GROUP wrapper
+     * lands here. */
     sc->entities[SCENE_ROOT_SLOT].in_use = true;
     sc->entities[SCENE_ROOT_SLOT].external_id = 0;
     sc->entities[SCENE_ROOT_SLOT].parent_slot = SCENE_INVALID_SLOT;
+    sc->entities[SCENE_ROOT_SLOT].drawable_class = YETTY_YDRAW_DRAWABLE_GROUP;
     sc->entity_high_water = SCENE_ROOT_SLOT + 1u;
 
     /* Opaque grid (zero-size until set_grid_size). */
@@ -1013,9 +1056,9 @@ static struct yetty_ycore_void_result scene_set_grid_size(struct yetty_ydraw_can
      * dims. Easier than migrating. */
     for (uint32_t i = 0; i < sc->entity_high_water; i++) {
         if (sc->entities[i].in_use) {
-            sc->entities[i].arena_count = 0;
-            sc->entities[i].drawable_count = 0;
-            sc->entities[i].touched_cell_count = 0;
+            sc->entities[i].body.group.arena_count = 0;
+            sc->entities[i].body.group.drawable_count = 0;
+            sc->entities[i].body.group.touched_cell_count = 0;
         }
     }
 
@@ -1041,7 +1084,7 @@ static struct yetty_ycore_grid_size scene_get_grid_size(const struct yetty_ydraw
  * Entity API
  *===========================================================================*/
 
-struct yetty_ydraw_scene_entity *yetty_ydraw_scene_canvas_root(struct yetty_ydraw_canvas *canvas)
+struct yetty_ydraw_drawable *yetty_ydraw_scene_canvas_root(struct yetty_ydraw_canvas *canvas)
 {
     if (!canvas) {
         return NULL;
@@ -1049,7 +1092,7 @@ struct yetty_ydraw_scene_entity *yetty_ydraw_scene_canvas_root(struct yetty_ydra
     return &as_scene(canvas)->entities[SCENE_ROOT_SLOT];
 }
 
-struct yetty_ydraw_scene_entity *yetty_ydraw_scene_entity_lookup(struct yetty_ydraw_canvas *canvas,
+struct yetty_ydraw_drawable *yetty_ydraw_drawable_lookup(struct yetty_ydraw_canvas *canvas,
                                                                  uint64_t external_id)
 {
     if (!canvas) {
@@ -1066,45 +1109,45 @@ struct yetty_ydraw_scene_entity *yetty_ydraw_scene_entity_lookup(struct yetty_yd
     return &sc->entities[slot];
 }
 
-static struct yetty_ycore_void_result entity_push_child(struct yetty_ydraw_scene_entity *parent,
+static struct yetty_ycore_void_result entity_push_child(struct yetty_ydraw_drawable *parent,
                                                         uint32_t child_slot)
 {
     struct yetty_ycore_void_result gr =
-        grow_u32(&parent->children, &parent->children_capacity, parent->children_count + 1);
+        grow_u32(&parent->body.group.children, &parent->body.group.children_capacity, parent->body.group.children_count + 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "scene-canvas: push_child");
-    parent->children[parent->children_count++] = child_slot;
+    parent->body.group.children[parent->body.group.children_count++] = child_slot;
     return YETTY_OK_VOID();
 }
 
-static void entity_remove_child(struct yetty_ydraw_scene_entity *parent, uint32_t child_slot)
+static void entity_remove_child(struct yetty_ydraw_drawable *parent, uint32_t child_slot)
 {
-    for (uint32_t i = 0; i < parent->children_count; i++) {
-        if (parent->children[i] == child_slot) {
-            if (i + 1 != parent->children_count) {
-                parent->children[i] = parent->children[parent->children_count - 1];
+    for (uint32_t i = 0; i < parent->body.group.children_count; i++) {
+        if (parent->body.group.children[i] == child_slot) {
+            if (i + 1 != parent->body.group.children_count) {
+                parent->body.group.children[i] = parent->body.group.children[parent->body.group.children_count - 1];
             }
-            parent->children_count--;
+            parent->body.group.children_count--;
             return;
         }
     }
 }
 
-struct yetty_ydraw_scene_entity_ptr_result yetty_ydraw_scene_entity_create(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_scene_entity *parent,
+struct yetty_ydraw_drawable_ptr_result yetty_ydraw_drawable_create_group(
+    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_drawable *parent,
     uint64_t external_id)
 {
     if (!canvas) {
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr, "scene-canvas: NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_ptr, "scene-canvas: NULL");
     }
     /* 0 is reserved for the implicit root; UINT64_MAX is the id_index
      * tombstone sentinel. Both have to be rejected so lookups stay
      * unambiguous. */
     if (external_id == 0) {
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr,
+        return YETTY_ERR(yetty_ydraw_drawable_ptr,
                          "scene-canvas: external_id 0 is reserved for root");
     }
     if (external_id == SCENE_ID_INDEX_TOMBSTONE) {
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr,
+        return YETTY_ERR(yetty_ydraw_drawable_ptr,
                          "scene-canvas: external_id UINT64_MAX is reserved");
     }
     struct scene_canvas *sc = as_scene(canvas);
@@ -1113,19 +1156,19 @@ struct yetty_ydraw_scene_entity_ptr_result yetty_ydraw_scene_entity_create(
     }
 
     if (id_index_lookup(sc, external_id) != SCENE_INVALID_SLOT) {
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr, "scene-canvas: external_id already in use");
+        return YETTY_ERR(yetty_ydraw_drawable_ptr, "scene-canvas: external_id already in use");
     }
 
     uint32_t parent_slot = parent->slot;
     uint32_t slot = SCENE_INVALID_SLOT;
     struct yetty_ycore_void_result ar = scene_alloc_slot(sc, &slot);
     if (YETTY_IS_ERR(ar)) {
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr, "scene-canvas: alloc slot failed", ar);
+        return YETTY_ERR(yetty_ydraw_drawable_ptr, "scene-canvas: alloc slot failed", ar);
     }
     /* Re-fetch parent — scene_alloc_slot may have reallocated entities[]. */
     parent = &sc->entities[parent_slot];
 
-    struct yetty_ydraw_scene_entity *e = &sc->entities[slot];
+    struct yetty_ydraw_drawable *e = &sc->entities[slot];
     e->external_id = external_id;
     e->parent_slot = parent_slot;
 
@@ -1137,16 +1180,16 @@ struct yetty_ydraw_scene_entity_ptr_result yetty_ydraw_scene_entity_create(
          * id that was never indexed. */
         e->external_id = 0;
         scene_release_slot(sc, slot);
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr,
+        return YETTY_ERR(yetty_ydraw_drawable_ptr,
                          "scene-canvas: id_index insert failed", ir);
     }
 
     struct yetty_ycore_void_result cr = entity_push_child(parent, slot);
     if (YETTY_IS_ERR(cr)) {
         scene_release_slot(sc, slot);
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr, "scene-canvas: link to parent failed", cr);
+        return YETTY_ERR(yetty_ydraw_drawable_ptr, "scene-canvas: link to parent failed", cr);
     }
-    return YETTY_OK(yetty_ydraw_scene_entity_ptr, e);
+    return YETTY_OK(yetty_ydraw_drawable_ptr, e);
 }
 
 /*===========================================================================
@@ -1154,7 +1197,7 @@ struct yetty_ydraw_scene_entity_ptr_result yetty_ydraw_scene_entity_create(
  *===========================================================================*/
 
 struct fresh_ctx {
-    struct yetty_ydraw_scene_entity *entity;
+    struct yetty_ydraw_drawable *entity;
 };
 
 /* Infallible: caller pre-grows touched_cells to absorb the worst-case
@@ -1164,7 +1207,7 @@ YETTY_EXTERNAL_CALLBACK
 static struct yetty_ycore_void_result on_fresh_cell(void *user, uint32_t row, uint32_t col)
 {
     struct fresh_ctx *ctx = user;
-    ctx->entity->touched_cells[ctx->entity->touched_cell_count++] = (struct scene_touched_cell){
+    ctx->entity->body.group.touched_cells[ctx->entity->body.group.touched_cell_count++] = (struct scene_touched_cell){
         .row = row,
         .col = col,
     };
@@ -1191,7 +1234,7 @@ static struct yetty_ycore_void_result on_fresh_cell(void *user, uint32_t row, ui
  * insertion fails the entity ends up ungridded until the next add,
  * which is the same failure mode the original add path has. */
 static struct yetty_ycore_void_result scene_entity_regrid_after_update(
-    struct scene_canvas *sc, struct yetty_ydraw_scene_entity *entity,
+    struct scene_canvas *sc, struct yetty_ydraw_drawable *entity,
     struct yetty_ycore_rectangle new_aabb)
 {
     if (!sc || !entity) {
@@ -1203,7 +1246,7 @@ static struct yetty_ycore_void_result scene_entity_regrid_after_update(
     if (sc->grid_size.rows == 0 || sc->grid_size.cols == 0) {
         return YETTY_OK_VOID();
     }
-    if (entity->drawable_count == 0) {
+    if (entity->body.group.drawable_count == 0) {
         return YETTY_OK_VOID();
     }
 
@@ -1219,11 +1262,11 @@ static struct yetty_ycore_void_result scene_entity_regrid_after_update(
     uint32_t cols = sc->grid_size.cols;
 
     /* Drop the entity from every cell it currently lives in. */
-    for (uint32_t i = 0; i < entity->touched_cell_count; i++) {
-        yetty_ydraw_scene_grid_drop_at(sc->grid, entity->touched_cells[i].row,
-                                       entity->touched_cells[i].col, entity->slot);
+    for (uint32_t i = 0; i < entity->body.group.touched_cell_count; i++) {
+        yetty_ydraw_scene_grid_drop_at(sc->grid, entity->body.group.touched_cells[i].row,
+                                       entity->body.group.touched_cells[i].col, entity->slot);
     }
-    entity->touched_cell_count = 0;
+    entity->body.group.touched_cell_count = 0;
 
     /* If the new AABB is entirely off-screen we're done — the entity
      * stays in the canvas but has no grid presence (matches the add
@@ -1250,7 +1293,7 @@ static struct yetty_ycore_void_result scene_entity_regrid_after_update(
     /* Pre-grow touched_cells so on_fresh_cell stays infallible. */
     uint64_t rect = (uint64_t)(row_max - row_min + 1) * (col_max - col_min + 1);
     struct yetty_ycore_void_result gtr = grow_touched(
-        &entity->touched_cells, &entity->touched_cell_capacity, (uint32_t)rect);
+        &entity->body.group.touched_cells, &entity->body.group.touched_cell_capacity, (uint32_t)rect);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gtr, "scene-canvas: regrid touched grow");
 
     struct fresh_ctx ctx = {.entity = entity};
@@ -1272,7 +1315,7 @@ static struct yetty_ycore_void_result scene_entity_regrid_after_update(
  * from the glyph payload + font metadata, without going through a
  * registered flyweight). */
 static struct yetty_ycore_void_result scene_entity_add_bytes(
-    struct scene_canvas *sc, struct yetty_ydraw_scene_entity *entity, const uint32_t *data,
+    struct scene_canvas *sc, struct yetty_ydraw_drawable *entity, const uint32_t *data,
     uint32_t word_count, struct yetty_ycore_rectangle aabb)
 {
     if (!entity || !data) {
@@ -1323,39 +1366,39 @@ static struct yetty_ycore_void_result scene_entity_add_bytes(
      * grid_insert's rollback concerned only with its own state. */
     uint64_t rect = (uint64_t)(row_max - row_min + 1) * (col_max - col_min + 1);
     struct yetty_ycore_void_result gtr =
-        grow_touched(&entity->touched_cells, &entity->touched_cell_capacity,
-                     (uint32_t)(entity->touched_cell_count + rect));
+        grow_touched(&entity->body.group.touched_cells, &entity->body.group.touched_cell_capacity,
+                     (uint32_t)(entity->body.group.touched_cell_count + rect));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gtr, "scene-canvas: pre-grow touched");
 
     /* Snapshot the entity's append-points so we can unwind on any
      * failure below. With the snapshot in hand every commit step is
      * effectively transactional. */
-    uint32_t saved_arena_count = entity->arena_count;
-    uint32_t saved_drawable_count = entity->drawable_count;
-    uint32_t saved_touched_count = entity->touched_cell_count;
+    uint32_t saved_arena_count = entity->body.group.arena_count;
+    uint32_t saved_drawable_count = entity->body.group.drawable_count;
+    uint32_t saved_touched_count = entity->body.group.touched_cell_count;
 
     /* Copy payload into entity arena. */
     struct yetty_ycore_void_result gar =
-        grow_u32(&entity->arena, &entity->arena_capacity, entity->arena_count + word_count);
+        grow_u32(&entity->body.group.arena, &entity->body.group.arena_capacity, entity->body.group.arena_count + word_count);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gar, "scene-canvas: arena grow");
-    uint32_t arena_offset = entity->arena_count;
-    memcpy(&entity->arena[arena_offset], data, word_count * sizeof(uint32_t));
-    entity->arena_count += word_count;
+    uint32_t arena_offset = entity->body.group.arena_count;
+    memcpy(&entity->body.group.arena[arena_offset], data, word_count * sizeof(uint32_t));
+    entity->body.group.arena_count += word_count;
 
     /* Append placement record. */
     struct yetty_ycore_void_result gpr =
-        grow_prims(&entity->prims, &entity->drawable_capacity, entity->drawable_count + 1);
+        grow_prims(&entity->body.group.prims, &entity->body.group.drawable_capacity, entity->body.group.drawable_count + 1);
     if (YETTY_IS_ERR(gpr)) {
-        entity->arena_count = saved_arena_count;
+        entity->body.group.arena_count = saved_arena_count;
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: prims grow", gpr);
     }
-    uint32_t local_idx = entity->drawable_count;
-    entity->prims[local_idx] = (struct scene_prim){
+    uint32_t local_idx = entity->body.group.drawable_count;
+    entity->body.group.prims[local_idx] = (struct scene_prim){
         .arena_offset = arena_offset,
         .word_count = word_count,
         .type = data[0],
     };
-    entity->drawable_count++;
+    entity->body.group.drawable_count++;
 
     /* Insert into the grid via opaque API. The grid sorts each cell's
      * buckets by external_id so paint order in any cell matches the
@@ -1367,9 +1410,9 @@ static struct yetty_ycore_void_result scene_entity_add_bytes(
     if (YETTY_IS_ERR(ir)) {
         /* grid_insert rolled back its own state — restore the entity's
          * append-points so they stay consistent. */
-        entity->arena_count = saved_arena_count;
-        entity->drawable_count = saved_drawable_count;
-        entity->touched_cell_count = saved_touched_count;
+        entity->body.group.arena_count = saved_arena_count;
+        entity->body.group.drawable_count = saved_drawable_count;
+        entity->body.group.touched_cell_count = saved_touched_count;
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: grid_insert", ir);
     }
 
@@ -1389,42 +1432,42 @@ static struct yetty_ycore_void_result scene_entity_add_bytes(
         if (YETTY_IS_ERR(inst_res)) {
             /* Roll back all prior commits + drop the grid bucket we just
              * inserted, so the entity stays consistent. */
-            for (uint32_t i = saved_touched_count; i < entity->touched_cell_count; i++) {
-                yetty_ydraw_scene_grid_drop_at(sc->grid, entity->touched_cells[i].row,
-                                               entity->touched_cells[i].col, entity->slot);
+            for (uint32_t i = saved_touched_count; i < entity->body.group.touched_cell_count; i++) {
+                yetty_ydraw_scene_grid_drop_at(sc->grid, entity->body.group.touched_cells[i].row,
+                                               entity->body.group.touched_cells[i].col, entity->slot);
             }
-            entity->arena_count = saved_arena_count;
-            entity->drawable_count = saved_drawable_count;
-            entity->touched_cell_count = saved_touched_count;
+            entity->body.group.arena_count = saved_arena_count;
+            entity->body.group.drawable_count = saved_drawable_count;
+            entity->body.group.touched_cell_count = saved_touched_count;
             return YETTY_ERR(yetty_ycore_void, "scene-canvas: figure create_instance", inst_res);
         }
-        struct yetty_ycore_void_result gf = grow_figures(&entity->figures,
-                                                         &entity->figure_capacity,
-                                                         entity->figure_count + 1u);
+        struct yetty_ycore_void_result gf = grow_figures(&entity->body.group.figures,
+                                                         &entity->body.group.figure_capacity,
+                                                         entity->body.group.figure_count + 1u);
         if (YETTY_IS_ERR(gf)) {
             yetty_ydraw_figure_destroy(inst_res.value);
-            for (uint32_t i = saved_touched_count; i < entity->touched_cell_count; i++) {
-                yetty_ydraw_scene_grid_drop_at(sc->grid, entity->touched_cells[i].row,
-                                               entity->touched_cells[i].col, entity->slot);
+            for (uint32_t i = saved_touched_count; i < entity->body.group.touched_cell_count; i++) {
+                yetty_ydraw_scene_grid_drop_at(sc->grid, entity->body.group.touched_cells[i].row,
+                                               entity->body.group.touched_cells[i].col, entity->slot);
             }
-            entity->arena_count = saved_arena_count;
-            entity->drawable_count = saved_drawable_count;
-            entity->touched_cell_count = saved_touched_count;
+            entity->body.group.arena_count = saved_arena_count;
+            entity->body.group.drawable_count = saved_drawable_count;
+            entity->body.group.touched_cell_count = saved_touched_count;
             return YETTY_ERR(yetty_ycore_void, "scene-canvas: figures grow", gf);
         }
         /* Mark fresh — the FIRST render must paint this figure even
          * though no listener has fired yet. ydraw_layer_render's
          * figure loop gates on inst->dirty || force. */
         inst_res.value->dirty = 1;
-        entity->figures[entity->figure_count++] = inst_res.value;
+        entity->body.group.figures[entity->body.group.figure_count++] = inst_res.value;
     }
 
     sc->dirty = true;
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ydraw_scene_entity_add_prim(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_scene_entity *entity,
+struct yetty_ycore_void_result yetty_ydraw_drawable_add_prim(
+    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_drawable *entity,
     const struct yetty_ydraw_drawable_flyweight *fw)
 {
     if (!canvas || !entity) {
@@ -1448,8 +1491,8 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_add_prim(
  * Clear / delete
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_ydraw_scene_entity_clear(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_scene_entity *entity)
+struct yetty_ycore_void_result yetty_ydraw_drawable_clear(
+    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_drawable *entity)
 {
     if (!canvas || !entity) {
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: null arg to clear");
@@ -1458,11 +1501,11 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_clear(
     return YETTY_OK_VOID();
 }
 
-static void entity_delete_recursive(struct scene_canvas *sc, struct yetty_ydraw_scene_entity *e)
+static void entity_delete_recursive(struct scene_canvas *sc, struct yetty_ydraw_drawable *e)
 {
-    while (e->children_count > 0) {
-        uint32_t child_slot = e->children[e->children_count - 1];
-        e->children_count--;
+    while (e->body.group.children_count > 0) {
+        uint32_t child_slot = e->body.group.children[e->body.group.children_count - 1];
+        e->body.group.children_count--;
         if (child_slot < sc->entity_capacity && sc->entities[child_slot].in_use) {
             entity_delete_recursive(sc, &sc->entities[child_slot]);
         }
@@ -1471,8 +1514,8 @@ static void entity_delete_recursive(struct scene_canvas *sc, struct yetty_ydraw_
     scene_release_slot(sc, e->slot);
 }
 
-struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_scene_entity *entity)
+struct yetty_ycore_void_result yetty_ydraw_drawable_delete(
+    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_drawable *entity)
 {
     if (!canvas || !entity) {
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: null arg to delete");
@@ -1491,8 +1534,8 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete_children(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_scene_entity *entity)
+struct yetty_ycore_void_result yetty_ydraw_drawable_delete_children(
+    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_drawable *entity)
 {
     if (!canvas || !entity) {
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: null arg to delete_children");
@@ -1501,9 +1544,9 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete_children(
     /* Each iteration deletes one child subtree. The recursive delete
      * does not touch the parent's children list, so we manage popping
      * from the back to keep slot validity invariant. */
-    while (entity->children_count > 0) {
-        uint32_t child_slot = entity->children[entity->children_count - 1];
-        entity->children_count--;
+    while (entity->body.group.children_count > 0) {
+        uint32_t child_slot = entity->body.group.children[entity->body.group.children_count - 1];
+        entity->body.group.children_count--;
         if (child_slot < sc->entity_capacity && sc->entities[child_slot].in_use) {
             entity_delete_recursive(sc, &sc->entities[child_slot]);
         }
@@ -1535,7 +1578,7 @@ static struct yetty_ycore_void_result process_group_body(
 
 /* Lookup an in-use entity by external_id; returns root for id==0;
  * NULL if not found. O(1) via the id_index hash table. */
-static struct yetty_ydraw_scene_entity *scene_lookup_entity(struct scene_canvas *sc,
+static struct yetty_ydraw_drawable *scene_lookup_entity(struct scene_canvas *sc,
                                                             uint64_t external_id)
 {
     if (external_id == 0) {
@@ -1554,23 +1597,23 @@ static struct yetty_ydraw_scene_entity *scene_lookup_entity(struct scene_canvas 
  * (multi-GB process death under steady-state mouse activity). Now we
  * surface the violation as a chained error that propagates all the
  * way to main and crashes yetty with the full chain printed. */
-static struct yetty_ydraw_scene_entity_ptr_result scene_lookup_or_create_entity(
-    struct scene_canvas *sc, struct yetty_ydraw_scene_entity *parent, uint64_t external_id)
+static struct yetty_ydraw_drawable_ptr_result scene_lookup_or_create_entity(
+    struct scene_canvas *sc, struct yetty_ydraw_drawable *parent, uint64_t external_id)
 {
     if (external_id == 0) {
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr,
+        return YETTY_ERR(yetty_ydraw_drawable_ptr,
                          "scene-canvas: GROUP id=0 is reserved for root");
     }
-    struct yetty_ydraw_scene_entity *existing = scene_lookup_entity(sc, external_id);
+    struct yetty_ydraw_drawable *existing = scene_lookup_entity(sc, external_id);
     if (existing) {
         yerror("scene-canvas: GROUP id=%llu already exists — producer emitted "
                "GROUP without preceding DELETE(id) (re-OPEN is not supported, "
                "drawables would accumulate forever)",
                (unsigned long long)external_id);
-        return YETTY_ERR(yetty_ydraw_scene_entity_ptr,
+        return YETTY_ERR(yetty_ydraw_drawable_ptr,
                          "scene-canvas: GROUP id collision — producer must DELETE before re-emit");
     }
-    return yetty_ydraw_scene_entity_create(&sc->base, parent, external_id);
+    return yetty_ydraw_drawable_create_group(&sc->base, parent, external_id);
 }
 
 /* Forward decl — used by dispatch_command. */
@@ -1581,7 +1624,7 @@ static struct yetty_ycore_void_result scene_clear(struct yetty_ydraw_canvas *bas
  * cursor and no rolling row — coordinates from the TEXT_SPAN payload
  * are taken as absolute. */
 static struct yetty_ycore_void_result scene_expand_text_span_to_glyphs(
-    struct scene_canvas *sc, struct yetty_ydraw_scene_entity *entity,
+    struct scene_canvas *sc, struct yetty_ydraw_drawable *entity,
     const struct yetty_ydraw_text_span_drawable_view *ts, struct yetty_ydraw_font *font,
     yetty_yfont_cache_handle font_handle)
 {
@@ -1749,7 +1792,7 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
                                                        const struct yetty_ydraw_command *cmd)
 {
     if (cmd->kind == YETTY_YDRAW_COMMAND_DELETE) {
-        struct yetty_ydraw_scene_entity *target = scene_lookup_entity(sc, cmd->id);
+        struct yetty_ydraw_drawable *target = scene_lookup_entity(sc, cmd->id);
         if (!target) {
             ydebug("scene-canvas: DELETE id=%u: not found, ignoring", cmd->id);
             return YETTY_OK_VOID();
@@ -1758,21 +1801,21 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
             ydebug("scene-canvas: DELETE id=0 (root): ignoring (use CMD_ZERO to clear)");
             return YETTY_OK_VOID();
         }
-        return yetty_ydraw_scene_entity_delete(&sc->base, target);
+        return yetty_ydraw_drawable_delete(&sc->base, target);
     }
 
     if (cmd->kind == YETTY_YDRAW_COMMAND_UPDATE) {
-        struct yetty_ydraw_scene_entity *target = scene_lookup_entity(sc, cmd->update.id);
+        struct yetty_ydraw_drawable *target = scene_lookup_entity(sc, cmd->update.id);
         if (!target) {
             ydebug("scene-canvas: UPDATE id=%u: not found, ignoring", cmd->update.id);
             return YETTY_OK_VOID();
         }
-        if (target->figure_count == 0u || !target->figures[0]) {
+        if (target->body.group.figure_count == 0u || !target->body.group.figures[0]) {
             ydebug("scene-canvas: UPDATE id=%u: no figure_instance (count=%u), ignoring",
-                   cmd->update.id, target->figure_count);
+                   cmd->update.id, target->body.group.figure_count);
             return YETTY_OK_VOID();
         }
-        struct yetty_ydraw_figure *fi = target->figures[0];
+        struct yetty_ydraw_figure *fi = target->body.group.figures[0];
         if (!fi->ops || !fi->ops->update) {
             ydebug("scene-canvas: UPDATE id=%u: figure type 0x%08x has no ops->update",
                    cmd->update.id, fi->type);
@@ -1838,8 +1881,8 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
         uint32_t payload_size;
         memcpy(&id, &cmd->flyweight.data[1], sizeof(id));
         memcpy(&payload_size, &cmd->flyweight.data[2], sizeof(payload_size));
-        struct yetty_ydraw_scene_entity *parent = &sc->entities[parent_slot];
-        struct yetty_ydraw_scene_entity_ptr_result ent_res =
+        struct yetty_ydraw_drawable *parent = &sc->entities[parent_slot];
+        struct yetty_ydraw_drawable_ptr_result ent_res =
             scene_lookup_or_create_entity(sc, parent, (uint64_t)id);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ent_res, "scene-canvas: GROUP lookup/create");
         /* Capture the new entity's slot BEFORE any further table grow. */
@@ -1869,7 +1912,7 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
      * itself grow the entity's arena via realloc but never touches the
      * entity table, so the local pointer here stays valid for the
      * duration of this call. */
-    return yetty_ydraw_scene_entity_add_prim(&sc->base, &sc->entities[parent_slot],
+    return yetty_ydraw_drawable_add_prim(&sc->base, &sc->entities[parent_slot],
                                              &cmd->flyweight);
 }
 
@@ -1983,7 +2026,7 @@ static struct yetty_ycore_void_result scene_clear(struct yetty_ydraw_canvas *bas
         }
     }
     entity_clear_in_place(sc, &sc->entities[SCENE_ROOT_SLOT]);
-    sc->entities[SCENE_ROOT_SLOT].children_count = 0;
+    sc->entities[SCENE_ROOT_SLOT].body.group.children_count = 0;
     sc->glyph_z_order = 0;
     sc->dirty = true;
     return YETTY_OK_VOID();
@@ -1998,7 +2041,7 @@ static uint32_t scene_drawable_count(const struct yetty_ydraw_canvas *base)
     uint32_t total = 0;
     for (uint32_t i = 0; i < sc->entity_high_water; i++) {
         if (sc->entities[i].in_use) {
-            total += sc->entities[i].drawable_count;
+            total += sc->entities[i].body.group.drawable_count;
         }
     }
     return total;
@@ -2049,10 +2092,10 @@ static struct yetty_ycore_void_result scene_build_staging_pass(struct scene_canv
             continue;
         }
         entity_base[s] = total_drawables;
-        const struct yetty_ydraw_scene_entity *e = &sc->entities[s];
-        total_drawables += e->drawable_count;
-        for (uint32_t p = 0; p < e->drawable_count; p++) {
-            total_payload_words += e->prims[p].word_count + 1u; /* +1 for rolling_row slot */
+        const struct yetty_ydraw_drawable *e = &sc->entities[s];
+        total_drawables += e->body.group.drawable_count;
+        for (uint32_t p = 0; p < e->body.group.drawable_count; p++) {
+            total_payload_words += e->body.group.prims[p].word_count + 1u; /* +1 for rolling_row slot */
         }
     }
 
@@ -2077,16 +2120,16 @@ static struct yetty_ycore_void_result scene_build_staging_pass(struct scene_canv
         uint32_t drawable_idx = 0;
         for (uint32_t s = 0; s < entity_cap; s++) {
             if (!sc->entities[s].in_use) continue;
-            const struct yetty_ydraw_scene_entity *e = &sc->entities[s];
-            for (uint32_t p = 0; p < e->drawable_count; p++) {
-                const struct scene_prim *pr = &e->prims[p];
+            const struct yetty_ydraw_drawable *e = &sc->entities[s];
+            for (uint32_t p = 0; p < e->body.group.drawable_count; p++) {
+                const struct scene_prim *pr = &e->body.group.prims[p];
                 /* Per-drawable offset into the data section. */
                 sc->drawable_staging[drawable_idx] = data_offset;
                 /* rolling_row slot — scene-canvas has no scroll → 0. */
                 sc->drawable_staging[total_drawables + data_offset] = 0u;
                 /* Payload words follow. */
                 memcpy(&sc->drawable_staging[total_drawables + data_offset + 1u],
-                       &e->arena[pr->arena_offset], pr->word_count * sizeof(uint32_t));
+                       &e->body.group.arena[pr->arena_offset], pr->word_count * sizeof(uint32_t));
                 data_offset += pr->word_count + 1u;
                 drawable_idx++;
             }
@@ -2215,7 +2258,7 @@ static uint32_t scene_figure_count(const struct yetty_ydraw_canvas *base)
     uint32_t total = 0;
     for (uint32_t s = 0; s < sc->entity_high_water; s++) {
         if (sc->entities[s].in_use) {
-            total += sc->entities[s].figure_count;
+            total += sc->entities[s].body.group.figure_count;
         }
     }
     return total;
@@ -2234,12 +2277,12 @@ static struct yetty_ydraw_figure *scene_get_figure(const struct yetty_ydraw_canv
      * order between SDF prims and figures stays consistent. */
     uint32_t cursor = 0;
     for (uint32_t s = 0; s < sc->entity_high_water; s++) {
-        const struct yetty_ydraw_scene_entity *e = &sc->entities[s];
+        const struct yetty_ydraw_drawable *e = &sc->entities[s];
         if (!e->in_use) continue;
-        if (index < cursor + e->figure_count) {
-            return e->figures[index - cursor];
+        if (index < cursor + e->body.group.figure_count) {
+            return e->body.group.figures[index - cursor];
         }
-        cursor += e->figure_count;
+        cursor += e->body.group.figure_count;
     }
     return NULL;
 }
@@ -2257,12 +2300,12 @@ static struct yetty_ycore_void_result scene_for_each_glyph(struct yetty_ydraw_ca
     struct scene_canvas *sc = as_scene(base);
     for (uint32_t s = 0; s < sc->entity_high_water; s++) {
         if (!sc->entities[s].in_use) continue;
-        const struct yetty_ydraw_scene_entity *e = &sc->entities[s];
-        for (uint32_t p = 0; p < e->drawable_count; p++) {
-            const struct scene_prim *pr = &e->prims[p];
+        const struct yetty_ydraw_drawable *e = &sc->entities[s];
+        for (uint32_t p = 0; p < e->body.group.drawable_count; p++) {
+            const struct scene_prim *pr = &e->body.group.prims[p];
             if (pr->word_count < SCENE_GLYPH_WORDS) continue;
             if (pr->type != SCENE_YSDF_GLYPH) continue;
-            const uint32_t *w = &e->arena[pr->arena_offset];
+            const uint32_t *w = &e->body.group.arena[pr->arena_offset];
             float gx;
             float gy;
             uint32_t packed;
