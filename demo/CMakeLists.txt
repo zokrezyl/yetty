@@ -9,6 +9,10 @@ if(YETTY_ENABLE_FEATURE_YMGUI)
     add_subdirectory(ymgui)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YWASM)
+    add_subdirectory(ywasm)
+endif()
+
 # yplot demos — pure CPU client tools that emit yplot OSC envelopes.
 # Linked against yetty_yplot_core only (no Dawn / WebGPU), so they build
 # wherever the wire-format core builds.

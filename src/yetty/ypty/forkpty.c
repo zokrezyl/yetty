@@ -4,6 +4,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -27,6 +28,10 @@ struct yetty_yplatform_fork_pty {
     uint32_t cols;
     uint32_t rows;
     int running;
+    /* Termios snapshot taken on the first set_raw call. restore_termios
+     * writes this back. NUL when nothing has been saved yet. */
+    struct termios saved_termios;
+    int saved_termios_valid;
 };
 
 /* Forward declarations */
@@ -39,6 +44,8 @@ static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty 
                                                       uint32_t cols, uint32_t rows);
 static struct yetty_ycore_void_result fork_pty_stop(struct yetty_platform_pty *self);
 static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(struct yetty_platform_pty *self);
+static struct yetty_ycore_void_result fork_pty_set_raw(struct yetty_platform_pty *self);
+static struct yetty_ycore_void_result fork_pty_restore_termios(struct yetty_platform_pty *self);
 
 /* Ops table */
 static const struct yetty_platform_pty_ops fork_pty_ops = {
@@ -48,7 +55,48 @@ static const struct yetty_platform_pty_ops fork_pty_ops = {
     .resize = fork_pty_resize,
     .stop = fork_pty_stop,
     .pipe_source = fork_pty_pipe_source,
+    .set_raw = fork_pty_set_raw,
+    .restore_termios = fork_pty_restore_termios,
 };
+
+static struct yetty_ycore_void_result fork_pty_set_raw(struct yetty_platform_pty *self)
+{
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
+    if (pty->pty_master < 0)
+        return YETTY_ERR(yetty_ycore_void, "set_raw: pty master not open");
+    struct termios t;
+    if (tcgetattr(pty->pty_master, &t) != 0)
+        return YETTY_ERR(yetty_ycore_void, "set_raw: tcgetattr failed");
+    if (!pty->saved_termios_valid) {
+        pty->saved_termios = t;
+        pty->saved_termios_valid = 1;
+    }
+    /* Same dance demo_raw_stdin does, but applied master-side so it
+     * propagates to the slave's termios. Lets the bridge protocol flow
+     * byte-clean through any cooked-mode hop (ssh, screen, etc) between
+     * yetty's wire-statemachine and the remote demo. */
+    t.c_lflag &= ~(ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG | IEXTEN);
+    t.c_iflag &= ~(IXON | IXOFF | ICRNL | INLCR | IGNCR | BRKINT | INPCK | ISTRIP | IXANY);
+    t.c_oflag &= ~OPOST;
+    t.c_cflag |= CS8;
+    t.c_cc[VMIN] = 0;
+    t.c_cc[VTIME] = 0;
+    if (tcsetattr(pty->pty_master, TCSANOW, &t) != 0)
+        return YETTY_ERR(yetty_ycore_void, "set_raw: tcsetattr failed");
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result fork_pty_restore_termios(struct yetty_platform_pty *self)
+{
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
+    if (pty->pty_master < 0 || !pty->saved_termios_valid)
+        return YETTY_OK_VOID();
+    (void)tcsetattr(pty->pty_master, TCSANOW, &pty->saved_termios);
+    pty->saved_termios_valid = 0;
+    return YETTY_OK_VOID();
+}
 
 static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_platform_pty *self)
 {
@@ -100,6 +148,13 @@ static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *
 
     written = write(pty->pty_master, data, len);
     if (written < 0) {
+        /* Non-blocking master fills its kernel buffer on a large
+         * write; the caller (terminal_yface_emit) loops on a 0 return
+         * with a brief backoff, so EAGAIN / EWOULDBLOCK are normal
+         * here, not an error. */
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+            return YETTY_OK(yetty_ycore_size, 0);
+        }
         return YETTY_ERR(yetty_ycore_size, "write to pty failed");
     }
 

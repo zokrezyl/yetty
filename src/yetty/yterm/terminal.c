@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/pty-pipe-source.h>
@@ -12,6 +13,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/ywasm/wire.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
@@ -21,6 +23,7 @@
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yterm/ymgui-layer.h>
+#include <yetty/yterm/ywasm-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
@@ -300,12 +303,29 @@ static struct yetty_ycore_void_result terminal_yface_emit(
 
     struct yetty_ycore_buffer *out = yetty_yface_out_buf(terminal->emit_yface);
     if (out && out->size) {
-        struct yetty_ycore_size_result pwr =
-            terminal_pty_write_raw(terminal, (const char *)out->data, out->size);
-        if (YETTY_IS_ERR(pwr)) {
-            yetty_ycore_buffer_clear(out);
-            return YETTY_ERR(yetty_ycore_void,
-                             "terminal_yface_emit: pty_write_raw failed", pwr);
+        /* Loop until every byte is on the PTY. The backend's write op
+         * is non-looping — one write(2) per call — so a short write
+         * (typical when the PTY's kernel buffer fills) drops the tail
+         * unless we keep going. Single-shot is fine for small OSC
+         * messages but the bridge's REPLY payloads carry up to a
+         * full readback buffer of pixels. */
+        size_t off = 0;
+        while (off < out->size) {
+            struct yetty_ycore_size_result pwr = terminal_pty_write_raw(
+                terminal, (const char *)out->data + off, out->size - off);
+            if (YETTY_IS_ERR(pwr)) {
+                yetty_ycore_buffer_clear(out);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "terminal_yface_emit: pty_write_raw failed", pwr);
+            }
+            if (pwr.value == 0) {
+                /* EAGAIN territory — back off briefly so we don't spin
+                 * the main thread while the kernel drains the buffer. */
+                struct timespec ts = {.tv_sec = 0, .tv_nsec = 100000L};
+                (void)nanosleep(&ts, NULL);
+                continue;
+            }
+            off += pwr.value;
         }
         yetty_ycore_buffer_clear(out);
     }
@@ -323,6 +343,25 @@ static struct yetty_ycore_void_result terminal_layer_emit_osc(
         terminal_yface_emit(terminal, osc_code, payload, len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_layer_emit_osc: yface_emit failed");
     return YETTY_OK_VOID();
+}
+
+/* Forward the layer's "switch PTY to raw / restore" intent to the
+ * platform PTY backend. ywasm-layer calls this on HELLO/BYE so the
+ * bridge protocol bytes don't get mangled by any cooked-mode hop
+ * between yetty and the demo (ssh, screen, tmux, the user's local
+ * shell). Backends without termios (memory-pty, webasm) leave the
+ * ops NULL and we silently skip — no-op is the right behaviour. */
+static struct yetty_ycore_void_result terminal_set_pty_raw(int enable, void *userdata)
+{
+    struct yetty_yterm_terminal *terminal = userdata;
+    if (!terminal || !terminal->context.pty || !terminal->context.pty->ops)
+        return YETTY_OK_VOID();
+    if (enable) {
+        if (!terminal->context.pty->ops->set_raw) return YETTY_OK_VOID();
+        return terminal->context.pty->ops->set_raw(terminal->context.pty);
+    }
+    if (!terminal->context.pty->ops->restore_termios) return YETTY_OK_VOID();
+    return terminal->context.pty->ops->restore_termios(terminal->context.pty);
 }
 
 /* Card-aware mouse forwarding. Each emit carries a card_id and
@@ -1327,6 +1366,41 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ymgui layer for YMGUI_OSC_CS_TERM_INPUT_SUB failed");
     ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
+
+    /* ywasm layer (WebGPU-over-OSC bridge — remote wasm process renders
+     * here as if our Dawn were its local GPU). */
+    struct yetty_yterm_terminal_layer_result ywasm_res = yetty_yterm_ywasm_layer_create(
+        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height,
+        yetty_context);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ywasm_res,
+                        "terminal_create: ywasm layer create failed");
+    add_r = yetty_yterm_terminal_layer_add(terminal, ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
+                        "terminal_create: terminal_layer_add(ywasm) failed");
+    ywasm_res.value->emit_osc_fn = terminal_layer_emit_osc;
+    ywasm_res.value->emit_osc_userdata = terminal;
+    ywasm_res.value->request_render_fn = terminal_request_render_callback;
+    ywasm_res.value->request_render_userdata = terminal;
+    ywasm_res.value->set_pty_raw_fn = terminal_set_pty_raw;
+    ywasm_res.value->set_pty_raw_userdata = terminal;
+
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_HELLO,
+                                                ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ywasm layer for YETTY_YWASM_OSC_CS_HELLO failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_CMD,
+                                                ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ywasm layer for YETTY_YWASM_OSC_CS_CMD failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_BULK,
+                                                ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ywasm layer for YETTY_YWASM_OSC_CS_BULK failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWASM_OSC_CS_BYE,
+                                                ywasm_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ywasm layer for YETTY_YWASM_OSC_CS_BYE failed");
+    ydebug("terminal_create: ywasm layer registered for OSC 620000-620003");
 
     /* Create render targets for each layer */
     const struct yetty_yetty_app_gpu_context *app_gpu = &yetty_context->gpu_context.app_gpu_context;
