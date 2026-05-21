@@ -926,9 +926,18 @@ static struct yetty_ycore_void_result
         return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
     }}
 
-    wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f,
+    /* The pane's render target may sit at a non-zero offset inside the
+     * big surface (e.g. yui pushes the terminal pane down by the titlebar
+     * height). The layer's simple-prim pass already draws to
+     * (vp.x, vp.y, vp.w, vp.h); the complex prim must use the same rect,
+     * otherwise its fullscreen triangle covers a different region of the
+     * framebuffer than the rest of the layer and the FS would compare
+     * canvas-local bounds against the wrong coordinate system — see the
+     * pane_pixel comment in the matching shader. */
+    wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
         target->viewport.w, target->viewport.h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0,
+    wgpuRenderPassEncoderSetScissorRect(pass,
+        (uint32_t)target->viewport.x, (uint32_t)target->viewport.y,
         (uint32_t)target->viewport.w, (uint32_t)target->viewport.h);
 
     float w = self->bounds.max.x - self->bounds.min.x;

@@ -275,13 +275,24 @@ struct yetty_ycore_void_result yetty_ygui_internal_emit_buffer_translated(
         }
         memcpy(work, p, s);
         uint32_t pre_t = ((uint32_t *)work)[0];
-        float pre_bx = (s >= 16) ? ((float *)work)[2] : 0.0f;
-        float pre_by = (s >= 16) ? ((float *)work)[3] : 0.0f;
+        /* For complex prims (high bit set) the bounds_x/y live at
+         * float[2]/[3]. For SDF prims the geometry centre lives at
+         * float[5]/[6] (after [type, z, fill, stroke, sw]). Log both
+         * so we can see which slot actually got translated. */
+        size_t wc = s / sizeof(float);
+        float pre_b23x  = (wc > 3)  ? ((float *)work)[2] : 0.0f;
+        float pre_b23y  = (wc > 3)  ? ((float *)work)[3] : 0.0f;
+        float pre_sdfx  = (wc > 6)  ? ((float *)work)[5] : 0.0f;
+        float pre_sdfy  = (wc > 6)  ? ((float *)work)[6] : 0.0f;
         translate_prim((uint32_t *)work, s, dx, dy);
-        float post_bx = (s >= 16) ? ((float *)work)[2] : 0.0f;
-        float post_by = (s >= 16) ? ((float *)work)[3] : 0.0f;
-        ydebug("emit_buffer_translated: prim type=0x%08x size=%zu dx=%.1f dy=%.1f pre=(%.1f,%.1f) post=(%.1f,%.1f)",
-               pre_t, s, dx, dy, pre_bx, pre_by, post_bx, post_by);
+        float post_b23x = (wc > 3)  ? ((float *)work)[2] : 0.0f;
+        float post_b23y = (wc > 3)  ? ((float *)work)[3] : 0.0f;
+        float post_sdfx = (wc > 6)  ? ((float *)work)[5] : 0.0f;
+        float post_sdfy = (wc > 6)  ? ((float *)work)[6] : 0.0f;
+        ydebug("emit_buffer_translated: type=0x%08x size=%zu dx=%.1f dy=%.1f bounds[2,3]: pre=(%.1f,%.1f) post=(%.1f,%.1f) sdf[5,6]: pre=(%.1f,%.1f) post=(%.1f,%.1f)",
+               pre_t, s, dx, dy,
+               pre_b23x, pre_b23y, post_b23x, post_b23y,
+               pre_sdfx, pre_sdfy, post_sdfx, post_sdfy);
         struct yetty_ydraw_id_result r =
             yetty_ydraw_draw_list_add_prim(ctx->buffer, work, s);
         if (YETTY_IS_ERR(r)) {

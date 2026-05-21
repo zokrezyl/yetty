@@ -62,10 +62,24 @@ static struct yetty_ydraw_draw_list *yplot_build_buffer(struct yetty_ygui_widget
     /* Bounds always follow the resolved layout box — the caller's
      * config bounds are ignored. That's the whole point of being a
      * widget: layout decides the size, not the caller. */
+    /* CLIENT-AREA INVARIANT: yplot is a single complex prim whose
+     * (bounds_x, bounds_y) anchors it on the canvas and (bounds_w,
+     * bounds_h) defines its extent. The widget always authors the prim
+     * in WIDGET-LOCAL coordinates — top-left at (0, 0), extent exactly
+     * (w, h) where (w, h) is the resolved layout box. Composition
+     * (emit_buffer_translated) then adds the widget's absolute
+     * (layout_x, layout_y) to (bounds_x, bounds_y) so the wire carries
+     * absolute canvas coords matching the widget's client area exactly.
+     * No part of the prim can render outside that rectangle — the
+     * fragment shader (yplot.wgsl: `if (local_pos < 0 || local_pos >=
+     * bounds_*) discard`) enforces it. */
     cfg.bounds_x = 0.0f;
     cfg.bounds_y = 0.0f;
     cfg.bounds_w = w;
     cfg.bounds_h = h;
+    ydebug("yplot_build_buffer id=%s WIDGET-LOCAL bounds=(x=%.1f y=%.1f w=%.1f h=%.1f)",
+           self->id ? self->id : "?",
+           cfg.bounds_x, cfg.bounds_y, cfg.bounds_w, cfg.bounds_h);
 
     const char *src = self->data.yplot.source ? self->data.yplot.source : "";
     size_t src_len = self->data.yplot.source_len;

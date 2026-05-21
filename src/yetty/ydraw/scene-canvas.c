@@ -228,6 +228,16 @@ struct scene_canvas {
     struct id_index_entry *id_index;
     uint32_t id_index_capacity;
     uint32_t id_index_count;
+    /* Tombstone count — slots where the entry was removed but the slot
+     * itself is still "occupied" for probe purposes. Linear probing must
+     * keep walking past tombstones (a real entry that hashed here may sit
+     * further down the chain), so a hot create/delete cycle would burn
+     * down every empty slot without ever growing the table — the load
+     * factor below considers count alone — and an insert's open-ended
+     * probe loop would spin forever once no slot is EMPTY. Counting
+     * tombstones lets id_index_grow trigger a rehash that clears them
+     * before that happens. */
+    uint32_t id_index_tombstones;
 
     /* Persistent scratch buffer for staging rebuild — sized to
      * entity_high_water on each rebuild, grows in place across frames.
@@ -480,11 +490,22 @@ static uint32_t id_hash(uint64_t id, uint32_t capacity_mask)
 
 static struct yetty_ycore_void_result id_index_grow(struct scene_canvas *sc, uint32_t want)
 {
-    /* Resize when projected load would exceed 0.7. */
-    if ((want + 1u) * 10u <= sc->id_index_capacity * 7u) {
+    /* Trigger a rebuild on TOTAL occupancy (live + tombstones), not just
+     * `want`. Tombstones don't shrink under linear probing — only a rehash
+     * clears them. A hot create/delete cycle keeps count low but burns
+     * empty slots into tombstones; without considering them here, the
+     * table would never grow and the insert probe loop would eventually
+     * find no EMPTY slot to terminate on. We don't actually grow capacity
+     * unless live count itself crosses the load factor — a same-size
+     * rehash is enough to flush tombstones. */
+    uint32_t occupancy = want + sc->id_index_tombstones;
+    if ((occupancy + 1u) * 10u <= sc->id_index_capacity * 7u) {
         return YETTY_OK_VOID();
     }
-    uint32_t new_cap = sc->id_index_capacity ? sc->id_index_capacity * 2u : 16u;
+    uint32_t new_cap = sc->id_index_capacity ? sc->id_index_capacity : 16u;
+    /* Only double when LIVE entries cross the load factor. Tombstone-only
+     * overflow gets a same-size rehash; the cleared tombstones are all the
+     * headroom we need. */
     while ((want + 1u) * 10u > new_cap * 7u) new_cap *= 2u;
 
     struct id_index_entry *new_index = calloc(new_cap, sizeof(struct id_index_entry));
@@ -497,6 +518,7 @@ static struct yetty_ycore_void_result id_index_grow(struct scene_canvas *sc, uin
     sc->id_index = new_index;
     sc->id_index_capacity = new_cap;
     sc->id_index_count = 0;
+    sc->id_index_tombstones = 0;
     for (uint32_t i = 0; i < old_cap; i++) {
         uint64_t k = old[i].external_id;
         if (k == SCENE_ID_INDEX_EMPTY || k == SCENE_ID_INDEX_TOMBSTONE) continue;
@@ -520,9 +542,15 @@ static struct yetty_ycore_void_result id_index_insert(struct scene_canvas *sc,
     uint32_t mask = sc->id_index_capacity - 1u;
     uint32_t i = id_hash(external_id, mask);
     uint32_t first_tomb = UINT32_MAX;
-    while (1) {
+    /* Bounded probe: id_index_grow above guarantees at least one EMPTY
+     * slot after rehashing (it rebuilds the table when occupancy crosses
+     * the load factor, and a rebuild clears tombstones). The probe MUST
+     * still terminate after at most `capacity` steps — a missing bound
+     * here is what hung the receiver under a hot create/delete cycle
+     * from ygreeter. */
+    for (uint32_t probes = 0; probes < sc->id_index_capacity; probes++) {
         uint64_t key = sc->id_index[i].external_id;
-        if (key == SCENE_ID_INDEX_EMPTY) break;
+        if (key == SCENE_ID_INDEX_EMPTY) goto place;
         if (key == SCENE_ID_INDEX_TOMBSTONE) {
             if (first_tomb == UINT32_MAX) first_tomb = i;
         } else if (key == external_id) {
@@ -530,7 +558,21 @@ static struct yetty_ycore_void_result id_index_insert(struct scene_canvas *sc,
         }
         i = (i + 1u) & mask;
     }
-    if (first_tomb != UINT32_MAX) i = first_tomb;
+    /* No EMPTY slot found — the table is full of live entries + tombstones.
+     * Reusing a tombstone slot is safe (duplicate-id check above already
+     * walked the full chain). If there's no tombstone either, the table is
+     * actually full; id_index_grow should have prevented this. */
+    if (first_tomb == UINT32_MAX) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "scene-canvas: id_index full (no EMPTY or tombstone)");
+    }
+place:
+    if (first_tomb != UINT32_MAX) {
+        /* Reusing a tombstone — net occupancy unchanged from probing's
+         * point of view, so don't double-count it in the load factor. */
+        i = first_tomb;
+        sc->id_index_tombstones--;
+    }
     sc->id_index[i] = (struct id_index_entry){.external_id = external_id, .slot = slot};
     sc->id_index_count++;
     return YETTY_OK_VOID();
@@ -548,6 +590,7 @@ static void id_index_remove(struct scene_canvas *sc, uint64_t external_id)
             sc->id_index[i].external_id = SCENE_ID_INDEX_TOMBSTONE;
             sc->id_index[i].slot = 0;
             sc->id_index_count--;
+            sc->id_index_tombstones++;
             return;
         }
         i = (i + 1u) & mask;

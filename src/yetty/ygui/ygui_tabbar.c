@@ -82,10 +82,16 @@ float yetty_ygui_tabbar_button_size(void)
 
 static float tabbar_header_h(const struct yetty_ygui_widget *self)
 {
-    if (self->data.tabbar.header_h > 0) {
-        return self->data.tabbar.header_h;
+    float h = self->data.tabbar.header_h > 0 ? self->data.tabbar.header_h
+                                             : TABBAR_DEFAULT_HEADER_H;
+    /* Never draw a header that's taller than the widget itself, otherwise
+     * the strip overflows downward and the layout pass places panel
+     * children (content_y = layout_y + padding_top) outside the tabbar's
+     * own box — siblings end up overlapping. */
+    if (self->layout_h > 0 && h > self->layout_h) {
+        h = self->layout_h;
     }
-    return TABBAR_DEFAULT_HEADER_H;
+    return h;
 }
 
 static float tabbar_pill_width(const struct yetty_ygui_widget *self)

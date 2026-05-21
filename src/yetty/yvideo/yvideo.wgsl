@@ -78,7 +78,17 @@ fn yvideo_render(local_pos: vec2<f32>) -> vec4<f32> {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
+    // Pane-local pixel coordinate (origin at the pane's top-left).
+    // @builtin(position) in the fragment is the FRAMEBUFFER pixel — once
+    // the layer's render target has a non-zero viewport offset (yui pushes
+    // the terminal pane down by the titlebar height, ygui tabbars push
+    // their content panels down by the header strip), framebuffer coords
+    // no longer line up with the pane origin and the bounds-x/y check
+    // below would compare canvas-local bounds against framebuffer pixels —
+    // yvideo ends up painting over whatever sits above the pane. Map NDC
+    // → pane pixels here so the FS reasons in the pane's own coordinate
+    // system, independent of where the pane sits in the big surface.
+    @location(0) @interpolate(linear) pane_pixel: vec2<f32>,
 };
 
 @vertex
@@ -89,15 +99,18 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
         vec2<f32>(3.0, -1.0),
         vec2<f32>(-1.0, 3.0)
     );
-    var uv: array<vec2<f32>, 3> = array<vec2<f32>, 3>(
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(2.0, 1.0),
-        vec2<f32>(0.0, -1.0)
-    );
+
+    let vp_w = uniforms.yvideo_viewport_w;
+    let vp_h = uniforms.yvideo_viewport_h;
 
     var out: VertexOutput;
     out.position = vec4<f32>(pos[vertex_index], 0.0, 1.0);
-    out.uv = uv[vertex_index];
+    // NDC.x: -1 → 0, 1 → vp_w
+    // NDC.y:  1 → 0, -1 → vp_h (framebuffer y is top-down)
+    out.pane_pixel = vec2<f32>(
+        (pos[vertex_index].x * 0.5 + 0.5) * vp_w,
+        (0.5 - pos[vertex_index].y * 0.5) * vp_h
+    );
     return out;
 }
 
@@ -115,7 +128,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                              uniforms.yvideo_viewport_h);
     let vp_c     = vp * 0.5;
 
-    let pane_px = in.position.xy;
+    let pane_px = in.pane_pixel;
     let after_visual = (pane_px - vp_c) / max(vz_scale, 0.0001) + vp_c + vz_off;
     let source_px    = after_visual / max(cz_scale, 0.0001) + cz_off;
 

@@ -324,9 +324,19 @@ static struct yetty_ycore_void_result yplot_instance_render(
         return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
     }
 
-    wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, target->viewport.w, target->viewport.h, 0.0f,
-                                     1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, (uint32_t)target->viewport.w,
+    /* The pane's render target may sit at a non-zero offset inside the
+     * big surface (e.g. yui pushes the terminal pane down by the titlebar
+     * height). The layer's simple-prim pass already draws to
+     * (vp.x, vp.y, vp.w, vp.h); yplot must use the same rect, otherwise
+     * its fullscreen triangle covers a different region of the framebuffer
+     * than the rest of the layer and the FS would compare canvas-local
+     * bounds against the wrong coordinate system — see yplot.wgsl
+     * pane_pixel comment for the matching shader-side fix. */
+    wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
+                                     target->viewport.w, target->viewport.h, 0.0f, 1.0f);
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)target->viewport.x,
+                                        (uint32_t)target->viewport.y,
+                                        (uint32_t)target->viewport.w,
                                         (uint32_t)target->viewport.h);
 
     float w = self->bounds.max.x - self->bounds.min.x;
