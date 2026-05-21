@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
+struct yetty_ywasm_client;
+
 void demo_raw_stdin(void);
 void demo_sleep_ms(int ms);
 
@@ -24,5 +26,14 @@ void demo_sleep_ms(int ms);
  * stdout / stderr. Returns NULL if the file can't be opened. Caller
  * fcloses. */
 FILE *demo_trace_open(const char *demo_name);
+
+/* Wire a 'q' keystroke from the host yetty into a flag the demo can
+ * poll inside its wait loops. yetty's ywasm-layer already forwards
+ * focused key/char events as KEY OSC frames; this helper just decodes
+ * `codepoint == 'q'` and writes 1 into *flag (passed as user data so
+ * the client doesn't need to grow another field). Pair with a
+ * `demo_should_quit(flag)` check inside any pump loop the demo runs. */
+extern int demo_quit_flag;
+void demo_install_quit_on_q(struct yetty_ywasm_client *c);
 
 #endif /* YETTY_DEMO_YWASM_COMMON_H */

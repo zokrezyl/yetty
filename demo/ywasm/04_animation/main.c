@@ -68,6 +68,7 @@ int main(void)
         return 1;
     }
     struct yetty_ywasm_client *c = cr.value;
+    demo_install_quit_on_q(c);
 
     (void)yetty_ywasm_client_send_hello(c);
     for (int i = 0; i < 200 && !yetty_ywasm_client_connected(c); ++i) {
@@ -83,7 +84,8 @@ int main(void)
     }
 
     int failures = 0;
-    for (int i = 0; i < FRAMES; ++i) {
+    int i;
+    for (i = 0; i < FRAMES && !demo_quit_flag; ++i) {
         float phase = (float)i / (float)FRAMES;
         make_frame(pixels, phase);
         struct yetty_ycore_void_result pr =
@@ -97,6 +99,7 @@ int main(void)
         (void)yetty_ywasm_client_pump(c);
         demo_sleep_ms(FRAME_INTERVAL_MS);
     }
+    if (demo_quit_flag) LOG("04_animation: 'q' pressed at frame %d\n", i);
     free(pixels);
     LOG("04_animation: %d frames done (failures=%d)\n", FRAMES, failures);
 

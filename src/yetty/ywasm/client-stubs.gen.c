@@ -49995,10 +49995,8 @@ WGPUFuture ywasm_client_wgpuBufferMapAsync(struct yetty_ywasm_client *c, uint64_
     args.mode = mode;
     args.offset = offset;
     args.size = size;
-    WGPUFuture _result = (WGPUFuture){0};
-    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_blocking(c, YETTY_YWASM_METHOD_wgpuBufferMapAsync, &args, sizeof(args), &_result, sizeof(_result), NULL);
-      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
-    return _result;
+    (void)yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_wgpuBufferMapAsync, &args, sizeof(args), cb, user);
+    return (WGPUFuture){0};
 }
 
 WGPUStatus ywasm_client_wgpuBufferReadMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, void *data, size_t size)
@@ -50173,57 +50171,60 @@ struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderCopyBufferToTextur
 {
     struct ywasm_args_wgpuCommandEncoderCopyBufferToTexture args = {0};
     args.commandEncoder = commandEncoder;
-    if (source) {
-        args.source_present = 1u;
-        args.source = *source;
-    }
-    if (destination) {
-        args.destination_present = 1u;
-        args.destination = *destination;
-    }
     if (copySize) {
         args.copySize_present = 1u;
         args.copySize = *copySize;
     }
-    return yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_wgpuCommandEncoderCopyBufferToTexture, &args, sizeof(args));
+    struct yetty_ycore_buffer _body = {0};
+    { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &args, sizeof(args)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    { uint8_t _f = source ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (source) ywasm_encode_WGPUTexelCopyBufferInfo(source, &_body);
+    { uint8_t _f = destination ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (destination) ywasm_encode_WGPUTexelCopyTextureInfo(destination, &_body);
+    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_wgpuCommandEncoderCopyBufferToTexture, _body.data, _body.size);
+      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    yetty_ycore_buffer_destroy(&_body);
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderCopyTextureToBuffer(struct yetty_ywasm_client *c, uint64_t commandEncoder, WGPUTexelCopyTextureInfo const *source, WGPUTexelCopyBufferInfo const *destination, WGPUExtent3D const *copySize)
 {
     struct ywasm_args_wgpuCommandEncoderCopyTextureToBuffer args = {0};
     args.commandEncoder = commandEncoder;
-    if (source) {
-        args.source_present = 1u;
-        args.source = *source;
-    }
-    if (destination) {
-        args.destination_present = 1u;
-        args.destination = *destination;
-    }
     if (copySize) {
         args.copySize_present = 1u;
         args.copySize = *copySize;
     }
-    return yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_wgpuCommandEncoderCopyTextureToBuffer, &args, sizeof(args));
+    struct yetty_ycore_buffer _body = {0};
+    { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &args, sizeof(args)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    { uint8_t _f = source ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (source) ywasm_encode_WGPUTexelCopyTextureInfo(source, &_body);
+    { uint8_t _f = destination ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (destination) ywasm_encode_WGPUTexelCopyBufferInfo(destination, &_body);
+    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_wgpuCommandEncoderCopyTextureToBuffer, _body.data, _body.size);
+      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    yetty_ycore_buffer_destroy(&_body);
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderCopyTextureToTexture(struct yetty_ywasm_client *c, uint64_t commandEncoder, WGPUTexelCopyTextureInfo const *source, WGPUTexelCopyTextureInfo const *destination, WGPUExtent3D const *copySize)
 {
     struct ywasm_args_wgpuCommandEncoderCopyTextureToTexture args = {0};
     args.commandEncoder = commandEncoder;
-    if (source) {
-        args.source_present = 1u;
-        args.source = *source;
-    }
-    if (destination) {
-        args.destination_present = 1u;
-        args.destination = *destination;
-    }
     if (copySize) {
         args.copySize_present = 1u;
         args.copySize = *copySize;
     }
-    return yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_wgpuCommandEncoderCopyTextureToTexture, &args, sizeof(args));
+    struct yetty_ycore_buffer _body = {0};
+    { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &args, sizeof(args)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    { uint8_t _f = source ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (source) ywasm_encode_WGPUTexelCopyTextureInfo(source, &_body);
+    { uint8_t _f = destination ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (destination) ywasm_encode_WGPUTexelCopyTextureInfo(destination, &_body);
+    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_wgpuCommandEncoderCopyTextureToTexture, _body.data, _body.size);
+      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    yetty_ycore_buffer_destroy(&_body);
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderInjectValidationError(struct yetty_ywasm_client *c, uint64_t commandEncoder, WGPUStringView message)
@@ -50660,11 +50661,10 @@ WGPUFuture ywasm_client_wgpuDeviceCreateComputePipelineAsync(struct yetty_ywasm_
     { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &args, sizeof(args)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     { uint8_t _f = descriptor ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     if (descriptor) ywasm_encode_WGPUComputePipelineDescriptor(descriptor, &_body);
-    WGPUFuture _result = (WGPUFuture){0};
-    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_blocking(c, YETTY_YWASM_METHOD_wgpuDeviceCreateComputePipelineAsync, _body.data, _body.size, &_result, sizeof(_result), NULL);
+    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_wgpuDeviceCreateComputePipelineAsync, _body.data, _body.size, cb, user);
       if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     yetty_ycore_buffer_destroy(&_body);
-    return _result;
+    return (WGPUFuture){0};
 }
 
 uint64_t ywasm_client_wgpuDeviceCreateErrorBuffer(struct yetty_ywasm_client *c, uint64_t device, WGPUBufferDescriptor const *descriptor)
@@ -50822,11 +50822,10 @@ WGPUFuture ywasm_client_wgpuDeviceCreateRenderPipelineAsync(struct yetty_ywasm_c
     { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &args, sizeof(args)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     { uint8_t _f = descriptor ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     if (descriptor) ywasm_encode_WGPURenderPipelineDescriptor(descriptor, &_body);
-    WGPUFuture _result = (WGPUFuture){0};
-    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_blocking(c, YETTY_YWASM_METHOD_wgpuDeviceCreateRenderPipelineAsync, _body.data, _body.size, &_result, sizeof(_result), NULL);
+    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_wgpuDeviceCreateRenderPipelineAsync, _body.data, _body.size, cb, user);
       if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     yetty_ycore_buffer_destroy(&_body);
-    return _result;
+    return (WGPUFuture){0};
 }
 
 uint64_t ywasm_client_wgpuDeviceCreateResourceTable(struct yetty_ywasm_client *c, uint64_t device, WGPUResourceTableDescriptor const *descriptor)
@@ -51106,10 +51105,8 @@ WGPUFuture ywasm_client_wgpuDevicePopErrorScope(struct yetty_ywasm_client *c, ui
 {
     struct ywasm_args_wgpuDevicePopErrorScope args = {0};
     args.device = device;
-    WGPUFuture _result = (WGPUFuture){0};
-    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_blocking(c, YETTY_YWASM_METHOD_wgpuDevicePopErrorScope, &args, sizeof(args), &_result, sizeof(_result), NULL);
-      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
-    return _result;
+    (void)yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_wgpuDevicePopErrorScope, &args, sizeof(args), cb, user);
+    return (WGPUFuture){0};
 }
 
 struct yetty_ycore_void_result ywasm_client_wgpuDevicePushErrorScope(struct yetty_ywasm_client *c, uint64_t device, uint32_t filter)
@@ -51469,10 +51466,6 @@ struct yetty_ycore_void_result ywasm_client_wgpuQueueCopyExternalTextureForBrows
 {
     struct ywasm_args_wgpuQueueCopyExternalTextureForBrowser args = {0};
     args.queue = queue;
-    if (destination) {
-        args.destination_present = 1u;
-        args.destination = *destination;
-    }
     if (copySize) {
         args.copySize_present = 1u;
         args.copySize = *copySize;
@@ -51481,6 +51474,8 @@ struct yetty_ycore_void_result ywasm_client_wgpuQueueCopyExternalTextureForBrows
     { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &args, sizeof(args)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     { uint8_t _f = source ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     if (source) ywasm_encode_WGPUImageCopyExternalTexture(source, &_body);
+    { uint8_t _f = destination ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (destination) ywasm_encode_WGPUTexelCopyTextureInfo(destination, &_body);
     { uint8_t _f = options ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     if (options) ywasm_encode_WGPUCopyTextureForBrowserOptions(options, &_body);
     { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_wgpuQueueCopyExternalTextureForBrowser, _body.data, _body.size);
@@ -51493,20 +51488,16 @@ struct yetty_ycore_void_result ywasm_client_wgpuQueueCopyTextureForBrowser(struc
 {
     struct ywasm_args_wgpuQueueCopyTextureForBrowser args = {0};
     args.queue = queue;
-    if (source) {
-        args.source_present = 1u;
-        args.source = *source;
-    }
-    if (destination) {
-        args.destination_present = 1u;
-        args.destination = *destination;
-    }
     if (copySize) {
         args.copySize_present = 1u;
         args.copySize = *copySize;
     }
     struct yetty_ycore_buffer _body = {0};
     { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &args, sizeof(args)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    { uint8_t _f = source ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (source) ywasm_encode_WGPUTexelCopyTextureInfo(source, &_body);
+    { uint8_t _f = destination ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (destination) ywasm_encode_WGPUTexelCopyTextureInfo(destination, &_body);
     { uint8_t _f = options ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     if (options) ywasm_encode_WGPUCopyTextureForBrowserOptions(options, &_body);
     { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_wgpuQueueCopyTextureForBrowser, _body.data, _body.size);
@@ -51519,10 +51510,8 @@ WGPUFuture ywasm_client_wgpuQueueOnSubmittedWorkDone(struct yetty_ywasm_client *
 {
     struct ywasm_args_wgpuQueueOnSubmittedWorkDone args = {0};
     args.queue = queue;
-    WGPUFuture _result = (WGPUFuture){0};
-    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_blocking(c, YETTY_YWASM_METHOD_wgpuQueueOnSubmittedWorkDone, &args, sizeof(args), &_result, sizeof(_result), NULL);
-      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
-    return _result;
+    (void)yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_wgpuQueueOnSubmittedWorkDone, &args, sizeof(args), cb, user);
+    return (WGPUFuture){0};
 }
 
 struct yetty_ycore_void_result ywasm_client_wgpuQueueSetLabel(struct yetty_ywasm_client *c, uint64_t queue, WGPUStringView label)
@@ -51587,10 +51576,6 @@ struct yetty_ycore_void_result ywasm_client_wgpuQueueWriteTexture(struct yetty_y
 {
     struct ywasm_args_wgpuQueueWriteTexture args = {0};
     args.queue = queue;
-    if (destination) {
-        args.destination_present = 1u;
-        args.destination = *destination;
-    }
     if (dataLayout) {
         args.dataLayout_present = 1u;
         args.dataLayout = *dataLayout;
@@ -51601,6 +51586,8 @@ struct yetty_ycore_void_result ywasm_client_wgpuQueueWriteTexture(struct yetty_y
     }
     struct yetty_ycore_buffer _body = {0};
     { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &args, sizeof(args)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    { uint8_t _f = destination ? 1u : 0u; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_f, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
+    if (destination) ywasm_encode_WGPUTexelCopyTextureInfo(destination, &_body);
     { uint64_t _c = (uint64_t)dataSize; struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, &_c, sizeof(_c)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
     if ((size_t)dataSize > 0 && data) {
         struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(&_body, data, (size_t)dataSize);
@@ -52351,10 +52338,8 @@ WGPUFuture ywasm_client_wgpuShaderModuleGetCompilationInfo(struct yetty_ywasm_cl
 {
     struct ywasm_args_wgpuShaderModuleGetCompilationInfo args = {0};
     args.shaderModule = shaderModule;
-    WGPUFuture _result = (WGPUFuture){0};
-    { struct yetty_ycore_void_result _r = yetty_ywasm_client_send_cmd_blocking(c, YETTY_YWASM_METHOD_wgpuShaderModuleGetCompilationInfo, &args, sizeof(args), &_result, sizeof(_result), NULL);
-      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }
-    return _result;
+    (void)yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_wgpuShaderModuleGetCompilationInfo, &args, sizeof(args), cb, user);
+    return (WGPUFuture){0};
 }
 
 struct yetty_ycore_void_result ywasm_client_wgpuShaderModuleRelease(struct yetty_ywasm_client *c, uint64_t shaderModule)

@@ -558,9 +558,7 @@ struct ywasm_args_wgpuCommandEncoderCopyBufferToBuffer {
 
 struct ywasm_args_wgpuCommandEncoderCopyBufferToTexture {
     uint64_t commandEncoder;
-    uint32_t source_present;
     WGPUTexelCopyBufferInfo source;
-    uint32_t destination_present;
     WGPUTexelCopyTextureInfo destination;
     uint32_t copySize_present;
     WGPUExtent3D copySize;
@@ -568,9 +566,7 @@ struct ywasm_args_wgpuCommandEncoderCopyBufferToTexture {
 
 struct ywasm_args_wgpuCommandEncoderCopyTextureToBuffer {
     uint64_t commandEncoder;
-    uint32_t source_present;
     WGPUTexelCopyTextureInfo source;
-    uint32_t destination_present;
     WGPUTexelCopyBufferInfo destination;
     uint32_t copySize_present;
     WGPUExtent3D copySize;
@@ -578,9 +574,7 @@ struct ywasm_args_wgpuCommandEncoderCopyTextureToBuffer {
 
 struct ywasm_args_wgpuCommandEncoderCopyTextureToTexture {
     uint64_t commandEncoder;
-    uint32_t source_present;
     WGPUTexelCopyTextureInfo source;
-    uint32_t destination_present;
     WGPUTexelCopyTextureInfo destination;
     uint32_t copySize_present;
     WGPUExtent3D copySize;
@@ -1062,7 +1056,6 @@ struct ywasm_args_wgpuQueueAddRef {
 struct ywasm_args_wgpuQueueCopyExternalTextureForBrowser {
     uint64_t queue;
     WGPUImageCopyExternalTexture source;
-    uint32_t destination_present;
     WGPUTexelCopyTextureInfo destination;
     uint32_t copySize_present;
     WGPUExtent3D copySize;
@@ -1071,9 +1064,7 @@ struct ywasm_args_wgpuQueueCopyExternalTextureForBrowser {
 
 struct ywasm_args_wgpuQueueCopyTextureForBrowser {
     uint64_t queue;
-    uint32_t source_present;
     WGPUTexelCopyTextureInfo source;
-    uint32_t destination_present;
     WGPUTexelCopyTextureInfo destination;
     uint32_t copySize_present;
     WGPUExtent3D copySize;
@@ -1106,7 +1097,6 @@ struct ywasm_args_wgpuQueueWriteBuffer {
 
 struct ywasm_args_wgpuQueueWriteTexture {
     uint64_t queue;
-    uint32_t destination_present;
     WGPUTexelCopyTextureInfo destination;
     size_t dataSize;
     uint8_t data;

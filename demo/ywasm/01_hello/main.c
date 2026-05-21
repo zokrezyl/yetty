@@ -26,6 +26,7 @@ int main(void)
     }
     struct yetty_ywasm_client *c = cr.value;
     LOG("01_hello: client ready\n");
+    demo_install_quit_on_q(c);
 
     struct yetty_ycore_void_result hr = yetty_ywasm_client_send_hello(c);
     if (hr.ok != 1) {
@@ -39,8 +40,9 @@ int main(void)
     }
     LOG("01_hello: connected=%d\n", yetty_ywasm_client_connected(c));
 
-    /* Hold the session briefly so the user can see the layer is up. */
-    for (int i = 0; i < 100; ++i) {
+    /* Hold the session briefly so the user can see the layer is up.
+     * Press 'q' in the host yetty to exit early. */
+    for (int i = 0; i < 100 && !demo_quit_flag; ++i) {
         (void)yetty_ywasm_client_pump(c);
         demo_sleep_ms(10);
     }

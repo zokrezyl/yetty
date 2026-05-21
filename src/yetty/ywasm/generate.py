@@ -51,9 +51,10 @@ METHODS = [
         ],
         "returns": "handle",
         "server_body": """\
-        WGPUInstance inst = wgpuCreateInstance(NULL);
+        WGPUInstance inst = (WGPUInstance)ywasm_server_get_shared_instance(ctx);
         if (!inst)
-            return YETTY_YWASM_REPLY_OUT_OF_MEMORY;
+            return YETTY_YWASM_REPLY_INTERNAL;
+        wgpuInstanceAddRef(inst);
         struct yetty_ycore_void_result r =
             ywasm_server_handle_set(ctx, a->result_handle, inst);
         if (YETTY_IS_ERR(r)) {
@@ -104,9 +105,13 @@ METHODS = [
         WGPUDevice device = (WGPUDevice)ywasm_server_handle_get(ctx, a->device);
         if (!device)
             return YETTY_YWASM_REPLY_VALIDATION_ERROR;
-        WGPUQueue q = wgpuDeviceGetQueue(device);
-        if (!q)
-            return YETTY_YWASM_REPLY_INTERNAL;
+        /* Hand back the shared queue rather than the per-device default
+         * (they're the same object for yetty's setup, but going through
+         * the accessor keeps the bridge honest about which Dawn pointer
+         * it's exposing). */
+        WGPUQueue q = (WGPUQueue)ywasm_server_get_shared_queue(ctx);
+        if (!q) return YETTY_YWASM_REPLY_INTERNAL;
+        wgpuQueueAddRef(q);
         struct yetty_ycore_void_result r =
             ywasm_server_handle_set(ctx, a->result_handle, q);
         if (YETTY_IS_ERR(r)) {
@@ -244,60 +249,26 @@ METHODS = [
         "server_body": """\
         if (req_id == 0)
             return YETTY_YWASM_REPLY_VALIDATION_ERROR;
-        WGPUInstance inst = (WGPUInstance)ywasm_server_handle_get(ctx, a->instance);
-        if (!inst)
-            return YETTY_YWASM_REPLY_VALIDATION_ERROR;
-        struct ywasm_async_cb *d =
-            (struct ywasm_async_cb *)malloc(sizeof(*d));
-        if (!d)
-            return YETTY_YWASM_REPLY_OUT_OF_MEMORY;
-        d->ctx = ctx;
-        d->req_id = req_id;
-        d->method_id = method_id;
-        d->result_handle = a->result_handle;
-        WGPURequestAdapterOptions opts = {0};
-        WGPURequestAdapterCallbackInfo ci = {0};
-        ci.mode = WGPUCallbackMode_AllowSpontaneous;
-        ci.callback = ywasm_trampoline_wgpuInstanceRequestAdapter;
-        ci.userdata1 = d;
-        wgpuInstanceRequestAdapter(inst, &opts, ci);
-        return YWASM_DISPATCH_DEFERRED;""",
-        "trampoline": """\
-static void ywasm_trampoline_wgpuInstanceRequestAdapter(
-    WGPURequestAdapterStatus status, WGPUAdapter adapter,
-    WGPUStringView message, void *userdata1, void *userdata2)
-{
-    /* userdata2 is the second slot Dawn's CallbackInfo offers; we put
-     * the whole closure in userdata1 and leave userdata2 NULL on the
-     * request side, so there is nothing meaningful to read here. */
-    (void)userdata2;
-    struct ywasm_async_cb *d = (struct ywasm_async_cb *)userdata1;
-    uint32_t reply_status = YETTY_YWASM_REPLY_OK;
-    if (status != WGPURequestAdapterStatus_Success || !adapter) {
-        yerror("ywasm: wgpuInstanceRequestAdapter failed status=%d msg=%.*s",
-               (int)status,
-               message.length == WGPU_STRLEN ? 0 : (int)message.length,
-               message.data ? message.data : "");
-        reply_status = YETTY_YWASM_REPLY_INTERNAL;
-    } else {
-        if (message.data && message.length && message.length != WGPU_STRLEN) {
-            ydebug("ywasm: wgpuInstanceRequestAdapter ok msg=%.*s",
-                   (int)message.length, message.data);
-        }
+        (void)a;
+        /* Hand back yetty's already-selected adapter — no Dawn call. We
+         * still emit the REPLY through the async path so the client's
+         * trampoline-driven wait completes the same way it would for a
+         * real adapter request. */
+        WGPUAdapter shared = (WGPUAdapter)ywasm_server_get_shared_adapter(ctx);
+        if (!shared) return YETTY_YWASM_REPLY_INTERNAL;
+        wgpuAdapterAddRef(shared);
         struct yetty_ycore_void_result r =
-            ywasm_server_handle_set(d->ctx, d->result_handle, adapter);
+            ywasm_server_handle_set(ctx, a->result_handle, shared);
+        uint32_t status = YETTY_YWASM_REPLY_OK;
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
-            wgpuAdapterRelease(adapter);
-            reply_status = YETTY_YWASM_REPLY_INTERNAL;
+            wgpuAdapterRelease(shared);
+            status = YETTY_YWASM_REPLY_INTERNAL;
         }
-    }
-    struct yetty_ycore_void_result e =
-        ywasm_server_emit_reply(d->ctx, d->req_id, d->method_id, reply_status, NULL, 0);
-    if (YETTY_IS_ERR(e))
-        yetty_ycore_error_destroy(e.error);
-    free(d);
-}""",
+        struct yetty_ycore_void_result e =
+            ywasm_server_emit_reply(ctx, req_id, method_id, status, NULL, 0);
+        if (YETTY_IS_ERR(e)) yetty_ycore_error_destroy(e.error);
+        return YWASM_DISPATCH_DEFERRED;""",
     },
     {
         "name": "wgpuAdapterRequestDevice",
@@ -311,60 +282,25 @@ static void ywasm_trampoline_wgpuInstanceRequestAdapter(
         "server_body": """\
         if (req_id == 0)
             return YETTY_YWASM_REPLY_VALIDATION_ERROR;
-        WGPUAdapter ad = (WGPUAdapter)ywasm_server_handle_get(ctx, a->adapter);
-        if (!ad)
-            return YETTY_YWASM_REPLY_VALIDATION_ERROR;
-        struct ywasm_async_cb *d =
-            (struct ywasm_async_cb *)malloc(sizeof(*d));
-        if (!d)
-            return YETTY_YWASM_REPLY_OUT_OF_MEMORY;
-        d->ctx = ctx;
-        d->req_id = req_id;
-        d->method_id = method_id;
-        d->result_handle = a->result_handle;
-        WGPUDeviceDescriptor desc = {0};
-        WGPURequestDeviceCallbackInfo ci = {0};
-        ci.mode = WGPUCallbackMode_AllowSpontaneous;
-        ci.callback = ywasm_trampoline_wgpuAdapterRequestDevice;
-        ci.userdata1 = d;
-        wgpuAdapterRequestDevice(ad, &desc, ci);
-        return YWASM_DISPATCH_DEFERRED;""",
-        "trampoline": """\
-static void ywasm_trampoline_wgpuAdapterRequestDevice(
-    WGPURequestDeviceStatus status, WGPUDevice device,
-    WGPUStringView message, void *userdata1, void *userdata2)
-{
-    /* userdata2 is Dawn's second optional slot; we use only userdata1
-     * for the closure pointer and pass NULL for userdata2 at request
-     * time, so nothing to read here. */
-    (void)userdata2;
-    struct ywasm_async_cb *d = (struct ywasm_async_cb *)userdata1;
-    uint32_t reply_status = YETTY_YWASM_REPLY_OK;
-    if (status != WGPURequestDeviceStatus_Success || !device) {
-        yerror("ywasm: wgpuAdapterRequestDevice failed status=%d msg=%.*s",
-               (int)status,
-               message.length == WGPU_STRLEN ? 0 : (int)message.length,
-               message.data ? message.data : "");
-        reply_status = YETTY_YWASM_REPLY_INTERNAL;
-    } else {
-        if (message.data && message.length && message.length != WGPU_STRLEN) {
-            ydebug("ywasm: wgpuAdapterRequestDevice ok msg=%.*s",
-                   (int)message.length, message.data);
-        }
+        (void)a;
+        /* Hand back yetty's already-active device for the same reason
+         * as RequestAdapter — running a second Dawn device in-process
+         * deadlocks Vulkan on the first pipeline-creation call. */
+        WGPUDevice shared = (WGPUDevice)ywasm_server_get_shared_device(ctx);
+        if (!shared) return YETTY_YWASM_REPLY_INTERNAL;
+        wgpuDeviceAddRef(shared);
         struct yetty_ycore_void_result r =
-            ywasm_server_handle_set(d->ctx, d->result_handle, device);
+            ywasm_server_handle_set(ctx, a->result_handle, shared);
+        uint32_t status = YETTY_YWASM_REPLY_OK;
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
-            wgpuDeviceRelease(device);
-            reply_status = YETTY_YWASM_REPLY_INTERNAL;
+            wgpuDeviceRelease(shared);
+            status = YETTY_YWASM_REPLY_INTERNAL;
         }
-    }
-    struct yetty_ycore_void_result e =
-        ywasm_server_emit_reply(d->ctx, d->req_id, d->method_id, reply_status, NULL, 0);
-    if (YETTY_IS_ERR(e))
-        yetty_ycore_error_destroy(e.error);
-    free(d);
-}""",
+        struct yetty_ycore_void_result e =
+            ywasm_server_emit_reply(ctx, req_id, method_id, status, NULL, 0);
+        if (YETTY_IS_ERR(e)) yetty_ycore_error_destroy(e.error);
+        return YWASM_DISPATCH_DEFERRED;""",
     },
     # Yetty-defined presentation primitive: the client uploads a frame
     # (pixel bytes shipped via a BULK ref) and the server swaps it into
@@ -866,7 +802,7 @@ def emit_struct_encoder_decoder(name: str, struct_fields: dict[str, list[tuple[s
     enc.append(f"void ywasm_encode_{name}(const {name} *src, struct yetty_ycore_buffer *out);")
 
     dec: list[str] = []
-    dec.append(f"int ywasm_decode_{name}(const uint8_t **src, size_t *rem, "
+    dec.append(f"int ywasm_decode_{name}(void *ctx, const uint8_t **src, size_t *rem, "
                f"{name} *out, struct ywasm_arena *arena);")
     return enc, dec  # just declarations; bodies emitted by emit_struct_codec_body
 
@@ -998,19 +934,35 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
     body.append("")
 
     # ----- decoder ----------------------------------------------------
-    body.append(f"int ywasm_decode_{name}(const uint8_t **src, size_t *rem,")
+    # The server decoder takes `ctx` so it can resolve handle fields
+    # through the layer's handle table — without that, fields like
+    # WGPURenderPipelineDescriptor.vertex.module arrive as raw u64
+    # tokens and Dawn dereferences garbage when it sees them as
+    # WGPUShaderModule pointers.
+    body.append(f"int ywasm_decode_{name}(void *ctx, const uint8_t **src, size_t *rem,")
     body.append(f"                                {name} *out, struct ywasm_arena *arena)")
     body.append("{")
-    body.append("    (void)arena;")
+    body.append("    (void)arena; (void)ctx;")
     for f in fields:
         k = field_kind_in_ctx(f, handle_types, aliases, pod_structs, struct_names, encodable)
         fn = f["fname"]
-        if k in ("scalar", "handle", "struct_pod"):
+        if k == "handle":
+            # WGPU* pointer field — wire carries the u64 token; resolve
+            # through the handle table so Dawn sees its own pointer.
+            ctype = f["ctype"]
+            body.append("    {")
+            body.append("        uint64_t _h = 0;")
+            body.append("        if (*rem < sizeof(_h)) return 0;")
+            body.append("        memcpy(&_h, *src, sizeof(_h));")
+            body.append("        *src += sizeof(_h); *rem -= sizeof(_h);")
+            body.append(f"        out->{fn} = ({ctype})ywasm_server_handle_get(ctx, _h);")
+            body.append("    }")
+        elif k in ("scalar", "struct_pod"):
             body.append(f"    if (*rem < sizeof(out->{fn})) return 0;")
             body.append(f"    memcpy(&out->{fn}, *src, sizeof(out->{fn}));")
             body.append(f"    *src += sizeof(out->{fn}); *rem -= sizeof(out->{fn});")
         elif k == "struct_nonpod":
-            body.append(f"    if (!ywasm_decode_{f['ctype']}(src, rem, &out->{fn}, arena)) return 0;")
+            body.append(f"    if (!ywasm_decode_{f['ctype']}(ctx, src, rem, &out->{fn}, arena)) return 0;")
         elif k == "stringview":
             body.append("    {")
             body.append("        uint64_t _len = 0;")
@@ -1054,7 +1006,7 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
                 body.append( "                if (!_link) return 0;")
                 body.append(f"                memset(_link, 0, sizeof(*_link));")
                 body.append(f"                _link->chain.sType = {stype};")
-                body.append(f"                if (!ywasm_decode_{struct}(&_body_p, &_body_rem, _link, arena)) return 0;")
+                body.append(f"                if (!ywasm_decode_{struct}(ctx, &_body_p, &_body_rem, _link, arena)) return 0;")
                 body.append( "                *_pp = (WGPUChainedStruct *)_link; _pp = &(*_pp)->next;")
                 body.append( "                break;")
                 body.append( "            }")
@@ -1085,7 +1037,7 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
                 body.append("            memcpy(_p, *src, sizeof(*_p));")
                 body.append("            *src += sizeof(*_p); *rem -= sizeof(*_p);")
             else:
-                body.append(f"            if (!ywasm_decode_{f['ctype']}(src, rem, _p, arena)) return 0;")
+                body.append(f"            if (!ywasm_decode_{f['ctype']}(ctx, src, rem, _p, arena)) return 0;")
             body.append(f"            out->{fn} = _p;")
             body.append("        } else {")
             body.append(f"            out->{fn} = NULL;")
@@ -1112,7 +1064,14 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
             body.append("        }")
             body.append("        for (size_t _i = 0; _i < _n; ++_i) {")
             if k == "array_nonpod":
-                body.append(f"            if (!ywasm_decode_{it_t}(src, rem, &_arr[_i], arena)) return 0;")
+                body.append(f"            if (!ywasm_decode_{it_t}(ctx, src, rem, &_arr[_i], arena)) return 0;")
+            elif k == "array_handle":
+                # Resolve every handle through the table — same reason as
+                # the scalar-handle field above.
+                body.append("            if (*rem < sizeof(uint64_t)) return 0;")
+                body.append("            uint64_t _h; memcpy(&_h, *src, sizeof(_h));")
+                body.append("            *src += sizeof(_h); *rem -= sizeof(_h);")
+                body.append(f"            _arr[_i] = ({it_t})ywasm_server_handle_get(ctx, _h);")
             else:
                 body.append("            if (*rem < sizeof(_arr[_i])) return 0;")
                 body.append("            memcpy(&_arr[_i], *src, sizeof(_arr[_i]));")
@@ -1120,7 +1079,26 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
             body.append("        }")
             body.append(f"        out->{fn} = _arr;")
             body.append("    }")
-        elif k in ("fixed_array_scalar", "fixed_array_pod", "fixed_array_handle"):
+        elif k == "fixed_array_handle":
+            n = f["length"]
+            elem_t = f["ctype"]
+            body.append("    {")
+            body.append("        if (*rem < 1) return 0;")
+            body.append("        uint8_t _p = **src; *src += 1; *rem -= 1;")
+            body.append("        if (_p) {")
+            body.append(f"            size_t _nb = sizeof({elem_t}) * {n};")
+            body.append(f"            if (*rem < _nb) return 0;")
+            body.append(f"            {elem_t} *_arr = ({elem_t} *)ywasm_arena_alloc(arena, _nb);")
+            body.append("            if (!_arr) return 0;")
+            body.append(f"            for (size_t _i = 0; _i < {n}; ++_i) {{")
+            body.append("                uint64_t _h; memcpy(&_h, (const uint8_t *)(*src) + _i * sizeof(uint64_t), sizeof(_h));")
+            body.append(f"                _arr[_i] = ({elem_t})ywasm_server_handle_get(ctx, _h);")
+            body.append("            }")
+            body.append("            *src += _nb; *rem -= _nb;")
+            body.append(f"            out->{fn} = _arr;")
+            body.append(f"        }} else {{ out->{fn} = NULL; }}")
+            body.append("    }")
+        elif k in ("fixed_array_scalar", "fixed_array_pod"):
             n = f["length"]
             elem_t = f["ctype"]
             body.append("    {")
@@ -1369,7 +1347,15 @@ def is_pod_struct(name: str, struct_fields: dict[str, list[tuple[str, str]]],
         if "*" in t:
             pod = False
             break
-        if t in handle_types or t in aliases or t in _POD_SCALARS:
+        if t in handle_types:
+            # Handle fields make the struct non-POD even though the
+            # type is pointer-sized — the wire still carries a u64
+            # token that the server must resolve through the handle
+            # table before Dawn sees it. Memcpy'ing the struct as a
+            # blob would hand Dawn a raw token cast to a pointer.
+            pod = False
+            break
+        if t in aliases or t in _POD_SCALARS:
             continue
         if t in struct_fields:
             if not is_pod_struct(t, struct_fields, handle_types, aliases, cache, depth + 1):
@@ -1915,7 +1901,7 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
             body_lines.append(f"        {ctype} _v_{an} = (({ctype}){{0}});")
             body_lines.append(f"        {ctype} *_ptr_{an} = NULL;")
             body_lines.append(f"        if (_f_{an}) {{")
-            body_lines.append(f"            if (!ywasm_decode_{ctype}(&_p, &_rem, &_v_{an}, &_arena)) {{")
+            body_lines.append(f"            if (!ywasm_decode_{ctype}(ctx, &_p, &_rem, &_v_{an}, &_arena)) {{")
             body_lines.append(f"                ywasm_arena_free(&_arena);")
             body_lines.append(f"                return YETTY_YWASM_REPLY_VALIDATION_ERROR;")
             body_lines.append(f"            }}")
@@ -1978,7 +1964,14 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
             body_lines.append("        _cb->method_id = method_id; _cb->result_handle = 0;")
             body_lines.append(f"        {ctype} _cbi_{an} = (({ctype}){{0}});")
             if has_mode:
-                body_lines.append(f"        _cbi_{an}.mode = WGPUCallbackMode_AllowSpontaneous;")
+                # WaitAnyOnly + wgpuInstanceWaitAny is the only callback
+                # mode this Dawn build actually drives in our setup —
+                # ProcessEvents-driven callbacks never fire and Spontaneous
+                # races the single-threaded OSC writer. WaitAny blocks the
+                # wire-layer coro until the trampoline emits the REPLY,
+                # which is fine: a Map/CreatePipeline/Submit-Done finishes
+                # in well under a render frame.
+                body_lines.append(f"        _cbi_{an}.mode = WGPUCallbackMode_WaitAnyOnly;")
             body_lines.append(f"        _cbi_{an}.callback = ywasm_trampoline_{name};")
             body_lines.append(f"        _cbi_{an}.userdata1 = _cb;")
             call_args.append(f"_cbi_{an}"); call_arg_by_name[an] = f"_cbi_{an}"
@@ -2090,9 +2083,25 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
     out_byte_arrays = [an for k, _c, an in classified if k == "out_byte_array"]
 
     if has_cb:
-        # The trampoline emits the REPLY when Dawn fires; we just
-        # invoke the wgpu* call here and return DEFERRED.
-        body_lines.append(f"        (void){call_expr};")
+        # If the wgpu* call returns a WGPUFuture, drive it to completion
+        # synchronously with wgpuInstanceWaitAny. The callback (mode=
+        # WaitAnyOnly) fires inside WaitAny on the same thread, the
+        # trampoline emits the REPLY, and we return DEFERRED so
+        # handle_cmd doesn't double-reply.
+        #
+        # Methods that return void from the cb-bearing entry point
+        # (only wgpuDeviceSetLoggingCallback today — a free-form
+        # listener, no Future) can't be waited on; fall back to the
+        # old fire-and-pray path. Its trampoline ignores the closure
+        # and Dawn will fire it whenever it likes.
+        ret_clean = " ".join(ret_type.replace("WGPU_NULLABLE", "").split())
+        if ret_clean == "WGPUFuture":
+            body_lines.append(f"        WGPUFuture _f = {call_expr};")
+            body_lines.append("        WGPUFutureWaitInfo _wi = { _f, 0 };")
+            body_lines.append("        WGPUInstance _inst = (WGPUInstance)ywasm_server_get_shared_instance(ctx);")
+            body_lines.append("        if (_inst) (void)wgpuInstanceWaitAny(_inst, 1, &_wi, UINT64_MAX);")
+        else:
+            body_lines.append(f"        (void){call_expr};")
         if has_var:
             body_lines.append("        ywasm_arena_free(&_arena);")
         body_lines.append("        return YWASM_DISPATCH_DEFERRED;")
@@ -2487,7 +2496,7 @@ def _emit_codec_runtime_decls(lines: list[str], codec_meta: dict | None, side: s
             # Server emits encoders too (for output structs) plus the
             # decoders (for descriptor args).
             lines.append(f"void ywasm_encode_{n}(const {n} *src, struct yetty_ycore_buffer *out);")
-            lines.append(f"int  ywasm_decode_{n}(const uint8_t **src, size_t *rem, "
+            lines.append(f"int  ywasm_decode_{n}(void *ctx, const uint8_t **src, size_t *rem, "
                          f"{n} *out, struct ywasm_arena *arena);")
 
 
@@ -2768,6 +2777,23 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                     lines.append("    return _result;")
                 else:
                     lines.append("    return YETTY_OK_VOID();")
+            elif is_async:
+                # See the no-var_args branch: async takes priority over
+                # value-return because the cb is what carries the result.
+                send = (
+                    f"yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_{m['name']},"
+                    " _body.data, _body.size, cb, user)"
+                )
+                lines.append(f"    {{ struct yetty_ycore_void_result _r = {send};")
+                lines.append("      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+                lines.append("    yetty_ycore_buffer_destroy(&_body);")
+                if m["returns"] == "handle":
+                    lines.append("    return h;")
+                elif m["returns"] == "value":
+                    ret_ct = m.get("return_ctype", "uint32_t")
+                    lines.append(f"    return ({ret_ct}){{0}};")
+                else:
+                    lines.append("    return YETTY_OK_VOID();")
             elif m["returns"] == "value":
                 ret_ct = m.get("return_ctype", "uint32_t")
                 lines.append(f"    {ret_ct} _result = ({ret_ct}){{0}};")
@@ -2780,16 +2806,10 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                 lines.append("    yetty_ycore_buffer_destroy(&_body);")
                 lines.append("    return _result;")
             else:
-                if is_async:
-                    send = (
-                        f"yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_{m['name']},"
-                        " _body.data, _body.size, cb, user)"
-                    )
-                else:
-                    send = (
-                        f"yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_{m['name']},"
-                        " _body.data, _body.size)"
-                    )
+                send = (
+                    f"yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_{m['name']},"
+                    " _body.data, _body.size)"
+                )
                 lines.append(f"    {{ struct yetty_ycore_void_result _r = {send};")
                 lines.append("      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
                 lines.append("    yetty_ycore_buffer_destroy(&_body);")
@@ -2824,6 +2844,27 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                     lines.append("    return _result;")
                 else:
                     lines.append("    return YETTY_OK_VOID();")
+            elif is_async:
+                # Async methods that ALSO return a value (typically
+                # WGPUFuture) — the value is irrelevant on the client
+                # side because the server already drove WaitAny to
+                # completion before emitting the REPLY; the cb fires
+                # when the REPLY arrives carrying the status. Hand back
+                # a zero value of the return type so callers that ignore
+                # the future are unaffected.
+                send = (
+                    f"yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_{m['name']},"
+                    " &args, sizeof(args), cb, user)"
+                )
+                if m["returns"] == "handle":
+                    lines.append(f"    (void){send};")
+                    lines.append(f"    return h;")
+                elif m["returns"] == "value":
+                    ret_ct = m.get("return_ctype", "uint32_t")
+                    lines.append(f"    (void){send};")
+                    lines.append(f"    return ({ret_ct}){{0}};")
+                else:
+                    lines.append(f"    return {send};")
             elif m["returns"] == "value":
                 ret_ct = m.get("return_ctype", "uint32_t")
                 lines.append(f"    {ret_ct} _result = ({ret_ct}){{0}};")
@@ -2833,16 +2874,6 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                              f"&args, sizeof(args), &_result, sizeof(_result), NULL);")
                 lines.append("      if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
                 lines.append("    return _result;")
-            elif is_async:
-                send = (
-                    f"yetty_ywasm_client_send_cmd_async(c, YETTY_YWASM_METHOD_{m['name']},"
-                    " &args, sizeof(args), cb, user)"
-                )
-                if m["returns"] == "handle":
-                    lines.append(f"    (void){send};")
-                    lines.append(f"    return h;")
-                else:
-                    lines.append(f"    return {send};")
             else:
                 send = (
                     f"yetty_ywasm_client_send_cmd_sync(c, YETTY_YWASM_METHOD_{m['name']},"

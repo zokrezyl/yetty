@@ -61,6 +61,7 @@ int main(void)
         return 1;
     }
     struct yetty_ywasm_client *c = cr.value;
+    demo_install_quit_on_q(c);
 
     (void)yetty_ywasm_client_send_hello(c);
     for (int i = 0; i < 200 && !yetty_ywasm_client_connected(c); ++i) {
@@ -120,8 +121,8 @@ cleanup_instance:
     LOG("03_async_init: chain torn down\n");
 
     /* Hold open long enough that the layer's debug trace lands in the
-     * yetty log before we tear the PTY down. */
-    for (int i = 0; i < 100; ++i) {
+     * yetty log before we tear the PTY down. 'q' cuts the wait short. */
+    for (int i = 0; i < 100 && !demo_quit_flag; ++i) {
         (void)yetty_ywasm_client_pump(c);
         demo_sleep_ms(10);
     }

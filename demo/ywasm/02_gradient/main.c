@@ -42,6 +42,7 @@ int main(void)
         return 1;
     }
     struct yetty_ywasm_client *c = cr.value;
+    demo_install_quit_on_q(c);
 
     (void)yetty_ywasm_client_send_hello(c);
     for (int i = 0; i < 200 && !yetty_ywasm_client_connected(c); ++i) {
@@ -66,8 +67,8 @@ int main(void)
     }
     LOG("02_gradient: presented %ux%u\n", W, H);
 
-    /* Linger so the rendered gradient stays on screen. */
-    for (int i = 0; i < 500; ++i) {
+    /* Linger so the rendered gradient stays on screen. Press 'q' to exit. */
+    for (int i = 0; i < 500 && !demo_quit_flag; ++i) {
         (void)yetty_ywasm_client_pump(c);
         demo_sleep_ms(10);
     }

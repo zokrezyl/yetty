@@ -92,7 +92,22 @@ static int find_glyph_id(const char *body, uint32_t *out_id)
 static char *build_wgsl(const char *util_src, const char *body_src,
                         uint32_t glyph_id, size_t *out_len)
 {
+    /* The glyph bodies sit inside yetty's shader-glyph-layer, which
+     * binds a giant `uniforms` block with grid_size, cell_size, time,
+     * zoom, etc. The bodies are free to reach into that block as
+     * globals — see e.g. 0x00f5-butterfly-flock.wgsl. Standalone
+     * compilation has to satisfy those references or Dawn rejects
+     * the module (and the layer's uncaptured-error callback FATAL-
+     * exits yetty). We declare a private-scope `uniforms` that
+     * satisfies every field the bodies actually reach for; default-
+     * initialised to zero is fine — this demo only compiles, it
+     * doesn't run the pipeline. */
     static const char wrapper[] =
+        "struct ShaderGlyphUniforms {\n"
+        "    shader_glyph_grid_size: vec2<f32>,\n"
+        "    shader_glyph_cell_size: vec2<f32>,\n"
+        "};\n"
+        "var<private> uniforms: ShaderGlyphUniforms;\n"
         "struct Uniforms {\n"
         "    time: f32,\n"
         "    _pad0: f32, _pad1: f32, _pad2: f32,\n"
@@ -108,8 +123,6 @@ static char *build_wgsl(const char *util_src, const char *body_src,
         "\n"
         "@vertex\n"
         "fn vs_main(@builtin(vertex_index) vid: u32) -> VsOut {\n"
-        "    // Fullscreen triangle: (-1,-3) (-1,1) (3,1) — covers the\n"
-        "    // viewport; uv mapped to [0,1] over the visible quad.\n"
         "    var p = array<vec2<f32>, 3>(\n"
         "        vec2<f32>(-1.0, -3.0),\n"
         "        vec2<f32>(-1.0,  1.0),\n"
@@ -123,7 +136,7 @@ static char *build_wgsl(const char *util_src, const char *body_src,
         "\n"
         "@fragment\n"
         "fn fs_main(in: VsOut) -> @location(0) vec4<f32> {\n"
-        "    let pixel_pos = in.uv * 32.0;  // arbitrary cell size — exercises pixel_pos arg\n"
+        "    let pixel_pos = in.uv * 32.0;\n"
         "    let rgb = shader_glyph_%u(in.uv, u.time, u.fg, u.bg, pixel_pos);\n"
         "    return vec4<f32>(rgb, 1.0);\n"
         "}\n";
@@ -164,6 +177,7 @@ int main(void)
         return 1;
     }
     struct yetty_ywasm_client *c = cr.value;
+    demo_install_quit_on_q(c);
     (void)yetty_ywasm_client_send_hello(c);
     for (int i = 0; i < 200 && !yetty_ywasm_client_connected(c); ++i) {
         (void)yetty_ywasm_client_pump(c);
@@ -218,7 +232,7 @@ int main(void)
     LOG("08_glyph_shaders: %d shader files to compile\n", n_names);
 
     int ok = 0, fail = 0;
-    for (int i = 0; i < n_names; ++i) {
+    for (int i = 0; i < n_names && !demo_quit_flag; ++i) {
         char path[1024];
         snprintf(path, sizeof(path), "%s/%s", YETTY_GLYPH_SHADERS_DIR, names[i]);
         size_t body_len = 0;
