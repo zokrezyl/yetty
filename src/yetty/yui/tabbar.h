@@ -71,11 +71,24 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
 struct yetty_ycore_void_result yetty_yui_tabbar_render(
     struct yetty_yui_tabbar *bar, struct yetty_ydraw_target *render_target, int force_redraw);
 
+/* `width` × `height` is the workspace region (the strip occupies the top,
+ * `height` already excludes any bottom statusbar inset). `total_height`
+ * is the full window height including everything below the workspace —
+ * the edge-resize hit-test reaches down to the real window bottom so the
+ * user can grab the statusbar edge rather than the invisible workspace
+ * bottom above it. */
 struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *bar, float width,
-                                                       float height);
+                                                       float height, float total_height);
 
 struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar *bar,
                                                         const struct yetty_yui_event *event);
+
+/* Returns the cursor shape (yetty_ycore_cursor_shape) appropriate for the
+ * given mouse position over the tabbar's invisible edge-resize bands:
+ * HRESIZE in the right band / bottom-right corner, VRESIZE in the bottom
+ * band, DEFAULT otherwise. yui_compute_cursor_shape calls this so a
+ * single code path owns the cursor decision (no race with widget cursors). */
+int yetty_yui_tabbar_edge_cursor_at(const struct yetty_yui_tabbar *bar, float x, float y);
 
 /* Append a workspace by loading the layout from config (mirrors the
  * single-workspace path that workspace_load_layout used to drive). The new

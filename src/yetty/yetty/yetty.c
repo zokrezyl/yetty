@@ -533,7 +533,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             ws_height = 0.0f;
         }
         if (yetty->tabbar) {
-            yetty_yui_tabbar_resize(yetty->tabbar, (float)width, ws_height);
+            yetty_yui_tabbar_resize(yetty->tabbar, (float)width, ws_height, (float)height);
         }
 
         /* Resize the app-level yui's scene canvas to match the full
@@ -635,7 +635,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 yetty_yui_tabbar_resize(
                     yetty->tabbar, yetty->window_width,
                     yetty->window_height -
-                        (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f));
+                        (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f),
+                    yetty->window_height);
             }
             yetty_yui_workspace_set_active(ws, 1);
             if (yetty->event_loop && yetty->event_loop->ops &&
@@ -694,7 +695,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 yetty_yui_tabbar_resize(
                     yetty->tabbar, yetty->window_width,
                     yetty->window_height -
-                        (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f));
+                        (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f),
+                    yetty->window_height);
             }
             if (yetty->event_loop && yetty->event_loop->ops &&
                 yetty->event_loop->ops->request_render) {

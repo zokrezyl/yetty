@@ -14,3 +14,10 @@ void yetty_yplatform_wayland_begin_interactive_move(struct GLFWwindow *window)
 {
     (void)window;
 }
+
+void yetty_yplatform_wayland_begin_interactive_resize(struct GLFWwindow *window,
+                                                       unsigned int edge)
+{
+    (void)window;
+    (void)edge;
+}

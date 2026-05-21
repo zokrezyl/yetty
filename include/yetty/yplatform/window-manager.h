@@ -50,6 +50,13 @@ struct yetty_yplatform_window_manager_ops {
      * a titlebar drag — see YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE. */
     void (*begin_interactive_move)(struct yetty_yplatform_window_manager *self);
 
+    /* Same shape as begin_interactive_move, but for resize. `edge` is a
+     * yetty_ycore_resize_edge bitmask telling the compositor which edge
+     * the user grabbed; on X11 this is a no-op and per-pixel resize_by
+     * keeps driving glfwSetWindowSize. */
+    void (*begin_interactive_resize)(struct yetty_yplatform_window_manager *self,
+                                     int edge);
+
     /* Set the OS mouse cursor shape. Shape is an enum
      * yetty_ycore_cursor_shape value. Posted to output_pipe and applied
      * on the main thread (GLFW cursor calls aren't safe off the main

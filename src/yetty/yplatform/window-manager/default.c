@@ -150,6 +150,18 @@ static void glfw_window_manager_begin_interactive_move(
     post_event(m, &ev);
 }
 
+static void glfw_window_manager_begin_interactive_resize(
+    struct yetty_yplatform_window_manager *self, int edge)
+{
+    struct yetty_yplatform_glfw_window_manager *m =
+        container_of(self, struct yetty_yplatform_glfw_window_manager, base);
+    ydebug("WMOVETRACE: [render-thread] begin_interactive_resize(edge=%d) -> "
+           "posting WINDOW_BEGIN_INTERACTIVE_RESIZE", edge);
+    struct yetty_yui_event ev = {.type = YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_RESIZE,
+                                 .window_begin_resize = {.edge = edge}};
+    post_event(m, &ev);
+}
+
 /*=============================================================================
  * Main-thread side — apply one event by calling GLFW
  *===========================================================================*/
@@ -235,6 +247,16 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
          * mis-pair as a double-click. */
         yetty_yplatform_os_event_invalidate_click_pairing(m->window);
         break;
+    case YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_RESIZE:
+        ydebug("WMOVETRACE: [main-thread] received WINDOW_BEGIN_INTERACTIVE_RESIZE "
+               "edge=%d, platform=%d", event->window_begin_resize.edge, glfwGetPlatform());
+        /* Same Wayland-vs-X11 split as the move helper. The wayland.c
+         * implementation runtime-checks the platform and no-ops on X11;
+         * X11 keeps using per-pixel WINDOW_RESIZE_BY. */
+        yetty_yplatform_wayland_begin_interactive_resize(
+            m->window, (unsigned int)event->window_begin_resize.edge);
+        yetty_yplatform_os_event_invalidate_click_pairing(m->window);
+        break;
     case YETTY_YCORE_SET_CURSOR: {
         int shape = event->set_cursor.shape;
         if (shape < 0 ||
@@ -263,6 +285,13 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         break;
     }
     case YETTY_YCORE_WINDOW_RESIZE_BY: {
+        /* On Wayland the compositor took over the resize at MOUSE_DOWN
+         * (see WINDOW_BEGIN_INTERACTIVE_RESIZE) — and glfwSetWindowSize is
+         * a no-op there anyway. Skip the per-pixel path. */
+        if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
+            yetty_yplatform_os_event_invalidate_click_pairing(m->window);
+            break;
+        }
         int ww = 0, wh = 0, fw = 0, fh = 0;
         glfwGetWindowSize(m->window, &ww, &wh);
         glfwGetFramebufferSize(m->window, &fw, &fh);
@@ -296,6 +325,7 @@ static const struct yetty_yplatform_window_manager_ops glfw_window_manager_ops =
     .drag_by = glfw_window_manager_drag_by,
     .resize_by = glfw_window_manager_resize_by,
     .begin_interactive_move = glfw_window_manager_begin_interactive_move,
+    .begin_interactive_resize = glfw_window_manager_begin_interactive_resize,
     .set_cursor = glfw_window_manager_set_cursor,
     .handle_event = glfw_window_manager_handle_event,
 };
