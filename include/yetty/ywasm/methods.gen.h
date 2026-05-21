@@ -367,7 +367,7 @@ struct ywasm_args_wgpuAdapterAddRef {
 
 struct ywasm_args_wgpuAdapterCreateDevice {
     uint64_t adapter;
-    uint64_t descriptor;
+    WGPUDeviceDescriptor descriptor;
     uint64_t result_handle;
 };
 
@@ -458,6 +458,7 @@ struct ywasm_args_wgpuBufferGetConstMappedRange {
     uint64_t buffer;
     size_t offset;
     size_t size;
+    uint64_t result_handle;
 };
 
 struct ywasm_args_wgpuBufferGetMapState {
@@ -468,6 +469,7 @@ struct ywasm_args_wgpuBufferGetMappedRange {
     uint64_t buffer;
     size_t offset;
     size_t size;
+    uint64_t result_handle;
 };
 
 struct ywasm_args_wgpuBufferGetSize {
@@ -489,8 +491,8 @@ struct ywasm_args_wgpuBufferMapAsync {
 struct ywasm_args_wgpuBufferReadMappedRange {
     uint64_t buffer;
     size_t offset;
-    uint64_t data;
     size_t size;
+    uint8_t data;
 };
 
 struct ywasm_args_wgpuBufferRelease {
@@ -510,7 +512,7 @@ struct ywasm_args_wgpuBufferWriteMappedRange {
     uint64_t buffer;
     size_t offset;
     size_t size;
-    uint64_t data;
+    uint8_t data;
 };
 
 struct ywasm_args_wgpuCommandBufferAddRef {
@@ -622,7 +624,7 @@ struct ywasm_args_wgpuCommandEncoderWriteBuffer {
     uint64_t buffer;
     uint64_t bufferOffset;
     size_t size;
-    uint64_t data;
+    uint8_t data;
 };
 
 struct ywasm_args_wgpuCommandEncoderWriteTimestamp {
@@ -675,14 +677,14 @@ struct ywasm_args_wgpuComputePassEncoderSetBindGroup {
     uint32_t groupIndex;
     uint64_t group;
     size_t dynamicOffsetCount;
-    uint64_t dynamicOffsets;
+    uint32_t dynamicOffsets;
 };
 
 struct ywasm_args_wgpuComputePassEncoderSetImmediates {
     uint64_t computePassEncoder;
     uint32_t offset;
     size_t size;
-    uint64_t data;
+    uint8_t data;
 };
 
 struct ywasm_args_wgpuComputePassEncoderSetLabel {
@@ -789,7 +791,7 @@ struct ywasm_args_wgpuDeviceCreateErrorTexture {
 
 struct ywasm_args_wgpuDeviceCreateExternalTexture {
     uint64_t device;
-    uint64_t externalTextureDescriptor;
+    WGPUExternalTextureDescriptor externalTextureDescriptor;
     uint64_t result_handle;
 };
 
@@ -860,7 +862,7 @@ struct ywasm_args_wgpuDeviceForceLoss {
 struct ywasm_args_wgpuDeviceGetAHardwareBufferProperties {
     uint64_t device;
     uint64_t handle;
-    uint64_t properties;
+    WGPUAHardwareBufferProperties properties;
 };
 
 struct ywasm_args_wgpuDeviceGetAdapter {
@@ -976,6 +978,7 @@ struct ywasm_args_wgpuGetInstanceLimits {
 
 struct ywasm_args_wgpuGetProcAddress {
     WGPUStringView procName;
+    uint64_t result_handle;
 };
 
 struct ywasm_args_wgpuHasInstanceFeature {
@@ -1063,7 +1066,7 @@ struct ywasm_args_wgpuQueueCopyExternalTextureForBrowser {
     WGPUTexelCopyTextureInfo destination;
     uint32_t copySize_present;
     WGPUExtent3D copySize;
-    uint64_t options;
+    WGPUCopyTextureForBrowserOptions options;
 };
 
 struct ywasm_args_wgpuQueueCopyTextureForBrowser {
@@ -1074,7 +1077,7 @@ struct ywasm_args_wgpuQueueCopyTextureForBrowser {
     WGPUTexelCopyTextureInfo destination;
     uint32_t copySize_present;
     WGPUExtent3D copySize;
-    uint64_t options;
+    WGPUCopyTextureForBrowserOptions options;
 };
 
 struct ywasm_args_wgpuQueueOnSubmittedWorkDone {
@@ -1098,7 +1101,7 @@ struct ywasm_args_wgpuQueueWriteBuffer {
     uint64_t buffer;
     uint64_t bufferOffset;
     size_t size;
-    uint64_t data;
+    uint8_t data;
 };
 
 struct ywasm_args_wgpuQueueWriteTexture {
@@ -1106,7 +1109,7 @@ struct ywasm_args_wgpuQueueWriteTexture {
     uint32_t destination_present;
     WGPUTexelCopyTextureInfo destination;
     size_t dataSize;
-    uint64_t data;
+    uint8_t data;
     uint32_t dataLayout_present;
     WGPUTexelCopyBufferLayout dataLayout;
     uint32_t writeSize_present;
@@ -1179,14 +1182,14 @@ struct ywasm_args_wgpuRenderBundleEncoderSetBindGroup {
     uint32_t groupIndex;
     uint64_t group;
     size_t dynamicOffsetCount;
-    uint64_t dynamicOffsets;
+    uint32_t dynamicOffsets;
 };
 
 struct ywasm_args_wgpuRenderBundleEncoderSetImmediates {
     uint64_t renderBundleEncoder;
     uint32_t offset;
     size_t size;
-    uint64_t data;
+    uint8_t data;
 };
 
 struct ywasm_args_wgpuRenderBundleEncoderSetIndexBuffer {
@@ -1326,7 +1329,7 @@ struct ywasm_args_wgpuRenderPassEncoderSetBindGroup {
     uint32_t groupIndex;
     uint64_t group;
     size_t dynamicOffsetCount;
-    uint64_t dynamicOffsets;
+    uint32_t dynamicOffsets;
 };
 
 struct ywasm_args_wgpuRenderPassEncoderSetBlendConstant {
@@ -1339,7 +1342,7 @@ struct ywasm_args_wgpuRenderPassEncoderSetImmediates {
     uint64_t renderPassEncoder;
     uint32_t offset;
     size_t size;
-    uint64_t data;
+    uint8_t data;
 };
 
 struct ywasm_args_wgpuRenderPassEncoderSetIndexBuffer {
@@ -1491,7 +1494,7 @@ struct ywasm_args_wgpuSharedBufferMemoryAddRef {
 struct ywasm_args_wgpuSharedBufferMemoryBeginAccess {
     uint64_t sharedBufferMemory;
     uint64_t buffer;
-    uint64_t descriptor;
+    WGPUSharedBufferMemoryBeginAccessDescriptor descriptor;
 };
 
 struct ywasm_args_wgpuSharedBufferMemoryCreateBuffer {
@@ -1503,7 +1506,7 @@ struct ywasm_args_wgpuSharedBufferMemoryCreateBuffer {
 struct ywasm_args_wgpuSharedBufferMemoryEndAccess {
     uint64_t sharedBufferMemory;
     uint64_t buffer;
-    uint64_t descriptor;
+    WGPUSharedBufferMemoryEndAccessState descriptor;
 };
 
 struct ywasm_args_wgpuSharedBufferMemoryEndAccessStateFreeMembers {
@@ -1553,7 +1556,7 @@ struct ywasm_args_wgpuSharedTextureMemoryAddRef {
 struct ywasm_args_wgpuSharedTextureMemoryBeginAccess {
     uint64_t sharedTextureMemory;
     uint64_t texture;
-    uint64_t descriptor;
+    WGPUSharedTextureMemoryBeginAccessDescriptor descriptor;
 };
 
 struct ywasm_args_wgpuSharedTextureMemoryCreateTexture {
@@ -1565,7 +1568,7 @@ struct ywasm_args_wgpuSharedTextureMemoryCreateTexture {
 struct ywasm_args_wgpuSharedTextureMemoryEndAccess {
     uint64_t sharedTextureMemory;
     uint64_t texture;
-    uint64_t descriptor;
+    WGPUSharedTextureMemoryEndAccessState descriptor;
 };
 
 struct ywasm_args_wgpuSharedTextureMemoryEndAccessStateFreeMembers {
@@ -1766,7 +1769,7 @@ struct yetty_ycore_void_result ywasm_client_wgpuCommandBufferRelease(struct yett
 uint64_t ywasm_client_wgpuInstanceRequestAdapter(struct yetty_ywasm_client *c, uint64_t instance, yetty_ywasm_reply_cb cb, void *user);
 uint64_t ywasm_client_wgpuAdapterRequestDevice(struct yetty_ywasm_client *c, uint64_t adapter, yetty_ywasm_reply_cb cb, void *user);
 struct yetty_ycore_void_result ywasm_client_wgpuAdapterAddRef(struct yetty_ywasm_client *c, uint64_t adapter);
-uint64_t ywasm_client_wgpuAdapterCreateDevice(struct yetty_ywasm_client *c, uint64_t adapter, uint64_t descriptor);
+uint64_t ywasm_client_wgpuAdapterCreateDevice(struct yetty_ywasm_client *c, uint64_t adapter, WGPUDeviceDescriptor const *descriptor);
 struct yetty_ycore_void_result ywasm_client_wgpuAdapterGetFeatures(struct yetty_ywasm_client *c, uint64_t adapter, WGPUSupportedFeatures *features);
 WGPUStatus ywasm_client_wgpuAdapterGetFormatCapabilities(struct yetty_ywasm_client *c, uint64_t adapter, uint32_t format, WGPUDawnFormatCapabilities *capabilities);
 WGPUStatus ywasm_client_wgpuAdapterGetInfo(struct yetty_ywasm_client *c, uint64_t adapter, WGPUAdapterInfo *info);
@@ -1774,8 +1777,8 @@ uint64_t ywasm_client_wgpuAdapterGetInstance(struct yetty_ywasm_client *c, uint6
 WGPUStatus ywasm_client_wgpuAdapterGetLimits(struct yetty_ywasm_client *c, uint64_t adapter, WGPULimits *limits);
 WGPUBool ywasm_client_wgpuAdapterHasFeature(struct yetty_ywasm_client *c, uint64_t adapter, uint32_t feature);
 void ywasm_client_wgpuAdapterInfoFreeMembers(struct yetty_ywasm_client *c, WGPUAdapterInfo adapterInfo);
-struct yetty_ycore_void_result ywasm_client_wgpuAdapterPropertiesMemoryHeapsFreeMembers(struct yetty_ywasm_client *c, uint64_t adapterPropertiesMemoryHeaps);
-struct yetty_ycore_void_result ywasm_client_wgpuAdapterPropertiesSubgroupMatrixConfigsFreeMembers(struct yetty_ywasm_client *c, uint64_t adapterPropertiesSubgroupMatrixConfigs);
+void ywasm_client_wgpuAdapterPropertiesMemoryHeapsFreeMembers(struct yetty_ywasm_client *c, WGPUAdapterPropertiesMemoryHeaps adapterPropertiesMemoryHeaps);
+void ywasm_client_wgpuAdapterPropertiesSubgroupMatrixConfigsFreeMembers(struct yetty_ywasm_client *c, WGPUAdapterPropertiesSubgroupMatrixConfigs adapterPropertiesSubgroupMatrixConfigs);
 struct yetty_ycore_void_result ywasm_client_wgpuBindGroupAddRef(struct yetty_ywasm_client *c, uint64_t bindGroup);
 struct yetty_ycore_void_result ywasm_client_wgpuBindGroupLayoutAddRef(struct yetty_ywasm_client *c, uint64_t bindGroupLayout);
 struct yetty_ycore_void_result ywasm_client_wgpuBindGroupLayoutRelease(struct yetty_ywasm_client *c, uint64_t bindGroupLayout);
@@ -1785,17 +1788,17 @@ struct yetty_ycore_void_result ywasm_client_wgpuBindGroupSetLabel(struct yetty_y
 struct yetty_ycore_void_result ywasm_client_wgpuBufferAddRef(struct yetty_ywasm_client *c, uint64_t buffer);
 uint64_t ywasm_client_wgpuBufferCreateTexelView(struct yetty_ywasm_client *c, uint64_t buffer, WGPUTexelBufferViewDescriptor const *descriptor);
 struct yetty_ycore_void_result ywasm_client_wgpuBufferDestroy(struct yetty_ywasm_client *c, uint64_t buffer);
-struct yetty_ycore_void_result ywasm_client_wgpuBufferGetConstMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, size_t size);
+uint64_t ywasm_client_wgpuBufferGetConstMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, size_t size);
 WGPUBufferMapState ywasm_client_wgpuBufferGetMapState(struct yetty_ywasm_client *c, uint64_t buffer);
-struct yetty_ycore_void_result ywasm_client_wgpuBufferGetMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, size_t size);
+uint64_t ywasm_client_wgpuBufferGetMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, size_t size);
 uint64_t ywasm_client_wgpuBufferGetSize(struct yetty_ywasm_client *c, uint64_t buffer);
 WGPUBufferUsage ywasm_client_wgpuBufferGetUsage(struct yetty_ywasm_client *c, uint64_t buffer);
 WGPUFuture ywasm_client_wgpuBufferMapAsync(struct yetty_ywasm_client *c, uint64_t buffer, uint32_t mode, size_t offset, size_t size, yetty_ywasm_reply_cb cb, void *user);
-uint32_t ywasm_client_wgpuBufferReadMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, uint64_t data, size_t size);
+WGPUStatus ywasm_client_wgpuBufferReadMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, void *data, size_t size);
 struct yetty_ycore_void_result ywasm_client_wgpuBufferRelease(struct yetty_ywasm_client *c, uint64_t buffer);
 struct yetty_ycore_void_result ywasm_client_wgpuBufferSetLabel(struct yetty_ywasm_client *c, uint64_t buffer, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuBufferUnmap(struct yetty_ywasm_client *c, uint64_t buffer);
-WGPUStatus ywasm_client_wgpuBufferWriteMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, size_t size, uint64_t data);
+WGPUStatus ywasm_client_wgpuBufferWriteMappedRange(struct yetty_ywasm_client *c, uint64_t buffer, size_t offset, void const *data, size_t size);
 struct yetty_ycore_void_result ywasm_client_wgpuCommandBufferAddRef(struct yetty_ywasm_client *c, uint64_t commandBuffer);
 struct yetty_ycore_void_result ywasm_client_wgpuCommandBufferSetLabel(struct yetty_ywasm_client *c, uint64_t commandBuffer, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderAddRef(struct yetty_ywasm_client *c, uint64_t commandEncoder);
@@ -1812,7 +1815,7 @@ struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderPopDebugGroup(stru
 struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderPushDebugGroup(struct yetty_ywasm_client *c, uint64_t commandEncoder, WGPUStringView groupLabel);
 struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderResolveQuerySet(struct yetty_ywasm_client *c, uint64_t commandEncoder, uint64_t querySet, uint32_t firstQuery, uint32_t queryCount, uint64_t destination, uint64_t destinationOffset);
 struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderSetLabel(struct yetty_ywasm_client *c, uint64_t commandEncoder, WGPUStringView label);
-struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderWriteBuffer(struct yetty_ywasm_client *c, uint64_t commandEncoder, uint64_t buffer, uint64_t bufferOffset, size_t size, uint64_t data);
+struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderWriteBuffer(struct yetty_ywasm_client *c, uint64_t commandEncoder, uint64_t buffer, uint64_t bufferOffset, void const *data, size_t size);
 struct yetty_ycore_void_result ywasm_client_wgpuCommandEncoderWriteTimestamp(struct yetty_ywasm_client *c, uint64_t commandEncoder, uint64_t querySet, uint32_t queryIndex);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderAddRef(struct yetty_ywasm_client *c, uint64_t computePassEncoder);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderDispatchWorkgroups(struct yetty_ywasm_client *c, uint64_t computePassEncoder, uint32_t workgroupCountX, uint32_t workgroupCountY, uint32_t workgroupCountZ);
@@ -1822,8 +1825,8 @@ struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderInsertDebugMar
 struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderPopDebugGroup(struct yetty_ywasm_client *c, uint64_t computePassEncoder);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderPushDebugGroup(struct yetty_ywasm_client *c, uint64_t computePassEncoder, WGPUStringView groupLabel);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderRelease(struct yetty_ywasm_client *c, uint64_t computePassEncoder);
-struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderSetBindGroup(struct yetty_ywasm_client *c, uint64_t computePassEncoder, uint32_t groupIndex, uint64_t group, size_t dynamicOffsetCount, uint64_t dynamicOffsets);
-struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderSetImmediates(struct yetty_ywasm_client *c, uint64_t computePassEncoder, uint32_t offset, size_t size, uint64_t data);
+struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderSetBindGroup(struct yetty_ywasm_client *c, uint64_t computePassEncoder, uint32_t groupIndex, uint64_t group, size_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
+struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderSetImmediates(struct yetty_ywasm_client *c, uint64_t computePassEncoder, uint32_t offset, void const *data, size_t size);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderSetLabel(struct yetty_ywasm_client *c, uint64_t computePassEncoder, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderSetPipeline(struct yetty_ywasm_client *c, uint64_t computePassEncoder, uint64_t pipeline);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePassEncoderSetResourceTable(struct yetty_ywasm_client *c, uint64_t computePassEncoder, uint64_t table);
@@ -1832,7 +1835,7 @@ struct yetty_ycore_void_result ywasm_client_wgpuComputePipelineAddRef(struct yet
 uint64_t ywasm_client_wgpuComputePipelineGetBindGroupLayout(struct yetty_ywasm_client *c, uint64_t computePipeline, uint32_t groupIndex);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePipelineRelease(struct yetty_ywasm_client *c, uint64_t computePipeline);
 struct yetty_ycore_void_result ywasm_client_wgpuComputePipelineSetLabel(struct yetty_ywasm_client *c, uint64_t computePipeline, WGPUStringView label);
-struct yetty_ycore_void_result ywasm_client_wgpuDawnDrmFormatCapabilitiesFreeMembers(struct yetty_ywasm_client *c, uint64_t dawnDrmFormatCapabilities);
+void ywasm_client_wgpuDawnDrmFormatCapabilitiesFreeMembers(struct yetty_ywasm_client *c, WGPUDawnDrmFormatCapabilities dawnDrmFormatCapabilities);
 struct yetty_ycore_void_result ywasm_client_wgpuDeviceAddRef(struct yetty_ywasm_client *c, uint64_t device);
 uint64_t ywasm_client_wgpuDeviceCreateBindGroup(struct yetty_ywasm_client *c, uint64_t device, WGPUBindGroupDescriptor const *descriptor);
 uint64_t ywasm_client_wgpuDeviceCreateBindGroupLayout(struct yetty_ywasm_client *c, uint64_t device, WGPUBindGroupLayoutDescriptor const *descriptor);
@@ -1843,7 +1846,7 @@ uint64_t ywasm_client_wgpuDeviceCreateErrorBuffer(struct yetty_ywasm_client *c, 
 uint64_t ywasm_client_wgpuDeviceCreateErrorExternalTexture(struct yetty_ywasm_client *c, uint64_t device);
 uint64_t ywasm_client_wgpuDeviceCreateErrorShaderModule(struct yetty_ywasm_client *c, uint64_t device, WGPUShaderModuleDescriptor const *descriptor, WGPUStringView errorMessage);
 uint64_t ywasm_client_wgpuDeviceCreateErrorTexture(struct yetty_ywasm_client *c, uint64_t device, WGPUTextureDescriptor const *descriptor);
-uint64_t ywasm_client_wgpuDeviceCreateExternalTexture(struct yetty_ywasm_client *c, uint64_t device, uint64_t externalTextureDescriptor);
+uint64_t ywasm_client_wgpuDeviceCreateExternalTexture(struct yetty_ywasm_client *c, uint64_t device, WGPUExternalTextureDescriptor const *externalTextureDescriptor);
 uint64_t ywasm_client_wgpuDeviceCreatePipelineLayout(struct yetty_ywasm_client *c, uint64_t device, WGPUPipelineLayoutDescriptor const *descriptor);
 uint64_t ywasm_client_wgpuDeviceCreateQuerySet(struct yetty_ywasm_client *c, uint64_t device, WGPUQuerySetDescriptor const *descriptor);
 uint64_t ywasm_client_wgpuDeviceCreateRenderBundleEncoder(struct yetty_ywasm_client *c, uint64_t device, WGPURenderBundleEncoderDescriptor const *descriptor);
@@ -1855,7 +1858,7 @@ uint64_t ywasm_client_wgpuDeviceCreateShaderModule(struct yetty_ywasm_client *c,
 uint64_t ywasm_client_wgpuDeviceCreateTexture(struct yetty_ywasm_client *c, uint64_t device, WGPUTextureDescriptor const *descriptor);
 struct yetty_ycore_void_result ywasm_client_wgpuDeviceDestroy(struct yetty_ywasm_client *c, uint64_t device);
 struct yetty_ycore_void_result ywasm_client_wgpuDeviceForceLoss(struct yetty_ywasm_client *c, uint64_t device, uint32_t type, WGPUStringView message);
-uint32_t ywasm_client_wgpuDeviceGetAHardwareBufferProperties(struct yetty_ywasm_client *c, uint64_t device, uint64_t handle, uint64_t properties);
+WGPUStatus ywasm_client_wgpuDeviceGetAHardwareBufferProperties(struct yetty_ywasm_client *c, uint64_t device, uint64_t handle, WGPUAHardwareBufferProperties *properties);
 uint64_t ywasm_client_wgpuDeviceGetAdapter(struct yetty_ywasm_client *c, uint64_t device);
 WGPUStatus ywasm_client_wgpuDeviceGetAdapterInfo(struct yetty_ywasm_client *c, uint64_t device, WGPUAdapterInfo *adapterInfo);
 struct yetty_ycore_void_result ywasm_client_wgpuDeviceGetFeatures(struct yetty_ywasm_client *c, uint64_t device, WGPUSupportedFeatures *features);
@@ -1879,7 +1882,7 @@ struct yetty_ycore_void_result ywasm_client_wgpuExternalTextureRelease(struct ye
 struct yetty_ycore_void_result ywasm_client_wgpuExternalTextureSetLabel(struct yetty_ywasm_client *c, uint64_t externalTexture, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuGetInstanceFeatures(struct yetty_ywasm_client *c, WGPUSupportedInstanceFeatures *features);
 WGPUStatus ywasm_client_wgpuGetInstanceLimits(struct yetty_ywasm_client *c, WGPUInstanceLimits *limits);
-struct yetty_ycore_void_result ywasm_client_wgpuGetProcAddress(struct yetty_ywasm_client *c, WGPUStringView procName);
+uint64_t ywasm_client_wgpuGetProcAddress(struct yetty_ywasm_client *c, WGPUStringView procName);
 WGPUBool ywasm_client_wgpuHasInstanceFeature(struct yetty_ywasm_client *c, uint32_t feature);
 struct yetty_ycore_void_result ywasm_client_wgpuInstanceAddRef(struct yetty_ywasm_client *c, uint64_t instance);
 uint64_t ywasm_client_wgpuInstanceCreateSurface(struct yetty_ywasm_client *c, uint64_t instance, WGPUSurfaceDescriptor const *descriptor);
@@ -1897,13 +1900,13 @@ WGPUQueryType ywasm_client_wgpuQuerySetGetType(struct yetty_ywasm_client *c, uin
 struct yetty_ycore_void_result ywasm_client_wgpuQuerySetRelease(struct yetty_ywasm_client *c, uint64_t querySet);
 struct yetty_ycore_void_result ywasm_client_wgpuQuerySetSetLabel(struct yetty_ywasm_client *c, uint64_t querySet, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuQueueAddRef(struct yetty_ywasm_client *c, uint64_t queue);
-struct yetty_ycore_void_result ywasm_client_wgpuQueueCopyExternalTextureForBrowser(struct yetty_ywasm_client *c, uint64_t queue, WGPUImageCopyExternalTexture const *source, WGPUTexelCopyTextureInfo const *destination, WGPUExtent3D const *copySize, uint64_t options);
-struct yetty_ycore_void_result ywasm_client_wgpuQueueCopyTextureForBrowser(struct yetty_ywasm_client *c, uint64_t queue, WGPUTexelCopyTextureInfo const *source, WGPUTexelCopyTextureInfo const *destination, WGPUExtent3D const *copySize, uint64_t options);
+struct yetty_ycore_void_result ywasm_client_wgpuQueueCopyExternalTextureForBrowser(struct yetty_ywasm_client *c, uint64_t queue, WGPUImageCopyExternalTexture const *source, WGPUTexelCopyTextureInfo const *destination, WGPUExtent3D const *copySize, WGPUCopyTextureForBrowserOptions const *options);
+struct yetty_ycore_void_result ywasm_client_wgpuQueueCopyTextureForBrowser(struct yetty_ywasm_client *c, uint64_t queue, WGPUTexelCopyTextureInfo const *source, WGPUTexelCopyTextureInfo const *destination, WGPUExtent3D const *copySize, WGPUCopyTextureForBrowserOptions const *options);
 WGPUFuture ywasm_client_wgpuQueueOnSubmittedWorkDone(struct yetty_ywasm_client *c, uint64_t queue, yetty_ywasm_reply_cb cb, void *user);
 struct yetty_ycore_void_result ywasm_client_wgpuQueueSetLabel(struct yetty_ywasm_client *c, uint64_t queue, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuQueueSubmit(struct yetty_ywasm_client *c, uint64_t queue, size_t commandCount, WGPUCommandBuffer const *commands);
-struct yetty_ycore_void_result ywasm_client_wgpuQueueWriteBuffer(struct yetty_ywasm_client *c, uint64_t queue, uint64_t buffer, uint64_t bufferOffset, size_t size, uint64_t data);
-struct yetty_ycore_void_result ywasm_client_wgpuQueueWriteTexture(struct yetty_ywasm_client *c, uint64_t queue, WGPUTexelCopyTextureInfo const *destination, size_t dataSize, uint64_t data, WGPUTexelCopyBufferLayout const *dataLayout, WGPUExtent3D const *writeSize);
+struct yetty_ycore_void_result ywasm_client_wgpuQueueWriteBuffer(struct yetty_ywasm_client *c, uint64_t queue, uint64_t buffer, uint64_t bufferOffset, void const *data, size_t size);
+struct yetty_ycore_void_result ywasm_client_wgpuQueueWriteTexture(struct yetty_ywasm_client *c, uint64_t queue, WGPUTexelCopyTextureInfo const *destination, void const *data, size_t dataSize, WGPUTexelCopyBufferLayout const *dataLayout, WGPUExtent3D const *writeSize);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleAddRef(struct yetty_ywasm_client *c, uint64_t renderBundle);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderAddRef(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderDraw(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
@@ -1915,8 +1918,8 @@ struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderInsertDebugMa
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderPopDebugGroup(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderPushDebugGroup(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, WGPUStringView groupLabel);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderRelease(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder);
-struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderSetBindGroup(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, uint32_t groupIndex, uint64_t group, size_t dynamicOffsetCount, uint64_t dynamicOffsets);
-struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderSetImmediates(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, uint32_t offset, size_t size, uint64_t data);
+struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderSetBindGroup(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, uint32_t groupIndex, uint64_t group, size_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
+struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderSetImmediates(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, uint32_t offset, void const *data, size_t size);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderSetIndexBuffer(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, uint64_t buffer, uint32_t format, uint64_t offset, uint64_t size);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderSetLabel(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderBundleEncoderSetPipeline(struct yetty_ywasm_client *c, uint64_t renderBundleEncoder, uint64_t pipeline);
@@ -1940,9 +1943,9 @@ struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderPixelLocalStora
 struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderPopDebugGroup(struct yetty_ywasm_client *c, uint64_t renderPassEncoder);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderPushDebugGroup(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, WGPUStringView groupLabel);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderRelease(struct yetty_ywasm_client *c, uint64_t renderPassEncoder);
-struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderSetBindGroup(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, uint32_t groupIndex, uint64_t group, size_t dynamicOffsetCount, uint64_t dynamicOffsets);
+struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderSetBindGroup(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, uint32_t groupIndex, uint64_t group, size_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderSetBlendConstant(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, WGPUColor const *color);
-struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderSetImmediates(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, uint32_t offset, size_t size, uint64_t data);
+struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderSetImmediates(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, uint32_t offset, void const *data, size_t size);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderSetIndexBuffer(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, uint64_t buffer, uint32_t format, uint64_t offset, uint64_t size);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderSetLabel(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuRenderPassEncoderSetPipeline(struct yetty_ywasm_client *c, uint64_t renderPassEncoder, uint64_t pipeline);
@@ -1971,10 +1974,10 @@ WGPUFuture ywasm_client_wgpuShaderModuleGetCompilationInfo(struct yetty_ywasm_cl
 struct yetty_ycore_void_result ywasm_client_wgpuShaderModuleRelease(struct yetty_ywasm_client *c, uint64_t shaderModule);
 struct yetty_ycore_void_result ywasm_client_wgpuShaderModuleSetLabel(struct yetty_ywasm_client *c, uint64_t shaderModule, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuSharedBufferMemoryAddRef(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory);
-uint32_t ywasm_client_wgpuSharedBufferMemoryBeginAccess(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory, uint64_t buffer, uint64_t descriptor);
+WGPUStatus ywasm_client_wgpuSharedBufferMemoryBeginAccess(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory, uint64_t buffer, WGPUSharedBufferMemoryBeginAccessDescriptor const *descriptor);
 uint64_t ywasm_client_wgpuSharedBufferMemoryCreateBuffer(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory, WGPUBufferDescriptor const *descriptor);
-uint32_t ywasm_client_wgpuSharedBufferMemoryEndAccess(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory, uint64_t buffer, uint64_t descriptor);
-struct yetty_ycore_void_result ywasm_client_wgpuSharedBufferMemoryEndAccessStateFreeMembers(struct yetty_ywasm_client *c, uint64_t sharedBufferMemoryEndAccessState);
+WGPUStatus ywasm_client_wgpuSharedBufferMemoryEndAccess(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory, uint64_t buffer, WGPUSharedBufferMemoryEndAccessState *descriptor);
+void ywasm_client_wgpuSharedBufferMemoryEndAccessStateFreeMembers(struct yetty_ywasm_client *c, WGPUSharedBufferMemoryEndAccessState sharedBufferMemoryEndAccessState);
 WGPUStatus ywasm_client_wgpuSharedBufferMemoryGetProperties(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory, WGPUSharedBufferMemoryProperties *properties);
 WGPUBool ywasm_client_wgpuSharedBufferMemoryIsDeviceLost(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory);
 struct yetty_ycore_void_result ywasm_client_wgpuSharedBufferMemoryRelease(struct yetty_ywasm_client *c, uint64_t sharedBufferMemory);
@@ -1984,10 +1987,10 @@ struct yetty_ycore_void_result ywasm_client_wgpuSharedFenceExportInfo(struct yet
 struct yetty_ycore_void_result ywasm_client_wgpuSharedFenceRelease(struct yetty_ywasm_client *c, uint64_t sharedFence);
 struct yetty_ycore_void_result ywasm_client_wgpuSharedFenceSetLabel(struct yetty_ywasm_client *c, uint64_t sharedFence, WGPUStringView label);
 struct yetty_ycore_void_result ywasm_client_wgpuSharedTextureMemoryAddRef(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory);
-uint32_t ywasm_client_wgpuSharedTextureMemoryBeginAccess(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory, uint64_t texture, uint64_t descriptor);
+WGPUStatus ywasm_client_wgpuSharedTextureMemoryBeginAccess(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory, uint64_t texture, WGPUSharedTextureMemoryBeginAccessDescriptor const *descriptor);
 uint64_t ywasm_client_wgpuSharedTextureMemoryCreateTexture(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory, WGPUTextureDescriptor const *descriptor);
-uint32_t ywasm_client_wgpuSharedTextureMemoryEndAccess(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory, uint64_t texture, uint64_t descriptor);
-struct yetty_ycore_void_result ywasm_client_wgpuSharedTextureMemoryEndAccessStateFreeMembers(struct yetty_ywasm_client *c, uint64_t sharedTextureMemoryEndAccessState);
+WGPUStatus ywasm_client_wgpuSharedTextureMemoryEndAccess(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory, uint64_t texture, WGPUSharedTextureMemoryEndAccessState *descriptor);
+void ywasm_client_wgpuSharedTextureMemoryEndAccessStateFreeMembers(struct yetty_ywasm_client *c, WGPUSharedTextureMemoryEndAccessState sharedTextureMemoryEndAccessState);
 WGPUStatus ywasm_client_wgpuSharedTextureMemoryGetProperties(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory, WGPUSharedTextureMemoryProperties *properties);
 WGPUBool ywasm_client_wgpuSharedTextureMemoryIsDeviceLost(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory);
 struct yetty_ycore_void_result ywasm_client_wgpuSharedTextureMemoryRelease(struct yetty_ywasm_client *c, uint64_t sharedTextureMemory);
