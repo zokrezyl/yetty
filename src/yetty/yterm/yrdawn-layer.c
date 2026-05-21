@@ -198,17 +198,8 @@ static struct yetty_ycore_void_result handle_hello(struct yetty_yterm_yrdawn_lay
         emit(l, YETTY_YRDAWN_OSC_SC_HELLO_ACK, &ack, sizeof(ack));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, e, "yrdawn-layer: HELLO_ACK");
 
-    if (ack.status == YETTY_YRDAWN_HELLO_OK) {
+    if (ack.status == YETTY_YRDAWN_HELLO_OK)
         l->connected = 1;
-        /* Switch the PTY to raw mode so the bridge protocol bytes
-         * survive any cooked-mode hop between yetty and the demo (ssh,
-         * tmux, screen, …). Restored in handle_bye / yrdawn_destroy. */
-        if (l->base.set_pty_raw_fn) {
-            struct yetty_ycore_void_result rr =
-                l->base.set_pty_raw_fn(1, l->base.set_pty_raw_userdata);
-            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
-        }
-    }
     return YETTY_OK_VOID();
 }
 
@@ -418,11 +409,6 @@ static struct yetty_ycore_void_result handle_bye(struct yetty_yterm_yrdawn_layer
     (void)len;
     l->disconnected = 1;
     l->connected = 0;
-    if (l->base.set_pty_raw_fn) {
-        struct yetty_ycore_void_result rr =
-            l->base.set_pty_raw_fn(0, l->base.set_pty_raw_userdata);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
-    }
     return YETTY_OK_VOID();
 }
 
@@ -1019,14 +1005,6 @@ static struct yetty_ycore_void_result yrdawn_destroy(struct yetty_yrender_termin
     if (!self)
         return YETTY_OK_VOID();
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)self;
-    /* Restore termios in case a session was active without a BYE
-     * (demo crashed, SSH dropped, …). Safe to call when already
-     * restored: the platform op is a no-op. */
-    if (l->base.set_pty_raw_fn) {
-        struct yetty_ycore_void_result rr =
-            l->base.set_pty_raw_fn(0, l->base.set_pty_raw_userdata);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
-    }
     release_gpu(l);
     yetty_ycore_buffer_destroy(&l->accum);
     for (size_t i = 0; i < l->bulk_count; ++i)

@@ -1,15 +1,12 @@
 #include <yetty/yrdawn/client.h>
 
-#include <errno.h>
-#include <fcntl.h>
-#include <poll.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <unistd.h>
 
 #include <yetty/ycore/result.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yplatform/io.h>
+#include <yetty/yplatform/time.h>
 #include <yetty/yrdawn/wire.h>
 
 struct pending_req {
@@ -391,8 +388,7 @@ struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_blocking_dyn(
         }
         if (st.done)
             break;
-        struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000L};
-        (void)nanosleep(&ts, NULL);
+        yetty_yplatform_ytime_sleep_ms(1);
         if (++spins > 5000) {
             free(st.buf);
             return YETTY_ERR(yetty_ycore_void, "send_cmd_blocking_dyn: timeout");
@@ -426,8 +422,7 @@ struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_blocking(
             return YETTY_ERR(yetty_ycore_void, "send_cmd_blocking: pump", pr);
         if (st.done)
             break;
-        struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000L};
-        (void)nanosleep(&ts, NULL);
+        yetty_yplatform_ytime_sleep_ms(1);
         if (++spins > 5000)
             return YETTY_ERR(yetty_ycore_void, "send_cmd_blocking: timeout");
     }
@@ -530,32 +525,20 @@ struct yetty_ycore_void_result yetty_yrdawn_client_present_frame(
 
 struct yetty_ycore_void_result yetty_yrdawn_client_pump(struct yetty_yrdawn_client *c)
 {
+    /* Drain whatever's available right now and feed it to yface. The
+     * platform helper paper-machines over poll(2)+read(2) on POSIX vs
+     * PeekNamedPipe+ReadFile on Windows; both flavours collapse "no
+     * bytes ready" to value == 0 so a clean loop terminator works
+     * either way. */
     for (;;) {
-        struct pollfd pfd = {.fd = c->in_fd, .events = POLLIN};
-        int pr = poll(&pfd, 1, 0);
-        if (pr == 0)
+        struct yetty_yplatform_io_size_result r =
+            yetty_yplatform_io_read_nonblocking(c->in_fd, c->rx_buf, c->rx_buf_cap);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yrdawn_client: io_read_nonblocking");
+        if (r.value == 0)
             break;
-        if (pr < 0) {
-            if (errno == EINTR)
-                continue;
-            return YETTY_ERR(yetty_ycore_void, "yrdawn_client: poll failed");
-        }
-        if (!(pfd.revents & (POLLIN | POLLHUP)))
-            break;
-        ssize_t n = read(c->in_fd, c->rx_buf, c->rx_buf_cap);
-        if (n > 0) {
-            struct yetty_ycore_void_result feed =
-                yetty_yface_feed_bytes(c->in_face, (const char *)c->rx_buf, (size_t)n);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, feed, "yrdawn_client: yface_feed_bytes");
-            continue;
-        }
-        if (n == 0)
-            break;
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            break;
-        if (errno == EINTR)
-            continue;
-        return YETTY_ERR(yetty_ycore_void, "yrdawn_client: read failed");
+        struct yetty_ycore_void_result feed =
+            yetty_yface_feed_bytes(c->in_face, (const char *)c->rx_buf, r.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, feed, "yrdawn_client: yface_feed_bytes");
     }
     return YETTY_OK_VOID();
 }

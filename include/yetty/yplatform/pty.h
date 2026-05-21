@@ -24,15 +24,6 @@ struct yetty_platform_pty_ops {
                                              uint32_t rows);
     struct yetty_ycore_void_result (*stop)(struct yetty_platform_pty *self);
     struct yetty_platform_pty_pipe_source *(*pipe_source)(struct yetty_platform_pty *self);
-    /* Save current termios and switch the slave to raw (no ICANON, no
-     * ECHO, no OPOST). Used by the yrdawn-layer while a bridge session
-     * is active so demo bytes flow through any intermediate hops
-     * (e.g. ssh) without line-discipline mangling. NULL = optional;
-     * backends without termios (memory-pty, webasm pipe) can leave it
-     * unset and the layer skips the call. */
-    struct yetty_ycore_void_result (*set_raw)(struct yetty_platform_pty *self);
-    /* Restore the termios that set_raw saved. Paired with set_raw 1:1. */
-    struct yetty_ycore_void_result (*restore_termios)(struct yetty_platform_pty *self);
 };
 
 /* Pty base */
