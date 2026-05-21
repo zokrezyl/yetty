@@ -12,8 +12,8 @@ if(YETTY_ENABLE_FEATURE_YMGUI)
     add_subdirectory(ymgui)
 endif()
 
-if(YETTY_ENABLE_FEATURE_YWASM)
-    add_subdirectory(ywasm)
+if(YETTY_ENABLE_FEATURE_YRDAWN)
+    add_subdirectory(yrdawn)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YDRAW_ZOO)

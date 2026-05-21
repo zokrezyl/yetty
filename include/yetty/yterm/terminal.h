@@ -257,13 +257,6 @@ struct yetty_yrender_terminal_layer {
    * focus events). */
     yetty_yterm_emit_osc_fn emit_osc_fn;
     void *emit_osc_userdata;
-    /* PTY termios mode-switch callbacks - set by creator. Optional.
-   * The ywasm-layer flips to raw mode on HELLO so the bridge protocol
-   * survives any cooked-mode hop between yetty and the remote demo
-   * (ssh, screen, …) and restores on BYE / destroy. enable=1 → raw,
-   * enable=0 → restore previously-saved termios. */
-    struct yetty_ycore_void_result (*set_pty_raw_fn)(int enable, void *userdata);
-    void *set_pty_raw_userdata;
     /* Alt-screen-toggle callback - set by creator. Fired by the layer
    * that hosts libvterm (text-layer) when the inferior toggles DEC
    * ?1049 / ?1047 / ?47. The terminal hooks this and broadcasts via
