@@ -35,6 +35,7 @@ if(WIN32)
         socket/windows.c
         ipc-socket/windows.c
         tty/windows.c
+        io/windows.c
     )
 else()
     set(_core_per_os
@@ -46,6 +47,7 @@ else()
         socket/default.c
         ipc-socket/default.c
         tty/default.c
+        io/default.c
     )
 endif()
 
