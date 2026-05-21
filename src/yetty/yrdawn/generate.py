@@ -2967,10 +2967,14 @@ def main(argv: list[str]) -> int:
     default_methods_h   = repo / "include" / "yetty" / "yrdawn" / "methods.gen.h"
     default_client_c    = here / "client-stubs.gen.c"
     default_server_c    = here / "server-dispatch.gen.c"
-    # webgpu.h lives in the build tree under Dawn's fetched install.
-    # Override with --webgpu-h when generating from a different SDK.
-    default_webgpu_h    = repo / "build-desktop-ytrace-release" / "_deps" \
-                              / "dawn_linux-src" / "include" / "dawn" / "webgpu.h"
+    # Read from the committed in-tree webgpu.h so regen is deterministic
+    # and independent of whatever Dawn happens to be fetched in any
+    # build tree (Android / webasm prebuilts ship slimmer headers that
+    # would silently strip types from the wire protocol). Override with
+    # --webgpu-h when intentionally regenerating against a different
+    # Dawn version, then re-copy the new header into include/yetty/
+    # yrdawn/dawn/webgpu.h to make the change part of the source.
+    default_webgpu_h    = repo / "include" / "yetty" / "yrdawn" / "dawn" / "webgpu.h"
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-methods-h", type=pathlib.Path, default=default_methods_h)

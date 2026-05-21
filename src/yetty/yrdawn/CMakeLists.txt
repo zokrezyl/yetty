@@ -20,18 +20,32 @@ add_library(yetty_yrdawn STATIC
     client-stubs.gen.c
 )
 
+target_include_directories(yetty_yrdawn BEFORE PUBLIC
+    # OUR committed webgpu.h MUST be searched first — it's the canonical
+    # type surface the bridge protocol is built against. Every Dawn
+    # prebuilt ships a slightly different webgpu.h (Android omits Drm /
+    # Dawn color-space extensions, webasm omits Vulkan handles, etc.).
+    # If client and server resolved `<webgpu/webgpu.h>` to whatever Dawn
+    # ships on each platform, struct layouts would diverge and the wire
+    # format would silently corrupt. Pinning the header here guarantees:
+    # (a) the committed .gen.c always compiles, (b) the wire layout is
+    # identical on every host that links yetty_yrdawn. Regenerate
+    # (`python3 src/yetty/yrdawn/generate.py`) against this same header.
+    # BEFORE is load-bearing: webgpu's INTERFACE include dir comes in
+    # via yetty_yterm's link line, and without BEFORE the dedup could
+    # pick Dawn's webgpu.h ahead of ours on some generator backends.
+    ${YETTY_ROOT}/include/yetty/yrdawn
+)
 target_include_directories(yetty_yrdawn PUBLIC
     ${YETTY_ROOT}/include
-    # Header-only consumption of webgpu.h: the codegen-emitted args
-    # structs reference WGPU* POD types by value (WGPUColor,
-    # WGPUExtent3D, …). We pull in the include path from the `webgpu`
-    # CMake target without linking the Dawn library — the client side
-    # stays Dawn-free; the server side links Dawn via yetty_yterm.
-    $<TARGET_PROPERTY:webgpu,INTERFACE_INCLUDE_DIRECTORIES>
 )
 
 target_link_libraries(yetty_yrdawn
     PUBLIC
         yetty_ycore
         yetty_yface
+        # Cross-platform sleep + non-blocking read used by the client
+        # pump. yetty_yplatform_core is per-OS so we don't drag POSIX
+        # (poll(2), nanosleep) into the Windows build.
+        yetty_yplatform_core
 )
