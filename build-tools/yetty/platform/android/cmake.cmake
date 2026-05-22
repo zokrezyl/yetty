@@ -39,7 +39,7 @@ file(MAKE_DIRECTORY ${ANDROID_ASSETS_DIR})
 
 # Platform sources — Android-specific + shared Unix components (all C)
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/ymain/android.c
+    ${YETTY_ROOT}/src/yetty/yinit/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c

@@ -30,6 +30,7 @@ endif()
 
 # Platform sources — macOS-specific + shared GLFW/Unix (C)
 set(YETTY_PLATFORM_SOURCES
+    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
     ${YETTY_ROOT}/src/yetty/ymain/glfw.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c

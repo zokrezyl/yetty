@@ -36,6 +36,7 @@ endif()
 # Platform sources — Windows-specific + shared GLFW (C)
 # Windows uses GLFW for window/surface but ConPTY for terminal and Windows pipes
 set(YETTY_PLATFORM_SOURCES
+    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
     ${YETTY_ROOT}/src/yetty/ymain/glfw.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c

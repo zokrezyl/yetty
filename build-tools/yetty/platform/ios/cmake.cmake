@@ -17,7 +17,7 @@ file(MAKE_DIRECTORY ${IOS_ASSETS_DIR})
 # (e.g. a YettyQemu.app companion). forkpty.c is linked because the factory
 # references its symbol; the forkpty(3) call itself is guarded out on iOS.
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/ymain/ios-tvos.m
+    ${YETTY_ROOT}/src/yetty/yinit/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
