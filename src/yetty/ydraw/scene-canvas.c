@@ -41,6 +41,7 @@
 #include <yetty/ydraw-core/flyweight.h>
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/ysdf/types.gen.h>
 #include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yruntime/yruntime.h>
@@ -80,6 +81,87 @@
  */
 #define SCENE_YSDF_GLYPH 200u
 #define SCENE_GLYPH_WORDS 7u
+
+/*===========================================================================
+ * Wire-time coordinate translation
+ *
+ * Incoming records carry coordinates relative to their parent group;
+ * scene-canvas stores absolute coordinates in its arena so the existing
+ * staging / shader path can treat them like before. This helper adds
+ * an (dx, dy) offset to the position fields of one record in place.
+ *
+ * The geometry layout is per-prim. For SDF prims the position fields
+ * live in `geom[]` starting at word index 5 (after type, z_order, fill,
+ * stroke, stroke_w). The vast majority of SDF types follow the
+ * convention `geom[0] = center_x, geom[1] = center_y`; multi-position
+ * prims (SEGMENT, TRIANGLE, GRADIENT_*) carry extra (x, y) pairs at
+ * fixed offsets that we add here explicitly.
+ *
+ * GLYPH (type 200) and TEXT_SPAN have their own wire shapes — translated
+ * by their callers at ingress, not here.
+ *===========================================================================*/
+static void translate_sdf_prim_inplace(uint32_t *prim_words, uint32_t word_count,
+                                       float dx, float dy)
+{
+    if (word_count < 7u)   /* type + 4 style words + at least 2 geom floats */
+        return;
+    uint32_t type = prim_words[0];
+    /* geom starts at word 5 (after type, z_order, fill, stroke, stroke_w). */
+    float *geom = (float *)&prim_words[5];
+
+    /* Convention: geom[0], geom[1] are an (x, y) position for every SDF
+     * prim except those listed below. Translate the convention pair
+     * first, then patch multi-position prims with their extra pairs. */
+    geom[0] += dx;
+    geom[1] += dy;
+
+    switch (type) {
+    case YETTY_YSDF_SEGMENT:
+        /* geom: start_x, start_y, end_x, end_y */
+        if (word_count >= 9u) {
+            geom[2] += dx;
+            geom[3] += dy;
+        }
+        break;
+    case YETTY_YSDF_TRIANGLE:
+        /* geom: vertex_a_x, vertex_a_y, vertex_b_x, vertex_b_y,
+         *       vertex_c_x, vertex_c_y */
+        if (word_count >= 11u) {
+            geom[2] += dx;
+            geom[3] += dy;
+            geom[4] += dx;
+            geom[5] += dy;
+        }
+        break;
+    case YETTY_YSDF_LINEAR_GRADIENT_BOX:
+        /* geom: center_x, center_y, half_width, half_height,
+         *       corner_radius, grad_x0, grad_y0, grad_x1, grad_y1,
+         *       color0, color1 */
+        if (word_count >= 14u) {
+            geom[5] += dx;
+            geom[6] += dy;
+            geom[7] += dx;
+            geom[8] += dy;
+        }
+        break;
+    case YETTY_YSDF_RADIAL_GRADIENT_BOX:
+        /* geom: center_x, center_y, half_width, half_height,
+         *       corner_radius, grad_cx, grad_cy, grad_radius,
+         *       color_inner, color_outer */
+        if (word_count >= 12u) {
+            geom[5] += dx;
+            geom[6] += dy;
+        }
+        break;
+    /* ARC, RING: aperture_x/y and normal_x/y are direction vectors,
+     * NOT positions — do not translate. The center pair (geom[0..1])
+     * was already handled above. */
+    default:
+        /* All other SDF types are single-position prims; the geom[0..1]
+         * translation above is sufficient. */
+        break;
+    }
+}
 
 /*===========================================================================
  * Internal types
@@ -1618,7 +1700,8 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_delete_children(
  * before a recursive create-then-realloc call would dangle. Slots are
  * stable for the entity's lifetime, so re-deref at each use is safe. */
 static struct yetty_ycore_void_result process_group_body(
-    struct scene_canvas *sc, uint32_t parent_slot, const uint8_t *body_bytes, uint32_t body_len);
+    struct scene_canvas *sc, uint32_t parent_slot, const uint8_t *body_bytes, uint32_t body_len,
+    float origin_x, float origin_y);
 
 /* Lookup an in-use entity by external_id; returns root for id==0;
  * NULL if not found. O(1) via the id_index hash table. */
@@ -1830,10 +1913,17 @@ static struct yetty_ycore_void_result scene_resolve_text_span_font(
 /* Apply one parsed command. `parent_slot` identifies the current parser
  * scope (root for the outer loop, the GROUP's entity inside a body).
  * The slot is stable across entity-table reallocs that may happen
- * during nested entity creation; an entity pointer would not be. */
+ * during nested entity creation; an entity pointer would not be.
+ *
+ * `origin_x, origin_y` is the absolute screen-space origin of the
+ * current parent group (root = 0, 0). Coordinates inside `cmd` arrive
+ * relative to this origin; this function translates them to absolute
+ * before storing in the arena so the staging / shader path keeps
+ * seeing absolute coords. */
 static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
                                                        uint32_t parent_slot,
-                                                       const struct yetty_ydraw_command *cmd)
+                                                       const struct yetty_ydraw_command *cmd,
+                                                       float origin_x, float origin_y)
 {
     if (cmd->kind == YETTY_YDRAW_COMMAND_DELETE) {
         struct yetty_ydraw_drawable *target = scene_lookup_entity(sc, cmd->id);
@@ -1931,8 +2021,37 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ent_res, "scene-canvas: GROUP lookup/create");
         /* Capture the new entity's slot BEFORE any further table grow. */
         uint32_t child_slot = ent_res.value->slot;
-        const uint8_t *body = (const uint8_t *)cmd->flyweight.data + 12u;
-        return process_group_body(sc, child_slot, body, payload_size);
+
+        /* The new-form CMD_GROUP embeds a 32-byte header inside the
+         * payload: 16 bytes of (unused) style words followed by 16
+         * bytes of (x, y, w, h) f32 rect, expressed RELATIVE to the
+         * parent group's origin. When that header is present we add
+         * the relative rect to the running origin so children's coords
+         * resolve to absolute on the way to the arena.
+         *
+         * Older callers omit the header and emit the body bytes
+         * directly after the 12-byte CMD_GROUP head; we detect that
+         * via payload_size < 32 and fall back to the legacy path with
+         * the parent's origin unchanged. */
+        const uint8_t *header = (const uint8_t *)cmd->flyweight.data + 12u;
+        const uint8_t *body;
+        uint32_t body_len;
+        float child_origin_x = origin_x;
+        float child_origin_y = origin_y;
+        if (payload_size >= 32u) {
+            float rel_x, rel_y;
+            memcpy(&rel_x, header + 16, sizeof(float));
+            memcpy(&rel_y, header + 20, sizeof(float));
+            child_origin_x += rel_x;
+            child_origin_y += rel_y;
+            body = header + 32u;
+            body_len = payload_size - 32u;
+        } else {
+            body = header;
+            body_len = payload_size;
+        }
+        return process_group_body(sc, child_slot, body, body_len,
+                                  child_origin_x, child_origin_y);
     }
     if (drawable_type == YETTY_YDRAW_TYPE_FONT) {
         return scene_handle_font(sc, &cmd->flyweight);
@@ -1942,6 +2061,13 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
         if (yetty_ydraw_text_span_drawable_parse(cmd->flyweight.data, &tv) != 0) {
             return YETTY_OK_VOID();
         }
+        /* Translate the span's anchor by the accumulated parent origin
+         * before glyph expansion. The expansion code derives every
+         * per-glyph (gx, gy) from tv.x / tv.y, so this single shift
+         * makes the generated glyph records carry absolute coords. */
+        tv.x += origin_x;
+        tv.y += origin_y;
+
         struct yetty_ydraw_font *font = NULL;
         yetty_yfont_cache_handle handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
         struct yetty_ycore_void_result fr =
@@ -1952,21 +2078,47 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
         }
         return scene_expand_text_span_to_glyphs(sc, &sc->entities[parent_slot], &tv, font, handle);
     }
-    /* Implicit Add — re-deref parent each call; entity_add_prim can
-     * itself grow the entity's arena via realloc but never touches the
-     * entity table, so the local pointer here stays valid for the
-     * duration of this call. */
+    /* Implicit Add — for an anonymous SDF prim. Translate its position
+     * fields by the accumulated origin before handing it to the canonical
+     * add_prim path. The wire bytes are const, so we copy into a stack
+     * buffer (cap at the largest SDF prim word count = 16) before
+     * shifting and reposting. */
+    if ((origin_x != 0.0f || origin_y != 0.0f) && cmd->flyweight.ops &&
+        cmd->flyweight.ops->size) {
+        struct yetty_ycore_size_result sz_res = cmd->flyweight.ops->size(cmd->flyweight.data);
+        if (YETTY_IS_OK(sz_res)) {
+            size_t word_count = sz_res.value / sizeof(uint32_t);
+            uint32_t translated[16];
+            if (word_count > 0 && word_count <= sizeof(translated) / sizeof(translated[0])) {
+                memcpy(translated, cmd->flyweight.data, word_count * sizeof(uint32_t));
+                translate_sdf_prim_inplace(translated, (uint32_t)word_count,
+                                           origin_x, origin_y);
+                struct yetty_ydraw_drawable_flyweight fw_local = {
+                    .data = translated,
+                    .ops = cmd->flyweight.ops,
+                };
+                return yetty_ydraw_drawable_add_prim(&sc->base, &sc->entities[parent_slot],
+                                                     &fw_local);
+            }
+        }
+    }
     return yetty_ydraw_drawable_add_prim(&sc->base, &sc->entities[parent_slot],
                                              &cmd->flyweight);
 }
 
 /* Walk a GROUP's payload as a stream of nested commands. Recurses on
  * sub-GROUPs via dispatch_command. parent_slot is stable across
- * entities[] reallocs that nested creates can trigger. */
+ * entities[] reallocs that nested creates can trigger.
+ *
+ * origin_x, origin_y is the accumulated parent-group origin in absolute
+ * canvas space. Records inside the body carry coords relative to this
+ * origin; dispatch_command adds the offset before storing absolute
+ * coords in the arena. */
 static struct yetty_ycore_void_result process_group_body(struct scene_canvas *sc,
                                                          uint32_t parent_slot,
                                                          const uint8_t *body_bytes,
-                                                         uint32_t body_len)
+                                                         uint32_t body_len,
+                                                         float origin_x, float origin_y)
 {
     uint32_t offset = 0;
     while (offset < body_len) {
@@ -1977,7 +2129,8 @@ static struct yetty_ycore_void_result process_group_body(struct scene_canvas *sc
         if (pr.value == 0) {
             return YETTY_ERR(yetty_ycore_void, "scene-canvas: group body parser returned 0");
         }
-        struct yetty_ycore_void_result dr = dispatch_command(sc, parent_slot, &cmd);
+        struct yetty_ycore_void_result dr =
+            dispatch_command(sc, parent_slot, &cmd, origin_x, origin_y);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "scene-canvas: group body dispatch");
         offset += (uint32_t)pr.value;
     }
@@ -2021,9 +2174,12 @@ static struct yetty_ycore_void_result scene_process_input(
                 break;
             }
             /* Pass parent by slot — `sc->entities[]` may grow under our
-             * feet when nested GROUPs trigger entity allocation. */
+             * feet when nested GROUPs trigger entity allocation. The
+             * envelope-root origin is (0, 0) — the topmost CMD_GROUP's
+             * rect is interpreted in absolute canvas space, and its
+             * children inherit the accumulated origin from there. */
             struct yetty_ycore_void_result dr =
-                dispatch_command(sc, SCENE_ROOT_SLOT, &iter.command);
+                dispatch_command(sc, SCENE_ROOT_SLOT, &iter.command, 0.0f, 0.0f);
             if (YETTY_IS_ERR(dr)) {
                 ret = YETTY_ERR(yetty_ycore_void, "scene_process_input: dispatch", dr);
                 goto cleanup;

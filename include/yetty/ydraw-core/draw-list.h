@@ -107,6 +107,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
     struct yetty_ydraw_draw_list *buf, uint32_t group_id);
 
+/* Append a CMD_GROUP_REF (kind=REF / bits 31:30 = 10) at the current
+ * write head. Wire layout: 2 u32 words = [CMD_GROUP_REF][target_id].
+ *
+ * Use inside a group's body to express "the group identified by
+ * `target_id` is one of my children" without re-declaring the target's
+ * geometry / payload. The target is expected to be declared elsewhere
+ * in the same envelope via a CMD_GROUP (kind=DECL / 01); forward
+ * references are allowed because the receiver resolves child links
+ * only after the envelope is fully walked. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_group_ref(
+    struct yetty_ydraw_draw_list *buf, uint32_t target_id);
+
 /* CMD_UPDATE: hand `payload` (size = `payload_size` bytes) to the prim
  * addressed by `target_id`. Wire layout written:
  *   [CMD_UPDATE u32][target_id u32][payload_size u32][payload bytes]

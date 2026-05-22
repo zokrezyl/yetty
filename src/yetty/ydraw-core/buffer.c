@@ -477,6 +477,20 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_group_ref(
+    struct yetty_ydraw_draw_list *buf, uint32_t target_id)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_group_ref: buf is NULL");
+    }
+    /* kind=REF (bits 31:30 = 10) is encoded in the constant itself; no
+     * payload_size word — the record is exactly 2 u32s. */
+    uint32_t record[2] = {YETTY_YDRAW_CMD_GROUP_REF, target_id};
+    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, record, sizeof(record));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_group_ref: add_prim failed");
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_update(
     struct yetty_ydraw_draw_list *buf, uint32_t target_id, const void *payload,
     size_t payload_size)
