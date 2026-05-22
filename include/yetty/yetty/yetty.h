@@ -15,12 +15,15 @@ struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
 struct yetty_platform_clipboard_manager;
 struct yetty_yplatform_pty_factory;
+struct yetty_yplatform_window_manager;
 struct yetty_yevent_event_loop;
 struct yetty_ydraw_gpu_allocator;
 struct yetty_ymsdf_generator;
 struct yetty_yruntime;
 
-/* App GPU context - platform-owned GPU objects */
+/* Platform-supplied GPU bindings created by yinit. Embedded by value in
+ * yetty_yruntime_gpu_context so consumers can pass &gpu.app_gpu_context
+ * by pointer to anything that wants the platform-level slice. */
 struct yetty_yinit_gpu_context {
     WGPUInstance instance;
     WGPUSurface surface;
@@ -43,30 +46,8 @@ struct yetty_yinit_gpu_context {
     unsigned long x11_window; /* Window (XID) */
 };
 
-/* App context - passed from platform main to yetty_create */
-struct yetty_yplatform_window_manager;
-
-struct yetty_yetty_app_context {
-    struct yetty_yinit_gpu_context app_gpu_context;
-    struct yetty_yconfig_config *config;
-    struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
-    struct yetty_platform_clipboard_manager *clipboard_manager;
-    /* Owned by glfw.c (main thread). Producer ops are thread-safe; the
-     * tabbar calls them on its render-thread mouse-down/drag handlers
-     * to ask the OS window for iconify / maximize-toggle / close /
-     * drag_by. NULL in headless mode. */
-    struct yetty_yplatform_window_manager *window_manager;
-    struct yetty_yplatform_pty_factory *pty_factory;
-    /* Generic GPU/event/RPC services layer below the yetty app. Holds
-     * adapter+device+queue+allocator+msdf, the event loop, the wgpu
-     * await machinery, the render target, plus optional VNC+RPC
-     * servers. Created by ymain via yetty_yruntime_create, lifetime
-     * outlives this yetty instance. yetty borrows everything through
-     * this pointer. */
-    struct yetty_yruntime *runtime;
-};
-
-/* Yetty GPU context - yetty-owned GPU objects */
+/* Runtime-owned GPU objects, built on top of the platform slice above.
+ * Created by yetty_yruntime_create; lives on struct yetty_yruntime. */
 struct yetty_yruntime_gpu_context {
     struct yetty_yinit_gpu_context app_gpu_context;
     WGPUAdapter adapter;
@@ -76,24 +57,41 @@ struct yetty_yruntime_gpu_context {
     struct yetty_ydraw_gpu_allocator *allocator;
 
     /* Polymorphic MSDF CDB generator (cpu | gpu). Selected from the
-     * `msdf/generator` config key in yetty_create after the WGPU device
-     * is up. Shared by every consumer that materialises a font on the
-     * fly (today: ydraw-canvas blob-font materialisation). */
+     * `msdf/generator` config key by yetty_yruntime_create after the
+     * WGPU device is up. Shared by every consumer that materialises a
+     * font on the fly (today: ydraw-canvas blob-font materialisation). */
     struct yetty_ymsdf_generator *msdf_generator;
 };
 
-/* Yetty context - passed down the hierarchy to terminals */
+/* The context propagated down the terminal hierarchy.
+ *   runtime     — generic GPU/event/RPC services layer that ymain handed
+ *                 us via yetty_yruntime_create. Source of truth for
+ *                 adapter/device/queue/allocator/msdf, render target,
+ *                 wgpu await machinery, optional VNC + RPC servers,
+ *                 config, platform input pipe, clipboard + window
+ *                 managers.
+ *   pty_factory — yetty-specific, supplied by ymain alongside the
+ *                 runtime; consumed by terminal creation.
+ *   event_loop  — convenience alias of runtime->event_loop. Hot paths
+ *                 use it instead of digging through runtime each time.
+ */
 struct yetty_context {
-    struct yetty_yetty_app_context app_context;
-    struct yetty_yruntime_gpu_context gpu_context;
-    struct yetty_yevent_event_loop *event_loop;
+    struct yetty_yruntime              *runtime;
+    struct yetty_yplatform_pty_factory *pty_factory;
+    struct yetty_yevent_event_loop     *event_loop;
 };
 
 /* Result type */
 YETTY_YRESULT_DECLARE(yetty_yetty_yetty, struct yetty_yetty_yetty *);
 
-/* Create yetty instance */
-struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_context *app_context);
+/* Create yetty instance. Both inputs are required and borrowed:
+ *
+ *   runtime     — outlives the returned yetty (caller tears yetty down
+ *                 first, then yetty_yruntime_destroy).
+ *   pty_factory — destroyed by the caller after yetty_destroy.
+ */
+struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
+                                             struct yetty_yplatform_pty_factory *pty_factory);
 
 /* Destroy yetty instance */
 struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty);

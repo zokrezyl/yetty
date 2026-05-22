@@ -5,6 +5,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/background-layer.h>
 #include <yetty/yvnc/vnc-viewer.h>
@@ -930,7 +931,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
     {
         const char *vnc_client = NULL;
         const char *desktop_vnc_client = NULL;
-        struct yetty_yconfig_config *app_config = yetty_ctx->app_context.config;
+        struct yetty_yconfig_config *app_config = yetty_ctx->runtime->config;
 
         if (app_config) {
             vnc_client = app_config->ops->get_string(app_config, "vnc/client", NULL);

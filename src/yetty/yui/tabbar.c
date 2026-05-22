@@ -15,6 +15,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yplatform/window-manager.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
@@ -727,7 +728,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
      * Either way → start a window drag. */
     if (in_strip && event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
         struct yetty_yplatform_window_manager *wm =
-            bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
         if (wm) {
             bar->dragging = 1;
             bar->drag_move_grab_sent = 0;
@@ -753,7 +754,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
     if (in_strip && event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK &&
         event->mouse.button == 0 && bar->count > 0) {
         struct yetty_yplatform_window_manager *wm =
-            bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
         if (wm && wm->ops && wm->ops->toggle_maximize) {
             wm->ops->toggle_maximize(wm);
         }
@@ -768,7 +769,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
      * duration of the drag. */
     if (bar->dragging) {
         struct yetty_yplatform_window_manager *wm =
-            bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
         if (event->type == YETTY_YCORE_MOUSE_MOVE || event->type == YETTY_YCORE_MOUSE_DRAG) {
             int dx = (int)(event->mouse.x - bar->drag_anchor_x);
             int dy = (int)(event->mouse.y - bar->drag_anchor_y);
@@ -850,7 +851,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
             break;
         }
         struct yetty_yplatform_window_manager *wm =
-            bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
 
         /* No `!bar->resizing` guard. On Wayland the compositor consumes
          * the entire gesture after begin_interactive_resize — including
@@ -1011,7 +1012,7 @@ void yetty_yui_tabbar_iconify(struct yetty_yui_tabbar *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->app_context.window_manager;
+    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->runtime->window_manager;
     if (wm && wm->ops && wm->ops->iconify) {
         wm->ops->iconify(wm);
     }
@@ -1022,7 +1023,7 @@ void yetty_yui_tabbar_toggle_maximize(struct yetty_yui_tabbar *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->app_context.window_manager;
+    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->runtime->window_manager;
     if (wm && wm->ops && wm->ops->toggle_maximize) {
         wm->ops->toggle_maximize(wm);
     }
@@ -1033,7 +1034,7 @@ void yetty_yui_tabbar_close_window(struct yetty_yui_tabbar *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->app_context.window_manager;
+    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->runtime->window_manager;
     if (wm && wm->ops && wm->ops->request_close) {
         wm->ops->request_close(wm);
     }

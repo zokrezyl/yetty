@@ -10,6 +10,7 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -139,8 +140,8 @@ static struct yetty_ycore_void_result vnc_viewer_view_render(
     }
 
     /* Create command encoder */
-    WGPUDevice device = viewer->context.gpu_context.device;
-    WGPUQueue queue = viewer->context.gpu_context.queue;
+    WGPUDevice device = viewer->context.runtime->gpu.device;
+    WGPUQueue queue = viewer->context.runtime->gpu.queue;
 
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, &enc_desc);
@@ -328,9 +329,9 @@ struct yetty_vnc_viewer_ptr_result yetty_yvnc_viewer_create(const char *host, ui
     }
 
     /* Create VNC client */
-    WGPUDevice device = yetty_ctx->gpu_context.device;
-    WGPUQueue queue = yetty_ctx->gpu_context.queue;
-    WGPUTextureFormat format = yetty_ctx->gpu_context.surface_format;
+    WGPUDevice device = yetty_ctx->runtime->gpu.device;
+    WGPUQueue queue = yetty_ctx->runtime->gpu.queue;
+    WGPUTextureFormat format = yetty_ctx->runtime->gpu.surface_format;
 
     /* Use initial size - will be resized on set_bounds */
     uint16_t initial_w = 800;

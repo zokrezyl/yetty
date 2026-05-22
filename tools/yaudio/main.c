@@ -17,6 +17,7 @@
 #include <yetty/yaudio/envelope.h>
 #include <yetty/yaudio/intervals.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
@@ -269,20 +270,20 @@ init_gpu_context(struct yaudio_app *app, struct yetty_yinit_runtime *rt)
     app->app_gpu.x11_display    = rt->x11_display;
     app->app_gpu.x11_window     = rt->x11_window;
 
-    app->ctx.app_context.app_gpu_context     = app->app_gpu;
-    app->ctx.app_context.config              = rt->config;
-    app->ctx.app_context.platform_input_pipe = rt->platform_input_pipe;
-    app->ctx.app_context.clipboard_manager   = rt->clipboard_manager;
-    app->ctx.app_context.window_manager      = rt->window_manager;
-    app->ctx.app_context.pty_factory         = NULL;
+    app->ctx.runtime->gpu.app_gpu_context     = app->app_gpu;
+    app->ctx.runtime->config              = rt->config;
+    app->ctx.runtime->platform_input_pipe = rt->platform_input_pipe;
+    app->ctx.runtime->clipboard_manager   = rt->clipboard_manager;
+    app->ctx.runtime->window_manager      = rt->window_manager;
+    app->ctx.pty_factory         = NULL;
 
-    app->ctx.gpu_context.app_gpu_context = app->app_gpu;
-    app->ctx.gpu_context.adapter         = adapter;
-    app->ctx.gpu_context.device          = device;
-    app->ctx.gpu_context.queue           = queue;
-    app->ctx.gpu_context.surface_format  = surface_format;
-    app->ctx.gpu_context.allocator       = app->allocator;
-    app->ctx.gpu_context.msdf_generator  = app->msdf;
+    app->ctx.runtime->gpu.app_gpu_context = app->app_gpu;
+    app->ctx.runtime->gpu.adapter         = adapter;
+    app->ctx.runtime->gpu.device          = device;
+    app->ctx.runtime->gpu.queue           = queue;
+    app->ctx.runtime->gpu.surface_format  = surface_format;
+    app->ctx.runtime->gpu.allocator       = app->allocator;
+    app->ctx.runtime->gpu.msdf_generator  = app->msdf;
 
     app->ctx.event_loop = app->event_loop;
     return YETTY_OK_VOID();
@@ -790,9 +791,9 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
         .w = (float)rt->surface_width, .h = (float)rt->surface_height,
     };
     struct yetty_yrender_target_ptr_result tr =
-        yetty_yrender_target_texture_create(app->ctx.gpu_context.device,
-                                            app->ctx.gpu_context.queue,
-                                            app->ctx.gpu_context.surface_format,
+        yetty_yrender_target_texture_create(app->ctx.runtime->gpu.device,
+                                            app->ctx.runtime->gpu.queue,
+                                            app->ctx.runtime->gpu.surface_format,
                                             app->allocator,
                                             (WGPUSurface)rt->surface, vp);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "render target create failed");

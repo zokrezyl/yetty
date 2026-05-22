@@ -44,22 +44,10 @@ yetty_worker(struct yetty_yinit_runtime *rt, void *user)
     }
     struct yetty_yruntime *yruntime = yrt_res.value;
 
-    /* App context still carries the legacy pieces (config, pipes,
-     * clipboard, window manager, embedded app_gpu_context, pty_factory)
-     * for backwards-compat with terminal/yui/view code that reads through
-     * context.app_context.X. The new field is `.runtime`, which is what
-     * yetty actually uses to reach the GPU / event-loop / render target. */
-    struct yetty_yetty_app_context app_context = {
-        .app_gpu_context     = yruntime->gpu.app_gpu_context,
-        .config              = rt->config,
-        .platform_input_pipe = rt->platform_input_pipe,
-        .clipboard_manager   = rt->clipboard_manager,
-        .window_manager      = rt->window_manager,
-        .pty_factory         = pty_factory,
-        .runtime             = yruntime,
-    };
-
-    struct yetty_yetty_yetty_result yres = yetty_create(&app_context);
+    /* yetty's two inputs: the generic runtime (GPU/event/RPC/render-
+     * target services + borrowed config/pipes/clipboard/window from
+     * yinit) and the yetty-specific pty_factory. */
+    struct yetty_yetty_yetty_result yres = yetty_create(yruntime, pty_factory);
     if (!YETTY_IS_OK(yres)) {
         yetty_yruntime_destroy(yruntime);
         pty_factory->ops->destroy(pty_factory);

@@ -188,7 +188,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             struct yetty_yui_event ev = {0};
             ev.type = YETTY_YCORE_ZOOM_CELL_SIZE;
             ev.zoom_cell_size.delta = event->mouse_scroll.dy * 0.04f;
-            yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
+            yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (ctrl) {
@@ -197,7 +197,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             ev.zoom_visual.delta = event->mouse_scroll.dy * 0.1f;
             ev.zoom_visual.anchor_x = event->mouse_scroll.x;
             ev.zoom_visual.anchor_y = event->mouse_scroll.y;
-            yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
+            yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
             return YETTY_OK(yetty_ycore_int, 1);
         }
         /* No zoom modifier — fall through to workspace forwarding below. */
@@ -215,7 +215,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             struct yetty_yui_event ev = {0};
             ev.type = YETTY_YCORE_ZOOM_VISUAL;
             ev.zoom_visual.reset = 1;
-            yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
+            yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
             ydebug("yetty: visual zoom EXIT (key=%d)", event->key.key);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -244,7 +244,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             ev.type = YETTY_YCORE_ZOOM_VISUAL_PAN;
             ev.zoom_visual_pan.dx = dx;
             ev.zoom_visual_pan.dy = dy;
-            yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
+            yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -461,20 +461,15 @@ static struct yetty_ycore_int_result yetty_event_handler(
         yetty->window_width = (float)width;
         yetty->window_height = (float)height;
 
-        /* Reconfigure surface via runtime helper, then mirror the new
-         * dimensions into our local context copies so consumers reading
-         * context.app_context.app_gpu_context.surface_{width,height}
-         * (or .gpu_context.app_gpu_context.…) see the post-resize size. */
+        /* Reconfigure surface via runtime helper — it also updates
+         * runtime->gpu.app_gpu_context.surface_{width,height} so any
+         * consumer reading those dimensions sees the post-resize size. */
         struct yetty_ycore_void_result rc =
             yetty_yruntime_reconfigure_surface(yetty->runtime, width, height);
         if (YETTY_IS_ERR(rc)) {
             ywarn("yetty: surface reconfigure failed: %s", rc.error.msg);
             yetty_ycore_error_destroy(rc.error);
         }
-        yetty->context.app_context.app_gpu_context.surface_width = width;
-        yetty->context.app_context.app_gpu_context.surface_height = height;
-        yetty->context.gpu_context.app_gpu_context.surface_width = width;
-        yetty->context.gpu_context.app_gpu_context.surface_height = height;
 
         /* Resize render target */
         if (yetty->runtime->render_target && yetty->runtime->render_target->ops->resize) {
@@ -538,7 +533,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             struct yetty_yui_workspace *ws = NULL;
             struct yetty_ycore_void_result r = yetty_yui_tabbar_attach_empty_workspace(
                 yetty->tabbar, event->workspace_create.workspace_id,
-                yetty->context.app_context.config, &yetty->context, &ws);
+                yetty->context.runtime->config, &yetty->context, &ws);
             if (YETTY_IS_ERR(r)) {
                 yerror("yetty: WORKSPACE_CREATE failed: %s", r.error.msg);
                 yetty_ycore_error_destroy(r.error);
@@ -725,7 +720,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
         event->key.key == 291 /* GLFW_KEY_F2 */) {
         struct yetty_yui_event ev = {0};
         ev.type = YETTY_YCORE_SCREENSHOT;
-        yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
+        yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
         ydebug("yetty: Ctrl+F2 -> SCREENSHOT");
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -830,7 +825,7 @@ static void yetty_on_v_menu_click(void *userdata, float anchor_x, float anchor_y
 static int yetty_apply_view_kind_to_config(struct yetty_yetty_yetty *yetty,
                                            enum yetty_yui_view_kind kind)
 {
-    struct yetty_yconfig_config *config = yetty->context.app_context.config;
+    struct yetty_yconfig_config *config = yetty->context.runtime->config;
     if (!config || !config->ops || !config->ops->set_string) {
         return -1;
     }
@@ -938,7 +933,7 @@ static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, in
     ev.pane_split.new_pane_id = yetty_ycore_next_object_id();
     ev.pane_split.new_split_id = yetty_ycore_next_object_id();
     ev.pane_split.orientation = horizontal ? 1 : 0;
-    yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
+    yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
 }
 
 static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
@@ -948,7 +943,7 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         return;
     }
     enum yetty_yui_tabbar_kind tk;
-    struct yetty_yconfig_config *config = yetty->context.app_context.config;
+    struct yetty_yconfig_config *config = yetty->context.runtime->config;
     switch (kind) {
     case YETTY_YUI_VIEW_SHELL:
         /* Default shell — clear shell/command so get_shell_argv falls
@@ -1057,35 +1052,37 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
  * Public API
  *===========================================================================*/
 
-struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_context *app_context)
+struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
+                                             struct yetty_yplatform_pty_factory *pty_factory)
 {
     ydebug("yetty_create: Starting...");
+
+    if (!runtime) {
+        return YETTY_ERR(yetty_yetty_yetty, "yetty_create: runtime is NULL");
+    }
+    if (!pty_factory) {
+        return YETTY_ERR(yetty_yetty_yetty, "yetty_create: pty_factory is NULL");
+    }
 
     struct yetty_yetty_yetty *yetty = calloc(1, sizeof(struct yetty_yetty_yetty));
     if (!yetty) {
         return YETTY_ERR(yetty_yetty_yetty, "Failed to allocate yetty");
     }
     yetty->visual_zoom_scale = 1.0f;
-    ydebug("yetty_create: Allocated yetty struct");
 
-    /* Copy app context, then cache the runtime pointer so hot paths
-     * read yetty->runtime->X instead of digging through app_context. */
-    yetty->context.app_context = *app_context;
-    yetty->runtime = app_context->runtime;
-    if (!yetty->runtime) {
-        free(yetty);
-        return YETTY_ERR(yetty_yetty_yetty, "yetty_create: app_context->runtime is NULL");
-    }
+    /* Wire up the propagated context: runtime owns the GPU/event/RPC
+     * services, pty_factory is yetty-specific, event_loop is a hot-path
+     * alias. */
+    yetty->runtime             = runtime;
+    yetty->context.runtime     = runtime;
+    yetty->context.pty_factory = pty_factory;
+    yetty->event_loop          = runtime->event_loop;
+    yetty->context.event_loop  = runtime->event_loop;
 
-    /* Borrow the runtime's event loop + GPU services. The runtime owns
-     * the lifecycle; yetty just points at the same objects so the
-     * context propagated to terminals keeps the shape it always had. */
-    yetty->event_loop = yetty->runtime->event_loop;
-    yetty->context.event_loop = yetty->event_loop;
-    yetty->context.gpu_context = yetty->runtime->gpu;
-    ydebug("yetty_create: borrowed runtime services (event_loop=%p, device=%p, render_target=%p)",
-           (void *)yetty->event_loop, (void *)yetty->runtime->gpu.device,
-           (void *)yetty->runtime->render_target);
+    struct yetty_yconfig_config *config = runtime->config;
+    ydebug("yetty_create: context wired (event_loop=%p, device=%p, render_target=%p)",
+           (void *)yetty->event_loop, (void *)runtime->gpu.device,
+           (void *)runtime->render_target);
 
     /* Register event listeners */
     struct yetty_ycore_void_result res = register_event_listeners(yetty);
@@ -1096,7 +1093,7 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
 
     /* Create tabbar — owns the (initially single) workspace. */
     ydebug("yetty_create: Creating tabbar...");
-    struct yetty_yui_tabbar_ptr_result tb_res = yetty_yui_tabbar_create(app_context->config);
+    struct yetty_yui_tabbar_ptr_result tb_res = yetty_yui_tabbar_create(config);
     if (!YETTY_IS_OK(tb_res)) {
         yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, "Failed to create tabbar");
@@ -1108,7 +1105,7 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
      * pre-tabbar load_layout consumed. */
     ydebug("yetty_create: Loading initial workspace from config...");
     struct yetty_ycore_void_result layout_res = yetty_yui_tabbar_add_workspace_from_config(
-        yetty->tabbar, app_context->config, &yetty->context);
+        yetty->tabbar, config, &yetty->context);
     if (!YETTY_IS_OK(layout_res)) {
         yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, layout_res.error.msg);
@@ -1121,8 +1118,8 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
      * Non-fatal on failure: the rest of the app keeps working without
      * the top-z yui layer. */
     {
-        uint32_t sw = app_context->app_gpu_context.surface_width;
-        uint32_t sh = app_context->app_gpu_context.surface_height;
+        uint32_t sw = runtime->gpu.app_gpu_context.surface_width;
+        uint32_t sh = runtime->gpu.app_gpu_context.surface_height;
         if (sw == 0) {
             sw = 1;
         }
@@ -1159,10 +1156,8 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
      * On webasm there is no flag — the only PTY backend is the in-iframe
      * TinyEMU VM (its factory is the only one compiled in), so the same
      * console+telnet pair is the default shape regardless of config. */
-    bool is_temu = app_context->config->ops->get_bool(
-        app_context->config, YETTY_YCONFIG_KEY_TEMU, 0);
-    bool is_qemu = app_context->config->ops->get_bool(
-        app_context->config, YETTY_YCONFIG_KEY_QEMU, 0);
+    bool is_temu = config->ops->get_bool(config, YETTY_YCONFIG_KEY_TEMU, 0);
+    bool is_qemu = config->ops->get_bool(config, YETTY_YCONFIG_KEY_QEMU, 0);
 #ifdef __EMSCRIPTEN__
     bool needs_console_telnet_pair = true;
     const char *which = "webasm";
@@ -1173,7 +1168,7 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
     if (needs_console_telnet_pair) {
         ydebug("yetty_create: %s — adding telnet tab", which);
         struct yetty_ycore_void_result tab2_res = yetty_yui_tabbar_add_workspace_from_config(
-            yetty->tabbar, app_context->config, &yetty->context);
+            yetty->tabbar, config, &yetty->context);
         if (!YETTY_IS_OK(tab2_res)) {
             yerror("yetty_create: failed to add telnet tab: %s", tab2_res.error.msg);
             yetty_ycore_error_destroy(tab2_res.error);

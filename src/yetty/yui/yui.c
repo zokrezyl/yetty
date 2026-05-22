@@ -16,6 +16,7 @@
 
 #include <yetty/ygui/ygui.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 
 /* yui-only entry into ygui — declared in src/yetty/ygui/ygui_internal.h.
  * The public ygui.h is the only header outside-of-ygui code includes,
@@ -145,7 +146,7 @@ struct yetty_yui {
     struct yetty_yevent_event_loop *loop;
 
     /* Borrowed context pointer — needed for posting events (input pipe
-     * lives at ctx->app_context.platform_input_pipe). yetty owns the
+     * lives at ctx->runtime->platform_input_pipe). yetty owns the
      * context and outlives yui. */
     const struct yetty_context *ctx;
 
@@ -673,8 +674,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
          *         Refresh button
          *         Close button
          */
-        yui->gpu_info_adapter = context->gpu_context.adapter;
-        yui->gpu_info_allocator = context->gpu_context.allocator;
+        yui->gpu_info_adapter = context->runtime->gpu.adapter;
+        yui->gpu_info_allocator = context->runtime->gpu.allocator;
 
         struct yetty_ygui_widget *gpu_dlg = yetty_ygui_engine_window(
             yui->engine, "yui_dlg_gpu_info", /*x=*/120.0f, /*y=*/80.0f,
@@ -739,7 +740,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
          * just doesn't get a Settings dialog). */
         struct yetty_yui_config_dialog_ptr_result cdr =
             yetty_yui_config_dialog_create(yui->engine,
-                                           context->app_context.config);
+                                           context->runtime->config);
         if (YETTY_IS_OK(cdr)) {
             yui->config_dialog = cdr.value;
         } else {
@@ -1110,7 +1111,7 @@ static void yui_splitter_on_change(struct yetty_ygui_widget *widget, float delta
     ev.split_resize.workspace_id = t->workspace_id;
     ev.split_resize.split_id = t->split_id;
     ev.split_resize.ratio = ratio;
-    yetty_yevent_post_async(t->yui->ctx->app_context.platform_input_pipe, &ev);
+    yetty_yevent_post_async(t->yui->ctx->runtime->platform_input_pipe, &ev);
 }
 
 /*===========================================================================
@@ -1967,7 +1968,7 @@ static void yui_apply_cursor(struct yetty_yui *yui, float mouse_x, float mouse_y
         return; /* nothing to do */
     }
     struct yetty_yplatform_window_manager *wm =
-        yui->ctx->app_context.window_manager;
+        yui->ctx->runtime->window_manager;
     if (wm && wm->ops && wm->ops->set_cursor) {
         wm->ops->set_cursor(wm, shape);
     }

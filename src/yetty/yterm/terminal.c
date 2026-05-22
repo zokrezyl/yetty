@@ -1,3 +1,4 @@
+#include <yetty/yruntime/yruntime.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -224,7 +225,7 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
      * only post SHUTDOWN if no other live terminal remains. */
         ydebug("terminal_pty_pipe_read: PTY EOF (nread=%ld), posting SHUTDOWN", nread);
         struct yetty_ycore_xthread_event_pipe *pipe =
-            terminal->context.yetty_context.app_context.platform_input_pipe;
+            terminal->context.yetty_context.runtime->platform_input_pipe;
         if (pipe && pipe->ops && pipe->ops->write) {
             struct yetty_yui_event ev = {.type = YETTY_YCORE_SHUTDOWN};
             pipe->ops->write(pipe, &ev, sizeof(ev));
@@ -921,7 +922,7 @@ static struct yetty_ycore_void_result terminal_copy_selection(
         return YETTY_OK_VOID();
     }
     struct yetty_platform_clipboard_manager *cm =
-        terminal->context.yetty_context.app_context.clipboard_manager;
+        terminal->context.yetty_context.runtime->clipboard_manager;
     if (!cm || !cm->ops || !cm->ops->set_text) {
         ydebug("terminal_copy_selection: no clipboard manager");
         return YETTY_OK_VOID();
@@ -961,7 +962,7 @@ static struct yetty_ycore_void_result terminal_paste_clipboard(
     struct yetty_yterm_terminal *terminal)
 {
     struct yetty_platform_clipboard_manager *cm =
-        terminal->context.yetty_context.app_context.clipboard_manager;
+        terminal->context.yetty_context.runtime->clipboard_manager;
     if (!cm || !cm->ops || !cm->ops->request_paste) {
         ydebug("terminal_paste_clipboard: no clipboard manager");
         return YETTY_OK_VOID();
@@ -1163,11 +1164,11 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
 
     /* PTY factory is required — every supported platform installs one at
      * startup. A missing factory means yetty_context was constructed wrong. */
-    struct yetty_yplatform_pty_factory *pty_factory = yetty_context->app_context.pty_factory;
+    struct yetty_yplatform_pty_factory *pty_factory = yetty_context->pty_factory;
     if (!pty_factory || !pty_factory->ops || !pty_factory->ops->create_pty) {
         free(terminal);
         return YETTY_ERR(yetty_yterm_terminal,
-                         "terminal_create: yetty_context.app_context.pty_factory is NULL or has no create_pty op");
+                         "terminal_create: yetty_context.pty_factory is NULL or has no create_pty op");
     }
 
     /* Create PTY */
@@ -1380,13 +1381,13 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     ydebug("terminal_create: yrdawn layer registered for OSC 620000-620003");
 
     /* Create render targets for each layer */
-    const struct yetty_yinit_gpu_context *app_gpu = &yetty_context->gpu_context.app_gpu_context;
+    const struct yetty_yinit_gpu_context *app_gpu = &yetty_context->runtime->gpu.app_gpu_context;
     struct yetty_yrender_viewport layer_vp = {
         .x = 0, .y = 0, .w = (float)app_gpu->surface_width, .h = (float)app_gpu->surface_height};
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_target_ptr_result target_res = yetty_yrender_target_texture_create(
-            yetty_context->gpu_context.device, yetty_context->gpu_context.queue,
-            yetty_context->gpu_context.surface_format, yetty_context->gpu_context.allocator,
+            yetty_context->runtime->gpu.device, yetty_context->runtime->gpu.queue,
+            yetty_context->runtime->gpu.surface_format, yetty_context->runtime->gpu.allocator,
             NULL, /* no surface for layer targets */
             layer_vp);
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, target_res,
@@ -2062,7 +2063,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                     YETTY_RETURN_IF_ERR(yetty_ycore_int, psr,
                                         "terminal_view_on_event: push_selection (final) failed");
                     struct yetty_yconfig_config *cfg =
-                        terminal->context.yetty_context.app_context.config;
+                        terminal->context.yetty_context.runtime->config;
                     int auto_copy = 1;
                     if (cfg && cfg->ops && cfg->ops->get_bool) {
                         auto_copy = cfg->ops->get_bool(cfg, "terminal/selection/auto-copy", 1);

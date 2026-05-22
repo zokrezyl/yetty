@@ -35,6 +35,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
@@ -2342,11 +2343,11 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ymgui_layer_create(
     if (!context) {
         return YETTY_ERR(yetty_yterm_terminal_layer, "context is NULL");
     }
-    if (!context->gpu_context.device || !context->gpu_context.queue) {
+    if (!context->runtime->gpu.device || !context->runtime->gpu.queue) {
         return YETTY_ERR(yetty_yterm_terminal_layer, "gpu context is incomplete");
     }
 
-    struct yetty_yconfig_config *cfg = context->app_context.config;
+    struct yetty_yconfig_config *cfg = context->runtime->config;
     const char *shaders_dir = cfg->ops->get_string(cfg, "paths/shaders", "");
     char shader_path[512];
     snprintf(shader_path, sizeof(shader_path), "%s/ymgui-layer.wgsl", shaders_dir);
@@ -2376,9 +2377,9 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ymgui_layer_create(
     l->base.cursor_fn = cursor_fn;
     l->base.cursor_userdata = cursor_userdata;
 
-    l->device = context->gpu_context.device;
-    l->queue = context->gpu_context.queue;
-    l->target_format = context->gpu_context.surface_format;
+    l->device = context->runtime->gpu.device;
+    l->queue = context->runtime->gpu.queue;
+    l->target_format = context->runtime->gpu.surface_format;
 
     {
         struct yetty_yface_ptr_result yr = yetty_yface_create();
