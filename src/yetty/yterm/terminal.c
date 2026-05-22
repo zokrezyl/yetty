@@ -1176,9 +1176,15 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     /* Compositor renders LAST — it's the topmost root of the new
      * rendering stack. Old layers (text / ydraw / ymgui / yrdawn)
      * paint underneath; everything ygui drives via YCOMPOSITOR_BIN
-     * composes on top. */
-    if (terminal->compositor &&
-        !yetty_ycompositor_is_empty(terminal->compositor)) {
+     * composes on top.
+     *
+     * No is_empty gate on purpose: when ygui CMD_DELETEs its last
+     * top-level group, the compositor goes empty but still carries
+     * residual damage (the rect we just removed). Calling
+     * compositor_render on the empty state lets it drain those flags
+     * — otherwise is_dirty() stays true forever and the layers below
+     * keep force-repainting every frame. */
+    if (terminal->compositor) {
         struct yetty_ycore_int_result cr =
             yetty_ycompositor_render(terminal->compositor, target, force);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,

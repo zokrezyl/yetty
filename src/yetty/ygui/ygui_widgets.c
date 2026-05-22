@@ -1459,8 +1459,12 @@ static struct yetty_ycore_void_result panel_render(struct yetty_ygui_widget *sel
 static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget *self,
                                                        struct yetty_ygui_render_ctx *ctx)
 {
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
+    /* effective_{x,y} stays as layout_{x,y} (absolute pane coords) set
+     * during layout_compute_engine. The render walk must NOT overwrite
+     * it with `self->{x,y} + ctx->offset_{x,y}` — ctx->offset is 0 at
+     * call time and self->{x,y} is parent-relative, so the result
+     * would be parent-relative and break mouse-coord computation
+     * (on_press receives lx = absolute - parent-relative = wrong). */
     self->was_rendered = 1;
 
     const struct yetty_ygui_theme *t = ctx->theme;
@@ -2578,8 +2582,9 @@ static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget 
         return YETTY_OK_VOID();
     }
 
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
+    /* effective_{x,y} kept at the absolute value layout wrote; render
+     * must not clobber with `self->{x,y} + ctx->offset_{x,y}` — see
+     * panel_render_all for the full rationale. */
     self->was_rendered = 1;
 
     uint32_t marker = yetty_ygui_widget_open_group(self, ctx, popup_render);
@@ -2885,8 +2890,12 @@ static struct yetty_ycore_void_result collapsing_header_render(struct yetty_ygui
 static struct yetty_ycore_void_result collapsing_header_render_all(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
 {
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
+    /* effective_{x,y} kept at the absolute value layout wrote; render
+     * must not clobber with `self->{x,y} + ctx->offset_{x,y}` — see
+     * panel_render_all for the full rationale. Without this fix the
+     * Elements tab's section headers wouldn't toggle: on_press received
+     * ly relative to the scrollarea (not the header), so the strip
+     * test treated every click as "below the header" and propagated. */
     self->was_rendered = 1;
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();

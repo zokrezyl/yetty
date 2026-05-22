@@ -133,6 +133,24 @@ struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pt
     return write_pty_all(output_pty, clear_seq, sizeof(clear_seq) - 1);
 }
 
+/* DECSET/DECRST 1049 — switch to / leave the alternate screen buffer
+ * (and save / restore the cursor). ygui apps virtually own the pane
+ * while running, so they enter the alt screen at handshake time and
+ * leave it on shutdown — matching vim / tmux / htop behaviour. On
+ * leave, the terminal restores the primary screen with the user's
+ * shell history (text + graphical scrollback) intact. */
+struct yetty_ycore_void_result yetty_ygui_osc_enter_alt_screen(
+    struct yetty_platform_pty *output_pty)
+{
+    return write_pty_all(output_pty, "\033[?1049h", 8);
+}
+
+struct yetty_ycore_void_result yetty_ygui_osc_leave_alt_screen(
+    struct yetty_platform_pty *output_pty)
+{
+    return write_pty_all(output_pty, "\033[?1049l", 8);
+}
+
 struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(struct yetty_platform_pty *output_pty,
                                                                int enable)
 {

@@ -776,8 +776,6 @@ struct yetty_ycore_int_result yetty_ycompositor_render(
         return YETTY_ERR(yetty_ycore_int, "ycompositor_render: NULL");
     ydebug("ycompositor_render: figures=%zu force=%d damage_active=%d",
            c->figure_count, force, c->damage_active);
-    if (c->figure_count == 0)
-        return YETTY_OK(yetty_ycore_int, 0);
 
     /* Fold per-figure dirty bits into damage. */
     for (size_t i = 0; i < c->figure_count; ++i)
@@ -788,19 +786,24 @@ struct yetty_ycore_int_result yetty_ycompositor_render(
         for (size_t i = 0; i < c->figure_count; ++i)
             damage_add(c, c->figures[i]->rect);
 
-    if (!c->damage_active)
-        return YETTY_OK(yetty_ycore_int, 0);
-
+    /* No-figures path: there's nothing to render, but we must still
+     * fall through to clear damage_active / dirty / damage_union below
+     * — otherwise the residual damage from a CMD_DELETE that just
+     * emptied us keeps `is_dirty()` true forever, the terminal forces
+     * lower layers to repaint every single frame, and our own flags
+     * never reset. */
     struct yetty_ycore_rectangle damage = c->damage_union;
     int drew = 0;
-    for (size_t i = 0; i < c->figure_count; ++i) {
-        struct yetty_yfigure_figure *f = c->figures[i];
-        if (!rect_overlaps(f->rect, damage))
-            continue;
-        struct yetty_ycore_void_result r = f->ops->render(f, target);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "ycompositor_render: figure render");
-        f->dirty = 0;
-        drew = 1;
+    if (c->damage_active) {
+        for (size_t i = 0; i < c->figure_count; ++i) {
+            struct yetty_yfigure_figure *f = c->figures[i];
+            if (!rect_overlaps(f->rect, damage))
+                continue;
+            struct yetty_ycore_void_result r = f->ops->render(f, target);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "ycompositor_render: figure render");
+            f->dirty = 0;
+            drew = 1;
+        }
     }
 
     c->damage_active = 0;

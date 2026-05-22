@@ -886,6 +886,13 @@ struct yetty_ygui_engine {
      * exit that leaves their final view in place. */
     int preserve_canvas_on_destroy;
 
+    /* True iff the engine successfully entered the alternate screen
+     * (`\033[?1049h`) at handshake time. Tracked so engine_destroy
+     * only sends the matching leave sequence when we actually entered
+     * — for in-process consumers (yui, tools/ycompositor-ygui) the
+     * handshake never runs and this stays 0. */
+    int alt_screen_active;
+
     /* Long-lived yface for parsing inbound binary OSC envelopes
      * (YMGUI_OSC_SC_MOUSE / RESIZE / FOCUS / KEY). */
     struct yetty_yface *yface_in;
@@ -1125,6 +1132,10 @@ struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_
                                                           uint32_t size);
 struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pty *output_pty,
                                                         const char *name);
+struct yetty_ycore_void_result yetty_ygui_osc_enter_alt_screen(
+    struct yetty_platform_pty *output_pty);
+struct yetty_ycore_void_result yetty_ygui_osc_leave_alt_screen(
+    struct yetty_platform_pty *output_pty);
 struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(struct yetty_platform_pty *output_pty,
                                                                int enable);
 struct yetty_ycore_void_result yetty_ygui_osc_subscribe_moves(struct yetty_platform_pty *output_pty,
