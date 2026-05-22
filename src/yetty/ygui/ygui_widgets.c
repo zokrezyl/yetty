@@ -5,6 +5,7 @@
 #include "ygui_internal.h"
 #include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /*=============================================================================
  * Widget Base Functions
@@ -166,9 +167,50 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
             yetty_ycore_error_destroy(dr.error);
         }
     }
-    struct yetty_ydraw_id_result mark_res =
-        yetty_ydraw_draw_list_begin_group(ctx->buffer, self->group_id);
+
+    /* When the new compositor wire path is active (YGRID_USE_NEW_OSC=1),
+     * emit the extended CMD_GROUP that carries the widget's absolute
+     * screen rect. The receiver creates a per-window yfigure_group +
+     * ygrid figure positioned at that rect.
+     *
+     * Inside the body, prim coords must be LOCAL to the widget's own
+     * origin. ygui widgets call render_box(ctx, self->x + dx, …) — we
+     * temporarily set ctx->offset_x/y to -self->x/-self->y so the
+     * +offset add inside render_box cancels self->x and leaves the
+     * pure local coord on the wire. Restored before returning. */
+    const char *new_osc_env = getenv("YGRID_USE_NEW_OSC");
+    int use_new_osc = (new_osc_env && new_osc_env[0] == '1');
+
+    struct yetty_ydraw_id_result mark_res;
+    float saved_off_x = ctx->offset_x;
+    float saved_off_y = ctx->offset_y;
+    if (use_new_osc) {
+        /* self->layout_x/y is ALREADY the widget's absolute screen
+         * position — the layout pass propagates parent origins down.
+         * Adding ctx->offset_x (= parent's layout_x) would double-count.
+         *
+         * For the body's prim emission we want render_box(ctx,
+         * self->x + dx, …) to write the widget-local coord `dx` on the
+         * wire. render_box does `ax = x + ctx->offset_x`, so:
+         *   ax = (self->x + dx) + (-self->x) = dx
+         * Hence ctx->offset_x = -self->x. (Was previously set by the
+         * caller to parent's layout_x; we override and restore below.) */
+        float gx = (float)self->layout_x;
+        float gy = (float)self->layout_y;
+        float gw = (float)self->layout_w;
+        float gh = (float)self->layout_h;
+        mark_res = yetty_ydraw_draw_list_begin_group_with_rect(
+            ctx->buffer, self->group_id, gx, gy, gw, gh);
+        ctx->offset_x = -(float)self->x;
+        ctx->offset_y = -(float)self->y;
+    } else {
+        mark_res = yetty_ydraw_draw_list_begin_group(ctx->buffer, self->group_id);
+    }
     if (YETTY_IS_ERR(mark_res)) {
+        if (use_new_osc) {
+            ctx->offset_x = saved_off_x;
+            ctx->offset_y = saved_off_y;
+        }
         yetty_ycore_error_destroy(mark_res.error);
         return YETTY_OK_VOID();
     }
@@ -180,6 +222,11 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
         if (YETTY_IS_ERR(r)) {
             first_err = r;
         }
+    }
+
+    if (use_new_osc) {
+        ctx->offset_x = saved_off_x;
+        ctx->offset_y = saved_off_y;
     }
 
     struct yetty_ycore_void_result er = yetty_ydraw_draw_list_end_group(ctx->buffer, group_marker);

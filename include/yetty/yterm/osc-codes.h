@@ -27,4 +27,13 @@
  * legacy flat-list producers (ypdf, ycat svg) keep using YDRAW_BIN. */
 #define YETTY_OSC_YDRAW_SCENE_BIN 600004
 
+/* ycompositor envelope — new positioned-figure compositor's wire path.
+ * Same on-wire shape as YDRAW_SCENE_BIN (yface binary, framed FAM
+ * records — `u32 type | u32 payload_size | payload`), but routed to
+ * the ycompositor layer which decodes records into a yfigure tree
+ * (currently just one default ygrid). Producers that want to migrate
+ * to the new compositor stack (ygui first, then ymgui, yrdawn, …)
+ * target this code under an env-var gate during the transition. */
+#define YETTY_OSC_YCOMPOSITOR_BIN 630000
+
 #endif /* YETTY_YTERM_OSC_CODES_H */

@@ -23,6 +23,7 @@
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/ydraw-layer.h>
+#include <yetty/ycompositor/compositor.h>
 #include <yetty/yterm/ymgui-layer.h>
 #include <yetty/yterm/yrdawn-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
@@ -51,6 +52,26 @@ static const struct yetty_yui_view_ops terminal_view_ops = {
     .set_bounds = terminal_view_set_bounds,
     .on_event = terminal_view_on_event,
 };
+
+/* Forward decl for the compositor SM shim's process_input. The shim
+ * fronts the compositor (which isn't a terminal_layer) for the wire
+ * SM, which only knows how to dispatch via layer->ops->process_input.
+ * comp_sm_shim is `terminal->comp_sm_shim` — use container_of to
+ * recover the terminal pointer and the compositor inside. */
+static struct yetty_ycore_void_result terminal_compositor_shim_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_ywire_wire_statemachine *sm);
+
+static const struct yetty_yterm_terminal_layer_ops *terminal_compositor_shim_ops(void)
+{
+    static const struct yetty_yterm_terminal_layer_ops ops = {
+        .process_input = terminal_compositor_shim_process_input,
+        /* All other ops are NULL — the shim is never rendered, never
+         * scrolled, never queried by the terminal's layer loop. Only
+         * the wire-SM dispatch reaches it, and only for process_input. */
+    };
+    return &ops;
+}
 
 struct yetty_yterm_terminal {
     struct yetty_yui_view view; /* MUST be first - allows cast to view */
@@ -107,6 +128,28 @@ struct yetty_yterm_terminal {
    * handlers can hit-test cards without scanning the layers array.
    * Borrowed pointer — owned by the layers[] array. */
     struct yetty_yrender_terminal_layer *ymgui_layer;
+
+    /* The compositor. Owned directly (not via the layers[] array). The
+     * terminal drives it with explicit calls in the render loop and
+     * via the SM shim below for OSC routing. */
+    struct yetty_ycompositor *compositor;
+
+    /* Wire-SM shim. The SM only knows how to dispatch process_input
+     * via terminal_layer.ops — this static-base instance forwards its
+     * process_input to yetty_ycompositor_process_input. It lives only
+     * for SM registration; never added to layers[]. */
+    struct yetty_yrender_terminal_layer comp_sm_shim;
+
+    /* Cached text-layer pointer — needed by the YGRID_USE_NEW_OSC=1
+     * render path to keep text-layer ON while bypassing every other
+     * legacy layer. Borrowed pointer; owned by terminal->layers[]. */
+    struct yetty_yrender_terminal_layer *text_layer_base;
+
+    /* YGRID_USE_NEW_OSC=1 — captured at create time. When non-zero,
+     * the render loop skips every layer except text-layer and runs
+     * only the compositor after it. Lets us isolate the new-OSC stack
+     * for the migration test. */
+    int new_osc_path_active;
 
     /* Cell-precise selection state.
      *
@@ -1071,12 +1114,24 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
             return YETTY_ERR(yetty_ycore_void,
                              "terminal_render_frame: terminal->layers[i] is NULL");
         }
+        /* YGRID_USE_NEW_OSC=1: skip every legacy layer except text-layer.
+         * The compositor (rendered after the loop) and text-layer
+         * (background + terminal text) are the only paints we want. */
+        if (terminal->new_osc_path_active && layer != terminal->text_layer_base)
+            continue;
         if (layer->ops && layer->ops->is_empty && layer->ops->is_empty(layer)) {
             continue;
         }
         if (layer->ops && layer->ops->is_dirty && layer->ops->is_dirty(layer)) {
             force = 1;
         }
+    }
+    /* Compositor lives outside the layers[] array — its dirty bit
+     * also forces lower layers to redraw so its semi-transparent
+     * figures composite over fresh background. */
+    if (!force && terminal->compositor &&
+        yetty_ycompositor_is_dirty(terminal->compositor)) {
+        force = 1;
     }
 
     for (size_t i = 0; i < terminal->layer_count; i++) {
@@ -1089,6 +1144,11 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
             return YETTY_ERR(yetty_ycore_void,
                              "terminal_render_frame: layer has no render op");
         }
+        /* YGRID_USE_NEW_OSC=1: bypass every legacy layer except text-layer.
+         * The compositor (rendered after this loop) and text-layer
+         * (background + terminal text) are the only paints we want. */
+        if (terminal->new_osc_path_active && layer != terminal->text_layer_base)
+            continue;
         /* Skip layers with nothing to draw at all (ydraw/ymgui report
          * empty when their canvas has no primitives). is_empty is an
          * optimisation only — a missing op is fine. */
@@ -1102,6 +1162,18 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
         }
     }
     ytime_report(layers);
+
+    /* Compositor renders LAST — it's the topmost root of the new
+     * rendering stack. Old layers (text / ydraw / ymgui / yrdawn)
+     * paint underneath; everything ygui drives via YCOMPOSITOR_BIN
+     * composes on top. */
+    if (terminal->compositor &&
+        !yetty_ycompositor_is_empty(terminal->compositor)) {
+        struct yetty_ycore_int_result cr =
+            yetty_ycompositor_render(terminal->compositor, target, force);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
+                            "terminal_render_frame: compositor render failed");
+    }
 
     ydebug("terminal_render_frame: done (all %zu layers direct, no blend)", terminal->layer_count);
     ytime_report(frame_render);
@@ -1123,6 +1195,15 @@ static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterm_termi
         }
     }
     return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result terminal_compositor_shim_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yterm_terminal *terminal =
+        container_of(self, struct yetty_yterm_terminal, comp_sm_shim);
+    return yetty_ycompositor_process_input(terminal->compositor, sm);
 }
 
 /* Terminal creation/destruction */
@@ -1229,6 +1310,14 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * libvterm processes a full-screen CSI ED. */
     text_layer_res.value->clear_screen_fn = terminal_clear_screen_callback;
     text_layer_res.value->clear_screen_userdata = terminal;
+    terminal->text_layer_base = text_layer_res.value;
+    {
+        const char *env = getenv("YGRID_USE_NEW_OSC");
+        terminal->new_osc_path_active = (env && env[0] == '1') ? 1 : 0;
+        if (terminal->new_osc_path_active) {
+            ydebug("terminal_create: YGRID_USE_NEW_OSC=1 active — legacy ydraw/ymgui/yrdawn/shader-glyph layers will be SKIPPED during render");
+        }
+    }
     struct yetty_ycore_void_result add_r =
         yetty_yterm_terminal_layer_add(terminal, text_layer_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
@@ -1380,6 +1469,37 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_BYE failed");
     ydebug("terminal_create: yrdawn layer registered for OSC 620000-620003");
 
+    /* Compositor — new positioned-figure root of the rendering stack.
+     * Owned directly by the terminal (NOT in the layers[] array). The
+     * render loop calls yetty_ycompositor_render after the existing
+     * layers; the wire SM dispatches OSC envelopes to it via the
+     * comp_sm_shim below. */
+    struct yetty_ycompositor_ptr_result comp_res = yetty_ycompositor_create(
+        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height,
+        yetty_context);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, comp_res,
+                        "terminal_create: ycompositor_create failed");
+    terminal->compositor = comp_res.value;
+    yetty_ycompositor_set_request_render(
+        terminal->compositor, terminal_request_render_callback, terminal);
+    ydebug("terminal_create: ycompositor created");
+
+    /* Wire-SM shim — the SM dispatches by `layer->ops->process_input`,
+     * so the compositor (which is NOT a layer) is wrapped in a thin
+     * static terminal_layer that forwards to yetty_ycompositor_process_input.
+     * The shim instance lives on the terminal struct; only its base
+     * pointer is given to the SM. */
+    terminal->comp_sm_shim.ops = terminal_compositor_shim_ops();
+    terminal->comp_sm_shim.grid_size.cols = cols;
+    terminal->comp_sm_shim.grid_size.rows = rows;
+    terminal->comp_sm_shim.cell_size = text_layer->cell_size;
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm,
+                                                YETTY_OSC_YCOMPOSITOR_BIN,
+                                                &terminal->comp_sm_shim);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register compositor shim for YCOMPOSITOR_BIN");
+    ydebug("terminal_create: ycompositor registered for OSC %d", YETTY_OSC_YCOMPOSITOR_BIN);
+
     /* Create render targets for each layer */
     const struct yetty_yinit_gpu_context *app_gpu = &yetty_context->runtime->gpu.app_gpu_context;
     struct yetty_yrender_viewport layer_vp = {
@@ -1439,6 +1559,19 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
         }
     }
     ydebug("terminal_destroy: layers destroyed");
+
+    /* Destroy compositor (owned directly, not in layers[]). Cascades
+     * to its figures + ygrid children. */
+    if (terminal->compositor) {
+        struct yetty_ycore_void_result r =
+            yetty_ycompositor_destroy(terminal->compositor);
+        if (YETTY_IS_ERR(r)) {
+            yerror("terminal_destroy: compositor destroy failed: %s", r.error.msg);
+            if (!have_err) { first_err = r; have_err = true; }
+            else yetty_ycore_error_destroy(r.error);
+        }
+        terminal->compositor = NULL;
+    }
 
     /* Destroy wire state machine BEFORE the PTY — the SM holds a
      * non-owning pointer to the PTY and must not outlive it. */
@@ -1510,6 +1643,13 @@ struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                                 "yetty_yterm_terminal_resize_grid: layer resize_grid failed");
         }
+    }
+    /* Propagate to the compositor (lives outside layers[]). */
+    if (terminal->compositor) {
+        struct yetty_ycore_void_result r =
+            yetty_ycompositor_resize(terminal->compositor, grid_size, cell_size);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                            "yetty_yterm_terminal_resize_grid: compositor resize failed");
     }
     return YETTY_OK_VOID();
 }

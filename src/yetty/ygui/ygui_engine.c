@@ -748,11 +748,12 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     if (!engine->card_shown) {
         struct yetty_ycore_void_result r = yetty_ygui_osc_create_card(
             engine->output_pty, engine->card_name, engine->card_x, engine->card_y, engine->card_w,
-            engine->card_h, data, size);
+            engine->card_h, data, size, engine->force_legacy_osc);
         engine->card_shown = 1;
         return r;
     }
-    return yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size);
+    return yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size,
+                                      engine->force_legacy_osc);
 }
 
 /* Send the init OSC handshake: cell-size query, mouse subscriptions,
@@ -805,7 +806,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
     if (size > 0 && data) {
         struct yetty_ycore_void_result cr = yetty_ygui_osc_create_card(
             engine->output_pty, engine->card_name, engine->card_x, engine->card_y,
-            engine->card_w, engine->card_h, data, size);
+            engine->card_w, engine->card_h, data, size, engine->force_legacy_osc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
                             "engine_emit_handshake: create_card placeholder failed");
         engine->card_shown = 1;
@@ -2042,6 +2043,14 @@ void yetty_ygui_engine_set_output_pty(struct yetty_ygui_engine *engine,
 {
     if (engine) {
         engine->output_pty = pty;
+    }
+}
+
+void yetty_ygui_engine_set_force_legacy_osc(struct yetty_ygui_engine *engine,
+                                            int force)
+{
+    if (engine) {
+        engine->force_legacy_osc = force ? 1 : 0;
     }
 }
 

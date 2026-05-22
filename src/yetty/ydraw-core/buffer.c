@@ -424,6 +424,32 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group(
     return yetty_ydraw_draw_list_add_prim(buf, header, sizeof(header));
 }
 
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group_with_rect(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_id,
+    float x, float y, float w, float h)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ydraw_id, "begin_group_with_rect: buf is NULL");
+    }
+    /* 11 u32 words = 44 bytes:
+     *   3 HAS_ID header (type, id, payload_size=0)
+     *   4 style words (z_order, fill, stroke, stroke_width) all zero
+     *   4 geometry words (x, y, w, h as f32)
+     * payload_size starts at 0; _end_group patches it once the body
+     * has been written. payload_size will end up = 32 (style + rect)
+     * + body bytes. */
+    uint32_t header[11] = {0};
+    header[0] = YETTY_YDRAW_CMD_GROUP;
+    header[1] = group_id;
+    header[2] = 0u;  /* payload_size — patched by _end_group */
+    /* header[3..6] style words stay zero */
+    memcpy(&header[7], &x, sizeof(float));
+    memcpy(&header[8], &y, sizeof(float));
+    memcpy(&header[9], &w, sizeof(float));
+    memcpy(&header[10], &h, sizeof(float));
+    return yetty_ydraw_draw_list_add_prim(buf, header, sizeof(header));
+}
+
 struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(
     struct yetty_ydraw_draw_list *buf, uint32_t group_marker_offset)
 {
@@ -497,9 +523,8 @@ struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_first(
     }
 
     const uint32_t *prim = (const uint32_t *)buf->primitives.buf.data;
-    uint32_t drawable_type = prim[0];
     struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-        yetty_ydraw_flyweight_registry_get(reg, drawable_type, prim);
+        yetty_ydraw_flyweight_registry_get(reg, prim);
     YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, fw_res,
                         "drawable_first: registry lookup failed");
 
@@ -533,9 +558,8 @@ struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_next(
         return YETTY_ERR(yetty_ydraw_primitive_iter, "end of buffer");
     }
 
-    uint32_t drawable_type = next[0];
     struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-        yetty_ydraw_flyweight_registry_get(reg, drawable_type, next);
+        yetty_ydraw_flyweight_registry_get(reg, next);
     YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, fw_res,
                         "drawable_next: registry lookup failed");
 

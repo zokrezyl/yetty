@@ -75,6 +75,32 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_add_prim(
 struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group(
     struct yetty_ydraw_draw_list *buf, uint32_t group_id);
 
+/* New-format CMD_GROUP that carries the group's screen rect inline so
+ * the ycompositor receiver can place a yfigure_group + ygrid figure at
+ * `(x, y, w, h)` without inferring bounds from children. Wire layout:
+ *
+ *   u32 type = CMD_GROUP
+ *   u32 id   = group_id
+ *   u32 payload_size                  (patched by _end_group)
+ *   u32 z_order        = 0            ← style header, kept at canonical
+ *   u32 fill_color     = 0              drawable position so geometry
+ *   u32 stroke_color   = 0              sits at the same offset as any
+ *   u32 stroke_width   = 0              SDF prim's geometry
+ *   f32 x
+ *   f32 y
+ *   f32 w
+ *   f32 h
+ *   bytes body[]                      (prim records with coords
+ *                                      LOCAL to (x, y))
+ *
+ * Records inside the body whose coords are widget-local (not absolute
+ * screen) flow into the receiver's per-group ygrid figure. Same
+ * _end_group call patches payload_size — the marker semantics are
+ * unchanged. */
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group_with_rect(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_id,
+    float x, float y, float w, float h);
+
 struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(
     struct yetty_ydraw_draw_list *buf, uint32_t group_marker_offset);
 

@@ -924,6 +924,14 @@ struct yetty_ygui_engine {
     int output_pty_owned; /* 1 if engine_destroy should destroy output_pty
                            * (set when ygui_engine_uv created it). */
 
+    /* When set, write_bin ignores YGRID_USE_NEW_OSC and always emits the
+     * legacy YDRAW_SCENE_BIN code. yui's internal chrome engine sets this
+     * to 1: its SM only registers the legacy codes, so emitting the new
+     * compositor code from chrome would leave the OSC undispatched. PTY-
+     * facing engines (yetty_ygui_engine_create, ygui_engine_uv) leave it
+     * at 0 so the env var still toggles their wire code. */
+    int force_legacy_osc;
+
     /* Input buffer for parsing */
     char input_buffer[4096];
     int input_len;
@@ -1119,10 +1127,10 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygu
 struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, int x, int y, int w,
                                                           int h, const uint8_t *data,
-                                                          uint32_t size);
+                                                          uint32_t size, int force_legacy);
 struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, const uint8_t *data,
-                                                          uint32_t size);
+                                                          uint32_t size, int force_legacy);
 struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pty *output_pty,
                                                         const char *name);
 struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(struct yetty_platform_pty *output_pty,

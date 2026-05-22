@@ -312,7 +312,7 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
             }
 
             struct yetty_ydraw_drawable_flyweight_ptr_result flyweight_res =
-                yetty_ydraw_flyweight_registry_get(iter->reg, drawable_type,
+                yetty_ydraw_flyweight_registry_get(iter->reg,
                                                    (const uint32_t *)iter->scratch);
             if (YETTY_IS_ERR(flyweight_res)) {
                 yerror("drawable_iter: registry lookup failed for type 0x%08x", drawable_type);
@@ -377,7 +377,7 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
         iter->command.update.size = payload_size;
     } else {
         struct yetty_ydraw_drawable_flyweight_ptr_result flyweight_res =
-            yetty_ydraw_flyweight_registry_get(iter->reg, drawable_type,
+            yetty_ydraw_flyweight_registry_get(iter->reg,
                                                (const uint32_t *)iter->scratch);
         if (YETTY_IS_ERR(flyweight_res)) {
             return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
@@ -452,7 +452,7 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
         out_command->kind = YETTY_YDRAW_COMMAND_ADD;
         out_command->flyweight.data = (const uint32_t *)bytes;
         struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-            yetty_ydraw_flyweight_registry_get(reg, drawable_type, (const uint32_t *)bytes);
+            yetty_ydraw_flyweight_registry_get(reg, (const uint32_t *)bytes);
         out_command->flyweight.ops = YETTY_IS_OK(fw_res) ? fw_res.value->ops : NULL;
         return YETTY_OK(yetty_ycore_size, (size_t)total);
     }
@@ -461,7 +461,7 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
         return YETTY_ERR(yetty_ycore_size, "command_parse: FAM header truncated");
     }
     struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-        yetty_ydraw_flyweight_registry_get(reg, drawable_type, (const uint32_t *)bytes);
+        yetty_ydraw_flyweight_registry_get(reg, (const uint32_t *)bytes);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, fw_res, "command_parse: registry lookup");
     struct yetty_ycore_size_result size_res = fw_res.value->ops->size((const uint32_t *)bytes);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, size_res, "command_parse: ops->size");

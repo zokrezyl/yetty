@@ -536,6 +536,11 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     if (YETTY_IS_OK(er)) {
         yui->engine = er.value;
         yetty_ygui_engine_set_output_pty(yui->engine, yui->yui_endpoint);
+        /* yui's SM only registers the legacy YDRAW_SCENE_BIN code, so
+         * pin this engine to the legacy wire code regardless of the
+         * YGRID_USE_NEW_OSC migration toggle. Only PTY-bound demos
+         * should switch to the new compositor code. */
+        yetty_ygui_engine_set_force_legacy_osc(yui->engine, 1);
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
 
         /* Build the single hamburger / app menu, then one config dialog

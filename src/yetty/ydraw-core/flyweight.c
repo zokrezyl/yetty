@@ -65,7 +65,7 @@ struct yetty_ycore_void_result yetty_ydraw_flyweight_registry_add(
 }
 
 struct yetty_ydraw_drawable_flyweight_ptr_result yetty_ydraw_flyweight_registry_get(
-    const struct yetty_ydraw_flyweight_registry *reg, uint32_t drawable_type,
+    const struct yetty_ydraw_flyweight_registry *reg,
     const uint32_t *drawable_data)
 {
     static struct yetty_ydraw_drawable_flyweight fw;
@@ -77,6 +77,7 @@ struct yetty_ydraw_drawable_flyweight_ptr_result yetty_ydraw_flyweight_registry_
         return YETTY_ERR(yetty_ydraw_drawable_flyweight_ptr, "drawable_data is NULL");
     }
 
+    uint32_t drawable_type = drawable_data[0];
     ydebug("flyweight_registry_get: drawable_type=0x%08x handler_count=%zu", drawable_type,
            reg->handler_count);
 
