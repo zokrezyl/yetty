@@ -25,9 +25,6 @@
  *   Plots   — yplot demos (sin/cos, parabola, decay, ...).
  *   Images  — image rendering placeholders; nodes that have a path bound
  *             load via yimage YAML.
- *   Video   — one yvideo prim sourced from assets/yetty-unchained-2.mp4,
- *             demuxed via minimp4. Decoding (openh264) runs on the
- *             receiving terminal, not in ygreeter itself.
  *   Code    — colourised code snippets (text spans coloured by token
  *             class — mirrors what `ycat --ts` produces, just authored
  *             inline so we don't pull in tree-sitter for the v1 tool).
@@ -62,9 +59,6 @@
 #ifdef YGREETER_HAS_YJUNGLE
 #include <yetty/ygui/ygui_yjungle.h>
 #include <yetty/yjungle/yjungle.h>
-#endif
-#ifdef YGREETER_HAS_YVIDEO
-#include <yetty/ygui/ygui_yvideo.h>
 #endif
 #include <yetty/ytrace/ytrace.h>
 
@@ -540,65 +534,6 @@ static void free_image_nav(void)
 }
 
 /* =========================================================================
- * Video tab — yvideo showcase.
- *
- * Source is assets/yetty-unchained-2.mp4 relative to the binary; the MP4
- * is handed to the ygui_yvideo widget which demuxes via
- * yetty_yvideo_render_from_mp4_file (yetty_yvideo_core / yvideo-mp4.h).
- * Decoding runs on the receiving terminal, not in ygreeter.
- *
- * The yvideo prim is heavy (multi-MB H.264 stream plus a per-frame
- * GPU upload) and its decoder loop runs unconditionally as long as the
- * prim exists on the receiving scene-canvas. So the tab follows the
- * same activate-on-show / deactivate-on-hide lifecycle the yzoo and
- * yjungle tabs use: state lives on `struct yvideo_tab` (owned by
- * struct app), and `on_tab_change` flips `set_active` so the prim is
- * built when the tab is visible and torn back down to the placeholder
- * the moment the user switches away.
- * ========================================================================= */
-
-#define VIDEO_PLACEHOLDER_YAML                                                                     \
-    "body:\n"                                                                                      \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 36]\n"                                                                   \
-    "      content: \"Yvideo showcase\"\n"                                                         \
-    "      font-size: 22\n"                                                                        \
-    "      color: \"#ffffff\"\n"                                                                   \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 84]\n"                                                                   \
-    "      content: \"Plays assets/yetty-unchained-2.mp4 via the yvideo primitive.\"\n"            \
-    "      font-size: 14\n"                                                                        \
-    "      color: \"#bbbbbb\"\n"                                                                   \
-    "  - text:\n"                                                                                  \
-    "      position: [16, 112]\n"                                                                  \
-    "      content: \"File not found, or this build is missing yvideo / openh264.\"\n"             \
-    "      font-size: 14\n"                                                                        \
-    "      color: \"#888888\"\n"                                                                   \
-    "  - box:\n"                                                                                   \
-    "      position: [16, 150]\n"                                                                  \
-    "      size: [460, 240]\n"                                                                     \
-    "      fill: \"#1f2330\"\n"                                                                    \
-    "      stroke: \"#2c3447\"\n"                                                                  \
-    "      stroke-width: 2\n"                                                                      \
-    "      round: 8\n"                                                                             \
-    "  - text:\n"                                                                                  \
-    "      position: [180, 280]\n"                                                                 \
-    "      content: \"[ video would render here ]\"\n"                                             \
-    "      font-size: 16\n"                                                                        \
-    "      color: \"#666e85\"\n"
-
-#ifdef YGREETER_HAS_YVIDEO
-struct yvideo_tab {
-    struct yetty_ygui_engine *engine;
-    struct yetty_ygui_widget *tab;        /* tab panel (parent of `rich`) */
-    struct yetty_ygui_widget *rich;       /* sole child filling the tab */
-    char *path;                           /* resolved mp4 path, or NULL */
-    int   tab_index;                      /* -1 = tab absent / closed */
-    bool  active;                         /* true while the tab is visible */
-};
-#endif
-
-/* =========================================================================
  * Code tab content.
  *
  * The user asked for "code viewing using the ycat feature". ycat builds a
@@ -883,14 +818,6 @@ struct yjungle_anim {
 
 /* Forward decls — bodies live just before on_resize, but on_tab_close
  * / on_tab_change (defined earlier in the file) need to call them. */
-#ifdef YGREETER_HAS_YVIDEO
-static void yvideo_tab_init(struct yvideo_tab *v, const char *argv0);
-static void yvideo_tab_attach(struct yvideo_tab *v, struct yetty_ygui_engine *engine,
-                              struct yetty_ygui_widget *tab_panel, int tab_index);
-static void yvideo_tab_set_active(struct yvideo_tab *v, bool active);
-static void yvideo_tab_on_tab_closed(struct yvideo_tab *v);
-static void yvideo_tab_shutdown(struct yvideo_tab *v);
-#endif
 #ifdef YGREETER_HAS_YZOO
 static void yzoo_anim_set_running(struct yzoo_anim *a, bool run);
 static void yzoo_anim_on_tab_closed(struct yzoo_anim *a);
@@ -921,9 +848,6 @@ struct app {
 #endif
 #ifdef YGREETER_HAS_YJUNGLE
     struct yjungle_anim yjungle;
-#endif
-#ifdef YGREETER_HAS_YVIDEO
-    struct yvideo_tab video;
 #endif
 };
 
@@ -1139,20 +1063,6 @@ static void on_tab_close(struct yetty_ygui_widget *tabbar, float value, void *us
         }
     }
 
-#ifdef YGREETER_HAS_YVIDEO
-    /* Same bookkeeping for the Video tab — when it's the one being
-     * closed, tear down the per-tab state (drops the playback prim
-     * and clears stale widget handles); when it's a tab AFTER the
-     * Video tab, shift our cached index down by one. */
-    if (app->video.tab_index >= 0) {
-        if (idx == app->video.tab_index) {
-            yvideo_tab_on_tab_closed(&app->video);
-        } else if (idx < app->video.tab_index) {
-            app->video.tab_index--;
-        }
-    }
-#endif
-
     /* Same bookkeeping for the yzoo / yjungle showcase tabs — drop our
      * dangling widget/tab pointers when the tab itself goes away,
      * otherwise the next resize-driven rebuild would chase a freed
@@ -1192,22 +1102,13 @@ static void on_tab_change(struct yetty_ygui_widget *tabbar, float value, void *u
 
     /* Default: load the first entry of the newly-active tab — only
      * applies to the nav+rich tabs (Welcome / Plots / Images / Code).
-     * The Video tab between Images and Code does not use nav+rich;
-     * its slot in app->tabs[] is empty so load_entry early-returns on
-     * n_entries == 0 for that index. */
-    if (idx >= 0 && idx < 5) {
+     * Tabs beyond index 3 (Elements + showcase tabs) don't use nav+rich;
+     * their slot in app->tabs[] is empty so load_entry early-returns on
+     * n_entries == 0 for those indices. */
+    if (idx >= 0 && idx < 4) {
         load_entry(app, idx, 0);
     }
 
-#ifdef YGREETER_HAS_YVIDEO
-    /* Drive the Video tab's playback prim from the tab-change event,
-     * same shape as the yzoo / yjungle set_running calls below. The
-     * helper builds the yvideo prim on activation and resets the
-     * widget to the placeholder on deactivation, so the receiving
-     * scene-canvas's decoder + per-frame GPU upload only run while
-     * the user is actually looking at the tab. */
-    yvideo_tab_set_active(&app->video, idx == app->video.tab_index);
-#endif
     /* Drive the yzoo / yjungle animation timers based on which tab is
      * now active. Pausing on tab-switch keeps idle CPU low; resuming
      * picks the producer's internal clock back up where it left off. */
@@ -1586,86 +1487,6 @@ static void yj_anim_shutdown(struct yjungle_anim *a)
 }
 #endif /* YGREETER_HAS_YJUNGLE */
 
-#ifdef YGREETER_HAS_YVIDEO
-/* yvideo_tab_init — resolve the bundled MP4 path once. Heap-owned;
- * freed by yvideo_tab_shutdown. */
-static void yvideo_tab_init(struct yvideo_tab *v, const char *argv0)
-{
-    v->engine = NULL;
-    v->tab = NULL;
-    v->rich = NULL;
-    v->path = locate_asset(argv0, "yetty-unchained-2.mp4", "assets/yetty-unchained-2.mp4");
-    v->tab_index = -1;
-    v->active = false;
-}
-
-/* yvideo_tab_attach — build the tab body: a single yvideo widget
- * filling the panel. The H.264 stream isn't materialised here; that
- * happens when set_active(true) fires, so the decoder + per-frame
- * GPU upload don't start until the user actually views the tab. */
-static void yvideo_tab_attach(struct yvideo_tab *v, struct yetty_ygui_engine *engine,
-                              struct yetty_ygui_widget *tab_panel, int tab_index)
-{
-    v->engine = engine;
-    v->tab = tab_panel;
-    v->tab_index = tab_index;
-    v->active = false;
-    /* Empty yvideo widget — set_active will load the MP4 source. */
-    v->rich = yetty_ygui_engine_yvideo_from_mp4_bytes(
-        engine, "video_yvideo", 0, 0, 0, 0,
-        /*mp4_bytes=*/NULL, /*mp4_len=*/0, /*overrides=*/NULL);
-    if (!v->rich) {
-        return;
-    }
-    yetty_ygui_widget_apply_css(v->rich, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(tab_panel, v->rich);
-}
-
-/* yvideo_tab_set_active — activate / deactivate playback. On activate,
- * hand the bundled MP4 to the ygui_yvideo widget — it demuxes via
- * yetty_yvideo_render_from_mp4_file (yetty_yvideo_core) and attaches
- * the resulting yvideo prim. On deactivate, clear the prim so the
- * receiving scene-canvas tears down the decoder + GPU upload — the
- * playback loop runs server-side, so the only way to pause it from
- * here is to remove the prim from the widget's draw_list. */
-static void yvideo_tab_set_active(struct yvideo_tab *v, bool active)
-{
-    if (!v || !v->rich || v->active == active) {
-        return;
-    }
-    v->active = active;
-    if (active && v->path) {
-        struct yetty_ycore_void_result r =
-            yetty_ygui_widget_yvideo_set_mp4_file(v->rich, v->path, NULL);
-        if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
-        }
-        return;
-    }
-    struct yetty_ycore_void_result r = yetty_ygui_widget_yvideo_clear(v->rich);
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_error_destroy(r.error);
-    }
-}
-
-/* yvideo_tab_on_tab_closed — the tabbar already owns the widgets and
- * is about to free them when we get here. Clear handles + active
- * flag; the heap-owned path stays alive until program shutdown. */
-static void yvideo_tab_on_tab_closed(struct yvideo_tab *v)
-{
-    v->tab = NULL;
-    v->rich = NULL;
-    v->tab_index = -1;
-    v->active = false;
-}
-
-static void yvideo_tab_shutdown(struct yvideo_tab *v)
-{
-    free(v->path);
-    v->path = NULL;
-}
-#endif /* YGREETER_HAS_YVIDEO */
-
 static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float pw, float ph,
                       void *u)
 {
@@ -1712,9 +1533,9 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
         }
     }
 
-    /* yvideo / yplot / yimage widgets self-resize: the render hook
-     * compares layout_w/h against last_w/h and rebuilds the prim on
-     * mismatch, so on_resize doesn't need to call into them. */
+    /* yplot / yimage widgets self-resize: the render hook compares
+     * layout_w/h against last_w/h and rebuilds the prim on mismatch,
+     * so on_resize doesn't need to call into them. */
 }
 
 /* =========================================================================
@@ -2030,54 +1851,48 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
         yetty_ygui_widget_add_child(sec, step);
     }
 
-    /* ---- Media (yplot / yimage / yvideo) ----
+    /* ---- Plot ----
      *
-     * One sample of each producer widget so the Elements tab has a
-     * runnable demo of the same APIs the Plots / Images / Video tabs
-     * use. Each widget is a thin wrapper over a rich surface; what
-     * you see here is exactly what the dedicated tabs render after
-     * their nav-click dispatch. */
+     * One yplot sample so the Elements tab has a runnable demo of the
+     * same API the Plots tab uses. The widget is a thin wrapper over a
+     * rich surface; what you see here is exactly what the Plots tab
+     * renders after its nav-click dispatch. */
     {
-        struct yetty_ygui_widget *sec = make_section(app, root, "el_media", "Media", 0);
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_plot", "Plot", 0);
         if (!sec) {
             return;
         }
         /* yplot — quick sin/cos so the GPU evaluator visibly ticks. */
-        {
-            struct yetty_yplot_render_config cfg = {
-                .x_min = -6.2832f, .x_max = 6.2832f,
-                .y_min = -1.5f,    .y_max = 1.5f,
-                .flags = PLOT_FLAGS_AXES,
-            };
-            struct yetty_ygui_widget *plot = yetty_ygui_engine_yplot_from_source(
-                app->engine, "el_yplot", 24, 0, 460, 200,
-                "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4",
-                0, &cfg);
-            if (plot) {
-                yetty_ygui_widget_add_child(sec, plot);
-            }
+        struct yetty_yplot_render_config cfg = {
+            .x_min = -6.2832f, .x_max = 6.2832f,
+            .y_min = -1.5f,    .y_max = 1.5f,
+            .flags = PLOT_FLAGS_AXES,
+        };
+        struct yetty_ygui_widget *plot = yetty_ygui_engine_yplot_from_source(
+            app->engine, "el_yplot", 24, 0, 460, 200,
+            "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4",
+            0, &cfg);
+        if (plot) {
+            yetty_ygui_widget_add_child(sec, plot);
         }
-        /* yimage — the first discovered logo (matches the Images tab). */
+    }
+
+    /* ---- Image ----
+     *
+     * One yimage sample (first discovered logo). Bundled logos are 1:1,
+     * so the widget is sized square to keep the aspect intact. */
+    {
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_image", "Image", 0);
+        if (!sec) {
+            return;
+        }
         if (g_image_path_count > 0 && g_image_paths && g_image_paths[0]) {
             struct yetty_ygui_widget *img = yetty_ygui_engine_yimage_from_file(
-                app->engine, "el_yimage", 24, 0, 320, 200, g_image_paths[0]);
+                app->engine, "el_yimage", 24, 0, 320, 320, g_image_paths[0]);
             if (img) {
                 yetty_ygui_widget_add_child(sec, img);
             }
         }
-        /* yvideo — same MP4 the Video tab plays (when available). The
-         * widget owns its decode lifecycle on the receiving canvas; the
-         * Elements tab is rarely the active one so the autoplay is
-         * cheap. */
-#ifdef YGREETER_HAS_YVIDEO
-        if (app->video.path) {
-            struct yetty_ygui_widget *vid = yetty_ygui_engine_yvideo_from_mp4_file(
-                app->engine, "el_yvideo", 24, 0, 480, 270, app->video.path, NULL);
-            if (vid) {
-                yetty_ygui_widget_add_child(sec, vid);
-            }
-        }
-#endif
     }
 
     /* ---- Lists & trees ---- */
@@ -2257,7 +2072,7 @@ int main(int argc, char **argv)
      * Windows impl is a no-op (no PTY-share scenario there). */
     yetty_yplatform_tty_redirect_stderr_if_shared_with_stdout("ygreeter");
 
-    /* First-run extraction of embedded assets (logos, video, README,
+    /* First-run extraction of embedded assets (logos, README,
      * sample.html, PDF) into the platform data dir. No-op when the build
      * lacks incbin support (dev builds) or the marker shows this
      * yetty-X.Y.Z build already extracted. */
@@ -2382,16 +2197,6 @@ int main(int argc, char **argv)
                        TAB_KIND_IMAGES);
     }
 
-#ifdef YGREETER_HAS_YVIDEO
-    /* Video tab — yvideo prim sourced from assets/yetty-unchained-2.mp4.
-     * State lives on app.video; same activate-on-show / deactivate-on-
-     * hide lifecycle as the yzoo / yjungle tabs. */
-    yvideo_tab_init(&app.video, argv[0]);
-    struct yetty_ygui_widget *video_tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Video");
-    int video_idx = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
-    yvideo_tab_attach(&app.video, app.engine, video_tab, video_idx);
-#endif
-
     /* Code */
     struct yetty_ygui_widget *code = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Code");
     int code_tab_index = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
@@ -2438,62 +2243,43 @@ int main(int argc, char **argv)
     }
 #endif
 
-    /* Markdown / HTML / PDF widget showcase tabs — each shows one
-     * sample document via the corresponding ygui widget. The widget
-     * fills its tab via flex: 1; if the bundled sample isn't found
-     * the tab is silently skipped (the feature was probably built
-     * without the dependency). */
+    /* Markdown / HTML / PDF widget showcase tabs — each renders the
+     * default sample that the widget library carries via its own
+     * incbin (no separate file ship needed; the README.md / sample.html
+     * / test-comprehensive.pdf bytes live inside the .a/.lib). */
 #ifdef YGREETER_HAS_YMARKDOWN
     {
-        char *md_path = locate_asset(argv[0], "README.md", "README.md");
-        if (md_path) {
-            struct yetty_ygui_widget *tab =
-                yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
-            struct yetty_ygui_widget *w = yetty_ygui_engine_ymarkdown_from_file(
-                app.engine, "md_view", 0, 0, 100, 100, md_path);
-            if (w) {
-                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-                yetty_ygui_widget_add_child(tab, w);
-            }
-            free(md_path);
+        struct yetty_ygui_widget *tab =
+            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
+        struct yetty_ygui_widget *w =
+            yetty_ygui_engine_ymarkdown_default(app.engine, "md_view", 0, 0, 100, 100);
+        if (w) {
+            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_widget_add_child(tab, w);
         }
     }
 #endif
 #ifdef YGREETER_HAS_YBROWSER
     {
-        char *html_path =
-            locate_asset(argv[0], "sample.html", "demo/ygui/26_ybrowser/sample.html");
-        if (html_path) {
-            struct yetty_ygui_widget *tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
-            struct yetty_ygui_widget *w = yetty_ygui_engine_ybrowser_from_file(
-                app.engine, "html_view", 0, 0, 100, 100, html_path);
-            if (w) {
-                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-                yetty_ygui_widget_add_child(tab, w);
-            }
-            free(html_path);
+        struct yetty_ygui_widget *tab =
+            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
+        struct yetty_ygui_widget *w =
+            yetty_ygui_engine_ybrowser_default(app.engine, "html_view", 0, 0, 100, 100);
+        if (w) {
+            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_widget_add_child(tab, w);
         }
     }
 #endif
 #ifdef YGREETER_HAS_YPDF
     {
-        /* Embedded under the flat name "pdf-sample.pdf" regardless of
-         * which source PDF the build picked up; the dev fallback tries
-         * the comprehensive one first and then the smaller sample. */
-        char *pdf_path = locate_asset(argv[0], "pdf-sample.pdf",
-                                      "test/ut/ypdf/test-comprehensive.pdf");
-        if (!pdf_path) {
-            pdf_path = find_repo_image(argv[0], "test/ut/ypdf/pdf-sample.pdf");
-        }
-        if (pdf_path) {
-            struct yetty_ygui_widget *tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "PDF");
-            struct yetty_ygui_widget *w =
-                yetty_ygui_engine_ypdf_from_file(app.engine, "pdf_view", 0, 0, 100, 100, pdf_path);
-            if (w) {
-                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-                yetty_ygui_widget_add_child(tab, w);
-            }
-            free(pdf_path);
+        struct yetty_ygui_widget *tab =
+            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "PDF");
+        struct yetty_ygui_widget *w =
+            yetty_ygui_engine_ypdf_default(app.engine, "pdf_view", 0, 0, 100, 100);
+        if (w) {
+            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_widget_add_child(tab, w);
         }
     }
 #endif
@@ -2513,9 +2299,6 @@ int main(int argc, char **argv)
     yetty_ygui_engine_run(app.engine);
 
     free_image_nav();
-#ifdef YGREETER_HAS_YVIDEO
-    yvideo_tab_shutdown(&app.video);
-#endif
     free_row_links();
     /* Stop timers and free producer state BEFORE the engine teardown —
      * the engine teardown closes the loop the timers are attached to. */

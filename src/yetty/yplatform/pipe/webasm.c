@@ -51,12 +51,21 @@ static struct yetty_ycore_int_result webasm_pipe_read_fd(
 static struct yetty_ycore_void_result webasm_pipe_set_event_loop(
     struct yetty_ycore_xthread_event_pipe *self, struct yetty_yevent_event_loop *loop);
 
+static struct yetty_ycore_void_result webasm_pipe_set_nonblocking_write(
+    struct yetty_ycore_xthread_event_pipe *self)
+{
+    /* webasm pipe is an in-memory ring; writes never block. */
+    (void)self;
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_platform_input_pipe_ops webasm_pipe_ops = {
     .destroy = webasm_pipe_destroy,
     .write = webasm_pipe_write,
     .read = webasm_pipe_read,
     .read_fd = webasm_pipe_read_fd,
     .set_event_loop = webasm_pipe_set_event_loop,
+    .set_nonblocking_write = webasm_pipe_set_nonblocking_write,
 };
 
 int yetty_yplatform_input_pipe_webasm_platform_input_pipe_has_pending(

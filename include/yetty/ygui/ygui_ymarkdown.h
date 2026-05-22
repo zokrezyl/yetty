@@ -33,6 +33,14 @@ struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_from_buffer(
     float x, float y, float w, float h,
     const uint8_t *data, size_t len);
 
+/* Build a widget rendering the default markdown bundled into ygui_ymarkdown
+ * itself (the repo's README.md, embedded at library-build time). Lets
+ * tools render a sample without shipping a separate .md file. Returns
+ * NULL on failure or when the library was built without an asset. */
+struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_default(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h);
+
 #ifdef __cplusplus
 }
 #endif

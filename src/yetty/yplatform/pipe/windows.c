@@ -27,6 +27,8 @@ static struct yetty_ycore_int_result win_pipe_read_fd(
     const struct yetty_ycore_xthread_event_pipe *self);
 static struct yetty_ycore_void_result win_pipe_set_event_loop(
     struct yetty_ycore_xthread_event_pipe *self, struct yetty_yevent_event_loop *loop);
+static struct yetty_ycore_void_result win_pipe_set_nonblocking_write(
+    struct yetty_ycore_xthread_event_pipe *self);
 
 /* Ops table */
 static const struct yetty_platform_input_pipe_ops win_pipe_ops = {
@@ -35,7 +37,19 @@ static const struct yetty_platform_input_pipe_ops win_pipe_ops = {
     .read = win_pipe_read,
     .read_fd = win_pipe_read_fd,
     .set_event_loop = win_pipe_set_event_loop,
+    .set_nonblocking_write = win_pipe_set_nonblocking_write,
 };
+
+static struct yetty_ycore_void_result win_pipe_set_nonblocking_write(
+    struct yetty_ycore_xthread_event_pipe *self)
+{
+    /* TODO: Windows ConPTY path doesn't yet hit the deadlock the unix
+     * impl works around (no shared-thread producer/consumer with a
+     * kernel pipe). Make this a no-op until ConPTY grows the same
+     * topology. */
+    (void)self;
+    return YETTY_OK_VOID();
+}
 
 /* Implementation */
 

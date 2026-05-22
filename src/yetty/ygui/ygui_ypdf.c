@@ -657,6 +657,33 @@ struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(
     return widget;
 }
 
+/* Built-in default sample (test/ut/ypdf/test-comprehensive.pdf), baked
+ * into the library via ygui_embed_default_asset (incbin / RCDATA). */
+#include "ygui_ypdf_ypdf_default_manifest.h"
+
+static const uint8_t *g_ypdf_default_data = NULL;
+static size_t g_ypdf_default_size = 0;
+static void ypdf_capture_default(const char *name, const uint8_t *data,
+                                  size_t size, int compressed)
+{
+    (void)name;
+    (void)compressed;
+    g_ypdf_default_data = data;
+    g_ypdf_default_size = size;
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_ypdf_default(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h)
+{
+    if (!g_ypdf_default_data) {
+        register_ypdf_default_assets_c(ypdf_capture_default);
+    }
+    return yetty_ygui_engine_ypdf_from_buffer(
+        engine, id, x, y, w, h,
+        g_ypdf_default_data, g_ypdf_default_size);
+}
+
 /*=============================================================================
  * Public scroll API
  *===========================================================================*/

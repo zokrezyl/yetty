@@ -87,6 +87,27 @@ struct yetty_ytelnet_telnet_pty {
     int naws_enabled;
     int binary_enabled;
     int sga_enabled;
+
+    /* Producer-side overflow for the output pipe.
+     *
+     * The hot path is: TCP read → telnet_on_data → telnet_emit_byte →
+     * output_pipe->ops->write. Producer and consumer (terminal_pty_pipe_read +
+     * wire-statemachine coro) live on the same libuv thread. libuv's stream
+     * read drains the TCP socket in a tight loop within one iteration —
+     * the pipe-read consumer doesn't get scheduled until that loop ends.
+     * So a multi-MB burst (e.g. a logo's SCENE_BIN payload) used to fill
+     * the kernel pipe and block the producer in write(2) forever, while
+     * the consumer (same thread) sat parked.
+     *
+     * Fix: write to the pipe NON-BLOCKING. Anything the pipe can't take
+     * right now lands in this overflow ring. Each later emit, and an
+     * end-of-callback flush, retries the pipe — by then the consumer has
+     * had a chance to drain. The ring grows on demand, so the producer
+     * never blocks regardless of payload size. */
+    uint8_t *tx_overflow;
+    size_t   tx_overflow_cap;
+    size_t   tx_overflow_head; /* read cursor (drain from here) */
+    size_t   tx_overflow_tail; /* write cursor (append here) */
 };
 
 /* Forward declarations */
@@ -227,15 +248,74 @@ static void telnet_handle_subneg(struct yetty_ytelnet_telnet_pty *pty)
     }
 }
 
+/* Push the head of the overflow ring into the kernel pipe via a single
+ * non-blocking write. Returns how many bytes the pipe accepted (0 if
+ * the kernel buffer is full — caller leaves the ring untouched and the
+ * unwritten tail is re-tried on the next drain). */
+static size_t telnet_drain_overflow_once(struct yetty_ytelnet_telnet_pty *pty)
+{
+    if (pty->tx_overflow_tail == pty->tx_overflow_head) {
+        return 0;
+    }
+    size_t avail = pty->tx_overflow_tail - pty->tx_overflow_head;
+    struct yetty_ycore_size_result r = pty->output_pipe->ops->write(
+        pty->output_pipe, pty->tx_overflow + pty->tx_overflow_head, avail);
+    if (YETTY_IS_ERR(r)) {
+        ywarn("telnet: drain overflow: pipe write error %s", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+        return 0;
+    }
+    pty->tx_overflow_head += r.value;
+    /* Reset the cursors when fully drained — keeps the ring compact and
+     * avoids unbounded growth of head/tail offsets. */
+    if (pty->tx_overflow_head == pty->tx_overflow_tail) {
+        pty->tx_overflow_head = 0;
+        pty->tx_overflow_tail = 0;
+    }
+    return r.value;
+}
+
+/* Append `len` bytes to the overflow ring. Grows on demand — the
+ * producer never blocks. */
+static void telnet_overflow_append(struct yetty_ytelnet_telnet_pty *pty,
+                                   const uint8_t *src, size_t len)
+{
+    /* Compact first if there's stale head padding eating capacity. */
+    if (pty->tx_overflow_head > 0) {
+        size_t live = pty->tx_overflow_tail - pty->tx_overflow_head;
+        memmove(pty->tx_overflow, pty->tx_overflow + pty->tx_overflow_head, live);
+        pty->tx_overflow_tail = live;
+        pty->tx_overflow_head = 0;
+    }
+    if (pty->tx_overflow_tail + len > pty->tx_overflow_cap) {
+        size_t need = pty->tx_overflow_tail + len;
+        size_t newcap = pty->tx_overflow_cap ? pty->tx_overflow_cap : 4096;
+        while (newcap < need) {
+            newcap *= 2;
+        }
+        uint8_t *grown = realloc(pty->tx_overflow, newcap);
+        if (!grown) {
+            ywarn("telnet: overflow realloc to %zu bytes failed; dropping %zu bytes",
+                  newcap, len);
+            return;
+        }
+        pty->tx_overflow = grown;
+        pty->tx_overflow_cap = newcap;
+    }
+    memcpy(pty->tx_overflow + pty->tx_overflow_tail, src, len);
+    pty->tx_overflow_tail += len;
+}
+
 static void telnet_emit_byte(struct yetty_ytelnet_telnet_pty *pty, uint8_t byte)
 {
-    static int n_emit;
-    n_emit++;
-    if (n_emit <= 8 || (n_emit % 64) == 0) {
-        ydebug("telnet: emit byte #%d 0x%02x ('%c') -> output_pipe", n_emit, byte,
-               (byte >= 32 && byte < 127) ? byte : '.');
-    }
-    pty->output_pipe->ops->write(pty->output_pipe, &byte, 1);
+    /* All emits go through the in-memory overflow ring. The previous
+     * code did a one-byte write(2) syscall here for every payload byte
+     * — fine for a 12-character prompt, but a multi-MB SCENE_BIN
+     * envelope (logo, big render) means millions of syscalls and adds
+     * seconds of latency on top of a telnet hop. Append-only is O(1)
+     * memcpy; telnet_drain_overflow_once at end-of-callback issues
+     * ONE write(2) for the whole batch. */
+    telnet_overflow_append(pty, &byte, 1);
 }
 
 static void telnet_process_byte(struct yetty_ytelnet_telnet_pty *pty, uint8_t byte)
@@ -342,6 +422,13 @@ static void telnet_on_data(void *ctx, struct yetty_yevent_conn *conn, const char
     for (long i = 0; i < nread; i++) {
         telnet_process_byte(pty, (uint8_t)data[i]);
     }
+    /* Drain whatever the per-byte path couldn't push through right away.
+     * Most of the time this writes the entire overflow in one go (kernel
+     * pipe was empty when we started the for-loop). On a backpressured
+     * pipe the unwritten tail stays in the ring and is retried on the
+     * next on_data call — by then libuv will have dispatched the
+     * pipe-reader and given the wire-statemachine a chance to drain. */
+    (void)telnet_drain_overflow_once(pty);
 }
 
 static void telnet_on_connect(void *ctx, struct yetty_yevent_conn *conn)
@@ -465,6 +552,12 @@ static struct yetty_ycore_void_result telnet_pty_destroy(struct yetty_platform_p
         pty->transport = NULL;
     }
 
+    free(pty->tx_overflow);
+    pty->tx_overflow = NULL;
+    pty->tx_overflow_cap = 0;
+    pty->tx_overflow_head = 0;
+    pty->tx_overflow_tail = 0;
+
     free(pty);
 
     if (YETTY_IS_ERR(stop_r)) {
@@ -518,6 +611,21 @@ struct yetty_yplatform_pty_ptr_result yetty_ytelnet_telnet_pty_create(
         return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to obtain pipe read fd");
     }
     pty->pipe_source.abstract = (uintptr_t)fdr.value;
+
+    /* Make the producer side non-blocking. Telnet's on_data and the
+     * pipe-reading wire-statemachine coro share the libuv loop thread,
+     * so a blocking write here parks the whole loop and the reader can
+     * never drain. With non-blocking writes we instead overflow into
+     * the local ring and retry across callbacks. */
+    if (pty->output_pipe->ops->set_nonblocking_write) {
+        struct yetty_ycore_void_result nbr =
+            pty->output_pipe->ops->set_nonblocking_write(pty->output_pipe);
+        if (YETTY_IS_ERR(nbr)) {
+            ywarn("telnet_pty_create: set_nonblocking_write failed: %s — large "
+                  "payloads may deadlock", nbr.error.msg);
+            yetty_ycore_error_destroy(nbr.error);
+        }
+    }
 
     /* Kick off async transport open. on_connect / on_connect_error will
      * fire later (loop-thread under TCP, postMessage-handler thread

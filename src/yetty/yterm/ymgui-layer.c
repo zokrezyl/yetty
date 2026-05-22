@@ -931,9 +931,13 @@ static struct yetty_ycore_void_result handle_card_remove(struct yetty_yterm_ymgu
 
     /* TODO: archive to ymgui-static-layer when KEEP_VISIBLE flag set. */
     if (l->focused_card_id == cr->card_id) {
-        struct yetty_ycore_void_result ef = emit_focus(l, cr->card_id, 0);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
-                            "handle_card_remove: emit_focus(lost) failed");
+        /* The client initiated this removal, so it already knows the
+         * card (and therefore its focus) is gone. Don't emit a FOCUS-LOST
+         * OSC back: the client is typically mid-shutdown when it sends
+         * CARD_REMOVE, so it won't read the reply — the bytes stay
+         * buffered in the PTY and get delivered to whatever process owns
+         * the PTY slave next (the parent shell). zle/readline then renders
+         * the b64 envelope body as visible text at the next prompt. */
         l->focused_card_id = 0;
     }
     card_remove(l, cr->card_id);
@@ -961,22 +965,18 @@ static struct yetty_ycore_void_result handle_clear(struct yetty_yterm_ymgui_laye
     }
 
     /* TODO: archive to ymgui-static-layer when KEEP_VISIBLE flag set. */
+    /* Same reasoning as handle_card_remove: client-initiated clear, no
+     * point emitting a FOCUS-LOST envelope back — the bytes would land
+     * in the PTY buffer past the client's shutdown and surface as
+     * visible base64 at the next shell prompt. */
     if (cl->card_id == YMGUI_CARD_ID_NONE) {
-        if (l->focused_card_id) {
-            struct yetty_ycore_void_result ef = emit_focus(l, l->focused_card_id, 0);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
-                                "handle_clear: emit_focus(all) failed");
-            l->focused_card_id = 0;
-        }
+        l->focused_card_id = 0;
         for (size_t i = 0; i < l->card_count; i++) {
             card_destroy(l->cards[i]);
         }
         l->card_count = 0;
     } else {
         if (l->focused_card_id == cl->card_id) {
-            struct yetty_ycore_void_result ef = emit_focus(l, cl->card_id, 0);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
-                                "handle_clear: emit_focus(one) failed");
             l->focused_card_id = 0;
         }
         card_remove(l, cl->card_id);

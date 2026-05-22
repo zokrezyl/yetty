@@ -24,6 +24,15 @@ struct yetty_platform_input_pipe_ops {
     struct yetty_ycore_int_result (*read_fd)(const struct yetty_ycore_xthread_event_pipe *self);
     struct yetty_ycore_void_result (*set_event_loop)(struct yetty_ycore_xthread_event_pipe *self,
                                                      struct yetty_yevent_event_loop *loop);
+    /* Switch the producer side to non-blocking. After this, write() may
+     * return a short count (or 0) instead of blocking when the kernel
+     * buffer is full — the caller is responsible for retrying later.
+     * Required by single-threaded producer/consumer setups where blocking
+     * the writer would also park the consumer (e.g. telnet_pty feeding
+     * the wire-statemachine: both live on the same libuv loop, so a
+     * write that waits for the reader deadlocks the whole loop). */
+    struct yetty_ycore_void_result (*set_nonblocking_write)(
+        struct yetty_ycore_xthread_event_pipe *self);
 };
 
 /* Platform input pipe base */
