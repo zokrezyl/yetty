@@ -20,7 +20,7 @@ struct yetty_ydraw_gpu_allocator;
 struct yetty_ymsdf_generator;
 
 /* App GPU context - platform-owned GPU objects */
-struct yetty_yetty_app_gpu_context {
+struct yetty_yinit_gpu_context {
     WGPUInstance instance;
     WGPUSurface surface;
     uint32_t surface_width;
@@ -46,7 +46,7 @@ struct yetty_yetty_app_gpu_context {
 struct yetty_yplatform_window_manager;
 
 struct yetty_yetty_app_context {
-    struct yetty_yetty_app_gpu_context app_gpu_context;
+    struct yetty_yinit_gpu_context app_gpu_context;
     struct yetty_yconfig_config *config;
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     struct yetty_platform_clipboard_manager *clipboard_manager;
@@ -59,8 +59,8 @@ struct yetty_yetty_app_context {
 };
 
 /* Yetty GPU context - yetty-owned GPU objects */
-struct yetty_yetty_gpu_context {
-    struct yetty_yetty_app_gpu_context app_gpu_context;
+struct yetty_yruntime_gpu_context {
+    struct yetty_yinit_gpu_context app_gpu_context;
     WGPUAdapter adapter;
     WGPUDevice device;
     WGPUQueue queue;
@@ -77,7 +77,7 @@ struct yetty_yetty_gpu_context {
 /* Yetty context - passed down the hierarchy to terminals */
 struct yetty_context {
     struct yetty_yetty_app_context app_context;
-    struct yetty_yetty_gpu_context gpu_context;
+    struct yetty_yruntime_gpu_context gpu_context;
     struct yetty_yevent_event_loop *event_loop;
 };
 

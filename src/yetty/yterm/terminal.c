@@ -1380,7 +1380,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     ydebug("terminal_create: yrdawn layer registered for OSC 620000-620003");
 
     /* Create render targets for each layer */
-    const struct yetty_yetty_app_gpu_context *app_gpu = &yetty_context->gpu_context.app_gpu_context;
+    const struct yetty_yinit_gpu_context *app_gpu = &yetty_context->gpu_context.app_gpu_context;
     struct yetty_yrender_viewport layer_vp = {
         .x = 0, .y = 0, .w = (float)app_gpu->surface_width, .h = (float)app_gpu->surface_height};
     for (size_t i = 0; i < terminal->layer_count; i++) {

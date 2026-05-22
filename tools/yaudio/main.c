@@ -60,7 +60,7 @@ struct yaudio_app {
     int    quit;
 
     /* GPU + UI state. */
-    struct yetty_yetty_app_gpu_context  app_gpu;
+    struct yetty_yinit_gpu_context  app_gpu;
     struct yetty_context                ctx;
     struct yetty_ydraw_gpu_allocator   *allocator;
     struct yetty_ymsdf_generator       *msdf;
