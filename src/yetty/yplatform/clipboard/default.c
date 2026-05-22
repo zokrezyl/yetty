@@ -33,8 +33,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+/* POSIX-only headers — used by the X11/Wayland PRIMARY-selection
+ * helper below. The whole helper is `#if !defined(_WIN32)`, so MSVC
+ * never sees fork / execvp / waitpid / unistd. */
 #include <unistd.h>
 #include <sys/wait.h>
+#endif
 
 struct yetty_yplatform_glfw_clipboard_manager {
     struct yetty_platform_clipboard_manager base;
@@ -65,6 +70,16 @@ struct yetty_yplatform_glfw_clipboard_manager {
  * isn't installed; we don't bubble that up as an error because the
  * CLIPBOARD path still works and falling back silently matches the
  * "best-effort PRIMARY" intent. */
+#ifdef _WIN32
+/* Windows has a single system clipboard and no PRIMARY counterpart;
+ * GLFW's glfwSetClipboardString covers the only target there is, so
+ * the per-callback PRIMARY push is a no-op on this platform. */
+static void write_primary_selection(const char *text, size_t len)
+{
+    (void)text;
+    (void)len;
+}
+#else
 static void write_primary_selection(const char *text, size_t len)
 {
     if (!text || len == 0) {
@@ -145,6 +160,7 @@ static void write_primary_selection(const char *text, size_t len)
         yinfo("clipboard: wrote %zu bytes to PRIMARY via %s", len, helper);
     }
 }
+#endif /* !_WIN32 */
 
 static struct yetty_ycore_void_result glfw_clipboard_destroy(
     struct yetty_platform_clipboard_manager *self)
