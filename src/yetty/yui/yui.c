@@ -1838,6 +1838,11 @@ struct yetty_ygui_widget *yetty_yui_statusbar(struct yetty_yui *yui)
     return yui ? yui->statusbar : NULL;
 }
 
+struct yetty_ygui_engine *yetty_yui_engine(struct yetty_yui *yui)
+{
+    return yui ? yui->engine : NULL;
+}
+
 void yetty_yui_set_status_left(struct yetty_yui *yui, const char *text)
 {
     if (!yui || !yui->statusbar) {

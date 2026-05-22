@@ -4,6 +4,7 @@
 
 add_library(yetty_yaudio STATIC
     wav.c
+    envelope.c
     intervals.c
 )
 

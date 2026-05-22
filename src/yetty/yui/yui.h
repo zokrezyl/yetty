@@ -161,6 +161,19 @@ void yetty_yui_show_context_menu(struct yetty_yui *yui, float anchor_x, float an
  * widget returned by yetty_yui_statusbar(). NULL when ygui engine
  * allocation failed. */
 struct yetty_ygui_widget *yetty_yui_statusbar(struct yetty_yui *yui);
+
+/* Direct access to yui's ygui engine — for consumers that want to add
+ * free-floating widgets (yplot, custom layouts) outside the tabbar /
+ * statusbar / menu chrome that yui owns. NULL if engine allocation
+ * failed at create time. Caller must not destroy. */
+struct yetty_ygui_engine *yetty_yui_engine(struct yetty_yui *yui);
+
+/* Dispatch a platform input event into yui (forwards mouse/key/char
+ * into the ygui engine for widget hit-testing and click handling).
+ * Returns 1 if the event was consumed by a widget / overlay; 0 if it
+ * passed through and the caller should try its own handler. */
+struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
+                                                  const struct yetty_yui_event *event);
 void yetty_yui_set_status_left(struct yetty_yui *yui, const char *text);
 void yetty_yui_set_status_right(struct yetty_yui *yui, const char *text);
 

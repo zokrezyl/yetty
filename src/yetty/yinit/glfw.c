@@ -114,8 +114,13 @@ static int yinit_worker_trampoline(void *arg)
 }
 
 int yetty_yinit_run(int argc, char **argv,
+                    const struct yetty_yinit_app_config *app_cfg,
                     yetty_yinit_worker_fn worker, void *user)
 {
+    struct yetty_yinit_app_config defaults = {0};
+    if (!app_cfg) {
+        app_cfg = &defaults;
+    }
     /* Platform paths */
     //TODO adapt path reading using the new api that reads a struct
     const char *cache_dir = yetty_yplatform_get_cache_dir();
@@ -152,20 +157,22 @@ int yetty_yinit_run(int argc, char **argv,
         setenv("YETTY_BIN_DIR", paths.bin_dir, 1);
     }
 
-    /* Extract bundled assets into data/config dirs BEFORE loading config —
-     * on first launch the config file lives inside the bundle and only
-     * exists on disk after this step. Depends only on the platform paths,
-     * not on config. */
-    {
-        struct yetty_ycore_void_result extract_result = yetty_platform_extract_assets();
+    /* Extract bundled assets — app-specific. yetty supplies a callback
+     * that unpacks its brotli/incbin'd shaders, fonts, configs and
+     * kernels. Standalone apps with no bundled content pass NULL and
+     * the brotli/yncbin link is never created. */
+    if (app_cfg->extract_assets_fn) {
+        struct yetty_ycore_void_result extract_result = app_cfg->extract_assets_fn();
         if (!YETTY_IS_OK(extract_result)) {
             fprintf(stderr, "Failed to extract assets: %s\n",
                     extract_result.error.msg ? extract_result.error.msg : "(no msg)");
             yetty_ycore_error_destroy(extract_result.error);
             return 1;
         }
+        ydebug("yinit: assets extracted");
+    } else {
+        ydebug("yinit: no asset extraction callback supplied");
     }
-    ydebug("yinit: assets extracted");
 
     /* Config — parses argv. -h/--help and unknown-flag errors exit() from
      * inside yetty_yconfig_create, so anything that needs a display server
