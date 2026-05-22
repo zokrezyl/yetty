@@ -707,6 +707,36 @@ static struct layer_coro *get_or_spawn_layer_coro(
     return lc;
 }
 
+/* Re-spawn the per-layer dispatch coro after it exited (returned from
+ * process_input). The wire-SM contract is "process_input must loop
+ * forever; return is fatal" — but in practice every layer's process_input
+ * propagates errors via YETTY_RETURN_IF_ERR, which makes the coro finish.
+ * Without respawn, the next envelope routed to that layer would also see
+ * a dead coro, and the body bytes would leak through raw_pump → vterm.
+ * Respawn keeps the layer alive for subsequent envelopes; the caller is
+ * still responsible for skipping the rest of the current envelope's body
+ * via the no-layer drain path so no body bytes reach the default sink. */
+static int respawn_layer_coro(struct layer_coro *lc)
+{
+    if (!lc) return 0;
+    if (YETTY_IS_ERR(lc->result)) {
+        yetty_ycore_error_destroy(lc->result.error);
+    }
+    lc->result = YETTY_OK_VOID();
+    if (lc->coro) {
+        yetty_yplatform_coro_destroy(lc->coro);
+        lc->coro = NULL;
+    }
+    struct yplatform_coro_ptr_result sp = yetty_yplatform_coro_spawn(
+        layer_coro_entry, lc, 1024 * 1024, "wire-layer");
+    if (YETTY_IS_ERR(sp)) {
+        yetty_ycore_error_destroy(sp.error);
+        return 0;
+    }
+    lc->coro = sp.value;
+    return 1;
+}
+
 /* Reset per-envelope state at the start of a new envelope. */
 static void envelope_reset(struct yetty_ywire_wire_statemachine *statemachine)
 {
@@ -983,24 +1013,40 @@ static void sm_coro_entry(void *arg)
                     break;
                 }
                 struct layer_coro *lc = find_layer_coro(sm, sm->default_layer);
-                if (lc && lc->coro &&
-                    !yetty_yplatform_coro_is_finished(lc->coro)) {
+                if (lc) {
+                    /* If the default-layer coro previously exited, respawn
+                     * it. Without this, raw bytes after the first failure
+                     * just pile up in the ring forever (no consumer) — or
+                     * worse, get dropped by the no-default-sink fallback. */
+                    if (!lc->coro || yetty_yplatform_coro_is_finished(lc->coro)) {
+                        if (YETTY_IS_ERR(lc->result)) {
+                            ywarn("wire: default-layer coro had exited (%s); respawning",
+                                  lc->result.error.msg);
+                        }
+                        if (!respawn_layer_coro(lc)) {
+                            sm->sm_result = YETTY_ERR(
+                                yetty_ycore_void,
+                                "wire: respawn of dead default-layer coro failed");
+                            return;
+                        }
+                    }
                     /* Resume the persistent default-layer coro. It will
                      * consume raw bytes via sm_read until the ring
                      * is empty for raw mode or sees ESC at head, then
                      * yield back to us. */
                     yetty_yplatform_coro_resume(lc->coro);
                     if (yetty_yplatform_coro_is_finished(lc->coro)) {
-                        /* Layer's process_input returned — fatal: it
-                         * is supposed to loop forever. Surface the
-                         * stashed result. */
-                        sm->sm_result = YETTY_IS_ERR(lc->result)
-                            ? YETTY_ERR(yetty_ycore_void,
-                                        "wire: default layer coro exited",
-                                        lc->result)
-                            : YETTY_ERR(yetty_ycore_void,
-                                        "wire: default layer coro exited unexpectedly");
-                        return;
+                        /* process_input returned — that's a violation
+                         * of the loop-forever contract. Log loudly and
+                         * leave the respawn for the next loop iteration
+                         * (so this isn't fatal to the SM). */
+                        if (YETTY_IS_ERR(lc->result)) {
+                            ywarn("wire: default-layer coro exited mid-stream: %s",
+                                  lc->result.error.msg);
+                        } else {
+                            ywarn("wire: default-layer coro returned cleanly "
+                                  "(was supposed to loop forever)");
+                        }
                     }
                     /* After resume: re-evaluate state in the outer loop. */
                     break;
@@ -1162,26 +1208,65 @@ static void sm_coro_entry(void *arg)
                  * layer. The layer was registered before the first byte
                  * arrived, so its coro must already exist. */
                 struct layer_coro *lc = find_layer_coro(sm, sm->current_layer);
-                if (!lc || !lc->coro) {
+                if (!lc) {
                     sm->sm_result = YETTY_ERR(
                         yetty_ycore_void,
                         "wire: no persistent coro for OSC layer");
                     return;
                 }
-                if (yetty_yplatform_coro_is_finished(lc->coro)) {
-                    sm->sm_result = YETTY_IS_ERR(lc->result)
-                        ? YETTY_ERR(yetty_ycore_void,
-                                    "wire: OSC layer coro exited",
-                                    lc->result)
-                        : YETTY_ERR(yetty_ycore_void,
-                                    "wire: OSC layer coro exited unexpectedly");
-                    return;
+                /* The wire-SM contract is "process_input loops forever",
+                 * but in practice layers propagate errors via
+                 * YETTY_RETURN_IF_ERR which finishes the coro. If we
+                 * detect a finished coro here (either because a prior
+                 * envelope's dispatch failed or because the layer was
+                 * implemented as a one-shot), respawn so future
+                 * envelopes have somewhere to dispatch; the *current*
+                 * envelope's body still has to be drained so its
+                 * remaining b64 bytes don't fall through to the default
+                 * text layer and paint as visible OSC text. The drop is
+                 * handled by setting current_layer=NULL — the outer
+                 * loop's "no registered layer" branch then advances
+                 * read_pos to the envelope terminator. */
+                if (!lc->coro || yetty_yplatform_coro_is_finished(lc->coro)) {
+                    if (YETTY_IS_ERR(lc->result)) {
+                        ywarn("wire: layer coro for OSC %d had exited (%s); "
+                              "respawning and dropping current envelope body",
+                              sm->current_code, lc->result.error.msg);
+                    }
+                    if (!respawn_layer_coro(lc)) {
+                        sm->sm_result = YETTY_ERR(
+                            yetty_ycore_void,
+                            "wire: respawn of dead OSC layer coro failed");
+                        return;
+                    }
+                    sm->current_layer = NULL;
+                    break;
                 }
 
                 /* Resume the layer. It will pull body bytes via sm_read
                  * until the iter signals EOE, then loop to its next
                  * envelope (yielding back here when the carry is empty). */
                 yetty_yplatform_coro_resume(lc->coro);
+
+                /* If the layer coro returned during this resume (its
+                 * process_input hit YETTY_RETURN_IF_ERR on a malformed
+                 * payload, or finished its one-shot dispatch), abandon
+                 * the rest of this envelope through the no-layer drain
+                 * path. The respawn happens lazily on the next envelope
+                 * routed to this layer (the lc->coro==finished check
+                 * above), so we don't have to do it here. */
+                if (yetty_yplatform_coro_is_finished(lc->coro)) {
+                    if (YETTY_IS_ERR(lc->result)) {
+                        ywarn("wire: layer coro for OSC %d exited mid-envelope: %s",
+                              sm->current_code, lc->result.error.msg);
+                    } else {
+                        ywarn("wire: layer coro for OSC %d returned cleanly "
+                              "(process_input was supposed to loop forever)",
+                              sm->current_code);
+                    }
+                    sm->current_layer = NULL;
+                    break;
+                }
 
                 if (sm->terminator_seen) {
                     sm->state = SCAN_RAW;

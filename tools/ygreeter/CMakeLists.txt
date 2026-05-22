@@ -29,15 +29,6 @@ target_include_directories(ygreeter PRIVATE
 # stays explicit — ygreeter calls yetty_yplatform_* directly.
 target_link_libraries(ygreeter PRIVATE ygui yetty_yplatform_core)
 
-# Video tab — drives the ygui_yvideo widget. The widget lives inside
-# ygui_core now (yetty_yvideo_core + yvideo-mp4.c are PUBLIC link
-# transitives via ygui), so ygreeter doesn't need its own minimp4 /
-# yvideo linkage. The compile define just gates the Video tab code
-# in main.c on the feature flag.
-if(YETTY_ENABLE_FEATURE_YVIDEO)
-    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YVIDEO)
-endif()
-
 # Optional showcase widgets — each gated on the feature flag that turns
 # the underlying backend on. Missing flag → tab silently absent.
 if(YETTY_ENABLE_FEATURE_YMARKDOWN)
@@ -84,13 +75,12 @@ if(YETTY_ENABLE_LIB_INCBIN)
     file(REMOVE_RECURSE "${_YGREETER_EMBED_DIR}")
     file(MAKE_DIRECTORY "${_YGREETER_EMBED_DIR}")
 
-    # Structurally required by the Images / Video tabs.
+    # Structurally required by the Images tab.
     foreach(_F
             "assets/logo-1.jpeg"
             "assets/logo-2.jpeg"
             "assets/logo-3.jpeg"
-            "assets/logo-4.jpeg"
-            "assets/yetty-unchained-2.mp4")
+            "assets/logo-4.jpeg")
         if(EXISTS "${YETTY_ROOT}/${_F}")
             get_filename_component(_NAME "${_F}" NAME)
             configure_file("${YETTY_ROOT}/${_F}"

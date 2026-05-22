@@ -209,9 +209,32 @@ static struct yetty_ycore_void_result ygui_uv_pty_op_destroy(struct yetty_platfo
     if (!p) {
         return YETTY_OK_VOID();
     }
-    /* Free any queued requests that haven't fired yet. The in-flight
-     * request, if any, will free itself when its callback runs — we
-     * leave it alone here; uv_close below schedules teardown. */
+    /* engine_destroy queues the exit-time OSCs (unsubscribe clicks/moves,
+     * kill_card, CARD_REMOVE) through ops->write right before tearing
+     * the pty down. Those writes get appended to p->head; only the
+     * already-in-flight request would actually reach the fd on its own.
+     * If we free the queue tail without flushing, the receiving terminal
+     * never sees the cleanup OSCs — the card stays painted, mouse
+     * subscriptions stay on, and the ymgui-layer keeps routing events
+     * to a process that's gone. Drain by pumping the loop until both
+     * the queue and the in-flight slot are empty. The safety counter
+     * caps the worst case (pipe permanently EAGAIN, peer dead, etc.). */
+    if (p->pipe_open && (p->head || p->in_flight)) {
+        uv_loop_t *loop = ((uv_handle_t *)&p->pipe)->loop;
+        if (loop) {
+            int safety = 4096;
+            while ((p->head || p->in_flight) && safety-- > 0) {
+                uv_run(loop, UV_RUN_NOWAIT);
+            }
+            if (p->head || p->in_flight) {
+                yerror("ygui_uv_pty: flush gave up with %s%s pending",
+                       p->in_flight ? "in-flight " : "",
+                       p->head ? "queued" : "");
+            }
+        }
+    }
+    /* Anything still queued after the flush is unreachable — peer closed
+     * or loop refused to make progress. Free without leaking. */
     while (p->head) {
         struct ygui_uv_write_req *wr = p->head;
         p->head = wr->next;

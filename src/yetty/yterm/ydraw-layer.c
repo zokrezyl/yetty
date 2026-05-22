@@ -5,6 +5,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ydraw-core/figure-types.h>
 #include <yetty/ydraw-factory/figure-factory.h>
@@ -460,9 +461,21 @@ static struct yetty_ycore_void_result ydraw_layer_destroy(struct yetty_yrender_t
     return YETTY_OK_VOID();
 }
 
-/* Process — thin dispatcher over the OSC SM. CLEAR wipes the canvas;
- * BIN / OVERLAY forward straight to the canvas's streaming process_input
- * which pulls prim bytes off the SM (the SM owns b64 + lz4 decoding).
+/* Process — persistent layer coro entry. The wire-statemachine resumes
+ * this once and treats a return as fatal layer exit (with the side
+ * effect that any partial envelope body still in the SM ring gets
+ * leaked to the default text-layer as raw text on respawn). So we must
+ * loop forever, yielding after each envelope.
+ *
+ * Each iteration handles one envelope:
+ *   CLEAR              — wipe the canvas, no body to drain.
+ *   BIN / OVERLAY      — framed YDrawList; canvas->process_input streams
+ *   SCENE_BIN            it off the SM (b64 + lz4 decoded by the SM).
+ *                        Those canvas implementations own their own
+ *                        long-lived loop, so the call doesn't return —
+ *                        the outer for(;;) is reached only on the CLEAR
+ *                        path. That's fine: only the layers registered
+ *                        for CLEAR need the loop to survive that code.
  * YAML is no longer accepted on the wire — yaml is producer-side only. */
 static struct yetty_ycore_void_result ydraw_layer_process_input(
     struct yetty_yrender_terminal_layer *self,
@@ -470,32 +483,31 @@ static struct yetty_ycore_void_result ydraw_layer_process_input(
 {
     struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
 
-    int code = yetty_ywire_wire_statemachine_code(osc_statemachine);
-    struct yetty_ycore_void_result r;
-    switch (code) {
-    case YETTY_OSC_YDRAW_CLEAR:
-        r = layer->canvas->ops->clear(layer->canvas);
-        break;
-    case YETTY_OSC_YDRAW_BIN:
-    case YETTY_OSC_YDRAW_OVERLAY:
-    case YETTY_OSC_YDRAW_SCENE_BIN:
-        /* All three carry a framed YDrawList envelope; the canvas's
-         * process_input pulls bytes off the wire-statemachine. The
-         * code distinction matters only to yterm's routing (which
-         * decides which layer/canvas variant receives the bytes) — by
-         * the time we're here the canvas already is the right kind. */
-        r = layer->canvas->ops->process_input(layer->canvas, osc_statemachine);
-        break;
-    default:
-        return YETTY_ERR(yetty_ycore_void, "ydraw: unexpected OSC code");
-    }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw: canvas process failed");
+    for (;;) {
+        int code = yetty_ywire_wire_statemachine_code(osc_statemachine);
+        struct yetty_ycore_void_result r;
+        switch (code) {
+        case YETTY_OSC_YDRAW_CLEAR:
+            r = layer->canvas->ops->clear(layer->canvas);
+            break;
+        case YETTY_OSC_YDRAW_BIN:
+        case YETTY_OSC_YDRAW_OVERLAY:
+        case YETTY_OSC_YDRAW_SCENE_BIN:
+            r = layer->canvas->ops->process_input(layer->canvas, osc_statemachine);
+            break;
+        default:
+            return YETTY_ERR(yetty_ycore_void, "ydraw: unexpected OSC code");
+        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw: canvas process failed");
 
-    layer->base.dirty = 1;
-    if (layer->base.request_render_fn) {
-        layer->base.request_render_fn(layer->base.request_render_userdata);
+        layer->base.dirty = 1;
+        if (layer->base.request_render_fn) {
+            layer->base.request_render_fn(layer->base.request_render_userdata);
+        }
+        /* Yield so the SM can clear terminator_seen and queue the next
+         * envelope's body before resuming us. */
+        yetty_yplatform_coro_yield();
     }
-    return YETTY_OK_VOID();
 }
 
 /* Single atomic update: both grid_size and cell_size. The canvas's

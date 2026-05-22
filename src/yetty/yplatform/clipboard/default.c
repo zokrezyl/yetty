@@ -28,8 +28,13 @@
 #include <yetty/ytrace/ytrace.h>
 
 #include <GLFW/glfw3.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 struct yetty_yplatform_glfw_clipboard_manager {
     struct yetty_platform_clipboard_manager base;
@@ -40,6 +45,106 @@ struct yetty_yplatform_glfw_clipboard_manager {
      * off here. NULL means "drop unknown events". */
     struct yetty_yplatform_window_manager *window_manager;
 };
+
+/* Write `len` bytes of `text` to the X11 PRIMARY selection (Wayland's
+ * primary-selection on Wayland) by spawning a child helper. GLFW's
+ * glfwSetClipboardString covers CLIPBOARD only — the selection that
+ * `Ctrl+V` reads. PRIMARY (what middle-click paste reads on X11 and
+ * what most standard terminals auto-populate on selection) needs a
+ * separate selection owner. Rather than build one inside the clipboard
+ * manager (it would need its own X11 event pump to respond to
+ * SelectionRequest events from peer apps), pipe the text into a
+ * fire-and-forget helper that already does it correctly:
+ *
+ *   X11      → xclip -selection primary
+ *   Wayland  → wl-copy --primary
+ *
+ * The helper reads stdin, then forks itself into the background and
+ * owns the selection until a peer overwrites it. We close our half of
+ * the pipe and reap; the child detaches itself. No-op if the helper
+ * isn't installed; we don't bubble that up as an error because the
+ * CLIPBOARD path still works and falling back silently matches the
+ * "best-effort PRIMARY" intent. */
+static void write_primary_selection(const char *text, size_t len)
+{
+    if (!text || len == 0) {
+        return;
+    }
+    /* Pick the helper by session type. Default to xclip — most X11
+     * users have it, and on a Wayland session that runs XWayland the
+     * X11 helper still works for XWayland clients (good enough). The
+     * Wayland-native path needs wl-copy if the user wants peer Wayland
+     * apps to see PRIMARY. */
+    const char *wl = getenv("WAYLAND_DISPLAY");
+    const char *helper;
+    char *const xclip_argv[] = {"xclip", "-selection", "primary", "-in", NULL};
+    char *const wlcopy_argv[] = {"wl-copy", "--primary", NULL};
+    char *const *argv;
+    if (wl && *wl) {
+        helper = "wl-copy";
+        argv = wlcopy_argv;
+    } else {
+        helper = "xclip";
+        argv = xclip_argv;
+    }
+
+    int pipefd[2];
+    if (pipe(pipefd) != 0) {
+        ywarn("clipboard: PRIMARY pipe() failed");
+        return;
+    }
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        ywarn("clipboard: PRIMARY fork() failed");
+        return;
+    }
+    if (pid == 0) {
+        /* Child: stdin from the pipe, stdout/stderr discarded so the
+         * helper's chatter doesn't pollute yetty's stdout. */
+        dup2(pipefd[0], 0);
+        int devnull = open("/dev/null", 1);
+        if (devnull >= 0) {
+            dup2(devnull, 1);
+            dup2(devnull, 2);
+            if (devnull > 2) close(devnull);
+        }
+        close(pipefd[0]);
+        close(pipefd[1]);
+        execvp(helper, argv);
+        _exit(127);
+    }
+    /* Parent: write text to child's stdin, close, reap. xclip/wl-copy
+     * fork themselves to background once stdin EOFs, so waitpid here
+     * returns immediately after the foreground half exits. */
+    close(pipefd[0]);
+    ssize_t off = 0;
+    while ((size_t)off < len) {
+        ssize_t w = write(pipefd[1], text + off, len - (size_t)off);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        off += w;
+    }
+    close(pipefd[1]);
+    int status = 0;
+    (void)waitpid(pid, &status, 0);
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 127) {
+        /* execvp couldn't find the helper. First selection of the
+         * session is enough to log once; subsequent ones stay silent. */
+        static int warned = 0;
+        if (!warned) {
+            ywarn("clipboard: PRIMARY helper '%s' not installed — install %s for "
+                  "middle-click paste from yetty to other apps",
+                  helper, helper);
+            warned = 1;
+        }
+    } else {
+        yinfo("clipboard: wrote %zu bytes to PRIMARY via %s", len, helper);
+    }
+}
 
 static struct yetty_ycore_void_result glfw_clipboard_destroy(
     struct yetty_platform_clipboard_manager *self)
@@ -136,7 +241,16 @@ static struct yetty_ycore_void_result glfw_clipboard_drain(
         case YETTY_YCORE_COPY: {
             char *text = ev.payload;
             if (text) {
+                size_t tlen = strlen(text);
+                /* CLIPBOARD selection (Ctrl+V target on every desktop).
+                 * GLFW owns the selection on X11 via its helper window
+                 * and on Wayland via wl_data_device_set_selection. */
                 glfwSetClipboardString(NULL, text);
+                /* PRIMARY selection (middle-click paste target on X11
+                 * and Wayland). GLFW doesn't expose it, so we pipe the
+                 * text into xclip/wl-copy. Fire-and-forget — the helper
+                 * detaches and owns the selection. */
+                write_primary_selection(text, tlen);
                 free(text);
             }
             break;
@@ -146,6 +260,8 @@ static struct yetty_ycore_void_result glfw_clipboard_drain(
              * post the result back to the render thread as a PASTE event
              * with the text in payload. */
             const char *got = glfwGetClipboardString(NULL);
+            yinfo("clipboard: get_clipboard_string -> %zu bytes",
+                  got ? strlen(got) : 0);
             char *copy = NULL;
             if (got) {
                 size_t glen = strlen(got);
