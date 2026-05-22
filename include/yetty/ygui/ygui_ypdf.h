@@ -48,6 +48,12 @@ struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(
     float x, float y, float w, float h,
     const uint8_t *data, size_t len);
 
+/* Default sample PDF embedded into ygui_ypdf. Returns NULL on failure
+ * or when the library was built without an asset. */
+struct yetty_ygui_widget *yetty_ygui_engine_ypdf_default(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h);
+
 /*=============================================================================
  * Scroll API
  *

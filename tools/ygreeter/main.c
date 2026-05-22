@@ -2243,62 +2243,43 @@ int main(int argc, char **argv)
     }
 #endif
 
-    /* Markdown / HTML / PDF widget showcase tabs — each shows one
-     * sample document via the corresponding ygui widget. The widget
-     * fills its tab via flex: 1; if the bundled sample isn't found
-     * the tab is silently skipped (the feature was probably built
-     * without the dependency). */
+    /* Markdown / HTML / PDF widget showcase tabs — each renders the
+     * default sample that the widget library carries via its own
+     * incbin (no separate file ship needed; the README.md / sample.html
+     * / test-comprehensive.pdf bytes live inside the .a/.lib). */
 #ifdef YGREETER_HAS_YMARKDOWN
     {
-        char *md_path = locate_asset(argv[0], "README.md", "README.md");
-        if (md_path) {
-            struct yetty_ygui_widget *tab =
-                yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
-            struct yetty_ygui_widget *w = yetty_ygui_engine_ymarkdown_from_file(
-                app.engine, "md_view", 0, 0, 100, 100, md_path);
-            if (w) {
-                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-                yetty_ygui_widget_add_child(tab, w);
-            }
-            free(md_path);
+        struct yetty_ygui_widget *tab =
+            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
+        struct yetty_ygui_widget *w =
+            yetty_ygui_engine_ymarkdown_default(app.engine, "md_view", 0, 0, 100, 100);
+        if (w) {
+            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_widget_add_child(tab, w);
         }
     }
 #endif
 #ifdef YGREETER_HAS_YBROWSER
     {
-        char *html_path =
-            locate_asset(argv[0], "sample.html", "demo/ygui/26_ybrowser/sample.html");
-        if (html_path) {
-            struct yetty_ygui_widget *tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
-            struct yetty_ygui_widget *w = yetty_ygui_engine_ybrowser_from_file(
-                app.engine, "html_view", 0, 0, 100, 100, html_path);
-            if (w) {
-                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-                yetty_ygui_widget_add_child(tab, w);
-            }
-            free(html_path);
+        struct yetty_ygui_widget *tab =
+            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
+        struct yetty_ygui_widget *w =
+            yetty_ygui_engine_ybrowser_default(app.engine, "html_view", 0, 0, 100, 100);
+        if (w) {
+            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_widget_add_child(tab, w);
         }
     }
 #endif
 #ifdef YGREETER_HAS_YPDF
     {
-        /* Embedded under the flat name "pdf-sample.pdf" regardless of
-         * which source PDF the build picked up; the dev fallback tries
-         * the comprehensive one first and then the smaller sample. */
-        char *pdf_path = locate_asset(argv[0], "pdf-sample.pdf",
-                                      "test/ut/ypdf/test-comprehensive.pdf");
-        if (!pdf_path) {
-            pdf_path = find_repo_image(argv[0], "test/ut/ypdf/pdf-sample.pdf");
-        }
-        if (pdf_path) {
-            struct yetty_ygui_widget *tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "PDF");
-            struct yetty_ygui_widget *w =
-                yetty_ygui_engine_ypdf_from_file(app.engine, "pdf_view", 0, 0, 100, 100, pdf_path);
-            if (w) {
-                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-                yetty_ygui_widget_add_child(tab, w);
-            }
-            free(pdf_path);
+        struct yetty_ygui_widget *tab =
+            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "PDF");
+        struct yetty_ygui_widget *w =
+            yetty_ygui_engine_ypdf_default(app.engine, "pdf_view", 0, 0, 100, 100);
+        if (w) {
+            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_widget_add_child(tab, w);
         }
     }
 #endif

@@ -171,3 +171,31 @@ struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_from_buffer(
     return render_with_base(engine, id, x, y, w, h,
                             (const char *)data, len, base_url);
 }
+
+/* Built-in default sample (demo/ygui/26_ybrowser/sample.html), baked
+ * into the library via ygui_embed_default_asset (incbin / RCDATA). */
+#include "ygui_ybrowser_ybrowser_default_manifest.h"
+
+static const uint8_t *g_ybrowser_default_data = NULL;
+static size_t g_ybrowser_default_size = 0;
+static void ybrowser_capture_default(const char *name, const uint8_t *data,
+                                      size_t size, int compressed)
+{
+    (void)name;
+    (void)compressed;
+    g_ybrowser_default_data = data;
+    g_ybrowser_default_size = size;
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_default(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h)
+{
+    if (!g_ybrowser_default_data) {
+        register_ybrowser_default_assets_c(ybrowser_capture_default);
+    }
+    /* base_url=NULL — sample.html is self-contained. */
+    return yetty_ygui_engine_ybrowser_from_buffer(
+        engine, id, x, y, w, h,
+        g_ybrowser_default_data, g_ybrowser_default_size, NULL);
+}

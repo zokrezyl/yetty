@@ -39,6 +39,12 @@ struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_from_buffer(
     float x, float y, float w, float h,
     const uint8_t *data, size_t len, const char *base_url);
 
+/* Default sample HTML embedded into ygui_ybrowser. Returns NULL on
+ * failure or when the library was built without an asset. */
+struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_default(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h);
+
 #ifdef __cplusplus
 }
 #endif

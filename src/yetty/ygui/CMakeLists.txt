@@ -117,6 +117,36 @@ install(TARGETS ygui_core ARCHIVE DESTINATION lib)
 # flat paint list compatible with the RICH widget's render path.
 # ---------------------------------------------------------------------
 
+# Stage a single asset file under a per-library embed dir and feed it
+# through the shared incbin_add_directory pipeline. Same mechanism the
+# main yetty target uses for its shaders / fonts / images and ygreeter
+# uses for its data assets — so it's portable across every backend
+# (gcc/clang via .incbin, MSVC via RCDATA). The asset rides inside the
+# .a/.lib; consumers calling yetty_ygui_engine_<NAME>_default() get
+# bytes without shipping the file alongside the binary.
+function(ygui_embed_default_asset LIB_TARGET NAME ASSET_PATH)
+    if(NOT EXISTS "${ASSET_PATH}")
+        message(FATAL_ERROR
+            "ygui_embed_default_asset(${NAME}): asset not found at "
+            "${ASSET_PATH}")
+    endif()
+    set(_EMBED_DIR "${CMAKE_CURRENT_BINARY_DIR}/${LIB_TARGET}-embed-default")
+    file(REMOVE_RECURSE "${_EMBED_DIR}")
+    file(MAKE_DIRECTORY "${_EMBED_DIR}")
+    get_filename_component(_NAME "${ASSET_PATH}" NAME)
+    configure_file("${ASSET_PATH}" "${_EMBED_DIR}/${_NAME}" COPYONLY)
+    # COMPRESS=FALSE: assets are tiny (≤16 kB) — brotli framing would
+    # cost more than it saves and would force every widget lib to link
+    # brotlidec for the runtime decode. The generated manifest exposes
+    # register_<NAME>_default_assets_c(cb) which we call once at first
+    # _default() invocation to cache the pointer.
+    incbin_add_directory(${LIB_TARGET} "${NAME}_default" "${_EMBED_DIR}" "*" FALSE)
+    # The manifest header lands in CMAKE_CURRENT_BINARY_DIR (per
+    # incbin.cmake convention). Add it to the lib's include path so the
+    # widget's .c can `#include "<libtarget>_<name>_default_manifest.h"`.
+    target_include_directories(${LIB_TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+endfunction()
+
 if(YETTY_ENABLE_FEATURE_YMARKDOWN)
     add_library(ygui_ymarkdown STATIC ygui_ymarkdown.c)
     target_include_directories(ygui_ymarkdown PUBLIC
@@ -125,6 +155,8 @@ if(YETTY_ENABLE_FEATURE_YMARKDOWN)
     )
     target_link_libraries(ygui_ymarkdown PUBLIC ygui_core yetty_ymarkdown)
     set_target_properties(ygui_ymarkdown PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    # Bundle the repo README as the markdown widget's default sample.
+    ygui_embed_default_asset(ygui_ymarkdown ymarkdown "${YETTY_ROOT}/README.md")
     install(TARGETS ygui_ymarkdown ARCHIVE DESTINATION lib)
 endif()
 
@@ -136,6 +168,8 @@ if(YETTY_ENABLE_FEATURE_YPDF)
     )
     target_link_libraries(ygui_ypdf PUBLIC ygui_core yetty_ypdf)
     set_target_properties(ygui_ypdf PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    ygui_embed_default_asset(ygui_ypdf ypdf
+        "${YETTY_ROOT}/test/ut/ypdf/test-comprehensive.pdf")
     install(TARGETS ygui_ypdf ARCHIVE DESTINATION lib)
 endif()
 
@@ -147,6 +181,8 @@ if(YETTY_ENABLE_FEATURE_YBROWSER)
     )
     target_link_libraries(ygui_ybrowser PUBLIC ygui_core yetty_ybrowser)
     set_target_properties(ygui_ybrowser PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    ygui_embed_default_asset(ygui_ybrowser ybrowser
+        "${YETTY_ROOT}/demo/ygui/26_ybrowser/sample.html")
     install(TARGETS ygui_ybrowser ARCHIVE DESTINATION lib)
 endif()
 

@@ -114,3 +114,30 @@ struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_from_buffer(
         yetty_ymarkdown_render((const char *)data, len, NULL, 0, &cfg);
     return attach_to_rich(engine, id, x, y, w, h, r);
 }
+
+/* Built-in default sample (the repo's README.md), baked into the
+ * library via ygui_embed_default_asset (incbin / RCDATA). */
+#include "ygui_ymarkdown_ymarkdown_default_manifest.h"
+
+static const uint8_t *g_ymarkdown_default_data = NULL;
+static size_t g_ymarkdown_default_size = 0;
+static void ymarkdown_capture_default(const char *name, const uint8_t *data,
+                                       size_t size, int compressed)
+{
+    (void)name;
+    (void)compressed;
+    g_ymarkdown_default_data = data;
+    g_ymarkdown_default_size = size;
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_default(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h)
+{
+    if (!g_ymarkdown_default_data) {
+        register_ymarkdown_default_assets_c(ymarkdown_capture_default);
+    }
+    return yetty_ygui_engine_ymarkdown_from_buffer(
+        engine, id, x, y, w, h,
+        g_ymarkdown_default_data, g_ymarkdown_default_size);
+}

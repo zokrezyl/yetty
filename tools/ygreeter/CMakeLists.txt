@@ -88,20 +88,10 @@ if(YETTY_ENABLE_LIB_INCBIN)
         endif()
     endforeach()
 
-    # Repo samples for the optional widget tabs. Flat names — main.c
-    # probes <data_dir>/<basename> for these, not their original repo path.
-    foreach(_PAIR
-            "README.md|README.md"
-            "demo/ygui/26_ybrowser/sample.html|sample.html"
-            "test/ut/ypdf/test-comprehensive.pdf|pdf-sample.pdf")
-        string(REPLACE "|" ";" _PARTS "${_PAIR}")
-        list(GET _PARTS 0 _SRC)
-        list(GET _PARTS 1 _DST)
-        if(EXISTS "${YETTY_ROOT}/${_SRC}")
-            configure_file("${YETTY_ROOT}/${_SRC}"
-                "${_YGREETER_EMBED_DIR}/${_DST}" COPYONLY)
-        endif()
-    endforeach()
+    # README / sample.html / test-comprehensive.pdf are NOT embedded here:
+    # the ygui_ymarkdown / ygui_ybrowser / ygui_ypdf widget libraries
+    # each carry their own default sample via incbin, and ygreeter's
+    # showcase tabs use the widget's `_default()` API.
 
     incbin_add_directory(ygreeter "data" "${_YGREETER_EMBED_DIR}" "*" TRUE)
 
