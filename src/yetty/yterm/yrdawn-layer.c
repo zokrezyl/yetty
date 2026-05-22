@@ -7,6 +7,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
@@ -1033,11 +1034,11 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_yrdawn_layer_create(
     l->base.cell_size.width = cell_width;
     l->base.cell_size.height = cell_height;
 
-    l->instance = context->gpu_context.app_gpu_context.instance;
-    l->adapter = context->gpu_context.adapter;
-    l->device = context->gpu_context.device;
-    l->queue = context->gpu_context.queue;
-    l->target_format = context->gpu_context.surface_format;
+    l->instance = context->runtime->gpu.app_gpu_context.instance;
+    l->adapter = context->runtime->gpu.adapter;
+    l->device = context->runtime->gpu.device;
+    l->queue = context->runtime->gpu.queue;
+    l->target_format = context->runtime->gpu.surface_format;
     l->base.dirty = 1;
 
     if (!build_pipeline(l)) {

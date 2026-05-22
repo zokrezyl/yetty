@@ -35,6 +35,7 @@
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
 #include <yetty/yfont/msdf-font.h>
@@ -508,8 +509,8 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
 
     /* figure factory + built-in registrations. */
     struct yetty_ydraw_raw_figure_factory_ptr_result factory_res = yetty_ydraw_raw_figure_factory_create(
-        context->gpu_context.device, context->gpu_context.queue,
-        context->gpu_context.surface_format, context->gpu_context.allocator,
+        context->runtime->gpu.device, context->runtime->gpu.queue,
+        context->runtime->gpu.surface_format, context->runtime->gpu.allocator,
         context->event_loop);
     if (YETTY_IS_ERR(factory_res)) {
         scrolling_canvas_destroy_internals(c);
@@ -588,7 +589,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
 #endif
 
     /* Dirs + font kind from config. */
-    struct yetty_yconfig_config *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->runtime->config;
     const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     const char *font_family = config->ops->font_family(config);
@@ -600,7 +601,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     strncpy(c->fonts_dir, fonts_dir, sizeof(c->fonts_dir) - 1);
     strncpy(c->font_family, font_family, sizeof(c->font_family) - 1);
     c->font_render_method = (strcmp(render_method, "raster") == 0) ? 1 : 0;
-    c->msdf_generator = context->gpu_context.msdf_generator;
+    c->msdf_generator = context->runtime->gpu.msdf_generator;
     ydebug("scrolling-canvas: font render_method='%s'", render_method);
 
     /* Per-canvas font cache. */

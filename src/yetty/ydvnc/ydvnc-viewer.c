@@ -17,6 +17,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
@@ -159,8 +160,8 @@ static struct yetty_ycore_void_result viewer_render(struct yetty_yui_view *view,
         return YETTY_ERR(yetty_ycore_void, "ydvnc viewer: no target view");
     }
 
-    WGPUDevice device = v->context.gpu_context.device;
-    WGPUQueue queue = v->context.gpu_context.queue;
+    WGPUDevice device = v->context.runtime->gpu.device;
+    WGPUQueue queue = v->context.runtime->gpu.queue;
 
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device, &enc_desc);
@@ -409,8 +410,8 @@ struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
     }
 
     struct yetty_ydvnc_rfb_client_ptr_result cres =
-        yetty_ydvnc_rfb_client_create(yetty_ctx->gpu_context.device, yetty_ctx->gpu_context.queue,
-                                      yetty_ctx->gpu_context.surface_format, yetty_ctx->event_loop);
+        yetty_ydvnc_rfb_client_create(yetty_ctx->runtime->gpu.device, yetty_ctx->runtime->gpu.queue,
+                                      yetty_ctx->runtime->gpu.surface_format, yetty_ctx->event_loop);
     if (YETTY_IS_ERR(cres)) {
         free(v->host);
         free(v);

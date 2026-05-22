@@ -1,3 +1,4 @@
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ywire/wire-statemachine.h>
@@ -821,7 +822,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     struct yetty_yterm_terminal_text_layer *text_layer;
 
     /* Load text-layer shader from file */
-    struct yetty_yconfig_config *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->runtime->config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char shader_path[512];
     snprintf(shader_path, sizeof(shader_path), "%s/text-layer.wgsl", shaders_dir);
@@ -884,7 +885,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
          * scale once here to framebuffer pixels so the glyphs render at
          * the right physical size on HiDPI displays without every other
          * pipeline stage having to know about content_scale. */
-        float content_scale = context->app_context.app_gpu_context.content_scale;
+        float content_scale = context->runtime->gpu.app_gpu_context.content_scale;
         if (content_scale <= 0.0f) {
             content_scale = 1.0f;
         }

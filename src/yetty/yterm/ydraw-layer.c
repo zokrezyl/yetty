@@ -18,6 +18,7 @@
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Uniform positions */
@@ -290,7 +291,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
     struct yetty_yterm_ydraw_layer *layer;
 
     /* Load ydraw-layer shader from file */
-    struct yetty_yconfig_config *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->runtime->config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char shader_path[512];
     char sdf_lib_path[512];

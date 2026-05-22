@@ -66,7 +66,7 @@ target_link_libraries(yaudio PRIVATE
     yetty_yaudio
     ${YETTY_LIBS}
     yetty_yplatform_core
-    yetty_yplatform_wayland_move
+    yetty_yplatform_move_resize
     yetty_yco
     yetty_telnet
     ${BROTLIDEC_LIBRARIES}

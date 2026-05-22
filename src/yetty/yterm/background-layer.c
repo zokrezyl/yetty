@@ -6,6 +6,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
@@ -117,7 +118,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_background_layer_create(
     if (!yetty_context) {
         return YETTY_ERR(yetty_yterm_terminal_layer, "yetty_context is NULL");
     }
-    struct yetty_yconfig_config *config = yetty_context->app_context.config;
+    struct yetty_yconfig_config *config = yetty_context->runtime->config;
     if (!config) {
         return YETTY_ERR(yetty_yterm_terminal_layer, "config is NULL");
     }
