@@ -1,34 +1,29 @@
 /*
  * tools/yaudio/main.c - audio analyzer GUI.
  *
- * Opens a window via yinit_run. The worker builds a full yetty_context
- * (adapter / device / queue / gpu_allocator / msdf_generator /
- * event_loop), creates a yui (which owns the scene-canvas + ygui
- * engine), then attaches a yplot widget showing the RMS envelope and
- * Prev/Next buttons that pan the plot's x range across the detected
- * noise intervals.
+ * Opens a window via yinit_run, hands the yinit_runtime to
+ * yetty_yruntime_create for the standard adapter / device / queue /
+ * allocator / msdf / event-loop / render-target bring-up (same code
+ * path the yetty terminal uses), then attaches a yui with a yplot
+ * widget showing the RMS envelope and Prev/Next buttons that pan
+ * across the detected noise intervals.
  *
  * Render loop: drain input pipe → update yplot view if selection
  * changed → clear target → yui_render → present.
  */
 
 #include <yetty/yinit/yinit.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yaudio/wav.h>
 #include <yetty/yaudio/envelope.h>
 #include <yetty/yaudio/intervals.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/extract-assets.h>
-#include <yetty/ywebgpu/request.h>
-#include <yetty/ywebgpu/limits.h>
-#include <yetty/webgpu/error.h>
-#include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ymsdf/generator.h>
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 
@@ -60,12 +55,10 @@ struct yaudio_app {
     int    selected;
     int    quit;
 
-    /* GPU + UI state. */
-    struct yetty_yinit_gpu_context  app_gpu;
-    struct yetty_context                ctx;
-    struct yetty_ydraw_gpu_allocator   *allocator;
-    struct yetty_ymsdf_generator       *msdf;
-    struct yetty_yevent_event_loop     *event_loop;
+    /* Generic GPU/event/render bring-up — owned here, lives for the
+     * lifetime of the worker. yui borrows everything through ctx.runtime. */
+    struct yetty_yruntime         *runtime;
+    struct yetty_context           ctx;
 
     struct yetty_yui              *yui;
     struct yetty_ygui_widget      *plot_widget;        /* energy envelope (dBFS) */
@@ -74,7 +67,6 @@ struct yaudio_app {
     struct yetty_ygui_widget      *prev_btn;
     struct yetty_ygui_widget      *next_btn;
     struct yetty_ygui_widget      *status_label;
-    struct yetty_ydraw_target     *render_target;
 
     /* Scratch buffers for the waveform widget.
      *
@@ -174,118 +166,6 @@ yaudio_load(struct yaudio_app *app)
     yinfo("yaudio: loaded %s — %.1f s, %zu intervals",
           app->wav_path,
           (double)app->wav->frames / (double)app->wav->sample_rate, app->iv->n);
-    return YETTY_OK_VOID();
-}
-
-/* ----------------------------------------------------------------------- */
-/* WGPU + yetty_context setup                                               */
-/* ----------------------------------------------------------------------- */
-
-static struct yetty_ycore_void_result
-init_gpu_context(struct yaudio_app *app, struct yetty_yinit_runtime *rt)
-{
-    WGPUInstance instance = (WGPUInstance)rt->instance;
-    WGPUSurface  surface  = (WGPUSurface)rt->surface;
-
-    /* Adapter. */
-    WGPURequestAdapterOptions opts = {0};
-    opts.compatibleSurface = surface;
-    opts.powerPreference   = WGPUPowerPreference_HighPerformance;
-    WGPUAdapter adapter = NULL;
-    int adapter_ready = 0;
-    WGPURequestAdapterCallbackInfo acb = {0};
-    acb.mode = WGPUCallbackMode_AllowSpontaneous;
-    acb.callback = yetty_ywebgpu_adapter_request_callback;
-    acb.userdata1 = &adapter;
-    acb.userdata2 = &adapter_ready;
-    wgpuInstanceRequestAdapter(instance, &opts, acb);
-    if (!adapter) return YETTY_ERR(yetty_ycore_void, "wgpu adapter request failed");
-
-    /* Device. */
-    WGPULimits limits;
-    yetty_ywebgpu_fill_default_limits(adapter, rt->config, &limits);
-    WGPUStringView dlabel = {.data = "yaudio device", .length = 13};
-    WGPUStringView qlabel = {.data = "yaudio queue",  .length = 12};
-    WGPUDeviceDescriptor dd = {0};
-    dd.label                       = dlabel;
-    dd.requiredLimits              = &limits;
-    dd.defaultQueue.label          = qlabel;
-    dd.uncapturedErrorCallbackInfo = yetty_ywebgpu_get_error_callback_info();
-    dd.deviceLostCallbackInfo      = yetty_ywebgpu_get_device_lost_callback_info();
-    WGPUDevice device = NULL;
-    struct yetty_ywebgpu_device_request_state dcb_state = {{0}, 0};
-    WGPURequestDeviceCallbackInfo dcb = {0};
-    dcb.mode      = WGPUCallbackMode_AllowSpontaneous;
-    dcb.callback  = yetty_ywebgpu_device_request_callback;
-    dcb.userdata1 = &device;
-    dcb.userdata2 = &dcb_state;
-    wgpuAdapterRequestDevice(adapter, &dd, dcb);
-    if (!device) return YETTY_ERR(yetty_ycore_void, "wgpu device request failed");
-    WGPUQueue queue = wgpuDeviceGetQueue(device);
-
-    /* Surface format + configure. */
-    WGPUTextureFormat surface_format = WGPUTextureFormat_BGRA8Unorm;
-    if (surface) {
-        WGPUSurfaceCapabilities caps = {0};
-        if (wgpuSurfaceGetCapabilities(surface, adapter, &caps) == WGPUStatus_Success
-         && caps.formatCount > 0) {
-            surface_format = caps.formats[0];
-            wgpuSurfaceCapabilitiesFreeMembers(caps);
-        }
-        WGPUSurfaceConfiguration sc = {0};
-        sc.device      = device;
-        sc.format      = surface_format;
-        sc.usage       = WGPUTextureUsage_RenderAttachment;
-        sc.width       = rt->surface_width;
-        sc.height      = rt->surface_height;
-        sc.presentMode = WGPUPresentMode_Fifo;
-        wgpuSurfaceConfigure(surface, &sc);
-    }
-
-    /* gpu_allocator. */
-    struct yetty_yrender_gpu_allocator_result ar =
-        yetty_yrender_gpu_allocator_create(device);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "wgpu gpu_allocator failed");
-    app->allocator = ar.value;
-
-    /* msdf. shaders_dir is set in the yconfig paths. */
-    const char *shaders_dir = rt->config->ops->get_string(rt->config, "paths/shaders", "");
-    struct yetty_ymsdf_generator_ptr_result mr =
-        yetty_ymsdf_generator_create_from_config(rt->config, device, instance, shaders_dir);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "msdf_generator create failed");
-    app->msdf = mr.value;
-
-    /* libuv event loop (yui_create uses it for the memory-pty wake). */
-    struct yetty_ycore_event_loop_result lr =
-        yetty_ycore_event_loop_create(rt->platform_input_pipe);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "event_loop create failed");
-    app->event_loop = lr.value;
-
-    /* Build the contexts. */
-    app->app_gpu.instance       = instance;
-    app->app_gpu.surface        = surface;
-    app->app_gpu.surface_width  = rt->surface_width;
-    app->app_gpu.surface_height = rt->surface_height;
-    app->app_gpu.content_scale  = rt->content_scale;
-    app->app_gpu.x11_display    = rt->x11_display;
-    app->app_gpu.x11_window     = rt->x11_window;
-
-    app->ctx.runtime->gpu.app_gpu_context     = app->app_gpu;
-    app->ctx.runtime->config              = rt->config;
-    app->ctx.runtime->platform_input_pipe = rt->platform_input_pipe;
-    app->ctx.runtime->clipboard_manager   = rt->clipboard_manager;
-    app->ctx.runtime->window_manager      = rt->window_manager;
-    app->ctx.pty_factory         = NULL;
-
-    app->ctx.runtime->gpu.app_gpu_context = app->app_gpu;
-    app->ctx.runtime->gpu.adapter         = adapter;
-    app->ctx.runtime->gpu.device          = device;
-    app->ctx.runtime->gpu.queue           = queue;
-    app->ctx.runtime->gpu.surface_format  = surface_format;
-    app->ctx.runtime->gpu.allocator       = app->allocator;
-    app->ctx.runtime->gpu.msdf_generator  = app->msdf;
-
-    app->ctx.event_loop = app->event_loop;
     return YETTY_OK_VOID();
 }
 
@@ -773,8 +653,16 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
     struct yetty_ycore_void_result lr = yaudio_load(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yaudio: load failed");
 
-    struct yetty_ycore_void_result gr = init_gpu_context(app, rt);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "yaudio: gpu init failed");
+    /* Standard GPU/event/render-target bring-up. Same call yetty's own
+     * main uses — adapter, device, queue, allocator, msdf generator,
+     * surface configuration, event loop, render target. The runtime
+     * owns all of it; we just borrow via app->ctx.runtime->X. */
+    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(rt);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, yrt_res, "yaudio: yruntime_create failed");
+    app->runtime           = yrt_res.value;
+    app->ctx.runtime       = app->runtime;
+    app->ctx.pty_factory   = NULL;          /* yaudio has no terminal */
+    app->ctx.event_loop    = app->runtime->event_loop;
 
     /* yui — owns the scene-canvas + ygui engine. cell_w/h are mostly
      * arbitrary for our use; pick the same defaults yui's tabbar uses. */
@@ -785,19 +673,10 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
 
     build_widgets(app, rt);
 
-    /* Render target — texture-backed, blits to the surface on present. */
-    struct yetty_yrender_viewport vp = {
-        .x = 0, .y = 0,
-        .w = (float)rt->surface_width, .h = (float)rt->surface_height,
-    };
-    struct yetty_yrender_target_ptr_result tr =
-        yetty_yrender_target_texture_create(app->ctx.runtime->gpu.device,
-                                            app->ctx.runtime->gpu.queue,
-                                            app->ctx.runtime->gpu.surface_format,
-                                            app->allocator,
-                                            (WGPUSurface)rt->surface, vp);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "render target create failed");
-    app->render_target = tr.value;
+    /* Render target comes from yruntime — texture-backed, configured to
+     * blit to the surface on present. Aliased into app->render_target
+     * for terseness in the loop below. */
+    struct yetty_ydraw_target *render_target = app->runtime->render_target;
 
     /* Pump events + render frames continuously. */
     struct yetty_ycore_int_result fdr =
@@ -842,27 +721,26 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
             apply_view(app);    /* expensive — runs at most once per frame */
         }
 
-        struct yetty_ycore_void_result cl = app->render_target->ops->clear(app->render_target);
+        struct yetty_ycore_void_result cl = render_target->ops->clear(render_target);
         if (YETTY_IS_ERR(cl)) {
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_void_result rr = yetty_yui_render(app->yui, app->render_target);
+        struct yetty_ycore_void_result rr = yetty_yui_render(app->yui, render_target);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_destroy(rr.error);
         }
-        struct yetty_ycore_void_result pp = app->render_target->ops->present(app->render_target);
+        struct yetty_ycore_void_result pp = render_target->ops->present(render_target);
         if (YETTY_IS_ERR(pp)) {
             yetty_ycore_error_destroy(pp.error);
         }
         needs_render = 0;
     }
 
-    if (app->render_target) app->render_target->ops->destroy(app->render_target);
-    if (app->yui)           yetty_yui_destroy(app->yui);
-    if (app->event_loop && app->event_loop->ops && app->event_loop->ops->destroy)
-        app->event_loop->ops->destroy(app->event_loop);
-    /* msdf / allocator / device / queue / adapter cleanup omitted; the
-     * process exits right after. */
+    /* Teardown: yui first (it holds GPU resources owned by the runtime),
+     * then the runtime (render target, msdf, allocator, event loop,
+     * surface, queue, device, adapter, in reverse-creation order). */
+    if (app->yui)     yetty_yui_destroy(app->yui);
+    if (app->runtime) yetty_yruntime_destroy(app->runtime);
 
     yetty_yaudio_intervals_destroy(app->iv);
     yetty_yaudio_envelope_destroy(app->env);

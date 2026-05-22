@@ -19,6 +19,7 @@ endif()
 
 set(YAUDIO_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+    ${YETTY_ROOT}/src/yetty/yruntime/yruntime.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
