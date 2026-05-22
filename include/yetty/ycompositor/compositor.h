@@ -49,6 +49,20 @@ struct yetty_ycompositor;
 
 YETTY_YRESULT_DECLARE(yetty_ycompositor_ptr, struct yetty_ycompositor *);
 
+/*---------------------------------------------------------------------------
+ * NULL-handling convention
+ *
+ * yetty_ycompositor_destroy(NULL) is a no-op that returns OK — mirrors
+ * the standard `free(NULL) = no-op` pattern so cleanup paths can call
+ * it without first checking whether construction succeeded.
+ *
+ * Every OTHER public entry point requires a valid compositor pointer.
+ * Passing NULL there is a contract violation and surfaces as
+ * `YETTY_ERR(..., "<func>: NULL arg")` rather than being silently
+ * swallowed — keeps caller bugs visible instead of letting them
+ * propagate as no-ops.
+ *=========================================================================*/
+
 /*===========================================================================
  * Lifecycle
  *=========================================================================*/
@@ -132,14 +146,6 @@ struct yetty_ycore_void_result yetty_ycompositor_set_figure_rect(
     struct yetty_ycompositor *comp,
     struct yetty_yfigure_figure *figure,
     struct yetty_ycore_rectangle new_rect);
-
-/* Lazily create a full-pane ygrid figure that receives every record
- * arriving on YETTY_OSC_YCOMPOSITOR_BIN. Called by the terminal at
- * setup and on resize. */
-struct yetty_ycore_void_result yetty_ycompositor_ensure_default_ygrid(
-    struct yetty_ycompositor *comp,
-    uint32_t cols, uint32_t rows, float cell_w, float cell_h,
-    const struct yetty_context *context);
 
 /* The terminal sets this once at create time so the compositor can
  * ask for a render frame after decoding an OSC envelope. NULL is OK

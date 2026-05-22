@@ -41,10 +41,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* yetty_ygui_engine_rebuild is a global in ygui_engine.c but lacks a
- * header declaration. Forward-declare to call it here. */
-struct yetty_ycore_void_result yetty_ygui_engine_rebuild(struct yetty_ygui_engine *engine);
-
 /* Brand palette (rules/08-branding.md) — used directly on widget
  * properties since the default theme uses a darker surface that's hard
  * to see against the brand-bg backdrop. */

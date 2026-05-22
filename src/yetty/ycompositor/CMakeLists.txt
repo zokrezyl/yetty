@@ -6,16 +6,18 @@ target_include_directories(yetty_ycompositor PUBLIC
     ${YETTY_ROOT}/include
 )
 
-# yfigure for the base figure type; ycore for result/types. The
-# compositor declares itself a yterm terminal_layer (via
-# <yetty/yterm/terminal.h>) but does NOT link against yterm —
-# terminal.h is a pure-interface header (no impl symbols). The
-# yterm <-> ycompositor link goes in yterm's CMakeLists, where
-# terminal.c calls yetty_ycompositor_layer_create.
+# yfigure for the base figure type; ycore for result/types; ygrid for
+# the per-group ygrid figures the compositor creates from CMD_GROUP
+# wire records; ywire for the OSC-statemachine drawable iterator used
+# by yetty_ycompositor_process_input; ydraw_core for the flyweight
+# registry + drawable command parser used by both
+# process_input and process_records.
 #
-# webgpu is here only for the include path: terminal.h transitively
-# pulls <yetty/yetty/yetty.h>, which #includes <webgpu/webgpu.h>.
-# ycompositor itself does not use webgpu types.
+# No terminal_layer base, no yterm dependency — the compositor is a
+# standalone module with its own direct API (add_figure / process_input /
+# process_records). The yetty/yetty.h include in compositor.c pulls in
+# the runtime context type; webgpu types arrive transitively through
+# yetty_ygrid (the only consumer that actually touches WGPU).
 target_link_libraries(yetty_ycompositor PUBLIC
     yetty_ycore
     yetty_yfigure

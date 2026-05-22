@@ -1236,6 +1236,12 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(
 struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
     const char *name, struct yetty_ygui_theme *theme);
 
+/* Headless rebuild — runs layout + render_all over the engine's
+ * widget tree into engine->buffer, but skips the OSC serialize + send
+ * that public engine_render does. Used by in-process consumers
+ * (yui, tools/ycompositor-ygui) that read engine->buffer directly. */
+struct yetty_ycore_void_result yetty_ygui_engine_rebuild(struct yetty_ygui_engine *engine);
+
 /* Emit the init OSC handshake (cell size query, subscribe_clicks/moves,
  * CARD_PLACE, CANVAS_FIT placeholder). Called from
  * engine_internal_bootstrap_runtime after output_pty is wired up.

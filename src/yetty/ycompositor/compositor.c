@@ -111,11 +111,26 @@ struct yetty_ycompositor {
  * Wire payload constants — match the layout documented at top.
  *=========================================================================*/
 
-/* Style header (z_order + fill + stroke + stroke_width). */
-#define GROUP_STYLE_BYTES 16u
-/* Geometry header (x + y + w + h as f32). */
-#define GROUP_GEOM_BYTES 16u
-#define GROUP_HEADER_BYTES (GROUP_STYLE_BYTES + GROUP_GEOM_BYTES)
+/* In-payload header that prefixes the body of every CMD_GROUP /
+ * CMD_UPDATE record. The first four words are the canonical drawable
+ * style header (always zero for groups — kept so geometry sits at the
+ * same word offset as any SDF prim's geometry). The last four are the
+ * group's rect as f32, parent-relative.
+ *
+ * Single struct lives here so the byte offsets aren't duplicated
+ * across parse_group_payload + feed_group_body. The _Static_assert
+ * catches any platform / packing surprise at compile time. */
+struct compositor_group_header {
+    uint32_t z_order;
+    uint32_t fill_color;
+    uint32_t stroke_color;
+    uint32_t stroke_width;
+    float x, y, w, h;
+};
+_Static_assert(sizeof(struct compositor_group_header) == 32,
+               "CMD_GROUP header must be exactly 32 bytes (style + rect)");
+
+#define GROUP_HEADER_BYTES (sizeof(struct compositor_group_header))
 
 /* Glyph type — same as ydraw-layer's YDRAW_SDF_GLYPH. Used to decide
  * whether a record entering a group's ygrid is renderable. */
@@ -229,11 +244,12 @@ static struct yetty_ycore_void_result parse_group_payload(
 {
     if (payload_size < GROUP_HEADER_BYTES)
         return YETTY_ERR(yetty_ycore_void, "ycompositor: group payload too small for header");
-    const uint8_t *geom = payload + GROUP_STYLE_BYTES;
-    memcpy(&out->x, geom + 0, 4);
-    memcpy(&out->y, geom + 4, 4);
-    memcpy(&out->w, geom + 8, 4);
-    memcpy(&out->h, geom + 12, 4);
+    struct compositor_group_header hdr;
+    memcpy(&hdr, payload, sizeof(hdr));
+    out->x = hdr.x;
+    out->y = hdr.y;
+    out->w = hdr.w;
+    out->h = hdr.h;
     out->body = payload + GROUP_HEADER_BYTES;
     out->body_len = payload_size - GROUP_HEADER_BYTES;
     return YETTY_OK_VOID();
@@ -307,7 +323,6 @@ static void compositor_translate_glyph_inplace(uint32_t *prim_words, uint32_t wo
  * origin. This is the "one ygrid per top-level window, many nested
  * groups inside" model — children's coordinate frames are honoured
  * but everything paints to one shared spatial bucket. */
-#define COMPOSITOR_GROUP_HEADER_BYTES 32u   /* style(16) + rect(16) */
 #define COMPOSITOR_MAX_PRIM_WORDS     32u
 
 static struct yetty_ycore_void_result feed_group_body(
@@ -341,14 +356,13 @@ static struct yetty_ycore_void_result feed_group_body(
                 uint32_t nested_body_len;
                 float child_origin_x = origin_x;
                 float child_origin_y = origin_y;
-                if (nested_payload_size >= COMPOSITOR_GROUP_HEADER_BYTES) {
-                    float rel_x, rel_y;
-                    memcpy(&rel_x, nested_header + 16, sizeof(float));
-                    memcpy(&rel_y, nested_header + 20, sizeof(float));
-                    child_origin_x += rel_x;
-                    child_origin_y += rel_y;
-                    nested_body = nested_header + COMPOSITOR_GROUP_HEADER_BYTES;
-                    nested_body_len = nested_payload_size - COMPOSITOR_GROUP_HEADER_BYTES;
+                if (nested_payload_size >= GROUP_HEADER_BYTES) {
+                    struct compositor_group_header hdr;
+                    memcpy(&hdr, nested_header, sizeof(hdr));
+                    child_origin_x += hdr.x;
+                    child_origin_y += hdr.y;
+                    nested_body = nested_header + GROUP_HEADER_BYTES;
+                    nested_body_len = nested_payload_size - GROUP_HEADER_BYTES;
                 } else {
                     nested_body = nested_header;
                     nested_body_len = nested_payload_size;
@@ -401,7 +415,7 @@ static struct yetty_ycore_void_result feed_group_body(
                     uint32_t scratch[COMPOSITOR_MAX_PRIM_WORDS];
                     memcpy(scratch, body + off, rec_size);
                     if (origin_x != 0.0f || origin_y != 0.0f) {
-                        if (type == 200u) {
+                        if (type == GLYPH_TYPE) {
                             compositor_translate_glyph_inplace(
                                 scratch, (uint32_t)word_count, origin_x, origin_y);
                         } else {
@@ -818,9 +832,6 @@ struct yetty_ycore_void_result yetty_ycompositor_add_figure(
 {
     if (!c || !f)
         return YETTY_ERR(yetty_ycore_void, "ycompositor_add_figure: NULL arg");
-    if (!f->ops || !f->ops->destroy || !f->ops->render)
-        return YETTY_ERR(yetty_ycore_void,
-                         "ycompositor_add_figure: figure ops vtable incomplete");
     if (find_figure_index(c, f) >= 0)
         return YETTY_ERR(yetty_ycore_void, "ycompositor_add_figure: already present");
     struct yetty_ycore_void_result g = grow_figures(c);
@@ -876,19 +887,6 @@ struct yetty_ycore_void_result yetty_ycompositor_set_figure_rect(
     f->rect = new_rect;
     damage_add(c, new_rect);
     f->dirty = 1;
-    return YETTY_OK_VOID();
-}
-
-struct yetty_ycore_void_result yetty_ycompositor_ensure_default_ygrid(
-    struct yetty_ycompositor *c, uint32_t cols, uint32_t rows,
-    float cell_w, float cell_h, const struct yetty_context *context)
-{
-    /* No-op in the new model. The "default ygrid" hack was for the
-     * pre-per-group decoder; now every window creates its own
-     * group+ygrid via CMD_GROUP. This entry point stays in the header
-     * for source-compat during the transition; callers (terminal.c)
-     * may remove the call entirely. */
-    (void)c; (void)cols; (void)rows; (void)cell_w; (void)cell_h; (void)context;
     return YETTY_OK_VOID();
 }
 
