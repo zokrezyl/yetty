@@ -3,22 +3,14 @@
  */
 
 #include <yetty/yetty/yetty.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
-#include <yetty/yplatform/ywebgpu.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yrender-utils/screenshot.h>
-#ifdef YETTY_HAS_X11_TILE
-#include <yetty/yrender/render-target-x11-tile.h>
-#endif
 #include <yetty/yterm/terminal.h>
-#include <yetty/webgpu/error.h>
-#include <yetty/ywebgpu/utils.h>
-#include <yetty/ywebgpu/limits.h>
-#include <yetty/ywebgpu/request.h>
 #include <yetty/ycore/math.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/ytrace/ytrace.h>
@@ -28,9 +20,6 @@
 #include <yetty/yui/tile.h>
 #include <yetty/yui/yui.h>
 #include <yetty/yui-core/view.h>
-#include <yetty/yrpc/rpc-server.h>
-#include <yetty/ymsdf/generator.h>
-#include <yetty/yvnc/vnc-server.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/fs.h>
 
@@ -41,13 +30,14 @@
 #include <stdint.h>
 #include <time.h>
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten/emscripten.h>
-#endif
-
 /* Yetty instance */
 struct yetty_yetty_yetty {
     struct yetty_context context;
+    /* Cached `app_context.runtime` — the generic services layer (event
+     * loop, adapter/device/queue/allocator/msdf, wgpu await, optional
+     * VNC + RPC, render target). Created and owned by ymain via
+     * yetty_yruntime_create; yetty borrows everything through it. */
+    struct yetty_yruntime *runtime;
     /* Top-level UI. The tabbar owns N workspaces; only the active
      * workspace renders. Single-workspace boots create one tab so the
      * existing render/event paths see exactly the same shape as before
@@ -58,33 +48,9 @@ struct yetty_yetty_yetty {
      * The tabbar above stays on its legacy rect path for now — yui is
      * additive; it does not displace anything. See src/yetty/yui/yui.h. */
     struct yetty_yui *yui;
+    /* Alias of runtime->event_loop, for terseness in hot paths. */
     struct yetty_yevent_event_loop *event_loop;
     struct yetty_yevent_event_listener listener;
-
-    /* WebGPU state (owned by Yetty) */
-    WGPUAdapter adapter;
-    WGPUDevice device;
-    WGPUQueue queue;
-    WGPUTextureFormat surface_format;
-    /* Present mode picked at init from surface capabilities + config.
-     * Reused on RESIZE so wgpuSurfaceConfigure doesn't silently flip
-     * back to Fifo. See initWebGPU for the selection policy. */
-    WGPUPresentMode present_mode;
-
-    /* Coroutine-aware wgpu await machinery (loop-thread tick + completion
-     * routing). Owned by Yetty; lifetime spans event_loop + wgpu instance. */
-    struct yetty_yplatform_wgpu *wgpu;
-
-    /* Big render target - window-sized texture with surface for presentation */
-    struct yetty_ydraw_target *render_target;
-
-    /* RPC server (optional, enabled via -r/--rpc-socket) */
-    struct yetty_yrpc_server *rpc_server;
-    yetty_yevent_timer_id rpc_timer_id;
-    struct yetty_yevent_event_listener rpc_timer_listener;
-
-    /* VNC server (optional, for --vnc-server or --vnc-headless) */
-    struct yetty_yvnc_server *vnc_server;
 
     /* Visual (shader-level) zoom state — applied by the final blend. */
     float visual_zoom_scale;    /* 1.0 = off; clamped to [1.0, 100.0] */
@@ -126,8 +92,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * targets so the next render actually repaints the window. Fall through
      * to the normal RENDER path below (no early return). */
     if (event->type == YETTY_YCORE_WINDOW_REFRESH) {
-        if (yetty->render_target && yetty->render_target->ops->refresh_full) {
-            yetty->render_target->ops->refresh_full(yetty->render_target);
+        if (yetty->runtime->render_target && yetty->runtime->render_target->ops->refresh_full) {
+            yetty->runtime->render_target->ops->refresh_full(yetty->runtime->render_target);
         }
         /* Re-dispatch as a normal RENDER so the single render pipeline runs
          * exactly once, via the same code path used by all other triggers. */
@@ -137,7 +103,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
     /* Handle RENDER event directly - yetty owns the render cycle */
     if (event->type == YETTY_YCORE_RENDER) {
-        if (!yetty->render_target) {
+        if (!yetty->runtime->render_target) {
             yerror("yetty: RENDER but no render_target");
             return YETTY_OK(yetty_ycore_int, 0);
         }
@@ -151,10 +117,10 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * on_idle once it's free again — otherwise the skip is silent and
          * the display stays one event behind (visible as the "one-char
          * delay" in nvim bursts). */
-        if (yetty->render_target->ops->is_busy &&
-            yetty->render_target->ops->is_busy(yetty->render_target)) {
-            if (yetty->render_target->ops->notify_render_skipped) {
-                yetty->render_target->ops->notify_render_skipped(yetty->render_target);
+        if (yetty->runtime->render_target->ops->is_busy &&
+            yetty->runtime->render_target->ops->is_busy(yetty->runtime->render_target)) {
+            if (yetty->runtime->render_target->ops->notify_render_skipped) {
+                yetty->runtime->render_target->ops->notify_render_skipped(yetty->runtime->render_target);
             }
             ydebug("yetty: RENDER skipped (target busy)");
             return YETTY_OK(yetty_ycore_int, 1);
@@ -178,7 +144,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
         ytime_start(workspace_render);
         if (yetty->tabbar) {
             struct yetty_ycore_void_result res =
-                yetty_yui_tabbar_render(yetty->tabbar, yetty->render_target, yui_force);
+                yetty_yui_tabbar_render(yetty->tabbar, yetty->runtime->render_target, yui_force);
             if (!YETTY_IS_OK(res)) {
                 yerror("yetty: tabbar render failed: %s", res.error.msg);
             }
@@ -187,7 +153,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
         if (yetty->yui) {
             struct yetty_ycore_void_result yr =
-                yetty_yui_render(yetty->yui, yetty->render_target);
+                yetty_yui_render(yetty->yui, yetty->runtime->render_target);
             if (!YETTY_IS_OK(yr)) {
                 yerror("yetty: yui render failed: %s", yr.error.msg);
                 yetty_ycore_error_destroy(yr.error);
@@ -196,7 +162,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
         ytime_start(present);
         struct yetty_ycore_void_result res =
-            yetty->render_target->ops->present(yetty->render_target);
+            yetty->runtime->render_target->ops->present(yetty->runtime->render_target);
         ytime_report(present);
         if (!YETTY_IS_OK(res)) {
             yerror("yetty: present failed: %s", res.error.msg);
@@ -420,11 +386,12 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * coroutine. If the path field is empty, fall back to a default under
      * /tmp so the user always gets *something* on disk. */
     if (event->type == YETTY_YCORE_SCREENSHOT) {
-        if (!yetty->render_target || !yetty->render_target->ops->get_texture) {
+        struct yetty_ydraw_target *render_target = yetty->runtime->render_target;
+        if (!render_target || !render_target->ops->get_texture) {
             yerror("yetty: SCREENSHOT but no render_target/get_texture");
             return YETTY_OK(yetty_ycore_int, 1);
         }
-        WGPUTexture tex = yetty->render_target->ops->get_texture(yetty->render_target);
+        WGPUTexture tex = render_target->ops->get_texture(render_target);
         if (!tex) {
             yerror("yetty: SCREENSHOT: render target has no texture");
             return YETTY_OK(yetty_ycore_int, 1);
@@ -461,7 +428,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
         }
 
         struct yetty_ycore_void_result sr = yetty_yrender_utils_screenshot_capture(
-            yetty->device, yetty->queue, yetty->wgpu, tex, path);
+            yetty->runtime->gpu.device, yetty->runtime->gpu.queue,
+            yetty->runtime->wgpu, tex, path);
         if (!YETTY_IS_OK(sr)) {
             yerror("yetty: SCREENSHOT failed: %s", sr.error.msg);
             yetty_ycore_error_destroy(sr.error);
@@ -493,31 +461,25 @@ static struct yetty_ycore_int_result yetty_event_handler(
         yetty->window_width = (float)width;
         yetty->window_height = (float)height;
 
-        /* Reconfigure surface */
-        WGPUSurface surface = yetty->context.app_context.app_gpu_context.surface;
-        if (surface && yetty->device) {
-            WGPUSurfaceConfiguration config = {0};
-            config.device = yetty->device;
-            config.format = yetty->surface_format;
-            config.usage = WGPUTextureUsage_RenderAttachment;
-            config.width = width;
-            config.height = height;
-            /* Keep the present-mode that initWebGPU picked from the
-             * surface capabilities — re-querying caps here is fine but
-             * we already chose it once and stashed it in yetty. */
-            config.presentMode = yetty->present_mode;
-            wgpuSurfaceConfigure(surface, &config);
-
-            yetty->context.app_context.app_gpu_context.surface_width = width;
-            yetty->context.app_context.app_gpu_context.surface_height = height;
-            yetty->context.gpu_context.app_gpu_context.surface_width = width;
-            yetty->context.gpu_context.app_gpu_context.surface_height = height;
+        /* Reconfigure surface via runtime helper, then mirror the new
+         * dimensions into our local context copies so consumers reading
+         * context.app_context.app_gpu_context.surface_{width,height}
+         * (or .gpu_context.app_gpu_context.…) see the post-resize size. */
+        struct yetty_ycore_void_result rc =
+            yetty_yruntime_reconfigure_surface(yetty->runtime, width, height);
+        if (YETTY_IS_ERR(rc)) {
+            ywarn("yetty: surface reconfigure failed: %s", rc.error.msg);
+            yetty_ycore_error_destroy(rc.error);
         }
+        yetty->context.app_context.app_gpu_context.surface_width = width;
+        yetty->context.app_context.app_gpu_context.surface_height = height;
+        yetty->context.gpu_context.app_gpu_context.surface_width = width;
+        yetty->context.gpu_context.app_gpu_context.surface_height = height;
 
         /* Resize render target */
-        if (yetty->render_target && yetty->render_target->ops->resize) {
+        if (yetty->runtime->render_target && yetty->runtime->render_target->ops->resize) {
             struct yetty_yrender_viewport vp = {0, 0, (float)width, (float)height};
-            yetty->render_target->ops->resize(yetty->render_target, vp);
+            yetty->runtime->render_target->ops->resize(yetty->runtime->render_target, vp);
         }
 
         /* Resize the tabbar: it slices off the strip height at the top
@@ -839,387 +801,6 @@ static struct yetty_ycore_void_result register_event_listeners(struct yetty_yett
     yetty->listener.handler = yetty_event_handler;
     return yetty_yevent_register_default_listeners(yetty->event_loop, &yetty->listener);
 }
-
-/*===========================================================================
- * WebGPU initialization
- *===========================================================================*/
-
-void yetty_log_gpu_info(WGPUAdapter adapter)
-{
-    if (!adapter) {
-        ywarn("yetty_log_gpu_info: adapter is NULL");
-        return;
-    }
-
-    char *desc = yetty_ywebgpu_get_webgpu_description(adapter);
-    if (!desc) {
-        ywarn("yetty_log_gpu_info: failed to get WebGPU description");
-        return;
-    }
-    yinfo("WebGPU adapter description:\n%s", desc);
-    free(desc);
-}
-
-static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yetty)
-{
-    ydebug("initWebGPU: Starting...");
-
-    /* Instance and surface from platform's AppGpuContext */
-    WGPUInstance instance = yetty->context.app_context.app_gpu_context.instance;
-    WGPUSurface surface = yetty->context.app_context.app_gpu_context.surface;
-
-    if (!instance) {
-        return YETTY_ERR(yetty_ycore_void, "No WebGPU instance provided");
-    }
-    ydebug("initWebGPU: instance=%p surface=%p", (void *)instance, (void *)surface);
-
-    /* Request adapter (surface can be NULL for headless mode) */
-    WGPURequestAdapterOptions adapter_opts = {0};
-    adapter_opts.compatibleSurface = surface; /* NULL is OK for headless */
-    adapter_opts.powerPreference = WGPUPowerPreference_HighPerformance;
-
-    int adapter_ready = 0;
-    WGPURequestAdapterCallbackInfo adapter_cb = {0};
-    adapter_cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    adapter_cb.callback = yetty_ywebgpu_adapter_request_callback;
-    adapter_cb.userdata1 = &yetty->adapter;
-    adapter_cb.userdata2 = &adapter_ready;
-
-    ydebug("initWebGPU: Requesting adapter...");
-    wgpuInstanceRequestAdapter(instance, &adapter_opts, adapter_cb);
-
-#ifdef __EMSCRIPTEN__
-    /* On WebASM, adapter request is async - yield to JS event loop */
-    while (!adapter_ready) {
-        emscripten_sleep(0);
-    }
-#endif
-
-    if (!yetty->adapter) {
-        return YETTY_ERR(yetty_ycore_void, "Failed to get WebGPU adapter");
-    }
-    ydebug("initWebGPU: Adapter obtained");
-
-    /* Log adapter info (backend, vendor, device, limits) at yinfo level */
-    yetty_log_gpu_info(yetty->adapter);
-
-    /* Request device.
-     *
-     * NOTE: the `config` argument to fill_default_limits is currently IGNORED;
-     * the values are still hardcoded in yetty_ywebgpu_fill_default_limits().
-     * See https://github.com/zokrezyl/yetty/issues/138 for the plan to source
-     * these knobs from the yetty config file. */
-    WGPULimits limits;
-    yetty_ywebgpu_fill_default_limits(yetty->adapter, yetty->context.app_context.config, &limits);
-
-    WGPUStringView device_label = {.data = "yetty device", .length = 12};
-    WGPUStringView queue_label = {.data = "default queue", .length = 13};
-
-    WGPUDeviceDescriptor device_desc = {0};
-    device_desc.label = device_label;
-    device_desc.requiredLimits = &limits;
-    device_desc.defaultQueue.label = queue_label;
-    device_desc.uncapturedErrorCallbackInfo = yetty_ywebgpu_get_error_callback_info();
-    device_desc.deviceLostCallbackInfo = yetty_ywebgpu_get_device_lost_callback_info();
-
-#ifndef __EMSCRIPTEN__
-    /* Device-scope Dawn toggles (opt-in via YETTY_DAWN_DEBUG=1). Same toggle
-     * names as instance-level — Dawn applies them at device-creation time.
-     * Static so the pointer remains valid until Dawn finishes the async
-     * RequestDevice. Dawn-only — the Emscripten WebGPU bindings don't ship
-     * WGPUDawnTogglesDescriptor. */
-    static const char *const dawn_device_enabled_toggles[] = {
-        "use_user_defined_labels_in_backend",
-        "disable_symbol_renaming",
-        "enable_immediate_error_handling",
-    };
-    WGPUDawnTogglesDescriptor dawn_device_toggles = {0};
-    if (getenv("YETTY_DAWN_DEBUG")) {
-        dawn_device_toggles.chain.sType = WGPUSType_DawnTogglesDescriptor;
-        dawn_device_toggles.enabledToggleCount =
-            sizeof(dawn_device_enabled_toggles) / sizeof(dawn_device_enabled_toggles[0]);
-        dawn_device_toggles.enabledToggles = dawn_device_enabled_toggles;
-        device_desc.nextInChain = &dawn_device_toggles.chain;
-        ydebug("initWebGPU: device-level Dawn debug toggles chained (%zu)",
-               dawn_device_toggles.enabledToggleCount);
-    }
-#endif
-
-    struct yetty_ywebgpu_device_request_state device_cb_data = {{0}, 0};
-    WGPURequestDeviceCallbackInfo device_cb = {0};
-    device_cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    device_cb.callback = yetty_ywebgpu_device_request_callback;
-    device_cb.userdata1 = &yetty->device;
-    device_cb.userdata2 = &device_cb_data;
-
-    ydebug("initWebGPU: Requesting device...");
-    wgpuAdapterRequestDevice(yetty->adapter, &device_desc, device_cb);
-
-#ifdef __EMSCRIPTEN__
-    /* On WebASM, device request is async - yield to JS event loop */
-    while (!device_cb_data.ready) {
-        emscripten_sleep(0);
-    }
-#endif
-
-    if (!yetty->device) {
-        yerror("initWebGPU: device request failed: %s",
-               device_cb_data.error_msg[0] ? device_cb_data.error_msg : "(no message)");
-        return YETTY_ERR(yetty_ycore_void, "Failed to get WebGPU device");
-    }
-    ydebug("initWebGPU: Device obtained");
-
-    yetty->queue = wgpuDeviceGetQueue(yetty->device);
-    ydebug("initWebGPU: Queue obtained");
-
-    /* Determine surface format + pick present mode in one capabilities
-     * query. Default policy: prefer Mailbox (non-blocking, replaces the
-     * queued frame on Present) over FifoRelaxed over Fifo — the
-     * render-thread stall we keep hitting under Fifo on Wayland/Mesa-ANV
-     * is exactly what Mailbox avoids: Present never waits for the
-     * compositor to release the previous image. User override via
-     * config: rendering/present-mode = "mailbox" | "fifo-relaxed" |
-     * "fifo" | "immediate" | "auto" (auto = the policy above). */
-    yetty->present_mode = WGPUPresentMode_Fifo;
-    if (surface) {
-        WGPUSurfaceCapabilities caps = {0};
-        wgpuSurfaceGetCapabilities(surface, yetty->adapter, &caps);
-        if (caps.formatCount > 0) {
-            yetty->surface_format = caps.formats[0];
-        }
-
-        const char *want = yetty->context.app_context.config->ops->get_string(
-            yetty->context.app_context.config, "rendering/present-mode", "auto");
-
-        int have_fifo = 0, have_fifo_relaxed = 0, have_mailbox = 0, have_immediate = 0;
-        for (size_t i = 0; i < caps.presentModeCount; i++) {
-            switch (caps.presentModes[i]) {
-            case WGPUPresentMode_Fifo:
-                have_fifo = 1;
-                break;
-            case WGPUPresentMode_FifoRelaxed:
-                have_fifo_relaxed = 1;
-                break;
-            case WGPUPresentMode_Mailbox:
-                have_mailbox = 1;
-                break;
-            case WGPUPresentMode_Immediate:
-                have_immediate = 1;
-                break;
-            default:
-                break;
-            }
-        }
-
-        const char *picked_name = "fifo";
-        if (strcmp(want, "mailbox") == 0 && have_mailbox) {
-            yetty->present_mode = WGPUPresentMode_Mailbox;
-            picked_name = "mailbox (user)";
-        } else if (strcmp(want, "fifo-relaxed") == 0 && have_fifo_relaxed) {
-            yetty->present_mode = WGPUPresentMode_FifoRelaxed;
-            picked_name = "fifo-relaxed (user)";
-        } else if (strcmp(want, "immediate") == 0 && have_immediate) {
-            yetty->present_mode = WGPUPresentMode_Immediate;
-            picked_name = "immediate (user)";
-        } else if (strcmp(want, "fifo") == 0) {
-            yetty->present_mode = WGPUPresentMode_Fifo;
-            picked_name = "fifo (user)";
-        } else { /* auto (default) — prefer non-blocking modes */
-            if (have_mailbox) {
-                yetty->present_mode = WGPUPresentMode_Mailbox;
-                picked_name = "mailbox (auto)";
-            } else if (have_fifo_relaxed) {
-                yetty->present_mode = WGPUPresentMode_FifoRelaxed;
-                picked_name = "fifo-relaxed (auto)";
-            } else {
-                yetty->present_mode = WGPUPresentMode_Fifo;
-                picked_name = "fifo (auto — only mode available)";
-            }
-        }
-        yinfo("present mode: %s (avail: fifo=%d fifo-relaxed=%d mailbox=%d immediate=%d)",
-              picked_name, have_fifo, have_fifo_relaxed, have_mailbox, have_immediate);
-
-        wgpuSurfaceCapabilitiesFreeMembers(caps);
-    } else {
-        yetty->surface_format = WGPUTextureFormat_BGRA8Unorm;
-    }
-    ydebug("initWebGPU: Surface format = %d", (int)yetty->surface_format);
-
-    /* Configure surface (skip for headless) */
-    if (surface) {
-        WGPUSurfaceConfiguration surface_config = {0};
-        surface_config.device = yetty->device;
-        surface_config.format = yetty->surface_format;
-        surface_config.usage = WGPUTextureUsage_RenderAttachment;
-        surface_config.width = yetty->context.app_context.app_gpu_context.surface_width;
-        surface_config.height = yetty->context.app_context.app_gpu_context.surface_height;
-        surface_config.presentMode = yetty->present_mode;
-        wgpuSurfaceConfigure(surface, &surface_config);
-        ydebug("initWebGPU: Surface configured %ux%u present_mode=%d", surface_config.width,
-               surface_config.height, (int)surface_config.presentMode);
-    } else {
-        ydebug("initWebGPU: No surface (headless mode)");
-    }
-
-    /* Create GPU allocator */
-    struct yetty_yrender_gpu_allocator_result alloc_res =
-        yetty_yrender_gpu_allocator_create(yetty->device);
-    if (!YETTY_IS_OK(alloc_res)) {
-        return YETTY_ERR(yetty_ycore_void, "failed to create GPU allocator");
-    }
-    ydebug("initWebGPU: GPU allocator created");
-
-    /* Complete context with owned GPU objects */
-    yetty->context.gpu_context.app_gpu_context = yetty->context.app_context.app_gpu_context;
-    yetty->context.gpu_context.adapter = yetty->adapter;
-    yetty->context.gpu_context.device = yetty->device;
-    yetty->context.gpu_context.queue = yetty->queue;
-    yetty->context.gpu_context.surface_format = yetty->surface_format;
-    yetty->context.gpu_context.allocator = alloc_res.value;
-
-    /* MSDF CDB generator (cpu | gpu). Selected by `msdf/generator` config
-     * key. Created here so every consumer (currently ydraw-canvas font
-     * materialisation) can grab it off gpu_context. */
-    {
-        const char *shaders_dir = yetty->context.app_context.config->ops->get_string(
-            yetty->context.app_context.config, "paths/shaders", "");
-        struct yetty_ymsdf_generator_ptr_result gres = yetty_ymsdf_generator_create_from_config(
-            yetty->context.app_context.config, yetty->device,
-            yetty->context.app_context.app_gpu_context.instance, shaders_dir);
-        if (YETTY_IS_ERR(gres)) {
-            return YETTY_ERR(yetty_ycore_void, "failed to create MSDF generator", gres);
-        }
-        yetty->context.gpu_context.msdf_generator = gres.value;
-        yinfo("ymsdf: generator = %s", gres.value->ops->name(gres.value));
-    }
-
-    /* Check for VNC mode. --record sets vnc/record-file: it spins up a vnc
-     * server (for the H.264 encode pipeline) without opening a TCP listener.
-     * Window mode is unaffected — recording is a passive sink alongside
-     * normal rendering. */
-    struct yetty_yconfig_config *config = yetty->context.app_context.config;
-    const char *vnc_server_str = config->ops->get_string(config, "vnc/server", NULL);
-    const char *vnc_headless_str = config->ops->get_string(config, "vnc/headless", NULL);
-    const char *vnc_record_str = config->ops->get_string(config, "vnc/record-file", NULL);
-    int vnc_listen_enabled = (vnc_server_str && strcmp(vnc_server_str, "true") == 0) ||
-                             (vnc_headless_str && strcmp(vnc_headless_str, "true") == 0);
-    int vnc_record_enabled = vnc_record_str && vnc_record_str[0];
-    int vnc_enabled = vnc_listen_enabled || vnc_record_enabled;
-
-    /* Create VNC server if enabled */
-    if (vnc_enabled) {
-        struct yetty_vnc_server_ptr_result vnc_res = yetty_yvnc_server_create(
-            instance, yetty->device, yetty->queue, yetty->event_loop, yetty->wgpu,
-            yetty->context.app_context.platform_input_pipe, config);
-        if (!YETTY_IS_OK(vnc_res)) {
-            return YETTY_ERR(yetty_ycore_void, "failed to create VNC server");
-        }
-        yetty->vnc_server = vnc_res.value;
-        ydebug("initWebGPU: VNC server created");
-
-        /* Start TCP listener only when explicitly asked for. --record alone
-         * keeps recording purely local. */
-        if (vnc_listen_enabled) {
-            int vnc_port = config->ops->get_int(config, "vnc/port", 5900);
-            struct yetty_ycore_void_result start_res =
-                yetty_yvnc_server_start(yetty->vnc_server, (uint16_t)vnc_port);
-            if (!YETTY_IS_OK(start_res)) {
-                yetty_yvnc_server_destroy(yetty->vnc_server);
-                yetty->vnc_server = NULL;
-                return YETTY_ERR(yetty_ycore_void, "failed to start VNC server", start_res);
-            }
-            yinfo("VNC server started on port %d", vnc_port);
-        } else {
-            /* Record-only: activate the encode pipeline without a TCP
-             * listener. send_frame_* will accept frames because the
-             * recording mux is registered as a consumer. */
-            struct yetty_ycore_void_result act_res =
-                yetty_yvnc_server_start_record_only(yetty->vnc_server);
-            if (!YETTY_IS_OK(act_res)) {
-                yetty_yvnc_server_destroy(yetty->vnc_server);
-                yetty->vnc_server = NULL;
-                return YETTY_ERR(yetty_ycore_void, "failed to activate VNC record mode", act_res);
-            }
-            yinfo("VNC record mode: %s", vnc_record_str);
-        }
-    }
-
-    /* Create render target */
-    struct yetty_yrender_viewport vp = {
-        .x = 0,
-        .y = 0,
-        .w = (float)yetty->context.app_context.app_gpu_context.surface_width,
-        .h = (float)yetty->context.app_context.app_gpu_context.surface_height};
-
-    struct yetty_yrender_target_ptr_result target_res;
-
-    /*
-     * When we're running on X11 — and the platform handed us native Display
-     * and Window handles (GLFW's X11 backend; Wayland/Cocoa/Win32 leave
-     * these NULL/0) — use the X11-tile target. It renders offscreen and
-     * XShmPutImage's only the dirty tiles into the X window, which keeps
-     * per-frame wire traffic tiny on remote displays (VNC+VGL) and stays
-     * competitive locally where XShm is a shared-memory memcpy.
-     *
-     * No opt-in flag: X11 means tile target, Wayland/other means the
-     * standard WebGPU surface path. VNC-server mode always wins above.
-     */
-    bool x11_tile_available = false;
-#ifdef YETTY_HAS_X11_TILE
-    x11_tile_available = yetty->context.app_context.app_gpu_context.x11_display != NULL &&
-                         yetty->context.app_context.app_gpu_context.x11_window != 0UL;
-#endif
-
-    /* set_wgpu casts straight to render_target_texture and writes to its
-     * `wgpu` field by raw offset — calling it on a VNC or X11-tile target
-     * stomps unrelated fields in those structs. Only flip this true when
-     * the chosen target is genuinely a texture target. */
-    bool target_is_texture = false;
-
-    if (vnc_enabled) {
-        /* VNC render target: sends frames to VNC, optionally presents to surface */
-        target_res = yetty_yrender_target_vnc_create(
-            yetty->device, yetty->queue, yetty->surface_format, alloc_res.value,
-            surface, /* NULL for headless, non-NULL for mirror */
-            yetty->vnc_server, vp);
-#ifdef YETTY_HAS_X11_TILE
-    } else if (x11_tile_available) {
-        yinfo("render target: X11-tile (XShmPutImage per dirty tile)");
-        target_res = yetty_yrender_target_x11_tile_create(
-            yetty->device, yetty->queue, yetty->surface_format, alloc_res.value, yetty->wgpu,
-            yetty->event_loop, yetty->context.app_context.app_gpu_context.x11_display,
-            yetty->context.app_context.app_gpu_context.x11_window, vp);
-        if (!YETTY_IS_OK(target_res)) {
-            ywarn("X11-tile target failed (%s); falling back to texture target",
-                  target_res.error.msg);
-            target_res = yetty_yrender_target_texture_create(
-                yetty->device, yetty->queue, yetty->surface_format, alloc_res.value, surface, vp);
-            target_is_texture = true;
-        }
-#endif
-    } else {
-        /* Standard texture render target */
-        target_res = yetty_yrender_target_texture_create(
-            yetty->device, yetty->queue, yetty->surface_format, alloc_res.value, surface, vp);
-        target_is_texture = true;
-    }
-    if (!YETTY_IS_OK(target_res)) {
-        return YETTY_ERR(yetty_ycore_void, "failed to create render target");
-    }
-    yetty->render_target = target_res.value;
-    /* Surface-bearing texture targets need the wgpu handle so present()
-     * can yield via yetty_yplatform_wgpu_surface_present_await instead of
-     * blocking the loop thread on wgpuSurfacePresent. Non-surface targets
-     * (layer/compositing) ignore this and never call present(). */
-    if (surface && target_is_texture) {
-        yetty_yrender_target_texture_set_wgpu(yetty->render_target, yetty->wgpu);
-    }
-    ydebug("initWebGPU: render target created %.0fx%.0f vnc=%d", vp.w, vp.h, vnc_enabled);
-
-    ydebug("initWebGPU: Complete");
-    return YETTY_OK_VOID();
-}
-
 /*===========================================================================
  * yui ↔ tabbar bridges
  *
@@ -1487,42 +1068,27 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
     yetty->visual_zoom_scale = 1.0f;
     ydebug("yetty_create: Allocated yetty struct");
 
-    /* Copy app context */
+    /* Copy app context, then cache the runtime pointer so hot paths
+     * read yetty->runtime->X instead of digging through app_context. */
     yetty->context.app_context = *app_context;
-    ydebug("yetty_create: Copied app context");
-
-    /* Create event loop early - needed by VNC in init_webgpu */
-    struct yetty_ycore_xthread_event_pipe *pipe = app_context->platform_input_pipe;
-    struct yetty_ycore_event_loop_result event_loop_res = yetty_ycore_event_loop_create(pipe);
-    if (!YETTY_IS_OK(event_loop_res)) {
+    yetty->runtime = app_context->runtime;
+    if (!yetty->runtime) {
         free(yetty);
-        return YETTY_ERR(yetty_yetty_yetty, "failed to create event loop");
+        return YETTY_ERR(yetty_yetty_yetty, "yetty_create: app_context->runtime is NULL");
     }
-    yetty->event_loop = event_loop_res.value;
+
+    /* Borrow the runtime's event loop + GPU services. The runtime owns
+     * the lifecycle; yetty just points at the same objects so the
+     * context propagated to terminals keeps the shape it always had. */
+    yetty->event_loop = yetty->runtime->event_loop;
     yetty->context.event_loop = yetty->event_loop;
-    ydebug("yetty_create: event loop created at %p", (void *)yetty->event_loop);
-
-    /* Create the GPU await machinery before init_webgpu so the VNC server
-     * (which init_webgpu may create) has it available. */
-    struct yplatform_wgpu_ptr_result wgpu_res = yetty_yplatform_wgpu_create(
-        yetty->context.app_context.app_gpu_context.instance, yetty->event_loop);
-    if (!YETTY_IS_OK(wgpu_res)) {
-        yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty_yetty, "yplatform_wgpu_create failed");
-    }
-    yetty->wgpu = wgpu_res.value;
-    ydebug("yetty_create: ywebgpu await machinery created");
-
-    /* Initialize WebGPU */
-    struct yetty_ycore_void_result res = init_webgpu(yetty);
-    if (!YETTY_IS_OK(res)) {
-        yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty_yetty, "WebGPU init failed");
-    }
-    ydebug("yetty_create: WebGPU initialized");
+    yetty->context.gpu_context = yetty->runtime->gpu;
+    ydebug("yetty_create: borrowed runtime services (event_loop=%p, device=%p, render_target=%p)",
+           (void *)yetty->event_loop, (void *)yetty->runtime->gpu.device,
+           (void *)yetty->runtime->render_target);
 
     /* Register event listeners */
-    res = register_event_listeners(yetty);
+    struct yetty_ycore_void_result res = register_event_listeners(yetty);
     if (!YETTY_IS_OK(res)) {
         yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, "failed to register event listeners");
@@ -1618,30 +1184,9 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
     (void)is_temu;
     (void)is_qemu;
 
-    /* Start RPC server if configured */
-    const char *rpc_port_str =
-        app_context->config->ops->get_string(app_context->config, YETTY_YCONFIG_KEY_RPC_PORT, NULL);
-    if (rpc_port_str) {
-        const char *rpc_host = app_context->config->ops->get_string(
-            app_context->config, YETTY_YCONFIG_KEY_RPC_HOST, "127.0.0.1");
-        int rpc_port = atoi(rpc_port_str);
-        ydebug("yetty_create: Starting RPC server on %s:%d", rpc_host, rpc_port);
-        struct yetty_rpc_server_ptr_result rpc_res = yetty_yrpc_server_create(yetty->event_loop);
-        if (YETTY_IS_OK(rpc_res)) {
-            yetty->rpc_server = rpc_res.value;
-            struct yetty_ycore_void_result start_res =
-                yetty_yrpc_server_start(yetty->rpc_server, rpc_host, rpc_port);
-            if (YETTY_IS_OK(start_res)) {
-                yinfo("yetty: RPC server listening on %s:%d", rpc_host, rpc_port);
-            } else {
-                yerror("yetty: failed to start RPC server: %s", start_res.error.msg);
-                yetty_yrpc_server_destroy(yetty->rpc_server);
-                yetty->rpc_server = NULL;
-            }
-        } else {
-            yerror("yetty: failed to create RPC server: %s", rpc_res.error.msg);
-        }
-    }
+    /* RPC server: owned by yruntime, already running by this point.
+     * Apps that want yetty-specific RPC methods can register handlers
+     * on yetty->runtime->rpc_server here. None today. */
 
     ydebug("yetty_create: Complete");
     return YETTY_OK(yetty_yetty_yetty, yetty);
@@ -1657,27 +1202,17 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
 
     ydebug("yetty_destroy: starting");
 
-    /* Destroy RPC server */
-    if (yetty->rpc_server) {
-        ydebug("yetty_destroy: destroying RPC server");
-        struct yetty_ycore_void_result rr = yetty_yrpc_server_destroy(yetty->rpc_server);
-        if (YETTY_IS_ERR(rr)) {
-            first_err = rr;
-        }
-        yetty->rpc_server = NULL;
-    }
+    /* Tear down the yetty-owned chrome only. The render target, wgpu
+     * await machinery, event loop, VNC, RPC, allocator, MSDF, queue,
+     * device, adapter, and surface live on the runtime and are destroyed
+     * by yetty_yruntime_destroy — which the caller must run AFTER this
+     * function returns. yui sits on top so it goes first. */
 
-    /* Destroy app-level yui before tabbar/render_target. yui holds GPU
-     * resources owned by the same wgpu/event-loop teardown chain below. */
     if (yetty->yui) {
         ydebug("yetty_destroy: destroying yui");
         struct yetty_ycore_void_result yr = yetty_yui_destroy(yetty->yui);
         if (YETTY_IS_ERR(yr)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = yr;
-            } else {
-                yetty_ycore_error_destroy(yr.error);
-            }
+            first_err = yr;
         }
         yetty->yui = NULL;
     }
@@ -1688,100 +1223,6 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
         yetty_yui_tabbar_destroy(yetty->tabbar);
         yetty->tabbar = NULL;
         ydebug("yetty_destroy: tabbar destroyed");
-    }
-
-    /* Destroy render target BEFORE wgpu and the event loop.
-     *
-     * Releasing GPU buffers (e.g. tile-diff readback buffers) synchronously
-     * fires any pending wgpuBufferMapAsync callbacks with status=Aborted.
-     * Those callbacks (map_callback in ywebgpu.c) dereference wgpu->loop to
-     * post a coro-resume — so wgpu and the event loop must still be alive
-     * when render_target's destroy runs. */
-    if (yetty->render_target && yetty->render_target->ops && yetty->render_target->ops->destroy) {
-        ydebug("yetty_destroy: destroying render_target");
-        yetty->render_target->ops->destroy(yetty->render_target);
-        yetty->render_target = NULL;
-    }
-
-    /* Tear down the GPU await machinery before the event loop. The tick
-     * timer is owned by the loop, so this must happen first. */
-    if (yetty->wgpu) {
-        yetty_yplatform_wgpu_destroy(yetty->wgpu);
-        yetty->wgpu = NULL;
-    }
-
-    /* Destroy event loop */
-    if (yetty->event_loop && yetty->event_loop->ops && yetty->event_loop->ops->destroy) {
-        ydebug("yetty_destroy: destroying event_loop");
-        yetty->event_loop->ops->destroy(yetty->event_loop);
-        yetty->event_loop = NULL;
-        yetty->context.event_loop = NULL;
-        ydebug("yetty_destroy: event_loop destroyed");
-    }
-
-    /* Destroy VNC server after render target (render target references it) */
-    if (yetty->vnc_server) {
-        ydebug("yetty_destroy: stopping VNC server");
-        struct yetty_ycore_void_result vsr = yetty_yvnc_server_stop(yetty->vnc_server);
-        if (YETTY_IS_ERR(vsr)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = vsr;
-            } else {
-                yetty_ycore_error_destroy(vsr.error);
-            }
-        }
-        ydebug("yetty_destroy: destroying VNC server");
-        struct yetty_ycore_void_result vdr = yetty_yvnc_server_destroy(yetty->vnc_server);
-        if (YETTY_IS_ERR(vdr)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = vdr;
-            } else {
-                yetty_ycore_error_destroy(vdr.error);
-            }
-        }
-        yetty->vnc_server = NULL;
-    }
-
-    /* Destroy MSDF generator before the device (gpu impl borrows it). */
-    if (yetty->context.gpu_context.msdf_generator) {
-        ydebug("yetty_destroy: destroying MSDF generator");
-        yetty->context.gpu_context.msdf_generator->ops->destroy(
-            yetty->context.gpu_context.msdf_generator);
-        yetty->context.gpu_context.msdf_generator = NULL;
-    }
-
-    /* Destroy GPU allocator before device */
-    if (yetty->context.gpu_context.allocator) {
-        ydebug("yetty_destroy: destroying GPU allocator");
-        yetty->context.gpu_context.allocator->ops->destroy(yetty->context.gpu_context.allocator);
-        yetty->context.gpu_context.allocator = NULL;
-    }
-
-    /* Surface is created by platform (glfw-main.c), but we configured it.
-     * Must release BEFORE device since release needs device for swapchain detach. */
-    WGPUSurface surface = yetty->context.app_context.app_gpu_context.surface;
-    if (surface && yetty->device) {
-        ydebug("yetty_destroy: unconfiguring surface");
-        wgpuSurfaceUnconfigure(surface);
-#ifndef __EMSCRIPTEN__
-        wgpuDeviceTick(yetty->device);
-#endif
-        ydebug("yetty_destroy: releasing surface");
-        wgpuSurfaceRelease(surface);
-        yetty->context.app_context.app_gpu_context.surface = NULL;
-    }
-
-    if (yetty->queue) {
-        ydebug("yetty_destroy: releasing queue");
-        wgpuQueueRelease(yetty->queue);
-    }
-    if (yetty->device) {
-        ydebug("yetty_destroy: releasing device");
-        wgpuDeviceRelease(yetty->device);
-    }
-    if (yetty->adapter) {
-        ydebug("yetty_destroy: releasing adapter");
-        wgpuAdapterRelease(yetty->adapter);
     }
 
     ydebug("yetty_destroy: freeing yetty struct");

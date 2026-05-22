@@ -40,9 +40,14 @@ endif()
 # webgpu PUBLIC so consumers of that header get the include path.
 add_subdirectory(yetty)
 
+# yruntime — generic GPU/event/RPC services layer. Same INTERFACE wrapper
+# pattern as yetty; yruntime.c is compiled inline via YETTY_SOURCES.
+add_subdirectory(yruntime)
+
 # Yetty sources (src/yetty/*.c)
 set(YETTY_SOURCES
     ${YETTY_ROOT}/src/yetty/yetty/yetty.c
+    ${YETTY_ROOT}/src/yetty/yruntime/yruntime.c
     ${YETTY_ROOT}/src/yetty/yconfig/config.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c

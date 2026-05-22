@@ -18,6 +18,7 @@ struct yetty_yplatform_pty_factory;
 struct yetty_yevent_event_loop;
 struct yetty_ydraw_gpu_allocator;
 struct yetty_ymsdf_generator;
+struct yetty_yruntime;
 
 /* App GPU context - platform-owned GPU objects */
 struct yetty_yinit_gpu_context {
@@ -36,8 +37,8 @@ struct yetty_yinit_gpu_context {
 
     /* Optional X11 native handles. Populated by the platform layer on
      * Linux/X11 (opaque here to keep Xlib out of this header); NULL / 0 on
-     * every other platform. yetty uses these only when the X11-tile render
-     * target is selected — see yetty_log_gpu_info / initWebGPU. */
+     * every other platform. yruntime reads these only when picking the
+     * X11-tile render target — see yetty/yruntime/yruntime.c. */
     void *x11_display;        /* Display * */
     unsigned long x11_window; /* Window (XID) */
 };
@@ -56,6 +57,13 @@ struct yetty_yetty_app_context {
      * drag_by. NULL in headless mode. */
     struct yetty_yplatform_window_manager *window_manager;
     struct yetty_yplatform_pty_factory *pty_factory;
+    /* Generic GPU/event/RPC services layer below the yetty app. Holds
+     * adapter+device+queue+allocator+msdf, the event loop, the wgpu
+     * await machinery, the render target, plus optional VNC+RPC
+     * servers. Created by ymain via yetty_yruntime_create, lifetime
+     * outlives this yetty instance. yetty borrows everything through
+     * this pointer. */
+    struct yetty_yruntime *runtime;
 };
 
 /* Yetty GPU context - yetty-owned GPU objects */
@@ -92,12 +100,6 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty);
 
 /* Run yetty (main loop integration) */
 struct yetty_ycore_void_result yetty_run(struct yetty_yetty_yetty *yetty);
-
-/* Dump WebGPU adapter info (vendor, backend, adapter type, IDs, key limits)
- * via yinfo. Safe to call any time after the adapter is available — used at
- * startup and can be re-invoked for diagnostics (e.g. when a GPU error
- * occurs or on demand via a debug command). */
-void yetty_log_gpu_info(WGPUAdapter adapter);
 
 #ifdef __cplusplus
 }

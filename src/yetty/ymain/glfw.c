@@ -9,6 +9,7 @@
 
 #include <yetty/yplatform/compat.h>     /* setenv shim on Windows MSVC */
 #include <yetty/yinit/yinit.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
@@ -33,24 +34,34 @@ yetty_worker(struct yetty_yinit_runtime *rt, void *user)
     }
     struct yetty_yplatform_pty_factory *pty_factory = pf_res.value;
 
-    /* App context drawn from the yinit runtime. */
+    /* Generic GPU / event-loop / VNC / RPC / render-target bring-up
+     * (adapter, device, queue, allocator, msdf, present mode, surface
+     * config, ...). Outlives the yetty terminal instance below. */
+    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(rt);
+    if (!YETTY_IS_OK(yrt_res)) {
+        pty_factory->ops->destroy(pty_factory);
+        return YETTY_ERR(yetty_ycore_void, "ymain: yruntime_create failed", yrt_res);
+    }
+    struct yetty_yruntime *yruntime = yrt_res.value;
+
+    /* App context still carries the legacy pieces (config, pipes,
+     * clipboard, window manager, embedded app_gpu_context, pty_factory)
+     * for backwards-compat with terminal/yui/view code that reads through
+     * context.app_context.X. The new field is `.runtime`, which is what
+     * yetty actually uses to reach the GPU / event-loop / render target. */
     struct yetty_yetty_app_context app_context = {
-        .app_gpu_context     = {.instance       = rt->instance,
-                                .surface        = rt->surface,
-                                .surface_width  = rt->surface_width,
-                                .surface_height = rt->surface_height,
-                                .content_scale  = rt->content_scale,
-                                .x11_display    = rt->x11_display,
-                                .x11_window     = rt->x11_window},
+        .app_gpu_context     = yruntime->gpu.app_gpu_context,
         .config              = rt->config,
         .platform_input_pipe = rt->platform_input_pipe,
         .clipboard_manager   = rt->clipboard_manager,
         .window_manager      = rt->window_manager,
         .pty_factory         = pty_factory,
+        .runtime             = yruntime,
     };
 
     struct yetty_yetty_yetty_result yres = yetty_create(&app_context);
     if (!YETTY_IS_OK(yres)) {
+        yetty_yruntime_destroy(yruntime);
         pty_factory->ops->destroy(pty_factory);
         return YETTY_ERR(yetty_ycore_void, "ymain: yetty_create failed", yres);
     }
@@ -68,7 +79,11 @@ yetty_worker(struct yetty_yinit_runtime *rt, void *user)
     struct yetty_ycore_void_result run_res = yetty_run(yetty);
 
     ydebug("ymain: yetty_run returned, tearing down");
+    /* Strict order: yetty (terminal/yui/tabbar) must die BEFORE yruntime
+     * tears down the render target / wgpu await / event loop / device,
+     * because pending readback callbacks dereference those. */
     yetty_destroy(yetty);
+    yetty_yruntime_destroy(yruntime);
     pty_factory->ops->destroy(pty_factory);
     return run_res;
 }
