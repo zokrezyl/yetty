@@ -34,5 +34,11 @@ set(YETTY_ENABLE_TOOL_YBROWSER     OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_YNETSURF  OFF CACHE BOOL "" FORCE)  # NetSurf prebuilt is non-Windows
 set(YETTY_ENABLE_TOOL_YNETSURF     OFF CACHE BOOL "" FORCE)
 
+# yaudio's wav.c uses POSIX mmap (sys/mman.h, MAP_PRIVATE). A Windows
+# port would need CreateFileMapping / MapViewOfFile. Out of scope for v1.
+set(YETTY_ENABLE_FEATURE_YAUDIO       OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YAUDIO_INTERVALS OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YAUDIO          OFF CACHE BOOL "" FORCE)
+
 # QA tools hardcode Linux LLVM paths.
 set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)

@@ -7,6 +7,7 @@
  * pipes, OS event loop) lives in yinit.
  */
 
+#include <yetty/yplatform/compat.h>     /* setenv shim on Windows MSVC */
 #include <yetty/yinit/yinit.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>

@@ -5,9 +5,11 @@
 # source list as the main yetty target — minus ymain/glfw.c (we
 # supply our own main here) and the yetty-specific YETTY_SOURCES.
 
-# Linux-only for v1. The other platforms' yinit code still has the
-# event-driven lifecycle that doesn't fit yinit_run yet.
-if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+# Linux-only for v1. Darwin lacks librt and the yaudio link line still
+# uses POSIX-Linux-flavoured deps (rt, fontconfig via pkg-config). The
+# other platforms' yinit code is also event-driven and doesn't fit
+# yinit_run yet.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     return()
 endif()
 
