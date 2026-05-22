@@ -4,6 +4,7 @@
 # code and by riscv64 cross-builds that can't link Dawn.
 add_library(yetty_yrender_core STATIC
     types.c
+    font-dispatcher.c
 )
 
 target_include_directories(yetty_yrender_core PUBLIC

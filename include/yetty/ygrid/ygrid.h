@@ -41,6 +41,7 @@ extern "C" {
 #endif
 
 struct yetty_ygrid_grid;
+struct yetty_ydraw_font;
 
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 
@@ -72,6 +73,22 @@ struct yetty_ycore_void_result yetty_ygrid_add_record(
  * an empty payload (renders nothing). Marks the figure dirty so the
  * compositor exposes the previously-covered region. */
 struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_ygrid_grid *grid);
+
+/* Attach a font at the given slot. Slot 0 is the default font (the slot
+ * a GLYPH record addresses when its packed `font_id` field is 0); higher
+ * slots are for alternate fonts (e.g. PDF-embedded). Pass `font = NULL`
+ * to clear a slot.
+ *
+ * The font's gpu_resource_set is attached as a child of the ygrid's rs,
+ * its namespaced helpers (<ns>_glyph_size, <ns>_glyph_sample, …) are
+ * merged into the compiled shader, and a per-slot dispatcher routes
+ * `slot` to the right helper. Changing the font set after the first
+ * render triggers a shader recompile via the binder's hash-change path.
+ *
+ * Caller retains ownership of the font — ygrid borrows the pointer and
+ * does NOT destroy it on ygrid_destroy. */
+struct yetty_ycore_void_result yetty_ygrid_set_font(
+    struct yetty_ygrid_grid *grid, uint32_t slot, struct yetty_ydraw_font *font);
 
 #ifdef __cplusplus
 }

@@ -151,6 +151,7 @@ option(YETTY_ENABLE_TOOL_YMESH           "ymesh tool (.glb → OSC)"           O
 option(YETTY_ENABLE_TOOL_YVIDEO          "yvideo tool (.h264 → OSC stream)"  ON)
 option(YETTY_ENABLE_TOOL_YAUDIO_INTERVALS "yaudio-intervals tool (WAV energy interval finder)" ON)
 option(YETTY_ENABLE_TOOL_YAUDIO    "yaudio analyzer GUI" ON)
+option(YETTY_ENABLE_TOOL_YCOMPOSITOR "ycompositor standalone test harness" ON)
 option(YETTY_ENABLE_TOOL_YMAZE           "ymaze tool (animated maze → OSC)"  ON)
 option(YETTY_ENABLE_TOOL_YZOO            "yzoo tool (control-point zoo → OSC)" ON)
 option(YETTY_ENABLE_TOOL_YJUNGLE         "yjungle tool (scene-canvas test → OSC)" ON)

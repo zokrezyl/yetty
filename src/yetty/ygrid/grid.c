@@ -28,11 +28,14 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yconfig/config.h>
+#include <yetty/yruntime/yruntime.h>
+#include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/ysdf/handler.h>
+#include <yetty/yfont/font.h>
+#include <yetty/yrender/font-dispatcher.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
-#include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yrender/types.h>
 #include <yetty/ytrace/ytrace.h>
@@ -41,27 +44,7 @@
 /* GLYPH primitive type — matches ydraw-layer.wgsl's YDRAW_SDF_GLYPH. */
 #define YGRID_GLYPH_TYPE 200u
 
-/*===========================================================================
- * Stub font dispatcher prepended to ydraw-layer.wgsl. ygrid v1 has no
- * font cache wired in yet — these stubs make the shader compile while
- * producing transparent glyphs. When font support lands they get
- * replaced with a real per-slot dispatcher (same shape as
- * ydraw-layer.c emits today).
- *=========================================================================*/
-static const char *ygrid_stub_font_dispatcher_wgsl(void)
-{
-    static const char src[] =
-        "// ygrid v1: stub font dispatcher (no fonts wired yet)\n"
-        "fn font_base_size(slot: u32) -> f32 { return 1.0; }\n"
-        "fn font_glyph_size(slot: u32, glyph_index: u32) -> vec2<f32> {\n"
-        "    return vec2<f32>(0.0, 0.0);\n"
-        "}\n"
-        "fn font_glyph_sample(slot: u32, glyph_index: u32, uv: vec2<f32>, ps: f32) -> f32 {\n"
-        "    return 0.0;\n"
-        "}\n"
-        "\n";
-    return src;
-}
+/* Font dispatcher generation lives below the struct definition. */
 
 #if 0
 /*===========================================================================
@@ -286,10 +269,25 @@ struct yetty_ygrid_grid {
     char *combined_shader;
     size_t combined_shader_size;
 
-    /* Pipeline + per-instance binder */
-    struct yetty_yrender_pipeline *pipeline;
+    /* Own-pipeline binder — flattens the rs tree, computes buffer
+     * offsets, compiles the shader with those offsets baked in, and
+     * uploads to those same offsets. One source of truth: any structural
+     * change (size growth past a power-of-2 cap, etc.) triggers a
+     * refinalize that re-derives offsets AND recompiles the shader. */
     struct yetty_yrender_gpu_resource_binder *binder;
     int binder_finalized;
+
+    /* Font slots. Slot 0 is the default font (font_id=0 in GLYPH wire
+     * payload). Pointers are borrowed; ygrid does not destroy.
+     *
+     * font_generation bumps on every set_font call; last_emitted_gen
+     * tracks the value the dispatcher was last regenerated for. The
+     * dispatcher rebuild path triggers a shader-hash change which makes
+     * the binder refinalize on the next update(). */
+    struct yetty_ydraw_font *fonts[YETTY_YRENDER_RS_MAX_CHILDREN - 1];
+    uint32_t font_count;
+    uint32_t font_generation;
+    uint32_t last_emitted_font_generation;
 
     int staging_dirty;
 };
@@ -406,6 +404,173 @@ static struct yetty_ycore_void_result bucket_prim(
  * — no need to synthesize the type separately.
  *=========================================================================*/
 
+/* Forward decls — the TEXT_SPAN expansion below uses
+ * parse_and_index_record to bucket each generated glyph record, and
+ * grow_bytes to extend grid->bytes for the new GLYPH records. The
+ * normal SDF/GLYPH parse loop and the expansion call into each other. */
+static struct yetty_ycore_void_result parse_and_index_record(
+    struct yetty_ygrid_grid *g, uint32_t record_offset, size_t record_len);
+static struct yetty_ycore_void_result grow_bytes(
+    struct yetty_ygrid_grid *grid, size_t need);
+
+/* Decode one UTF-8 codepoint at *ptr (clamped by `end`). Advances *ptr
+ * past the consumed bytes and returns the codepoint, or 0xFFFD on a
+ * malformed prefix (still consumes one byte to make forward progress).
+ * Matches the same decode shape scene-canvas uses for TEXT_SPAN. */
+static uint32_t decode_utf8(const uint8_t **ptr, const uint8_t *end)
+{
+    const uint8_t *cursor = *ptr;
+    if (cursor >= end)
+        return 0;
+    uint8_t lead = *cursor;
+    uint32_t codepoint;
+    if ((lead & 0x80u) == 0u) {
+        codepoint = lead;
+        cursor += 1;
+    } else if ((lead & 0xE0u) == 0xC0u) {
+        codepoint = (uint32_t)(lead & 0x1Fu) << 6;
+        cursor += 1;
+        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+    } else if ((lead & 0xF0u) == 0xE0u) {
+        codepoint = (uint32_t)(lead & 0x0Fu) << 12;
+        cursor += 1;
+        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 6;
+        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+    } else if ((lead & 0xF8u) == 0xF0u) {
+        codepoint = (uint32_t)(lead & 0x07u) << 18;
+        cursor += 1;
+        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 12;
+        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 6;
+        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+    } else {
+        codepoint = 0xFFFDu;
+        cursor += 1;
+    }
+    *ptr = cursor;
+    return codepoint;
+}
+
+/* Expand one TEXT_SPAN wire record into glyph records, mirroring
+ * scene-canvas's scene_expand_text_span_to_glyphs. The TEXT_SPAN's
+ * font_id maps directly to a ygrid font slot (-1 means slot 0, the
+ * default). Each generated glyph is appended to grid->bytes as its own
+ * 7-word GLYPH wire record and bucketed via parse_and_index_record so
+ * the rest of the pipeline treats it like any other glyph.
+ *
+ * `text_run` and `text_run_len` are passed in instead of read from the
+ * view because the view's text pointer lives inside grid->bytes, which
+ * may be realloc'd by grow_bytes when each generated glyph is emitted.
+ * The caller takes a heap copy first to keep the pointer stable. */
+static struct yetty_ycore_void_result expand_text_span(
+    struct yetty_ygrid_grid *grid, const struct yetty_ydraw_text_span_drawable_view *span,
+    const uint8_t *text_run, uint32_t text_run_len)
+{
+    /* font_id < 0 means "default" → slot 0. Otherwise the producer chose
+     * an explicit slot via the slot-indexed set_font API. Out-of-range
+     * or NULL-slot fonts are dropped silently — same as scene-canvas's
+     * "no font registered yet" path. */
+    uint32_t slot = (span->font_id < 0) ? 0u : (uint32_t)span->font_id;
+    if (slot >= grid->font_count || !grid->fonts[slot]) {
+        ydebug("ygrid: TEXT_SPAN font_id=%d -> slot %u has no font; dropped",
+               span->font_id, slot);
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ydraw_font *font = grid->fonts[slot];
+
+    struct yetty_yrender_gpu_resource_set_result font_rs_result =
+        font->ops->get_gpu_resource_set(font);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, font_rs_result,
+                        "ygrid: text_span font rs");
+    const struct yetty_ydraw_gpu_resource_set *font_rs = font_rs_result.value;
+    if (font_rs->buffer_count == 0 || !font_rs->buffers[0].data) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "ygrid: text_span: font has no glyph metadata");
+    }
+    /* msdf-font's rs.buffers[0] is an array of 6-float entries:
+     *   size_x, size_y, bearing_x, bearing_y, advance, cell_idx
+     * Same layout scene-canvas reads from. */
+    const float *meta = (const float *)font_rs->buffers[0].data;
+    uint32_t meta_count =
+        (uint32_t)(font_rs->buffers[0].size / (6u * sizeof(float)));
+
+    float base_size = font->ops->get_base_size(font);
+    float scale = (base_size > 0.0f) ? span->font_size / base_size : 1.0f;
+    float cursor_x = span->x;
+
+    const uint8_t *cursor = text_run;
+    const uint8_t *end = text_run + text_run_len;
+    while (cursor < end) {
+        uint32_t codepoint = decode_utf8(&cursor, end);
+        if (codepoint == 0)
+            break;
+
+        struct uint32_result glyph_idx_result =
+            font->ops->get_glyph_index(font, codepoint);
+        if (YETTY_IS_ERR(glyph_idx_result)) {
+            /* No glyph for this codepoint — match scene-canvas's
+             * fallback: advance by a quarter em + spacing. */
+            yetty_ycore_error_destroy(glyph_idx_result.error);
+            cursor_x += (span->font_size * 0.25f) + span->char_spacing;
+            if (codepoint == 0x20)
+                cursor_x += span->word_spacing;
+            continue;
+        }
+        uint32_t glyph_index = glyph_idx_result.value;
+        if (glyph_index >= meta_count)
+            return YETTY_ERR(yetty_ycore_void,
+                             "ygrid: text_span glyph_index out of metadata range");
+
+        const float *glyph_meta = meta + glyph_index * 6u;
+        float size_x = glyph_meta[0];
+        float size_y = glyph_meta[1];
+        float bearing_x = glyph_meta[2];
+        float bearing_y = glyph_meta[3];
+        float advance = glyph_meta[4];
+
+        if (size_x <= 0.0f || size_y <= 0.0f) {
+            cursor_x += advance * scale + span->char_spacing;
+            if (codepoint == 0x20)
+                cursor_x += span->word_spacing;
+            continue;
+        }
+
+        float glyph_x = cursor_x + bearing_x * scale;
+        float glyph_y = span->y - bearing_y * scale;
+
+        /* Build the 7-word GLYPH wire record into a stack buffer,
+         * append to grid->bytes (which may realloc), then bucket via
+         * parse_and_index_record. Re-reading text_run / span from
+         * grid->bytes after the realloc would be unsafe — that's why
+         * the caller passed in a heap-stable text copy. */
+        uint32_t glyph_record[7];
+        glyph_record[0] = YGRID_GLYPH_TYPE;
+        glyph_record[1] = 0u;                /* z_order */
+        memcpy(&glyph_record[2], &glyph_x, sizeof(float));
+        memcpy(&glyph_record[3], &glyph_y, sizeof(float));
+        memcpy(&glyph_record[4], &span->font_size, sizeof(float));
+        glyph_record[5] = (glyph_index & 0xFFFFu) | ((slot + 1u) << 16);
+        glyph_record[6] = span->color;
+
+        size_t glyph_bytes = sizeof(glyph_record);
+        struct yetty_ycore_void_result grow_result = grow_bytes(grid, glyph_bytes);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, grow_result,
+                            "ygrid: text_span grow_bytes");
+        uint32_t glyph_offset = (uint32_t)grid->bytes_len;
+        memcpy(grid->bytes + grid->bytes_len, glyph_record, glyph_bytes);
+        grid->bytes_len += glyph_bytes;
+
+        struct yetty_ycore_void_result index_result =
+            parse_and_index_record(grid, glyph_offset, glyph_bytes);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, index_result,
+                            "ygrid: text_span index glyph");
+
+        cursor_x += advance * scale + span->char_spacing;
+        if (codepoint == 0x20)
+            cursor_x += span->word_spacing;
+    }
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result parse_and_index_record(
     struct yetty_ygrid_grid *g, uint32_t record_offset, size_t record_len)
 {
@@ -436,23 +601,52 @@ static struct yetty_ycore_void_result parse_and_index_record(
      * and dropping the unrendered ones silently is the v1 contract.
      * The bytes consumed by these records aren't reclaimed; they live
      * until the next yetty_ygrid_clear. */
+    /* TEXT_SPAN: not a rendered prim itself. Expand into one GLYPH
+     * record per codepoint (same shape as scene-canvas's expansion);
+     * each generated glyph is appended + bucketed normally and shows
+     * up in prim_count/staging. The TEXT_SPAN bytes themselves stay in
+     * grid->bytes but produce no prim entry. */
+    if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
+        struct yetty_ydraw_text_span_drawable_view view;
+        if (yetty_ydraw_text_span_drawable_parse(hdr, &view) != 0)
+            return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_SPAN parse failed");
+        /* `view.text` aliases into g->bytes; grow_bytes inside the
+         * expansion may realloc that buffer and dangle the pointer.
+         * Take a heap copy so each glyph emission has a stable read. */
+        uint8_t *text_copy = NULL;
+        if (view.text_len > 0) {
+            text_copy = (uint8_t *)malloc(view.text_len);
+            if (!text_copy)
+                return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_SPAN text copy oom");
+            memcpy(text_copy, view.text, view.text_len);
+        }
+        struct yetty_ycore_void_result expand_result =
+            expand_text_span(g, &view, text_copy, view.text_len);
+        free(text_copy);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, expand_result, "ygrid: TEXT_SPAN expand");
+        return YETTY_OK_VOID();
+    }
+
     struct rectangle_result ar;
     if (type == YGRID_GLYPH_TYPE) {
-        /* GLYPH wire layout (record_len/4 = 8 words):
-         *   word 0 type
-         *   word 1 z_order / rolling-equivalent
-         *   word 2 (unused, fill slot)
-         *   word 3 x   ← read here
-         *   word 4 y
-         *   word 5 font_size
-         *   word 6 packed (glyph_idx | font_id)
-         *   word 7 color
-         * Matches ydraw-layer.wgsl's glyph_read_x = storage[off+3] convention. */
-        if (record_len < 8u * sizeof(uint32_t))
+        /* GLYPH wire layout — 7 words, identical to scrolling-canvas's
+         * YDRAW_GLYPH_WORDS so the same ydraw-layer.wgsl shader reads
+         * both producers:
+         *   word 0 type            (= 200)
+         *   word 1 z_order
+         *   word 2 x               ← read here
+         *   word 3 y
+         *   word 4 font_size
+         *   word 5 packed          (glyph_idx | (slot+1) << 16)
+         *   word 6 color
+         * rebuild_prim_staging prepends a rolling_row=0 word, so
+         * storage_buffer[drawable_offset+3] lands on word 2 (x) — which
+         * is what glyph_read_x in the shader expects. */
+        if (record_len < 7u * sizeof(uint32_t))
             return YETTY_ERR(yetty_ycore_void, "ygrid: GLYPH record truncated");
-        float gx = *(const float *)&hdr[3];
-        float gy = *(const float *)&hdr[4];
-        float gs = *(const float *)&hdr[5];
+        float gx = *(const float *)&hdr[2];
+        float gy = *(const float *)&hdr[3];
+        float gs = *(const float *)&hdr[4];
         ar = YETTY_OK(rectangle, ((struct yetty_ycore_rectangle){
             .min = {.x = gx, .y = gy},
             .max = {.x = gx + gs, .y = gy + gs},
@@ -612,8 +806,6 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
 
     if (g->binder)
         g->binder->ops->destroy(g->binder);
-    if (g->pipeline)
-        yetty_yrender_pipeline_destroy(g->pipeline);
 
     free(g->sdf_lib_code.data);
     free(g->layer_shader_code.data);
@@ -628,6 +820,12 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     free(g);
     return YETTY_OK_VOID();
 }
+
+/* Defined further down (alongside the other shader-build helpers, after
+ * the resource_set / pipeline setup section). Declared here so the
+ * render path can pull it in when the font set changes mid-frame. */
+static struct yetty_ycore_void_result rebuild_font_dispatcher(
+    struct yetty_ygrid_grid *grid);
 
 static struct yetty_ycore_void_result ygrid_render(
     struct yetty_yfigure_figure *self,
@@ -644,6 +842,16 @@ static struct yetty_ycore_void_result ygrid_render(
         struct yetty_ycore_void_result pr = rebuild_prim_staging(g);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid_render: prim staging");
         g->staging_dirty = 0;
+    }
+
+    /* Font set changed since last render — regenerate the dispatcher and
+     * rs.children. The shader-code hash change triggers a binder
+     * refinalize on the next update(). */
+    if (g->font_generation != g->last_emitted_font_generation) {
+        struct yetty_ycore_void_result dispatcher_result =
+            rebuild_font_dispatcher(g);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_result,
+                            "ygrid_render: rebuild font dispatcher");
     }
 
     /* Wire current staging into the rs and re-submit to the binder. */
@@ -684,6 +892,13 @@ static struct yetty_ycore_void_result ygrid_render(
     float vy = self->rect.min.y;
     if (w <= 0.0f || h <= 0.0f)
         return YETTY_OK_VOID();
+
+    ydebug("ygrid_render: view=%p target=%p target_vp=(%.1f,%.1f,%.1f,%.1f) "
+           "viewport=(%.1f,%.1f,%.1fx%.1f) prim_count=%u",
+           (void *)view, (void *)target,
+           target->viewport.x, target->viewport.y,
+           target->viewport.w, target->viewport.h,
+           vx, vy, w, h, g->prim_count);
 
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(g->device, &enc_desc);
@@ -732,6 +947,10 @@ static struct yetty_ycore_void_result ygrid_render(
 
     WGPURenderPipeline pipe = g->binder->ops->get_pipeline(g->binder);
     WGPUBuffer quad_vb = g->binder->ops->get_quad_vertex_buffer(g->binder);
+    ydebug("ygrid_render: pipe=%p quad_vb=%p scissor=(%u,%u,%u,%u)",
+           (void *)pipe, (void *)quad_vb,
+           (uint32_t)sx0, (uint32_t)sy0,
+           (uint32_t)(sx1 - sx0), (uint32_t)(sy1 - sy0));
     wgpuRenderPassEncoderSetPipeline(pass, pipe);
     if (quad_vb)
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quad_vb, 0, WGPU_WHOLE_SIZE);
@@ -798,41 +1017,105 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
     rs->uniforms[U_CZ_OFF].vec2[1] = 0.0f;
 }
 
+/* Load the raw ydraw-layer.wgsl bytes into layer_shader_code. The
+ * combined shader (font-dispatcher + this file) is assembled lazily by
+ * rebuild_font_dispatcher() and updated whenever the font set changes. */
 static struct yetty_ycore_void_result load_layer_shader(
-    struct yetty_ygrid_grid *g, const struct yetty_context *context)
+    struct yetty_ygrid_grid *grid, const struct yetty_context *context)
 {
-    struct yetty_yconfig_config *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->runtime->config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char path[512];
     snprintf(path, sizeof(path), "%s/ydraw-layer.wgsl", shaders_dir);
-    struct yetty_ycore_buffer_result fr = yetty_ycore_read_file(path);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ygrid: read ydraw-layer.wgsl");
-    g->layer_shader_code = fr.value;
+    struct yetty_ycore_buffer_result file_result = yetty_ycore_read_file(path);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, file_result, "ygrid: read ydraw-layer.wgsl");
+    grid->layer_shader_code = file_result.value;
+    return YETTY_OK_VOID();
+}
 
-    /* Combine stub-font-dispatcher + ydraw-layer.wgsl. The dispatcher
-     * defines font_base_size / font_glyph_size / font_glyph_sample as
-     * no-ops so the shader compiles without a real font cache. */
-    const char *stub = ygrid_stub_font_dispatcher_wgsl();
-    size_t stub_len = strlen(stub);
-    size_t total = stub_len + g->layer_shader_code.size + 1u;
-    char *buf = (char *)malloc(total);
-    if (!buf)
+/* Regenerate combined shader (dispatcher + layer code) and refresh
+ * rs.children with the currently active fonts. Called from ygrid_render
+ * when font_generation differs from last_emitted_font_generation. The
+ * resulting shader-code hash change makes the binder refinalize on the
+ * next update(), which recompiles with the new dispatcher in place.
+ *
+ * The dispatcher itself comes from yetty_yrender_build_font_dispatcher_wgsl
+ * (shared with ydraw-layer); this function deals only with collecting
+ * per-slot namespaces, concatenating the dispatcher with the layer shader,
+ * and wiring the active font rs's into rs.children. */
+static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid_grid *grid)
+{
+    /* Resolve each active slot's font rs once. The rs pointers are
+     * reused below for both the dispatcher namespace list and the
+     * rs.children attachment, so we don't double-call the font op. */
+    const struct yetty_ydraw_gpu_resource_set *font_rs[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
+    const char *slot_namespaces[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
+    for (uint32_t slot = 0; slot < grid->font_count; slot++) {
+        if (!grid->fonts[slot])
+            continue;
+        struct yetty_yrender_gpu_resource_set_result font_rs_result =
+            grid->fonts[slot]->ops->get_gpu_resource_set(grid->fonts[slot]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, font_rs_result,
+                            "ygrid: font get_gpu_resource_set");
+        font_rs[slot] = font_rs_result.value;
+        slot_namespaces[slot] = font_rs_result.value->namespace;
+    }
+
+    char *dispatcher_wgsl = NULL;
+    size_t dispatcher_size = 0;
+    struct yetty_ycore_void_result dispatcher_result =
+        yetty_yrender_build_font_dispatcher_wgsl(
+            slot_namespaces, grid->font_count, &dispatcher_wgsl, &dispatcher_size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_result,
+                        "ygrid: build font dispatcher");
+
+    size_t combined_size = dispatcher_size + grid->layer_shader_code.size;
+    char *combined_buffer = (char *)malloc(combined_size + 1u);
+    if (!combined_buffer) {
+        free(dispatcher_wgsl);
         return YETTY_ERR(yetty_ycore_void, "ygrid: combined shader oom");
-    memcpy(buf, stub, stub_len);
-    memcpy(buf + stub_len, g->layer_shader_code.data, g->layer_shader_code.size);
-    buf[total - 1u] = '\0';
-    g->combined_shader = buf;
-    g->combined_shader_size = total - 1u;
+    }
+    memcpy(combined_buffer, dispatcher_wgsl, dispatcher_size);
+    memcpy(combined_buffer + dispatcher_size,
+           grid->layer_shader_code.data, grid->layer_shader_code.size);
+    combined_buffer[combined_size] = '\0';
+    free(dispatcher_wgsl);
+
+    free(grid->combined_shader);
+    grid->combined_shader = combined_buffer;
+    grid->combined_shader_size = combined_size;
+    yetty_yrender_shader_code_set(&grid->rs.shader,
+                                  grid->combined_shader,
+                                  grid->combined_shader_size);
+
+    /* rs.children[0] = sdf_lib, [1..N] = active font rs in slot order.
+     * NULL slots are skipped — the dispatcher's switch cases are sparse
+     * (skipped slots fall through to the default). */
+    size_t children_used = 0;
+    grid->rs.children[children_used++] = &grid->sdf_lib_rs;
+    for (uint32_t slot = 0; slot < grid->font_count; slot++) {
+        if (!font_rs[slot])
+            continue;
+        if (children_used >= YETTY_YRENDER_RS_MAX_CHILDREN)
+            break;
+        grid->rs.children[children_used++] =
+            (struct yetty_ydraw_gpu_resource_set *)font_rs[slot];
+    }
+    grid->rs.children_count = children_used;
+    grid->last_emitted_font_generation = grid->font_generation;
+    ydebug("ygrid: rebuilt dispatcher fonts=%u children=%zu shader=%zuB",
+           grid->font_count, children_used, grid->combined_shader_size);
     return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result load_sdf_lib(
     struct yetty_ygrid_grid *g, const struct yetty_context *context)
 {
-    struct yetty_yconfig_config *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->runtime->config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char path[512];
     snprintf(path, sizeof(path), "%s/ysdf.gen.wgsl", shaders_dir);
+    ydebug("ygrid: load_sdf_lib: shaders_dir='%s' path='%s'", shaders_dir, path);
     struct yetty_ycore_buffer_result fr = yetty_ycore_read_file(path);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ygrid: read ysdf.gen.wgsl");
     g->sdf_lib_code = fr.value;
@@ -843,40 +1126,38 @@ static struct yetty_ycore_void_result load_sdf_lib(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result build_pipeline(struct yetty_ygrid_grid *g)
+static struct yetty_ycore_void_result build_binder(struct yetty_ygrid_grid *grid)
 {
     /* Mirror ydraw-layer's rs shape exactly so ydraw-layer.wgsl works
      * as our shader without modification. namespace "ydraw" gives the
      * binder-generated uniform field names the shader expects
      * (ydraw_ydraw_grid_size etc.). */
-    strncpy(g->rs.namespace, "ydraw", YETTY_YRENDER_NAME_MAX - 1);
-    g->rs.buffer_count = 2;
-    strncpy(g->rs.buffers[0].name, "grid", YETTY_YRENDER_NAME_MAX - 1);
-    strncpy(g->rs.buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
-    g->rs.buffers[0].readonly = 1;
-    strncpy(g->rs.buffers[1].name, "prims", YETTY_YRENDER_NAME_MAX - 1);
-    strncpy(g->rs.buffers[1].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
-    g->rs.buffers[1].readonly = 1;
+    strncpy(grid->rs.namespace, "ydraw", YETTY_YRENDER_NAME_MAX - 1);
+    grid->rs.buffer_count = 2;
+    strncpy(grid->rs.buffers[0].name, "grid", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(grid->rs.buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
+    grid->rs.buffers[0].readonly = 1;
+    strncpy(grid->rs.buffers[1].name, "prims", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(grid->rs.buffers[1].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
+    grid->rs.buffers[1].readonly = 1;
 
-    init_uniforms(&g->rs);
+    init_uniforms(&grid->rs);
 
-    yetty_yrender_shader_code_set(&g->rs.shader, g->combined_shader,
-                                  g->combined_shader_size);
+    grid->rs.instance_count = 1;
 
-    g->rs.children[0] = &g->sdf_lib_rs;
-    g->rs.children_count = 1;
-    g->rs.instance_count = 1;
+    /* Build the initial (no-font) dispatcher → combined shader →
+     * rs.children. With no fonts attached this is just the SDF lib
+     * + the layer code with stub-default helpers; the shader compiles
+     * and renders SDF prims correctly. set_font() rebuilds later. */
+    struct yetty_ycore_void_result dispatcher_result = rebuild_font_dispatcher(grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_result,
+                        "ygrid: initial dispatcher");
 
-    struct yetty_yrender_pipeline_ptr_result pr = yetty_yrender_pipeline_create(
-        g->device, g->target_format, g->allocator, &g->rs);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid: pipeline create");
-    g->pipeline = pr.value;
-
-    struct yetty_yrender_gpu_resource_binder_result br =
-        yetty_yrender_gpu_resource_binder_create_with_pipeline(
-            g->device, g->queue, g->allocator, g->pipeline);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ygrid: binder create");
-    g->binder = br.value;
+    struct yetty_yrender_gpu_resource_binder_result binder_result =
+        yetty_yrender_gpu_resource_binder_create(
+            grid->device, grid->queue, grid->target_format, grid->allocator);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, binder_result, "ygrid: binder create");
+    grid->binder = binder_result.value;
 
     return YETTY_OK_VOID();
 }
@@ -923,10 +1204,10 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
     g->base.dirty = 1;
     g->grid_cols = grid_cols;
     g->grid_rows = grid_rows;
-    g->device = context->gpu_context.device;
-    g->queue = context->gpu_context.queue;
-    g->target_format = context->gpu_context.surface_format;
-    g->allocator = context->gpu_context.allocator;
+    g->device = context->runtime->gpu.device;
+    g->queue = context->runtime->gpu.queue;
+    g->target_format = context->runtime->gpu.surface_format;
+    g->allocator = context->runtime->gpu.allocator;
     g->staging_dirty = 1;
 
     struct yetty_ycore_void_result cr = cells_alloc(g);
@@ -944,10 +1225,10 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
         ygrid_destroy(&g->base);
         return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_layer_shader", ls);
     }
-    struct yetty_ycore_void_result br = build_pipeline(g);
+    struct yetty_ycore_void_result br = build_binder(g);
     if (YETTY_IS_ERR(br)) {
         ygrid_destroy(&g->base);
-        return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: build_pipeline", br);
+        return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: build_binder", br);
     }
 
     return YETTY_OK(yetty_ygrid_grid_ptr, g);
@@ -993,6 +1274,26 @@ struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_ygrid_grid *grid)
     grid->prim_count = 0;
     cells_clear(grid);
     grid->staging_dirty = 1;
+    grid->base.dirty = 1;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygrid_set_font(
+    struct yetty_ygrid_grid *grid, uint32_t slot, struct yetty_ydraw_font *font)
+{
+    if (!grid)
+        return YETTY_ERR(yetty_ycore_void, "ygrid_set_font: NULL grid");
+    /* Cap at the rs.children[] capacity minus the SDF lib slot. */
+    if (slot >= YETTY_YRENDER_RS_MAX_CHILDREN - 1u)
+        return YETTY_ERR(yetty_ycore_void, "ygrid_set_font: slot out of range");
+
+    grid->fonts[slot] = font;
+    /* font_count is the high watermark used by the dispatcher loop —
+     * keep it ≥ slot+1 when assigning; clearing a tail slot doesn't
+     * shrink it (NULL slots fall through to the default case anyway). */
+    if (font && (slot + 1u) > grid->font_count)
+        grid->font_count = slot + 1u;
+    grid->font_generation++;
     grid->base.dirty = 1;
     return YETTY_OK_VOID();
 }

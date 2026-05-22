@@ -46,6 +46,10 @@ if(YETTY_ENABLE_TOOL_YAUDIO AND YETTY_ENABLE_FEATURE_YAUDIO)
     add_subdirectory(yaudio)
 endif()
 
+if(YETTY_ENABLE_TOOL_YCOMPOSITOR)
+    add_subdirectory(ycompositor)
+endif()
+
 if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
 endif()

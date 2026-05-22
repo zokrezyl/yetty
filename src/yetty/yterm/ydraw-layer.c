@@ -12,6 +12,7 @@
 #include <yetty/ydraw/canvas.h>
 #include <yetty/ydraw/scene-canvas.h>
 #include <yetty/ydraw/scrolling-canvas.h>
+#include <yetty/yrender/font-dispatcher.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-args.h>
@@ -636,80 +637,37 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
      * release, unlike font_count which is a high watermark. */
     uint32_t font_generation = layer->canvas->ops->font_generation(layer->canvas);
     if (font_generation != layer->last_font_generation) {
-        size_t cap = layer->shader_code.size + 4096 + (size_t)font_count * 512;
-        char *buf = malloc(cap);
-        if (buf) {
-            int n = snprintf(buf, cap, "// auto-generated font dispatcher (canvas slots 0..%u)\n",
-                             font_count);
-            size_t off = (n > 0) ? (size_t)n : 0;
+        const char *slot_namespaces[YETTY_YRENDER_RS_MAX_CHILDREN];
+        for (uint32_t slot = 0; slot < font_count; slot++)
+            slot_namespaces[slot] = font_rss[slot] ? font_rss[slot]->namespace : NULL;
 
-            /* font_base_size(slot) */
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "fn font_base_size(slot: u32) -> f32 {\n"
-                                    "    switch slot {\n");
-            for (uint32_t s = 0; s < font_count; s++) {
-                if (!font_rss[s]) {
-                    continue;
-                }
-                off += (size_t)snprintf(buf + off, cap - off,
-                                        "        case %uu: { return uniforms.%s_base_size; }\n", s,
-                                        font_rss[s]->namespace);
-            }
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "        default: { return 1.0; }\n    }\n}\n");
-
-            /* font_glyph_size(slot, glyph_index) */
-            off +=
-                (size_t)snprintf(buf + off, cap - off,
-                                 "fn font_glyph_size(slot: u32, glyph_index: u32) -> vec2<f32> {\n"
-                                 "    switch slot {\n");
-            for (uint32_t s = 0; s < font_count; s++) {
-                if (!font_rss[s]) {
-                    continue;
-                }
-                off +=
-                    (size_t)snprintf(buf + off, cap - off,
-                                     "        case %uu: { return %s_glyph_size(glyph_index); }\n",
-                                     s, font_rss[s]->namespace);
-            }
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "        default: { return vec2<f32>(0.0, 0.0); }\n    }\n}\n");
-
-            /* font_glyph_sample(slot, glyph_index, uv, ps) */
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "fn font_glyph_sample(slot: u32, glyph_index: u32, "
-                                    "uv: vec2<f32>, ps: f32) -> f32 {\n"
-                                    "    switch slot {\n");
-            for (uint32_t s = 0; s < font_count; s++) {
-                if (!font_rss[s]) {
-                    continue;
-                }
-                off += (size_t)snprintf(
-                    buf + off, cap - off,
-                    "        case %uu: { return %s_glyph_sample(glyph_index, uv, ps); }\n", s,
-                    font_rss[s]->namespace);
-            }
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "        default: { return 0.0; }\n    }\n}\n\n");
-
-            /* Append the static layer source verbatim. */
-            if (off + layer->shader_code.size + 1 <= cap) {
-                memcpy(buf + off, layer->shader_code.data, layer->shader_code.size);
-                off += layer->shader_code.size;
-                buf[off] = '\0';
+        char *dispatcher_wgsl = NULL;
+        size_t dispatcher_size = 0;
+        struct yetty_ycore_void_result dispatcher_result =
+            yetty_yrender_build_font_dispatcher_wgsl(
+                slot_namespaces, font_count, &dispatcher_wgsl, &dispatcher_size);
+        if (YETTY_IS_OK(dispatcher_result)) {
+            size_t combined_size = dispatcher_size + layer->shader_code.size;
+            char *combined_buffer = malloc(combined_size + 1u);
+            if (combined_buffer) {
+                memcpy(combined_buffer, dispatcher_wgsl, dispatcher_size);
+                memcpy(combined_buffer + dispatcher_size,
+                       layer->shader_code.data, layer->shader_code.size);
+                combined_buffer[combined_size] = '\0';
 
                 free(layer->combined_shader);
-                layer->combined_shader = buf;
-                layer->combined_shader_size = off;
+                layer->combined_shader = combined_buffer;
+                layer->combined_shader_size = combined_size;
                 layer->last_font_count = font_count;
                 layer->last_font_generation = font_generation;
                 yetty_yrender_shader_code_set(&layer->rs.shader, layer->combined_shader,
                                               layer->combined_shader_size);
                 ydebug("ydraw_layer: rebuilt dispatcher for %u fonts gen=%u (%zu bytes)",
-                       font_count, font_generation, off);
-            } else {
-                free(buf);
+                       font_count, font_generation, combined_size);
             }
+            free(dispatcher_wgsl);
+        } else {
+            yetty_ycore_error_destroy(dispatcher_result.error);
         }
     }
 

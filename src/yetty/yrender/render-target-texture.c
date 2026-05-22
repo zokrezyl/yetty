@@ -992,6 +992,9 @@ static struct yetty_ycore_void_result render_target_texture_present(
     ydebug("present: AFTER  QueueWriteBuffer (uniforms)");
 
     /* Create bind group with this target's texture as source */
+    ydebug("present: blit source rt->view=%p rt->texture=%p (the view ygrid/clear "
+           "wrote to should match this)",
+           (void *)rt->view, (void *)rt->texture);
     WGPUTextureView source_views[MAX_BLEND_SOURCES];
     source_views[0] = rt->view;
     for (int i = 1; i < MAX_BLEND_SOURCES; i++) {
