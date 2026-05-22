@@ -422,21 +422,6 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
         }
     }
 
-    /* Leave the alternate screen LAST — after every other OSC we
-     * might emit (subscribes off, kill_card, CMD_ZERO, card_remove).
-     * The matching `[?1049l` swaps the primary screen back in so the
-     * user's pre-launch shell view (text + graphical scrollback)
-     * reappears under the cursor. We only emit if we previously
-     * entered — set in engine_emit_handshake. */
-    if (engine->alt_screen_active && engine->output_pty) {
-        struct yetty_ycore_void_result r = yetty_ygui_osc_leave_alt_screen(engine->output_pty);
-        if (YETTY_IS_ERR(r)) {
-            yerror("ygui_engine_destroy: leave_alt_screen: %s", r.error.msg);
-            yetty_ycore_error_destroy(r.error);
-        }
-        engine->alt_screen_active = 0;
-    }
-
     /* Drop the ymgui-layer card so the server stops routing mouse to us. */
     if (engine->card_id != 0) {
         struct yetty_ycore_void_result r =
@@ -842,21 +827,6 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
         return YETTY_ERR(yetty_ycore_void,
                          "engine_emit_handshake: output_pty not installed — "
                          "bootstrap must run before any OSC emission");
-    }
-
-    /* Enter the alternate screen FIRST — before any other OSC, before
-     * the placeholder card lands. The receiving terminal saves the
-     * primary screen (text + graphical scrollback) and gives us a
-     * clean buffer to paint into; on engine_destroy we send the
-     * matching `[?1049l` to restore it. Standard tmux/vim/htop pattern.
-     * Failure is non-fatal — the worst case is the user sees ygui
-     * pixels mixed with terminal text. */
-    struct yetty_ycore_void_result alt_r = yetty_ygui_osc_enter_alt_screen(engine->output_pty);
-    if (YETTY_IS_ERR(alt_r)) {
-        yerror("engine_emit_handshake: enter_alt_screen: %s", alt_r.error.msg);
-        yetty_ycore_error_destroy(alt_r.error);
-    } else {
-        engine->alt_screen_active = 1;
     }
 
     /* Cell size query — host replies via OSC and runtime stores it. */
