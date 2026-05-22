@@ -17,6 +17,8 @@
 #include <sys/stat.h>
 
 #include <yetty/yetty/yetty.h>
+#include <yetty/yinit/yinit.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yevent/event.h>
@@ -40,6 +42,9 @@ struct yetty_yplatform_app_state {
     struct android_app *app;
     ANativeWindow *window;
     struct yetty_yetty_yetty *yetty;
+    /* Owned by us; outlives yetty. Built in init_yetty from a synthetic
+     * yinit_runtime and torn down after yetty_destroy. */
+    struct yetty_yruntime *yruntime;
     struct yetty_ycore_xthread_event_pipe *pipe;
     struct yetty_yconfig_config *config;
     struct yetty_yplatform_pty_factory *pty_factory;
@@ -189,7 +194,7 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     struct yetty_yconfig_result config_result;
     struct yetty_yplatform_input_pipe_result pipe_result;
     struct yetty_yplatform_pty_factory_ptr_result pty_result;
-    struct yetty_yetty_app_context ctx;
+    struct yetty_yinit_runtime yinit_rt;
     struct yetty_yetty_yetty_result yetty_result;
     struct yetty_yplatform_render_thread_args *args;
     int32_t width, height;
@@ -301,21 +306,35 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     width = ANativeWindow_getWidth(state->window);
     height = ANativeWindow_getHeight(state->window);
 
-    /* Create Yetty */
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.app_gpu_context.instance = state->instance;
-    ctx.app_gpu_context.surface = state->surface;
-    ctx.app_gpu_context.surface_width = (uint32_t)width;
-    ctx.app_gpu_context.surface_height = (uint32_t)height;
-    ctx.config = state->config;
-    ctx.platform_input_pipe = state->pipe;
-    ctx.clipboard_manager = NULL;
-    ctx.pty_factory = state->pty_factory;
+    /* Assemble a yinit_runtime in-place so yruntime_create can take the
+     * same code path the desktop worker uses. Android doesn't go through
+     * yetty_yinit_run — the NDK drives the OS loop and we bootstrap here
+     * inline — so the struct gets stamped by hand. No argv/output_pipe/
+     * clipboard/window_manager on Android. */
+    memset(&yinit_rt, 0, sizeof(yinit_rt));
+    yinit_rt.config              = state->config;
+    yinit_rt.instance            = state->instance;
+    yinit_rt.surface             = state->surface;
+    yinit_rt.surface_width       = (uint32_t)width;
+    yinit_rt.surface_height      = (uint32_t)height;
+    yinit_rt.content_scale       = 1.0f;
+    yinit_rt.platform_input_pipe = state->pipe;
 
-    yetty_result = yetty_create(&ctx);
+    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(&yinit_rt);
+    if (!YETTY_IS_OK(yrt_res)) {
+        LOGE("Failed to create yruntime: %s",
+             yrt_res.error.msg ? yrt_res.error.msg : "(no message)");
+        yetty_ycore_error_destroy(yrt_res.error);
+        return;
+    }
+    state->yruntime = yrt_res.value;
+
+    yetty_result = yetty_create(state->yruntime, state->pty_factory);
     if (!YETTY_IS_OK(yetty_result)) {
         LOGE("Failed to create Yetty: %s",
              yetty_result.error.msg ? yetty_result.error.msg : "(no message)");
+        yetty_yruntime_destroy(state->yruntime);
+        state->yruntime = NULL;
         return;
     }
     state->yetty = yetty_result.value;
@@ -372,6 +391,18 @@ static struct yetty_ycore_void_result term_yetty(struct yetty_yplatform_app_stat
             first_err = r;
         }
         state->yetty = NULL;
+    }
+    if (state->yruntime) {
+        struct yetty_ycore_void_result r = yetty_yruntime_destroy(state->yruntime);
+        if (YETTY_IS_ERR(r)) {
+            if (YETTY_IS_OK(first_err)) first_err = r;
+            else yetty_ycore_error_destroy(r.error);
+        }
+        state->yruntime = NULL;
+        /* yruntime_destroy already unconfigured + released the surface +
+         * instance. Null them here so the legacy fallbacks below skip. */
+        state->surface = NULL;
+        state->instance = NULL;
     }
     if (state->surface) {
         wgpuSurfaceRelease(state->surface);

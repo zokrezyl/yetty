@@ -5,6 +5,8 @@
  */
 
 #include <yetty/yetty/yetty.h>
+#include <yetty/yinit/yinit.h>
+#include <yetty/yruntime/yruntime.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
@@ -457,7 +459,8 @@ int main(int argc, char **argv)
     WGPUInstance instance;
     WGPUSurface surface;
     int canvas_width, canvas_height;
-    struct yetty_yetty_app_context app_context;
+    struct yetty_yinit_runtime yinit_rt;
+    struct yetty_yruntime *yruntime;
     struct yetty_yetty_yetty_result yetty_result;
     struct yetty_yetty_yetty *yetty;
     struct yetty_yui_event event = {0};
@@ -577,20 +580,42 @@ int main(int argc, char **argv)
         return c ? c.height : window.innerHeight;
     });
 
-    /* AppContext */
-    memset(&app_context, 0, sizeof(app_context));
-    app_context.config = config;
-    app_context.platform_input_pipe = pipe;
-    app_context.pty_factory = pty_factory;
-    app_context.app_gpu_context.instance = instance;
-    app_context.app_gpu_context.surface = surface;
-    app_context.app_gpu_context.surface_width = (uint32_t)canvas_width;
-    app_context.app_gpu_context.surface_height = (uint32_t)canvas_height;
+    /* Build a synthetic yinit_runtime from what we bootstrapped above,
+     * then hand it to yruntime_create — same code path as the desktop
+     * worker. webasm doesn't go through yetty_yinit_run (Emscripten
+     * drives the loop from JS) so we assemble the struct manually here.
+     * No output_pipe / clipboard / window_manager on web. */
+    memset(&yinit_rt, 0, sizeof(yinit_rt));
+    yinit_rt.argc                = argc;
+    yinit_rt.argv                = argv;
+    yinit_rt.config              = config;
+    yinit_rt.instance            = instance;
+    yinit_rt.surface             = surface;
+    yinit_rt.surface_width       = (uint32_t)canvas_width;
+    yinit_rt.surface_height      = (uint32_t)canvas_height;
+    yinit_rt.content_scale       = 1.0f;
+    yinit_rt.platform_input_pipe = pipe;
+
+    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(&yinit_rt);
+    if (!YETTY_IS_OK(yrt_res)) {
+        yerror("Failed to create yruntime: %s",
+               yrt_res.error.msg ? yrt_res.error.msg : "(no msg)");
+        yetty_ycore_error_destroy(yrt_res.error);
+        wgpuSurfaceRelease(surface);
+        wgpuInstanceRelease(instance);
+        pty_factory->ops->destroy(pty_factory);
+        pipe->ops->destroy(pipe);
+        yetty_yplatform_webasm_destroy_window();
+        config->ops->destroy(config);
+        return 1;
+    }
+    yruntime = yrt_res.value;
 
     /* Yetty */
-    yetty_result = yetty_create(&app_context);
+    yetty_result = yetty_create(yruntime, pty_factory);
     if (!YETTY_IS_OK(yetty_result)) {
         yerror("Failed to create Yetty");
+        yetty_yruntime_destroy(yruntime);
         wgpuSurfaceRelease(surface);
         wgpuInstanceRelease(instance);
         pty_factory->ops->destroy(pty_factory);
