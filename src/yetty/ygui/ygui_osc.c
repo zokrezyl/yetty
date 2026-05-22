@@ -63,12 +63,10 @@ static struct yetty_ycore_void_result write_pty_all(struct yetty_platform_pty *p
 }
 
 /* Build the OSC envelope for a binary ydraw payload (compressed) and
- * push it through output_pty. `force_legacy` pins the wire code to
- * YDRAW_SCENE_BIN regardless of the env var — yui's chrome engine sets
- * this because its SM only registers the legacy code. */
+ * push it through output_pty. Always ships to YCOMPOSITOR_BIN — the
+ * legacy YDRAW_SCENE_BIN path was retired with scene-canvas. */
 static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *output_pty,
-                                                const uint8_t *data, uint32_t size,
-                                                int force_legacy)
+                                                const uint8_t *data, uint32_t size)
 {
     if (size == 0 || !data) {
         /* Nothing to send. The receiver keeps last frame; intentional
@@ -85,22 +83,8 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer out = {0};
-    /* OSC envelope routing:
-     *   - default: YDRAW_SCENE_BIN → existing scene-canvas layer
-     *     (current production path)
-     *   - YGRID_USE_NEW_OSC=1 in env (and !force_legacy): YCOMPOSITOR_BIN
-     *     → new compositor + ygrid figure. Lets the same ygui frontend
-     *     drive either receiver during the migration test. The wire
-     *     payload is identical; only the OSC code changes. */
-    int code = YETTY_OSC_YDRAW_SCENE_BIN;
-    const char *env = getenv("YGRID_USE_NEW_OSC");
-    if (!force_legacy && env && env[0] == '1')
-        code = YETTY_OSC_YCOMPOSITOR_BIN;
-    ydebug("write_bin: YGRID_USE_NEW_OSC=%s force_legacy=%d → OSC code=%d",
-           env ? env : "(unset)", force_legacy, code);
-
     struct yetty_ycore_void_result r =
-        yetty_yface_emit(code, /*compressed=*/1, &meta, sizeof(meta), data,
+        yetty_yface_emit(YETTY_OSC_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta), data,
                          size, &out);
     ydebug("write_bin: raw_size=%u envelope_bytes=%zu emit_ok=%d", size, out.size,
            YETTY_IS_OK(r));
@@ -122,22 +106,22 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
 struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, int x, int y, int w,
                                                           int h, const uint8_t *data,
-                                                          uint32_t size, int force_legacy)
+                                                          uint32_t size)
 {
     (void)name;
     (void)x;
     (void)y;
     (void)w;
     (void)h;
-    return write_bin(output_pty, data, size, force_legacy);
+    return write_bin(output_pty, data, size);
 }
 
 struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, const uint8_t *data,
-                                                          uint32_t size, int force_legacy)
+                                                          uint32_t size)
 {
     (void)name;
-    return write_bin(output_pty, data, size, force_legacy);
+    return write_bin(output_pty, data, size);
 }
 
 struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pty *output_pty,

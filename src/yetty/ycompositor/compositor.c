@@ -105,6 +105,13 @@ struct yetty_ycompositor {
      * groups with TEXT_SPAN content will silently drop glyphs in that
      * case. */
     struct yetty_ydraw_font *default_font;
+
+    /* Offset of the compositor's render area within the target. Wire
+     * rects come in pane-local; this is added to convert them to
+     * absolute target pixel space. Every stored figure rect is already
+     * absolute — i.e. `pane_local + viewport_offset`. */
+    float viewport_offset_x;
+    float viewport_offset_y;
 };
 
 /*===========================================================================
@@ -454,9 +461,12 @@ static struct yetty_ycore_void_result group_create(
     ydebug("ycompositor: group_create id=%u rect=(%.1f, %.1f, %.1fx%.1f) body=%u",
            id, gp.x, gp.y, gp.w, gp.h, gp.body_len);
 
+    /* Translate pane-local wire rect to absolute target rect. */
+    float abs_x = gp.x + c->viewport_offset_x;
+    float abs_y = gp.y + c->viewport_offset_y;
     struct yetty_ycore_rectangle group_rect = {
-        .min = {.x = gp.x, .y = gp.y},
-        .max = {.x = gp.x + gp.w, .y = gp.y + gp.h},
+        .min = {.x = abs_x, .y = abs_y},
+        .max = {.x = abs_x + gp.w, .y = abs_y + gp.h},
     };
     struct yetty_yfigure_group_ptr_result grp_r = yetty_yfigure_group_create(group_rect);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grp_r, "ycompositor: yfigure_group_create");
@@ -552,14 +562,21 @@ static struct yetty_ycore_void_result group_update(
     struct yetty_ycore_void_result hr = parse_group_payload(payload, payload_size, &gp);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "ycompositor: group_update parse");
 
-    /* Re-rect the group (damages both old and new). */
+    /* Translate pane-local wire rect to absolute target rect. */
+    float abs_x = gp.x + c->viewport_offset_x;
+    float abs_y = gp.y + c->viewport_offset_y;
     struct yetty_ycore_rectangle new_rect = {
-        .min = {.x = gp.x, .y = gp.y},
-        .max = {.x = gp.x + gp.w, .y = gp.y + gp.h},
+        .min = {.x = abs_x, .y = abs_y},
+        .max = {.x = abs_x + gp.w, .y = abs_y + gp.h},
     };
     struct yetty_ycore_void_result sr = yetty_ycompositor_set_figure_rect(
         c, yetty_yfigure_group_as_figure(ent->group), new_rect);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ycompositor: group_update set_rect");
+    /* The ygrid child overlays the group's rect; keep them in sync so
+     * ygrid_render sets the right viewport on the target. */
+    struct yetty_yfigure_figure *yg_fig = yetty_ygrid_as_figure(ent->ygrid);
+    yg_fig->rect = new_rect;
+    yg_fig->dirty = 1;
 
     /* Wipe the existing prim store and refill. Same origin contract as
      * group_create: top-level rect lives on the figure, body starts
@@ -576,8 +593,17 @@ static struct yetty_ycore_void_result group_delete(
     struct yetty_ycompositor *c, uint32_t id)
 {
     ssize_t idx = find_group_index(c, id);
-    if (idx < 0)
-        return YETTY_ERR(yetty_ycore_void, "ycompositor: CMD_DELETE id not found");
+    if (idx < 0) {
+        /* Stale DELETE — the producer's pending_deletes queue can
+         * carry ids the receiver no longer has (e.g. after a forced
+         * full-redraw on this side wiped state the producer doesn't
+         * know about). Don't bubble an error: the dispatch loop
+         * treats every per-command error as fatal and would silently
+         * drop the rest of the envelope, including any hover
+         * redraw that follows the stale DELETE. Warn + continue. */
+        ydebug("ycompositor: CMD_DELETE id=%u not found, ignoring", id);
+        return YETTY_OK_VOID();
+    }
     struct ygroup_entry ent = c->groups[idx];
 
     /* Pull from compositor's top-level figures (damages the rect). */
@@ -904,6 +930,41 @@ void yetty_ycompositor_set_default_font(
 {
     if (!c) return;
     c->default_font = font;
+}
+
+void yetty_ycompositor_set_viewport_offset(
+    struct yetty_ycompositor *c, float offset_x, float offset_y)
+{
+    if (!c) return;
+    float dx = offset_x - c->viewport_offset_x;
+    float dy = offset_y - c->viewport_offset_y;
+    if (dx == 0.0f && dy == 0.0f)
+        return;
+    ydebug("ycompositor: viewport_offset %+.1f,%+.1f -> %.1f,%.1f (delta %+.1f,%+.1f)",
+           c->viewport_offset_x, c->viewport_offset_y, offset_x, offset_y, dx, dy);
+    c->viewport_offset_x = offset_x;
+    c->viewport_offset_y = offset_y;
+    /* Shift every stored figure rect by the delta. Each top-level
+     * figure is a yfigure_group and (for v1) has exactly one ygrid
+     * child whose rect overlays the group's — both move together. */
+    for (size_t i = 0; i < c->group_count; ++i) {
+        struct yetty_yfigure_figure *gf =
+            yetty_yfigure_group_as_figure(c->groups[i].group);
+        struct yetty_yfigure_figure *yf =
+            yetty_ygrid_as_figure(c->groups[i].ygrid);
+        damage_add(c, gf->rect);
+        gf->rect.min.x += dx;
+        gf->rect.min.y += dy;
+        gf->rect.max.x += dx;
+        gf->rect.max.y += dy;
+        yf->rect.min.x += dx;
+        yf->rect.min.y += dy;
+        yf->rect.max.x += dx;
+        yf->rect.max.y += dy;
+        damage_add(c, gf->rect);
+        gf->dirty = 1;
+        yf->dirty = 1;
+    }
 }
 
 /*===========================================================================

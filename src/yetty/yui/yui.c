@@ -15,24 +15,24 @@
 #include <string.h>
 
 #include <yetty/ygui/ygui.h>
+/* ygui_internal.h gives us the headless alloc + rebuild entry points
+ * plus the engine struct definition (needed to read engine->buffer
+ * after rebuild). Same pattern tools/ycompositor-ygui uses. */
+#include <yetty/ygui/ygui_internal.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yruntime/yruntime.h>
-
-/* yui-only entry into ygui — declared in src/yetty/ygui/ygui_internal.h.
- * The public ygui.h is the only header outside-of-ygui code includes,
- * so forward-declare here instead of widening the public API. */
-struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
-    const char *name, struct yetty_ygui_theme *theme);
+#include <yetty/ycompositor/compositor.h>
+#include <yetty/yconfig/config.h>
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yevent/event-loop.h>
+#include <yetty/yfont/font.h>
+#include <yetty/yfont/msdf-font.h>
 #include <yetty/ynotify/ynotify.h>
-#include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/thread.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yterm/osc-codes.h>
-#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/terminal.h>
-#include <yetty/yterm/ydraw-layer.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywebgpu/utils.h>
 #include <yetty/yui/workspace.h>
@@ -45,26 +45,23 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
 #include "tabbar.h"
 
 struct yetty_yui {
-    /* Producer-side endpoint. ygui's output flows in here via
-     * pty->ops->write. */
-    struct yetty_platform_pty *yui_endpoint;
+    /* yui's own ycompositor — owns the per-widget yfigure_group / ygrid
+     * figures that ygui's wire emission creates via process_records.
+     * Renders LAST in the frame so the chrome (titlebar / tabbar /
+     * menus / dialogs / splitters) sits above terminal panes painted
+     * earlier. Kept separate from the terminal's compositor to keep
+     * CMD_ZERO scoped to yui's own groups. */
+    struct yetty_ycompositor *compositor;
 
-    /* Consumer-side endpoint. The SM reads from here via pty->ops->read
-     * (zero copy from the memory-pty's ring). */
-    struct yetty_platform_pty *render_endpoint;
+    /* Default MSDF font attached to every per-group ygrid the
+     * compositor creates (slot 0). yui owns lifetime; teardown
+     * sequence destroys the compositor first (cascading the
+     * borrowed-pointer ygrids) then the font. */
+    struct yetty_ydraw_font *font;
 
-    /* Owns the YDRAW decode pipeline (b64 + lz4 today, kept as-is per
-     * the simplified plan — we do NOT change the wire codec yet, only
-     * the transport). Bound to render_endpoint. */
-    struct yetty_ywire_wire_statemachine *sm;
-
-    /* Static-canvas ydraw layer registered against YDRAW_CLEAR/BIN/OVERLAY
-     * on `sm`. Same constructor used by the per-terminal static placeholder. */
-    struct yetty_yrender_terminal_layer *layer;
-
-    /* Producer engine. Its OSC output is routed via output_pty into
-     * `yui_endpoint`; bytes flow through the memory pty → render side
-     * → SM → layer. */
+    /* Producer engine. Bytes from engine->buffer are fed into the
+     * compositor every frame via process_records — no PTY, no OSC
+     * framing, no wire-statemachine on the receive side. */
     struct yetty_ygui_engine *engine;
 
     /* Single hamburger / app menu, parked on `engine` and starting
@@ -398,28 +395,6 @@ static struct yui_cb_ctx s_cb_ctx[YETTY_YUI_VIEW_KIND_COUNT];
  * once yui moves to its own thread.
  *===========================================================================*/
 
-static void yui_drain_cb(void *arg)
-{
-    struct yetty_yui *yui = arg;
-    if (!yui || !yui->sm) {
-        return;
-    }
-    struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_process(yui->sm);
-    if (!YETTY_IS_OK(r)) {
-        ywarn("yui: SM process failed: %s", r.error.msg);
-        yetty_ycore_error_destroy(r.error);
-    }
-}
-
-static void yui_wake(void *userdata)
-{
-    struct yetty_yui *yui = userdata;
-    if (!yui || !yui->loop || !yui->loop->ops || !yui->loop->ops->post_to_loop) {
-        return;
-    }
-    yui->loop->ops->post_to_loop(yui->loop, yui_drain_cb, yui);
-}
-
 /*===========================================================================
  * Lifecycle
  *===========================================================================*/
@@ -450,97 +425,72 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->cell_w = cell_w;
     yui->cell_h = cell_h;
 
-    /* Memory-pty pair — default 16 MiB per direction. */
-    struct yetty_yplatform_memory_pty_pair_result pp =
-        yetty_yplatform_memory_pty_pair_create(0);
-    if (!YETTY_IS_OK(pp)) {
-        free(yui);
-        return YETTY_ERR(yetty_yui_ptr, "yui_create: memory pty pair", pp);
-    }
-    yui->yui_endpoint = pp.value.a;
-    yui->render_endpoint = pp.value.b;
-
-    /* Scene-canvas ydraw layer. yui primitives are absolute-pixel, so
-     * we don't care about the grid stride for layout — only that the
-     * canvas's `cols * cell_w x rows * cell_h` equals the framebuffer
-     * exactly (otherwise the shader's NDC→pixel map stretches and
-     * primitives pinned to the edges, like the statusbar at H-22, get
-     * shifted/clipped). Algorithm: round the requested cell stride
-     * against the framebuffer to pick integer cols/rows, then re-derive
-     * actual cell stride as `pixel / cells`. */
+    /* yui's own compositor. Grid stride matches the framebuffer so the
+     * per-group ygrid shaders' NDC→pixel mapping is 1:1 — primitives
+     * pinned to the edges (statusbar at H-22, etc.) land where the
+     * widgets say they should. The compositor receives wire bytes
+     * straight from ygui's engine_rebuild buffer via process_records
+     * each frame; no PTY, no OSC. */
     uint32_t cols = (uint32_t)((float)surface_w / cell_w + 0.5f);
     uint32_t rows = (uint32_t)((float)surface_h / cell_h + 0.5f);
-    if (cols == 0) {
-        cols = 1;
-    }
-    if (rows == 0) {
-        rows = 1;
-    }
+    if (cols == 0) cols = 1;
+    if (rows == 0) rows = 1;
     float actual_cell_w = (float)surface_w / (float)cols;
     float actual_cell_h = (float)surface_h / (float)rows;
-
-    struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ydraw_layer_create(
-        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows, actual_cell_w, actual_cell_h, context,
-        /*request_render_fn=*/NULL, /*request_render_userdata=*/NULL,
-        /*scroll_fn=*/NULL, /*scroll_userdata=*/NULL,
-        /*cursor_fn=*/NULL, /*cursor_userdata=*/NULL);
-    if (!YETTY_IS_OK(lr)) {
-        yui->yui_endpoint->ops->destroy(yui->yui_endpoint);
-        yui->render_endpoint->ops->destroy(yui->render_endpoint);
+    struct yetty_ycompositor_ptr_result cr =
+        yetty_ycompositor_create(cols, rows, actual_cell_w, actual_cell_h, context);
+    if (!YETTY_IS_OK(cr)) {
         free(yui);
-        return YETTY_ERR(yetty_yui_ptr, "yui_create: layer create", lr);
+        return YETTY_ERR(yetty_yui_ptr, "yui_create: compositor create", cr);
     }
-    yui->layer = lr.value;
+    yui->compositor = cr.value;
 
-    /* SM bound to the consumer-side endpoint. */
-    struct yetty_ywire_wire_statemachine_ptr_result sr =
-        yetty_ywire_wire_statemachine_create(yui->render_endpoint);
-    if (!YETTY_IS_OK(sr)) {
-        if (yui->layer && yui->layer->ops && yui->layer->ops->destroy) {
-            yui->layer->ops->destroy(yui->layer);
+    /* Default MSDF font handed to every per-group ygrid the compositor
+     * creates. Without it, TEXT_SPAN records expand to zero glyphs and
+     * widget labels are blank. Path layout mirrors scrolling-canvas
+     * (`<fonts_dir>/../msdf-fonts/<family>-Regular.cdb`). */
+    {
+        struct yetty_yconfig_config *config = context->runtime->config;
+        const char *fonts_dir   = config->ops->get_string(config, "paths/fonts", "");
+        const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
+        const char *font_family = "DejaVuSansMNerdFontMono";
+        char cdb_path[768];
+        char shader_path[768];
+        snprintf(cdb_path, sizeof(cdb_path),
+                 "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir, font_family);
+        snprintf(shader_path, sizeof(shader_path),
+                 "%s/msdf-font.wgsl", shaders_dir);
+        struct yetty_font_font_result fr =
+            yetty_yfont_msdf_font_create(cdb_path, shader_path, "yui_default");
+        if (!YETTY_IS_OK(fr)) {
+            yetty_ycompositor_destroy(yui->compositor);
+            free(yui);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: msdf_font_create", fr);
         }
-        yui->yui_endpoint->ops->destroy(yui->yui_endpoint);
-        yui->render_endpoint->ops->destroy(yui->render_endpoint);
-        free(yui);
-        return YETTY_ERR(yetty_yui_ptr, "yui_create: SM create", sr);
+        yui->font = fr.value;
+        struct yetty_ycore_void_result load = yui->font->ops->load_basic_latin(yui->font);
+        if (!YETTY_IS_OK(load)) {
+            yui->font->ops->destroy(yui->font);
+            yetty_ycompositor_destroy(yui->compositor);
+            free(yui);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: load_basic_latin", load);
+        }
+        yetty_ycompositor_set_default_font(yui->compositor, yui->font);
     }
-    yui->sm = sr.value;
-
-    /* Register YDRAW codes against the SM. ygui's producer (ygui_osc.c)
-     * emits SCENE_BIN — that's the one that must be wired for the v-menu
-     * to reach the scene canvas. CLEAR/BIN/OVERLAY are kept registered so
-     * future producers that target the same yui layer (e.g. an external
-     * yface tool reusing this transport) still work. */
-    struct yetty_ycore_void_result rr;
-    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_CLEAR, yui->layer);
-    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register CLEAR");
-    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_BIN, yui->layer);
-    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register BIN");
-    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_OVERLAY, yui->layer);
-    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register OVERLAY");
-    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_SCENE_BIN, yui->layer);
-    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register SCENE_BIN");
-
-    /* Wake the consumer side via post_to_loop whenever the producer
-     * writes — defers even in same-thread mode, so the wake never
-     * re-enters dispatch mid-write. */
-    yetty_yplatform_memory_pty_set_wake(yui->render_endpoint, yui_wake, yui);
 
     /* Producer engine. yui is in-process — no parent yetty over a pty,
-     * no stdin polling, no handshake. Allocation-only constructor, then
-     * we plug in the memory pty and the display size directly. */
-    (void)cols;
-    (void)rows;
+     * no stdin polling, no handshake. Allocation-only constructor; the
+     * engine writes its output to its own draw_list and we read it
+     * directly each frame. No engine_set_output_pty call — there's no
+     * downstream OSC transport in the new path. */
     struct ygui_engine_ptr_result er =
         yetty_ygui_engine_internal_alloc_for_yui("yui", /*theme=*/NULL);
     if (YETTY_IS_OK(er)) {
         yui->engine = er.value;
-        yetty_ygui_engine_set_output_pty(yui->engine, yui->yui_endpoint);
-        /* yui's SM only registers the legacy YDRAW_SCENE_BIN code, so
-         * pin this engine to the legacy wire code regardless of the
-         * YGRID_USE_NEW_OSC migration toggle. Only PTY-bound demos
-         * should switch to the new compositor code. */
-        yetty_ygui_engine_set_force_legacy_osc(yui->engine, 1);
+        /* No output_pty — bytes go directly from engine->buffer into
+         * yui->compositor via process_records each frame. The engine's
+         * legacy-OSC toggle is now irrelevant since we never serialize
+         * the buffer to a wire envelope. */
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
 
         /* Build the single hamburger / app menu, then one config dialog
@@ -853,25 +803,20 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
      * struct). NULL-safe. */
     yetty_yui_config_dialog_destroy(yui->config_dialog);
     yui->config_dialog = NULL;
-    if (yui->sm) {
-        struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_destroy(yui->sm);
+    /* Compositor first — cascades destroy into the per-widget
+     * yfigure_group + ygrid figures it created (which hold borrowed
+     * refs to yui->font). After that the font is safe to free. */
+    if (yui->compositor) {
+        struct yetty_ycore_void_result r = yetty_ycompositor_destroy(yui->compositor);
         if (!YETTY_IS_OK(r)) {
-            ywarn("yui_destroy: sm destroy: %s", r.error.msg);
+            ywarn("yui_destroy: compositor destroy: %s", r.error.msg);
             yetty_ycore_error_destroy(r.error);
         }
+        yui->compositor = NULL;
     }
-    if (yui->layer && yui->layer->ops && yui->layer->ops->destroy) {
-        struct yetty_ycore_void_result r = yui->layer->ops->destroy(yui->layer);
-        if (!YETTY_IS_OK(r)) {
-            ywarn("yui_destroy: layer destroy: %s", r.error.msg);
-            yetty_ycore_error_destroy(r.error);
-        }
-    }
-    if (yui->yui_endpoint) {
-        yui->yui_endpoint->ops->destroy(yui->yui_endpoint);
-    }
-    if (yui->render_endpoint) {
-        yui->render_endpoint->ops->destroy(yui->render_endpoint);
+    if (yui->font) {
+        yui->font->ops->destroy(yui->font);
+        yui->font = NULL;
     }
     free(yui->splitters);
     free(yui);
@@ -1126,7 +1071,7 @@ static void yui_splitter_on_change(struct yetty_ygui_widget *widget, float delta
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
                                                 struct yetty_ydraw_target *target)
 {
-    if (!yui || !yui->layer || !target) {
+    if (!yui || !yui->compositor || !target) {
         return YETTY_OK_VOID();
     }
 
@@ -1137,58 +1082,52 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
      * tree already match. */
     yui_titlebar_sync(yui);
 
-    /* Same reconciliation pattern for the per-split divider widgets:
-     * one engine_splitter per yui_split node in the active workspace,
-     * positioned absolutely on the shared edge. New splits appear,
-     * stale ones get removed; positions track tile bounds. */
+    /* Same reconciliation pattern for the per-split divider widgets. */
     yui_splitters_sync(yui);
 
-    /* Drive the producer engine when dirty. Writes the OSC frame envelope
-     * into the yui_endpoint memory pty (no stdout, no b64-round-trip). */
+    /* When dirty, rerun layout + render_all into engine->buffer, then
+     * push the bytes into yui's compositor via process_records. No PTY,
+     * no OSC framing.
+     *
+     * engine_rebuild appends to the existing buffer (engine_render is
+     * the one that clears + ships); for the compositor path we clear
+     * the buffer ourselves and lead with CMD_ZERO so the compositor
+     * wipes any prior frame's yui groups before applying the new ones.
+     * CMD_ZERO's clear is scoped to yui's compositor instance — it
+     * does NOT touch the terminal's compositor. */
     if (yui->engine && yetty_ygui_engine_is_dirty(yui->engine)) {
-        struct yetty_ycore_void_result er = yetty_ygui_engine_render(yui->engine);
-        if (YETTY_IS_ERR(er)) {
-            ywarn("yui_render: engine render: %s", er.error.msg);
-            yetty_ycore_error_destroy(er.error);
+        yetty_ydraw_draw_list_clear(yui->engine->buffer);
+        struct yetty_ycore_void_result zr =
+            yetty_ydraw_draw_list_add_cmd_zero(yui->engine->buffer);
+        if (YETTY_IS_ERR(zr)) {
+            yetty_ycore_error_destroy(zr.error);
+        }
+        struct yetty_ycore_void_result rr = yetty_ygui_engine_rebuild(yui->engine);
+        if (YETTY_IS_ERR(rr)) {
+            ywarn("yui_render: engine_rebuild: %s", rr.error.msg);
+            yetty_ycore_error_destroy(rr.error);
+        } else {
+            const uint8_t *bytes =
+                (const uint8_t *)yetty_ydraw_draw_list_data(yui->engine->buffer);
+            size_t size = yetty_ydraw_draw_list_size(yui->engine->buffer);
+            struct yetty_ycore_void_result pr =
+                yetty_ycompositor_process_records(yui->compositor, bytes, size);
+            if (YETTY_IS_ERR(pr)) {
+                ywarn("yui_render: process_records: %s", pr.error.msg);
+                yetty_ycore_error_destroy(pr.error);
+            }
         }
     }
 
-    /* Drain the SM synchronously — bytes the engine just wrote are sitting
-     * in the memory pty waiting to be parsed. Doing this in the same frame
-     * avoids a one-frame lag (the post_to_loop wake would otherwise defer
-     * this to next iteration). */
-    if (yui->sm) {
-        struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(yui->sm);
-        if (YETTY_IS_ERR(pr)) {
-            ywarn("yui_render: SM process: %s", pr.error.msg);
-            yetty_ycore_error_destroy(pr.error);
-        }
-    }
-
-    if (yui->layer->ops->is_empty && yui->layer->ops->is_empty(yui->layer)) {
-        return YETTY_OK_VOID();
-    }
-    /* The yui scene-canvas is the topmost paint in the frame — every
-     * pane has already painted into the shared big_target with
-     * LoadOp_Load before us, and any pane that drew this frame wiped
-     * its area (background-layer is a full opaque pane fill), which
-     * also wipes whatever yui chrome we painted into that area last
-     * frame. RENDER events fire only when something is dirty, so when
-     * we get here at least one of {yui itself, some pane} was dirty;
-     * in either case the chrome region of big_target has been
-     * disturbed, and we must repaint our cached content unconditionally
-     * to keep it on screen. Pre-fix this was force=0 and the chrome
-     * flickered on every pane redraw (cursor blink, mouse move
-     * provoking ymgui repaint, …). Drop the int return (success /
-     * failure is all that matters at this site). */
-    struct yetty_ycore_int_result rr = yui->layer->ops->render(yui->layer, target, /*force=*/1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui layer render");
+    /* yui's compositor is the topmost paint in the frame — terminal
+     * panes paint into the shared big_target with LoadOp_Load first;
+     * yui's compositor adds its chrome on top. force=1 because RENDER
+     * events fire only when something is dirty, and by that point the
+     * chrome region has been disturbed by an earlier pane repaint. */
+    struct yetty_ycore_int_result rr =
+        yetty_ycompositor_render(yui->compositor, target, /*force=*/1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui compositor render");
     return YETTY_OK_VOID();
-}
-
-struct yetty_platform_pty *yetty_yui_producer_pty(struct yetty_yui *yui)
-{
-    return yui ? yui->yui_endpoint : NULL;
 }
 
 int yetty_yui_is_dirty(const struct yetty_yui *yui)
@@ -2119,24 +2058,19 @@ void yetty_yui_set_split_callback(struct yetty_yui *yui, yetty_yui_split_cb cb, 
 struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t surface_w,
                                                 uint32_t surface_h)
 {
-    if (!yui || !yui->layer) {
+    if (!yui || !yui->compositor) {
         return YETTY_OK_VOID();
     }
     if (surface_w == 0 || surface_h == 0 || yui->cell_w <= 0.0f || yui->cell_h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    /* Same algorithm as yui_create — round the requested cell stride
-     * against the new framebuffer, then re-derive actual cell stride so
-     * cols*cell_w == surface_w and rows*cell_h == surface_h. The unified
-     * resize_grid pushes both onto the canvas in one atomic step. */
+    /* Round the requested cell stride against the new framebuffer,
+     * then re-derive actual cell stride so cols*cell_w == surface_w
+     * and rows*cell_h == surface_h. */
     uint32_t cols = (uint32_t)((float)surface_w / yui->cell_w + 0.5f);
     uint32_t rows = (uint32_t)((float)surface_h / yui->cell_h + 0.5f);
-    if (cols == 0) {
-        cols = 1;
-    }
-    if (rows == 0) {
-        rows = 1;
-    }
+    if (cols == 0) cols = 1;
+    if (rows == 0) rows = 1;
     struct yetty_ycore_pixel_size actual_cs = {
         .width = (float)surface_w / (float)cols,
         .height = (float)surface_h / (float)rows,
@@ -2146,10 +2080,7 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
     if (yui->engine) {
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
     }
-    if (yui->layer->ops->resize_grid) {
-        struct yetty_ycore_grid_size gs = {.cols = cols, .rows = rows};
-        return yui->layer->ops->resize_grid(yui->layer, gs, actual_cs);
-    }
-    return YETTY_OK_VOID();
+    struct yetty_ycore_grid_size gs = {.cols = cols, .rows = rows};
+    return yetty_ycompositor_resize(yui->compositor, gs, actual_cs);
 }
 

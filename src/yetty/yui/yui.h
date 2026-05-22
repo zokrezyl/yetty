@@ -133,11 +133,6 @@ int yetty_yui_is_dirty(const struct yetty_yui *yui);
 struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t surface_w,
                                                 uint32_t surface_h);
 
-/* Accessor for the producer-side memory-pty endpoint. Future task: the
- * ygui_engine writes its OSC envelopes to this fd-less pty via the
- * existing pty->ops->write. */
-struct yetty_platform_pty *yetty_yui_producer_pty(struct yetty_yui *yui);
-
 /* Open the view-launcher menu at (anchor_x, anchor_y) in window pixels.
  * Wired to the tabbar's v-button click. Items: shell, ssh, telnet, yvnc;
  * each opens the corresponding config dialog. */

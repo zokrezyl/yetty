@@ -10,7 +10,6 @@
 #include <yetty/ydraw-core/figure-types.h>
 #include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/ydraw/canvas.h>
-#include <yetty/ydraw/scene-canvas.h>
 #include <yetty/ydraw/scrolling-canvas.h>
 #include <yetty/yrender/font-dispatcher.h>
 #include <yetty/yrender/gpu-resource-set.h>
@@ -347,14 +346,21 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
     layer->create_context = context;
     layer->kind = kind;
 
-    /* Create the canvas variant matching `kind`. */
+    /* Create the canvas. Only KIND_SCROLLING remains — scene-canvas
+     * was retired with the ycompositor migration. The kind parameter
+     * is kept on the create signature for source compatibility with
+     * existing call sites that pass SCROLLING explicitly. */
     if (!context) {
         free(layer);
         return YETTY_ERR(yetty_yterm_terminal_layer, "context is NULL");
     }
+    if (kind != YETTY_YDRAW_LAYER_KIND_SCROLLING) {
+        free(layer);
+        return YETTY_ERR(yetty_yterm_terminal_layer,
+                         "ydraw-layer: only KIND_SCROLLING is supported");
+    }
     struct yetty_ydraw_canvas_ptr_result canvas_res =
-        (kind == YETTY_YDRAW_LAYER_KIND_SCROLLING) ? yetty_ydraw_scrolling_canvas_create(context)
-                                                   : yetty_ydraw_scene_canvas_create(context);
+        yetty_ydraw_scrolling_canvas_create(context);
     if (YETTY_IS_ERR(canvas_res)) {
         free(layer);
         return YETTY_ERR(yetty_yterm_terminal_layer, "ydraw-layer: canvas create failed",
@@ -493,7 +499,6 @@ static struct yetty_ycore_void_result ydraw_layer_process_input(
             break;
         case YETTY_OSC_YDRAW_BIN:
         case YETTY_OSC_YDRAW_OVERLAY:
-        case YETTY_OSC_YDRAW_SCENE_BIN:
             r = layer->canvas->ops->process_input(layer->canvas, osc_statemachine);
             break;
         default:
@@ -813,15 +818,12 @@ static struct yetty_ycore_void_result ydraw_layer_set_alt_screen(
         return YETTY_OK_VOID();
     }
 
-    /* Lazy-build the saved-side canvas the first time we toggle. The
-   * empty side starts on the alt slot when we enter (alt_active=1),
-   * and on the primary slot if for some reason we exit before having
-   * entered (shouldn't happen, but cheap to handle). */
+    /* Lazy-build the saved-side canvas the first time we toggle. Only
+   * KIND_SCROLLING exists now — scene-canvas was retired with the
+   * ycompositor migration. */
     if (!layer->saved_canvas && layer->create_context) {
         struct yetty_ydraw_canvas_ptr_result saved_res =
-            (layer->kind == YETTY_YDRAW_LAYER_KIND_SCROLLING)
-                ? yetty_ydraw_scrolling_canvas_create(layer->create_context)
-                : yetty_ydraw_scene_canvas_create(layer->create_context);
+            yetty_ydraw_scrolling_canvas_create(layer->create_context);
         if (YETTY_IS_ERR(saved_res)) {
             return YETTY_ERR(yetty_ycore_void, "ydraw_layer_set_alt_screen: canvas create failed",
                              saved_res);
@@ -857,30 +859,17 @@ static struct yetty_ycore_void_result ydraw_layer_set_alt_screen(
     return YETTY_OK_VOID();
 }
 
-/* Full-screen erase (CSI 2J / 3J) on the active screen — wipe the
- * scene-kind canvas that's currently bound. The scrolling-kind canvas
- * is for the ydraw OSC stream (ycat images / plots) and is not in scope
- * for the libvterm grid erase — clearing it disturbs the layer's
- * cursor/rolling state and breaks the post-feed dirty handshake that
- * drives subsequent renders. Only the scene canvas (where ygui/ygreeter
- * lives) needs to be flushed on full-screen erase. No request_render
- * here either: terminal_pty_pipe_read's after-feed check already pumps
- * a render when text-layer is dirty, which it is by the time we get
- * here (the matching on_damage from erase_user fires just before). */
+/* Full-screen erase (CSI 2J / 3J). With scene-canvas retired, the only
+ * remaining canvas kind is SCROLLING — and that one is for the ydraw
+ * OSC stream (ycat images / plots), which is NOT in scope for the
+ * libvterm grid erase. Clearing it disturbs the layer's cursor /
+ * rolling state and breaks the post-feed dirty handshake. So this
+ * entry point is now a no-op; it stays on the vtable so the terminal's
+ * dispatch doesn't need an existence check. */
 static struct yetty_ycore_void_result ydraw_layer_clear_screen(
     struct yetty_yrender_terminal_layer *self)
 {
-    struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
-    if (layer->kind != YETTY_YDRAW_LAYER_KIND_SCENE) {
-        return YETTY_OK_VOID();
-    }
-    if (!layer->canvas) {
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ycore_void_result r = layer->canvas->ops->clear(layer->canvas);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw_layer_clear_screen: canvas clear failed");
-    layer->base.dirty = 1;
-    ydebug("ydraw scene: clear_screen");
+    (void)self;
     return YETTY_OK_VOID();
 }
 

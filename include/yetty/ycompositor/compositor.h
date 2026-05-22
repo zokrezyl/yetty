@@ -166,6 +166,22 @@ struct yetty_ydraw_font;
 void yetty_ycompositor_set_default_font(
     struct yetty_ycompositor *comp, struct yetty_ydraw_font *font);
 
+/* Offset of the compositor's render area within the target's surface,
+ * in target pixel space.
+ *
+ * Wire CMD_GROUP rects from producers (ygreeter, ygui-driven OSC) are
+ * PANE-LOCAL — the producer doesn't know where the compositor's pane
+ * sits inside the terminal surface (e.g. the tab strip pushes panes
+ * down by ~30 px). The compositor converts incoming pane-local rects
+ * to absolute target rects by adding (offset_x, offset_y); rendered
+ * figures land at the same screen coords the input pipeline subtracts
+ * to forward mouse events, so cursor and hit-test agree.
+ *
+ * Changing the offset shifts every existing figure rect by the delta
+ * and marks the whole frame damaged. Default offset is (0, 0). */
+void yetty_ycompositor_set_viewport_offset(
+    struct yetty_ycompositor *comp, float offset_x, float offset_y);
+
 #ifdef __cplusplus
 }
 #endif

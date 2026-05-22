@@ -3,8 +3,6 @@
 
 add_library(yetty_ydraw STATIC
     flyweight.c
-    scene-canvas.c
-    scene-grid.c
     scrollbuffer.c
     scrolling-canvas.c
     scrolling-grid.c

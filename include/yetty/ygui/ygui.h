@@ -1637,12 +1637,6 @@ struct yetty_platform_pty;
 void yetty_ygui_engine_set_output_pty(struct yetty_ygui_engine *engine,
                                       struct yetty_platform_pty *pty);
 
-/* Force the engine to emit YDRAW_SCENE_BIN even when YGRID_USE_NEW_OSC=1
- * is set in the environment. yui's chrome engine sets this — its SM only
- * registers the legacy code, so the new compositor code would dead-end. */
-void yetty_ygui_engine_set_force_legacy_osc(struct yetty_ygui_engine *engine,
-                                            int force);
-
 /* Set card dimensions for testing coordinate scaling
  * These are normally set by ygui_engine_create() but can be overridden for tests */
 void yetty_ygui_engine_set_card_size(struct yetty_ygui_engine *engine, int card_w, int card_h);

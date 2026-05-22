@@ -185,12 +185,28 @@ uint32_t yetty_ygui_widget_open_group(
         }
     }
 
-    /* Group rect is parent-relative (self->x, self->y). Body prim coords
-     * are widget-local — ygui paints call render_box(ctx, self->x + dx, …)
-     * and the offset trick (ctx->offset_x = -self->x) cancels self->x so
-     * the wire carries pure `dx`. */
-    float gx = (float)self->x;
-    float gy = (float)self->y;
+    /* Group rect choice depends on whether ancestors are on the wire
+     * in the same envelope:
+     *
+     *  - Full-redraw: every visible widget emits, so ancestor CMD_GROUPs
+     *    nest around this one and the receiver accumulates their
+     *    parent-relative rects into an absolute origin. We emit
+     *    PARENT-RELATIVE (self->x, self->y) — the receiver does the
+     *    accumulation.
+     *
+     *  - Incremental (only dirty widget emits): clean ancestors are
+     *    skipped, so the dirty widget arrives at the top level of the
+     *    wire envelope without any parent chain for the receiver to
+     *    accumulate. We must emit ABSOLUTE (effective_x, effective_y)
+     *    — the layout pass already computed it as
+     *      effective_x = self->x + sum(ancestor x's)
+     *
+     * Body prim coords stay widget-local in both modes — the
+     * ctx->offset_x = -self->x trick below makes `render_box(self->x +
+     * dx, …)` write `dx` on the wire, which is correct because the
+     * receiver's figure rect provides the origin in either path. */
+    float gx = ctx->force_full_redraw ? (float)self->x : (float)self->effective_x;
+    float gy = ctx->force_full_redraw ? (float)self->y : (float)self->effective_y;
     float gw = (float)self->layout_w;
     float gh = (float)self->layout_h;
     struct yetty_ydraw_id_result mark_res = yetty_ydraw_draw_list_begin_group_with_rect(

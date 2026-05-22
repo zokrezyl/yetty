@@ -672,13 +672,27 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
      * effect on the receiver until we ship the envelope). */
     yetty_ydraw_draw_list_clear(engine->buffer);
 
-    /* 1a. Full-redraw frames open with CMD_ZERO so the receiver wipes
-     * any prior entity state before we re-emit the whole tree. After
-     * the first frame we run in incremental mode: no CMD_ZERO, just a
-     * batch of `DELETE(group_id)` records for widgets that died since
-     * last render, followed by `DELETE+GROUP` pairs for every dirty
-     * widget (emitted inside the tree walk below). */
-    int full_redraw = engine->needs_full_redraw || !engine->card_shown;
+    /* 1a. Force full-redraw on every frame — the ycompositor receiver
+     * (current production target) builds one yfigure_group + ygrid per
+     * TOP-LEVEL CMD_GROUP and merges nested CMD_GROUPs into the
+     * outermost figure's ygrid via offset accumulation. That model
+     * does not support incremental updates to nested widgets: a
+     * mid-tree CMD_GROUP on a dirty descendant ends up as a NEW
+     * top-level figure layered on top of the still-existing parent
+     * (whose ygrid already paints that widget's pixels) — visible as
+     * double-paint + z-order jump on every hover. Issue #229 covers
+     * the analysis.
+     *
+     * Until per-widget figures (or a parent_id wire field) land,
+     * every emission re-emits the whole tree. CMD_ZERO at the head
+     * wipes the producer's previous frame from the receiver; the
+     * nested CMD_GROUPs re-create the figure with stable insertion
+     * order (= stable z-order). The cost is a full WebGPU rebuild
+     * per frame, which is acceptable while ygreeter / ytop are the
+     * dominant producers. */
+    int full_redraw = 1;
+    (void)engine->card_shown;
+    (void)engine->needs_full_redraw;
     if (full_redraw) {
         struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(engine->buffer);
         if (YETTY_IS_ERR(zr)) {
@@ -748,12 +762,11 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     if (!engine->card_shown) {
         struct yetty_ycore_void_result r = yetty_ygui_osc_create_card(
             engine->output_pty, engine->card_name, engine->card_x, engine->card_y, engine->card_w,
-            engine->card_h, data, size, engine->force_legacy_osc);
+            engine->card_h, data, size);
         engine->card_shown = 1;
         return r;
     }
-    return yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size,
-                                      engine->force_legacy_osc);
+    return yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size);
 }
 
 /* Send the init OSC handshake: cell-size query, mouse subscriptions,
@@ -806,7 +819,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
     if (size > 0 && data) {
         struct yetty_ycore_void_result cr = yetty_ygui_osc_create_card(
             engine->output_pty, engine->card_name, engine->card_x, engine->card_y,
-            engine->card_w, engine->card_h, data, size, engine->force_legacy_osc);
+            engine->card_w, engine->card_h, data, size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
                             "engine_emit_handshake: create_card placeholder failed");
         engine->card_shown = 1;
@@ -2043,14 +2056,6 @@ void yetty_ygui_engine_set_output_pty(struct yetty_ygui_engine *engine,
 {
     if (engine) {
         engine->output_pty = pty;
-    }
-}
-
-void yetty_ygui_engine_set_force_legacy_osc(struct yetty_ygui_engine *engine,
-                                            int force)
-{
-    if (engine) {
-        engine->force_legacy_osc = force ? 1 : 0;
     }
 }
 

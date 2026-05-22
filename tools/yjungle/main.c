@@ -5,7 +5,7 @@
  * stream: GROUP / DELETE / CMD_ZERO records targeting named entities
  * inside the receiver's scene-canvas. This tool drives time, owns the
  * envelope ydraw_list, watches for pane resize / quit keys via yface,
- * and ships envelopes to stdout on YETTY_OSC_YDRAW_SCENE_BIN (600004).
+ * and ships envelopes to stdout on YETTY_OSC_YCOMPOSITOR_BIN.
  *
  * Modelled on tools/yzoo/main.c. Key differences:
  *   - Targets the SCENE_BIN OSC code so the receiver routes to the
@@ -55,7 +55,7 @@ emit_envelope(int osc_code, int compressed,
     return YETTY_OK_VOID();
 }
 
-/* Ship the contents of `buf` as a YDRAW_SCENE_BIN envelope. Returns
+/* Ship the contents of `buf` as a YCOMPOSITOR_BIN envelope. Returns
  * OK and emits nothing if the serialised buffer carries no commands
  * (i.e. only the 24-byte framed-envelope header — no actual prims). */
 static struct yetty_ycore_void_result
@@ -81,7 +81,7 @@ emit_scene_bin(struct yetty_ydraw_draw_list *buf)
         .reserved = {0, 0},
     };
     struct yetty_ycore_void_result r =
-        emit_envelope(YETTY_OSC_YDRAW_SCENE_BIN, /*compressed=*/1,
+        emit_envelope(YETTY_OSC_YCOMPOSITOR_BIN, /*compressed=*/1,
                       &meta, sizeof(meta), raw, raw_size);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_scene_bin");
     return YETTY_OK_VOID();

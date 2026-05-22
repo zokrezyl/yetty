@@ -10,6 +10,8 @@
 #include <yetty/yplatform/clipboard-manager.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yconfig/config.h>
+#include <yetty/yfont/font.h>
+#include <yetty/yfont/msdf-font.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yface/yface.h>
@@ -133,6 +135,14 @@ struct yetty_yterm_terminal {
      * terminal drives it with explicit calls in the render loop and
      * via the SM shim below for OSC routing. */
     struct yetty_ycompositor *compositor;
+
+    /* Default MSDF font attached to every per-group ygrid the
+     * compositor creates (slot 0). Without it, TEXT_SPAN records from
+     * ygui subprocesses (ygreeter labels, button text, …) expand to
+     * zero glyphs. Owned by the terminal; teardown destroys the
+     * compositor first (cascades into per-group ygrids that hold
+     * borrowed refs to this font) then the font. */
+    struct yetty_ydraw_font *compositor_font;
 
     /* Wire-SM shim. The SM only knows how to dispatch process_input
      * via terminal_layer.ops — this static-base instance forwards its
@@ -1358,29 +1368,6 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_OVERLAY failed");
     ydebug("terminal_create: ydraw layer registered for OSC CLEAR/BIN/OVERLAY");
 
-    /* yui layer — scene canvas, placed above the scrolling one.
-     * Placeholder for yui until its content path lands; no OSC codes. */
-    struct yetty_yterm_terminal_layer_result ydraw_static_res = yetty_yterm_ydraw_layer_create(
-        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows,
-        text_layer->cell_size.width, text_layer->cell_size.height,
-        yetty_context, terminal_request_render_callback, terminal,
-        terminal_scroll_callback, terminal, terminal_cursor_callback, terminal);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ydraw_static_res,
-                        "terminal_create: ydraw static layer create failed");
-    add_r = yetty_yterm_terminal_layer_add(terminal, ydraw_static_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
-                        "terminal_create: terminal_layer_add(ydraw static) failed");
-    ydebug("terminal_create: ydraw static layer created and added");
-
-    /* Register the scene layer for YDRAW_SCENE_BIN — ygui's incremental
-     * GROUP/DELETE shipments land here so they don't compete with the
-     * scrolling layer for flat YDRAW_BIN envelopes. */
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_SCENE_BIN,
-                                                ydraw_static_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
-                        "terminal_create: register scene layer for YDRAW_SCENE_BIN failed");
-    ydebug("terminal_create: ydraw scene layer registered for OSC SCENE_BIN");
-
     /* Shader-glyph layer — animated procedurals at cells whose glyph_index
      * is in the shader-glyph range (top half of u32). Sits above text-layer
      * in compose order so animations overlay text. Reads text-layer's cell
@@ -1484,6 +1471,47 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         terminal->compositor, terminal_request_render_callback, terminal);
     ydebug("terminal_create: ycompositor created");
 
+    /* Default MSDF font for the compositor. ygui-emitting subprocesses
+     * (ygreeter, ytop, …) ship widget labels as TEXT_SPAN records; the
+     * compositor hands those to each per-group ygrid, which needs a
+     * font at slot 0 to expand them into renderable glyphs. Same path
+     * layout scrolling-canvas uses:
+     *   <paths/fonts>/../msdf-fonts/<family>-Regular.cdb
+     *   <paths/shaders>/msdf-font.wgsl
+     * Failure here is non-fatal — labels won't render, but the
+     * terminal stays up. */
+    {
+        struct yetty_yconfig_config *config = yetty_context->runtime->config;
+        const char *fonts_dir   = config->ops->get_string(config, "paths/fonts", "");
+        const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
+        const char *font_family = "DejaVuSansMNerdFontMono";
+        char cdb_path[768];
+        char shader_path[768];
+        snprintf(cdb_path, sizeof(cdb_path),
+                 "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir, font_family);
+        snprintf(shader_path, sizeof(shader_path),
+                 "%s/msdf-font.wgsl", shaders_dir);
+        struct yetty_font_font_result font_res =
+            yetty_yfont_msdf_font_create(cdb_path, shader_path, "terminal_compositor");
+        if (YETTY_IS_OK(font_res)) {
+            terminal->compositor_font = font_res.value;
+            struct yetty_ycore_void_result load_res =
+                terminal->compositor_font->ops->load_basic_latin(terminal->compositor_font);
+            if (YETTY_IS_ERR(load_res)) {
+                ywarn("terminal_create: compositor font load_basic_latin: %s",
+                      load_res.error.msg);
+                yetty_ycore_error_destroy(load_res.error);
+            }
+            yetty_ycompositor_set_default_font(
+                terminal->compositor, terminal->compositor_font);
+            ydebug("terminal_create: ycompositor default font ready (%s)", cdb_path);
+        } else {
+            ywarn("terminal_create: compositor font load failed (%s): %s",
+                  cdb_path, font_res.error.msg);
+            yetty_ycore_error_destroy(font_res.error);
+        }
+    }
+
     /* Wire-SM shim — the SM dispatches by `layer->ops->process_input`,
      * so the compositor (which is NOT a layer) is wrapped in a thin
      * static terminal_layer that forwards to yetty_ycompositor_process_input.
@@ -1561,7 +1589,9 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
     ydebug("terminal_destroy: layers destroyed");
 
     /* Destroy compositor (owned directly, not in layers[]). Cascades
-     * to its figures + ygrid children. */
+     * to its figures + ygrid children, which hold borrowed refs to
+     * the compositor_font — so the font is only safe to free after
+     * the compositor cascade completes. */
     if (terminal->compositor) {
         struct yetty_ycore_void_result r =
             yetty_ycompositor_destroy(terminal->compositor);
@@ -1571,6 +1601,10 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
             else yetty_ycore_error_destroy(r.error);
         }
         terminal->compositor = NULL;
+    }
+    if (terminal->compositor_font) {
+        terminal->compositor_font->ops->destroy(terminal->compositor_font);
+        terminal->compositor_font = NULL;
     }
 
     /* Destroy wire state machine BEFORE the PTY — the SM holds a
@@ -1762,6 +1796,14 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
     /* For now, just log - the actual resize happens through the event system */
     ydebug("terminal_view_set_bounds: %.0fx%.0f at (%.0f,%.0f)", bounds.w, bounds.h, bounds.x,
            bounds.y);
+
+    /* Compositor draws figures at absolute target coords, but the wire
+     * producers (ygreeter, ygui) emit pane-local rects. Push the pane
+     * origin into the compositor so it can shift incoming rects, keeping
+     * the rendered pixels aligned with the mouse coords the input
+     * pipeline subtracts (bounds.x/y) on the way down to the producer. */
+    if (terminal->compositor)
+        yetty_ycompositor_set_viewport_offset(terminal->compositor, bounds.x, bounds.y);
 
     /* Fan out the new pane pixel size to any terminal-wide subscriber.
      * Card-aware subscribers get their per-card resize through a separate
