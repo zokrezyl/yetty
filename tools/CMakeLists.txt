@@ -48,6 +48,7 @@ endif()
 
 if(YETTY_ENABLE_TOOL_YCOMPOSITOR)
     add_subdirectory(ycompositor)
+    add_subdirectory(ycompositor-ygui)
 endif()
 
 if(YETTY_ENABLE_TOOL_YTOP)

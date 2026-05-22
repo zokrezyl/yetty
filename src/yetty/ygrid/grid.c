@@ -488,10 +488,12 @@ static struct yetty_ycore_void_result expand_text_span(
     }
     /* msdf-font's rs.buffers[0] is an array of 6-float entries:
      *   size_x, size_y, bearing_x, bearing_y, advance, cell_idx
-     * Same layout scene-canvas reads from. */
-    const float *meta = (const float *)font_rs->buffers[0].data;
-    uint32_t meta_count =
-        (uint32_t)(font_rs->buffers[0].size / (6u * sizeof(float)));
+     * The font lazily allocates a new metadata slot whenever
+     * get_glyph_index sees a codepoint it hasn't rasterized yet, so
+     * `font_rs->buffers[0].size` grows DURING this loop. Re-fetch it
+     * after every get_glyph_index call (same pattern scene-canvas's
+     * expand uses) so the bounds check stays in sync. */
+    (void)font_rs;  /* the per-iteration re-fetch supersedes this snapshot */
 
     float base_size = font->ops->get_base_size(font);
     float scale = (base_size > 0.0f) ? span->font_size / base_size : 1.0f;
@@ -516,6 +518,17 @@ static struct yetty_ycore_void_result expand_text_span(
             continue;
         }
         uint32_t glyph_index = glyph_idx_result.value;
+
+        /* Re-fetch the metadata view AFTER get_glyph_index so any
+         * lazy slot allocation it triggered is visible here. */
+        struct yetty_yrender_gpu_resource_set_result fresh_rs_result =
+            font->ops->get_gpu_resource_set(font);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fresh_rs_result,
+                            "ygrid: text_span font rs refetch");
+        const struct yetty_ydraw_gpu_resource_set *fresh_rs = fresh_rs_result.value;
+        const float *meta = (const float *)fresh_rs->buffers[0].data;
+        uint32_t meta_count =
+            (uint32_t)(fresh_rs->buffers[0].size / (6u * sizeof(float)));
         if (glyph_index >= meta_count)
             return YETTY_ERR(yetty_ycore_void,
                              "ygrid: text_span glyph_index out of metadata range");

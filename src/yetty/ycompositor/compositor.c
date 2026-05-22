@@ -55,6 +55,7 @@
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ysdf/handler.h>
+#include <yetty/ysdf/types.gen.h>
 #include <yetty/ywire/wire-statemachine.h>
 
 /*===========================================================================
@@ -96,6 +97,14 @@ struct yetty_ycompositor {
     /* request_render callback (set by terminal). */
     yetty_ycompositor_request_render_fn request_render_fn;
     void *request_render_userdata;
+
+    /* Default font attached at slot 0 to every per-group ygrid the
+     * compositor creates. Borrowed — set by the host via
+     * yetty_ycompositor_set_default_font; the host owns lifetime and
+     * must outlive every group that uses it. NULL = no default font;
+     * groups with TEXT_SPAN content will silently drop glyphs in that
+     * case. */
+    struct yetty_ydraw_font *default_font;
 };
 
 /*===========================================================================
@@ -237,11 +246,74 @@ static struct yetty_ycore_void_result parse_group_payload(
  * through it.
  *=========================================================================*/
 
+/* Translate an SDF prim's position fields by (dx, dy) in place.
+ * Mirrors scene-canvas's translate_sdf_prim_inplace — every SDF prim
+ * has geom[0..1] as a position pair; multi-position prims carry extra
+ * pairs at fixed offsets. Generic-translator candidate for shared
+ * yrender util once we have more callers. */
+static void compositor_translate_sdf_inplace(uint32_t *prim_words, uint32_t word_count,
+                                             float dx, float dy)
+{
+    if (word_count < 7u)
+        return;
+    uint32_t type = prim_words[0];
+    float *geom = (float *)&prim_words[5];
+    geom[0] += dx;
+    geom[1] += dy;
+    switch (type) {
+    case YETTY_YSDF_SEGMENT:
+        if (word_count >= 9u) { geom[2] += dx; geom[3] += dy; }
+        break;
+    case YETTY_YSDF_TRIANGLE:
+        if (word_count >= 11u) {
+            geom[2] += dx; geom[3] += dy;
+            geom[4] += dx; geom[5] += dy;
+        }
+        break;
+    case YETTY_YSDF_LINEAR_GRADIENT_BOX:
+        if (word_count >= 14u) {
+            geom[5] += dx; geom[6] += dy;
+            geom[7] += dx; geom[8] += dy;
+        }
+        break;
+    case YETTY_YSDF_RADIAL_GRADIENT_BOX:
+        if (word_count >= 12u) { geom[5] += dx; geom[6] += dy; }
+        break;
+    default:
+        break;
+    }
+}
+
+/* Translate a GLYPH wire record's x/y in place. The wire layout has
+ * x at word index 2, y at index 3 (matches scrolling-canvas's
+ * YDRAW_GLYPH_WORDS / SCENE_GLYPH_WORDS shape). */
+static void compositor_translate_glyph_inplace(uint32_t *prim_words, uint32_t word_count,
+                                               float dx, float dy)
+{
+    if (word_count < 7u)
+        return;
+    float *fx = (float *)&prim_words[2];
+    float *fy = (float *)&prim_words[3];
+    *fx += dx;
+    *fy += dy;
+}
+
+/* Walk a group's body. `origin_x, origin_y` is the absolute offset
+ * accumulated from the parent chain so far; prims added to the ygrid
+ * are translated by it before they hit add_record.
+ *
+ * Nested CMD_GROUP records are walked recursively into the SAME ygrid
+ * (ent->ygrid), accumulating their parent-relative rects into the
+ * origin. This is the "one ygrid per top-level window, many nested
+ * groups inside" model — children's coordinate frames are honoured
+ * but everything paints to one shared spatial bucket. */
+#define COMPOSITOR_GROUP_HEADER_BYTES 32u   /* style(16) + rect(16) */
+#define COMPOSITOR_MAX_PRIM_WORDS     32u
+
 static struct yetty_ycore_void_result feed_group_body(
     struct yetty_ycompositor *c, struct ygroup_entry *ent,
-    const uint8_t *body, uint32_t body_len)
+    const uint8_t *body, uint32_t body_len, float origin_x, float origin_y)
 {
-    (void)c;
     uint32_t off = 0;
     while (off < body_len) {
         struct yetty_ydraw_command cmd;
@@ -255,17 +327,93 @@ static struct yetty_ycore_void_result feed_group_body(
         if (cmd.kind == YETTY_YDRAW_COMMAND_ADD) {
             uint32_t type = cmd.flyweight.data[0];
             if (type == YETTY_YDRAW_CMD_GROUP) {
-                /* Nested groups inside a window-group: not v1; skip. */
-                ydebug("ycompositor: nested CMD_GROUP inside group body (skipped in v1)");
-            } else {
-                /* SDF prim, glyph, or anything else the ygrid understands.
-                 * ygrid drops unsupported types silently. We hand the
-                 * full record bytes (8 + payload_size). */
+                /* Nested group — read its with-rect header (if present)
+                 * to accumulate the parent-relative rect into origin
+                 * and recurse into the nested body. The nested group's
+                 * prims flow into the SAME ygrid as the outer parent
+                 * (one ygrid per top-level window). */
+                uint32_t nested_payload_size;
+                memcpy(&nested_payload_size,
+                       (const uint8_t *)cmd.flyweight.data + 8, 4);
+                const uint8_t *nested_header =
+                    (const uint8_t *)cmd.flyweight.data + 12;
+                const uint8_t *nested_body;
+                uint32_t nested_body_len;
+                float child_origin_x = origin_x;
+                float child_origin_y = origin_y;
+                if (nested_payload_size >= COMPOSITOR_GROUP_HEADER_BYTES) {
+                    float rel_x, rel_y;
+                    memcpy(&rel_x, nested_header + 16, sizeof(float));
+                    memcpy(&rel_y, nested_header + 20, sizeof(float));
+                    child_origin_x += rel_x;
+                    child_origin_y += rel_y;
+                    nested_body = nested_header + COMPOSITOR_GROUP_HEADER_BYTES;
+                    nested_body_len = nested_payload_size - COMPOSITOR_GROUP_HEADER_BYTES;
+                } else {
+                    nested_body = nested_header;
+                    nested_body_len = nested_payload_size;
+                }
+                struct yetty_ycore_void_result nr = feed_group_body(
+                    c, ent, nested_body, nested_body_len,
+                    child_origin_x, child_origin_y);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, nr,
+                                    "ycompositor: nested group");
+            } else if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
+                /* TEXT_SPAN: shift x, y in a heap copy so the ygrid's
+                 * expansion uses absolute coords. The wire bytes are
+                 * const, so we copy. ts->x at payload byte 0,
+                 * ts->y at byte 4 (just past the 8-byte header). */
                 size_t rec_size = (size_t)pr.value;
-                struct yetty_ycore_void_result ar = yetty_ygrid_add_record(
-                    ent->ygrid, body + off, rec_size);
+                uint8_t *copy = (uint8_t *)malloc(rec_size);
+                if (!copy)
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "ycompositor: TEXT_SPAN copy oom");
+                memcpy(copy, body + off, rec_size);
+                if (origin_x != 0.0f || origin_y != 0.0f) {
+                    float ts_x, ts_y;
+                    memcpy(&ts_x, copy + 8 + 0, 4);
+                    memcpy(&ts_y, copy + 8 + 4, 4);
+                    ts_x += origin_x;
+                    ts_y += origin_y;
+                    memcpy(copy + 8 + 0, &ts_x, 4);
+                    memcpy(copy + 8 + 4, &ts_y, 4);
+                }
+                struct yetty_ycore_void_result ar =
+                    yetty_ygrid_add_record(ent->ygrid, copy, rec_size);
+                free(copy);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
-                                    "ycompositor: ygrid add_record (group body)");
+                                    "ycompositor: ygrid add_record (TEXT_SPAN)");
+            } else {
+                /* SDF prim or GLYPH — translate positions by origin
+                 * before handing to the ygrid. Wire bytes are const so
+                 * copy into a stack buffer. SDF max word count is 16
+                 * (LINEAR_GRADIENT_BOX); GLYPH is 7. */
+                size_t rec_size = (size_t)pr.value;
+                size_t word_count = rec_size / sizeof(uint32_t);
+                if (word_count == 0 || word_count > COMPOSITOR_MAX_PRIM_WORDS) {
+                    /* Unsupported prim shape — pass through unmodified
+                     * (preserves today's drop-unknown semantics). */
+                    struct yetty_ycore_void_result ar = yetty_ygrid_add_record(
+                        ent->ygrid, body + off, rec_size);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
+                                        "ycompositor: ygrid add_record (passthrough)");
+                } else {
+                    uint32_t scratch[COMPOSITOR_MAX_PRIM_WORDS];
+                    memcpy(scratch, body + off, rec_size);
+                    if (origin_x != 0.0f || origin_y != 0.0f) {
+                        if (type == 200u) {
+                            compositor_translate_glyph_inplace(
+                                scratch, (uint32_t)word_count, origin_x, origin_y);
+                        } else {
+                            compositor_translate_sdf_inplace(
+                                scratch, (uint32_t)word_count, origin_x, origin_y);
+                        }
+                    }
+                    struct yetty_ycore_void_result ar = yetty_ygrid_add_record(
+                        ent->ygrid, (const uint8_t *)scratch, rec_size);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
+                                        "ycompositor: ygrid add_record");
+                }
             }
         }
         /* DELETE/UPDATE inside a group body: not v1; ignore. */
@@ -322,6 +470,19 @@ static struct yetty_ycore_void_result group_create(
     struct yetty_ygrid_grid *yg = yg_r.value;
     struct yetty_yfigure_figure *yg_fig = yetty_ygrid_as_figure(yg);
 
+    /* Attach the compositor's default font at slot 0 so TEXT_SPAN
+     * records that arrive in the group body can be expanded into
+     * renderable glyphs. ygrid borrows the pointer; the host (which
+     * called yetty_ycompositor_set_default_font) owns lifetime. */
+    if (c->default_font) {
+        struct yetty_ycore_void_result fr =
+            yetty_ygrid_set_font(yg, 0u, c->default_font);
+        if (YETTY_IS_ERR(fr)) {
+            ydebug("ycompositor: ygrid_set_font failed: %s", fr.error.msg);
+            yetty_ycore_error_destroy(fr.error);
+        }
+    }
+
     struct yetty_ycore_void_result ar =
         yetty_yfigure_group_add_child(grp, yg_fig);
     if (YETTY_IS_ERR(ar)) {
@@ -353,9 +514,13 @@ static struct yetty_ycore_void_result group_create(
         .id = id, .group = grp, .ygrid = yg,
     };
 
-    /* Feed body prims into the ygrid. */
+    /* Feed body prims into the ygrid. The top-level group's rect is
+     * already absorbed by the ygrid's figure rect (the figure handles
+     * placement), so body prims start with origin (0, 0) — only
+     * nested CMD_GROUPs inside the body contribute to origin. */
     struct yetty_ycore_void_result br = feed_group_body(c, &c->groups[c->group_count - 1],
-                                                       gp.body, gp.body_len);
+                                                       gp.body, gp.body_len,
+                                                       0.0f, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ycompositor: group_create body");
     return YETTY_OK_VOID();
 }
@@ -382,11 +547,13 @@ static struct yetty_ycore_void_result group_update(
         c, yetty_yfigure_group_as_figure(ent->group), new_rect);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ycompositor: group_update set_rect");
 
-    /* Wipe the existing prim store and refill. */
+    /* Wipe the existing prim store and refill. Same origin contract as
+     * group_create: top-level rect lives on the figure, body starts
+     * with origin (0, 0). */
     struct yetty_ycore_void_result cr = yetty_ygrid_clear(ent->ygrid);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ycompositor: group_update clear ygrid");
     struct yetty_ycore_void_result br =
-        feed_group_body(c, ent, gp.body, gp.body_len);
+        feed_group_body(c, ent, gp.body, gp.body_len, 0.0f, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ycompositor: group_update body");
     return YETTY_OK_VOID();
 }
@@ -430,6 +597,74 @@ static struct yetty_ycore_void_result clear_all_groups(struct yetty_ycompositor 
     return YETTY_OK_VOID();
 }
 
+/* Dispatch one already-parsed wire command into the compositor's
+ * group machinery. Factored out of process_input so the bytes-based
+ * process_records entry point can share the same logic without going
+ * through the wire-statemachine. */
+static struct yetty_ycore_void_result dispatch_one_command(
+    struct yetty_ycompositor *c, const struct yetty_ydraw_command *cmd)
+{
+    if (cmd->kind == YETTY_YDRAW_COMMAND_ADD) {
+        uint32_t type = cmd->flyweight.data[0];
+        ydebug("ycompositor: ADD type=0x%08x", type);
+        if (type == YETTY_YDRAW_CMD_ZERO) {
+            return clear_all_groups(c);
+        }
+        if (type == YETTY_YDRAW_CMD_GROUP) {
+            uint32_t id, payload_size;
+            memcpy(&id, (const uint8_t *)cmd->flyweight.data + 4, 4);
+            memcpy(&payload_size, (const uint8_t *)cmd->flyweight.data + 8, 4);
+            const uint8_t *payload = (const uint8_t *)cmd->flyweight.data + 12;
+            ydebug("ycompositor: CMD_GROUP id=%u payload_size=%u", id, payload_size);
+            return group_create(c, id, payload, payload_size);
+        }
+        /* Stray top-level prim (no enclosing group). v1 ignores. */
+        ydebug("ycompositor: top-level prim type=0x%08x ignored (need CMD_GROUP)", type);
+        return YETTY_OK_VOID();
+    }
+    if (cmd->kind == YETTY_YDRAW_COMMAND_DELETE) {
+        return group_delete(c, cmd->id);
+    }
+    if (cmd->kind == YETTY_YDRAW_COMMAND_UPDATE) {
+        return group_update(c, cmd->update.id, cmd->update.data, cmd->update.size);
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ycompositor_process_records(
+    struct yetty_ycompositor *c, const uint8_t *bytes, size_t bytes_len)
+{
+    if (!c)
+        return YETTY_ERR(yetty_ycore_void, "ycompositor_process_records: NULL compositor");
+    if (bytes_len == 0)
+        return YETTY_OK_VOID();
+    if (!bytes)
+        return YETTY_ERR(yetty_ycore_void, "ycompositor_process_records: NULL bytes");
+
+    size_t offset = 0;
+    while (offset < bytes_len) {
+        struct yetty_ydraw_command cmd;
+        struct yetty_ycore_size_result pr = yetty_ydraw_drawable_command_parse(
+            c->registry, bytes + offset, bytes_len - offset, &cmd);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ycompositor_process_records: parse");
+        if (pr.value == 0)
+            return YETTY_ERR(yetty_ycore_void,
+                             "ycompositor_process_records: parser made no progress");
+        struct yetty_ycore_void_result dr = dispatch_one_command(c, &cmd);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "ycompositor_process_records: dispatch");
+        offset += (size_t)pr.value;
+    }
+
+    c->dirty = 1;
+    if (c->request_render_fn) {
+        struct yetty_ycore_void_result rr =
+            c->request_render_fn(c->request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                            "ycompositor_process_records: request_render");
+    }
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ycompositor_process_input(
     struct yetty_ycompositor *c,
     struct yetty_ywire_wire_statemachine *sm)
@@ -464,33 +699,7 @@ struct yetty_ycore_void_result yetty_ycompositor_process_input(
                 break;
             }
 
-            const struct yetty_ydraw_command *cmd = &iter.command;
-            struct yetty_ycore_void_result dr = YETTY_OK_VOID();
-
-            if (cmd->kind == YETTY_YDRAW_COMMAND_ADD) {
-                uint32_t type = cmd->flyweight.data[0];
-                ydebug("ycompositor: ADD type=0x%08x", type);
-                if (type == YETTY_YDRAW_CMD_ZERO) {
-                    dr = clear_all_groups(c);
-                } else if (type == YETTY_YDRAW_CMD_GROUP) {
-                    uint32_t id, payload_size;
-                    memcpy(&id, (const uint8_t *)cmd->flyweight.data + 4, 4);
-                    memcpy(&payload_size, (const uint8_t *)cmd->flyweight.data + 8, 4);
-                    const uint8_t *payload =
-                        (const uint8_t *)cmd->flyweight.data + 12;
-                    ydebug("ycompositor: CMD_GROUP id=%u payload_size=%u", id, payload_size);
-                    dr = group_create(c, id, payload, payload_size);
-                } else {
-                    /* Stray top-level prim (no enclosing group). v1 ignores. */
-                    ydebug("ycompositor: top-level prim type=0x%08x ignored (need CMD_GROUP)",
-                           type);
-                }
-            } else if (cmd->kind == YETTY_YDRAW_COMMAND_DELETE) {
-                dr = group_delete(c, cmd->id);
-            } else if (cmd->kind == YETTY_YDRAW_COMMAND_UPDATE) {
-                dr = group_update(c, cmd->update.id,
-                                  cmd->update.data, cmd->update.size);
-            }
+            struct yetty_ycore_void_result dr = dispatch_one_command(c, &iter.command);
 
             if (YETTY_IS_ERR(dr)) {
                 envelope_err = YETTY_ERR(yetty_ycore_void, "ycompositor: cmd dispatch", dr);
@@ -690,6 +899,13 @@ void yetty_ycompositor_set_request_render(
     if (!c) return;
     c->request_render_fn = fn;
     c->request_render_userdata = user;
+}
+
+void yetty_ycompositor_set_default_font(
+    struct yetty_ycompositor *c, struct yetty_ydraw_font *font)
+{
+    if (!c) return;
+    c->default_font = font;
 }
 
 /*===========================================================================

@@ -31,6 +31,7 @@
 #ifndef YETTY_YCOMPOSITOR_COMPOSITOR_H
 #define YETTY_YCOMPOSITOR_COMPOSITOR_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
@@ -80,6 +81,22 @@ struct yetty_ycore_int_result yetty_ycompositor_render(
 struct yetty_ycore_void_result yetty_ycompositor_process_input(
     struct yetty_ycompositor *comp,
     struct yetty_ywire_wire_statemachine *sm);
+
+/* Feed a contiguous block of wire-record bytes into the compositor
+ * without going through the OSC / wire-statemachine framing. Used by
+ * in-process producers (e.g. an embedded ygui_engine + ycompositor)
+ * that already hold the drawable byte stream produced by
+ * yetty_ydraw_draw_list. The bytes must be a sequence of complete
+ * CMD_ZERO / CMD_GROUP / CMD_DELETE / CMD_UPDATE records in the same
+ * shape the OSC pipeline would have delivered; CMD_GROUP envelopes
+ * use the new with-rect form so the receiver can place each window's
+ * yfigure_group + ygrid at the right position.
+ *
+ * Marks the compositor dirty and (if registered) invokes the
+ * request_render callback at the end, same as process_input. */
+struct yetty_ycore_void_result yetty_ycompositor_process_records(
+    struct yetty_ycompositor *comp,
+    const uint8_t *bytes, size_t bytes_len);
 
 /* Notify of grid + cell-size change. Resizes the default ygrid to
  * cover the new pane and marks everything dirty. */
@@ -132,6 +149,16 @@ typedef struct yetty_ycore_void_result (*yetty_ycompositor_request_render_fn)(vo
 void yetty_ycompositor_set_request_render(
     struct yetty_ycompositor *comp,
     yetty_ycompositor_request_render_fn fn, void *user);
+
+/* Attach a default MSDF / raster font for every ygrid the compositor
+ * creates via group_create. ygrid borrows the pointer at slot 0; the
+ * caller owns lifetime and must keep the font alive longer than the
+ * compositor (and any group inside it that holds the borrowed ref).
+ * Pass NULL to clear — groups created afterwards will have no font,
+ * and TEXT_SPAN records in their bodies will silently drop glyphs. */
+struct yetty_ydraw_font;
+void yetty_ycompositor_set_default_font(
+    struct yetty_ycompositor *comp, struct yetty_ydraw_font *font);
 
 #ifdef __cplusplus
 }

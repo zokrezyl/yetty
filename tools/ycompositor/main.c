@@ -32,7 +32,6 @@
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ycompositor/compositor.h>
-#include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygrid/ygrid.h>
