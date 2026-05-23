@@ -10,6 +10,7 @@
 
 #include "ygui_internal.h"
 #include "ygui_flatten.h"
+#include <yetty/yfigure/wire.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -279,10 +280,24 @@ static void yj_destroy(struct yetty_ygui_widget *self)
     self->data.yjungle.live_cap = 0;
 }
 
+static struct yetty_ycore_void_result yj_render_all(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+{
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
+    uint32_t marker = yetty_ygui_widget_open_group_as_kind(
+        self, ctx, YETTY_YFIGURE_KIND_YJUNGLE, yj_render);
+    yetty_ygui_widget_close_group(self, ctx, marker);
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_ygui_widget_vtable *yj_vtable_ptr(void)
 {
     static const struct yetty_ygui_widget_vtable vt = {
         .render = yj_render,
+        .render_all = yj_render_all,
         .destroy = yj_destroy,
     };
     return &vt;

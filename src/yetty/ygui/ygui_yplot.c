@@ -8,6 +8,7 @@
  */
 
 #include "ygui_internal.h"
+#include <yetty/yfigure/wire.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -167,10 +168,29 @@ static void yplot_destroy(struct yetty_ygui_widget *self)
     yplot_free_buffers(self);
 }
 
+/* Custom render_all — yplot lives in its OWN figure kind (YPLOT), not
+ * inside the surrounding chrome ygrid. The yplot's body bytes are the
+ * cached prim stream; the figure rect is the widget rect. Receiver
+ * still routes YPLOT through the ygrid factory today (same SDF/glyph
+ * pipeline), but the wire stays semantically labelled. */
+static struct yetty_ycore_void_result yplot_render_all(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+{
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
+    uint32_t marker = yetty_ygui_widget_open_group_as_kind(
+        self, ctx, YETTY_YFIGURE_KIND_YPLOT, yplot_render);
+    yetty_ygui_widget_close_group(self, ctx, marker);
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_ygui_widget_vtable *yplot_vtable_ptr(void)
 {
     static const struct yetty_ygui_widget_vtable vt = {
         .render = yplot_render,
+        .render_all = yplot_render_all,
         .destroy = yplot_destroy,
     };
     return &vt;

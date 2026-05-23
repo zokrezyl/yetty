@@ -12,6 +12,7 @@
 
 #include "ygui_internal.h"
 #include "ygui_flatten.h"
+#include <yetty/yfigure/wire.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -167,10 +168,24 @@ static void yzoo_destroy(struct yetty_ygui_widget *self)
     yzoo_drop_producer(self);
 }
 
+static struct yetty_ycore_void_result yzoo_render_all(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+{
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
+    uint32_t marker = yetty_ygui_widget_open_group_as_kind(
+        self, ctx, YETTY_YFIGURE_KIND_YZOO, yzoo_render);
+    yetty_ygui_widget_close_group(self, ctx, marker);
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_ygui_widget_vtable *yzoo_vtable_ptr(void)
 {
     static const struct yetty_ygui_widget_vtable vt = {
         .render = yzoo_render,
+        .render_all = yzoo_render_all,
         .destroy = yzoo_destroy,
     };
     return &vt;

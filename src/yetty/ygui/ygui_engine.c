@@ -1932,6 +1932,7 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
     if (!engine) {
         return;
     }
+    ydebug("ygui_yface_on_osc: code=%d payload_len=%zu", osc_code, payload_len);
 
     switch (osc_code) {
     case YMGUI_OSC_SC_MOUSE: {
@@ -1944,9 +1945,13 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
             return;
         }
         if (m->figure_id != engine->figure_id) {
+            ydebug("ygui_yface_on_osc: SC_MOUSE figure_id=%u != engine->figure_id=%u, ignoring",
+                   m->figure_id, engine->figure_id);
             return; /* not ours */
         }
 
+        ydebug("ygui_yface_on_osc: SC_MOUSE kind=%d figure_id=%u x=%.1f y=%.1f button=%d pressed=%d",
+               (int)m->kind, m->figure_id, m->x, m->y, (int)m->button, (int)m->pressed);
         switch (m->kind) {
         case YETTY_YMGUI_INPUT_MOUSE_POS:
             yetty_ygui_engine_mouse_move(engine, m->x, m->y);

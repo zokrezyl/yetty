@@ -68,12 +68,25 @@ enum yetty_yfigure_wire_admin_op {
 
 /* Figure-kind codes — registered with yetty_yfigure_registry by each
  * figure-kind module's _register_factory call. Reserved range 0..0xFFFF
- * for built-in kinds; user kinds start at 0x10000. */
+ * for built-in kinds; user kinds start at 0x10000.
+ *
+ * YPLOT/YIMAGE/YVIDEO/YZOO/YJUNGLE are sibling figure kinds emitted by
+ * ygui's complex producer widgets — they live alongside the widget's
+ * own chrome ygrid in the parent container rather than being inlined
+ * into it. The receiver still renders them via the ygrid factory today
+ * (their payload is an SDF/glyph prim stream), but the distinct kind
+ * code keeps the wire semantically labelled and leaves room for
+ * kind-specific renderers later. */
 enum yetty_yfigure_wire_kind {
     YETTY_YFIGURE_KIND_CONTAINER = 1,
     YETTY_YFIGURE_KIND_YGRID = 2,
     YETTY_YFIGURE_KIND_YMGUI = 3,
     YETTY_YFIGURE_KIND_YRDAWN = 4,
+    YETTY_YFIGURE_KIND_YPLOT = 5,
+    YETTY_YFIGURE_KIND_YIMAGE = 6,
+    YETTY_YFIGURE_KIND_YVIDEO = 7,
+    YETTY_YFIGURE_KIND_YZOO = 8,
+    YETTY_YFIGURE_KIND_YJUNGLE = 9,
 };
 
 #ifdef __cplusplus

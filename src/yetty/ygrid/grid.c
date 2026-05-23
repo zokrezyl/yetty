@@ -1401,6 +1401,15 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory(
         registry, YETTY_YFIGURE_KIND_YGRID, ygrid_factory, default_font);
 }
 
+struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
+    struct yetty_yfigure_registry *registry,
+    uint32_t kind,
+    struct yetty_ydraw_font *default_font)
+{
+    return yetty_yfigure_registry_register(
+        registry, kind, ygrid_factory, default_font);
+}
+
 struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)
 {
     if (!grid)

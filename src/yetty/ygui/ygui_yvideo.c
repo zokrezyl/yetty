@@ -11,6 +11,7 @@
  */
 
 #include "ygui_internal.h"
+#include <yetty/yfigure/wire.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -170,10 +171,24 @@ static void yvideo_destroy(struct yetty_ygui_widget *self)
     yvideo_clear_source(self);
 }
 
+static struct yetty_ycore_void_result yvideo_render_all(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+{
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
+    uint32_t marker = yetty_ygui_widget_open_group_as_kind(
+        self, ctx, YETTY_YFIGURE_KIND_YVIDEO, yvideo_render);
+    yetty_ygui_widget_close_group(self, ctx, marker);
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_ygui_widget_vtable *yvideo_vtable_ptr(void)
 {
     static const struct yetty_ygui_widget_vtable vt = {
         .render = yvideo_render,
+        .render_all = yvideo_render_all,
         .destroy = yvideo_destroy,
     };
     return &vt;

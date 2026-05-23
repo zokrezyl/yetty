@@ -2435,16 +2435,20 @@ struct yetty_yterm_ymgui_hit yetty_yterm_terminal_layer_ymgui_layer_hit_test(
     }
     const struct yetty_yterm_ymgui_layer *l = (const struct yetty_yterm_ymgui_layer *)layer;
 
+    ydebug("ymgui_hit_test: px=%.1f py=%.1f cards=%zu", px, py, l->card_count);
     /* Newest card first — last-rendered = topmost. */
     for (size_t i = l->card_count; i > 0; i--) {
         const struct yetty_yterm_ymgui_card *c = l->cards[i - 1];
-        if (!card_visible(l, c)) {
-            continue;
-        }
+        int vis = card_visible(l, c);
         float ox = card_origin_x(l, c);
         float oy = card_origin_y(l, c);
         float w = card_pixel_w(l, c);
         float ch = card_pixel_h(l, c);
+        ydebug("ymgui_hit_test:   card id=%u vis=%d ox=%.1f oy=%.1f w=%.1f h=%.1f rolling_row=%u row0=%u",
+               c->id, vis, ox, oy, w, ch, c->rolling_row, l->row0_absolute);
+        if (!vis) {
+            continue;
+        }
         if (px >= ox && px < ox + w && py >= oy && py < oy + ch) {
             h.figure_id = c->id;
             h.local_x = px - ox;

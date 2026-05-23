@@ -59,6 +59,17 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory(
     struct yetty_yfigure_registry *registry,
     struct yetty_ydraw_font *default_font);
 
+/* Register the ygrid factory under an arbitrary kind code. Used by
+ * ygui's complex producer widgets (yplot/yimage/yvideo/yzoo/yjungle)
+ * so their content lands in dedicated kind slots on the wire — same
+ * underlying renderer (SDF/glyph prim stream) but a distinct kind tag
+ * that proxies and analyzers can route on. `default_font` is borrowed,
+ * same semantics as register_factory above. */
+struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
+    struct yetty_yfigure_registry *registry,
+    uint32_t kind,
+    struct yetty_ydraw_font *default_font);
+
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 
 /* Create an empty ygrid figure with the given AABB in absolute target

@@ -146,7 +146,7 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
 
 /* Sentinel for widget_open_group: caller passes this to widget_close_group
  * when the widget was skipped (no group opened). */
-#define YETTY_YGUI_GROUP_SKIPPED UINT32_MAX
+/* YETTY_YGUI_GROUP_SKIPPED — defined in ygui_internal.h. */
 
 /* Open this widget's CMD_GROUP and emit its body (the widget's own
  * drawables, NOT its children). Leaves the group OPEN — the caller is
@@ -161,8 +161,8 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
  * The group rect is parent-RELATIVE: (self->x, self->y, layout_w,
  * layout_h). The receiver accumulates the parent chain to resolve
  * coords back to absolute. */
-uint32_t yetty_ygui_widget_open_group(
-    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
+uint32_t yetty_ygui_widget_open_group_as_kind(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx, uint32_t kind,
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *))
 {
@@ -202,7 +202,7 @@ uint32_t yetty_ygui_widget_open_group(
     float gh = (float)self->layout_h;
     struct yetty_ydraw_id_result mark_res =
         yetty_ydraw_draw_list_begin_admin_create_child(
-            ctx->buffer, self->group_id, YETTY_YFIGURE_KIND_YGRID,
+            ctx->buffer, self->group_id, kind,
             gx, gy, gx + gw, gy + gh);
     if (YETTY_IS_ERR(mark_res)) {
         yetty_ycore_error_destroy(mark_res.error);
@@ -223,6 +223,19 @@ uint32_t yetty_ygui_widget_open_group(
     }
 
     return mark_res.value;
+}
+
+/* Convenience wrapper — most widgets ship as YGRID (the default kind for
+ * widget chrome: boxes, borders, text). Producer widgets that need their
+ * own kind tag on the wire (yplot/yimage/yvideo/yzoo/yjungle) call
+ * open_group_as_kind directly. */
+uint32_t yetty_ygui_widget_open_group(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *))
+{
+    return yetty_ygui_widget_open_group_as_kind(
+        self, ctx, YETTY_YFIGURE_KIND_YGRID, render_fn);
 }
 
 /* Close a group previously opened by yetty_ygui_widget_open_group.
@@ -1474,24 +1487,24 @@ static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget 
     float sb_w = (content_h > scrollable_h && scrollable_h > 0) ? t->scrollbar_size : 0;
     (void)sb_w;
 
-    /* Open the panel's CMD_GROUP (parent-relative rect), emit body
-     * (background + scrollbar), then recurse children INSIDE the open
-     * group so each child's CMD_GROUP nests under this one. Children
-     * coords are already widget-local; scroll offset is applied as a
-     * negative offset on the ctx so render_box positions reflect the
-     * scroll state. Note: with the nested wire model, the receiver
-     * accumulates the parent rect for absolute positions, so scrolling
-     * via ctx offset stays a widget-local concern.
+    /* Flat-wire emission: open this widget's CREATE_CHILD record, emit
+     * own body (background + scrollbar) into it, CLOSE IT, then recurse
+     * children at the ROOT envelope level. Each child becomes its own
+     * top-level CREATE_CHILD at the root container — the receiver
+     * preserves z-order via record order (back-to-front) and resolves
+     * absolute coords from the figure rect (effective_x/y), not from
+     * any parent-chain accumulation.
      *
-     * For TWO populations (header vs scrollable), we use the existing
-     * ctx->offset shift only for the scrollable subset — header
-     * children stay at their layout coords. */
-    uint32_t marker = yetty_ygui_widget_open_group(self, ctx, panel_render);
+     * Scroll/header partition: header children stay at their layout
+     * coords; scrollable children get their effective_y mutated by
+     * -scroll temporarily so the emitted figure rect lands at the
+     * on-screen position. Both child sets recurse at root level. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, panel_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
 
-    /* Header children (no scroll). offset stays whatever the caller
-     * had set for body emission since render_box adds it. We don't
-     * need to shift here because child render_all uses the child's
-     * own (parent-relative) x/y for its CMD_GROUP rect. */
+    /* Header children (no scroll). */
     for (struct yetty_ygui_widget *child = self->first_child; child;
          child = child->next_sibling) {
         if (child->y < header_h) {
@@ -1503,22 +1516,23 @@ static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget 
         }
     }
 
-    /* Scrollable children — the panel's scroll state is a per-child
-     * y-offset that lives in the CMD_GROUP rect we emit for each child
-     * (in the future this should become a property of THIS group's
-     * rect or a dedicated scroll uniform — for now we adjust each
-     * child's effective position via temporary mutation of the
-     * child's stored y). */
+    /* Scrollable children — mutate stored x/y by -scroll so the figure
+     * rect emitted by open_group reflects the scrolled position. The
+     * layout pass already wrote effective_x/y absolute, so we shift
+     * those too. */
     float scroll_x = self->data.panel.scroll_x;
     float scroll_y = self->data.panel.scroll_y;
     for (struct yetty_ygui_widget *child = self->first_child; child;
          child = child->next_sibling) {
         if (child->y >= header_h) {
-            /* TODO: proper clipping */
             float saved_x = (float)child->x;
             float saved_y = (float)child->y;
+            float saved_ex = child->effective_x;
+            float saved_ey = child->effective_y;
             child->x = (int)(saved_x - scroll_x);
             child->y = (int)(saved_y - scroll_y);
+            child->effective_x = saved_ex - scroll_x;
+            child->effective_y = saved_ey - scroll_y;
             if (child->vtable && child->vtable->render_all) {
                 child->vtable->render_all(child, ctx);
             } else {
@@ -1526,10 +1540,11 @@ static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget 
             }
             child->x = (int)saved_x;
             child->y = (int)saved_y;
+            child->effective_x = saved_ex;
+            child->effective_y = saved_ey;
         }
     }
 
-    yetty_ygui_widget_close_group(self, ctx, marker);
     return YETTY_OK_VOID();
 }
 
@@ -2587,7 +2602,12 @@ static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget 
      * panel_render_all for the full rationale. */
     self->was_rendered = 1;
 
-    uint32_t marker = yetty_ygui_widget_open_group(self, ctx, popup_render);
+    /* Flat-wire emission: open + close own group, recurse children at
+     * root level. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, popup_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
 
     for (struct yetty_ygui_widget *child = self->first_child; child;
          child = child->next_sibling) {
@@ -2598,7 +2618,6 @@ static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget 
         }
     }
 
-    yetty_ygui_widget_close_group(self, ctx, marker);
     return YETTY_OK_VOID();
 }
 
@@ -2900,15 +2919,15 @@ static struct yetty_ycore_void_result collapsing_header_render_all(
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
-    /* Open this widget's GROUP, emit the header strip body, then
-     * recurse children INSIDE the open scope (so they nest properly
-     * on the wire). Children are skipped when the collapser is closed. */
-    uint32_t marker = yetty_ygui_widget_open_group(self, ctx, collapsing_header_render);
+    /* Flat-wire emission: open + close own group (header strip only),
+     * recurse children at the root envelope level. Children are
+     * skipped when the collapser is closed. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, collapsing_header_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
 
     if ((self->flags & YETTY_YGUI_FLAG_OPEN) && self->first_child) {
-        /* Children were positioned by the flex pass into the box just
-         * below the header (padding_top = header_h). Their stored
-         * (x, y) is already parent-relative — no ctx offset needed. */
         for (struct yetty_ygui_widget *child = self->first_child; child;
              child = child->next_sibling) {
             if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
@@ -2930,7 +2949,6 @@ static struct yetty_ycore_void_result collapsing_header_render_all(
         }
     }
 
-    yetty_ygui_widget_close_group(self, ctx, marker);
     return first_err;
 }
 
@@ -3692,10 +3710,12 @@ static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *
     }
     self->was_rendered = 1;
 
-    /* Open list's CMD_GROUP (parent-relative rect), emit selection
-     * background body, then recurse children INSIDE the open scope so
-     * they nest. Children's positions are already parent-relative. */
-    uint32_t marker = yetty_ygui_widget_open_group(self, ctx, list_render);
+    /* Flat-wire emission: open + close own group (selection background),
+     * recurse children at the root envelope level. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, list_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
@@ -3715,7 +3735,6 @@ static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *
         }
     }
 
-    yetty_ygui_widget_close_group(self, ctx, marker);
     return first_err;
 }
 
@@ -4447,10 +4466,13 @@ static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_wid
     }
     self->was_rendered = 1;
 
-    /* Open this node's GROUP, emit the header (chevron + label) body,
-     * then recurse the children-list INSIDE the open scope when
-     * expanded. kids->x/y are already parent-relative to this node. */
-    uint32_t marker = yetty_ygui_widget_open_group(self, ctx, tree_node_render);
+    /* Flat-wire emission: open + close own group (header chrome only),
+     * then recurse the children-list at the root envelope level when
+     * expanded. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, tree_node_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
 
     struct yetty_ygui_widget *kids = self->data.tree_node.children_list;
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
@@ -4463,7 +4485,6 @@ static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_wid
         }
     }
 
-    yetty_ygui_widget_close_group(self, ctx, marker);
     return first_err;
 }
 
@@ -5949,12 +5970,14 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
     }
     float scroll = self->data.scrollarea.scroll_y;
 
-    /* Open the scrollarea's CMD_GROUP (parent-relative rect), then
-     * recurse children INSIDE the open scope. Each child's CMD_GROUP
-     * rect carries its own y; we mutate child->y by -scroll for the
-     * recursion (and restore after) so the emitted rect reflects the
-     * scrolled position. */
-    uint32_t marker = yetty_ygui_widget_open_group(self, ctx, scrollarea_render);
+    /* Flat-wire emission: open + close the scrollarea's own group first
+     * (chrome only — bg/scrollbar), THEN recurse children at the root
+     * envelope level. Children's figure rects are shifted by -scroll
+     * via temporary effective_y mutation so they land on-screen. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, scrollarea_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     for (struct yetty_ygui_widget *child = self->first_child; child;
@@ -5963,7 +5986,9 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
             continue;
         }
         float saved_y = (float)child->y;
+        float saved_ey = child->effective_y;
         child->y = (int)(saved_y - scroll);
+        child->effective_y = saved_ey - scroll;
         struct yetty_ycore_void_result r;
         if (child->vtable && child->vtable->render_all) {
             r = child->vtable->render_all(child, ctx);
@@ -5971,6 +5996,7 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
             r = yetty_ygui_widget_render_all_default(child, ctx);
         }
         child->y = (int)saved_y;
+        child->effective_y = saved_ey;
         if (YETTY_IS_ERR(r)) {
             if (YETTY_IS_OK(first_err)) {
                 first_err = r;
@@ -5990,7 +6016,6 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
         }
     }
 
-    yetty_ygui_widget_close_group(self, ctx, marker);
     return first_err;
 }
 

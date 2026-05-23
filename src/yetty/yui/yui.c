@@ -480,6 +480,29 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory", rf);
         }
+        /* Producer-widget kinds — same factory as YGRID for now (see
+         * yfigure/wire.h). yui doesn't itself produce yplot/yimage/etc.
+         * widgets in the chrome, but standalone tools (ygreeter, ytop, …)
+         * may, and yui's compositor processes their wire stream after
+         * they're nested under one of yui's panes via process_records. */
+        static const uint32_t producer_kinds[] = {
+            YETTY_YFIGURE_KIND_YPLOT,
+            YETTY_YFIGURE_KIND_YIMAGE,
+            YETTY_YFIGURE_KIND_YVIDEO,
+            YETTY_YFIGURE_KIND_YZOO,
+            YETTY_YFIGURE_KIND_YJUNGLE,
+        };
+        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); i++) {
+            struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
+                yui->figure_registry, producer_kinds[i], yui->font);
+            if (!YETTY_IS_OK(kr)) {
+                yetty_yfigure_registry_destroy(yui->figure_registry);
+                yui->font->ops->destroy(yui->font);
+                free(yui);
+                return YETTY_ERR(yetty_yui_ptr,
+                                 "yui_create: ygrid register_factory_for_kind", kr);
+            }
+        }
         struct yetty_ycore_rectangle root_rect = {
             .min = {.x = 0.0f, .y = 0.0f},
             .max = {.x = (float)surface_w, .y = (float)surface_h},

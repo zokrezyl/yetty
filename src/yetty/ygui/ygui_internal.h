@@ -70,6 +70,29 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *));
 
+/* Open the widget's CREATE_CHILD record under an explicit figure-kind
+ * code (instead of the default YGRID). Used by complex producer widgets
+ * (yplot/yimage/yvideo/yzoo/yjungle) so their content lands as its own
+ * kind on the wire — a sibling figure of the surrounding ygrid chrome,
+ * not prims inlined into it. Caller must pair with widget_close_group.
+ *
+ * The default-kind sibling, yetty_ygui_widget_open_group, is just this
+ * with kind=YETTY_YFIGURE_KIND_YGRID. */
+uint32_t yetty_ygui_widget_open_group_as_kind(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx, uint32_t kind,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *));
+
+uint32_t yetty_ygui_widget_open_group(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *));
+
+void yetty_ygui_widget_close_group(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx, uint32_t marker);
+
+#define YETTY_YGUI_GROUP_SKIPPED UINT32_MAX
+
 /*=============================================================================
  * Theme Structure
  *===========================================================================*/

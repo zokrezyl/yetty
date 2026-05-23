@@ -236,6 +236,11 @@ static const char *kind_name(uint32_t kind)
     case YETTY_YFIGURE_KIND_YGRID:     return "YGRID";
     case YETTY_YFIGURE_KIND_YMGUI:     return "YMGUI";
     case YETTY_YFIGURE_KIND_YRDAWN:    return "YRDAWN";
+    case YETTY_YFIGURE_KIND_YPLOT:     return "YPLOT";
+    case YETTY_YFIGURE_KIND_YIMAGE:    return "YIMAGE";
+    case YETTY_YFIGURE_KIND_YVIDEO:    return "YVIDEO";
+    case YETTY_YFIGURE_KIND_YZOO:      return "YZOO";
+    case YETTY_YFIGURE_KIND_YJUNGLE:   return "YJUNGLE";
     default:                            return "UNKNOWN_KIND";
     }
 }

@@ -527,7 +527,14 @@ struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
                 dr = YETTY_OK_VOID();
             } else {
                 dr = child->ops->process_bytes(child, payload, hdr.length);
-                if (YETTY_IS_OK(dr)) child->dirty = 1;
+                if (YETTY_IS_OK(dr)) {
+                    child->dirty = 1;
+                    /* Mark the container dirty too — the render-request
+                     * gate in terminal_pty_pipe_read polls the container's
+                     * dirty flag, not the children's. Without this, frames
+                     * land silently and the screen stays stale. */
+                    container->base.dirty = 1;
+                }
             }
         }
         free(payload);

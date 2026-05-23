@@ -267,6 +267,19 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
                     terminal->context.yetty_context.event_loop);
             }
         }
+        /* Root-container path: the wire-SM dispatch into consume_envelope
+         * lands new figure data here. The legacy text-layer dirty check
+         * above only covers libvterm-side mutations, so without this any
+         * frame coming over OSC 630000 lands silently and the screen stays
+         * stale until something else triggers a render. */
+        if (terminal->root_container) {
+            struct yetty_yfigure_figure *rf =
+                yetty_yfigure_container_as_figure(terminal->root_container);
+            if (rf && rf->dirty) {
+                terminal->context.yetty_context.event_loop->ops->request_render(
+                    terminal->context.yetty_context.event_loop);
+            }
+        }
     } else if (nread < 0 && !terminal->shutting_down) {
         /* PTY closed (UV_EOF / read error): the child shell exited — typically
      * Ctrl-D in the prompt, or the user typed `exit`. Trigger the same
@@ -1529,6 +1542,24 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             terminal->figure_registry, terminal->compositor_font);
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rf,
                             "terminal_create: ygrid register_factory");
+        /* Producer-widget kinds reuse the ygrid factory today (same SDF /
+         * glyph prim stream) but ship under distinct kind codes on the
+         * wire — see yfigure/wire.h. Once a kind-specific renderer lands
+         * (e.g. yvideo's NV12 sampling path), it can replace these one by
+         * one without touching the producers. */
+        static const uint32_t producer_kinds[] = {
+            YETTY_YFIGURE_KIND_YPLOT,
+            YETTY_YFIGURE_KIND_YIMAGE,
+            YETTY_YFIGURE_KIND_YVIDEO,
+            YETTY_YFIGURE_KIND_YZOO,
+            YETTY_YFIGURE_KIND_YJUNGLE,
+        };
+        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); i++) {
+            struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
+                terminal->figure_registry, producer_kinds[i], terminal->compositor_font);
+            YETTY_RETURN_IF_ERR(yetty_yterm_terminal, kr,
+                                "terminal_create: ygrid register_factory_for_kind");
+        }
     }
 
     struct yetty_ycore_rectangle root_rect = {
