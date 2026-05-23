@@ -141,7 +141,7 @@ function(yetty_stage_webasm_assets)
     foreach(_SHADER
             "${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl"
             "${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl"
-            "${YETTY_ROOT}/src/yetty/yterm/ymgui-layer.wgsl"
+            "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl"
             "${YETTY_ROOT}/src/yetty/yterm/background-layer.wgsl"
             "${YETTY_ROOT}/src/yetty/yterm/shader-glyph-layer.wgsl"
             "${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl"

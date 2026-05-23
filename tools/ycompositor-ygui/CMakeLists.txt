@@ -63,6 +63,8 @@ target_link_libraries(ycompositor-ygui PRIVATE
 
     yetty_ygrid
     yetty_yfigure
+    yetty_ymgui
+    yetty_yface
     yetty_ydraw_core
     yetty_yruntime
     ${YETTY_LIBS}

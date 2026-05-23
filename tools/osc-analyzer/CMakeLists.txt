@@ -21,6 +21,7 @@ target_link_libraries(osc-analyzer PRIVATE
     yetty_ycore
     yetty_ydraw_core
     yetty_yplatform_core
+    lz4_static
 )
 
 if(NOT MSVC)

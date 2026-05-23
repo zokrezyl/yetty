@@ -25,7 +25,6 @@ add_library(yetty_yterm
     terminal.c
     text-layer.c
     ydraw-layer.c
-    ymgui-layer.c
     yrdawn-layer.c
     ${_yrdawn_server_src}
     shader-glyph-layer.c
@@ -56,6 +55,7 @@ target_link_libraries(yetty_yterm
     yetty_yrdawn
     yetty_yfigure
     yetty_ygrid
+    yetty_ymgui
     lz4_static
 )
 
@@ -63,7 +63,6 @@ target_link_libraries(yetty_yterm
 incbin_add_resources(yetty_yterm
     text_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/text-layer.wgsl"
     ydraw_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/ydraw-layer.wgsl"
-    ymgui_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/ymgui-layer.wgsl"
     shader_glyph_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/shader-glyph-layer.wgsl"
     background_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/background-layer.wgsl"
 )

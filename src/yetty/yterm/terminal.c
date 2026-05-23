@@ -15,7 +15,9 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yface/yface.h>
+#include <yetty/ymgui/figure.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/yrdawn/wire.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
@@ -33,7 +35,6 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/yterm/ymgui-layer.h>
 #include <yetty/yterm/yrdawn-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -114,14 +115,6 @@ struct yetty_yterm_terminal {
     int mouse_move_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
 
-    /* Terminal-wide input subscription (YMGUI_OSC_CS_TERM_INPUT_SUB).
-     * Independent from the card-aware path above: when set, every mouse /
-     * key event ALSO fans out as YMGUI_OSC_SC_TERM_* tagged with figure_id=0
-     * and pane-local pixel coords. Programs that draw their own UI
-     * directly into the pane (browser, file manager) subscribe via this
-     * channel instead of registering a card. */
-    uint32_t term_input_sub_flags;
-
     /* Long-lived yface for emitting input events to the inferior over the
    * PTY. Reused across every emit; out_buf is cleared after each write. */
     struct yetty_yface *emit_yface;
@@ -133,10 +126,11 @@ struct yetty_yterm_terminal {
     int scrollback_active;
     uint32_t view_top_total_idx;
 
-    /* The ymgui layer (cards). Cached during creation so the mouse / KB
-   * handlers can hit-test cards without scanning the layers array.
-   * Borrowed pointer — owned by the layers[] array. */
-    struct yetty_yrender_terminal_layer *ymgui_layer;
+    /* Currently focused ymgui figure (click-focus model). Tracked
+     * directly on the terminal now that hit-testing walks the root
+     * container instead of going through a dedicated ymgui layer.
+     * 0 = no figure focused. */
+    uint32_t focused_figure_id;
 
     /* Root container — replaces the legacy compositor. Holds every
      * figure the producer addresses by id; consumes YCOMPOSITOR_BIN
@@ -163,6 +157,11 @@ struct yetty_yterm_terminal {
      * and the host has to outlive every ygrid the registry might still
      * mint. */
     struct yetty_ygrid_factory_args figure_args;
+
+    /* Same idea for the YMGUI factory — the args carry the lazily-built
+     * shared ymgui pipeline. Lives on the terminal so it outlives every
+     * ymgui figure the registry might mint. */
+    struct yetty_ymgui_factory_args ymgui_figure_args;
 
     /* Wire-SM shim. The SM only knows how to dispatch process_input
      * via terminal_layer.ops — this static-base instance forwards its
@@ -434,12 +433,28 @@ static struct yetty_ycore_void_result terminal_layer_emit_osc(
 /* Card-aware mouse forwarding. Each emit carries a figure_id and
  * card-local pixel coords. figure_id=0 means "no card here" — clients
  * use that to clear their hover state. */
+static struct yetty_ycore_void_result terminal_emit_card_focus(
+    struct yetty_yterm_terminal *terminal, uint32_t figure_id, int gained)
+{
+    struct yetty_client_input_focus msg = {
+        .magic = YETTY_CLIENT_INPUT_FOCUS_MAGIC,
+        .version = YMGUI_WIRE_VERSION,
+        .figure_id = figure_id,
+        .gained = gained,
+    };
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                        "terminal_emit_card_focus: yface_emit failed");
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
     struct yetty_yterm_terminal *terminal, uint32_t figure_id,
     float lx, float ly, int button, int press, float wheel_dy)
 {
-    struct yetty_ymgui_wire_input_mouse msg = {
-        .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
+    struct yetty_client_input_mouse msg = {
+        .magic = YETTY_CLIENT_INPUT_MOUSE_MAGIC,
         .version = YMGUI_WIRE_VERSION,
         .figure_id = figure_id,
         .x = lx,
@@ -455,7 +470,7 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
         msg.pressed = press;
     }
     struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YMGUI_OSC_SC_MOUSE, &msg, sizeof(msg));
+        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE, &msg, sizeof(msg));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_mouse_button: yface_emit failed");
     return YETTY_OK_VOID();
 }
@@ -464,8 +479,8 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
     struct yetty_yterm_terminal *terminal, uint32_t figure_id,
     float lx, float ly, int buttons_held)
 {
-    struct yetty_ymgui_wire_input_mouse msg = {
-        .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
+    struct yetty_client_input_mouse msg = {
+        .magic = YETTY_CLIENT_INPUT_MOUSE_MAGIC,
         .version = YMGUI_WIRE_VERSION,
         .figure_id = figure_id,
         .kind = YETTY_YMGUI_INPUT_MOUSE_POS,
@@ -475,161 +490,56 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
         .y = ly,
     };
     struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YMGUI_OSC_SC_MOUSE, &msg, sizeof(msg));
+        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE, &msg, sizeof(msg));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_mouse_move: yface_emit failed");
     return YETTY_OK_VOID();
 }
 
-/* Terminal-wide variants — same wire structs, figure_id=0, pane-local px.
- * Each is gated on a bit of terminal->term_input_sub_flags so an
- * uninterested subscriber doesn't receive (e.g.) wheel events when it
- * only asked for clicks + moves. */
-static struct yetty_ycore_void_result terminal_emit_term_mouse_button(
-    struct yetty_yterm_terminal *terminal, float lx, float ly,
-    int button, int press, float wheel_dy)
+/* Resolve the pane-pixel point (lx, ly) to a figure-local hit by
+ * walking the root container's ymgui figures. If a figure is "captured"
+ * (drag in progress), the captured figure always wins and coords are
+ * reported as-if-projected into its local space. Otherwise the topmost
+ * visible ymgui figure under the cursor wins. */
+static struct yetty_ymgui_hit terminal_resolve_figure_hit(struct yetty_yterm_terminal *terminal,
+                                                          float lx, float ly,
+                                                          uint32_t captured_figure_id)
 {
-    int is_wheel = (wheel_dy != 0.0f);
-    uint32_t need = is_wheel ? YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL : YETTY_YMGUI_TERM_SUB_MOUSE_CLICK;
-    if (!(terminal->term_input_sub_flags & need)) {
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ymgui_wire_input_mouse msg = {
-        .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
-        .version = YMGUI_WIRE_VERSION,
-        .figure_id = 0,
-        .x = lx,
-        .y = ly,
-    };
-    if (is_wheel) {
-        msg.kind = YETTY_YMGUI_INPUT_MOUSE_WHEEL;
-        msg.button = -1;
-        msg.wheel_dy = wheel_dy;
-    } else {
-        msg.kind = YETTY_YMGUI_INPUT_MOUSE_BUTTON;
-        msg.button = button;
-        msg.pressed = press;
-    }
-    struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_MOUSE, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_term_mouse_button: yface_emit failed");
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result terminal_emit_term_mouse_move(
-    struct yetty_yterm_terminal *terminal, float lx, float ly, int buttons_held)
-{
-    if (!(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_MOVE)) {
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ymgui_wire_input_mouse msg = {
-        .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
-        .version = YMGUI_WIRE_VERSION,
-        .figure_id = 0,
-        .kind = YETTY_YMGUI_INPUT_MOUSE_POS,
-        .button = -1,
-        .buttons_held = (uint32_t)buttons_held,
-        .x = lx,
-        .y = ly,
-    };
-    struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_MOUSE, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_term_mouse_move: yface_emit failed");
-    return YETTY_OK_VOID();
-}
-
-/* Pane pixel size — emitted on subscribe (rising edge) and on resize so
- * subscribers can size their canvases. figure_id=0 = pane-wide. */
-static struct yetty_ycore_void_result terminal_emit_term_resize(
-    struct yetty_yterm_terminal *terminal, float w_px, float h_px)
-{
-    if (!terminal->term_input_sub_flags) {
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ymgui_wire_input_resize msg = {
-        .magic = YMGUI_WIRE_MAGIC_INPUT_RESIZE,
-        .version = YMGUI_WIRE_VERSION,
-        .figure_id = 0,
-        .width = w_px,
-        .height = h_px,
-    };
-    struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_RESIZE, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_term_resize: yface_emit failed");
-    return YETTY_OK_VOID();
-}
-
-/* Term-wide keyboard. Sent for any key (including with no card focused),
- * so console programs can do their own focus tracking. figure_id=0. */
-static struct yetty_ycore_void_result terminal_emit_term_key(
-    struct yetty_yterm_terminal *terminal, uint32_t kind, int key,
-    int mods, uint32_t codepoint)
-{
-    if (!(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_KEY)) {
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ymgui_wire_input_key msg = {
-        .magic = YMGUI_WIRE_MAGIC_INPUT_KEY,
-        .version = YMGUI_WIRE_VERSION,
-        .figure_id = 0,
-        .kind = kind,
-        .key = key,
-        .mods = mods,
-        .codepoint = codepoint,
-    };
-    struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_KEY, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_term_key: yface_emit failed");
-    return YETTY_OK_VOID();
-}
-
-/* Resolve the pane-pixel point (lx, ly) to a card-local hit. If a card
- * is "captured" (drag in progress), the captured card always wins and
- * coords are reported as-if-projected into that card's local space.
- * Otherwise the topmost visible card under the cursor wins. */
-static struct yetty_yterm_ymgui_hit terminal_resolve_card_hit(struct yetty_yterm_terminal *terminal,
-                                                              float lx, float ly,
-                                                              uint32_t captured_card_id)
-{
-    struct yetty_yterm_ymgui_hit hit = {0, 0, 0};
-    if (!terminal->ymgui_layer) {
+    struct yetty_ymgui_hit hit = {0, 0, 0};
+    if (!terminal->root_container) {
         return hit;
     }
 
-    if (captured_card_id != 0) {
-        /* Drag: route to the captured card; project the cursor into its
-     * local space even when the cursor leaves the card's rect. */
-        hit = yetty_yterm_terminal_layer_ymgui_layer_hit_test(terminal->ymgui_layer, lx, ly);
-        if (hit.figure_id == captured_card_id) {
+    if (captured_figure_id != 0) {
+        /* Drag: route to the captured figure; project the cursor into
+         * its local space even when the cursor leaves the figure's rect.
+         * Hit-test first — if cursor is still inside the captured figure,
+         * use the natural local coords; otherwise fall back to the raw
+         * pane coords tagged with the captured id. */
+        hit = yetty_ymgui_figure_hit_test_container(terminal->root_container, lx, ly);
+        if (hit.figure_id == captured_figure_id) {
             return hit;
         }
-        /* Cursor left the captured card. Report local coords by re-asking
-     * the layer for the captured card's origin via a dummy probe at
-     * its own anchor — but the layer only has hit_test today, so fall
-     * back to (lx, ly) tagged with the captured id; clients clamp. */
-        struct yetty_yterm_ymgui_hit captured = {captured_card_id, lx, ly};
+        struct yetty_ymgui_hit captured = {captured_figure_id, lx, ly};
         return captured;
     }
 
-    return yetty_yterm_terminal_layer_ymgui_layer_hit_test(terminal->ymgui_layer, lx, ly);
+    return yetty_ymgui_figure_hit_test_container(terminal->root_container, lx, ly);
 }
 
-/* Emit a keyboard event for the focused card. Returns 1 if delivered
+/* Emit a keyboard event for the focused figure. Returns 1 if delivered
  * (caller treats the keystroke as consumed), 0 otherwise. Emit failures
  * propagate via the Result. */
-static struct yetty_ycore_int_result terminal_emit_card_key(
+static struct yetty_ycore_int_result terminal_emit_figure_key(
     struct yetty_yterm_terminal *terminal, uint32_t kind, int key,
     int mods, uint32_t codepoint)
 {
-    uint32_t focused =
-        terminal->ymgui_layer
-            ? yetty_yterm_terminal_layer_ymgui_layer_focused_card(terminal->ymgui_layer)
-            : 0;
+    uint32_t focused = terminal->focused_figure_id;
     if (focused == 0) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
-    struct yetty_ymgui_wire_input_key msg = {
-        .magic = YMGUI_WIRE_MAGIC_INPUT_KEY,
+    struct yetty_client_input_key msg = {
+        .magic = YETTY_CLIENT_INPUT_KEY_MAGIC,
         .version = YMGUI_WIRE_VERSION,
         .figure_id = focused,
         .kind = kind,
@@ -638,8 +548,8 @@ static struct yetty_ycore_int_result terminal_emit_card_key(
         .codepoint = codepoint,
     };
     struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YMGUI_OSC_SC_KEY, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "terminal_emit_card_key: yface_emit failed");
+        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "terminal_emit_figure_key: yface_emit failed");
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
@@ -765,7 +675,7 @@ static struct yetty_ycore_void_result terminal_scrollback_exit(struct yetty_yter
 /* yetty_yterm_mouse_sub_fn impl — fired by the text-layer when libvterm
  * flips DEC mode 1500/1501. Latch state on the terminal. (No pane-size
  * emission on the rising edge — under the card model, each CARD_PLACE
- * confirms the card's pixel size via YMGUI_OSC_SC_RESIZE individually.) */
+ * confirms the card's pixel size via YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE individually.) */
 static struct yetty_ycore_void_result terminal_mouse_sub_callback(
     int click_enabled, int move_enabled, void *userdata)
 {
@@ -773,30 +683,6 @@ static struct yetty_ycore_void_result terminal_mouse_sub_callback(
     terminal->mouse_click_subscribed = click_enabled;
     terminal->mouse_move_subscribed = move_enabled;
     ydebug("terminal: mouse_sub click=%d move=%d", click_enabled, move_enabled);
-    return YETTY_OK_VOID();
-}
-
-/* yetty_yterm_term_input_sub_fn impl — YMGUI_OSC_CS_TERM_INPUT_SUB arrived
- * (forwarded by ymgui-layer). Latch the new flag bitmask, and on the rising
- * edge of any subscription emit a YMGUI_OSC_SC_TERM_RESIZE so the
- * subscriber knows the pane pixel size before the first event arrives. */
-static struct yetty_ycore_void_result terminal_term_input_sub_callback(
-    uint32_t flags, void *userdata)
-{
-    struct yetty_yterm_terminal *terminal = userdata;
-    uint32_t prev = terminal->term_input_sub_flags;
-    terminal->term_input_sub_flags = flags;
-    ydebug("terminal: term_input_sub flags=0x%x (was 0x%x)", flags, prev);
-
-    /* Rising edge → emit pane pixel size now so the subscriber can size
-     * its canvas before the first event arrives. Bounds come from the
-     * view already used by the mouse handlers above (terminal->view). */
-    if (flags && !prev) {
-        struct yetty_ycore_void_result r =
-            terminal_emit_term_resize(terminal, terminal->view.bounds.w, terminal->view.bounds.h);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
-                            "terminal_term_input_sub_callback: emit_term_resize failed");
-    }
     return YETTY_OK_VOID();
 }
 
@@ -1249,19 +1135,20 @@ static struct yetty_ycore_void_result terminal_compositor_shim_process_input(
 {
     struct yetty_yterm_terminal *terminal =
         container_of(self, struct yetty_yterm_terminal, comp_sm_shim);
-    ydebug("comp_sm_shim: process_input ENTRY root_container=%p", (void *)terminal->root_container);
     if (!terminal->root_container)
         return YETTY_ERR(yetty_ycore_void,
                          "compositor shim: root_container not built");
-    /* Wire-SM contract: process_input loops forever, one envelope per
-     * iteration. consume_envelope returns when at_end is true; yield
-     * back to the SM scanner so it can re-arm us for the next OSC. */
+    /* Hand the SM straight to the root container's process_input — the
+     * figure does the routing. This shim only exists because the SM
+     * still talks to terminal_layer; when layers become figures the
+     * shim vanishes and the SM dispatches the container directly. */
+    struct yetty_yfigure_figure *root =
+        yetty_yfigure_container_as_figure(terminal->root_container);
     for (;;) {
         struct yetty_ycore_void_result r =
-            yetty_yfigure_container_consume_envelope(
-                terminal->root_container, sm);
+            root->ops->process_input(root, sm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
-                            "comp_sm_shim: consume_envelope failed");
+                            "comp_sm_shim: container process_input failed");
         yetty_yplatform_coro_yield();
     }
 }
@@ -1433,45 +1320,11 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: terminal_layer_add(shader_glyph) failed");
     ydebug("terminal_create: shader_glyph layer created and added");
 
-    /* ymgui layer (Dear ImGui frame, cursor-anchored, terminal-scrolling) */
-    struct yetty_yterm_terminal_layer_result ymgui_res = yetty_yterm_ymgui_layer_create(
-        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height, yetty_context,
-        terminal_request_render_callback, terminal, terminal_scroll_callback, terminal,
-        terminal_cursor_callback, terminal);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ymgui_res,
-                        "terminal_create: ymgui layer create failed");
-    add_r = yetty_yterm_terminal_layer_add(terminal, ymgui_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
-                        "terminal_create: terminal_layer_add(ymgui) failed");
-    terminal->ymgui_layer = ymgui_res.value;
-    /* Layer's emit-back path so it can ship FOCUS / RESIZE events through
-     * this terminal's emit_yface. */
-    ymgui_res.value->emit_osc_fn = terminal_layer_emit_osc;
-    ymgui_res.value->emit_osc_userdata = terminal;
-    /* Terminal-wide input subscription updates flow through the same layer
-     * (it owns the OSC parser); the layer just forwards the new bitmask. */
-    ymgui_res.value->term_input_sub_fn = terminal_term_input_sub_callback;
-    ymgui_res.value->term_input_sub_userdata = terminal;
-
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_CLEAR, ymgui_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
-                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_CLEAR failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_FRAME, ymgui_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
-                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_FRAME failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_TEX, ymgui_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
-                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_TEX failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
-                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_CARD_PLACE failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
-                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_CARD_REMOVE failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_TERM_INPUT_SUB, ymgui_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
-                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_TERM_INPUT_SUB failed");
-    ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
+    /* ymgui has moved out of the layer stack. ImGui frames now flow as
+     * yetty_ymgui_figure children of the root container (figure-tree
+     * wire on OSC 630000). Mouse / focus routing scans the root
+     * container, the figures paint themselves, and ymgui-layer.c is
+     * gone. */
 
     /* yrdawn layer (WebGPU-over-OSC bridge — remote wasm process renders
      * here as if our Dawn were its local GPU). */
@@ -1606,6 +1459,16 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             YETTY_RETURN_IF_ERR(yetty_yterm_terminal, kr,
                                 "terminal_create: ygrid register_factory_for_kind");
         }
+
+        /* YMGUI — Dear-ImGui frames as figure-tree siblings. The factory
+         * args carry the lazily-built shared pipeline; pre-stash the
+         * context so the first mint can build it. */
+        terminal->ymgui_figure_args.context = yetty_context;
+        terminal->ymgui_figure_args.pipeline = NULL;
+        struct yetty_ycore_void_result mr = yetty_ymgui_register_factory(
+            terminal->figure_registry, &terminal->ymgui_figure_args);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, mr,
+                            "terminal_create: ymgui register_factory");
     }
 
     struct yetty_ycore_rectangle root_rect = {
@@ -1718,6 +1581,14 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
             yetty_yfigure_registry_destroy(terminal->figure_registry);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         terminal->figure_registry = NULL;
+    }
+    /* ymgui pipeline (if lazily built) outlived every ymgui figure that
+     * borrowed it — the container cascade above already destroyed those.
+     * Safe to tear it down now. */
+    {
+        struct yetty_ycore_void_result r =
+            yetty_ymgui_factory_args_release(&terminal->ymgui_figure_args);
+        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
     }
     /* The complex-prim factory outlives the registry — every ygrid the
      * registry minted borrowed our factory pointer, and they must be
@@ -1938,16 +1809,7 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
         yetty_yfigure_container_set_viewport_offset(
             terminal->root_container, bounds.x, bounds.y);
 
-    /* Fan out the new pane pixel size to any terminal-wide subscriber.
-     * Card-aware subscribers get their per-card resize through a separate
-     * path (ymgui-layer's CARD_PLACE → SC_RESIZE). */
-    if (changed && terminal->term_input_sub_flags) {
-        struct yetty_ycore_void_result r =
-            terminal_emit_term_resize(terminal, bounds.w, bounds.h);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
-                            "terminal_view_set_bounds: emit_term_resize failed");
-    }
-
+    (void)changed;
     return YETTY_OK_VOID();
 }
 
@@ -2010,21 +1872,11 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             }
         }
         /* Terminal-wide keyboard fan-out — opt-in via TERM_INPUT_SUB. Fires
-         * BEFORE the focused-card path so subscribers see every key the
-         * pane received, regardless of card focus. Subscribers that also
-         * want libvterm-formatted bytes get those via stdin as usual; this
-         * channel just adds structured (key+mods+codepoint) info on top. */
+         * If a ymgui figure has focus, route the keystroke to it as an
+         * OSC envelope and DO NOT also feed libvterm — otherwise the
+         * shell would see the keystroke alongside the figure. */
         {
-            struct yetty_ycore_void_result tkr = terminal_emit_term_key(
-                terminal, YETTY_YMGUI_INPUT_KEY_DOWN, event->key.key, event->key.mods, 0);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, tkr,
-                                "terminal_view_on_event: emit_term_key(KEY_DOWN) failed");
-        }
-        /* If a ymgui card has focus, route the keystroke to it as an OSC
-     * envelope and DO NOT also feed libvterm — otherwise the shell
-     * would see the keystroke alongside the card. */
-        {
-            struct yetty_ycore_int_result ckr = terminal_emit_card_key(
+            struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
                 terminal, YETTY_YMGUI_INPUT_KEY_DOWN, event->key.key, event->key.mods, 0);
             if (YETTY_IS_ERR(ckr)) {
                 return YETTY_ERR(yetty_ycore_int,
@@ -2046,11 +1898,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
 
     case YETTY_YCORE_KEY_UP: {
         ydebug("terminal: KEY_UP key=%d mods=%d", event->key.key, event->key.mods);
-        struct yetty_ycore_void_result tkr = terminal_emit_term_key(
-            terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key, event->key.mods, 0);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, tkr,
-                            "terminal_view_on_event: emit_term_key(KEY_UP) failed");
-        struct yetty_ycore_int_result ckr = terminal_emit_card_key(
+        struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
             terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key, event->key.mods, 0);
         if (YETTY_IS_ERR(ckr)) {
             return YETTY_ERR(yetty_ycore_int,
@@ -2069,15 +1917,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             YETTY_RETURN_IF_ERR(yetty_ycore_int, xr,
                                 "terminal_view_on_event: scrollback_exit failed");
         }
+        /* See KEY_DOWN: focused figure consumes the codepoint. */
         {
-            struct yetty_ycore_void_result tkr = terminal_emit_term_key(
-                terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods, event->chr.codepoint);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, tkr,
-                                "terminal_view_on_event: emit_term_key(CHAR) failed");
-        }
-        /* See KEY_DOWN: focused card consumes the codepoint. */
-        {
-            struct yetty_ycore_int_result ckr = terminal_emit_card_key(
+            struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
                 terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods, event->chr.codepoint);
             if (YETTY_IS_ERR(ckr)) {
                 return YETTY_ERR(yetty_ycore_int,
@@ -2153,7 +1995,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                                     "terminal_view_on_event: pty resize failed");
             }
         }
-        /* Cards self-announce their pixel size via per-card YMGUI_OSC_SC_RESIZE
+        /* Cards self-announce their pixel size via per-card YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE
      * fired from the layer (see ymgui-layer.c::ymgui_resize_grid). No
      * pane-size emission needed here. */
         return YETTY_OK(yetty_ycore_int, 1);
@@ -2313,21 +2155,20 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP: {
         ydebug("terminal: MOUSE_%s win=(%.1f,%.1f) bounds=(%.0fx%.0f@%.0f,%.0f) "
-               "click_sub=%d term_sub=0x%x",
+               "click_sub=%d",
                event->type == YETTY_YCORE_MOUSE_DOWN ? "DOWN" : "UP", event->mouse.x,
                event->mouse.y, view->bounds.w, view->bounds.h, view->bounds.x, view->bounds.y,
-               terminal->mouse_click_subscribed, terminal->term_input_sub_flags);
+               terminal->mouse_click_subscribed);
 
         /* Cell-precise selection. Left-button drag starts/extends/finalises
-         * a selection when nothing else owns the click (no card-aware
-         * subscriber, no terminal-wide subscriber, no scrollback view).
-         * Anchor is the cell under MOUSE_DOWN; head tracks MOUSE_DRAG. */
+         * a selection when nothing else owns the click (no figure-aware
+         * subscriber, no scrollback view). Anchor is the cell under
+         * MOUSE_DOWN; head tracks MOUSE_DRAG. */
         float lx_sel = event->mouse.x - view->bounds.x;
         float ly_sel = event->mouse.y - view->bounds.y;
         int in_bounds = !(lx_sel < 0.0f || ly_sel < 0.0f || lx_sel >= view->bounds.w ||
                           ly_sel >= view->bounds.h);
-        int term_owns_click = !terminal->mouse_click_subscribed && !terminal->scrollback_active &&
-                              !(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_CLICK);
+        int term_owns_click = !terminal->mouse_click_subscribed && !terminal->scrollback_active;
 
         /* X-Windows-style middle-click paste. Button 2 press inside the
          * pane, when no subscriber owns the click, pulls the current
@@ -2393,8 +2234,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             }
         }
 
-        int term_wants = (terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_CLICK) != 0;
-        if (!terminal->mouse_click_subscribed && !term_wants) {
+        if (!terminal->mouse_click_subscribed) {
             return YETTY_OK(yetty_ycore_int, 0);
         }
         float lx = event->mouse.x - view->bounds.x;
@@ -2410,24 +2250,31 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             terminal->mouse_buttons_held &= ~(1 << btn);
         }
 
-        /* Card-aware path (unchanged). */
+        /* Figure-aware path. Focus tracking is click-only: a press
+         * updates focused_figure_id (and emits an SC_FOCUS transition
+         * if it changed); a release routes to whatever was focused. */
         if (terminal->mouse_click_subscribed) {
-            uint32_t focused =
-                terminal->ymgui_layer
-                    ? yetty_yterm_terminal_layer_ymgui_layer_focused_card(terminal->ymgui_layer)
-                    : 0;
-            struct yetty_yterm_ymgui_hit hit;
+            uint32_t focused = terminal->focused_figure_id;
+            struct yetty_ymgui_hit hit;
             if (press) {
-                hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
-                if (terminal->ymgui_layer) {
-                    struct yetty_ycore_void_result fr =
-                        yetty_yterm_terminal_layer_ymgui_layer_set_focus(terminal->ymgui_layer,
-                                                                         hit.figure_id);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_int, fr,
-                                        "terminal_view_on_event: ymgui_layer_set_focus failed");
+                hit = terminal_resolve_figure_hit(terminal, lx, ly, 0);
+                if (hit.figure_id != focused) {
+                    if (focused != 0) {
+                        struct yetty_ycore_void_result lr =
+                            terminal_emit_card_focus(terminal, focused, 0);
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, lr,
+                                            "terminal_view_on_event: emit focus lost");
+                    }
+                    terminal->focused_figure_id = hit.figure_id;
+                    if (hit.figure_id != 0) {
+                        struct yetty_ycore_void_result gr =
+                            terminal_emit_card_focus(terminal, hit.figure_id, 1);
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, gr,
+                                            "terminal_view_on_event: emit focus gained");
+                    }
                 }
             } else {
-                hit = terminal_resolve_card_hit(terminal, lx, ly, focused);
+                hit = terminal_resolve_figure_hit(terminal, lx, ly, focused);
             }
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
@@ -2437,22 +2284,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             }
         }
 
-        /* Terminal-wide fan-out — fires regardless of card hit, with
-         * pane-local pixel coords. */
-        {
-            struct yetty_ycore_void_result tmr =
-                terminal_emit_term_mouse_button(terminal, lx, ly, btn, press, 0.0f);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, tmr,
-                                "terminal_view_on_event: emit_term_mouse_button failed");
-        }
-
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        ydebug("terminal: MOUSE_MOVE win=(%.1f,%.1f) move_sub=%d term_sub=0x%x", event->mouse.x,
-               event->mouse.y, terminal->mouse_move_subscribed, terminal->term_input_sub_flags);
+        ydebug("terminal: MOUSE_MOVE win=(%.1f,%.1f) move_sub=%d", event->mouse.x,
+               event->mouse.y, terminal->mouse_move_subscribed);
 
         /* Extend an in-flight selection. The platform's GLFW dispatcher
          * never synthesises MOUSE_DRAG — it only emits MOUSE_MOVE — so we
@@ -2474,8 +2312,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             return YETTY_OK(yetty_ycore_int, 1);
         }
 
-        int term_wants = (terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_MOVE) != 0;
-        if (!terminal->mouse_move_subscribed && !term_wants) {
+        if (!terminal->mouse_move_subscribed) {
             return YETTY_OK(yetty_ycore_int, 0);
         }
         float lx = event->mouse.x - view->bounds.x;
@@ -2484,29 +2321,17 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             return YETTY_OK(yetty_ycore_int, 0);
         }
 
-        /* Card-aware path (unchanged). */
-        if (terminal->mouse_move_subscribed) {
-            uint32_t captured = 0;
-            if (terminal->mouse_buttons_held && terminal->ymgui_layer) {
-                captured =
-                    yetty_yterm_terminal_layer_ymgui_layer_focused_card(terminal->ymgui_layer);
-            }
-            struct yetty_yterm_ymgui_hit hit =
-                terminal_resolve_card_hit(terminal, lx, ly, captured);
-            if (hit.figure_id != 0) {
-                struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
-                    terminal, hit.figure_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
-                                    "terminal_view_on_event: emit_card_mouse_move failed");
-            }
-        }
-
-        /* Terminal-wide fan-out. */
-        {
-            struct yetty_ycore_void_result tmr = terminal_emit_term_mouse_move(
-                terminal, lx, ly, terminal->mouse_buttons_held);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, tmr,
-                                "terminal_view_on_event: emit_term_mouse_move failed");
+        /* Figure-aware path. Drag = mouse held while moving; route the
+         * captured figure (the one focused at button-down). */
+        uint32_t captured =
+            terminal->mouse_buttons_held ? terminal->focused_figure_id : 0u;
+        struct yetty_ymgui_hit hit =
+            terminal_resolve_figure_hit(terminal, lx, ly, captured);
+        if (hit.figure_id != 0) {
+            struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
+                terminal, hit.figure_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                "terminal_view_on_event: emit_card_mouse_move failed");
         }
 
         return YETTY_OK(yetty_ycore_int, 1);
@@ -2525,32 +2350,16 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         }
 
         /* Once in scrollback view, wheel always drives history. Otherwise
-     * if a card is under the cursor OR a terminal-wide wheel subscriber
-     * is listening, the wheel goes outbound; else scrollback. */
-        int term_wheel_wants =
-            (terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL) != 0;
-        if (!terminal->scrollback_active &&
-            (terminal->mouse_click_subscribed || term_wheel_wants)) {
-            int delivered = 0;
-            if (terminal->mouse_click_subscribed) {
-                struct yetty_yterm_ymgui_hit hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
-                if (hit.figure_id != 0) {
-                    struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
-                        terminal, hit.figure_id, hit.local_x, hit.local_y,
-                        0, 0, event->mouse_scroll.dy);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
-                                        "terminal_view_on_event: emit_card_mouse_button (wheel) failed");
-                    delivered = 1;
-                }
-            }
-            if (term_wheel_wants) {
-                struct yetty_ycore_void_result tmr = terminal_emit_term_mouse_button(
-                    terminal, lx, ly, 0, 0, event->mouse_scroll.dy);
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, tmr,
-                                    "terminal_view_on_event: emit_term_mouse_button (wheel) failed");
-                delivered = 1;
-            }
-            if (delivered) {
+         * if a figure is under the cursor, the wheel goes outbound; else
+         * scrollback. */
+        if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
+            struct yetty_ymgui_hit hit = terminal_resolve_figure_hit(terminal, lx, ly, 0);
+            if (hit.figure_id != 0) {
+                struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
+                    terminal, hit.figure_id, hit.local_x, hit.local_y,
+                    0, 0, event->mouse_scroll.dy);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                    "terminal_view_on_event: emit_card_mouse_button (wheel) failed");
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }

@@ -27,6 +27,7 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <stdlib.h>
@@ -144,13 +145,13 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
     ydebug("on_yface_osc: code=%d args_len=%zu payload_len=%zu", osc_code, args_len, len);
 
     switch (osc_code) {
-    case YMGUI_OSC_SC_MOUSE: {
-        if (len < sizeof(struct yetty_ymgui_wire_input_mouse)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE: {
+        if (len < sizeof(struct yetty_client_input_mouse)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_mouse *m =
-            (const struct yetty_ymgui_wire_input_mouse *)payload;
-        if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) {
+        const struct yetty_client_input_mouse *m =
+            (const struct yetty_client_input_mouse *)payload;
+        if (m->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             return;
         }
         switch (m->kind) {
@@ -173,13 +174,13 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
         L->frame_pending = 1;
         break;
     }
-    case YMGUI_OSC_SC_RESIZE: {
-        if (len < sizeof(struct yetty_ymgui_wire_input_resize)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE: {
+        if (len < sizeof(struct yetty_client_input_resize)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_resize *r =
-            (const struct yetty_ymgui_wire_input_resize *)payload;
-        if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) {
+        const struct yetty_client_input_resize *r =
+            (const struct yetty_client_input_resize *)payload;
+        if (r->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC) {
             return;
         }
         if (L->on_resize) {
@@ -188,13 +189,13 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
         L->frame_pending = 1;
         break;
     }
-    case YMGUI_OSC_SC_FOCUS: {
-        if (len < sizeof(struct yetty_ymgui_wire_input_focus)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS: {
+        if (len < sizeof(struct yetty_client_input_focus)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_focus *f =
-            (const struct yetty_ymgui_wire_input_focus *)payload;
-        if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) {
+        const struct yetty_client_input_focus *f =
+            (const struct yetty_client_input_focus *)payload;
+        if (f->magic != YETTY_CLIENT_INPUT_FOCUS_MAGIC) {
             return;
         }
         if (L->on_focus) {
@@ -203,13 +204,13 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
         L->frame_pending = 1;
         break;
     }
-    case YMGUI_OSC_SC_KEY: {
-        if (len < sizeof(struct yetty_ymgui_wire_input_key)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY: {
+        if (len < sizeof(struct yetty_client_input_key)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_key *k =
-            (const struct yetty_ymgui_wire_input_key *)payload;
-        if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) {
+        const struct yetty_client_input_key *k =
+            (const struct yetty_client_input_key *)payload;
+        if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
             return;
         }
         if (L->on_key) {

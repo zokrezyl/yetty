@@ -26,6 +26,7 @@
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yrender/render-target.h>
@@ -432,6 +433,207 @@ static struct yetty_ycore_void_result ymgui_figure_render(
  * pre-determined this figure as the routing target.
  *=========================================================================*/
 
+static struct yetty_ycore_void_result handle_frame_payload(
+    struct yetty_ymgui_figure *f, const uint8_t *bytes, size_t bytes_len)
+{
+    return yetty_ymgui_figure_set_frame(f, bytes, bytes_len);
+}
+
+static struct yetty_ycore_void_result handle_tex_payload(
+    struct yetty_ymgui_figure *f, const uint8_t *bytes, size_t bytes_len)
+{
+    if (bytes_len < sizeof(struct yetty_ymgui_wire_tex))
+        return YETTY_ERR(yetty_ycore_void,
+                         "ymgui_figure: tex payload too small");
+    const struct yetty_ymgui_wire_tex *th =
+        (const struct yetty_ymgui_wire_tex *)bytes;
+    if (th->total_size != bytes_len)
+        return YETTY_ERR(yetty_ycore_void,
+                         "ymgui_figure: tex total_size mismatch");
+    if (th->format != YMGUI_TEX_FMT_R8)
+        return YETTY_ERR(yetty_ycore_void,
+                         "ymgui_figure: tex format != R8 unsupported");
+    const uint8_t *pixels = bytes + sizeof(*th);
+    size_t pixel_bytes = (size_t)th->width * (size_t)th->height;
+    return yetty_ymgui_figure_set_atlas(f, pixels, pixel_bytes,
+                                        th->width, th->height);
+}
+
+/*===========================================================================
+ * Streaming entry point: process_input(self, sm).
+ *
+ * The figure pumps the wire-statemachine directly, yielding the coro
+ * whenever there are no bytes ready. Self-describing payloads — the
+ * sub-op tag dictates how many bytes follow, and the per-op struct
+ * headers (frame.total_size, tex.{width,height}) bound the rest. The
+ * container that dispatched us is trusted to have passed the right
+ * record boundary; we consume exactly that many bytes by following the
+ * sub-op's own size fields.
+ *=========================================================================*/
+
+static struct yetty_ycore_void_result ymgui_sm_read_exact(
+    struct yetty_ywire_wire_statemachine *sm, void *out, size_t n)
+{
+    uint8_t *p = (uint8_t *)out;
+    size_t got = 0;
+    while (got < n) {
+        struct yetty_ycore_size_result rr =
+            yetty_ywire_wire_statemachine_read(sm, p + got, n - got);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymgui sm_read_exact");
+        if (rr.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm))
+                return YETTY_ERR(yetty_ycore_void,
+                                 "ymgui sm_read_exact: EOE mid-read");
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        got += rr.value;
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Read a FRAME body off the SM. `tag` was peeked by the caller; the
+ * frame header `magic` may already equal `tag` (legacy magic-prefixed
+ * path) or be a fresh struct following a tagged sub_op. In both cases
+ * the frame's `total_size` covers the header + cmd lists; we read the
+ * remainder of the header first, then the body, then apply. */
+static struct yetty_ycore_void_result stream_frame(
+    struct yetty_ymgui_figure *f, struct yetty_ywire_wire_statemachine *sm,
+    int tag_is_magic)
+{
+    struct yetty_ymgui_wire_frame fh;
+    if (tag_is_magic) {
+        fh.magic = YMGUI_WIRE_MAGIC_FRAME;
+        struct yetty_ycore_void_result r = ymgui_sm_read_exact(
+            sm, ((uint8_t *)&fh) + sizeof(uint32_t),
+            sizeof(fh) - sizeof(uint32_t));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "stream_frame: header rest");
+    } else {
+        struct yetty_ycore_void_result r =
+            ymgui_sm_read_exact(sm, &fh, sizeof(fh));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "stream_frame: header");
+        if (fh.magic != YMGUI_WIRE_MAGIC_FRAME)
+            return YETTY_ERR(yetty_ycore_void,
+                             "stream_frame: header magic mismatch");
+    }
+    if (fh.total_size < sizeof(fh))
+        return YETTY_ERR(yetty_ycore_void,
+                         "stream_frame: total_size < header");
+
+    size_t body_bytes = fh.total_size - sizeof(fh);
+    uint8_t *buf = malloc(fh.total_size);
+    if (!buf)
+        return YETTY_ERR(yetty_ycore_void, "stream_frame: oom");
+    memcpy(buf, &fh, sizeof(fh));
+    if (body_bytes) {
+        struct yetty_ycore_void_result r =
+            ymgui_sm_read_exact(sm, buf + sizeof(fh), body_bytes);
+        if (YETTY_IS_ERR(r)) {
+            free(buf);
+            return YETTY_ERR(yetty_ycore_void, "stream_frame: body", r);
+        }
+    }
+    struct yetty_ycore_void_result rr =
+        yetty_ymgui_figure_set_frame(f, buf, fh.total_size);
+    free(buf);
+    return rr;
+}
+
+static struct yetty_ycore_void_result stream_tex(
+    struct yetty_ymgui_figure *f, struct yetty_ywire_wire_statemachine *sm,
+    int tag_is_magic)
+{
+    struct yetty_ymgui_wire_tex th;
+    if (tag_is_magic) {
+        th.magic = YMGUI_WIRE_MAGIC_TEX;
+        struct yetty_ycore_void_result r = ymgui_sm_read_exact(
+            sm, ((uint8_t *)&th) + sizeof(uint32_t),
+            sizeof(th) - sizeof(uint32_t));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "stream_tex: header rest");
+    } else {
+        struct yetty_ycore_void_result r =
+            ymgui_sm_read_exact(sm, &th, sizeof(th));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "stream_tex: header");
+        if (th.magic != YMGUI_WIRE_MAGIC_TEX)
+            return YETTY_ERR(yetty_ycore_void,
+                             "stream_tex: header magic mismatch");
+    }
+    if (th.format != YMGUI_TEX_FMT_R8)
+        return YETTY_ERR(yetty_ycore_void,
+                         "stream_tex: format != R8 unsupported");
+
+    size_t pixel_bytes = (size_t)th.width * (size_t)th.height;
+    uint8_t *pixels = malloc(pixel_bytes ? pixel_bytes : 1);
+    if (!pixels)
+        return YETTY_ERR(yetty_ycore_void, "stream_tex: oom");
+    if (pixel_bytes) {
+        struct yetty_ycore_void_result r =
+            ymgui_sm_read_exact(sm, pixels, pixel_bytes);
+        if (YETTY_IS_ERR(r)) {
+            free(pixels);
+            return YETTY_ERR(yetty_ycore_void, "stream_tex: pixels", r);
+        }
+    }
+    struct yetty_ycore_void_result rr =
+        yetty_ymgui_figure_set_atlas(f, pixels, pixel_bytes, th.width, th.height);
+    free(pixels);
+    return rr;
+}
+
+static struct yetty_ycore_void_result ymgui_figure_process_input(
+    struct yetty_yfigure_figure *self,
+    struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_ymgui_figure *f = (struct yetty_ymgui_figure *)self;
+    uint32_t tag;
+    struct yetty_ycore_void_result r = ymgui_sm_read_exact(sm, &tag, sizeof(tag));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ymgui process_input: tag");
+
+    switch (tag) {
+    /* Legacy magic-prefixed bodies — first u32 IS the wire struct's
+     * magic. Common in producers that don't use the SUB_* tagging. */
+    case YMGUI_WIRE_MAGIC_FRAME:
+        return stream_frame(f, sm, /*tag_is_magic=*/1);
+    case YMGUI_WIRE_MAGIC_TEX:
+        return stream_tex(f, sm, /*tag_is_magic=*/1);
+
+    /* Tagged sub-records — first u32 is the sub-op enum; the wire
+     * struct follows with its own magic field. */
+    case YETTY_YMGUI_FIGURE_SUB_FRAME:
+        return stream_frame(f, sm, /*tag_is_magic=*/0);
+    case YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD:
+        return stream_tex(f, sm, /*tag_is_magic=*/0);
+    case YETTY_YMGUI_FIGURE_SUB_CLEAR:
+        free(f->frame_bytes);
+        f->frame_bytes = NULL;
+        f->frame_size = 0;
+        f->has_frame = 0;
+        f->base.dirty = 1;
+        return YETTY_OK_VOID();
+    case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
+    case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
+        ydebug("ymgui process_input: sub_op=%u not yet implemented", tag);
+        return YETTY_OK_VOID();
+    default:
+        return YETTY_ERR(yetty_ycore_void,
+                         "ymgui process_input: unknown tag");
+    }
+}
+
+/* Two payload shapes coexist during the figure-tree migration:
+ *
+ *   (a) Legacy magic-prefixed bodies — the first u32 is one of
+ *       YMGUI_WIRE_MAGIC_FRAME / _TEX and the rest is the full wire
+ *       struct (its own header carries the size). New producers may
+ *       still emit these for ad-hoc routing.
+ *
+ *   (b) Tagged sub-records — the first u32 is a YETTY_YMGUI_FIGURE_SUB_*
+ *       enum value, followed by the same struct + payload. This is the
+ *       form the figure-tree producer in the C++ frontend emits when
+ *       run under YMGUI_USE_FIGURE_TREE=1.
+ *
+ * Both share the same per-payload dispatch — only the discriminator
+ * width differs. */
 static struct yetty_ycore_void_result ymgui_figure_process_bytes(
     struct yetty_yfigure_figure *self,
     const uint8_t *bytes, size_t bytes_len)
@@ -439,37 +641,61 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(
     struct yetty_ymgui_figure *f = (struct yetty_ymgui_figure *)self;
     if (bytes_len < 4)
         return YETTY_ERR(yetty_ycore_void,
-                         "ymgui_figure_process_bytes: too small for magic");
+                         "ymgui_figure_process_bytes: too small for tag");
 
-    uint32_t magic;
-    memcpy(&magic, bytes, 4);
-    if (magic == YMGUI_WIRE_MAGIC_FRAME) {
-        return yetty_ymgui_figure_set_frame(f, bytes, bytes_len);
+    uint32_t tag;
+    memcpy(&tag, bytes, 4);
+
+    if (tag == YMGUI_WIRE_MAGIC_FRAME)
+        return handle_frame_payload(f, bytes, bytes_len);
+    if (tag == YMGUI_WIRE_MAGIC_TEX)
+        return handle_tex_payload(f, bytes, bytes_len);
+
+    /* Tagged sub-record — body starts at byte 4. */
+    const uint8_t *body = bytes + 4;
+    size_t body_len = bytes_len - 4;
+    switch (tag) {
+    case YETTY_YMGUI_FIGURE_SUB_FRAME:
+        return handle_frame_payload(f, body, body_len);
+    case YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD:
+        return handle_tex_payload(f, body, body_len);
+    case YETTY_YMGUI_FIGURE_SUB_CLEAR:
+        /* "Drop the visible frame" — represented by no-frame state. The
+         * figure stays in the tree until the parent DELETE_CHILD removes
+         * it; this just blanks its rect. */
+        free(f->frame_bytes);
+        f->frame_bytes = NULL;
+        f->frame_size = 0;
+        f->has_frame = 0;
+        f->base.dirty = 1;
+        return YETTY_OK_VOID();
+    case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
+    case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
+        ydebug("ymgui_figure_process_bytes: sub_op=%u not yet implemented", tag);
+        return YETTY_OK_VOID();
+    default:
+        return YETTY_ERR(yetty_ycore_void,
+                         "ymgui_figure_process_bytes: unknown tag");
     }
-    if (magic == YMGUI_WIRE_MAGIC_TEX) {
-        if (bytes_len < sizeof(struct yetty_ymgui_wire_tex))
-            return YETTY_ERR(yetty_ycore_void,
-                             "ymgui_figure_process_bytes: tex too small");
-        const struct yetty_ymgui_wire_tex *th =
-            (const struct yetty_ymgui_wire_tex *)bytes;
-        if (th->total_size != bytes_len)
-            return YETTY_ERR(yetty_ycore_void,
-                             "ymgui_figure_process_bytes: tex total_size mismatch");
-        if (th->format != YMGUI_TEX_FMT_R8)
-            return YETTY_ERR(yetty_ycore_void,
-                             "ymgui_figure_process_bytes: tex format != R8 unsupported");
-        const uint8_t *pixels = bytes + sizeof(*th);
-        size_t pixel_bytes = (size_t)th->width * (size_t)th->height;
-        return yetty_ymgui_figure_set_atlas(f, pixels, pixel_bytes,
-                                            th->width, th->height);
-    }
-    return YETTY_ERR(yetty_ycore_void,
-                     "ymgui_figure_process_bytes: unknown magic");
 }
 
 /*===========================================================================
  * Lifecycle / public API
  *=========================================================================*/
+
+/* Ops vtable shared by every ymgui figure. Same-pointer identity is
+ * how yetty_ymgui_figure_from_base recognises an ymgui child sitting
+ * inside a heterogeneous yfigure container. */
+static const struct yetty_yfigure_figure_ops *ymgui_figure_ops(void)
+{
+    static const struct yetty_yfigure_figure_ops ops = {
+        .destroy = ymgui_figure_destroy,
+        .render = ymgui_figure_render,
+        .process_input = ymgui_figure_process_input,
+        .process_bytes = ymgui_figure_process_bytes,
+    };
+    return &ops;
+}
 
 struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create(
     struct yetty_ycore_rectangle rect,
@@ -488,16 +714,18 @@ struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create(
         return YETTY_ERR(yetty_ymgui_figure_ptr,
                          "ymgui_figure_create: oom");
 
-    static const struct yetty_yfigure_figure_ops ops = {
-        .destroy = ymgui_figure_destroy,
-        .render = ymgui_figure_render,
-        .process_bytes = ymgui_figure_process_bytes,
-    };
-    f->base.ops = &ops;
+    f->base.ops = ymgui_figure_ops();
     f->base.rect = rect;
     f->base.dirty = 1;
     f->pipeline = pipeline;
     return YETTY_OK(yetty_ymgui_figure_ptr, f);
+}
+
+struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(
+    struct yetty_yfigure_figure *base)
+{
+    if (!base || base->ops != ymgui_figure_ops()) return NULL;
+    return (struct yetty_ymgui_figure *)base;
 }
 
 struct yetty_yfigure_figure *yetty_ymgui_figure_as_figure(
@@ -605,4 +833,108 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(
     f->base.dirty = 1;
     ydebug("ymgui_figure_set_atlas: %ux%u R8", atlas_w, atlas_h);
     return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Factory — invoked by yetty_yfigure_registry_mint on admin CREATE_CHILD
+ * records with kind=YMGUI. `user` is a borrowed `yetty_ymgui_factory_args*`.
+ * The pipeline is shared across every minted figure; the first mint
+ * builds it and the host releases it via yetty_ymgui_factory_args_release.
+ *=========================================================================*/
+
+static struct yetty_yfigure_figure_ptr_result ymgui_factory(
+    struct yetty_ycore_rectangle rect,
+    const struct yetty_context *context,
+    void *user)
+{
+    struct yetty_ymgui_factory_args *args = (struct yetty_ymgui_factory_args *)user;
+    if (!args)
+        return YETTY_ERR(yetty_yfigure_figure_ptr,
+                         "ymgui_factory: NULL factory args");
+
+    if (!args->pipeline) {
+        /* Lazy build — first ymgui figure on this host. Prefer the
+         * registry-supplied context (the container hands us the host's
+         * context at mint time); fall back to the args' stashed context
+         * for tooling that registers without a context. */
+        const struct yetty_context *ctx = context ? context : args->context;
+        if (!ctx)
+            return YETTY_ERR(yetty_yfigure_figure_ptr,
+                             "ymgui_factory: no context to build pipeline");
+        struct yetty_ymgui_pipeline_ptr_result pr =
+            yetty_ymgui_pipeline_create(ctx);
+        YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, pr,
+                            "ymgui_factory: pipeline create");
+        args->pipeline = pr.value;
+    }
+
+    struct yetty_ymgui_figure_ptr_result fr =
+        yetty_ymgui_figure_create(rect, args->pipeline, context);
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, fr,
+                        "ymgui_factory: figure create");
+    return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ymgui_figure_as_figure(fr.value));
+}
+
+struct yetty_ycore_void_result yetty_ymgui_register_factory(
+    struct yetty_yfigure_registry *registry,
+    struct yetty_ymgui_factory_args *args)
+{
+    if (!registry || !args)
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ymgui_register_factory: NULL arg");
+    return yetty_yfigure_registry_register(
+        registry, YETTY_YFIGURE_KIND_YMGUI, ymgui_factory, args);
+}
+
+struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
+    struct yetty_ymgui_factory_args *args)
+{
+    if (!args) return YETTY_OK_VOID();
+    if (args->pipeline) {
+        struct yetty_ycore_void_result r =
+            yetty_ymgui_pipeline_destroy(args->pipeline);
+        args->pipeline = NULL;
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                            "yetty_ymgui_factory_args_release: pipeline destroy");
+    }
+    return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Hit-testing against a yfigure container.
+ *
+ * The visitor walks every child the container holds; for ymgui ones it
+ * checks the point against the child's rect and records the LAST hit
+ * (= topmost in z-order, since uthash iteration is insertion order =
+ * back-to-front). The visitor never short-circuits — we need to see
+ * the whole z-order to pick the topmost hit.
+ *=========================================================================*/
+
+struct ymgui_hit_visitor_state {
+    float x;
+    float y;
+    struct yetty_ymgui_hit hit;
+};
+
+static int ymgui_hit_visit(uint32_t id, struct yetty_yfigure_figure *child,
+                           void *user)
+{
+    struct ymgui_hit_visitor_state *st = user;
+    struct yetty_ymgui_figure *f = yetty_ymgui_figure_from_base(child);
+    if (!f) return 0; /* not an ymgui figure */
+    if (st->x < child->rect.min.x || st->x >= child->rect.max.x ||
+        st->y < child->rect.min.y || st->y >= child->rect.max.y)
+        return 0;
+    st->hit.figure_id = id;
+    st->hit.local_x = st->x - child->rect.min.x;
+    st->hit.local_y = st->y - child->rect.min.y;
+    return 0;
+}
+
+struct yetty_ymgui_hit yetty_ymgui_figure_hit_test_container(
+    struct yetty_yfigure_container *container, float x, float y)
+{
+    struct ymgui_hit_visitor_state st = {.x = x, .y = y, .hit = {0, 0, 0}};
+    yetty_yfigure_container_for_each(container, ymgui_hit_visit, &st);
+    return st.hit;
 }

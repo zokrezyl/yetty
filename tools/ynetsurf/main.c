@@ -44,6 +44,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/yterm/osc-codes.h>
 
 #include "content/fetch.h"
@@ -361,11 +362,12 @@ static void on_raw(void *user, const char *bytes, size_t n)
 
 /* yface OSC-envelope callback — inbound mouse/key/resize events from yterm.
  *
- * We accept BOTH term-wide (YMGUI_OSC_SC_TERM_*) and card-aware
- * (YMGUI_OSC_SC_*) variants so the same handlers work whether the
- * subscriber is registered as a card or via TERM_INPUT_SUB. ynetsurf
- * uses TERM_INPUT_SUB; the card OSCs are wired purely so a future
- * "ynetsurf as a card" experiment doesn't need code changes here. */
+ * We accept BOTH pane-wide (YETTY_OSC_SC_CLIENT_INPUT_*) and
+ * figure-tagged (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_*) variants so the
+ * same handlers work whether the subscriber is registered as a card
+ * or via YETTY_OSC_CS_CLIENT_INPUT_SUB. ynetsurf uses the latter; the
+ * figure-tagged OSCs are wired purely so a future "ynetsurf as a card"
+ * experiment doesn't need code changes here. */
 static void on_osc(void *user, int osc_code,
 		   const uint8_t *args, size_t args_len,
 		   const uint8_t *payload, size_t payload_len)
@@ -373,11 +375,11 @@ static void on_osc(void *user, int osc_code,
 	(void)args; (void)args_len;
 	struct ev_state *st = user;
 
-	if (osc_code == YMGUI_OSC_SC_MOUSE || osc_code == YMGUI_OSC_SC_TERM_MOUSE) {
-		if (payload_len < sizeof(struct yetty_ymgui_wire_input_mouse))
+	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE || osc_code == YETTY_OSC_SC_CLIENT_INPUT_MOUSE) {
+		if (payload_len < sizeof(struct yetty_client_input_mouse))
 			return;
-		const struct yetty_ymgui_wire_input_mouse *m =
-			(const struct yetty_ymgui_wire_input_mouse *)payload;
+		const struct yetty_client_input_mouse *m =
+			(const struct yetty_client_input_mouse *)payload;
 		switch (m->kind) {
 		case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
 			int btn = (m->button == 1) ? 2 : 1;  /* GLFW 1=right -> NS 2 */
@@ -406,15 +408,15 @@ static void on_osc(void *user, int osc_code,
 		return;
 	}
 
-	if (osc_code == YMGUI_OSC_SC_RESIZE || osc_code == YMGUI_OSC_SC_TERM_RESIZE) {
+	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE || osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE) {
 		/* yterm replies with the resolved pane pixel size after our
 		 * subscribe (or per-card after CARD_PLACE) — the natural
 		 * moment to (re)size the NetSurf viewport to match. Same
 		 * handler also fires when the user resizes the host terminal. */
-		if (payload_len < sizeof(struct yetty_ymgui_wire_input_resize))
+		if (payload_len < sizeof(struct yetty_client_input_resize))
 			return;
-		const struct yetty_ymgui_wire_input_resize *r =
-			(const struct yetty_ymgui_wire_input_resize *)payload;
+		const struct yetty_client_input_resize *r =
+			(const struct yetty_client_input_resize *)payload;
 		int w = (int)r->width;
 		int h = (int)r->height;
 		if (w > 0 && h > 0) {
@@ -424,11 +426,11 @@ static void on_osc(void *user, int osc_code,
 		return;
 	}
 
-	if (osc_code == YMGUI_OSC_SC_KEY || osc_code == YMGUI_OSC_SC_TERM_KEY) {
-		if (payload_len < sizeof(struct yetty_ymgui_wire_input_key))
+	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY || osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY) {
+		if (payload_len < sizeof(struct yetty_client_input_key))
 			return;
-		const struct yetty_ymgui_wire_input_key *k =
-			(const struct yetty_ymgui_wire_input_key *)payload;
+		const struct yetty_client_input_key *k =
+			(const struct yetty_client_input_key *)payload;
 		if (k->kind == YETTY_YMGUI_INPUT_KEY_CHAR && k->codepoint) {
 			yetty_ynetsurf_key_press(st->ns, k->codepoint);
 			st->dirty = 1;
@@ -438,7 +440,7 @@ static void on_osc(void *user, int osc_code,
 }
 
 /* ===========================================================================
- * Terminal-wide input subscription (YMGUI_OSC_CS_TERM_INPUT_SUB).
+ * Terminal-wide input subscription (YETTY_OSC_CS_CLIENT_INPUT_SUB).
  *
  * ynetsurf is not card-shaped — it draws into the whole pane, not into a
  * registered card rect. The TERM_INPUT_SUB channel gives us pane-wide
@@ -449,13 +451,13 @@ static void on_osc(void *user, int osc_code,
 
 static void term_input_subscribe(uint32_t flags)
 {
-	struct yetty_ymgui_wire_term_input_sub msg = {
-		.magic = YMGUI_WIRE_MAGIC_TERM_INPUT_SUB,
+	struct yetty_client_input_sub msg = {
+		.magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
 		.version = YMGUI_WIRE_VERSION,
 		.flags = flags,
 		._pad0 = 0,
 	};
-	(void)emit_envelope(YMGUI_OSC_CS_TERM_INPUT_SUB, /*compressed=*/0,
+	(void)emit_envelope(YETTY_OSC_CS_CLIENT_INPUT_SUB, /*compressed=*/0,
 			    NULL, 0, &msg, sizeof(msg));
 }
 
@@ -486,14 +488,14 @@ static int interactive_loop(struct yetty_ynetsurf *ns)
 	}
 
 	/* Subscribe to terminal-wide mouse + keyboard via the new
-	 * YMGUI_OSC_CS_TERM_INPUT_SUB channel — pane-pixel events,
+	 * YETTY_OSC_CS_CLIENT_INPUT_SUB channel — pane-pixel events,
 	 * figure_id=0, fires regardless of card hit-test. yterm replies with
-	 * a YMGUI_OSC_SC_TERM_RESIZE giving the pane pixel size; our
+	 * a YETTY_OSC_SC_CLIENT_INPUT_RESIZE giving the pane pixel size; our
 	 * on_osc handler picks that up and (re)sizes the NetSurf viewport. */
-	term_input_subscribe(YETTY_YMGUI_TERM_SUB_MOUSE_CLICK |
-			     YETTY_YMGUI_TERM_SUB_MOUSE_MOVE  |
-			     YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL |
-			     YETTY_YMGUI_TERM_SUB_KEY);
+	term_input_subscribe(YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK |
+			     YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE  |
+			     YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL |
+			     YETTY_CLIENT_INPUT_SUB_KEY);
 	fflush(stdout);
 
 	(void)redraw_and_push(ns);

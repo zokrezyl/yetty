@@ -169,7 +169,7 @@ struct yetty_ycore_void_result yetty_ygui_osc_subscribe_view_changes(
 }
 
 /* Register a card with the ymgui layer. The server then hit-tests this
- * card and routes mouse events to it as YMGUI_OSC_SC_MOUSE with
+ * card and routes mouse events to it as YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE with
  * card-local coords. */
 struct yetty_ycore_void_result yetty_ygui_osc_card_place(struct yetty_platform_pty *output_pty,
                                                          uint32_t figure_id, int col, int row,

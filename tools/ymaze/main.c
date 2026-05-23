@@ -21,6 +21,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yterm/osc-codes.h>
 
@@ -87,13 +88,13 @@ static int emit_bin_serialized(struct yetty_ydraw_draw_list *buf)
 
 static void term_input_subscribe(uint32_t flags)
 {
-	struct yetty_ymgui_wire_term_input_sub msg = {
-		.magic = YMGUI_WIRE_MAGIC_TERM_INPUT_SUB,
+	struct yetty_client_input_sub msg = {
+		.magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
 		.version = YMGUI_WIRE_VERSION,
 		.flags = flags,
 		._pad0 = 0,
 	};
-	(void)emit_envelope(YMGUI_OSC_CS_TERM_INPUT_SUB, /*compressed=*/0,
+	(void)emit_envelope(YETTY_OSC_CS_CLIENT_INPUT_SUB, /*compressed=*/0,
 			    NULL, 0, &msg, sizeof(msg));
 }
 
@@ -260,21 +261,21 @@ static void on_osc(void *user, int osc_code,
 	(void)args; (void)args_len;
 	struct ymaze_app *app = user;
 
-	if (osc_code == YMGUI_OSC_SC_RESIZE
-	    || osc_code == YMGUI_OSC_SC_TERM_RESIZE) {
-		if (payload_len < sizeof(struct yetty_ymgui_wire_input_resize))
+	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE
+	    || osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE) {
+		if (payload_len < sizeof(struct yetty_client_input_resize))
 			return;
-		const struct yetty_ymgui_wire_input_resize *r =
-			(const struct yetty_ymgui_wire_input_resize *)payload;
+		const struct yetty_client_input_resize *r =
+			(const struct yetty_client_input_resize *)payload;
 		apply_pane_size(app, r->width, r->height);
 		return;
 	}
 
-	if (osc_code == YMGUI_OSC_SC_KEY || osc_code == YMGUI_OSC_SC_TERM_KEY) {
-		if (payload_len < sizeof(struct yetty_ymgui_wire_input_key))
+	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY || osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY) {
+		if (payload_len < sizeof(struct yetty_client_input_key))
 			return;
-		const struct yetty_ymgui_wire_input_key *k =
-			(const struct yetty_ymgui_wire_input_key *)payload;
+		const struct yetty_client_input_key *k =
+			(const struct yetty_client_input_key *)payload;
 		if (k->kind == YETTY_YMGUI_INPUT_KEY_CHAR && k->codepoint)
 			on_key_codepoint(app, k->codepoint);
 		return;
@@ -446,7 +447,7 @@ int main(int argc, char **argv)
 
 	/* Subscribe to keys so we get rising-edge TERM_RESIZE with pane size,
 	 * plus subsequent resizes and CHAR-coded keystrokes. */
-	term_input_subscribe(YETTY_YMGUI_TERM_SUB_KEY);
+	term_input_subscribe(YETTY_CLIENT_INPUT_SUB_KEY);
 	fflush(stdout);
 
 	/* Initial frame — uses CLI-supplied scene size; the rising-edge resize

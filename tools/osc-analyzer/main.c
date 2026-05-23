@@ -40,6 +40,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <pty.h>
+#include <signal.h>
+#include <sys/ioctl.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include <yetty/ycore/util.h>
 #include <yetty/ycore/types.h>
@@ -52,6 +59,9 @@
 #include <yetty/ydraw-core/figure-types.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterm/client-input.h>
+#include <lz4frame.h>
 
 static FILE *g_out = NULL;
 
@@ -245,6 +255,61 @@ static const char *kind_name(uint32_t kind)
     }
 }
 
+/* All OSC codes the wire-layer module headers define, decoded by symbol
+ * name. New codes added to the public headers should also be added here
+ * so the analyzer keeps narrating the stream without forcing the reader
+ * to look numerics up by hand. */
+static const char *osc_code_name(int code)
+{
+    switch (code) {
+    case YETTY_OSC_YDRAW_CLEAR:                    return "YDRAW_CLEAR";
+    case YETTY_OSC_YDRAW_BIN:                      return "YDRAW_BIN";
+    case YETTY_OSC_YDRAW_YAML:                     return "YDRAW_YAML";
+    case YETTY_OSC_YDRAW_OVERLAY:                  return "YDRAW_OVERLAY";
+    case YETTY_OSC_YDRAW_SCENE_BIN:                return "YDRAW_SCENE_BIN";
+    case YETTY_OSC_YCOMPOSITOR_BIN:                return "YCOMPOSITOR_BIN";
+    case YETTY_OSC_CS_CLIENT_INPUT_SUB:            return "CS_CLIENT_INPUT_SUB";
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE:   return "SC_CLIENT_INPUT_FIGURE_MOUSE";
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE:  return "SC_CLIENT_INPUT_FIGURE_RESIZE";
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS:   return "SC_CLIENT_INPUT_FIGURE_FOCUS";
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY:     return "SC_CLIENT_INPUT_FIGURE_KEY";
+    case YETTY_OSC_SC_CLIENT_INPUT_MOUSE:          return "SC_CLIENT_INPUT_MOUSE";
+    case YETTY_OSC_SC_CLIENT_INPUT_RESIZE:         return "SC_CLIENT_INPUT_RESIZE";
+    case YETTY_OSC_SC_CLIENT_INPUT_KEY:            return "SC_CLIENT_INPUT_KEY";
+    case YMGUI_OSC_CS_CLEAR:                        return "YMGUI_CS_CLEAR";
+    case YMGUI_OSC_CS_FRAME:                        return "YMGUI_CS_FRAME";
+    case YMGUI_OSC_CS_TEX:                          return "YMGUI_CS_TEX";
+    case YMGUI_OSC_CS_CARD_PLACE:                   return "YMGUI_CS_CARD_PLACE";
+    case YMGUI_OSC_CS_CARD_REMOVE:                  return "YMGUI_CS_CARD_REMOVE";
+    default:                                        return NULL;
+    }
+}
+
+/* When a routed record's payload begins with this u32 instead of one of
+ * the ymgui_wire_* magics, the body is in tagged form: the first u32 is
+ * the sub_op enum, then the embedded ymgui struct (FRAME header / TEX
+ * header / …) follows. */
+static const char *ymgui_sub_op_name(uint32_t op)
+{
+    switch (op) {
+    case YETTY_YMGUI_FIGURE_SUB_CLEAR:          return "SUB_CLEAR";
+    case YETTY_YMGUI_FIGURE_SUB_FRAME:          return "SUB_FRAME";
+    case YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD:     return "SUB_TEX_UPLOAD";
+    case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:    return "SUB_TEX_RELEASE";
+    case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB: return "SUB_TERM_INPUT_SUB";
+    default:                                     return NULL;
+    }
+}
+
+static const char *tex_fmt_name(uint32_t f)
+{
+    switch (f) {
+    case YMGUI_TEX_FMT_R8:    return "R8";
+    case YMGUI_TEX_FMT_RGBA8: return "RGBA8";
+    default:                  return "?";
+    }
+}
+
 static void walk_records(const uint8_t *bytes, size_t bytes_len, int depth);
 
 /* Decide what a routed record's payload IS by peeking its first u32,
@@ -260,14 +325,66 @@ static void walk_routed_payload(uint32_t id, const uint8_t *payload, size_t plen
     uint32_t first = 0;
     memcpy(&first, payload, plen >= 4 ? 4 : plen);
 
-    /* ymgui FRAME / TEX magic? */
+    /* Tagged FIGURE_SUB form (current ymgui wire). First u32 is the sub
+     * enum, then the embedded ymgui_wire_* struct (frame/tex) or empty
+     * body for CLEAR/TEX_RELEASE/TERM_INPUT_SUB. */
+    const char *sub_name = ymgui_sub_op_name(first);
+    if (sub_name) {
+        ind(depth);
+        out("ymgui %s (sub_op=%u, body=%zu B)\n", sub_name, first, plen - 4);
+        const uint8_t *body = payload + 4;
+        size_t blen = plen - 4;
+        switch (first) {
+        case YETTY_YMGUI_FIGURE_SUB_FRAME:
+            if (blen >= sizeof(struct yetty_ymgui_wire_frame)) {
+                const struct yetty_ymgui_wire_frame *fh =
+                    (const struct yetty_ymgui_wire_frame *)body;
+                ind(depth + 1);
+                out("FRAME version=%u total=%u figure_id=%u cmd_lists=%u "
+                    "display=(%.1fx%.1f) flags=0x%x%s\n",
+                    fh->version, fh->total_size, fh->figure_id,
+                    fh->cmd_list_count, fh->display_size_x, fh->display_size_y,
+                    fh->flags,
+                    (fh->flags & YMGUI_FRAME_FLAG_IDX32) ? " IDX32" : "");
+            } else {
+                ind(depth + 1);
+                out("(FRAME body too small: %zu B)\n", blen);
+            }
+            break;
+        case YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD:
+            if (blen >= sizeof(struct yetty_ymgui_wire_tex)) {
+                const struct yetty_ymgui_wire_tex *th =
+                    (const struct yetty_ymgui_wire_tex *)body;
+                ind(depth + 1);
+                out("TEX_UPLOAD version=%u total=%u figure_id=%u tex_id=%u "
+                    "format=%s(%u) %ux%u\n",
+                    th->version, th->total_size, th->figure_id, th->tex_id,
+                    tex_fmt_name(th->format), th->format,
+                    th->width, th->height);
+            } else {
+                ind(depth + 1);
+                out("(TEX_UPLOAD body too small: %zu B)\n", blen);
+            }
+            break;
+        default:
+            /* CLEAR / TEX_RELEASE / TERM_INPUT_SUB carry minimal or no
+             * body — nothing to decode beyond the tag. */
+            break;
+        }
+        return;
+    }
+
+    /* Magic-prefixed form — the ymgui_wire_frame / ymgui_wire_tex
+     * structs self-describe via their `magic` field as the first u32,
+     * so the same payload can travel without a leading sub_op tag.
+     * Documented as an accepted dispatch path in <yetty/ymgui/wire.h>. */
     if (first == YMGUI_WIRE_MAGIC_FRAME) {
         if (plen >= sizeof(struct yetty_ymgui_wire_frame)) {
             const struct yetty_ymgui_wire_frame *fh =
                 (const struct yetty_ymgui_wire_frame *)payload;
             ind(depth);
-            out("ymgui FRAME version=%u total=%u figure_id=%u cmd_lists=%u "
-                "display=(%.1fx%.1f)\n",
+            out("ymgui FRAME (magic-tagged) version=%u total=%u figure_id=%u "
+                "cmd_lists=%u display=(%.1fx%.1f)\n",
                 fh->version, fh->total_size, fh->figure_id, fh->cmd_list_count,
                 fh->display_size_x, fh->display_size_y);
         } else {
@@ -281,10 +398,10 @@ static void walk_routed_payload(uint32_t id, const uint8_t *payload, size_t plen
             const struct yetty_ymgui_wire_tex *th =
                 (const struct yetty_ymgui_wire_tex *)payload;
             ind(depth);
-            out("ymgui TEX version=%u total=%u figure_id=%u tex_id=%u "
-                "format=%u %ux%u\n",
+            out("ymgui TEX (magic-tagged) version=%u total=%u figure_id=%u "
+                "tex_id=%u format=%s(%u) %ux%u\n",
                 th->version, th->total_size, th->figure_id, th->tex_id,
-                th->format, th->width, th->height);
+                tex_fmt_name(th->format), th->format, th->width, th->height);
         } else {
             ind(depth);
             out("ymgui TEX (truncated, %zu B)\n", plen);
@@ -428,10 +545,12 @@ static int decode_envelope(struct yetty_yface *y,
     const char *payload = semi2 + 1;
     size_t payload_len = after_code_len - args_len - 1;
 
-    out("  osc code: %d  (args b64=%zu  payload b64=%zu)\n",
-        osc_code, args_len, payload_len);
+    const char *code_name = osc_code_name(osc_code);
+    out("  osc code: %d (%s)  (args b64=%zu  payload b64=%zu)\n",
+        osc_code, code_name ? code_name : "?", args_len, payload_len);
 
     int compressed = 0;
+    int compression_known = 0;
     if (args_len > 0) {
         char meta_raw[64] = {0};
         size_t mlen = yetty_ycore_base64_decode(after_code, args_len,
@@ -444,7 +563,10 @@ static int decode_envelope(struct yetty_yface *y,
             out("  meta: magic=0x%08x [%s] version=%u compressed=%u raw_size=%llu\n",
                 m->magic, magic_ok, m->version, m->compressed,
                 (unsigned long long)m->raw_size);
-            compressed = (m->compressed != 0);
+            if (m->magic == YETTY_YFACE_BIN_MAGIC) {
+                compressed = (m->compressed != 0);
+                compression_known = 1;
+            }
         }
     }
 
@@ -452,6 +574,14 @@ static int decode_envelope(struct yetty_yface *y,
         out("  (no payload — envelope is admin/control with empty body)\n");
         return 0;
     }
+
+    /* When no bin_meta is supplied (or the magic mismatched), the
+     * producer may still have shipped a compressed body (the ymgui
+     * FRAME emit path does this). Do an uncompressed pass first; if the
+     * result starts with the LZ4F frame magic we redo with compression
+     * on. Mirrors ywire's auto-sniffing — yface's stream scanner can't
+     * do this on its own because the framing decision is locked at
+     * start_read() time. */
     struct yetty_ycore_void_result r = yetty_yface_start_read(y, compressed);
     if (!r.ok) { out("  start_read failed: %s\n", r.error.msg); return -1; }
     r = yetty_yface_feed(y, payload, payload_len);
@@ -461,7 +591,28 @@ static int decode_envelope(struct yetty_yface *y,
     if (!r.ok) { out("  finish_read failed: %s\n", r.error.msg); return -1; }
 
     struct yetty_ycore_buffer *in = yetty_yface_in_buf(y);
-    out("  payload decoded: %zu bytes; first 16:", in->size);
+    if (!compressed && !compression_known && in->size >= 4) {
+        uint32_t magic;
+        memcpy(&magic, in->data, 4);
+        if (magic == 0x184D2204u) {
+            out("  meta: (none) — sniffed LZ4F frame magic in payload, "
+                "retrying with compression on\n");
+            r = yetty_yface_start_read(y, 1);
+            if (r.ok) {
+                r = yetty_yface_feed(y, payload, payload_len);
+                if (r.ok) r = yetty_yface_finish_read(y);
+            }
+            if (!r.ok) {
+                out("  lz4f auto-decode failed: %s\n", r.error.msg);
+                return -1;
+            }
+            in = yetty_yface_in_buf(y);
+            compressed = 1;
+        }
+    }
+
+    out("  payload decoded%s: %zu bytes; first 16:",
+        compressed ? " [LZ4F]" : "", in->size);
     for (size_t i = 0; i < in->size && i < 16; i++)
         out(" %02x", (unsigned char)in->data[i]);
     out("\n");
@@ -682,23 +833,144 @@ static int run_interpose(void)
     return rc;
 }
 
+/* Spawn `argv` under a freshly forked PTY and stream its master fd
+ * through the same passthrough+decode pipeline as run_interpose. Tools
+ * like ygreeter / the ymgui demo refuse to start when their stdout is a
+ * plain pipe (they isatty-gate their init), so the analyzer has to give
+ * them a real terminal on the other end. Returns child's exit status as
+ * a positive int, or 1 on internal error. */
+static int run_exec(char **argv, int cols, int rows)
+{
+    struct yetty_yface_ptr_result yr = yetty_yface_create();
+    if (!yr.ok) { fprintf(stderr, "yface_create failed\n"); return 1; }
+    struct yetty_yface *y = yr.value;
+
+    struct splitter s = {0};
+    s.yface = y;
+
+    struct winsize ws = {0};
+    ws.ws_col = (unsigned short)cols;
+    ws.ws_row = (unsigned short)rows;
+
+    int pty_master = -1;
+    pid_t pid = forkpty(&pty_master, NULL, NULL, &ws);
+    if (pid < 0) {
+        fprintf(stderr, "forkpty failed: %s\n", strerror(errno));
+        yetty_yface_destroy(y);
+        return 1;
+    }
+    if (pid == 0) {
+        /* Child — drop inherited high fds and exec the target. */
+        for (int fd = 3; fd < 1024; fd++) close(fd);
+        execvp(argv[0], argv);
+        fprintf(stderr, "execvp(%s) failed: %s\n", argv[0], strerror(errno));
+        _exit(127);
+    }
+    fprintf(stderr, "osc-analyzer: spawned pid=%d argv0='%s' "
+                    "winsize=%ux%u cells\n",
+            pid, argv[0], ws.ws_col, ws.ws_row);
+
+    int flags = fcntl(pty_master, F_GETFL, 0);
+    if (flags >= 0) fcntl(pty_master, F_SETFL, flags | O_NONBLOCK);
+
+    yetty_yplatform_tty_binary_io();
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    char chunk[1u << 13];
+    int rc = 0;
+    for (;;) {
+        struct pollfd pfd = {.fd = pty_master, .events = POLLIN};
+        int pr = poll(&pfd, 1, -1);
+        if (pr < 0) {
+            if (errno == EINTR) continue;
+            fprintf(stderr, "osc-analyzer: poll failed: %s\n", strerror(errno));
+            rc = 1;
+            break;
+        }
+        if (!(pfd.revents & (POLLIN | POLLHUP))) continue;
+
+        int eof = 0;
+        for (;;) {
+            ssize_t n = read(pty_master, chunk, sizeof(chunk));
+            if (n > 0) {
+                /* Passthrough every byte to stdout (so a downstream
+                 * consumer or a `tee` user still sees the unfiltered
+                 * wire) and feed the same bytes through the splitter. */
+                if (fwrite(chunk, 1, (size_t)n, stdout) != (size_t)n) {
+                    fprintf(stderr, "osc-analyzer: stdout write failed\n");
+                    rc = 1;
+                    eof = 1;
+                    break;
+                }
+                if (splitter_grow(&s, s.len + (size_t)n) == 0) {
+                    memcpy(s.buf + s.len, chunk, (size_t)n);
+                    s.len += (size_t)n;
+                    splitter_consume(&s);
+                    fflush(g_out);
+                }
+                continue;
+            }
+            if (n == 0) { eof = 1; break; }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+            if (errno == EINTR) continue;
+            /* PTY master read returns EIO once the child exits and has
+             * no more buffered output — treat as EOF. */
+            if (errno == EIO) { eof = 1; break; }
+            fprintf(stderr, "osc-analyzer: pty read failed: %s\n",
+                    strerror(errno));
+            rc = 1;
+            eof = 1;
+            break;
+        }
+        if (eof) break;
+    }
+
+    close(pty_master);
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        fprintf(stderr, "osc-analyzer: waitpid failed: %s\n", strerror(errno));
+    } else if (WIFEXITED(status)) {
+        fprintf(stderr, "osc-analyzer: child exited rc=%d\n", WEXITSTATUS(status));
+        if (rc == 0) rc = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        fprintf(stderr, "osc-analyzer: child killed by signal %d\n",
+                WTERMSIG(status));
+        if (rc == 0) rc = 128 + WTERMSIG(status);
+    }
+
+    out("\nrun closed: %d envelope(s), %d error(s); %zu B tail\n",
+        s.env_count, s.err_count, s.len);
+    free(s.buf);
+    yetty_yface_destroy(y);
+    return rc;
+}
+
 static void print_help(const char *prog)
 {
     fprintf(stderr,
-            "usage: %s [FILE | -]            decode envelopes in FILE/stdin\n"
-            "       %s --interpose [-o FILE]  pipe through, decode to FILE\n"
+            "usage: %s [FILE | -]                  decode envelopes in FILE/stdin\n"
+            "       %s --interpose [-o FILE]       pipe through, decode to FILE\n"
+            "       %s -e <cmd> [args...] [-o FILE] forkpty <cmd>, decode to FILE\n"
             "\n"
-            "Decode the new figure-tree OSC wire (post-migration). For the\n"
-            "legacy ydraw CMD_GROUP/UPDATE/DELETE format use decode-ydraw\n"
-            "instead.\n"
-            "\n"
-            "Records: { length:u32 | id:u32 | payload[length] }.\n"
+            "Decode the figure-tree OSC wire. Records have shape\n"
+            "{ length:u32 | id:u32 | payload[length] }:\n"
             "  id=0  -> admin: CLEAR_ALL / CREATE_CHILD / DELETE_CHILD /\n"
             "          SET_RECT / SET_CHILD_RECT (decoded inline)\n"
-            "  id!=0 -> routed to child figure; payload printed as either\n"
-            "          a ymgui FRAME/TEX, a nested record stream (container),\n"
-            "          or a flat SDF/glyph stream (ygrid body)\n",
-            prog, prog);
+            "  id!=0 -> routed to a child figure; payload may be the tagged\n"
+            "          YETTY_YMGUI_FIGURE_SUB_* form, a magic-tagged\n"
+            "          ymgui_wire_frame / ymgui_wire_tex, a nested record\n"
+            "          stream, or a flat SDF/glyph stream (ygrid body).\n"
+            "\n"
+            "-e mode is the way to run apps that gate on isatty() (ygreeter,\n"
+            "the ymgui demo, …) — the analyzer hands them a real PTY and\n"
+            "reads the master side. Without -e, those apps refuse to start\n"
+            "because a shell pipe is not a terminal.\n"
+            "\n"
+            "Options:\n"
+            "  -o FILE     write decoded output to FILE (default stderr)\n"
+            "  --cols N    PTY cell columns for -e (default 80)\n"
+            "  --rows N    PTY cell rows for -e (default 24)\n",
+            prog, prog, prog);
 }
 
 int main(int argc, char **argv)

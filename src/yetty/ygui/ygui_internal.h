@@ -910,7 +910,7 @@ struct yetty_ygui_engine {
     int preserve_canvas_on_destroy;
 
     /* Long-lived yface for parsing inbound binary OSC envelopes
-     * (YMGUI_OSC_SC_MOUSE / RESIZE / FOCUS / KEY). */
+     * (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE / RESIZE / FOCUS / KEY). */
     struct yetty_yface *yface_in;
 
     /* State */

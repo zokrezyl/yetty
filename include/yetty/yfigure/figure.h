@@ -56,21 +56,30 @@ struct yetty_yfigure_figure_ops {
         struct yetty_yfigure_figure *self,
         struct yetty_ydraw_target *target);
 
-    /* Apply a wire update from an in-memory byte buffer. The parent
-     * has already read this figure's outer record header `{length,
-     * id}` (from either an SM or a byte stream), buffered `length`
-     * bytes of payload, and looks up `self` via id. It then hands the
-     * buffer to the child here.
+    /* Consume input directly from the wire-statemachine. A coroutine —
+     * yields when the SM has no bytes ready and resumes when the next
+     * chunk arrives. Same shape every figure speaks; no buffered
+     * payload, no length argument. The figure reads what it needs from
+     * the SM in its own format.
      *
-     * For composite figures (yfigure_container), the payload is a
-     * stream of `{length, id, payload}` records — process_bytes loops
-     * reading record headers from `bytes` and dispatching to children,
-     * recursing naturally.
+     * For composite figures (yfigure_container), the body is a stream
+     * of `{length, id, body}` records — process_input loops reading
+     * record headers from the SM and dispatches each to either its own
+     * admin handler (id=0) or the matching child's process_input.
      *
-     * For leaf figures (ygrid, ymgui, yrdawn, …), the payload is the
-     * figure-kind's own format and the op decodes it directly.
+     * For leaf figures (ygrid, ymgui, yrdawn, …), the body is the
+     * figure-kind's own self-describing format. The figure reads from
+     * the SM directly and decodes as it goes.
      *
      * NULL = figure is purely visual and rejects wire updates. */
+    struct yetty_ycore_void_result (*process_input)(
+        struct yetty_yfigure_figure *self,
+        struct yetty_ywire_wire_statemachine *sm);
+
+    /* Apply a wire update from an in-memory byte buffer. TEMPORARY —
+     * the migration target is `process_input` above. Kept while ygrid
+     * and the container's admin records still go through the buffered
+     * path; will be deleted once every figure kind speaks `process_input`. */
     struct yetty_ycore_void_result (*process_bytes)(
         struct yetty_yfigure_figure *self,
         const uint8_t *bytes, size_t bytes_len);
@@ -188,6 +197,19 @@ struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id(
  * (rendered last). No-op when `id` isn't bound. */
 struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(
     struct yetty_yfigure_container *group, uint32_t id);
+
+/* Iterate every child in z-order (back-to-front). `fn` is called once
+ * per child with its parent-scoped id, figure pointer, and the caller's
+ * `user` cookie. Returning non-zero from `fn` stops the walk early and
+ * the same value is returned from for_each — callers use that as the
+ * "found" / hit short-circuit. Returns 0 when the visitor ran to
+ * completion. */
+typedef int (*yetty_yfigure_container_visitor_fn)(
+    uint32_t id, struct yetty_yfigure_figure *child, void *user);
+
+int yetty_yfigure_container_for_each(
+    struct yetty_yfigure_container *group,
+    yetty_yfigure_container_visitor_fn fn, void *user);
 
 #ifdef __cplusplus
 }

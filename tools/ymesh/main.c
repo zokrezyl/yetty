@@ -10,7 +10,7 @@
  *   INTERACTIVE (default when stdin + stdout are both TTYs, or with -i):
  *     parse the .glb once, then sit in a select() loop:
  *       - subscribe to terminal-wide mouse + keyboard via
- *         YMGUI_OSC_CS_TERM_INPUT_SUB
+ *         YETTY_OSC_CS_CLIENT_INPUT_SUB
  *       - left-drag      → orbit camera (azimuth/elevation)
  *       - right-drag     → pan
  *       - middle-drag    → pan
@@ -35,6 +35,7 @@
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/yplatform/tty.h>
 #include <yetty/yterm/osc-codes.h>
 
@@ -160,7 +161,7 @@ static int redraw_and_push(struct ev_state *st)
 #define YMESH_ZOOM_STEP   0.10f   /* dist_factor multiplier per wheel notch */
 
 static void handle_mouse_button(struct ev_state *st,
-                                const struct yetty_ymgui_wire_input_mouse *m)
+                                const struct yetty_client_input_mouse *m)
 {
     if (m->pressed) {
         st->buttons_held |= (1u << m->button);
@@ -175,7 +176,7 @@ static void handle_mouse_button(struct ev_state *st,
 }
 
 static void handle_mouse_move(struct ev_state *st,
-                              const struct yetty_ymgui_wire_input_mouse *m)
+                              const struct yetty_client_input_mouse *m)
 {
     /* Use the wire's buttons_held when in a POS event — its bitmask is the
      * authority on what's still pressed (handles missed-button edges). */
@@ -205,7 +206,7 @@ static void handle_mouse_move(struct ev_state *st,
 }
 
 static void handle_mouse_wheel(struct ev_state *st,
-                               const struct yetty_ymgui_wire_input_mouse *m)
+                               const struct yetty_client_input_mouse *m)
 {
     /* Each wheel notch ~ 1.0; positive = up = zoom in (closer). */
     float factor = 1.0f - m->wheel_dy * YMESH_ZOOM_STEP;
@@ -217,7 +218,7 @@ static void handle_mouse_wheel(struct ev_state *st,
 }
 
 /*=============================================================================
- * Keyboard handling — both via OSC (YMGUI_OSC_SC_TERM_KEY) and raw TTY
+ * Keyboard handling — both via OSC (YETTY_OSC_SC_CLIENT_INPUT_KEY) and raw TTY
  * bytes. The two sources may both fire for the same keystroke; both paths
  * just set state.dirty, so duplicates are harmless.
  *===========================================================================*/
@@ -261,10 +262,10 @@ static void on_osc(void *user, int osc_code,
     (void)args; (void)args_len;
     struct ev_state *st = user;
 
-    if (osc_code == YMGUI_OSC_SC_MOUSE || osc_code == YMGUI_OSC_SC_TERM_MOUSE) {
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_mouse)) return;
-        const struct yetty_ymgui_wire_input_mouse *m =
-            (const struct yetty_ymgui_wire_input_mouse *)payload;
+    if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE || osc_code == YETTY_OSC_SC_CLIENT_INPUT_MOUSE) {
+        if (payload_len < sizeof(struct yetty_client_input_mouse)) return;
+        const struct yetty_client_input_mouse *m =
+            (const struct yetty_client_input_mouse *)payload;
         switch (m->kind) {
         case YETTY_YMGUI_INPUT_MOUSE_BUTTON: handle_mouse_button(st, m); break;
         case YETTY_YMGUI_INPUT_MOUSE_POS:    handle_mouse_move(st, m);   break;
@@ -273,10 +274,10 @@ static void on_osc(void *user, int osc_code,
         return;
     }
 
-    if (osc_code == YMGUI_OSC_SC_KEY || osc_code == YMGUI_OSC_SC_TERM_KEY) {
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_key)) return;
-        const struct yetty_ymgui_wire_input_key *k =
-            (const struct yetty_ymgui_wire_input_key *)payload;
+    if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY || osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY) {
+        if (payload_len < sizeof(struct yetty_client_input_key)) return;
+        const struct yetty_client_input_key *k =
+            (const struct yetty_client_input_key *)payload;
         if (k->kind == YETTY_YMGUI_INPUT_KEY_CHAR && k->codepoint)
             handle_key_codepoint(st, k->codepoint);
         return;
@@ -319,13 +320,13 @@ static void on_raw(void *user, const char *bytes, size_t n)
 
 static void term_input_subscribe(uint32_t flags)
 {
-    struct yetty_ymgui_wire_term_input_sub msg = {
-        .magic = YMGUI_WIRE_MAGIC_TERM_INPUT_SUB,
+    struct yetty_client_input_sub msg = {
+        .magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
         .version = YMGUI_WIRE_VERSION,
         .flags = flags,
         ._pad0 = 0,
     };
-    (void)emit_envelope(YMGUI_OSC_CS_TERM_INPUT_SUB, /*compressed=*/0,
+    (void)emit_envelope(YETTY_OSC_CS_CLIENT_INPUT_SUB, /*compressed=*/0,
                         NULL, 0, &msg, sizeof(msg));
 }
 
@@ -357,10 +358,10 @@ static int interactive_loop(struct ev_state *st)
     }
     atexit(yetty_yplatform_tty_restore);
 
-    term_input_subscribe(YETTY_YMGUI_TERM_SUB_MOUSE_CLICK |
-                         YETTY_YMGUI_TERM_SUB_MOUSE_MOVE  |
-                         YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL |
-                         YETTY_YMGUI_TERM_SUB_KEY);
+    term_input_subscribe(YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK |
+                         YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE  |
+                         YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL |
+                         YETTY_CLIENT_INPUT_SUB_KEY);
     fflush(stdout);
 
     (void)redraw_and_push(st);

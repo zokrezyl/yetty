@@ -34,6 +34,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,13 +57,13 @@ struct yetty_ymgui_hit {
 };
 
 /* Callback the compositor uses to ship server-to-client ymgui OSCs
- * (YMGUI_OSC_SC_RESIZE / SC_FOCUS) back to the client process. The
+ * (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE / SC_FOCUS) back to the client process. The
  * compositor passes the OSC code + raw payload bytes; the host wraps
  * them in a yface envelope and writes to the PTY. */
 typedef struct yetty_ycore_void_result (*yetty_ymgui_emit_osc_fn)(
     int osc_code, const void *data, size_t size, void *user);
 
-/* Callback the compositor fires when a YMGUI_OSC_CS_TERM_INPUT_SUB
+/* Callback the compositor fires when a YETTY_OSC_CS_CLIENT_INPUT_SUB
  * envelope arrives. Updates the host's terminal-wide input subscription
  * bitmask. Returns a Result so the host can fail back to the compositor
  * (e.g. emit_yface failed shipping a TERM_RESIZE on rising edge). */
@@ -107,6 +108,64 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(
     struct yetty_ymgui_figure *figure,
     const uint8_t *atlas_bytes, size_t atlas_size,
     uint32_t atlas_w, uint32_t atlas_h);
+
+/*===========================================================================
+ * Figure-kind factory registration.
+ *
+ * The host (terminal, yui) hands a non-NULL `factory_args` to the registry
+ * via `yetty_ymgui_register_factory`. The args struct outlives every
+ * minted figure — the registry borrows it. The pipeline is built lazily
+ * on the first mint and stored on the args; the host releases it at
+ * shutdown with `yetty_ymgui_factory_args_release`.
+ *
+ * The args also expose the shared pipeline so the host can hand it to
+ * any code that needs to render ymgui content outside the figure-tree
+ * path (in-process embedded mode, tests).
+ *=========================================================================*/
+
+struct yetty_ymgui_factory_args {
+    /* Borrowed — used to lazily build `pipeline` on first mint. The
+     * underlying context (GPU device / queue / config) must outlive the
+     * args struct. */
+    const struct yetty_context *context;
+
+    /* Owned by the args once built. NULL until the first factory mint
+     * triggers `yetty_ymgui_pipeline_create`. Host MUST call
+     * `yetty_ymgui_factory_args_release` at shutdown to free it. */
+    struct yetty_ymgui_pipeline *pipeline;
+};
+
+/* Register the YMGUI factory under YETTY_YFIGURE_KIND_YMGUI. `args` is
+ * borrowed; the host owns its lifetime and MUST keep it alive while the
+ * registry references it. Errors if the kind is already registered. */
+struct yetty_ycore_void_result yetty_ymgui_register_factory(
+    struct yetty_yfigure_registry *registry,
+    struct yetty_ymgui_factory_args *args);
+
+/* Tear down the lazily-built pipeline (if any). Safe to call when no
+ * pipeline was ever built; in that case the args are simply zeroed. */
+struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
+    struct yetty_ymgui_factory_args *args);
+
+/* Downcast helper. Returns the typed pointer when `base` is actually
+ * an ymgui figure (identified by its ops vtable), NULL otherwise. Use
+ * this to filter the heterogeneous children of a yfigure container. */
+struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(
+    struct yetty_yfigure_figure *base);
+
+/* Walk a yfigure container looking for the topmost ymgui figure whose
+ * rect contains the pane-local point (x, y). On hit, `figure_id` is
+ * the parent-scoped id and (local_x, local_y) are the cursor's
+ * coordinates inside the figure's own pixel space (origin at the
+ * figure's top-left). When no ymgui figure is under the cursor, returns
+ * `{0, 0, 0}`.
+ *
+ * Walks in reverse z-order so the topmost figure wins. The cursor's
+ * coords are in absolute target pixel space (same coords the figures'
+ * rects live in). */
+struct yetty_yfigure_container;
+struct yetty_ymgui_hit yetty_ymgui_figure_hit_test_container(
+    struct yetty_yfigure_container *container, float x, float y);
 
 #ifdef __cplusplus
 }

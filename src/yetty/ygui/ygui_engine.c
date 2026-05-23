@@ -7,6 +7,7 @@
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/yfont/raster-font.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/yplatform/term.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
@@ -843,8 +844,8 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
     engine->moves_subscribed = 1;
 
     /* Register the card with the ymgui-layer so the server hit-tests
-     * the cursor against our rect and emits YMGUI_OSC_SC_MOUSE with
-     * card-local coordinates. Triggers the host's YMGUI_OSC_SC_RESIZE
+     * the cursor against our rect and emits YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE with
+     * card-local coordinates. Triggers the host's YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE
      * reply carrying the actual pixel size. */
     struct yetty_ycore_void_result place_r =
         yetty_ygui_osc_card_place(engine->output_pty, engine->figure_id, engine->card_x,
@@ -1911,7 +1912,7 @@ void yetty_ygui_internal_process_input(struct yetty_ygui_engine *engine, const c
  * yface input — decode binary OSC envelopes from the ymgui-layer hit router
  *
  * The server (yetty/src/yterm/terminal.c) hit-tests the cursor against live
- * cards and emits YMGUI_OSC_SC_MOUSE / RESIZE / FOCUS / KEY with
+ * cards and emits YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE / RESIZE / FOCUS / KEY with
  * card-local coordinates. We only react to events tagged with our own
  * figure_id. Bytes that don't form an OSC envelope (CSI replies, plain
  * keystrokes) are forwarded through on_raw to the existing parser.
@@ -1929,13 +1930,13 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
     ydebug("ygui_yface_on_osc: code=%d payload_len=%zu", osc_code, payload_len);
 
     switch (osc_code) {
-    case YMGUI_OSC_SC_MOUSE: {
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_mouse)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE: {
+        if (payload_len < sizeof(struct yetty_client_input_mouse)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_mouse *m =
-            (const struct yetty_ymgui_wire_input_mouse *)payload;
-        if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) {
+        const struct yetty_client_input_mouse *m =
+            (const struct yetty_client_input_mouse *)payload;
+        if (m->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             return;
         }
         if (m->figure_id != engine->figure_id) {
@@ -1963,13 +1964,13 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
         }
         break;
     }
-    case YMGUI_OSC_SC_RESIZE: {
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_resize)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE: {
+        if (payload_len < sizeof(struct yetty_client_input_resize)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_resize *r =
-            (const struct yetty_ymgui_wire_input_resize *)payload;
-        if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) {
+        const struct yetty_client_input_resize *r =
+            (const struct yetty_client_input_resize *)payload;
+        if (r->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC) {
             return;
         }
         if (r->figure_id != engine->figure_id) {
@@ -1992,16 +1993,16 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
          * actually change. */
         break;
     }
-    case YMGUI_OSC_SC_FOCUS: {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS: {
         /* Focus tracking is internal to the engine for now — no public API
          * surface. The server tells us when our card gains/loses focus;
          * widget-level focus stays driven by mouse/key events. */
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_focus)) {
+        if (payload_len < sizeof(struct yetty_client_input_focus)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_focus *f =
-            (const struct yetty_ymgui_wire_input_focus *)payload;
-        if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) {
+        const struct yetty_client_input_focus *f =
+            (const struct yetty_client_input_focus *)payload;
+        if (f->magic != YETTY_CLIENT_INPUT_FOCUS_MAGIC) {
             return;
         }
         if (f->figure_id != engine->figure_id) {
@@ -2010,13 +2011,13 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
         /* Currently unused — wire it through if/when we add a focus API. */
         break;
     }
-    case YMGUI_OSC_SC_KEY: {
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_key)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY: {
+        if (payload_len < sizeof(struct yetty_client_input_key)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_key *k =
-            (const struct yetty_ymgui_wire_input_key *)payload;
-        if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) {
+        const struct yetty_client_input_key *k =
+            (const struct yetty_client_input_key *)payload;
+        if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
             return;
         }
         if (k->figure_id != engine->figure_id) {

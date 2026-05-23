@@ -591,7 +591,7 @@ function(yetty_embed_assets TARGET)
     # Collect shaders from module locations
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    file(COPY "${YETTY_ROOT}/src/yetty/yterm/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # Generated SDF dispatcher + sdf_* functions — attached at runtime as a
     # child resource set of ydraw-layer; see src/yetty/ysdf/gen-sdf-code.py.

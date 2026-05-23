@@ -75,36 +75,25 @@ extern "C" {
  * is a single switch on osc_code with no body inspection.
  *===========================================================================*/
 
-/* client → server (frontend → ymgui-layer). 600000–600003 belong to
- * ydraw (see <yetty/yterm/osc-codes.h>); ymgui starts at 610000. */
+/* Client → server traffic flows through the figure-tree OSC
+ * (YETTY_OSC_YCOMPOSITOR_BIN, see <yetty/yterm/osc-codes.h>) as
+ * `{u32 length, u32 id, body}` records. Body for id != 0 is one of
+ * the YETTY_YMGUI_FIGURE_SUB_* sub-records defined below. There are
+ * no per-message client→server OSC codes any more — the figure-tree
+ * carries everything.
+ *
+ * The CARD_* / CLEAR / FRAME / TEX CS codes below are legacy producer
+ * fallback (still referenced by ygui_osc.c); they will be deleted with
+ * that producer. The pane-wide client-input channel lives in
+ * <yetty/yterm/client-input.h>. */
 #define YMGUI_OSC_CS_CLEAR 610000       /* ymgui_wire_clear,        comp=0 */
 #define YMGUI_OSC_CS_FRAME 610001       /* ymgui_wire_frame,        comp=1 */
 #define YMGUI_OSC_CS_TEX 610002         /* ymgui_wire_tex,          comp=1 */
 #define YMGUI_OSC_CS_CARD_PLACE 610003  /* ymgui_wire_card_place,   comp=0 */
 #define YMGUI_OSC_CS_CARD_REMOVE 610004 /* ymgui_wire_card_remove,  comp=0 */
 
-/* Terminal-wide input subscription — independent of the card hit table.
- * Programs that aren't ymgui-shaped (browser, file manager, anything that
- * draws its own UI directly into the pane) subscribe via this OSC and
- * receive YMGUI_OSC_SC_TERM_* events tagged with figure_id=0 and pane-local
- * pixel coords. The card path is unchanged: cards keep getting their own
- * card-tagged events; both fan out simultaneously when both subscriptions
- * are active. */
-#define YMGUI_OSC_CS_TERM_INPUT_SUB 610010 /* ymgui_wire_term_input_sub, comp=0 */
-
-/* server → client (yetty terminal → frontend / ygui / yrich) */
-#define YMGUI_OSC_SC_MOUSE 700000  /* ymgui_wire_input_mouse,  comp=0 */
-#define YMGUI_OSC_SC_RESIZE 700001 /* ymgui_wire_input_resize, comp=0 */
-#define YMGUI_OSC_SC_FOCUS 700002  /* ymgui_wire_input_focus,  comp=0 */
-#define YMGUI_OSC_SC_KEY 700003    /* ymgui_wire_input_key,    comp=0 */
-
-/* Terminal-wide variants — same wire structs as the card-tagged events
- * (ymgui_wire_input_mouse / _key / _resize), but figure_id=0 and x/y are in
- * pane-local pixels (origin = pane top-left). Sent only to the
- * foreground PTY reader that subscribed via YMGUI_OSC_CS_TERM_INPUT_SUB. */
-#define YMGUI_OSC_SC_TERM_MOUSE 700010  /* ymgui_wire_input_mouse,  comp=0 */
-#define YMGUI_OSC_SC_TERM_RESIZE 700011 /* ymgui_wire_input_resize, comp=0 */
-#define YMGUI_OSC_SC_TERM_KEY 700012    /* ymgui_wire_input_key,    comp=0 */
+/* Server → client client-input events (figure-tagged and pane-wide variants)
+ * live in <yetty/yterm/client-input.h>. */
 
 /*=============================================================================
  * Magic numbers + versioning
@@ -114,32 +103,10 @@ extern "C" {
 #define YMGUI_WIRE_MAGIC_CLEAR 0x4D4C4359u          /* "YCLM" */
 #define YMGUI_WIRE_MAGIC_CARD_PLACE 0x4D504443u     /* "CDPM" */
 #define YMGUI_WIRE_MAGIC_CARD_REMOVE 0x4D524443u    /* "CDRM" */
-#define YMGUI_WIRE_MAGIC_INPUT_MOUSE 0x4D49534Du    /* "MSIM" reversed: "MISM" */
-#define YMGUI_WIRE_MAGIC_INPUT_RESIZE 0x4D52534Du   /* "MSRM" reversed: "MRSM" */
-#define YMGUI_WIRE_MAGIC_INPUT_FOCUS 0x4D434F46u    /* "FOCM" */
-#define YMGUI_WIRE_MAGIC_INPUT_KEY 0x4D59454Bu      /* "KEYM" */
-#define YMGUI_WIRE_MAGIC_TERM_INPUT_SUB 0x53504954u /* "TIPS" */
 
 #define YMGUI_WIRE_VERSION 4u
 
-/*=============================================================================
- * Terminal-wide input subscription flags (YMGUI_OSC_CS_TERM_INPUT_SUB).
- * Bitmask of which event categories to forward as YMGUI_OSC_SC_TERM_*.
- * Sending flags=0 unsubscribes from all of them.
- *===========================================================================*/
-#define YETTY_YMGUI_TERM_SUB_MOUSE_CLICK (1u << 0)
-#define YETTY_YMGUI_TERM_SUB_MOUSE_MOVE (1u << 1)
-#define YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL (1u << 2)
-#define YETTY_YMGUI_TERM_SUB_KEY (1u << 3)
-
-struct yetty_ymgui_wire_term_input_sub {
-    uint32_t magic;   /* YMGUI_WIRE_MAGIC_TERM_INPUT_SUB */
-    uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t flags;   /* bitmask of YETTY_YMGUI_TERM_SUB_* */
-    uint32_t _pad0;
-};
-
-/* Texture IDs. Per-card namespace: each card has its own tex_id space.
+/* Texture IDs. Per-figure namespace: each figure has its own tex_id space.
  * tex_id=1 = that card's font atlas. User textures (v2) allocate 2..N
  * within the card. tex_id=0 = "no texture" (solid-colored triangles only). */
 #define YMGUI_TEX_ID_NONE 0u
@@ -151,6 +118,45 @@ struct yetty_ymgui_wire_term_input_sub {
 
 /* Frame flags. */
 #define YMGUI_FRAME_FLAG_IDX32 (1u << 0)
+
+/*=============================================================================
+ * Figure-tree sub-records
+ *
+ * When ymgui is carried as a yfigure (kind=YETTY_YFIGURE_KIND_YMGUI=3) on
+ * the shared figure-tree OSC code (YETTY_OSC_YCOMPOSITOR_BIN=630000),
+ * each top-level container record `{length, id=child_id, payload}` arrives
+ * at the figure's process_bytes with `payload` being one self-describing
+ * sub-record. The first u32 of `payload` is either:
+ *
+ *   - a YMGUI_WIRE_MAGIC_* word (FRAME / TEX) — the legacy in-figure
+ *     dispatcher; or
+ *   - a YMGUI_FIGURE_SUB_* enum value — the new tagged form.
+ *
+ * The dispatcher accepts both for the migration window. New producers
+ * should use YMGUI_FIGURE_SUB_*. The magic-prefixed payloads remain
+ * available because the original `yetty_ymgui_wire_frame` /
+ * `yetty_ymgui_wire_tex` structs already self-describe via their magic
+ * field.
+ *
+ * SUB_FRAME payload after the u32 sub_op:
+ *   struct yetty_ymgui_wire_frame frame_hdr;
+ *   ... (cmd_list bodies as documented below)
+ *
+ * SUB_TEX_UPLOAD payload after the u32 sub_op:
+ *   struct yetty_ymgui_wire_tex tex_hdr;
+ *   uint8_t pixels[];
+ *
+ * SUB_CLEAR / SUB_TEX_RELEASE / SUB_TERM_INPUT_SUB are reserved for the
+ * follow-up PRs; the receiver currently rejects them so encoders don't
+ * silently lose state.
+ *===========================================================================*/
+enum yetty_ymgui_figure_sub_op {
+    YETTY_YMGUI_FIGURE_SUB_CLEAR = 1,
+    YETTY_YMGUI_FIGURE_SUB_FRAME = 2,
+    YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD = 3,
+    YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE = 4,
+    YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB = 5,
+};
 
 /* Per-cmd_list flags (yetty_ymgui_wire_cmd_list.flags).
  *
@@ -351,96 +357,8 @@ struct yetty_ymgui_wire_card_remove {
     uint32_t flags; /* YMGUI_CLEAR_FLAG_* */
 };
 
-/*=============================================================================
- * Input events (server → client)
- *
- * All input events carry a figure_id. The server hit-tests the cursor
- * against the live cards' pixel rects (drift-corrected for current
- * scroll) and routes the event to the topmost card under the cursor.
- * Coordinates x, y are in card-local pixels (origin = card's top-left,
- * already drift-corrected) — the client never needs to know where the
- * card sits on the pane.
- *===========================================================================*/
-
-/* ymgui_wire_input_mouse.kind */
-enum yetty_ymgui_wire_input_mouse_kind {
-    YETTY_YMGUI_INPUT_MOUSE_POS = 0,    /* x,y; buttons_held mask for drag tracking */
-    YETTY_YMGUI_INPUT_MOUSE_BUTTON = 1, /* button transition: button + pressed + x,y */
-    YETTY_YMGUI_INPUT_MOUSE_WHEEL = 2,  /* wheel: wheel_dy at x,y */
-};
-
-/* Single struct covers move / button / wheel — kind discriminates.
- * Fields not relevant to a kind are zero on the wire. */
-struct yetty_ymgui_wire_input_mouse {
-    uint32_t magic;        /* YMGUI_WIRE_MAGIC_INPUT_MOUSE */
-    uint32_t version;      /* YMGUI_WIRE_VERSION */
-    uint32_t figure_id;      /* card under cursor (focused for click events) */
-    uint32_t kind;         /* enum ymgui_wire_input_mouse_kind */
-    int32_t button;        /* BUTTON: 0=left,1=right,2=middle,...; else -1 */
-    int32_t pressed;       /* BUTTON: 1=down 0=up; else 0 */
-    uint32_t buttons_held; /* POS during drag: bitmask (1<<button) */
-    float x;               /* card-local pixel */
-    float y;               /* card-local pixel */
-    float wheel_dy;        /* WHEEL */
-    uint32_t _pad0;
-};
-
-/* Sent when a card's pixel size changes — either because the card was
- * (re)placed via CARD_PLACE (server confirms the resolved pixel size,
- * since the client supplied cells), because cell size changed (zoom),
- * or because the terminal was resized and a w_cells=0 card grew/shrank
- * with the right edge.
- *
- * The client uses (width, height) as DisplaySize for that card's
- * ImGuiContext. */
-struct yetty_ymgui_wire_input_resize {
-    uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_RESIZE */
-    uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t figure_id;
-    uint32_t _pad0;
-    float width;  /* pixels */
-    float height; /* pixels */
-};
-
-/* Focus transition for a card. Click-focus model: the focused card
- * changes only on YMGUI_INPUT_MOUSE_BUTTON press. Plain hover does not
- * change focus (avoids twitchy emissions). The client uses the gained
- * event to set its per-card ImGuiContext as current; lost to drain
- * "key up" / "mouse up" on the previously-focused card. */
-struct yetty_ymgui_wire_input_focus {
-    uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_FOCUS */
-    uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t figure_id;
-    int32_t gained; /* 1 = card gained focus, 0 = lost */
-};
-
-/*---------------------------------------------------------------------------
- * Keyboard event — payload of YMGUI_OSC_SC_KEY.
- *
- * Sent only when the terminal has a keyboard subscription active for
- * this client (DEC ?1502h, parallel to the mouse ?1500/?1501 model)
- * AND a card has focus. figure_id is the focused card. The client uses
- * `key` (a GLFW-compatible keycode the same way text-layer's on_key
- * does) for KEY_DOWN/UP and `codepoint` (UTF-32) for CHAR.
- *
- * Mods bitmask (parallel to GLFW): SHIFT=1, CTRL=2, ALT=4, SUPER=8.
- *-------------------------------------------------------------------------*/
-enum yetty_ymgui_wire_input_key_kind {
-    YETTY_YMGUI_INPUT_KEY_DOWN = 0,
-    YETTY_YMGUI_INPUT_KEY_UP = 1,
-    YETTY_YMGUI_INPUT_KEY_CHAR = 2, /* unicode text input (uses codepoint, not key) */
-};
-
-struct yetty_ymgui_wire_input_key {
-    uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_KEY */
-    uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t figure_id;
-    uint32_t kind;      /* enum ymgui_wire_input_key_kind */
-    int32_t key;        /* GLFW keycode, DOWN/UP only; -1 for CHAR */
-    int32_t mods;       /* bitmask */
-    uint32_t codepoint; /* CHAR only; 0 otherwise */
-    uint32_t _pad0;
-};
+/* Server → client client-input event structs (mouse / resize / focus / key)
+ * live in <yetty/yterm/client-input.h>. */
 
 #ifdef __cplusplus
 }

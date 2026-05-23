@@ -21,6 +21,7 @@ target_link_libraries(yetty_yui
         webgpu
         yetty_yfigure
         yetty_ygrid
+        yetty_ymgui
         yetty_yui_core
         yetty_yterm
         ygui_core

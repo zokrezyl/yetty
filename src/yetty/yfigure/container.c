@@ -399,11 +399,26 @@ static struct yetty_ycore_void_result container_process_bytes(
     return YETTY_OK_VOID();
 }
 
+/* process_input op — pumps the wire-statemachine via the existing
+ * consume_envelope helper. The SM gives us a fresh envelope each time
+ * its OSC code fires; consume_envelope walks `{length, id, body}`
+ * records, routes id=0 to handle_admin_bytes and id!=0 to the matching
+ * child. Children's input still flows through process_bytes for now —
+ * that migrates to process_input figure-by-figure. */
+static struct yetty_ycore_void_result container_process_input(
+    struct yetty_yfigure_figure *self,
+    struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yfigure_container *g = (struct yetty_yfigure_container *)self;
+    return yetty_yfigure_container_consume_envelope(g, sm);
+}
+
 static const struct yetty_yfigure_figure_ops *group_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
         .destroy = group_destroy,
         .render = group_render,
+        .process_input = container_process_input,
         .process_bytes = container_process_bytes,
     };
     return &ops;
@@ -484,6 +499,39 @@ struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
             /* Clean end of envelope — all body bytes delivered. */
             break;
         }
+        struct yetty_ycore_void_result dr = YETTY_OK_VOID();
+        struct yetty_yfigure_figure *child =
+            (hdr.id == 0) ? NULL
+                          : yetty_yfigure_container_find_child_by_id(container, hdr.id);
+
+        /* Streaming dispatch: if the target child has its own
+         * process_input coroutine, hand the SM straight to it — no
+         * intermediate buffer, the child pumps the SM and reads its
+         * `hdr.length` bytes via self-describing sub-records.
+         *
+         * Note: dump_fp can't see this record's payload because we
+         * never buffer it. That's a known cost of the streaming path. */
+        if (child && child->ops->process_input) {
+            if (dump_fp) {
+                fwrite(&hdr, 1, sizeof(hdr), dump_fp);
+                fwrite("<<streamed>>", 1, 12, dump_fp);
+            }
+            dr = child->ops->process_input(child, sm);
+            if (YETTY_IS_OK(dr)) {
+                child->dirty = 1;
+                container->base.dirty = 1;
+            }
+            if (YETTY_IS_ERR(dr)) {
+                if (dump_fp) fclose(dump_fp);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "consume_envelope: child process_input", dr);
+            }
+            continue;
+        }
+
+        /* Legacy path — buffer the payload bytes then call process_bytes.
+         * Used by admin records (id=0) and by child kinds that haven't
+         * migrated to process_input yet. */
         uint8_t *payload = NULL;
         if (hdr.length > 0) {
             payload = (uint8_t *)malloc(hdr.length);
@@ -512,29 +560,19 @@ struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
             fwrite(&hdr, 1, sizeof(hdr), dump_fp);
             if (payload && hdr.length) fwrite(payload, 1, hdr.length, dump_fp);
         }
-        struct yetty_ycore_void_result dr;
         if (hdr.id == 0) {
             dr = handle_admin_bytes(container, payload, hdr.length);
+        } else if (!child) {
+            ydebug("consume_envelope: id=%u not bound, skipping %u bytes",
+                   hdr.id, hdr.length);
+        } else if (!child->ops->process_bytes) {
+            ydebug("consume_envelope: id=%u no process_bytes / process_input",
+                   hdr.id);
         } else {
-            struct yetty_yfigure_figure *child =
-                yetty_yfigure_container_find_child_by_id(container, hdr.id);
-            if (!child) {
-                ydebug("consume_envelope: id=%u not bound, skipping %u bytes",
-                       hdr.id, hdr.length);
-                dr = YETTY_OK_VOID();
-            } else if (!child->ops->process_bytes) {
-                ydebug("consume_envelope: id=%u no process_bytes", hdr.id);
-                dr = YETTY_OK_VOID();
-            } else {
-                dr = child->ops->process_bytes(child, payload, hdr.length);
-                if (YETTY_IS_OK(dr)) {
-                    child->dirty = 1;
-                    /* Mark the container dirty too — the render-request
-                     * gate in terminal_pty_pipe_read polls the container's
-                     * dirty flag, not the children's. Without this, frames
-                     * land silently and the screen stays stale. */
-                    container->base.dirty = 1;
-                }
+            dr = child->ops->process_bytes(child, payload, hdr.length);
+            if (YETTY_IS_OK(dr)) {
+                child->dirty = 1;
+                container->base.dirty = 1;
             }
         }
         free(payload);
@@ -625,6 +663,19 @@ struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id(
                          "yfigure_group_remove_child_by_id: child destroy failed",
                          first_err);
     return YETTY_OK_VOID();
+}
+
+int yetty_yfigure_container_for_each(
+    struct yetty_yfigure_container *group,
+    yetty_yfigure_container_visitor_fn fn, void *user)
+{
+    if (!group || !fn) return 0;
+    struct child_entry *e, *tmp;
+    HASH_ITER(hh, group->children, e, tmp) {
+        int rc = fn(e->id, e->figure, user);
+        if (rc) return rc;
+    }
+    return 0;
 }
 
 struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(

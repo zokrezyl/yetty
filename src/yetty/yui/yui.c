@@ -28,6 +28,7 @@
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
+#include <yetty/ymgui/figure.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
@@ -71,6 +72,11 @@ struct yetty_yui {
      * ship yplot/yimage prims through this path. */
     struct yetty_ydraw_raw_figure_factory *figure_factory;
     struct yetty_ygrid_factory_args figure_args;
+
+    /* YMGUI factory args — pipeline lazily built on first ymgui figure
+     * mint. Released on yui teardown after the root container cascade
+     * destroyed every figure that borrowed it. */
+    struct yetty_ymgui_factory_args ymgui_figure_args;
 
     /* Producer engine. Bytes from engine->buffer are fed into the
      * compositor every frame via process_records — no PTY, no OSC
@@ -540,6 +546,26 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
                                  "yui_create: ygrid register_factory_for_kind", kr);
             }
         }
+
+        /* YMGUI — figure-tree sibling, pipeline lazily built on first
+         * mint. yui won't usually mint ymgui figures itself (yui's
+         * chrome is widget-based), but registering keeps the kind
+         * available for tools that nest a producer into yui's root
+         * container. */
+        yui->ymgui_figure_args.context = context;
+        yui->ymgui_figure_args.pipeline = NULL;
+        {
+            struct yetty_ycore_void_result mr = yetty_ymgui_register_factory(
+                yui->figure_registry, &yui->ymgui_figure_args);
+            if (!YETTY_IS_OK(mr)) {
+                yetty_yfigure_registry_destroy(yui->figure_registry);
+                yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
+                yui->font->ops->destroy(yui->font);
+                free(yui);
+                return YETTY_ERR(yetty_yui_ptr,
+                                 "yui_create: ymgui register_factory", mr);
+            }
+        }
         struct yetty_ycore_rectangle root_rect = {
             .min = {.x = 0.0f, .y = 0.0f},
             .max = {.x = (float)surface_w, .y = (float)surface_h},
@@ -899,6 +925,11 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
             yetty_yfigure_registry_destroy(yui->figure_registry);
         if (!YETTY_IS_OK(r)) yetty_ycore_error_destroy(r.error);
         yui->figure_registry = NULL;
+    }
+    {
+        struct yetty_ycore_void_result r =
+            yetty_ymgui_factory_args_release(&yui->ymgui_figure_args);
+        if (!YETTY_IS_OK(r)) yetty_ycore_error_destroy(r.error);
     }
     if (yui->figure_factory) {
         yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);

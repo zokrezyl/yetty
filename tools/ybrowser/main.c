@@ -9,10 +9,10 @@
  *         echo '<h1>hi</h1>' | ./ylexbor-demo --osc
  *
  *   INTERACTIVE (default when stdin + stdout are TTYs):
- *     subscribe to terminal-wide input via YMGUI_OSC_CS_TERM_INPUT_SUB,
+ *     subscribe to terminal-wide input via YETTY_OSC_CS_CLIENT_INPUT_SUB,
  *     re-render on every input event. Arrow keys / PgUp/PgDn scroll;
  *     Ctrl-C exits. The pane pixel size comes back as
- *     YMGUI_OSC_SC_TERM_RESIZE which we feed straight into the
+ *     YETTY_OSC_SC_CLIENT_INPUT_RESIZE which we feed straight into the
  *     viewport.
  */
 
@@ -35,6 +35,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -291,13 +292,13 @@ struct ev_state {
 
 static void term_input_subscribe(uint32_t flags)
 {
-	struct yetty_ymgui_wire_term_input_sub msg = {
-		.magic = YMGUI_WIRE_MAGIC_TERM_INPUT_SUB,
+	struct yetty_client_input_sub msg = {
+		.magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
 		.version = YMGUI_WIRE_VERSION,
 		.flags = flags,
 		._pad0 = 0,
 	};
-	(void)emit_envelope(YMGUI_OSC_CS_TERM_INPUT_SUB, 0,
+	(void)emit_envelope(YETTY_OSC_CS_CLIENT_INPUT_SUB, 0,
 			    NULL, 0, &msg, sizeof(msg));
 }
 
@@ -310,12 +311,12 @@ static void on_osc(void *user, int osc_code,
 	(void)args; (void)args_len;
 	struct ev_state *st = user;
 
-	if (osc_code == YMGUI_OSC_SC_TERM_RESIZE ||
-	    osc_code == YMGUI_OSC_SC_RESIZE) {
-		if (payload_len < sizeof(struct yetty_ymgui_wire_input_resize))
+	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE ||
+	    osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) {
+		if (payload_len < sizeof(struct yetty_client_input_resize))
 			return;
-		const struct yetty_ymgui_wire_input_resize *r =
-			(const struct yetty_ymgui_wire_input_resize *)payload;
+		const struct yetty_client_input_resize *r =
+			(const struct yetty_client_input_resize *)payload;
 		if (r->width > 0 && r->height > 0) {
 			yetty_ylexbor_set_viewport(st->yl,
 				(int)r->width, (int)r->height);
@@ -323,12 +324,12 @@ static void on_osc(void *user, int osc_code,
 		}
 		return;
 	}
-	if (osc_code == YMGUI_OSC_SC_TERM_MOUSE ||
-	    osc_code == YMGUI_OSC_SC_MOUSE) {
-		if (payload_len < sizeof(struct yetty_ymgui_wire_input_mouse))
+	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_MOUSE ||
+	    osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE) {
+		if (payload_len < sizeof(struct yetty_client_input_mouse))
 			return;
-		const struct yetty_ymgui_wire_input_mouse *m =
-			(const struct yetty_ymgui_wire_input_mouse *)payload;
+		const struct yetty_client_input_mouse *m =
+			(const struct yetty_client_input_mouse *)payload;
 		/* Click → fire JS handlers attached at (x,y). The handlers
 		 * may mutate the DOM; ylexbor's dom_dirty flag tells us so
 		 * the main loop knows to relayout before the next paint. */
@@ -338,7 +339,7 @@ static void on_osc(void *user, int osc_code,
 		}
 		return;
 	}
-	if (osc_code == YMGUI_OSC_SC_TERM_KEY) {
+	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY) {
 		st->dirty = 1;
 	}
 }
@@ -371,10 +372,10 @@ static int interactive_loop(struct yetty_ylexbor *yl)
 		return 1;
 	}
 
-	term_input_subscribe(YETTY_YMGUI_TERM_SUB_MOUSE_CLICK |
-			     YETTY_YMGUI_TERM_SUB_MOUSE_MOVE  |
-			     YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL |
-			     YETTY_YMGUI_TERM_SUB_KEY);
+	term_input_subscribe(YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK |
+			     YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE  |
+			     YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL |
+			     YETTY_CLIENT_INPUT_SUB_KEY);
 	fflush(stdout);
 
 	(void)redraw_and_push(yl);
