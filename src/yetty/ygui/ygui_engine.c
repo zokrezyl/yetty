@@ -367,44 +367,38 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
         }
     }
 
-    /* Delete this engine's root group on the receiver.
+    /* Wipe the host's root container of every figure this engine ever
+     * authored. With the flat-wire model each widget is its OWN top-
+     * level child of the root container (no nested CMD_GROUPs), so a
+     * single DELETE_CHILD(root) no longer cascades — we'd have to
+     * enumerate every group_id we ever minted. CLEAR_ALL is the right
+     * shape for "the app is going away, drop everything I shipped."
      *
-     * engine->first_widget is the app's root window — everything the
-     * app authored via window_body() / add_child became a tree
-     * descendant (add_child pulls children out of the engine
-     * top-level list, see ygui_widgets.c:437-449), so the whole
-     * scene lives nested under the root's CMD_GROUP on the wire.
-     * Receiver's group_delete cascades destroy into the child ygrid,
-     * wiping the entire subtree's pixels.
+     * Without this the figures persist on the host after the producer
+     * exits, leaving stale UI floating over whatever takes over the
+     * pane (the text-layer's shell prompt, the next view, …).
      *
-     * NOT gated by preserve_canvas_on_destroy: that flag was designed
-     * for the scrolling-canvas (graphical scrollback — you want your
-     * inline yimage history to survive across the app exit). Compositor
-     * chrome is transient UI, not history; closing the app must remove
-     * the window regardless of preserve. */
-    if (engine->card_shown) {
-        struct yetty_ygui_widget *root = engine->first_widget;
-        if (root && root->was_rendered && engine->buffer) {
-            yetty_ydraw_draw_list_clear(engine->buffer);
-            struct yetty_ycore_void_result dr =
-                yetty_ydraw_draw_list_add_admin_delete_child(
-                    engine->buffer, root->group_id);
-            if (YETTY_IS_ERR(dr)) {
-                yerror("ygui_engine_destroy: add_admin_delete_child(root=%u): %s",
-                       root->group_id, dr.error.msg);
-                yetty_ycore_error_destroy(dr.error);
-            } else {
-                const uint8_t *data = NULL;
-                uint32_t size =
-                    (uint32_t)yetty_ydraw_draw_list_serialize(engine->buffer, &data);
-                if (size > 0 && data) {
-                    struct yetty_ycore_void_result wr = yetty_ygui_osc_update_card(
-                        engine->output_pty, engine->card_name, data, size);
-                    if (YETTY_IS_ERR(wr)) {
-                        yerror("ygui_engine_destroy: root DELETE emit: %s",
-                               wr.error.msg);
-                        yetty_ycore_error_destroy(wr.error);
-                    }
+     * Not gated by preserve_canvas_on_destroy — that flag was for
+     * scrolling-canvas graphical scrollback; ygui compositor chrome
+     * is transient. */
+    if (engine->card_shown && engine->buffer) {
+        yetty_ydraw_draw_list_clear(engine->buffer);
+        struct yetty_ycore_void_result zr =
+            yetty_ydraw_draw_list_add_admin_clear_all(engine->buffer);
+        if (YETTY_IS_ERR(zr)) {
+            yerror("ygui_engine_destroy: add_admin_clear_all: %s", zr.error.msg);
+            yetty_ycore_error_destroy(zr.error);
+        } else {
+            /* Raw record stream — same path engine_render uses now. */
+            const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(engine->buffer);
+            uint32_t size = (uint32_t)yetty_ydraw_draw_list_size(engine->buffer);
+            if (size > 0 && data) {
+                struct yetty_ycore_void_result wr = yetty_ygui_osc_update_card(
+                    engine->output_pty, engine->card_name, data, size);
+                if (YETTY_IS_ERR(wr)) {
+                    yerror("ygui_engine_destroy: CLEAR_ALL emit: %s",
+                           wr.error.msg);
+                    yetty_ycore_error_destroy(wr.error);
                 }
             }
         }
