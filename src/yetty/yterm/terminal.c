@@ -2286,12 +2286,20 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
 
         /* Figure-aware path. Focus tracking is click-only: a press
          * updates focused_figure_id (and emits an SC_FOCUS transition
-         * if it changed); a release routes to whatever was focused. */
+         * if it changed); a release routes to whatever was focused.
+         *
+         * Hit-testing runs in WINDOW coords (not pane-local lx/ly).
+         * The compositor stores figure rects with viewport_offset
+         * already added — i.e. in window coords. Passing pane-local
+         * cursor here would subtract bounds.y twice (once in lx/ly
+         * derivation, once in hit_visit's local = cursor - rect.min)
+         * and the engine would receive a click offset by exactly the
+         * chrome height. */
         if (terminal->mouse_click_subscribed) {
             uint32_t focused = terminal->focused_figure_id;
             struct yetty_ymgui_hit hit;
             if (press) {
-                hit = terminal_resolve_figure_hit(terminal, lx, ly, 0);
+                hit = terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, 0);
                 if (hit.figure_id != focused) {
                     if (focused != 0) {
                         struct yetty_ycore_void_result lr =
@@ -2308,7 +2316,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                     }
                 }
             } else {
-                hit = terminal_resolve_figure_hit(terminal, lx, ly, focused);
+                hit = terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, focused);
             }
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
@@ -2356,11 +2364,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         }
 
         /* Figure-aware path. Drag = mouse held while moving; route the
-         * captured figure (the one focused at button-down). */
+         * captured figure (the one focused at button-down). Window coords
+         * (not pane-local) for the same reason as the MOUSE_DOWN handler
+         * above — figure rects carry viewport_offset already. */
         uint32_t captured =
             terminal->mouse_buttons_held ? terminal->focused_figure_id : 0u;
         struct yetty_ymgui_hit hit =
-            terminal_resolve_figure_hit(terminal, lx, ly, captured);
+            terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, captured);
         if (hit.figure_id != 0) {
             struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
                 terminal, hit.figure_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
@@ -2387,7 +2397,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * if a figure is under the cursor, the wheel goes outbound; else
          * scrollback. */
         if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
-            struct yetty_ymgui_hit hit = terminal_resolve_figure_hit(terminal, lx, ly, 0);
+            /* Window coords, same reason as MOUSE_DOWN. */
+            struct yetty_ymgui_hit hit = terminal_resolve_figure_hit(
+                terminal, event->mouse_scroll.x, event->mouse_scroll.y, 0);
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
                     terminal, hit.figure_id, hit.local_x, hit.local_y,

@@ -903,11 +903,23 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
 /*===========================================================================
  * Hit-testing against a yfigure container.
  *
- * The visitor walks every child the container holds; for ymgui ones it
- * checks the point against the child's rect and records the LAST hit
- * (= topmost in z-order, since uthash iteration is insertion order =
- * back-to-front). The visitor never short-circuits — we need to see
- * the whole z-order to pick the topmost hit.
+ * Iterates every child the container holds (any figure kind, not just
+ * ymgui — ygreeter's ygui engine ships ygrid figures and still needs
+ * its clicks routed). uthash iteration is insertion order =
+ * back-to-front in z-order; we record the FIRST hit and short-circuit
+ * the walk, which for the common case where a single top-level figure
+ * covers the whole pane (every ygui-engine producer: ygreeter, the
+ * ymgui demo's single card, …) returns that root figure's id with
+ * pane-relative coords. The client engine then runs its own hit-test
+ * against its widget tree.
+ *
+ * Overlapping-cards case (multiple ymgui cards in the same pane): this
+ * returns the BACK-most rather than the top-most. That's a deliberate
+ * trade-off — the figure-tree wire doesn't currently distinguish "I'm
+ * the engine root" from "I'm a child widget that happens to be a
+ * top-level figure", and routing to the back-most matches the
+ * common-case need. Overlapping cards will need an explicit
+ * container-vs-widget hint on the wire later.
  *=========================================================================*/
 
 struct ymgui_hit_visitor_state {
@@ -920,8 +932,7 @@ static int ymgui_hit_visit(uint32_t id, struct yetty_yfigure_figure *child,
                            void *user)
 {
     struct ymgui_hit_visitor_state *st = user;
-    struct yetty_ymgui_figure *f = yetty_ymgui_figure_from_base(child);
-    if (!f) return 0; /* not an ymgui figure */
+    if (st->hit.figure_id != 0) return 0; /* already found back-most hit */
     if (st->x < child->rect.min.x || st->x >= child->rect.max.x ||
         st->y < child->rect.min.y || st->y >= child->rect.max.y)
         return 0;
