@@ -5,7 +5,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/background-layer.h>
 #include <yetty/yvnc/vnc-viewer.h>

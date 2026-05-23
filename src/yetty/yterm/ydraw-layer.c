@@ -19,7 +19,7 @@
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Uniform positions */

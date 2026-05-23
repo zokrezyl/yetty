@@ -20,7 +20,7 @@
  * after rebuild). Same pattern tools/ycompositor-ygui uses. */
 #include <yetty/ygui/ygui_internal.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/ydraw-factory/figure-factory.h>

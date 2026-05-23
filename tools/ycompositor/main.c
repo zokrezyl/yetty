@@ -1,7 +1,7 @@
 /*
  * tools/ycompositor/main.c — standalone ycompositor test harness.
  *
- * Opens a window via yinit_run + yruntime_create, builds a ycompositor
+ * Opens a window via yinit_run + yframework_create, builds a ycompositor
  * with a single full-window ygrid figure, and pushes a parameter-sweep
  * of SDF primitives directly into the grid via yetty_ygrid_add_record.
  * No terminal, no yui, no ygui — the compositor and ygrid render path
@@ -24,7 +24,7 @@
  */
 
 #include <yetty/yinit/yinit.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
@@ -50,9 +50,9 @@
 struct ycomp_app {
     int quit;
     struct yetty_context       ctx;
-    struct yetty_yruntime     *yrt;
+    struct yetty_yframework     *yrt;
     struct yetty_ydraw_target *target;  /* our own texture target, bypasses
-                                         * yruntime's x11-tile choice */
+                                         * yframework's x11-tile choice */
     struct yetty_yfigure_container *root;
     struct yetty_ygrid_grid   *grid;
     /* Default font loaded once at worker startup and attached to every
@@ -417,7 +417,7 @@ static void handle_event(struct ycomp_app *app, const struct yetty_yui_event *ev
         app->surface_w = w;
         app->surface_h = h;
         struct yetty_ycore_void_result rr =
-            yetty_yruntime_reconfigure_surface(app->yrt, w, h);
+            yetty_yframework_reconfigure_surface(app->yrt, w, h);
         if (YETTY_IS_ERR(rr)) {
             yerror("ycompositor: reconfigure_surface failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
@@ -452,12 +452,12 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     struct ycomp_app *app = user;
 
-    struct yetty_yruntime_ptr_result yr = yetty_yruntime_create(rt);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yruntime_create failed");
+    struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
     app->yrt = yr.value;
 
     /* Build the context the compositor + ygrid expect. pty_factory is
-     * absent (no terminal); event_loop comes from yruntime. */
+     * absent (no terminal); event_loop comes from yframework. */
     app->ctx.runtime     = app->yrt;
     app->ctx.pty_factory = NULL;
     app->ctx.event_loop  = app->yrt->event_loop;
@@ -466,11 +466,11 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
     app->surface_w = rt->surface_width;
     app->surface_h = rt->surface_height;
 
-    /* yruntime auto-picks an X11-tile render target on Linux/X11; its
+    /* yframework auto-picks an X11-tile render target on Linux/X11; its
      * present() pipeline is async (libuv + wgpu buffer-map callbacks)
      * and needs the event loop pumped. The simple poll loop here can't
      * drive that, so swap it out for a plain texture target that
-     * blits to the GLFW surface on present. yruntime_create always
+     * blits to the GLFW surface on present. yframework_create always
      * yields a non-NULL render_target — a NULL here is a contract
      * violation; let it crash. */
     app->yrt->render_target->ops->destroy(app->yrt->render_target);
@@ -576,7 +576,7 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
         needs_render = 0;
     }
 
-    /* Strict teardown: root container + figures before yruntime so any
+    /* Strict teardown: root container + figures before yframework so any
      * pending GPU work bound to the runtime's device flushes first. */
     {
         struct yetty_yfigure_figure *rf =
@@ -597,7 +597,7 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
         app->font = NULL;
     }
 
-    yetty_yruntime_destroy(app->yrt);
+    yetty_yframework_destroy(app->yrt);
     app->yrt = NULL;
     return YETTY_OK_VOID();
 }

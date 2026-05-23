@@ -26,7 +26,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/ytrace/ytrace.h>
 
 struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(

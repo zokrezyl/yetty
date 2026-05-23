@@ -14,7 +14,7 @@ endif()
 
 set(YCOMP_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yinit/glfw.c
-    ${YETTY_ROOT}/src/yetty/yruntime/yruntime.c
+    ${YETTY_ROOT}/src/yetty/yframework/yframework.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
@@ -58,7 +58,7 @@ target_link_libraries(ycompositor PRIVATE
     yetty_ygrid
     yetty_yfigure
     yetty_ydraw_core
-    yetty_yruntime
+    yetty_yframework
     ${YETTY_LIBS}
     yetty_ywire
     yetty_ydraw_core

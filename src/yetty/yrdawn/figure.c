@@ -37,7 +37,7 @@
 #include <yetty/yrdawn/server.h>
 #include <yetty/yrdawn/wire.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/ytrace/ytrace.h>
 
 /*===========================================================================

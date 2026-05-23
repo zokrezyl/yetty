@@ -6,7 +6,7 @@
 
 #include <yetty/yetty/yetty.h>
 #include <yetty/yinit/yinit.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
@@ -460,7 +460,7 @@ int main(int argc, char **argv)
     WGPUSurface surface;
     int canvas_width, canvas_height;
     struct yetty_yinit_runtime yinit_rt;
-    struct yetty_yruntime *yruntime;
+    struct yetty_yframework *yframework;
     struct yetty_yetty_yetty_result yetty_result;
     struct yetty_yetty_yetty *yetty;
     struct yetty_yui_event event = {0};
@@ -581,7 +581,7 @@ int main(int argc, char **argv)
     });
 
     /* Build a synthetic yinit_runtime from what we bootstrapped above,
-     * then hand it to yruntime_create — same code path as the desktop
+     * then hand it to yframework_create — same code path as the desktop
      * worker. webasm doesn't go through yetty_yinit_run (Emscripten
      * drives the loop from JS) so we assemble the struct manually here.
      * No output_pipe / clipboard / window_manager on web. */
@@ -596,9 +596,9 @@ int main(int argc, char **argv)
     yinit_rt.content_scale       = 1.0f;
     yinit_rt.platform_input_pipe = pipe;
 
-    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(&yinit_rt);
+    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(&yinit_rt);
     if (!YETTY_IS_OK(yrt_res)) {
-        yerror("Failed to create yruntime: %s",
+        yerror("Failed to create yframework: %s",
                yrt_res.error.msg ? yrt_res.error.msg : "(no msg)");
         yetty_ycore_error_destroy(yrt_res.error);
         wgpuSurfaceRelease(surface);
@@ -609,13 +609,13 @@ int main(int argc, char **argv)
         config->ops->destroy(config);
         return 1;
     }
-    yruntime = yrt_res.value;
+    yframework = yrt_res.value;
 
     /* Yetty */
-    yetty_result = yetty_create(yruntime, pty_factory);
+    yetty_result = yetty_create(yframework, pty_factory);
     if (!YETTY_IS_OK(yetty_result)) {
         yerror("Failed to create Yetty");
-        yetty_yruntime_destroy(yruntime);
+        yetty_yframework_destroy(yframework);
         wgpuSurfaceRelease(surface);
         wgpuInstanceRelease(instance);
         pty_factory->ops->destroy(pty_factory);

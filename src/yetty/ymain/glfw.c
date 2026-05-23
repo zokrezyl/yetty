@@ -9,7 +9,7 @@
 
 #include <yetty/yplatform/compat.h>     /* setenv shim on Windows MSVC */
 #include <yetty/yinit/yinit.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
@@ -37,19 +37,19 @@ yetty_worker(struct yetty_yinit_runtime *rt, void *user)
     /* Generic GPU / event-loop / VNC / RPC / render-target bring-up
      * (adapter, device, queue, allocator, msdf, present mode, surface
      * config, ...). Outlives the yetty terminal instance below. */
-    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(rt);
+    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(rt);
     if (!YETTY_IS_OK(yrt_res)) {
         pty_factory->ops->destroy(pty_factory);
-        return YETTY_ERR(yetty_ycore_void, "ymain: yruntime_create failed", yrt_res);
+        return YETTY_ERR(yetty_ycore_void, "ymain: yframework_create failed", yrt_res);
     }
-    struct yetty_yruntime *yruntime = yrt_res.value;
+    struct yetty_yframework *yframework = yrt_res.value;
 
     /* yetty's two inputs: the generic runtime (GPU/event/RPC/render-
      * target services + borrowed config/pipes/clipboard/window from
      * yinit) and the yetty-specific pty_factory. */
-    struct yetty_yetty_yetty_result yres = yetty_create(yruntime, pty_factory);
+    struct yetty_yetty_yetty_result yres = yetty_create(yframework, pty_factory);
     if (!YETTY_IS_OK(yres)) {
-        yetty_yruntime_destroy(yruntime);
+        yetty_yframework_destroy(yframework);
         pty_factory->ops->destroy(pty_factory);
         return YETTY_ERR(yetty_ycore_void, "ymain: yetty_create failed", yres);
     }
@@ -67,11 +67,11 @@ yetty_worker(struct yetty_yinit_runtime *rt, void *user)
     struct yetty_ycore_void_result run_res = yetty_run(yetty);
 
     ydebug("ymain: yetty_run returned, tearing down");
-    /* Strict order: yetty (terminal/yui/tabbar) must die BEFORE yruntime
+    /* Strict order: yetty (terminal/yui/tabbar) must die BEFORE yframework
      * tears down the render target / wgpu await / event loop / device,
      * because pending readback callbacks dereference those. */
     yetty_destroy(yetty);
-    yetty_yruntime_destroy(yruntime);
+    yetty_yframework_destroy(yframework);
     pty_factory->ops->destroy(pty_factory);
     return run_res;
 }

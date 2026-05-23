@@ -18,7 +18,7 @@
 
 #include <yetty/yetty/yetty.h>
 #include <yetty/yinit/yinit.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yevent/event.h>
@@ -44,7 +44,7 @@ struct yetty_yplatform_app_state {
     struct yetty_yetty_yetty *yetty;
     /* Owned by us; outlives yetty. Built in init_yetty from a synthetic
      * yinit_runtime and torn down after yetty_destroy. */
-    struct yetty_yruntime *yruntime;
+    struct yetty_yframework *yframework;
     struct yetty_ycore_xthread_event_pipe *pipe;
     struct yetty_yconfig_config *config;
     struct yetty_yplatform_pty_factory *pty_factory;
@@ -306,7 +306,7 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     width = ANativeWindow_getWidth(state->window);
     height = ANativeWindow_getHeight(state->window);
 
-    /* Assemble a yinit_runtime in-place so yruntime_create can take the
+    /* Assemble a yinit_runtime in-place so yframework_create can take the
      * same code path the desktop worker uses. Android doesn't go through
      * yetty_yinit_run — the NDK drives the OS loop and we bootstrap here
      * inline — so the struct gets stamped by hand. No argv/output_pipe/
@@ -320,21 +320,21 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     yinit_rt.content_scale       = 1.0f;
     yinit_rt.platform_input_pipe = state->pipe;
 
-    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(&yinit_rt);
+    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(&yinit_rt);
     if (!YETTY_IS_OK(yrt_res)) {
-        LOGE("Failed to create yruntime: %s",
+        LOGE("Failed to create yframework: %s",
              yrt_res.error.msg ? yrt_res.error.msg : "(no message)");
         yetty_ycore_error_destroy(yrt_res.error);
         return;
     }
-    state->yruntime = yrt_res.value;
+    state->yframework = yrt_res.value;
 
-    yetty_result = yetty_create(state->yruntime, state->pty_factory);
+    yetty_result = yetty_create(state->yframework, state->pty_factory);
     if (!YETTY_IS_OK(yetty_result)) {
         LOGE("Failed to create Yetty: %s",
              yetty_result.error.msg ? yetty_result.error.msg : "(no message)");
-        yetty_yruntime_destroy(state->yruntime);
-        state->yruntime = NULL;
+        yetty_yframework_destroy(state->yframework);
+        state->yframework = NULL;
         return;
     }
     state->yetty = yetty_result.value;
@@ -392,14 +392,14 @@ static struct yetty_ycore_void_result term_yetty(struct yetty_yplatform_app_stat
         }
         state->yetty = NULL;
     }
-    if (state->yruntime) {
-        struct yetty_ycore_void_result r = yetty_yruntime_destroy(state->yruntime);
+    if (state->yframework) {
+        struct yetty_ycore_void_result r = yetty_yframework_destroy(state->yframework);
         if (YETTY_IS_ERR(r)) {
             if (YETTY_IS_OK(first_err)) first_err = r;
             else yetty_ycore_error_destroy(r.error);
         }
-        state->yruntime = NULL;
-        /* yruntime_destroy already unconfigured + released the surface +
+        state->yframework = NULL;
+        /* yframework_destroy already unconfigured + released the surface +
          * instance. Null them here so the legacy fallbacks below skip. */
         state->surface = NULL;
         state->instance = NULL;

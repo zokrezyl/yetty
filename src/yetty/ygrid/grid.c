@@ -28,7 +28,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-iterator.h>
 #include <yetty/ydraw-core/figure-types.h>

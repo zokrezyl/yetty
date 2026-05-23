@@ -10,7 +10,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yplatform/fs.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>

@@ -26,7 +26,7 @@
  */
 
 #include <yetty/yinit/yinit.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
@@ -78,7 +78,7 @@
 struct ycomp_ygui_app {
     int quit;
     struct yetty_context       ctx;
-    struct yetty_yruntime     *yrt;
+    struct yetty_yframework     *yrt;
     struct yetty_ydraw_target *target;
     struct yetty_yfigure_container *root;
     struct yetty_yfigure_registry *registry;
@@ -490,7 +490,7 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
         app->surface_w = w;
         app->surface_h = h;
         struct yetty_ycore_void_result rr =
-            yetty_yruntime_reconfigure_surface(app->yrt, w, h);
+            yetty_yframework_reconfigure_surface(app->yrt, w, h);
         if (YETTY_IS_ERR(rr)) {
             yerror("ycompositor-ygui: reconfigure_surface failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
@@ -581,8 +581,8 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     struct ycomp_ygui_app *app = user;
 
-    struct yetty_yruntime_ptr_result yr = yetty_yruntime_create(rt);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yruntime_create failed");
+    struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
     app->yrt = yr.value;
 
     app->ctx.runtime     = app->yrt;
@@ -593,7 +593,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     app->surface_w = rt->surface_width;
     app->surface_h = rt->surface_height;
 
-    /* Replace yruntime's render target with a texture target that
+    /* Replace yframework's render target with a texture target that
      * blits to the GLFW surface on present — same setup as
      * tools/ycompositor. */
     app->yrt->render_target->ops->destroy(app->yrt->render_target);
@@ -765,7 +765,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     }
 
     /* Teardown — root container first so any pending GPU work bound
-     * to the runtime's device flushes before yruntime_destroy. */
+     * to the runtime's device flushes before yframework_destroy. */
     {
         struct yetty_yfigure_figure *rrf =
             yetty_yfigure_container_as_figure(app->root);
@@ -817,7 +817,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         app->font = NULL;
     }
 
-    yetty_yruntime_destroy(app->yrt);
+    yetty_yframework_destroy(app->yrt);
     app->yrt = NULL;
     return YETTY_OK_VOID();
 }

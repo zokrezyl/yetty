@@ -3,7 +3,7 @@
  */
 
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -36,8 +36,8 @@ struct yetty_yetty_yetty {
     /* Cached `app_context.runtime` — the generic services layer (event
      * loop, adapter/device/queue/allocator/msdf, wgpu await, optional
      * VNC + RPC, render target). Created and owned by ymain via
-     * yetty_yruntime_create; yetty borrows everything through it. */
-    struct yetty_yruntime *runtime;
+     * yetty_yframework_create; yetty borrows everything through it. */
+    struct yetty_yframework *runtime;
     /* Top-level UI. The tabbar owns N workspaces; only the active
      * workspace renders. Single-workspace boots create one tab so the
      * existing render/event paths see exactly the same shape as before
@@ -465,7 +465,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * runtime->gpu.app_gpu_context.surface_{width,height} so any
          * consumer reading those dimensions sees the post-resize size. */
         struct yetty_ycore_void_result rc =
-            yetty_yruntime_reconfigure_surface(yetty->runtime, width, height);
+            yetty_yframework_reconfigure_surface(yetty->runtime, width, height);
         if (YETTY_IS_ERR(rc)) {
             ywarn("yetty: surface reconfigure failed: %s", rc.error.msg);
             yetty_ycore_error_destroy(rc.error);
@@ -1052,7 +1052,7 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
  * Public API
  *===========================================================================*/
 
-struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
+struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
                                              struct yetty_yplatform_pty_factory *pty_factory)
 {
     ydebug("yetty_create: Starting...");
@@ -1179,7 +1179,7 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
     (void)is_temu;
     (void)is_qemu;
 
-    /* RPC server: owned by yruntime, already running by this point.
+    /* RPC server: owned by yframework, already running by this point.
      * Apps that want yetty-specific RPC methods can register handlers
      * on yetty->runtime->rpc_server here. None today. */
 
@@ -1200,7 +1200,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
     /* Tear down the yetty-owned chrome only. The render target, wgpu
      * await machinery, event loop, VNC, RPC, allocator, MSDF, queue,
      * device, adapter, and surface live on the runtime and are destroyed
-     * by yetty_yruntime_destroy — which the caller must run AFTER this
+     * by yetty_yframework_destroy — which the caller must run AFTER this
      * function returns. yui sits on top so it goes first. */
 
     if (yetty->yui) {

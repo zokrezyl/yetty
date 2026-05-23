@@ -35,7 +35,7 @@
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
 #include <yetty/yfont/msdf-font.h>
