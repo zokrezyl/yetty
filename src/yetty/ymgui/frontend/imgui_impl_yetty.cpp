@@ -121,7 +121,13 @@ static struct ymgui_impl_state g_state = {
     {},
     1u,
     0u,
-    YETTY_YMGUI_OPT_DEDUP_CMDLIST | YETTY_YMGUI_OPT_DEDUP_CMD,
+    /* Server-side dedup cache (REPEAT / CMD_DIFF rehydration) hasn't been
+     * ported to the figure-tree path yet. Until it is, the frontend MUST
+     * emit SLOT_FULL every frame — otherwise the second frame's REPEAT
+     * slot reaches a server that has no prior bytes to copy from, the
+     * measure returns zero geometry, the figure render bails, and the
+     * pane background erases the previous frame's pixels. */
+    0u,
     8.0f,
     16.0f,
 };

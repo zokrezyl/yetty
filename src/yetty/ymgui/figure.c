@@ -311,16 +311,19 @@ static struct yetty_ycore_void_result ymgui_figure_render(
     if (!ok)
         return YETTY_ERR(yetty_ycore_void, "ymgui_figure_render: upload");
 
-    /* Frame's own display size (what the vertices are encoded against)
-     * comes from the wire header. frame_top is the figure's absolute
-     * top-left in target pixels — moving the figure just moves this. */
+    /* Vertex coords are frame-local pixels in [0, display_size].
+     * The render pass sets a per-figure viewport (below) that already
+     * maps NDC [-1, +1] onto the figure's absolute target rect, so the
+     * shader only needs to normalize against display_size. frame_top
+     * stays zero — the legacy "translate vertices by card origin"
+     * trick was a substitute for not having a viewport. */
     const struct yetty_ymgui_wire_frame *fh =
         (const struct yetty_ymgui_wire_frame *)f->frame_bytes;
     float frame_w = fh->display_size_x;
     float frame_h = fh->display_size_y;
     float ox = self->rect.min.x;
     float oy = self->rect.min.y;
-    float uniforms[8] = {frame_w, frame_h, ox, oy, 0, 0, 0, 0};
+    float uniforms[8] = {frame_w, frame_h, 0.0f, 0.0f, 0, 0, 0, 0};
     wgpuQueueWriteBuffer(f->pipeline->queue, f->uniform_buffer, 0,
                          uniforms, sizeof(uniforms));
 
