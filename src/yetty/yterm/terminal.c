@@ -683,6 +683,16 @@ static struct yetty_ycore_void_result terminal_mouse_sub_callback(
     terminal->mouse_click_subscribed = click_enabled;
     terminal->mouse_move_subscribed = move_enabled;
     ydebug("terminal: mouse_sub click=%d move=%d", click_enabled, move_enabled);
+    /* Subscription drop = the figure no longer wants client input. The
+     * figure itself may persist in the compositor (apps that exit with
+     * keep_visible=true), but routing keystrokes to it after this point
+     * would mean writing OSC envelopes targeted at a non-listening
+     * figure to the PTY slave — the cooked-mode tty driver echoes the
+     * printable bytes back, libvterm prints them as plain text, and the
+     * user sees base64 garbage at the shell prompt. */
+    if (!click_enabled && !move_enabled) {
+        terminal->focused_figure_id = 0;
+    }
     return YETTY_OK_VOID();
 }
 
