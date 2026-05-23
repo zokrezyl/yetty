@@ -86,7 +86,7 @@ static struct yetty_ycore_size_result ssh_pty_read(struct yetty_platform_pty *se
 static struct yetty_ycore_size_result ssh_pty_write(struct yetty_platform_pty *self,
                                                     const char *data, size_t len);
 static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_platform_pty *self, uint32_t cols,
-                                                     uint32_t rows);
+                                                     uint32_t rows, uint32_t pixel_w, uint32_t pixel_h);
 static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_platform_pty *self);
 static struct yetty_platform_pty_pipe_source *ssh_pty_pipe_source(struct yetty_platform_pty *self);
 
@@ -400,7 +400,7 @@ static struct yetty_ycore_size_result ssh_pty_write(struct yetty_platform_pty *s
 }
 
 static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_platform_pty *self, uint32_t cols,
-                                                     uint32_t rows)
+                                                     uint32_t rows, uint32_t pixel_w, uint32_t pixel_h)
 {
     struct yetty_yssh_ssh_pty *pty = (struct yetty_yssh_ssh_pty *)self;
     pty->cols = cols;

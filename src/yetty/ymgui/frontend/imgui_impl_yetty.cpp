@@ -246,15 +246,15 @@ static bool emit_admin_delete_child(uint32_t child_id)
     return emit_record(/*id=*/0, /*compressed=*/false, body, sizeof(body));
 }
 
-/* Read the PTY winsize so w_cells=0 / h_cells=0 (= "fill to edge") can
- * resolve to the full pane width / height. yetty's PTY only sets
- * ws_col / ws_row (cell counts); ws_xpixel / ws_ypixel are zero, so we
- * multiply cells by cell_w_px / cell_h_px ourselves. Returns false if
- * the ioctl fails (out_fd not a tty, headless test, …). */
-static bool query_pane_cells(uint32_t *cols, uint32_t *rows)
+/* Read the PTY winsize. yetty's terminal_create pushes ws_xpixel /
+ * ws_ypixel (full pane pixel area) AND ws_col / ws_row (cell counts);
+ * we prefer the pixel area when non-zero. Returns false if the ioctl
+ * fails — out_fd not a tty, headless test, … */
+static bool query_pane_winsize(uint32_t *cols, uint32_t *rows,
+                               uint32_t *pixel_w, uint32_t *pixel_h)
 {
 #ifdef _WIN32
-    (void)cols; (void)rows;
+    (void)cols; (void)rows; (void)pixel_w; (void)pixel_h;
     return false;
 #else
     struct winsize ws = {};
@@ -264,17 +264,21 @@ static bool query_pane_cells(uint32_t *cols, uint32_t *rows)
     }
     *cols = ws.ws_col;
     *rows = ws.ws_row;
+    *pixel_w = ws.ws_xpixel;
+    *pixel_h = ws.ws_ypixel;
     return true;
 #endif
 }
 
 /* Pre-compute the pixel rect a figure maps to when the producer emits in
  * figure-tree mode. Uses the figure's last-known w_pixels/h_pixels when
- * available (set by SC_RESIZE) otherwise falls back to cell-size × cells.
- * The placement still anchors at (col*cell_w, row*cell_h) — the host
- * has no col/row concept on the new wire, so the producer takes
- * responsibility for the layout. w_cells/h_cells == 0 means "fill to the
- * right/bottom edge" — resolved against the PTY winsize. */
+ * available (set by SC_RESIZE) otherwise falls back to TIOCGWINSZ-derived
+ * pane dims. The placement still anchors at (col*cell_w, row*cell_h) —
+ * the host has no col/row concept on the new wire, so the producer
+ * takes responsibility for the layout. w_cells/h_cells == 0 means "fill
+ * to the right/bottom edge" — resolved against TIOCGWINSZ: pixel area
+ * first (yetty sets ws_xpixel/ws_ypixel after the terminal grid is
+ * laid out), cells × default cell size as fallback. */
 static void figure_tree_rect_for_figure(const ymgui_figure_state *c,
                                       float *x0, float *y0,
                                       float *x1, float *y1)
@@ -283,22 +287,34 @@ static void figure_tree_rect_for_figure(const ymgui_figure_state *c,
     *y0 = (float)c->row * g_state.cell_h_px;
 
     uint32_t pane_cols = 0, pane_rows = 0;
+    uint32_t pane_px_w = 0, pane_px_h = 0;
     bool have_pane = (c->w_cells == 0 || c->h_cells == 0)
-                     && query_pane_cells(&pane_cols, &pane_rows);
+                     && query_pane_winsize(&pane_cols, &pane_rows,
+                                           &pane_px_w, &pane_px_h);
 
-    uint32_t eff_w_cells = c->w_cells;
-    uint32_t eff_h_cells = c->h_cells;
-    if (eff_w_cells == 0 && have_pane && pane_cols > (uint32_t)c->col) {
-        eff_w_cells = pane_cols - (uint32_t)c->col;
-    }
-    if (eff_h_cells == 0 && have_pane && pane_rows > (uint32_t)c->row) {
-        eff_h_cells = pane_rows - (uint32_t)c->row;
+    float w_px, h_px;
+    if (c->w_pixels > 0.0f) {
+        w_px = c->w_pixels;
+    } else if (c->w_cells == 0 && have_pane && pane_px_w > 0
+               && pane_px_w > (uint32_t)(*x0)) {
+        w_px = (float)pane_px_w - *x0;
+    } else if (c->w_cells == 0 && have_pane && pane_cols > (uint32_t)c->col) {
+        w_px = (float)(pane_cols - (uint32_t)c->col) * g_state.cell_w_px;
+    } else {
+        w_px = (float)c->w_cells * g_state.cell_w_px;
     }
 
-    float w_px = (c->w_pixels > 0.0f) ? c->w_pixels
-                                       : (float)eff_w_cells * g_state.cell_w_px;
-    float h_px = (c->h_pixels > 0.0f) ? c->h_pixels
-                                       : (float)eff_h_cells * g_state.cell_h_px;
+    if (c->h_pixels > 0.0f) {
+        h_px = c->h_pixels;
+    } else if (c->h_cells == 0 && have_pane && pane_px_h > 0
+               && pane_px_h > (uint32_t)(*y0)) {
+        h_px = (float)pane_px_h - *y0;
+    } else if (c->h_cells == 0 && have_pane && pane_rows > (uint32_t)c->row) {
+        h_px = (float)(pane_rows - (uint32_t)c->row) * g_state.cell_h_px;
+    } else {
+        h_px = (float)c->h_cells * g_state.cell_h_px;
+    }
+
     *x1 = *x0 + w_px;
     *y1 = *y0 + h_px;
 }

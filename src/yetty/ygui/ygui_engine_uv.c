@@ -174,7 +174,7 @@ static struct yetty_ycore_size_result ygui_uv_pty_op_read(struct yetty_platform_
 }
 
 static struct yetty_ycore_void_result ygui_uv_pty_op_resize(struct yetty_platform_pty *self,
-                                                            uint32_t cols, uint32_t rows)
+                                                            uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h)
 {
     (void)self;
     (void)cols;
@@ -291,6 +291,13 @@ struct ygui_uv_state {
     int          owns_loop;
     uv_poll_t    stdin_poll;
     uv_prepare_t prepare_handle;
+    /* SIGWINCH wakeup. libuv installs its own sigprocmask which
+     * silently masks the raw signal() handler that engine.c installs;
+     * using uv_signal_t is the contract-correct way to react to a
+     * signal from inside a libuv loop. Fires sigwinch_cb which simply
+     * sets the resize-pending flag — prepare_cb does the actual ioctl
+     * re-read. */
+    uv_signal_t  sigwinch_handle;
 };
 
 static struct ygui_uv_state *uv_state_of(struct yetty_ygui_engine *engine)
@@ -355,16 +362,38 @@ static void stdin_poll_cb(uv_poll_t *handle, int status, int events)
 }
 
 YETTY_EXTERNAL_CALLBACK
+static void sigwinch_cb(uv_signal_t *handle, int signum)
+{
+    (void)handle;
+    (void)signum;
+    /* Same flag the raw signal() handler in engine.c flips. prepare_cb
+     * is the consumer; we don't do any wire work here. */
+    yetty_ygui_internal_resize_pending = 1;
+}
+
+YETTY_EXTERNAL_CALLBACK
 static void prepare_cb(uv_prepare_t *handle)
 {
     struct yetty_ygui_engine *engine = (struct yetty_ygui_engine *)handle->data;
     struct ygui_uv_state *s = uv_state_of(engine);
 
-    /* Check for terminal resize */
-    if (yetty_ygui_internal_resize_pending) {
+    /* Check for terminal resize. We re-read TIOCGWINSZ every prepare
+     * tick (one cheap ioctl), not only on the SIGWINCH flag, because
+     * the signal is fundamentally racy: yetty fires the post-layout
+     * resize as soon as the YUI settles, which can land before the
+     * child has installed its SIGWINCH handler (default disposition is
+     * "ignore"), AND because libuv's own signal plumbing can swallow
+     * delivery. The ioctl returns instantly when nothing changed, so
+     * the poll is essentially free. */
+    {
         yetty_ygui_internal_resize_pending = 0;
 #ifndef _WIN32
-        /* Pick up the new host-terminal cell count. */
+        /* Pick up the new host-terminal cell count AND pixel size.
+         * yetty populates ws_xpixel/ws_ypixel in TIOCGWINSZ alongside
+         * ws_col/ws_row; the engine used to wait for an SC_RESIZE OSC
+         * from the host to learn the real pixel size, but the
+         * figure-tree path no longer emits one — read the pixel area
+         * straight from the ioctl instead. */
         struct winsize ws;
         if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
             int new_w = ws.ws_col;
@@ -379,6 +408,26 @@ static void prepare_cb(uv_prepare_t *handle)
                     yerror("ygui_uv: card_place on SIGWINCH: %s", pr.error.msg);
                     yetty_ycore_error_destroy(pr.error);
                 }
+            }
+            if (ws.ws_xpixel > 0 && ws.ws_ypixel > 0
+                && ((float)ws.ws_xpixel != engine->display_pixel_w
+                    || (float)ws.ws_ypixel != engine->display_pixel_h)) {
+                /* Path the figure-tree wire used to drive via
+                 * SC_CLIENT_INPUT_FIGURE_RESIZE: set the pixel-size
+                 * fields + needs_resize, the next render runs
+                 * handle_resize which updates engine->width/height
+                 * AND fires the user's resize_callback (ygreeter's
+                 * outer-window stretcher hangs off this). */
+                engine->display_pixel_w = (float)ws.ws_xpixel;
+                engine->display_pixel_h = (float)ws.ws_ypixel;
+                engine->have_pixel_size = 1;
+                if (engine->reference_w == 0.0f) {
+                    engine->reference_w = engine->display_pixel_w;
+                    engine->reference_h = engine->display_pixel_h;
+                }
+                engine->needs_resize = 1;
+                engine->dirty = 1;
+                engine->needs_full_redraw = 1;
             }
         }
 #endif
@@ -477,6 +526,18 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_bootstrap_runtime(
                          "bootstrap_runtime: prepare uv_prepare_start failed");
     }
 
+    /* SIGWINCH wakeup via uv_signal_t. The signal() handler in
+     * engine.c also flips yetty_ygui_internal_resize_pending, but
+     * libuv installs its own sigprocmask and may swallow the raw
+     * signal — the uv_signal_t path is the contract-correct way. */
+    if (uv_signal_init(s->loop, &s->sigwinch_handle) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: uv_signal_init failed");
+    }
+    s->sigwinch_handle.data = engine;
+    if (uv_signal_start(&s->sigwinch_handle, sigwinch_cb, SIGWINCH) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: uv_signal_start failed");
+    }
+
     /* Output pty: caller-supplied (borrowed — yui's memory ring) or
      * allocate a libuv pipe wrapping STDOUT (owned). Producers write
      * OSCs through output_pty->ops->write; the queued uv_write keeps
@@ -519,6 +580,7 @@ void yetty_ygui_engine_run(struct yetty_ygui_engine *engine)
      * responsible for stopping its own handles too.) */
     uv_poll_stop(&s->stdin_poll);
     uv_prepare_stop(&s->prepare_handle);
+    uv_signal_stop(&s->sigwinch_handle);
 }
 
 /*=============================================================================

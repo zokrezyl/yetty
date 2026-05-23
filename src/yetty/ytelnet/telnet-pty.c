@@ -117,7 +117,7 @@ static struct yetty_ycore_size_result telnet_pty_read(struct yetty_platform_pty 
 static struct yetty_ycore_size_result telnet_pty_write(struct yetty_platform_pty *self,
                                                        const char *data, size_t len);
 static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows);
+                                                        uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h);
 static struct yetty_ycore_void_result telnet_pty_stop(struct yetty_platform_pty *self);
 static struct yetty_platform_pty_pipe_source *telnet_pty_pipe_source(
     struct yetty_platform_pty *self);
@@ -506,7 +506,7 @@ static struct yetty_ycore_size_result telnet_pty_write(struct yetty_platform_pty
 }
 
 static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows)
+                                                        uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h)
 {
     struct yetty_ytelnet_telnet_pty *pty = (struct yetty_ytelnet_telnet_pty *)self;
 

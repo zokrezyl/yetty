@@ -263,8 +263,9 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *name,
         engine->owns_theme = 1;
     }
 
-    /* Initial state — actual pixel size is set by SC_RESIZE; this 1×1
-     * placeholder is what the first (placeholder) frame ships. */
+    /* Initial state — placeholder dims; the TIOCGWINSZ seeding below
+     * overrides display_pixel_w/h with real numbers when the ioctl
+     * succeeds. */
     engine->dirty = 1;
     engine->width = 1.0f;
     engine->height = 1.0f;
@@ -294,6 +295,43 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *name,
     engine->display_pixel_w = 0.0f;
     engine->display_pixel_h = 0.0f;
     engine->have_pixel_size = 0;
+
+    /* Seed the pixel size from TIOCGWINSZ.ws_xpixel/ws_ypixel — yetty
+     * populates those alongside ws_col/ws_row in terminal_resize_grid.
+     * Going through display_pixel_w/h + needs_resize (rather than
+     * setting engine->width/height directly) makes the first render
+     * fire handle_resize, which in turn invokes the user's
+     * resize_callback. Tools like ygreeter rely on that callback to
+     * stretch their outer window widget; without it the widget tree
+     * stays at its authored 100×100 (the literal in the
+     * `engine_window("outer", 0, 0, 100, 100, ...)` call) — the bug
+     * the user reported as "all widgets packed in the upper-left
+     * corner". */
+#ifndef _WIN32
+    {
+        struct winsize ws;
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0
+            && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
+            engine->display_pixel_w = (float)ws.ws_xpixel;
+            engine->display_pixel_h = (float)ws.ws_ypixel;
+            engine->have_pixel_size = 1;
+            engine->reference_w = engine->display_pixel_w;
+            engine->reference_h = engine->display_pixel_h;
+            engine->needs_resize = 1;
+            engine->needs_full_redraw = 1;
+        }
+    }
+    /* The SIGWINCH from yetty's `terminal_resize_grid` is racy: yetty
+     * fires the resize as soon as the YUI layout settles, which can
+     * happen before the child has even called yetty_ygui_init (and so
+     * before our SIGWINCH handler is installed — the default
+     * disposition is "ignore"). The signal is then dropped silently
+     * and our card stays at the fork-time 80x24 cells / 1x1 pixel
+     * canvas forever. Force a re-read of TIOCGWINSZ on the very first
+     * prepare_cb iteration so we catch any size that landed during
+     * the gap, regardless of whether SIGWINCH was actually caught. */
+    yetty_ygui_internal_resize_pending = 1;
+#endif
 
     /* I/O endpoints. STDIN for inbound OSCs, STDOUT for outbound. The
      * libuv pipe wrapping STDOUT becomes output_pty inside

@@ -1282,6 +1282,21 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * for the ydraw OSC codes — the SM does b64+lz4 decoding
      * (protocol-fixed), so registration carries no codec parameter. */
     struct yetty_yrender_terminal_layer *text_layer = text_layer_res.value;
+
+    /* Push the real cell+pixel dims down to the PTY before any child
+     * process can read TIOCGWINSZ. The PTY's create_pty path forks at
+     * 80x24 with ws_xpixel/ws_ypixel=0; without this catch-up, every
+     * client that needs the pane pixel area (ymgui demo, GPU clients)
+     * sees zero and falls back to guessing. */
+    if (terminal->context.pty->ops->resize) {
+        struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
+            terminal->context.pty, cols, rows,
+            cols * (uint32_t)text_layer->cell_size.width,
+            rows * (uint32_t)text_layer->cell_size.height);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, pr,
+                            "terminal_create: initial pty resize with pixel dims failed");
+    }
+
     struct yetty_yterm_terminal_layer_result ydraw_res = yetty_yterm_ydraw_layer_create(
         YETTY_YDRAW_LAYER_KIND_SCROLLING, cols, rows,
         text_layer->cell_size.width, text_layer->cell_size.height,
@@ -1673,6 +1688,21 @@ struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
                                 "yetty_yterm_terminal_resize_grid: layer resize_grid failed");
         }
     }
+    /* Push the new grid+pixel dims down to the PTY so a SIGWINCH fires
+     * in the child and ws_xpixel/ws_ypixel from TIOCGWINSZ stays
+     * current. Without this the layout-driven first resize (e.g. 80x24
+     * default → 212x60 after pane layout) never reaches the inferior
+     * and clients that need the actual pane pixel area get a stale
+     * answer for the lifetime of the process. */
+    if (terminal->context.pty && terminal->context.pty->ops
+        && terminal->context.pty->ops->resize) {
+        struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
+            terminal->context.pty, grid_size.cols, grid_size.rows,
+            grid_size.cols * (uint32_t)cell_size.width,
+            grid_size.rows * (uint32_t)cell_size.height);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
+                            "yetty_yterm_terminal_resize_grid: pty resize failed");
+    }
     /* Root container has no grid-resize concept: each figure tracks
      * its own rect via wire SET_CHILD_RECT records. On terminal resize
      * the producer re-emits the layout in the new dims; the root
@@ -1990,7 +2020,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                                 "terminal_view_on_event: terminal_resize_grid failed");
             if (terminal->context.pty->ops->resize) {
                 struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-                    terminal->context.pty, new_cols, new_rows);
+                    terminal->context.pty, new_cols, new_rows,
+                    new_cols * (uint32_t)new_cell.width,
+                    new_rows * (uint32_t)new_cell.height);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
                                     "terminal_view_on_event: pty resize failed");
             }
@@ -2059,7 +2091,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                                 "terminal_view_on_event: terminal_resize_grid (zoom) failed");
             if (terminal->context.pty->ops->resize) {
                 struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-                    terminal->context.pty, new_cols, new_rows);
+                    terminal->context.pty, new_cols, new_rows,
+                    new_cols * (uint32_t)new_cell.width,
+                    new_rows * (uint32_t)new_cell.height);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
                                     "terminal_view_on_event: pty resize (zoom) failed");
             }

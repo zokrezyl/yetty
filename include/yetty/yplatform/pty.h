@@ -20,8 +20,17 @@ struct yetty_platform_pty_ops {
                                            size_t max_len);
     struct yetty_ycore_size_result (*write)(struct yetty_platform_pty *self, const char *data,
                                             size_t len);
+    /* `pixel_w` / `pixel_h` carry the full pane pixel size so the impl
+     * can populate `ws_xpixel` / `ws_ypixel` for TIOCGWINSZ. Without it,
+     * client apps that need the actual pane pixel area (the ymgui demo,
+     * any GPU-rendering client) can only multiply ws_col/ws_row by a
+     * default 8×16 cell — wrong on every non-default cell size. Zero is
+     * acceptable when the impl truly doesn't know yet (initial create
+     * before the first grid is laid out); yetty pushes a real value as
+     * soon as the layer cell size is known. */
     struct yetty_ycore_void_result (*resize)(struct yetty_platform_pty *self, uint32_t cols,
-                                             uint32_t rows);
+                                             uint32_t rows, uint32_t pixel_w,
+                                             uint32_t pixel_h);
     struct yetty_ycore_void_result (*stop)(struct yetty_platform_pty *self);
     struct yetty_platform_pty_pipe_source *(*pipe_source)(struct yetty_platform_pty *self);
 };

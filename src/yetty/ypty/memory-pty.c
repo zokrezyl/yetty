@@ -183,7 +183,7 @@ static struct yetty_ycore_size_result memory_pty_write(struct yetty_platform_pty
 }
 
 static struct yetty_ycore_void_result memory_pty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows)
+                                                        uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h)
 {
     (void)self;
     (void)cols;

@@ -37,7 +37,8 @@ static struct yetty_ycore_size_result fork_pty_read(struct yetty_platform_pty *s
 static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *self,
                                                      const char *data, size_t len);
 static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty *self,
-                                                      uint32_t cols, uint32_t rows);
+                                                      uint32_t cols, uint32_t rows,
+                                                      uint32_t pixel_w, uint32_t pixel_h);
 static struct yetty_ycore_void_result fork_pty_stop(struct yetty_platform_pty *self);
 static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(struct yetty_platform_pty *self);
 
@@ -115,7 +116,8 @@ static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *
 }
 
 static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty *self,
-                                                      uint32_t cols, uint32_t rows)
+                                                      uint32_t cols, uint32_t rows,
+                                                      uint32_t pixel_w, uint32_t pixel_h)
 {
     struct yetty_yplatform_fork_pty *pty =
         container_of(self, struct yetty_yplatform_fork_pty, base);
@@ -130,8 +132,8 @@ static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty 
 
     ws.ws_row = (unsigned short)rows;
     ws.ws_col = (unsigned short)cols;
-    ws.ws_xpixel = 0;
-    ws.ws_ypixel = 0;
+    ws.ws_xpixel = (unsigned short)pixel_w;
+    ws.ws_ypixel = (unsigned short)pixel_h;
 
     if (ioctl(pty->pty_master, TIOCSWINSZ, &ws) < 0) {
         return YETTY_ERR(yetty_ycore_void, "ioctl TIOCSWINSZ failed");
