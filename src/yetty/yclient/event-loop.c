@@ -156,17 +156,17 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
         switch (m->kind) {
         case YETTY_YMGUI_INPUT_MOUSE_POS:
             if (L->on_pos) {
-                L->on_pos(L->user, m->card_id, m->x, m->y, m->buttons_held);
+                L->on_pos(L->user, m->figure_id, m->x, m->y, m->buttons_held);
             }
             break;
         case YETTY_YMGUI_INPUT_MOUSE_BUTTON:
             if (L->on_btn) {
-                L->on_btn(L->user, m->card_id, m->button, m->pressed, m->x, m->y);
+                L->on_btn(L->user, m->figure_id, m->button, m->pressed, m->x, m->y);
             }
             break;
         case YETTY_YMGUI_INPUT_MOUSE_WHEEL:
             if (L->on_wheel) {
-                L->on_wheel(L->user, m->card_id, m->wheel_dy, m->x, m->y);
+                L->on_wheel(L->user, m->figure_id, m->wheel_dy, m->x, m->y);
             }
             break;
         }
@@ -183,7 +183,7 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
             return;
         }
         if (L->on_resize) {
-            L->on_resize(L->user, r->card_id, r->width, r->height);
+            L->on_resize(L->user, r->figure_id, r->width, r->height);
         }
         L->frame_pending = 1;
         break;
@@ -198,7 +198,7 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
             return;
         }
         if (L->on_focus) {
-            L->on_focus(L->user, f->card_id, f->gained);
+            L->on_focus(L->user, f->figure_id, f->gained);
         }
         L->frame_pending = 1;
         break;
@@ -213,7 +213,7 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
             return;
         }
         if (L->on_key) {
-            L->on_key(L->user, k->card_id, (int)k->kind, k->key, k->mods, k->codepoint);
+            L->on_key(L->user, k->figure_id, (int)k->kind, k->key, k->mods, k->codepoint);
         }
         L->frame_pending = 1;
         break;

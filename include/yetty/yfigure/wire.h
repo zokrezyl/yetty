@@ -1,0 +1,83 @@
+/*
+ * yfigure wire format — record + admin sub-cmd constants.
+ *
+ * Every wire envelope on the figure-tree OSC code is a sequence of
+ * records. Each record:
+ *
+ *   u32 length     bytes of payload that follow this header
+ *   u32 id         parent-scoped figure id; 0 = admin / self-target
+ *   bytes payload[length]
+ *
+ * Length-first so a pipeline linter / proxy can walk and validate
+ * without knowing ids or figure semantics. id=0 = admin: the receiving
+ * container consumes the payload itself (sub-cmd codes below). id!=0:
+ * the container resolves id to a child figure and hands the payload to
+ * the child's process_input(self, sm, length).
+ *
+ * Admin record payload layout:
+ *   u32 admin_op    sub-cmd code (yetty_yfigure_wire_admin_op below)
+ *   bytes admin_payload   sub-cmd-specific, length = (record length - 4)
+ */
+#ifndef YETTY_YFIGURE_WIRE_H
+#define YETTY_YFIGURE_WIRE_H
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Top-level record header. */
+struct yetty_yfigure_wire_record {
+    uint32_t length;
+    uint32_t id;
+};
+
+/* Admin record sub-cmds — payload of an id==0 record begins with one
+ * of these as a u32 discriminator. */
+enum yetty_yfigure_wire_admin_op {
+    /* Drop every child of the receiving container. No further fields. */
+    YETTY_YFIGURE_ADMIN_CLEAR_ALL = 1,
+
+    /* Create a child. Payload layout after admin_op:
+     *   u32   child_id
+     *   u32   kind             (one of yetty_yfigure_wire_kind)
+     *   f32   rect_min_x, rect_min_y, rect_max_x, rect_max_y
+     *   u32   init_payload_bytes
+     *   bytes init[init_payload_bytes]   forwarded to child's
+     *                                    process_input(sm, init_payload_bytes)
+     */
+    YETTY_YFIGURE_ADMIN_CREATE_CHILD = 2,
+
+    /* Drop a single child. Payload after admin_op:
+     *   u32   child_id
+     */
+    YETTY_YFIGURE_ADMIN_DELETE_CHILD = 3,
+
+    /* Update a child's rect without rebuilding its state. Payload:
+     *   u32   child_id
+     *   f32   rect_min_x, rect_min_y, rect_max_x, rect_max_y
+     */
+    YETTY_YFIGURE_ADMIN_SET_CHILD_RECT = 4,
+
+    /* Update THIS container's own rect. Payload:
+     *   f32   rect_min_x, rect_min_y, rect_max_x, rect_max_y
+     */
+    YETTY_YFIGURE_ADMIN_SET_RECT = 5,
+};
+
+/* Figure-kind codes — registered with yetty_yfigure_registry by each
+ * figure-kind module's _register_factory call. Reserved range 0..0xFFFF
+ * for built-in kinds; user kinds start at 0x10000. */
+enum yetty_yfigure_wire_kind {
+    YETTY_YFIGURE_KIND_CONTAINER = 1,
+    YETTY_YFIGURE_KIND_YGRID = 2,
+    YETTY_YFIGURE_KIND_YMGUI = 3,
+    YETTY_YFIGURE_KIND_YRDAWN = 4,
+};
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* YETTY_YFIGURE_WIRE_H */

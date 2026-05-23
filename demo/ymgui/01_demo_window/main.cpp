@@ -20,7 +20,7 @@
 
 struct demo_state {
     struct yetty_yclient_event_loop *loop;
-    uint32_t card_id;
+    uint32_t figure_id;
     int frames_rendered;
     int frames_max;
     uint64_t last_ns;
@@ -38,7 +38,7 @@ static void on_frame(void *user)
 {
     struct demo_state *S = (struct demo_state *)user;
 
-    yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(S->card_id);
+    yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(S->figure_id);
     ImGuiIO &io = ImGui::GetIO();
 
     /* Skip drawing until we know the card's pixel size from the server's
@@ -66,7 +66,7 @@ static void on_frame(void *user)
     ImGui::ShowDemoWindow(&S->window_open);
 
     ImGui::Render();
-    yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(S->card_id, ImGui::GetDrawData());
+    yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(S->figure_id, ImGui::GetDrawData());
 
     S->frames_rendered++;
     /* User clicked the [x] in the demo window — exit. */
@@ -105,8 +105,8 @@ int main(int argc, char **argv)
 
     /* Card filling the whole pane (w_cells=0 → right edge dynamically;
      * h_cells=0 → bottom edge at placement time). */
-    state.card_id = yetty_ymgui_ImGui_ImplYetty_CreateCard(
-        /*card_id=*/0, /*col=*/0, /*row=*/0,
+    state.figure_id = yetty_ymgui_ImGui_ImplYetty_CreateCard(
+        /*figure_id=*/0, /*col=*/0, /*row=*/0,
         /*w_cells=*/0, /*h_cells=*/0);
 
     struct yetty_yclient_lib_event_loop_config cfg = {};
@@ -129,7 +129,7 @@ int main(int argc, char **argv)
 
     yetty_yclient_event_loop_destroy(state.loop);
     /* Archive the last frame so it remains visible as scrollback. */
-    yetty_ymgui_ImGui_ImplYetty_RemoveCard(state.card_id, /*keep_visible=*/true);
+    yetty_ymgui_ImGui_ImplYetty_RemoveCard(state.figure_id, /*keep_visible=*/true);
     yetty_ymgui_ImGui_ImplYetty_Clear(/*keep_visible=*/false);
     yetty_ymgui_ImGui_ImplYetty_PlatformShutdown();
     yetty_ymgui_ImGui_ImplYetty_Shutdown();

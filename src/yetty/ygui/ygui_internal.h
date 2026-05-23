@@ -876,7 +876,7 @@ struct yetty_ygui_engine {
     char *card_name;
     int card_x, card_y, card_w, card_h;
     int card_shown;   /* 0 = not shown yet, 1 = shown (use update) */
-    uint32_t card_id; /* ymgui-layer card id (for CARD_PLACE / hit routing) */
+    uint32_t figure_id; /* ymgui-layer card id (for CARD_PLACE / hit routing) */
 
     /* When set, engine_destroy skips the YDRAW_CLEAR OSC so the last
      * rendered frame stays painted on the canvas (the ydraw primitives
@@ -1134,10 +1134,10 @@ struct yetty_ycore_void_result yetty_ygui_osc_subscribe_view_changes(
 struct yetty_ycore_void_result yetty_ygui_osc_query_cell_size(
     struct yetty_platform_pty *output_pty);
 struct yetty_ycore_void_result yetty_ygui_osc_card_place(struct yetty_platform_pty *output_pty,
-                                                         uint32_t card_id, int col, int row,
+                                                         uint32_t figure_id, int col, int row,
                                                          uint32_t w_cells, uint32_t h_cells);
 struct yetty_ycore_void_result yetty_ygui_osc_card_remove(struct yetty_platform_pty *output_pty,
-                                                          uint32_t card_id);
+                                                          uint32_t figure_id);
 struct yetty_ycore_void_result yetty_ygui_osc_zoom_card(struct yetty_platform_pty *output_pty,
                                                         const char *name, float level);
 struct yetty_ycore_void_result yetty_ygui_osc_scroll_card(struct yetty_platform_pty *output_pty,

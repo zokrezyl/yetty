@@ -125,6 +125,7 @@ endif()
 
 if(YETTY_ENABLE_TOOL_DECODE_YDRAW)
     add_subdirectory(decode-ydraw)
+    add_subdirectory(osc-analyzer)
 endif()
 
 # ydiagram CLI links the yetty_ydiagram static lib (built in

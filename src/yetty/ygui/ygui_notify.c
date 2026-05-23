@@ -165,8 +165,8 @@ static struct yetty_ygui_widget *notify_build_card(struct yetty_ygui_engine *eng
                                                    int slot, int severity,
                                                    const char *message)
 {
-    char card_id[48], stripe_id[48], lbl_id[48], close_id[48], row_id[48];
-    snprintf(card_id,   sizeof(card_id),   "ygui_notif_%d_card",   slot);
+    char figure_id[48], stripe_id[48], lbl_id[48], close_id[48], row_id[48];
+    snprintf(figure_id,   sizeof(figure_id),   "ygui_notif_%d_card",   slot);
     snprintf(row_id,    sizeof(row_id),    "ygui_notif_%d_row",    slot);
     snprintf(stripe_id, sizeof(stripe_id), "ygui_notif_%d_stripe", slot);
     snprintf(lbl_id,    sizeof(lbl_id),    "ygui_notif_%d_lbl",    slot);
@@ -175,7 +175,7 @@ static struct yetty_ygui_widget *notify_build_card(struct yetty_ygui_engine *eng
     /* Card: a vbox that fills NOTIF_CARD_W and grows vertically with the
      * label. background BRAND_BG_LIFTED, rounded corners, 1-px BRAND_BORDER. */
     struct yetty_ygui_widget *card =
-        yetty_ygui_engine_vbox(engine, card_id, 0, 0, NOTIF_CARD_W, 0);
+        yetty_ygui_engine_vbox(engine, figure_id, 0, 0, NOTIF_CARD_W, 0);
     if (!card) {
         return NULL;
     }

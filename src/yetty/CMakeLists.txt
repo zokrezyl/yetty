@@ -124,12 +124,6 @@ endif()
 # Foundational, depends only on ycore.
 add_subdirectory(yfigure)
 
-# ycompositor — positioned-figure compositor layer. Implements the
-# yterm terminal_layer interface; hosts a z-ordered list of yfigure
-# figures with damage-rect repaint. Concrete figure kinds (yui chrome,
-# ymgui cards, yrdawn surfaces, …) live above this.
-add_subdirectory(ycompositor)
-
 # ygrid — concrete figure kind: spatial-bucketed batch of SDF prims
 # and glyphs. First migration target for ygui's scene content.
 add_subdirectory(ygrid)

@@ -54,7 +54,8 @@ target_link_libraries(yetty_yterm
     yetty_yface
     yetty_ywire
     yetty_yrdawn
-    yetty_ycompositor
+    yetty_yfigure
+    yetty_ygrid
     lz4_static
 )
 

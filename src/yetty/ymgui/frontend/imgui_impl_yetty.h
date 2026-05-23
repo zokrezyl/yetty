@@ -12,7 +12,7 @@
  *
  *     ImGui_ImplYetty_Init();                 // backend state
  *     ImGui_ImplYetty_PlatformInit();         // raw stdin + DEC subscribe
- *     uint32_t card = ImGui_ImplYetty_CreateCard(card_id, col, row, w, h);
+ *     uint32_t card = ImGui_ImplYetty_CreateCard(figure_id, col, row, w, h);
  *
  *     // each frame:
  *     ImGui_ImplYetty_BeginCardFrame(card);   // context current + NewFrame
@@ -26,7 +26,7 @@
  *
  * Input
  *
- *   The terminal forwards all input as OSC envelopes carrying a card_id
+ *   The terminal forwards all input as OSC envelopes carrying a figure_id
  *   and card-local coordinates. Three ways to consume them:
  *
  *     (1) PollInput() once per frame (sync drain).
@@ -81,18 +81,18 @@ IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_PlatformShutdown(void);
  * right edge of the pane" — the card auto-resizes with the terminal.
  *===========================================================================*/
 
-IMGUI_IMPL_API uint32_t yetty_ymgui_ImGui_ImplYetty_CreateCard(uint32_t card_id, int col, int row,
+IMGUI_IMPL_API uint32_t yetty_ymgui_ImGui_ImplYetty_CreateCard(uint32_t figure_id, int col, int row,
                                                                uint32_t w_cells, uint32_t h_cells);
 
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_MoveCard(uint32_t card_id, int col, int row,
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_MoveCard(uint32_t figure_id, int col, int row,
                                                          uint32_t w_cells, uint32_t h_cells);
 
-/* Remove `card_id`. If keep_visible, the server archives the last
+/* Remove `figure_id`. If keep_visible, the server archives the last
  * frame to the static scrollback layer; otherwise it's just dropped. */
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_RemoveCard(uint32_t card_id, bool keep_visible);
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_RemoveCard(uint32_t figure_id, bool keep_visible);
 
 /* Returns the ImGuiContext bound to a card, or NULL if not found. */
-IMGUI_IMPL_API ImGuiContext *yetty_ymgui_ImGui_ImplYetty_GetCardContext(uint32_t card_id);
+IMGUI_IMPL_API ImGuiContext *yetty_ymgui_ImGui_ImplYetty_GetCardContext(uint32_t figure_id);
 
 /* Currently focused card per the latest server-side click-focus event,
  * or 0 if none. */
@@ -109,8 +109,8 @@ IMGUI_IMPL_API uint32_t yetty_ymgui_ImGui_ImplYetty_FocusedCard(void);
  * card's frame.
  *===========================================================================*/
 
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(uint32_t card_id);
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id,
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(uint32_t figure_id);
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t figure_id,
                                                                    ImDrawData *draw_data);
 
 /*=============================================================================
@@ -152,16 +152,16 @@ IMGUI_IMPL_API bool yetty_ymgui_ImGui_ImplYetty_WaitInput(int timeout_ms);
  * Push input (option 3) — feed ImGuiIO of the named card directly
  *===========================================================================*/
 
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(uint32_t card_id, double x, double y,
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(uint32_t figure_id, double x, double y,
                                                                uint32_t buttons_held);
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(uint32_t card_id, int button,
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(uint32_t figure_id, int button,
                                                                   int pressed, double x, double y);
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(uint32_t card_id, double dy,
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(uint32_t figure_id, double dy,
                                                                  double x, double y);
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardResize(uint32_t card_id, double width,
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardResize(uint32_t figure_id, double width,
                                                              double height);
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardFocus(uint32_t card_id, int gained);
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardKey(uint32_t card_id, int kind, int key,
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardFocus(uint32_t figure_id, int gained);
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnCardKey(uint32_t figure_id, int kind, int key,
                                                           int mods, uint32_t codepoint);
 
 /*=============================================================================

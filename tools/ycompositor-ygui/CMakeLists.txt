@@ -4,7 +4,7 @@
 # This one allocates an in-process (headless) ygui engine, builds a tiny
 # widget tree, calls engine_rebuild to produce the canonical draw_list
 # bytes, and feeds them straight into the compositor via
-# yetty_ycompositor_process_records. No PTY / no OSC / no parent yetty.
+# root container_process_records. No PTY / no OSC / no parent yetty.
 #
 # Used to validate the new ygui→compositor pipeline that will eventually
 # replace scene-canvas inside the main yetty binary.
@@ -60,7 +60,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 
 target_link_libraries(ycompositor-ygui PRIVATE
-    yetty_ycompositor
+
     yetty_ygrid
     yetty_yfigure
     yetty_ydraw_core

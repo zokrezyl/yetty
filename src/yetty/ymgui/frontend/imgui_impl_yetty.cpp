@@ -13,11 +13,11 @@
  *   - BeginCardFrame makes that card's context current; first time
  *     also uploads the card's font atlas via --tex.
  *   - RenderCardDrawData serializes ImDrawData into wire format and
- *     sends a --frame OSC tagged with the card_id.
+ *     sends a --frame OSC tagged with the figure_id.
  *
  * Input flow:
  *   - The server hit-tests each event against the live cards and
- *     ships the result with a card_id. The bridge looks up the card,
+ *     ships the result with a figure_id. The bridge looks up the card,
  *     switches its ImGuiContext, calls AddXxxEvent.
  */
 
@@ -252,7 +252,7 @@ void yetty_ymgui_ImGui_ImplYetty_Clear(bool keep_visible)
     struct yetty_ymgui_wire_clear msg = {};
     msg.magic = YMGUI_WIRE_MAGIC_CLEAR;
     msg.version = YMGUI_WIRE_VERSION;
-    msg.card_id = YMGUI_CARD_ID_NONE;
+    msg.figure_id = YMGUI_FIGURE_ID_NONE;
     msg.flags = keep_visible ? YMGUI_CLEAR_FLAG_KEEP_VISIBLE : 0u;
     emit_osc(YMGUI_OSC_CS_CLEAR, /*compressed=*/false, &msg, sizeof(msg));
 }
@@ -261,23 +261,23 @@ void yetty_ymgui_ImGui_ImplYetty_Clear(bool keep_visible)
  * Card lifecycle
  *=========================================================================*/
 
-uint32_t yetty_ymgui_ImGui_ImplYetty_CreateCard(uint32_t card_id, int col, int row,
+uint32_t yetty_ymgui_ImGui_ImplYetty_CreateCard(uint32_t figure_id, int col, int row,
                                                 uint32_t w_cells, uint32_t h_cells)
 {
-    if (card_id == YMGUI_CARD_ID_NONE) {
-        card_id = g_state.next_auto_card_id++;
-    } else if (card_id >= g_state.next_auto_card_id) {
-        g_state.next_auto_card_id = card_id + 1u;
+    if (figure_id == YMGUI_FIGURE_ID_NONE) {
+        figure_id = g_state.next_auto_card_id++;
+    } else if (figure_id >= g_state.next_auto_card_id) {
+        g_state.next_auto_card_id = figure_id + 1u;
     }
 
-    if (find_card(card_id)) {
+    if (find_card(figure_id)) {
         /* Already exists — treat as move. */
-        yetty_ymgui_ImGui_ImplYetty_MoveCard(card_id, col, row, w_cells, h_cells);
-        return card_id;
+        yetty_ymgui_ImGui_ImplYetty_MoveCard(figure_id, col, row, w_cells, h_cells);
+        return figure_id;
     }
 
     auto *c = new ymgui_card_state{};
-    c->id = card_id;
+    c->id = figure_id;
     c->ctx = ImGui::CreateContext();
     c->col = col;
     c->row = row;
@@ -306,20 +306,20 @@ uint32_t yetty_ymgui_ImGui_ImplYetty_CreateCard(uint32_t card_id, int col, int r
     struct yetty_ymgui_wire_card_place msg = {};
     msg.magic = YMGUI_WIRE_MAGIC_CARD_PLACE;
     msg.version = YMGUI_WIRE_VERSION;
-    msg.card_id = card_id;
+    msg.figure_id = figure_id;
     msg.col = col;
     msg.row = row;
     msg.w_cells = w_cells;
     msg.h_cells = h_cells;
     emit_osc(YMGUI_OSC_CS_CARD_PLACE, /*compressed=*/false, &msg, sizeof(msg));
 
-    return card_id;
+    return figure_id;
 }
 
-void yetty_ymgui_ImGui_ImplYetty_MoveCard(uint32_t card_id, int col, int row, uint32_t w_cells,
+void yetty_ymgui_ImGui_ImplYetty_MoveCard(uint32_t figure_id, int col, int row, uint32_t w_cells,
                                           uint32_t h_cells)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
@@ -330,7 +330,7 @@ void yetty_ymgui_ImGui_ImplYetty_MoveCard(uint32_t card_id, int col, int row, ui
     struct yetty_ymgui_wire_card_place msg = {};
     msg.magic = YMGUI_WIRE_MAGIC_CARD_PLACE;
     msg.version = YMGUI_WIRE_VERSION;
-    msg.card_id = card_id;
+    msg.figure_id = figure_id;
     msg.col = col;
     msg.row = row;
     msg.w_cells = w_cells;
@@ -338,19 +338,19 @@ void yetty_ymgui_ImGui_ImplYetty_MoveCard(uint32_t card_id, int col, int row, ui
     emit_osc(YMGUI_OSC_CS_CARD_PLACE, /*compressed=*/false, &msg, sizeof(msg));
 }
 
-void yetty_ymgui_ImGui_ImplYetty_RemoveCard(uint32_t card_id, bool keep_visible)
+void yetty_ymgui_ImGui_ImplYetty_RemoveCard(uint32_t figure_id, bool keep_visible)
 {
     /* Tell the server first so it can archive the last frame. */
     struct yetty_ymgui_wire_card_remove msg = {};
     msg.magic = YMGUI_WIRE_MAGIC_CARD_REMOVE;
     msg.version = YMGUI_WIRE_VERSION;
-    msg.card_id = card_id;
+    msg.figure_id = figure_id;
     msg.flags = keep_visible ? YMGUI_CLEAR_FLAG_KEEP_VISIBLE : 0u;
     emit_osc(YMGUI_OSC_CS_CARD_REMOVE, /*compressed=*/false, &msg, sizeof(msg));
 
     /* Then drop our local state. */
     for (auto it = g_state.cards.begin(); it != g_state.cards.end(); ++it) {
-        if ((*it)->id == card_id) {
+        if ((*it)->id == figure_id) {
             if ((*it)->ctx) {
                 ImGui::DestroyContext((*it)->ctx);
             }
@@ -359,14 +359,14 @@ void yetty_ymgui_ImGui_ImplYetty_RemoveCard(uint32_t card_id, bool keep_visible)
             break;
         }
     }
-    if (g_state.focused_card_id == card_id) {
+    if (g_state.focused_card_id == figure_id) {
         g_state.focused_card_id = 0;
     }
 }
 
-ImGuiContext *yetty_ymgui_ImGui_ImplYetty_GetCardContext(uint32_t card_id)
+ImGuiContext *yetty_ymgui_ImGui_ImplYetty_GetCardContext(uint32_t figure_id)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     return c ? c->ctx : nullptr;
 }
 
@@ -396,7 +396,7 @@ static bool upload_card_atlas(ymgui_card_state *c)
     struct yetty_ymgui_wire_tex hdr = {};
     hdr.magic = YMGUI_WIRE_MAGIC_TEX;
     hdr.version = YMGUI_WIRE_VERSION;
-    hdr.card_id = c->id;
+    hdr.figure_id = c->id;
     hdr.tex_id = YMGUI_TEX_ID_FONT_ATLAS;
     hdr.format = YMGUI_TEX_FMT_R8;
     hdr.width = (uint32_t)w;
@@ -426,9 +426,9 @@ static bool upload_card_atlas(ymgui_card_state *c)
     return true;
 }
 
-void yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(uint32_t card_id)
+void yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(uint32_t figure_id)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
@@ -571,9 +571,9 @@ struct slot_plan {
      * the cache from scratch; SLOT_REPEAT keeps it as is. */
 };
 
-void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
+void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t figure_id, ImDrawData *draw_data)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
@@ -700,7 +700,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
     fh.version = YMGUI_WIRE_VERSION;
     fh.flags = (sizeof(ImDrawIdx) == 4) ? YMGUI_FRAME_FLAG_IDX32 : 0;
     fh.total_size = (uint32_t)total_size;
-    fh.card_id = card_id;
+    fh.figure_id = figure_id;
     fh.cmd_list_count = (uint32_t)cl_count;
     fh.display_pos_x = draw_data->DisplayPos.x;
     fh.display_pos_y = draw_data->DisplayPos.y;
@@ -982,11 +982,11 @@ struct context_scope {
 };
 } // namespace
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(uint32_t card_id, double x, double y,
+void yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(uint32_t figure_id, double x, double y,
                                                 uint32_t buttons_held)
 {
     (void)buttons_held;
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
@@ -994,10 +994,10 @@ void yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(uint32_t card_id, double x, doub
     ImGui::GetIO().AddMousePosEvent((float)x, (float)y);
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(uint32_t card_id, int button, int pressed,
+void yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(uint32_t figure_id, int button, int pressed,
                                                    double x, double y)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
@@ -1009,9 +1009,9 @@ void yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(uint32_t card_id, int button,
     }
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(uint32_t card_id, double dy, double x, double y)
+void yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(uint32_t figure_id, double dy, double x, double y)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
@@ -1021,9 +1021,9 @@ void yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(uint32_t card_id, double dy, d
     io.AddMouseWheelEvent(0.0f, (float)dy);
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardResize(uint32_t card_id, double width, double height)
+void yetty_ymgui_ImGui_ImplYetty_OnCardResize(uint32_t figure_id, double width, double height)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
@@ -1036,15 +1036,15 @@ void yetty_ymgui_ImGui_ImplYetty_OnCardResize(uint32_t card_id, double width, do
     ImGui::GetIO().DisplaySize = ImVec2((float)width, (float)height);
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardFocus(uint32_t card_id, int gained)
+void yetty_ymgui_ImGui_ImplYetty_OnCardFocus(uint32_t figure_id, int gained)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
     if (gained) {
-        g_state.focused_card_id = card_id;
-    } else if (g_state.focused_card_id == card_id) {
+        g_state.focused_card_id = figure_id;
+    } else if (g_state.focused_card_id == figure_id) {
         g_state.focused_card_id = 0;
     }
 
@@ -1222,10 +1222,10 @@ static ImGuiKey glfw_to_imgui_key(int key)
     }
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardKey(uint32_t card_id, int kind, int key, int mods,
+void yetty_ymgui_ImGui_ImplYetty_OnCardKey(uint32_t figure_id, int kind, int key, int mods,
                                            uint32_t codepoint)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_card(figure_id);
     if (!c) {
         return;
     }
@@ -1272,14 +1272,14 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
         }
         switch (m->kind) {
         case YETTY_YMGUI_INPUT_MOUSE_POS:
-            yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(m->card_id, m->x, m->y, m->buttons_held);
+            yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(m->figure_id, m->x, m->y, m->buttons_held);
             break;
         case YETTY_YMGUI_INPUT_MOUSE_BUTTON:
-            yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(m->card_id, m->button, m->pressed, m->x,
+            yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(m->figure_id, m->button, m->pressed, m->x,
                                                           m->y);
             break;
         case YETTY_YMGUI_INPUT_MOUSE_WHEEL:
-            yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(m->card_id, m->wheel_dy, m->x, m->y);
+            yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(m->figure_id, m->wheel_dy, m->x, m->y);
             break;
         }
         break;
@@ -1293,7 +1293,7 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
         if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) {
             return;
         }
-        yetty_ymgui_ImGui_ImplYetty_OnCardResize(r->card_id, r->width, r->height);
+        yetty_ymgui_ImGui_ImplYetty_OnCardResize(r->figure_id, r->width, r->height);
         break;
     }
     case YMGUI_OSC_SC_FOCUS: {
@@ -1305,7 +1305,7 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
         if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) {
             return;
         }
-        yetty_ymgui_ImGui_ImplYetty_OnCardFocus(f->card_id, f->gained);
+        yetty_ymgui_ImGui_ImplYetty_OnCardFocus(f->figure_id, f->gained);
         break;
     }
     case YMGUI_OSC_SC_KEY: {
@@ -1317,7 +1317,7 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
         if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) {
             return;
         }
-        yetty_ymgui_ImGui_ImplYetty_OnCardKey(k->card_id, (int)k->kind, k->key, k->mods,
+        yetty_ymgui_ImGui_ImplYetty_OnCardKey(k->figure_id, (int)k->kind, k->key, k->mods,
                                               k->codepoint);
         break;
     }
@@ -1388,35 +1388,35 @@ bool yetty_ymgui_ImGui_ImplYetty_WaitInput(int timeout_ms)
  *=========================================================================*/
 
 extern "C" {
-static void loop_on_pos(void *u, uint32_t card_id, double x, double y, uint32_t held)
+static void loop_on_pos(void *u, uint32_t figure_id, double x, double y, uint32_t held)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(card_id, x, y, held);
+    yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(figure_id, x, y, held);
 }
-static void loop_on_btn(void *u, uint32_t card_id, int b, int p, double x, double y)
+static void loop_on_btn(void *u, uint32_t figure_id, int b, int p, double x, double y)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(card_id, b, p, x, y);
+    yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(figure_id, b, p, x, y);
 }
-static void loop_on_wheel(void *u, uint32_t card_id, double dy, double x, double y)
+static void loop_on_wheel(void *u, uint32_t figure_id, double dy, double x, double y)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(card_id, dy, x, y);
+    yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(figure_id, dy, x, y);
 }
-static void loop_on_resize(void *u, uint32_t card_id, double w, double h)
+static void loop_on_resize(void *u, uint32_t figure_id, double w, double h)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardResize(card_id, w, h);
+    yetty_ymgui_ImGui_ImplYetty_OnCardResize(figure_id, w, h);
 }
-static void loop_on_focus(void *u, uint32_t card_id, int gained)
+static void loop_on_focus(void *u, uint32_t figure_id, int gained)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardFocus(card_id, gained);
+    yetty_ymgui_ImGui_ImplYetty_OnCardFocus(figure_id, gained);
 }
-static void loop_on_key(void *u, uint32_t card_id, int kind, int key, int mods, uint32_t codepoint)
+static void loop_on_key(void *u, uint32_t figure_id, int kind, int key, int mods, uint32_t codepoint)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardKey(card_id, kind, key, mods, codepoint);
+    yetty_ymgui_ImGui_ImplYetty_OnCardKey(figure_id, kind, key, mods, codepoint);
 }
 } /* extern "C" */
 

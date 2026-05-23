@@ -19,7 +19,7 @@ extern "C" {
  *
  * KIND_SCENE was retired with the ycompositor migration — yui's chrome
  * and ygui-emitted content (popups, statusbar, ygreeter, …) now flow
- * through yetty_ycompositor instead of through a scene-canvas-backed
+ * through root container instead of through a scene-canvas-backed
  * ydraw_layer. The enum stays single-valued for source compat with
  * existing call sites that pass KIND_SCROLLING explicitly.
  */

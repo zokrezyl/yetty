@@ -31,7 +31,9 @@
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ycompositor/compositor.h>
+#include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/wire.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygrid/ygrid.h>
@@ -51,7 +53,7 @@ struct ycomp_app {
     struct yetty_yruntime     *yrt;
     struct yetty_ydraw_target *target;  /* our own texture target, bypasses
                                          * yruntime's x11-tile choice */
-    struct yetty_ycompositor  *comp;
+    struct yetty_yfigure_container *root;
     struct yetty_ygrid_grid   *grid;
     /* Default font loaded once at worker startup and attached to every
      * rebuilt grid at slot 0. Owned here, destroyed in teardown. */
@@ -363,16 +365,12 @@ rebuild_figure(struct ycomp_app *app)
     if (w <= 0.0f || h <= 0.0f)
         return YETTY_OK_VOID();      /* window too small — try again next resize */
 
-    /* Drop the old figure if present. The compositor owns it; removal +
-     * destroy is the cleanest reset given that ygrid records coords are
-     * local and we want a fresh layout for the new size. */
+    /* Drop the old figure if present. remove_child_by_id destroys the
+     * child as part of the same call (uthash entry + figure cascade). */
     if (app->grid) {
-        struct yetty_yfigure_figure *old = yetty_ygrid_as_figure(app->grid);
         struct yetty_ycore_void_result rr =
-            yetty_ycompositor_remove_figure(app->comp, old);
+            yetty_yfigure_container_remove_child_by_id(app->root, 1u);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rebuild_figure: remove old");
-        struct yetty_ycore_void_result dr = old->ops->destroy(old);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "rebuild_figure: destroy old");
         app->grid = NULL;
     }
 
@@ -396,9 +394,9 @@ rebuild_figure(struct ycomp_app *app)
         populate_grid(app->grid, /*has_text=*/app->font != NULL, w, h);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "rebuild_figure: populate_grid");
 
-    struct yetty_ycore_void_result ar = yetty_ycompositor_add_figure(
-        app->comp, yetty_ygrid_as_figure(app->grid));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "rebuild_figure: add_figure");
+    struct yetty_ycore_void_result ar = yetty_yfigure_container_add_child(
+        app->root, yetty_ygrid_as_figure(app->grid), /*id=*/1u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "rebuild_figure: add_child");
 
     yinfo("ycompositor: figure rebuilt for %ux%u (rect %.1fx%.1f)",
           app->surface_w, app->surface_h, w, h);
@@ -487,13 +485,17 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "texture target create failed");
     app->target = tr.value;
 
-    /* Compositor sized to the surface in "grid cells" of 1 px each.
-     * The test app doesn't drive a text grid; cell sizing only matters
-     * for the OSC wire path, which we bypass. */
-    struct yetty_ycompositor_ptr_result cr = yetty_ycompositor_create(
-        app->surface_w, app->surface_h, 1.0f, 1.0f, &app->ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ycompositor_create failed");
-    app->comp = cr.value;
+    /* Root container — owns the demo's ygrid figure. No registry
+     * needed: this tool adds the ygrid directly via add_child rather
+     * than going through wire admin CREATE_CHILD. */
+    struct yetty_ycore_rectangle root_rect = {
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h},
+    };
+    struct yetty_yfigure_container_ptr_result cr =
+        yetty_yfigure_container_create(root_rect, &app->ctx, /*registry=*/NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "root container create failed");
+    app->root = cr.value;
 
     /* Load the default MSDF font once and pre-cache basic-latin glyphs
      * so populate_grid's text emission can resolve every codepoint
@@ -547,8 +549,9 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
         if (rt->instance) {
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
-        if (!(needs_render || had_events ||
-              yetty_ycompositor_is_dirty(app->comp))) {
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(app->root);
+        if (!(needs_render || had_events || rf->dirty)) {
             continue;
         }
 
@@ -558,11 +561,12 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
             yerror("ycompositor: clear failed: %s", cl.error.msg);
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_int_result rr =
-            yetty_ycompositor_render(app->comp, target, /*force=*/1);
+        struct yetty_ycore_void_result rr = rf->ops->render(rf, target);
         if (YETTY_IS_ERR(rr)) {
-            yerror("ycompositor: compositor render failed: %s", rr.error.msg);
+            yerror("ycompositor: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
+        } else {
+            rf->dirty = 0;
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) {
@@ -572,16 +576,16 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
         needs_render = 0;
     }
 
-    /* Strict teardown: compositor + figures before yruntime so any
-     * pending GPU work bound to the runtime's device flushes first.
-     * We only reach this point after every creation step succeeded
-     * (any earlier error returns out of the worker), so all three
-     * pointers must be valid — a NULL is a bug we want to surface,
-     * not silently swallow. */
-    struct yetty_ycore_void_result dr = yetty_ycompositor_destroy(app->comp);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "compositor destroy");
-    app->comp = NULL;
-    app->grid = NULL;       /* destroyed by compositor cascade */
+    /* Strict teardown: root container + figures before yruntime so any
+     * pending GPU work bound to the runtime's device flushes first. */
+    {
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(app->root);
+        struct yetty_ycore_void_result dr = rf->ops->destroy(rf);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
+    }
+    app->root = NULL;
+    app->grid = NULL;       /* destroyed by root cascade */
 
     app->target->ops->destroy(app->target);
     app->target = NULL;

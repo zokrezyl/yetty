@@ -29,8 +29,17 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yruntime/yruntime.h>
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/drawable-iterator.h>
+#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-core/flyweight.h>
+#include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/yplatform/ycoroutine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/wire.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yrender/font-dispatcher.h>
@@ -228,6 +237,11 @@ struct ygrid_cell {
 
 struct yetty_ygrid_grid {
     struct yetty_yfigure_figure base;
+
+    /* Owned. Built at create time. Used by process_input to walk the
+     * routed-record payload as a stream of SDF/glyph/TEXT_SPAN records
+     * and feed each one into the ygrid's flat byte buffer. */
+    struct yetty_ydraw_flyweight_registry *registry;
 
     uint32_t grid_cols;
     uint32_t grid_rows;
@@ -819,6 +833,8 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
 
     if (g->binder)
         g->binder->ops->destroy(g->binder);
+    if (g->registry)
+        yetty_ydraw_flyweight_registry_destroy(g->registry);
 
     free(g->sdf_lib_code.data);
     free(g->layer_shader_code.data);
@@ -983,11 +999,72 @@ static struct yetty_ycore_void_result ygrid_render(
     return YETTY_OK_VOID();
 }
 
+/* Walk a flat SDF / glyph / TEXT_SPAN / FONT record stream and call
+ * yetty_ygrid_add_record on each. */
+static struct yetty_ycore_void_result ygrid_process_bytes(
+    struct yetty_yfigure_figure *self,
+    const uint8_t *bytes, size_t bytes_len)
+{
+    struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
+    uint32_t off = 0;
+    while (off < bytes_len) {
+        struct yetty_ydraw_command cmd;
+        struct yetty_ycore_size_result pr = yetty_ydraw_drawable_command_parse(
+            g->registry, bytes + off, (uint32_t)(bytes_len - off), &cmd);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid_process_bytes: parse");
+        if (pr.value == 0)
+            return YETTY_ERR(yetty_ycore_void,
+                             "ygrid_process_bytes: parser made no progress");
+        if (cmd.kind == YETTY_YDRAW_COMMAND_ADD) {
+            /* Some flyweight handlers (FONT with variable-length name)
+             * return records whose total isn't a multiple of 4. ygrid's
+             * byte store requires u32-aligned records — pad the copy
+             * up if needed. */
+            size_t rec_size = (size_t)pr.value;
+            size_t padded = (rec_size + 3u) & ~(size_t)3u;
+            if (padded == rec_size) {
+                struct yetty_ycore_void_result ar =
+                    yetty_ygrid_add_record(g, bytes + off, rec_size);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
+                                    "ygrid_process_bytes: add_record");
+            } else {
+                uint8_t scratch[64];
+                if (padded <= sizeof(scratch)) {
+                    memcpy(scratch, bytes + off, rec_size);
+                    memset(scratch + rec_size, 0, padded - rec_size);
+                    struct yetty_ycore_void_result ar =
+                        yetty_ygrid_add_record(g, scratch, padded);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
+                                        "ygrid_process_bytes: add_record padded");
+                } else {
+                    uint8_t *heap = (uint8_t *)malloc(padded);
+                    if (!heap)
+                        return YETTY_ERR(yetty_ycore_void,
+                                         "ygrid_process_bytes: pad oom");
+                    memcpy(heap, bytes + off, rec_size);
+                    memset(heap + rec_size, 0, padded - rec_size);
+                    struct yetty_ycore_void_result ar =
+                        yetty_ygrid_add_record(g, heap, padded);
+                    free(heap);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
+                                        "ygrid_process_bytes: add_record padded (heap)");
+                }
+            }
+        }
+        /* DELETE / UPDATE / GROUP records inside an ygrid payload aren't
+         * yet supported (no entity table — see grid.c TODO at the top).
+         * Skip them silently; the parser gave us the size to advance. */
+        off += (uint32_t)pr.value;
+    }
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_yfigure_figure_ops *ygrid_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
         .destroy = ygrid_destroy,
         .render = ygrid_render,
+        .process_bytes = ygrid_process_bytes,
     };
     return &ops;
 }
@@ -1223,6 +1300,50 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
     g->allocator = context->runtime->gpu.allocator;
     g->staging_dirty = 1;
 
+    /* Flyweight registry — used by process_input to walk the routed-
+     * record payload as a stream of SDF / glyph / TEXT_SPAN / FONT
+     * records. Same handler set the legacy compositor used for its
+     * outer iterator, lifted here so each ygrid is self-sufficient. */
+    {
+        struct yetty_ydraw_flyweight_registry_ptr_result rr =
+            yetty_ydraw_flyweight_registry_create();
+        if (YETTY_IS_ERR(rr)) {
+            ygrid_destroy(&g->base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry", rr);
+        }
+        g->registry = rr.value;
+        yetty_ydraw_flyweight_registry_set_default(g->registry, yetty_ysdf_handler);
+        struct yetty_ycore_void_result hr;
+        hr = yetty_ydraw_flyweight_registry_add(
+            g->registry, YETTY_YDRAW_CMD_BASE, YETTY_YDRAW_CMD_END,
+            yetty_ydraw_cmd_handler);
+        if (YETTY_IS_ERR(hr)) {
+            ygrid_destroy(&g->base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry cmd", hr);
+        }
+        hr = yetty_ydraw_flyweight_registry_add(
+            g->registry, YETTY_YDRAW_TYPE_FONT, YETTY_YDRAW_TYPE_FONT,
+            yetty_ydraw_font_drawable_handler);
+        if (YETTY_IS_ERR(hr)) {
+            ygrid_destroy(&g->base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry font", hr);
+        }
+        hr = yetty_ydraw_flyweight_registry_add(
+            g->registry, YETTY_YDRAW_TYPE_TEXT_SPAN, YETTY_YDRAW_TYPE_TEXT_SPAN,
+            yetty_ydraw_text_span_drawable_handler);
+        if (YETTY_IS_ERR(hr)) {
+            ygrid_destroy(&g->base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
+        }
+        hr = yetty_ydraw_flyweight_registry_add(
+            g->registry, YETTY_YDRAW_COMPLEX_TYPE_BASE, 0xFFFFFFFFu,
+            yetty_ydraw_raw_figure_handler);
+        if (YETTY_IS_ERR(hr)) {
+            ygrid_destroy(&g->base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);
+        }
+    }
+
     struct yetty_ycore_void_result cr = cells_alloc(g);
     if (YETTY_IS_ERR(cr)) {
         ygrid_destroy(&g->base);
@@ -1245,6 +1366,39 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
     }
 
     return YETTY_OK(yetty_ygrid_grid_ptr, g);
+}
+
+/* Factory used by yetty_yfigure_registry_mint for KIND_YGRID. `user`
+ * is the default font set at register_factory time (borrowed). */
+static struct yetty_yfigure_figure_ptr_result ygrid_factory(
+    struct yetty_ycore_rectangle rect,
+    const struct yetty_context *context,
+    void *user)
+{
+    /* 1x1 grid — ygreeter widgets are flat prim stores; the spatial-
+     * cell bucketing isn't useful for variable widget rects. */
+    struct yetty_ygrid_grid_ptr_result gr =
+        yetty_ygrid_create(rect, /*grid_cols=*/1u, /*grid_rows=*/1u, context);
+    if (YETTY_IS_ERR(gr))
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: create", gr);
+    if (user) {
+        struct yetty_ydraw_font *font = (struct yetty_ydraw_font *)user;
+        struct yetty_ycore_void_result fr =
+            yetty_ygrid_set_font(gr.value, 0u, font);
+        if (YETTY_IS_ERR(fr)) {
+            ydebug("ygrid_factory: set_font(slot 0) failed: %s", fr.error.msg);
+            yetty_ycore_error_destroy(fr.error);
+        }
+    }
+    return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ygrid_as_figure(gr.value));
+}
+
+struct yetty_ycore_void_result yetty_ygrid_register_factory(
+    struct yetty_yfigure_registry *registry,
+    struct yetty_ydraw_font *default_font)
+{
+    return yetty_yfigure_registry_register(
+        registry, YETTY_YFIGURE_KIND_YGRID, ygrid_factory, default_font);
 }
 
 struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)

@@ -172,13 +172,13 @@ struct yetty_ycore_void_result yetty_ygui_osc_subscribe_view_changes(
  * card and routes mouse events to it as YMGUI_OSC_SC_MOUSE with
  * card-local coords. */
 struct yetty_ycore_void_result yetty_ygui_osc_card_place(struct yetty_platform_pty *output_pty,
-                                                         uint32_t card_id, int col, int row,
+                                                         uint32_t figure_id, int col, int row,
                                                          uint32_t w_cells, uint32_t h_cells)
 {
     struct yetty_ymgui_wire_card_place msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_PLACE,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = card_id,
+        .figure_id = figure_id,
         .flags = 0,
         .col = col,
         .row = row,
@@ -206,12 +206,12 @@ struct yetty_ycore_void_result yetty_ygui_osc_card_place(struct yetty_platform_p
 }
 
 struct yetty_ycore_void_result yetty_ygui_osc_card_remove(struct yetty_platform_pty *output_pty,
-                                                          uint32_t card_id)
+                                                          uint32_t figure_id)
 {
     struct yetty_ymgui_wire_card_remove msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_REMOVE,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = card_id,
+        .figure_id = figure_id,
         .flags = 0,
     };
     struct yetty_ycore_buffer out = {0};

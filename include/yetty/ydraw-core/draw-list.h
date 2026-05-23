@@ -131,6 +131,67 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_update(
     struct yetty_ydraw_draw_list *buf, uint32_t target_id, const void *payload,
     size_t payload_size);
 
+/*===========================================================================
+ * Figure-tree wire records (new envelope format).
+ *
+ * Each record on the wire: `{length: u32, id: u32, payload[length]}`.
+ * length-first so a pipeline tool can walk and validate without knowing
+ * ids; id=0 means admin (the receiving container consumes the payload
+ * itself, payload starts with a u32 admin_op from
+ * <yetty/yfigure/wire.h>); id!=0 routes to the child figure of the
+ * receiving container.
+ *=========================================================================*/
+
+/* Append a routed record `{length=payload_size, id, payload}`. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_record(
+    struct yetty_ydraw_draw_list *buf, uint32_t id,
+    const void *payload, size_t payload_size);
+
+/* Begin a routed record `{length=<filled>, id}` and return a marker.
+ * The caller emits the body via add_prim / add_record / etc., then
+ * calls end_record(buf, marker) to backfill the length. */
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_record(
+    struct yetty_ydraw_draw_list *buf, uint32_t id);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_end_record(
+    struct yetty_ydraw_draw_list *buf, uint32_t record_marker_offset);
+
+/* Admin record emitters. id=0 admin records the receiving container
+ * consumes itself; the sub-cmd byte is encoded in the payload. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_clear_all(
+    struct yetty_ydraw_draw_list *buf);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_delete_child(
+    struct yetty_ydraw_draw_list *buf, uint32_t child_id);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_set_rect(
+    struct yetty_ydraw_draw_list *buf,
+    float min_x, float min_y, float max_x, float max_y);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_set_child_rect(
+    struct yetty_ydraw_draw_list *buf, uint32_t child_id,
+    float min_x, float min_y, float max_x, float max_y);
+
+/* CREATE_CHILD admin. The init_payload is forwarded to the freshly-
+ * minted child's process_input(sm, init_payload_size). Pass init=NULL,
+ * init_size=0 to create an empty figure. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_create_child(
+    struct yetty_ydraw_draw_list *buf, uint32_t child_id, uint32_t kind,
+    float min_x, float min_y, float max_x, float max_y,
+    const void *init_payload, size_t init_payload_size);
+
+/* Begin an admin CREATE_CHILD record. The caller emits the init payload
+ * inline (e.g. via add_prim, or further admin records for sub-containers),
+ * then calls end_admin_create_child to backfill both `length` and
+ * `init_payload_bytes`. Returns marker (the offset of the outer record's
+ * length field). */
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_admin_create_child(
+    struct yetty_ydraw_draw_list *buf, uint32_t child_id, uint32_t kind,
+    float min_x, float min_y, float max_x, float max_y);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_end_admin_create_child(
+    struct yetty_ydraw_draw_list *buf, uint32_t record_marker_offset);
+
 // Read-only view of the raw primitive byte stream (no scene-bounds framing,
 // just the concatenated FAM/SDF prim bytes). Used by producers that need to
 // walk their own buffer (e.g. ygui's RICH widget translating prims into the

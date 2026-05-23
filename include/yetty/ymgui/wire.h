@@ -18,7 +18,7 @@
  * Cards (v2): a single client process may own multiple "cards" — placed
  * sub-regions of the terminal grid (col,row,w_cells,h_cells), each with
  * its own ImGui frame and font atlas. Every CS/SC payload carries a
- * card_id, so frames/textures/inputs are routed per card. Mouse coords
+ * figure_id, so frames/textures/inputs are routed per card. Mouse coords
  * are card-local pixels — the client never needs to know where its
  * cards sit on the pane. See the "Cards" section below for the full
  * placement model.
@@ -60,12 +60,12 @@ extern "C" {
  * Card IDs are client-allocated u32. ID 0 is reserved (= "no card",
  * used by transitional / legacy paths and as a sentinel).
  *
- * Every CS payload after CARD_PLACE carries a card_id so the server
- * routes uploads to the right card. SC payloads carry a card_id so the
+ * Every CS payload after CARD_PLACE carries a figure_id so the server
+ * routes uploads to the right card. SC payloads carry a figure_id so the
  * client routes input to the right per-card ImGuiContext.
  *===========================================================================*/
 
-#define YMGUI_CARD_ID_NONE 0u
+#define YMGUI_FIGURE_ID_NONE 0u
 
 /*=============================================================================
  * OSC codes
@@ -86,7 +86,7 @@ extern "C" {
 /* Terminal-wide input subscription — independent of the card hit table.
  * Programs that aren't ymgui-shaped (browser, file manager, anything that
  * draws its own UI directly into the pane) subscribe via this OSC and
- * receive YMGUI_OSC_SC_TERM_* events tagged with card_id=0 and pane-local
+ * receive YMGUI_OSC_SC_TERM_* events tagged with figure_id=0 and pane-local
  * pixel coords. The card path is unchanged: cards keep getting their own
  * card-tagged events; both fan out simultaneously when both subscriptions
  * are active. */
@@ -99,7 +99,7 @@ extern "C" {
 #define YMGUI_OSC_SC_KEY 700003    /* ymgui_wire_input_key,    comp=0 */
 
 /* Terminal-wide variants — same wire structs as the card-tagged events
- * (ymgui_wire_input_mouse / _key / _resize), but card_id=0 and x/y are in
+ * (ymgui_wire_input_mouse / _key / _resize), but figure_id=0 and x/y are in
  * pane-local pixels (origin = pane top-left). Sent only to the
  * foreground PTY reader that subscribed via YMGUI_OSC_CS_TERM_INPUT_SUB. */
 #define YMGUI_OSC_SC_TERM_MOUSE 700010  /* ymgui_wire_input_mouse,  comp=0 */
@@ -250,7 +250,7 @@ struct yetty_ymgui_wire_frame {
     uint32_t version;    /* YMGUI_WIRE_VERSION */
     uint32_t flags;      /* YMGUI_FRAME_FLAG_* */
     uint32_t total_size; /* bytes in the whole frame payload */
-    uint32_t card_id;    /* card this frame belongs to (must be live) */
+    uint32_t figure_id;    /* card this frame belongs to (must be live) */
     uint32_t cmd_list_count;
     float display_pos_x; /* ImDrawData::DisplayPos (typically 0) */
     float display_pos_y;
@@ -265,12 +265,12 @@ struct yetty_ymgui_wire_frame {
  * Texture upload payload of YMGUI_OSC_CS_TEX. Pixel data follows the
  * header, length = width*height*bpp (1 = R8, 4 = RGBA8).
  *
- * Textures are owned per-card: tex_id is namespaced to card_id.
+ * Textures are owned per-card: tex_id is namespaced to figure_id.
  *-------------------------------------------------------------------------*/
 struct yetty_ymgui_wire_tex {
     uint32_t magic;   /* YMGUI_WIRE_MAGIC_TEX */
     uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t card_id; /* card this texture belongs to (must be live) */
+    uint32_t figure_id; /* card this texture belongs to (must be live) */
     uint32_t tex_id;  /* per-card; 1 = font atlas */
     uint32_t format;  /* YMGUI_TEX_FMT_* */
     uint32_t width;
@@ -282,7 +282,7 @@ struct yetty_ymgui_wire_tex {
 /*---------------------------------------------------------------------------
  * Clear payload of YMGUI_OSC_CS_CLEAR.
  *
- * card_id == YMGUI_CARD_ID_NONE: drop the entire ymgui state for this
+ * figure_id == YMGUI_FIGURE_ID_NONE: drop the entire ymgui state for this
  * client (every live card on this terminal). This is what the client
  * issues at shutdown (see ImGui_ImplYetty_Clear). Otherwise: drop only
  * the named card. In both cases, the server may promote the dropped
@@ -299,14 +299,14 @@ struct yetty_ymgui_wire_tex {
 struct yetty_ymgui_wire_clear {
     uint32_t magic;   /* YMGUI_WIRE_MAGIC_CLEAR */
     uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t card_id; /* YMGUI_CARD_ID_NONE = all cards */
+    uint32_t figure_id; /* YMGUI_FIGURE_ID_NONE = all cards */
     uint32_t flags;   /* YMGUI_CLEAR_FLAG_* */
 };
 
 /*---------------------------------------------------------------------------
  * Card placement / move / resize — payload of YMGUI_OSC_CS_CARD_PLACE.
  *
- * First emit for a given card_id creates the card; subsequent emits
+ * First emit for a given figure_id creates the card; subsequent emits
  * with the same id move/resize it.
  *
  * Placement model — ncurses-dialog style:
@@ -320,14 +320,14 @@ struct yetty_ymgui_wire_clear {
  *   After placement, the text-layer cursor jumps to (col=0, row+h_cells)
  *   so subsequent stdout flows underneath the card.
  *
- *   On resize/move (existing card_id), the cursor is NOT moved — only
+ *   On resize/move (existing figure_id), the cursor is NOT moved — only
  *   create-time placement advances it. col/row in a move-emit are
  *   re-resolved against the current visible window.
  *-------------------------------------------------------------------------*/
 struct yetty_ymgui_wire_card_place {
     uint32_t magic;   /* YMGUI_WIRE_MAGIC_CARD_PLACE */
     uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t card_id; /* must be != YMGUI_CARD_ID_NONE */
+    uint32_t figure_id; /* must be != YMGUI_FIGURE_ID_NONE */
     uint32_t flags;   /* reserved, send 0 */
     int32_t col;      /* grid column (0-based) */
     int32_t row;      /* grid row (0-based, relative to visible top) */
@@ -347,14 +347,14 @@ struct yetty_ymgui_wire_card_place {
 struct yetty_ymgui_wire_card_remove {
     uint32_t magic;   /* YMGUI_WIRE_MAGIC_CARD_REMOVE */
     uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;
+    uint32_t figure_id;
     uint32_t flags; /* YMGUI_CLEAR_FLAG_* */
 };
 
 /*=============================================================================
  * Input events (server → client)
  *
- * All input events carry a card_id. The server hit-tests the cursor
+ * All input events carry a figure_id. The server hit-tests the cursor
  * against the live cards' pixel rects (drift-corrected for current
  * scroll) and routes the event to the topmost card under the cursor.
  * Coordinates x, y are in card-local pixels (origin = card's top-left,
@@ -374,7 +374,7 @@ enum yetty_ymgui_wire_input_mouse_kind {
 struct yetty_ymgui_wire_input_mouse {
     uint32_t magic;        /* YMGUI_WIRE_MAGIC_INPUT_MOUSE */
     uint32_t version;      /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;      /* card under cursor (focused for click events) */
+    uint32_t figure_id;      /* card under cursor (focused for click events) */
     uint32_t kind;         /* enum ymgui_wire_input_mouse_kind */
     int32_t button;        /* BUTTON: 0=left,1=right,2=middle,...; else -1 */
     int32_t pressed;       /* BUTTON: 1=down 0=up; else 0 */
@@ -396,7 +396,7 @@ struct yetty_ymgui_wire_input_mouse {
 struct yetty_ymgui_wire_input_resize {
     uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_RESIZE */
     uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;
+    uint32_t figure_id;
     uint32_t _pad0;
     float width;  /* pixels */
     float height; /* pixels */
@@ -410,7 +410,7 @@ struct yetty_ymgui_wire_input_resize {
 struct yetty_ymgui_wire_input_focus {
     uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_FOCUS */
     uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;
+    uint32_t figure_id;
     int32_t gained; /* 1 = card gained focus, 0 = lost */
 };
 
@@ -419,7 +419,7 @@ struct yetty_ymgui_wire_input_focus {
  *
  * Sent only when the terminal has a keyboard subscription active for
  * this client (DEC ?1502h, parallel to the mouse ?1500/?1501 model)
- * AND a card has focus. card_id is the focused card. The client uses
+ * AND a card has focus. figure_id is the focused card. The client uses
  * `key` (a GLFW-compatible keycode the same way text-layer's on_key
  * does) for KEY_DOWN/UP and `codepoint` (UTF-32) for CHAR.
  *
@@ -434,7 +434,7 @@ enum yetty_ymgui_wire_input_key_kind {
 struct yetty_ymgui_wire_input_key {
     uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_KEY */
     uint32_t version; /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;
+    uint32_t figure_id;
     uint32_t kind;      /* enum ymgui_wire_input_key_kind */
     int32_t key;        /* GLFW keycode, DOWN/UP only; -1 for CHAR */
     int32_t mods;       /* bitmask */

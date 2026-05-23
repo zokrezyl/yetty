@@ -373,7 +373,7 @@ static void prepare_cb(uv_prepare_t *handle)
                 engine->card_w = new_w;
                 engine->card_h = new_h;
                 struct yetty_ycore_void_result pr =
-                    yetty_ygui_osc_card_place(engine->output_pty, engine->card_id, engine->card_x,
+                    yetty_ygui_osc_card_place(engine->output_pty, engine->figure_id, engine->card_x,
                                               engine->card_y, (uint32_t)new_w, (uint32_t)new_h);
                 if (YETTY_IS_ERR(pr)) {
                     yerror("ygui_uv: card_place on SIGWINCH: %s", pr.error.msg);

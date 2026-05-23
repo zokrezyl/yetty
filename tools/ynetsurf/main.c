@@ -487,7 +487,7 @@ static int interactive_loop(struct yetty_ynetsurf *ns)
 
 	/* Subscribe to terminal-wide mouse + keyboard via the new
 	 * YMGUI_OSC_CS_TERM_INPUT_SUB channel — pane-pixel events,
-	 * card_id=0, fires regardless of card hit-test. yterm replies with
+	 * figure_id=0, fires regardless of card hit-test. yterm replies with
 	 * a YMGUI_OSC_SC_TERM_RESIZE giving the pane pixel size; our
 	 * on_osc handler picks that up and (re)sizes the NetSurf viewport. */
 	term_input_subscribe(YETTY_YMGUI_TERM_SUB_MOUSE_CLICK |

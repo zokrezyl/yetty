@@ -55,7 +55,6 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 
 target_link_libraries(ycompositor PRIVATE
-    yetty_ycompositor
     yetty_ygrid
     yetty_yfigure
     yetty_ydraw_core

@@ -22,10 +22,14 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ywire/wire-statemachine.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/ydraw-layer.h>
-#include <yetty/ycompositor/compositor.h>
+#include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/wire.h>
+#include <yetty/ygrid/ygrid.h>
 #include <yetty/yterm/ymgui-layer.h>
 #include <yetty/yterm/yrdawn-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
@@ -109,7 +113,7 @@ struct yetty_yterm_terminal {
 
     /* Terminal-wide input subscription (YMGUI_OSC_CS_TERM_INPUT_SUB).
      * Independent from the card-aware path above: when set, every mouse /
-     * key event ALSO fans out as YMGUI_OSC_SC_TERM_* tagged with card_id=0
+     * key event ALSO fans out as YMGUI_OSC_SC_TERM_* tagged with figure_id=0
      * and pane-local pixel coords. Programs that draw their own UI
      * directly into the pane (browser, file manager) subscribe via this
      * channel instead of registering a card. */
@@ -131,23 +135,24 @@ struct yetty_yterm_terminal {
    * Borrowed pointer — owned by the layers[] array. */
     struct yetty_yrender_terminal_layer *ymgui_layer;
 
-    /* The compositor. Owned directly (not via the layers[] array). The
-     * terminal drives it with explicit calls in the render loop and
-     * via the SM shim below for OSC routing. */
-    struct yetty_ycompositor *compositor;
+    /* Root container — replaces the legacy compositor. Holds every
+     * figure the producer addresses by id; consumes YCOMPOSITOR_BIN
+     * envelopes as `{length, id, payload}` record streams via the
+     * comp_sm_shim below. Owned directly. */
+    struct yetty_yfigure_container *root_container;
+    struct yetty_yfigure_registry *figure_registry;
 
-    /* Default MSDF font attached to every per-group ygrid the
-     * compositor creates (slot 0). Without it, TEXT_SPAN records from
-     * ygui subprocesses (ygreeter labels, button text, …) expand to
-     * zero glyphs. Owned by the terminal; teardown destroys the
-     * compositor first (cascades into per-group ygrids that hold
+    /* Default MSDF font attached to every ygrid the root container
+     * mints (registered as user-data on KIND_YGRID factory). Borrowed
+     * by each ygrid; terminal owns lifetime. Teardown destroys the
+     * root container first (cascades into per-figure ygrids that hold
      * borrowed refs to this font) then the font. */
     struct yetty_ydraw_font *compositor_font;
 
     /* Wire-SM shim. The SM only knows how to dispatch process_input
      * via terminal_layer.ops — this static-base instance forwards its
-     * process_input to yetty_ycompositor_process_input. It lives only
-     * for SM registration; never added to layers[]. */
+     * process_input to yetty_yfigure_container_consume_envelope. It
+     * lives only for SM registration; never added to layers[]. */
     struct yetty_yrender_terminal_layer comp_sm_shim;
 
     /* Cached text-layer pointer — needed by the YGRID_USE_NEW_OSC=1
@@ -391,23 +396,24 @@ static struct yetty_ycore_void_result terminal_layer_emit_osc(
     int osc_code, const void *payload, size_t len, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
+    ydebug("terminal_layer_emit_osc: code=%d payload_len=%zu", osc_code, len);
     struct yetty_ycore_void_result r =
         terminal_yface_emit(terminal, osc_code, payload, len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_layer_emit_osc: yface_emit failed");
     return YETTY_OK_VOID();
 }
 
-/* Card-aware mouse forwarding. Each emit carries a card_id and
- * card-local pixel coords. card_id=0 means "no card here" — clients
+/* Card-aware mouse forwarding. Each emit carries a figure_id and
+ * card-local pixel coords. figure_id=0 means "no card here" — clients
  * use that to clear their hover state. */
 static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
-    struct yetty_yterm_terminal *terminal, uint32_t card_id,
+    struct yetty_yterm_terminal *terminal, uint32_t figure_id,
     float lx, float ly, int button, int press, float wheel_dy)
 {
     struct yetty_ymgui_wire_input_mouse msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = card_id,
+        .figure_id = figure_id,
         .x = lx,
         .y = ly,
     };
@@ -427,13 +433,13 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
 }
 
 static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
-    struct yetty_yterm_terminal *terminal, uint32_t card_id,
+    struct yetty_yterm_terminal *terminal, uint32_t figure_id,
     float lx, float ly, int buttons_held)
 {
     struct yetty_ymgui_wire_input_mouse msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = card_id,
+        .figure_id = figure_id,
         .kind = YETTY_YMGUI_INPUT_MOUSE_POS,
         .button = -1,
         .buttons_held = (uint32_t)buttons_held,
@@ -446,7 +452,7 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
     return YETTY_OK_VOID();
 }
 
-/* Terminal-wide variants — same wire structs, card_id=0, pane-local px.
+/* Terminal-wide variants — same wire structs, figure_id=0, pane-local px.
  * Each is gated on a bit of terminal->term_input_sub_flags so an
  * uninterested subscriber doesn't receive (e.g.) wheel events when it
  * only asked for clicks + moves. */
@@ -462,7 +468,7 @@ static struct yetty_ycore_void_result terminal_emit_term_mouse_button(
     struct yetty_ymgui_wire_input_mouse msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = 0,
+        .figure_id = 0,
         .x = lx,
         .y = ly,
     };
@@ -490,7 +496,7 @@ static struct yetty_ycore_void_result terminal_emit_term_mouse_move(
     struct yetty_ymgui_wire_input_mouse msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = 0,
+        .figure_id = 0,
         .kind = YETTY_YMGUI_INPUT_MOUSE_POS,
         .button = -1,
         .buttons_held = (uint32_t)buttons_held,
@@ -504,7 +510,7 @@ static struct yetty_ycore_void_result terminal_emit_term_mouse_move(
 }
 
 /* Pane pixel size — emitted on subscribe (rising edge) and on resize so
- * subscribers can size their canvases. card_id=0 = pane-wide. */
+ * subscribers can size their canvases. figure_id=0 = pane-wide. */
 static struct yetty_ycore_void_result terminal_emit_term_resize(
     struct yetty_yterm_terminal *terminal, float w_px, float h_px)
 {
@@ -514,7 +520,7 @@ static struct yetty_ycore_void_result terminal_emit_term_resize(
     struct yetty_ymgui_wire_input_resize msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_RESIZE,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = 0,
+        .figure_id = 0,
         .width = w_px,
         .height = h_px,
     };
@@ -525,7 +531,7 @@ static struct yetty_ycore_void_result terminal_emit_term_resize(
 }
 
 /* Term-wide keyboard. Sent for any key (including with no card focused),
- * so console programs can do their own focus tracking. card_id=0. */
+ * so console programs can do their own focus tracking. figure_id=0. */
 static struct yetty_ycore_void_result terminal_emit_term_key(
     struct yetty_yterm_terminal *terminal, uint32_t kind, int key,
     int mods, uint32_t codepoint)
@@ -536,7 +542,7 @@ static struct yetty_ycore_void_result terminal_emit_term_key(
     struct yetty_ymgui_wire_input_key msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_KEY,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = 0,
+        .figure_id = 0,
         .kind = kind,
         .key = key,
         .mods = mods,
@@ -565,7 +571,7 @@ static struct yetty_yterm_ymgui_hit terminal_resolve_card_hit(struct yetty_yterm
         /* Drag: route to the captured card; project the cursor into its
      * local space even when the cursor leaves the card's rect. */
         hit = yetty_yterm_terminal_layer_ymgui_layer_hit_test(terminal->ymgui_layer, lx, ly);
-        if (hit.card_id == captured_card_id) {
+        if (hit.figure_id == captured_card_id) {
             return hit;
         }
         /* Cursor left the captured card. Report local coords by re-asking
@@ -597,7 +603,7 @@ static struct yetty_ycore_int_result terminal_emit_card_key(
     struct yetty_ymgui_wire_input_key msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_KEY,
         .version = YMGUI_WIRE_VERSION,
-        .card_id = focused,
+        .figure_id = focused,
         .kind = kind,
         .key = key,
         .mods = mods,
@@ -1136,12 +1142,13 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
             force = 1;
         }
     }
-    /* Compositor lives outside the layers[] array — its dirty bit
+    /* Root container lives outside the layers[] array — its dirty bit
      * also forces lower layers to redraw so its semi-transparent
      * figures composite over fresh background. */
-    if (!force && terminal->compositor &&
-        yetty_ycompositor_is_dirty(terminal->compositor)) {
-        force = 1;
+    if (!force && terminal->root_container) {
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(terminal->root_container);
+        if (rf && rf->dirty) force = 1;
     }
 
     for (size_t i = 0; i < terminal->layer_count; i++) {
@@ -1173,22 +1180,17 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     }
     ytime_report(layers);
 
-    /* Compositor renders LAST — it's the topmost root of the new
-     * rendering stack. Old layers (text / ydraw / ymgui / yrdawn)
-     * paint underneath; everything ygui drives via YCOMPOSITOR_BIN
-     * composes on top.
-     *
-     * No is_empty gate on purpose: when ygui CMD_DELETEs its last
-     * top-level group, the compositor goes empty but still carries
-     * residual damage (the rect we just removed). Calling
-     * compositor_render on the empty state lets it drain those flags
-     * — otherwise is_dirty() stays true forever and the layers below
-     * keep force-repainting every frame. */
-    if (terminal->compositor) {
-        struct yetty_ycore_int_result cr =
-            yetty_ycompositor_render(terminal->compositor, target, force);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
-                            "terminal_render_frame: compositor render failed");
+    /* Root container renders LAST — topmost of the new rendering
+     * stack. Old layers (text / ydraw / ymgui / yrdawn) paint
+     * underneath; everything addressed via YCOMPOSITOR_BIN figure
+     * records composes on top. */
+    if (terminal->root_container) {
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(terminal->root_container);
+        struct yetty_ycore_void_result rr = rf->ops->render(rf, target);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                            "terminal_render_frame: root container render");
+        rf->dirty = 0;
     }
 
     ydebug("terminal_render_frame: done (all %zu layers direct, no blend)", terminal->layer_count);
@@ -1219,7 +1221,21 @@ static struct yetty_ycore_void_result terminal_compositor_shim_process_input(
 {
     struct yetty_yterm_terminal *terminal =
         container_of(self, struct yetty_yterm_terminal, comp_sm_shim);
-    return yetty_ycompositor_process_input(terminal->compositor, sm);
+    ydebug("comp_sm_shim: process_input ENTRY root_container=%p", (void *)terminal->root_container);
+    if (!terminal->root_container)
+        return YETTY_ERR(yetty_ycore_void,
+                         "compositor shim: root_container not built");
+    /* Wire-SM contract: process_input loops forever, one envelope per
+     * iteration. consume_envelope returns when at_end is true; yield
+     * back to the SM scanner so it can re-arm us for the next OSC. */
+    for (;;) {
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_container_consume_envelope(
+                terminal->root_container, sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                            "comp_sm_shim: consume_envelope failed");
+        yetty_yplatform_coro_yield();
+    }
 }
 
 /* Terminal creation/destruction */
@@ -1462,30 +1478,17 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_BYE failed");
     ydebug("terminal_create: yrdawn layer registered for OSC 620000-620003");
 
-    /* Compositor — new positioned-figure root of the rendering stack.
-     * Owned directly by the terminal (NOT in the layers[] array). The
-     * render loop calls yetty_ycompositor_render after the existing
-     * layers; the wire SM dispatches OSC envelopes to it via the
-     * comp_sm_shim below. */
-    struct yetty_ycompositor_ptr_result comp_res = yetty_ycompositor_create(
-        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height,
-        yetty_context);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, comp_res,
-                        "terminal_create: ycompositor_create failed");
-    terminal->compositor = comp_res.value;
-    yetty_ycompositor_set_request_render(
-        terminal->compositor, terminal_request_render_callback, terminal);
-    ydebug("terminal_create: ycompositor created");
-
-    /* Default MSDF font for the compositor. ygui-emitting subprocesses
-     * (ygreeter, ytop, …) ship widget labels as TEXT_SPAN records; the
-     * compositor hands those to each per-group ygrid, which needs a
-     * font at slot 0 to expand them into renderable glyphs. Same path
-     * layout scrolling-canvas uses:
-     *   <paths/fonts>/../msdf-fonts/<family>-Regular.cdb
-     *   <paths/shaders>/msdf-font.wgsl
-     * Failure here is non-fatal — labels won't render, but the
-     * terminal stays up. */
+    /* Root container — new positioned-figure root of the rendering
+     * stack. Owned directly by the terminal (NOT in the layers[]
+     * array). The render loop calls root_container->ops->render after
+     * the existing layers; the wire SM dispatches OSC envelopes to it
+     * via the comp_sm_shim below.
+     *
+     * Default MSDF font: ygui-emitting subprocesses (ygreeter, ytop, …)
+     * ship widget labels as TEXT_SPAN records; each ygrid figure the
+     * container mints (KIND_YGRID factory) needs a font at slot 0 to
+     * expand them into renderable glyphs. Font load failure is
+     * non-fatal — labels won't render, but the terminal stays up. */
     {
         struct yetty_yconfig_config *config = yetty_context->runtime->config;
         const char *fonts_dir   = config->ops->get_string(config, "paths/fonts", "");
@@ -1498,29 +1501,52 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         snprintf(shader_path, sizeof(shader_path),
                  "%s/msdf-font.wgsl", shaders_dir);
         struct yetty_font_font_result font_res =
-            yetty_yfont_msdf_font_create(cdb_path, shader_path, "terminal_compositor");
+            yetty_yfont_msdf_font_create(cdb_path, shader_path, "terminal_root");
         if (YETTY_IS_OK(font_res)) {
             terminal->compositor_font = font_res.value;
             struct yetty_ycore_void_result load_res =
                 terminal->compositor_font->ops->load_basic_latin(terminal->compositor_font);
             if (YETTY_IS_ERR(load_res)) {
-                ywarn("terminal_create: compositor font load_basic_latin: %s",
+                ywarn("terminal_create: root font load_basic_latin: %s",
                       load_res.error.msg);
                 yetty_ycore_error_destroy(load_res.error);
             }
-            yetty_ycompositor_set_default_font(
-                terminal->compositor, terminal->compositor_font);
-            ydebug("terminal_create: ycompositor default font ready (%s)", cdb_path);
+            ydebug("terminal_create: root default font ready (%s)", cdb_path);
         } else {
-            ywarn("terminal_create: compositor font load failed (%s): %s",
+            ywarn("terminal_create: root font load failed (%s): %s",
                   cdb_path, font_res.error.msg);
             yetty_ycore_error_destroy(font_res.error);
         }
     }
 
+    struct yetty_yfigure_registry_ptr_result reg_res =
+        yetty_yfigure_registry_create();
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, reg_res,
+                        "terminal_create: figure registry create failed");
+    terminal->figure_registry = reg_res.value;
+    {
+        struct yetty_ycore_void_result rf = yetty_ygrid_register_factory(
+            terminal->figure_registry, terminal->compositor_font);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rf,
+                            "terminal_create: ygrid register_factory");
+    }
+
+    struct yetty_ycore_rectangle root_rect = {
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)cols * text_layer->cell_size.width,
+                .y = (float)rows * text_layer->cell_size.height},
+    };
+    struct yetty_yfigure_container_ptr_result cont_res =
+        yetty_yfigure_container_create(root_rect, yetty_context,
+                                       terminal->figure_registry);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, cont_res,
+                        "terminal_create: root_container create failed");
+    terminal->root_container = cont_res.value;
+    ydebug("terminal_create: root container ready");
+
     /* Wire-SM shim — the SM dispatches by `layer->ops->process_input`,
      * so the compositor (which is NOT a layer) is wrapped in a thin
-     * static terminal_layer that forwards to yetty_ycompositor_process_input.
+     * static terminal_layer that forwards to yetty_yfigure_container_consume_envelope.
      * The shim instance lives on the terminal struct; only its base
      * pointer is given to the SM. */
     terminal->comp_sm_shim.ops = terminal_compositor_shim_ops();
@@ -1594,19 +1620,27 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
     }
     ydebug("terminal_destroy: layers destroyed");
 
-    /* Destroy compositor (owned directly, not in layers[]). Cascades
-     * to its figures + ygrid children, which hold borrowed refs to
-     * the compositor_font — so the font is only safe to free after
-     * the compositor cascade completes. */
-    if (terminal->compositor) {
-        struct yetty_ycore_void_result r =
-            yetty_ycompositor_destroy(terminal->compositor);
+    /* Destroy root container (owned directly, not in layers[]).
+     * Cascades to its child figures, which hold borrowed refs to the
+     * compositor_font — so the font is only safe to free after the
+     * container cascade completes. The registry holds borrowed refs to
+     * the same font (factory user-data); destroy registry next. */
+    if (terminal->root_container) {
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(terminal->root_container);
+        struct yetty_ycore_void_result r = rf->ops->destroy(rf);
         if (YETTY_IS_ERR(r)) {
-            yerror("terminal_destroy: compositor destroy failed: %s", r.error.msg);
+            yerror("terminal_destroy: root_container destroy failed: %s", r.error.msg);
             if (!have_err) { first_err = r; have_err = true; }
             else yetty_ycore_error_destroy(r.error);
         }
-        terminal->compositor = NULL;
+        terminal->root_container = NULL;
+    }
+    if (terminal->figure_registry) {
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_registry_destroy(terminal->figure_registry);
+        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        terminal->figure_registry = NULL;
     }
     if (terminal->compositor_font) {
         terminal->compositor_font->ops->destroy(terminal->compositor_font);
@@ -1684,12 +1718,20 @@ struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
                                 "yetty_yterm_terminal_resize_grid: layer resize_grid failed");
         }
     }
-    /* Propagate to the compositor (lives outside layers[]). */
-    if (terminal->compositor) {
-        struct yetty_ycore_void_result r =
-            yetty_ycompositor_resize(terminal->compositor, grid_size, cell_size);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
-                            "yetty_yterm_terminal_resize_grid: compositor resize failed");
+    /* Root container has no grid-resize concept: each figure tracks
+     * its own rect via wire SET_CHILD_RECT records. On terminal resize
+     * the producer re-emits the layout in the new dims; the root
+     * container's own rect gets refreshed at viewport-offset push time. */
+    if (terminal->root_container) {
+        struct yetty_ycore_rectangle new_rect = {
+            .min = {.x = 0.0f, .y = 0.0f},
+            .max = {.x = (float)grid_size.cols * cell_size.width,
+                    .y = (float)grid_size.rows * cell_size.height},
+        };
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(terminal->root_container);
+        rf->rect = new_rect;
+        rf->dirty = 1;
     }
     return YETTY_OK_VOID();
 }
@@ -1808,8 +1850,9 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
      * origin into the compositor so it can shift incoming rects, keeping
      * the rendered pixels aligned with the mouse coords the input
      * pipeline subtracts (bounds.x/y) on the way down to the producer. */
-    if (terminal->compositor)
-        yetty_ycompositor_set_viewport_offset(terminal->compositor, bounds.x, bounds.y);
+    if (terminal->root_container)
+        yetty_yfigure_container_set_viewport_offset(
+            terminal->root_container, bounds.x, bounds.y);
 
     /* Fan out the new pane pixel size to any terminal-wide subscriber.
      * Card-aware subscribers get their per-card resize through a separate
@@ -2172,7 +2215,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
    *
    * Coordinates start window-absolute (GLFW pipe), get de-offset against
    * view bounds for terminal-local pane pixels, then hit-tested against
-   * the ymgui-layer's card registry. Each emit carries a card_id and
+   * the ymgui-layer's card registry. Each emit carries a figure_id and
    * card-local coords so the client never has to know where its cards
    * sit in the pane.
    *
@@ -2295,16 +2338,16 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 if (terminal->ymgui_layer) {
                     struct yetty_ycore_void_result fr =
                         yetty_yterm_terminal_layer_ymgui_layer_set_focus(terminal->ymgui_layer,
-                                                                         hit.card_id);
+                                                                         hit.figure_id);
                     YETTY_RETURN_IF_ERR(yetty_ycore_int, fr,
                                         "terminal_view_on_event: ymgui_layer_set_focus failed");
                 }
             } else {
                 hit = terminal_resolve_card_hit(terminal, lx, ly, focused);
             }
-            if (hit.card_id != 0) {
+            if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
-                    terminal, hit.card_id, hit.local_x, hit.local_y, btn, press, 0.0f);
+                    terminal, hit.figure_id, hit.local_x, hit.local_y, btn, press, 0.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
                                     "terminal_view_on_event: emit_card_mouse_button failed");
             }
@@ -2366,9 +2409,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             }
             struct yetty_yterm_ymgui_hit hit =
                 terminal_resolve_card_hit(terminal, lx, ly, captured);
-            if (hit.card_id != 0) {
+            if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
-                    terminal, hit.card_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
+                    terminal, hit.figure_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
                                     "terminal_view_on_event: emit_card_mouse_move failed");
             }
@@ -2407,9 +2450,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             int delivered = 0;
             if (terminal->mouse_click_subscribed) {
                 struct yetty_yterm_ymgui_hit hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
-                if (hit.card_id != 0) {
+                if (hit.figure_id != 0) {
                     struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
-                        terminal, hit.card_id, hit.local_x, hit.local_y,
+                        terminal, hit.figure_id, hit.local_x, hit.local_y,
                         0, 0, event->mouse_scroll.dy);
                     YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
                                         "terminal_view_on_event: emit_card_mouse_button (wheel) failed");

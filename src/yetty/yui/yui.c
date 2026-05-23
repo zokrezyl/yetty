@@ -21,7 +21,10 @@
 #include <yetty/ygui/ygui_internal.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yruntime/yruntime.h>
-#include <yetty/ycompositor/compositor.h>
+#include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/wire.h>
+#include <yetty/ygrid/ygrid.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
@@ -45,13 +48,13 @@
 #include "tabbar.h"
 
 struct yetty_yui {
-    /* yui's own ycompositor — owns the per-widget yfigure_group / ygrid
-     * figures that ygui's wire emission creates via process_records.
-     * Renders LAST in the frame so the chrome (titlebar / tabbar /
-     * menus / dialogs / splitters) sits above terminal panes painted
-     * earlier. Kept separate from the terminal's compositor to keep
-     * CMD_ZERO scoped to yui's own groups. */
-    struct yetty_ycompositor *compositor;
+    /* yui's own root container — owns the per-widget ygrid figures
+     * that ygui's wire emission creates via process_records. Renders
+     * LAST in the frame so the chrome sits above terminal panes
+     * painted earlier. Kept separate from the terminal's root
+     * container to keep CLEAR_ALL scoped to yui's own children. */
+    struct yetty_yfigure_container *root_container;
+    struct yetty_yfigure_registry *figure_registry;
 
     /* Default MSDF font attached to every per-group ygrid the
      * compositor creates (slot 0). yui owns lifetime; teardown
@@ -425,30 +428,13 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->cell_w = cell_w;
     yui->cell_h = cell_h;
 
-    /* yui's own compositor. Grid stride matches the framebuffer so the
-     * per-group ygrid shaders' NDC→pixel mapping is 1:1 — primitives
-     * pinned to the edges (statusbar at H-22, etc.) land where the
-     * widgets say they should. The compositor receives wire bytes
-     * straight from ygui's engine_rebuild buffer via process_records
-     * each frame; no PTY, no OSC. */
-    uint32_t cols = (uint32_t)((float)surface_w / cell_w + 0.5f);
-    uint32_t rows = (uint32_t)((float)surface_h / cell_h + 0.5f);
-    if (cols == 0) cols = 1;
-    if (rows == 0) rows = 1;
-    float actual_cell_w = (float)surface_w / (float)cols;
-    float actual_cell_h = (float)surface_h / (float)rows;
-    struct yetty_ycompositor_ptr_result cr =
-        yetty_ycompositor_create(cols, rows, actual_cell_w, actual_cell_h, context);
-    if (!YETTY_IS_OK(cr)) {
-        free(yui);
-        return YETTY_ERR(yetty_yui_ptr, "yui_create: compositor create", cr);
-    }
-    yui->compositor = cr.value;
+    /* yui's own root container. Receives wire bytes straight from
+     * ygui's engine_rebuild buffer via process_records each frame; no
+     * PTY, no OSC. */
 
-    /* Default MSDF font handed to every per-group ygrid the compositor
-     * creates. Without it, TEXT_SPAN records expand to zero glyphs and
-     * widget labels are blank. Path layout mirrors scrolling-canvas
-     * (`<fonts_dir>/../msdf-fonts/<family>-Regular.cdb`). */
+    /* Default MSDF font handed to every ygrid figure the root mints
+     * (KIND_YGRID factory's user-data). Without it, TEXT_SPAN records
+     * expand to zero glyphs and widget labels are blank. */
     {
         struct yetty_yconfig_config *config = context->runtime->config;
         const char *fonts_dir   = config->ops->get_string(config, "paths/fonts", "");
@@ -463,7 +449,6 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         struct yetty_font_font_result fr =
             yetty_yfont_msdf_font_create(cdb_path, shader_path, "yui_default");
         if (!YETTY_IS_OK(fr)) {
-            yetty_ycompositor_destroy(yui->compositor);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: msdf_font_create", fr);
         }
@@ -471,11 +456,43 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         struct yetty_ycore_void_result load = yui->font->ops->load_basic_latin(yui->font);
         if (!YETTY_IS_OK(load)) {
             yui->font->ops->destroy(yui->font);
-            yetty_ycompositor_destroy(yui->compositor);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: load_basic_latin", load);
         }
-        yetty_ycompositor_set_default_font(yui->compositor, yui->font);
+    }
+
+    /* Build registry + register ygrid factory with the default font as
+     * user-data, then the root container that consumes ygui's records. */
+    {
+        struct yetty_yfigure_registry_ptr_result reg_res =
+            yetty_yfigure_registry_create();
+        if (!YETTY_IS_OK(reg_res)) {
+            yui->font->ops->destroy(yui->font);
+            free(yui);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: registry", reg_res);
+        }
+        yui->figure_registry = reg_res.value;
+        struct yetty_ycore_void_result rf = yetty_ygrid_register_factory(
+            yui->figure_registry, yui->font);
+        if (!YETTY_IS_OK(rf)) {
+            yetty_yfigure_registry_destroy(yui->figure_registry);
+            yui->font->ops->destroy(yui->font);
+            free(yui);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory", rf);
+        }
+        struct yetty_ycore_rectangle root_rect = {
+            .min = {.x = 0.0f, .y = 0.0f},
+            .max = {.x = (float)surface_w, .y = (float)surface_h},
+        };
+        struct yetty_yfigure_container_ptr_result cr =
+            yetty_yfigure_container_create(root_rect, context, yui->figure_registry);
+        if (!YETTY_IS_OK(cr)) {
+            yetty_yfigure_registry_destroy(yui->figure_registry);
+            yui->font->ops->destroy(yui->font);
+            free(yui);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: root_container", cr);
+        }
+        yui->root_container = cr.value;
     }
 
     /* Producer engine. yui is in-process — no parent yetty over a pty,
@@ -637,7 +654,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             /*w=*/560.0f, /*h=*/360.0f, "GPU info");
         yui->gpu_info_dialog = gpu_dlg;
         if (gpu_dlg) {
-            yetty_ygui_widget_set_visible(gpu_dlg, 0);
+            /* TEMP DEBUG: force-visible at startup for wire capture. */
+            yetty_ygui_widget_set_visible(gpu_dlg, getenv("YUI_DEBUG_OPEN_GPU_DIALOG") ? 1 : 0);
             struct yetty_ygui_widget *body = yetty_ygui_widget_window_body(gpu_dlg);
             if (body) {
                 yetty_ygui_widget_apply_css(body,
@@ -756,7 +774,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
      * and is a no-op until the model is non-NULL. */
     yui_titlebar_build(yui);
 
-    ydebug("yui_create: grid=%ux%u cell=%.1fx%.1f", cols, rows, cell_w, cell_h);
+    ydebug("yui_create: surface=%ux%u cell=%.1fx%.1f", surface_w, surface_h, cell_w, cell_h);
     return YETTY_OK(yetty_yui_ptr, yui);
 }
 
@@ -803,16 +821,24 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
      * struct). NULL-safe. */
     yetty_yui_config_dialog_destroy(yui->config_dialog);
     yui->config_dialog = NULL;
-    /* Compositor first — cascades destroy into the per-widget
-     * yfigure_group + ygrid figures it created (which hold borrowed
-     * refs to yui->font). After that the font is safe to free. */
-    if (yui->compositor) {
-        struct yetty_ycore_void_result r = yetty_ycompositor_destroy(yui->compositor);
+    /* Root container first — cascades destroy into the per-widget
+     * ygrid figures it minted (which hold borrowed refs to yui->font).
+     * Then registry. Then font. */
+    if (yui->root_container) {
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(yui->root_container);
+        struct yetty_ycore_void_result r = rf->ops->destroy(rf);
         if (!YETTY_IS_OK(r)) {
-            ywarn("yui_destroy: compositor destroy: %s", r.error.msg);
+            ywarn("yui_destroy: root_container destroy: %s", r.error.msg);
             yetty_ycore_error_destroy(r.error);
         }
-        yui->compositor = NULL;
+        yui->root_container = NULL;
+    }
+    if (yui->figure_registry) {
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_registry_destroy(yui->figure_registry);
+        if (!YETTY_IS_OK(r)) yetty_ycore_error_destroy(r.error);
+        yui->figure_registry = NULL;
     }
     if (yui->font) {
         yui->font->ops->destroy(yui->font);
@@ -1071,7 +1097,7 @@ static void yui_splitter_on_change(struct yetty_ygui_widget *widget, float delta
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
                                                 struct yetty_ydraw_target *target)
 {
-    if (!yui || !yui->compositor || !target) {
+    if (!yui || !yui->root_container || !target) {
         return YETTY_OK_VOID();
     }
 
@@ -1098,7 +1124,7 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
     if (yui->engine && yetty_ygui_engine_is_dirty(yui->engine)) {
         yetty_ydraw_draw_list_clear(yui->engine->buffer);
         struct yetty_ycore_void_result zr =
-            yetty_ydraw_draw_list_add_cmd_zero(yui->engine->buffer);
+            yetty_ydraw_draw_list_add_admin_clear_all(yui->engine->buffer);
         if (YETTY_IS_ERR(zr)) {
             yetty_ycore_error_destroy(zr.error);
         }
@@ -1110,8 +1136,31 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
             const uint8_t *bytes =
                 (const uint8_t *)yetty_ydraw_draw_list_data(yui->engine->buffer);
             size_t size = yetty_ydraw_draw_list_size(yui->engine->buffer);
+            /* Optional dump of the raw record stream for diagnosis with
+             * tools/osc-analyzer --raw. Activated via env var so the
+             * normal hot-path stays branch-free. The file is overwritten
+             * on each frame — point at /tmp/yui-records.bin and decode
+             * with `osc-analyzer -r /tmp/yui-records.bin`. */
+            const char *dump_path = getenv("YUI_DUMP_RECORDS");
+            if (dump_path && dump_path[0]) {
+                /* Append mode + per-frame separator so multiple frames
+                 * can be captured and decoded together by osc-analyzer
+                 * --raw. The separator is the bytes "===FRAME===" — not
+                 * a valid record header (length would be 0x4d415246
+                 * ~ 1.3 GB which fails the length check immediately).
+                 * osc-analyzer --raw reports the walker error and stops
+                 * cleanly; the file content of EACH frame can still be
+                 * inspected by grep / xxd. */
+                FILE *df = fopen(dump_path, "ab");
+                if (df) {
+                    fwrite("===FRAME===\n", 1, 12, df);
+                    fwrite(bytes, 1, size, df);
+                    fclose(df);
+                }
+            }
             struct yetty_ycore_void_result pr =
-                yetty_ycompositor_process_records(yui->compositor, bytes, size);
+                yetty_yfigure_container_process_records(
+                    yui->root_container, bytes, size);
             if (YETTY_IS_ERR(pr)) {
                 ywarn("yui_render: process_records: %s", pr.error.msg);
                 yetty_ycore_error_destroy(pr.error);
@@ -1119,14 +1168,16 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
         }
     }
 
-    /* yui's compositor is the topmost paint in the frame — terminal
+    /* yui's root container is the topmost paint in the frame — terminal
      * panes paint into the shared big_target with LoadOp_Load first;
-     * yui's compositor adds its chrome on top. force=1 because RENDER
-     * events fire only when something is dirty, and by that point the
-     * chrome region has been disturbed by an earlier pane repaint. */
-    struct yetty_ycore_int_result rr =
-        yetty_ycompositor_render(yui->compositor, target, /*force=*/1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui compositor render");
+     * yui's chrome figures paint on top. */
+    {
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(yui->root_container);
+        struct yetty_ycore_void_result rr = rf->ops->render(rf, target);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui root_container render");
+        rf->dirty = 0;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -2058,29 +2109,27 @@ void yetty_yui_set_split_callback(struct yetty_yui *yui, yetty_yui_split_cb cb, 
 struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t surface_w,
                                                 uint32_t surface_h)
 {
-    if (!yui || !yui->compositor) {
+    if (!yui || !yui->root_container) {
         return YETTY_OK_VOID();
     }
-    if (surface_w == 0 || surface_h == 0 || yui->cell_w <= 0.0f || yui->cell_h <= 0.0f) {
+    if (surface_w == 0 || surface_h == 0) {
         return YETTY_OK_VOID();
     }
-    /* Round the requested cell stride against the new framebuffer,
-     * then re-derive actual cell stride so cols*cell_w == surface_w
-     * and rows*cell_h == surface_h. */
-    uint32_t cols = (uint32_t)((float)surface_w / yui->cell_w + 0.5f);
-    uint32_t rows = (uint32_t)((float)surface_h / yui->cell_h + 0.5f);
-    if (cols == 0) cols = 1;
-    if (rows == 0) rows = 1;
-    struct yetty_ycore_pixel_size actual_cs = {
-        .width = (float)surface_w / (float)cols,
-        .height = (float)surface_h / (float)rows,
-    };
     yui->surface_w = (float)surface_w;
     yui->surface_h = (float)surface_h;
     if (yui->engine) {
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
     }
-    struct yetty_ycore_grid_size gs = {.cols = cols, .rows = rows};
-    return yetty_ycompositor_resize(yui->compositor, gs, actual_cs);
+    /* Refresh the root container's rect to the new framebuffer extent;
+     * child figures track their own rects via wire SET_CHILD_RECT
+     * records when ygui re-emits at the new layout. */
+    struct yetty_yfigure_figure *rf =
+        yetty_yfigure_container_as_figure(yui->root_container);
+    rf->rect = (struct yetty_ycore_rectangle){
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)surface_w, .y = (float)surface_h},
+    };
+    rf->dirty = 1;
+    return YETTY_OK_VOID();
 }
 

@@ -42,6 +42,22 @@ extern "C" {
 
 struct yetty_ygrid_grid;
 struct yetty_ydraw_font;
+struct yetty_yfigure_registry;
+
+/* Register the ygrid factory under YETTY_YFIGURE_KIND_YGRID with the
+ * given registry. Subsequent admin CREATE_CHILD records with kind=YGRID
+ * land in the factory, which mints a ygrid at the supplied rect using
+ * default grid dims (1x1 — the ygrid is for flat prims; cell bucketing
+ * isn't useful for arbitrary widget rects). `default_font` is borrowed
+ * and attached to slot 0 of every ygrid the factory creates so
+ * TEXT_SPAN records can expand into glyphs. Pass NULL for no font
+ * (glyph records will silently drop).
+ *
+ * `default_font` lifetime must outlive every ygrid created via this
+ * factory. */
+struct yetty_ycore_void_result yetty_ygrid_register_factory(
+    struct yetty_yfigure_registry *registry,
+    struct yetty_ydraw_font *default_font);
 
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 

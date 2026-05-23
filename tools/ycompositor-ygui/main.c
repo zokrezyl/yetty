@@ -6,7 +6,7 @@
  * render target + compositor render loop) but instead of a hand-built
  * ygrid full of SDF primitives this tool spins up a headless ygui
  * engine, builds a tiny widget tree, and pushes the engine's
- * draw_list bytes through yetty_ycompositor_process_records.
+ * draw_list bytes through root container_process_records.
  *
  * On every RESIZE event the surface is reconfigured, the engine's
  * display pixel size is updated, and the ygui scene is re-emitted
@@ -22,7 +22,10 @@
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ycompositor/compositor.h>
+#include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/wire.h>
+#include <yetty/ygrid/ygrid.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfigure/figure.h>
@@ -55,7 +58,8 @@ struct ycomp_ygui_app {
     struct yetty_context       ctx;
     struct yetty_yruntime     *yrt;
     struct yetty_ydraw_target *target;
-    struct yetty_ycompositor  *comp;
+    struct yetty_yfigure_container *root;
+    struct yetty_yfigure_registry *registry;
     struct yetty_ygui_engine  *ygui;
     /* Borrowed pointer to the outer window so we can resize it to the
      * canvas dims on every push (ygui doesn't auto-fill via CSS in
@@ -191,8 +195,8 @@ static struct yetty_ycore_void_result push_ygui_scene(struct ycomp_ygui_app *app
     }
     yetty_ydraw_draw_list_clear(app->ygui->buffer);
     struct yetty_ycore_void_result zr =
-        yetty_ydraw_draw_list_add_cmd_zero(app->ygui->buffer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "push_ygui_scene: add CMD_ZERO");
+        yetty_ydraw_draw_list_add_admin_clear_all(app->ygui->buffer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "push_ygui_scene: add CLEAR_ALL");
     struct yetty_ycore_void_result rr = yetty_ygui_engine_rebuild(app->ygui);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "push_ygui_scene: engine_rebuild");
     const uint8_t *bytes =
@@ -200,7 +204,7 @@ static struct yetty_ycore_void_result push_ygui_scene(struct ycomp_ygui_app *app
     size_t size = yetty_ydraw_draw_list_size(app->ygui->buffer);
     yinfo("ycompositor-ygui: feeding %zu ygui wire bytes through process_records",
           size);
-    return yetty_ycompositor_process_records(app->comp, bytes, size);
+    return yetty_yfigure_container_process_records(app->root, bytes, size);
 }
 
 static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_event *ev)
@@ -229,15 +233,18 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
             yerror("ycompositor-ygui: render_target resize failed: %s", tr.error.msg);
             yetty_ycore_error_destroy(tr.error);
         }
-        /* Compositor sized in cells of 1 px each — cell sizing only
-         * matters for the OSC wire path, which we bypass via direct
-         * process_records calls. resize() here just damages every
-         * existing figure so the next frame redraws them. */
-        struct yetty_ycore_grid_size gs = {.cols = w, .rows = h};
-        struct yetty_ycore_pixel_size cs = {.width = 1.0f, .height = 1.0f};
-        struct yetty_ycore_void_result cr = yetty_ycompositor_resize(app->comp, gs, cs);
+        /* Root container's rect tracks the framebuffer. The producer
+         * re-emits the scene at the new dims; child figures move via
+         * SET_CHILD_RECT records embedded in that re-emit. */
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(app->root);
+        rf->rect = (struct yetty_ycore_rectangle){
+            .min = {.x = 0.0f, .y = 0.0f}, .max = {.x = (float)w, .y = (float)h},
+        };
+        rf->dirty = 1;
+        struct yetty_ycore_void_result cr = YETTY_OK_VOID();
         if (YETTY_IS_ERR(cr)) {
-            yerror("ycompositor-ygui: compositor resize failed: %s", cr.error.msg);
+            yerror("ycompositor-ygui: root resize failed: %s", cr.error.msg);
             yetty_ycore_error_destroy(cr.error);
         }
         struct yetty_ycore_void_result pr = push_ygui_scene(app);
@@ -335,15 +342,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "texture target create failed");
     app->target = tr.value;
 
-    struct yetty_ycompositor_ptr_result cr = yetty_ycompositor_create(
-        app->surface_w, app->surface_h, 1.0f, 1.0f, &app->ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ycompositor_create failed");
-    app->comp = cr.value;
-
-    /* Load the default MSDF font once and pre-cache basic-latin so the
-     * compositor can hand it to every per-group ygrid (slot 0) it
-     * creates. Without this the button labels (TEXT_SPAN records)
-     * silently drop every glyph and we see only the button chrome. */
+    /* Load font first — it's needed as user-data for the ygrid factory. */
     {
         struct yetty_yconfig_config *config = app->yrt->config;
         const char *fonts_dir   = config->ops->get_string(config, "paths/fonts", "");
@@ -363,8 +362,25 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         struct yetty_ycore_void_result load_result =
             app->font->ops->load_basic_latin(app->font);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, load_result, "font load_basic_latin failed");
-        yetty_ycompositor_set_default_font(app->comp, app->font);
     }
+
+    /* Registry + root container — ygui will emit CREATE_CHILD records
+     * targeting KIND_YGRID for each widget. */
+    struct yetty_yfigure_registry_ptr_result reg_r =
+        yetty_yfigure_registry_create();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
+    app->registry = reg_r.value;
+    struct yetty_ycore_void_result rf =
+        yetty_ygrid_register_factory(app->registry, app->font);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ygrid_register_factory failed");
+    struct yetty_ycore_rectangle root_rect = {
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h},
+    };
+    struct yetty_yfigure_container_ptr_result cr =
+        yetty_yfigure_container_create(root_rect, &app->ctx, app->registry);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "root_container create failed");
+    app->root = cr.value;
 
     /* Headless ygui engine — same path yui uses (no libuv loop, no
      * PTY handshake). Built once at startup; the widget tree stays
@@ -403,8 +419,9 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         if (rt->instance) {
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
-        if (!(needs_render || had_events ||
-              yetty_ycompositor_is_dirty(app->comp))) {
+        struct yetty_yfigure_figure *rrf =
+            yetty_yfigure_container_as_figure(app->root);
+        if (!(needs_render || had_events || rrf->dirty)) {
             continue;
         }
 
@@ -414,11 +431,12 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
             yerror("ycompositor-ygui: clear failed: %s", cl.error.msg);
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_int_result rr =
-            yetty_ycompositor_render(app->comp, target, /*force=*/1);
+        struct yetty_ycore_void_result rr = rrf->ops->render(rrf, target);
         if (YETTY_IS_ERR(rr)) {
-            yerror("ycompositor-ygui: compositor render failed: %s", rr.error.msg);
+            yerror("ycompositor-ygui: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
+        } else {
+            rrf->dirty = 0;
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) {
@@ -428,11 +446,21 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         needs_render = 0;
     }
 
-    /* Teardown — compositor first so any pending GPU work bound to
-     * the runtime's device flushes before yruntime_destroy. */
-    struct yetty_ycore_void_result dr = yetty_ycompositor_destroy(app->comp);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "compositor destroy");
-    app->comp = NULL;
+    /* Teardown — root container first so any pending GPU work bound
+     * to the runtime's device flushes before yruntime_destroy. */
+    {
+        struct yetty_yfigure_figure *rrf =
+            yetty_yfigure_container_as_figure(app->root);
+        struct yetty_ycore_void_result dr = rrf->ops->destroy(rrf);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
+    }
+    app->root = NULL;
+    if (app->registry) {
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_registry_destroy(app->registry);
+        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        app->registry = NULL;
+    }
 
     app->target->ops->destroy(app->target);
     app->target = NULL;

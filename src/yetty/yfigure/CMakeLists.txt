@@ -1,5 +1,6 @@
 add_library(yetty_yfigure STATIC
-    group.c
+    container.c
+    registry.c
 )
 
 target_include_directories(yetty_yfigure PUBLIC
@@ -8,4 +9,5 @@ target_include_directories(yetty_yfigure PUBLIC
 
 target_link_libraries(yetty_yfigure PUBLIC
     yetty_ycore
+    yetty_ywire
 )

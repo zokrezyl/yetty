@@ -3,6 +3,7 @@
  */
 
 #include "ygui_internal.h"
+#include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -173,44 +174,36 @@ uint32_t yetty_ygui_widget_open_group(
     if (!self->dirty && !ctx->force_full_redraw) {
         return YETTY_YGUI_GROUP_SKIPPED;
     }
-    /* In incremental mode, the receiver's existing entity for this
-     * group_id must be wiped before we re-emit a fresh GROUP. CMD_ZERO
-     * at the envelope head (force_full_redraw=1) handles this for the
-     * whole canvas at once, so no per-widget DELETE is needed there. */
-    if (!ctx->force_full_redraw) {
+    /* Always emit DELETE before CREATE — idempotent. In full-redraw
+     * mode the envelope head already CLEAR_ALL'd everything; the
+     * extra DELETE_CHILD record on a non-existent id is a benign no-op
+     * on the receiver (the container's remove_child_by_id returns OK
+     * for unbound ids). */
+    {
         struct yetty_ycore_void_result dr =
-            yetty_ydraw_draw_list_add_cmd_delete(ctx->buffer, self->group_id);
+            yetty_ydraw_draw_list_add_admin_delete_child(ctx->buffer, self->group_id);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
     }
 
-    /* Group rect choice depends on whether ancestors are on the wire
-     * in the same envelope:
+    /* New wire: every widget is a TOP-LEVEL child of the root container
+     * with ABSOLUTE coords. The layout pass resolved effective_x/y as
+     * `self->x + sum(ancestor x's)` — use that for the figure rect.
+     * No nesting on the wire, no parent-chain accumulation.
      *
-     *  - Full-redraw: every visible widget emits, so ancestor CMD_GROUPs
-     *    nest around this one and the receiver accumulates their
-     *    parent-relative rects into an absolute origin. We emit
-     *    PARENT-RELATIVE (self->x, self->y) — the receiver does the
-     *    accumulation.
-     *
-     *  - Incremental (only dirty widget emits): clean ancestors are
-     *    skipped, so the dirty widget arrives at the top level of the
-     *    wire envelope without any parent chain for the receiver to
-     *    accumulate. We must emit ABSOLUTE (effective_x, effective_y)
-     *    — the layout pass already computed it as
-     *      effective_x = self->x + sum(ancestor x's)
-     *
-     * Body prim coords stay widget-local in both modes — the
-     * ctx->offset_x = -self->x trick below makes `render_box(self->x +
-     * dx, …)` write `dx` on the wire, which is correct because the
-     * receiver's figure rect provides the origin in either path. */
-    float gx = ctx->force_full_redraw ? (float)self->x : (float)self->effective_x;
-    float gy = ctx->force_full_redraw ? (float)self->y : (float)self->effective_y;
+     * Body prim coords stay widget-local. Render fns call
+     * `render_box(self->x + dx, …)` with self->x in PARENT-local space,
+     * so offset by -self->x to land at widget-local `dx` on the wire.
+     * (effective_x would only cancel for top-level widgets.) */
+    float gx = (float)self->effective_x;
+    float gy = (float)self->effective_y;
     float gw = (float)self->layout_w;
     float gh = (float)self->layout_h;
-    struct yetty_ydraw_id_result mark_res = yetty_ydraw_draw_list_begin_group_with_rect(
-        ctx->buffer, self->group_id, gx, gy, gw, gh);
+    struct yetty_ydraw_id_result mark_res =
+        yetty_ydraw_draw_list_begin_admin_create_child(
+            ctx->buffer, self->group_id, YETTY_YFIGURE_KIND_YGRID,
+            gx, gy, gx + gw, gy + gh);
     if (YETTY_IS_ERR(mark_res)) {
         yetty_ycore_error_destroy(mark_res.error);
         return YETTY_YGUI_GROUP_SKIPPED;
@@ -240,7 +233,8 @@ void yetty_ygui_widget_close_group(
     if (!ctx || !ctx->buffer || marker == YETTY_YGUI_GROUP_SKIPPED) {
         return;
     }
-    struct yetty_ycore_void_result er = yetty_ydraw_draw_list_end_group(ctx->buffer, marker);
+    struct yetty_ycore_void_result er =
+        yetty_ydraw_draw_list_end_admin_create_child(ctx->buffer, marker);
     if (YETTY_IS_ERR(er)) {
         yetty_ycore_error_destroy(er.error);
     }
@@ -276,13 +270,21 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
     self->was_rendered = 1;
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
-    /* Open this widget's CMD_GROUP (rect = parent-relative (self->x,
-     * self->y, …)), emit body, recurse into children INSIDE the open
-     * group scope so each child's CMD_GROUP nests properly, then close.
-     * The wire structure mirrors the UI hierarchy 1:1. */
-    uint32_t marker = yetty_ygui_widget_open_group(
-        self, ctx,
-        self->vtable && self->vtable->render ? self->vtable->render : NULL);
+    /* Open this widget's CREATE_CHILD record, emit my own body, close it
+     * — THEN recurse into children at the ROOT envelope level. The new
+     * wire is flat: each widget produces exactly one CREATE_CHILD record
+     * at the root container's level. Children's records aren't nested
+     * inside parents' bodies any more (the ygrid figure body is a flat
+     * stream of SDF/glyph records, no nested admin allowed). The UI
+     * hierarchy is preserved purely by the order in which records
+     * arrive — siblings render in z-order; absolute coords come from
+     * the layout pass (effective_x/y). */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(
+            self, ctx,
+            self->vtable && self->vtable->render ? self->vtable->render : NULL);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
 
     for (struct yetty_ygui_widget *child = self->first_child; child;
          child = child->next_sibling) {
@@ -303,8 +305,6 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
             }
         }
     }
-
-    yetty_ygui_widget_close_group(self, ctx, marker);
 
     return first_err;
 }
