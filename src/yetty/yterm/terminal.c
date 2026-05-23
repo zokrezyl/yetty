@@ -23,6 +23,9 @@
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
+#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/yplot/yplot-gen.h>
+#include <yetty/yimage/yimage-gen.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/ydraw-layer.h>
@@ -148,6 +151,18 @@ struct yetty_yterm_terminal {
      * root container first (cascades into per-figure ygrids that hold
      * borrowed refs to this font) then the font. */
     struct yetty_ydraw_font *compositor_font;
+
+    /* Complex-prim factory (yplot / yimage / yvideo / yzoo / yjungle …).
+     * One instance per terminal — every ygrid the root container mints
+     * borrows the same pointer via figure_args (below) so they all share
+     * the same per-type pipeline cache. */
+    struct yetty_ydraw_raw_figure_factory *figure_factory;
+
+    /* Bundle handed as registry user-data on every kind ygrid handles.
+     * Lives on the terminal because the registry stores a pointer to it,
+     * and the host has to outlive every ygrid the registry might still
+     * mint. */
+    struct yetty_ygrid_factory_args figure_args;
 
     /* Wire-SM shim. The SM only knows how to dispatch process_input
      * via terminal_layer.ops — this static-base instance forwards its
@@ -1532,6 +1547,37 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         }
     }
 
+    /* Complex-prim factory — handles yplot/yimage/yvideo prims that
+     * arrive embedded in YPLOT/YIMAGE/... figure payloads. Each
+     * concrete factory (yplot_factory_create etc.) builds its own
+     * pipeline lazily on the first create_instance call. */
+    {
+        struct yetty_ydraw_raw_figure_factory_ptr_result ffr =
+            yetty_ydraw_raw_figure_factory_create(
+                yetty_context->runtime->gpu.device,
+                yetty_context->runtime->gpu.queue,
+                yetty_context->runtime->gpu.surface_format,
+                yetty_context->runtime->gpu.allocator,
+                yetty_context->event_loop);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ffr,
+                            "terminal_create: raw_figure_factory create");
+        terminal->figure_factory = ffr.value;
+        struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
+        if (yplot_f) {
+            struct yetty_ycore_void_result rr = yetty_ydraw_raw_figure_factory_register(
+                terminal->figure_factory, yplot_f);
+            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        }
+        struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
+        if (yimage_f) {
+            struct yetty_ycore_void_result rr = yetty_ydraw_raw_figure_factory_register(
+                terminal->figure_factory, yimage_f);
+            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        }
+    }
+    terminal->figure_args.default_font = terminal->compositor_font;
+    terminal->figure_args.figure_factory = terminal->figure_factory;
+
     struct yetty_yfigure_registry_ptr_result reg_res =
         yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, reg_res,
@@ -1539,14 +1585,14 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     terminal->figure_registry = reg_res.value;
     {
         struct yetty_ycore_void_result rf = yetty_ygrid_register_factory(
-            terminal->figure_registry, terminal->compositor_font);
+            terminal->figure_registry, &terminal->figure_args);
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rf,
                             "terminal_create: ygrid register_factory");
         /* Producer-widget kinds reuse the ygrid factory today (same SDF /
          * glyph prim stream) but ship under distinct kind codes on the
-         * wire — see yfigure/wire.h. Once a kind-specific renderer lands
-         * (e.g. yvideo's NV12 sampling path), it can replace these one by
-         * one without touching the producers. */
+         * wire — see yfigure/wire.h. The complex-prim factory in figure_args
+         * lets each ygrid render yplot/yimage/etc. instances embedded in
+         * the prim stream. */
         static const uint32_t producer_kinds[] = {
             YETTY_YFIGURE_KIND_YPLOT,
             YETTY_YFIGURE_KIND_YIMAGE,
@@ -1556,7 +1602,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         };
         for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                terminal->figure_registry, producer_kinds[i], terminal->compositor_font);
+                terminal->figure_registry, producer_kinds[i], &terminal->figure_args);
             YETTY_RETURN_IF_ERR(yetty_yterm_terminal, kr,
                                 "terminal_create: ygrid register_factory_for_kind");
         }
@@ -1672,6 +1718,13 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
             yetty_yfigure_registry_destroy(terminal->figure_registry);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         terminal->figure_registry = NULL;
+    }
+    /* The complex-prim factory outlives the registry — every ygrid the
+     * registry minted borrowed our factory pointer, and they must be
+     * gone (via root_container destroy above) before we tear it down. */
+    if (terminal->figure_factory) {
+        yetty_ydraw_raw_figure_factory_destroy(terminal->figure_factory);
+        terminal->figure_factory = NULL;
     }
     if (terminal->compositor_font) {
         terminal->compositor_font->ops->destroy(terminal->compositor_font);

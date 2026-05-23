@@ -43,32 +43,52 @@ extern "C" {
 struct yetty_ygrid_grid;
 struct yetty_ydraw_font;
 struct yetty_yfigure_registry;
+struct yetty_ydraw_raw_figure_factory;
+
+/* Bundle of host-owned pointers handed to every ygrid the factory mints.
+ * Both fields are borrowed — the host (terminal / yui) keeps the actual
+ * font and complex-prim factory alive for the lifetime of every ygrid
+ * the registry might still be holding.
+ *
+ *   default_font   slot-0 font for GLYPH/TEXT_SPAN expansion. NULL → no
+ *                  default font, glyph records silently drop.
+ *   figure_factory complex-prim renderer (yplot / yimage / yvideo / …).
+ *                  NULL → complex-prim records silently drop, same as
+ *                  the v1 behaviour. */
+struct yetty_ygrid_factory_args {
+    struct yetty_ydraw_font *default_font;
+    struct yetty_ydraw_raw_figure_factory *figure_factory;
+};
 
 /* Register the ygrid factory under YETTY_YFIGURE_KIND_YGRID with the
  * given registry. Subsequent admin CREATE_CHILD records with kind=YGRID
  * land in the factory, which mints a ygrid at the supplied rect using
  * default grid dims (1x1 — the ygrid is for flat prims; cell bucketing
- * isn't useful for arbitrary widget rects). `default_font` is borrowed
- * and attached to slot 0 of every ygrid the factory creates so
- * TEXT_SPAN records can expand into glyphs. Pass NULL for no font
- * (glyph records will silently drop).
+ * isn't useful for arbitrary widget rects).
  *
- * `default_font` lifetime must outlive every ygrid created via this
- * factory. */
+ * `args` is borrowed and must outlive every ygrid the factory will ever
+ * mint. The host should keep it as part of its own state. */
 struct yetty_ycore_void_result yetty_ygrid_register_factory(
     struct yetty_yfigure_registry *registry,
-    struct yetty_ydraw_font *default_font);
+    const struct yetty_ygrid_factory_args *args);
 
 /* Register the ygrid factory under an arbitrary kind code. Used by
  * ygui's complex producer widgets (yplot/yimage/yvideo/yzoo/yjungle)
  * so their content lands in dedicated kind slots on the wire — same
- * underlying renderer (SDF/glyph prim stream) but a distinct kind tag
- * that proxies and analyzers can route on. `default_font` is borrowed,
- * same semantics as register_factory above. */
+ * underlying renderer but a distinct kind tag that proxies and
+ * analyzers can route on. Args has the same lifetime contract. */
 struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
     struct yetty_yfigure_registry *registry,
     uint32_t kind,
-    struct yetty_ydraw_font *default_font);
+    const struct yetty_ygrid_factory_args *args);
+
+/* Attach a complex-prim figure factory. Borrowed; lifetime must
+ * outlive the ygrid. Complex prims (yplot / yimage / etc.) arriving
+ * via process_bytes after this call mint a figure instance through
+ * the factory and are rendered alongside the SDF / glyph pass. */
+void yetty_ygrid_set_figure_factory(
+    struct yetty_ygrid_grid *grid,
+    struct yetty_ydraw_raw_figure_factory *factory);
 
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 

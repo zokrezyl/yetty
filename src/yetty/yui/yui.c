@@ -23,6 +23,9 @@
 #include <yetty/yruntime/yruntime.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
+#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/yplot/yplot-gen.h>
+#include <yetty/yimage/yimage-gen.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yconfig/config.h>
@@ -61,6 +64,13 @@ struct yetty_yui {
      * sequence destroys the compositor first (cascading the
      * borrowed-pointer ygrids) then the font. */
     struct yetty_ydraw_font *font;
+
+    /* Complex-prim factory + args bundle — same role as on the terminal
+     * side, see yterm/terminal.c. yui's own chrome doesn't need it but
+     * standalone tools nested via process_records (ygreeter, ytop, …)
+     * ship yplot/yimage prims through this path. */
+    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ygrid_factory_args figure_args;
 
     /* Producer engine. Bytes from engine->buffer are fed into the
      * compositor every frame via process_records — no PTY, no OSC
@@ -464,27 +474,53 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     /* Build registry + register ygrid factory with the default font as
      * user-data, then the root container that consumes ygui's records. */
     {
+        /* Complex-prim factory before the registry — every ygrid the
+         * registry mints will borrow this pointer via figure_args. */
+        struct yetty_ydraw_raw_figure_factory_ptr_result ffr =
+            yetty_ydraw_raw_figure_factory_create(
+                context->runtime->gpu.device, context->runtime->gpu.queue,
+                context->runtime->gpu.surface_format,
+                context->runtime->gpu.allocator, context->event_loop);
+        if (!YETTY_IS_OK(ffr)) {
+            yui->font->ops->destroy(yui->font);
+            free(yui);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: raw_figure_factory create", ffr);
+        }
+        yui->figure_factory = ffr.value;
+        struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
+        if (yplot_f) {
+            struct yetty_ycore_void_result rr = yetty_ydraw_raw_figure_factory_register(
+                yui->figure_factory, yplot_f);
+            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        }
+        struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
+        if (yimage_f) {
+            struct yetty_ycore_void_result rr = yetty_ydraw_raw_figure_factory_register(
+                yui->figure_factory, yimage_f);
+            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        }
+        yui->figure_args.default_font = yui->font;
+        yui->figure_args.figure_factory = yui->figure_factory;
+
         struct yetty_yfigure_registry_ptr_result reg_res =
             yetty_yfigure_registry_create();
         if (!YETTY_IS_OK(reg_res)) {
+            yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: registry", reg_res);
         }
         yui->figure_registry = reg_res.value;
         struct yetty_ycore_void_result rf = yetty_ygrid_register_factory(
-            yui->figure_registry, yui->font);
+            yui->figure_registry, &yui->figure_args);
         if (!YETTY_IS_OK(rf)) {
             yetty_yfigure_registry_destroy(yui->figure_registry);
+            yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory", rf);
         }
-        /* Producer-widget kinds — same factory as YGRID for now (see
-         * yfigure/wire.h). yui doesn't itself produce yplot/yimage/etc.
-         * widgets in the chrome, but standalone tools (ygreeter, ytop, …)
-         * may, and yui's compositor processes their wire stream after
-         * they're nested under one of yui's panes via process_records. */
+        /* Producer-widget kinds. */
         static const uint32_t producer_kinds[] = {
             YETTY_YFIGURE_KIND_YPLOT,
             YETTY_YFIGURE_KIND_YIMAGE,
@@ -494,9 +530,10 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         };
         for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                yui->figure_registry, producer_kinds[i], yui->font);
+                yui->figure_registry, producer_kinds[i], &yui->figure_args);
             if (!YETTY_IS_OK(kr)) {
                 yetty_yfigure_registry_destroy(yui->figure_registry);
+                yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
                 yui->font->ops->destroy(yui->font);
                 free(yui);
                 return YETTY_ERR(yetty_yui_ptr,
@@ -862,6 +899,10 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
             yetty_yfigure_registry_destroy(yui->figure_registry);
         if (!YETTY_IS_OK(r)) yetty_ycore_error_destroy(r.error);
         yui->figure_registry = NULL;
+    }
+    if (yui->figure_factory) {
+        yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
+        yui->figure_factory = NULL;
     }
     if (yui->font) {
         yui->font->ops->destroy(yui->font);

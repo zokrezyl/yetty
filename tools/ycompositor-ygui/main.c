@@ -69,6 +69,9 @@ struct ycomp_ygui_app {
      * compositor creates borrows this at slot 0 so TEXT_SPAN records
      * (button labels, etc.) expand into renderable glyphs. */
     struct yetty_ydraw_font   *font;
+    /* ygrid factory bundle — borrowed by every ygrid the registry mints;
+     * must outlive every ygrid (i.e. outlive the container). */
+    struct yetty_ygrid_factory_args figure_args;
     void                       *surface;
     uint32_t                    surface_w;
     uint32_t                    surface_h;
@@ -370,8 +373,12 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
+    /* Bundle the font into the factory-args struct; no complex-prim
+     * factory at this layer — tool is a minimal POC. */
+    app->figure_args.default_font = app->font;
+    app->figure_args.figure_factory = NULL;
     struct yetty_ycore_void_result rf =
-        yetty_ygrid_register_factory(app->registry, app->font);
+        yetty_ygrid_register_factory(app->registry, &app->figure_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ygrid_register_factory failed");
     struct yetty_ycore_rectangle root_rect = {
         .min = {.x = 0.0f, .y = 0.0f},

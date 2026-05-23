@@ -159,8 +159,9 @@ static struct yetty_ycore_void_result yzoo_render(struct yetty_ygui_widget *self
     if (!self->data.yzoo.flat) {
         return YETTY_OK_VOID();
     }
+    /* Figure-local: see ygui_yplot.c for rationale. */
     return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.yzoo.flat, self->layout_x, self->layout_y);
+        ctx, self->data.yzoo.flat, 0.0f, 0.0f);
 }
 
 static void yzoo_destroy(struct yetty_ygui_widget *self)

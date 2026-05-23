@@ -156,8 +156,14 @@ static struct yetty_ycore_void_result yplot_render(struct yetty_ygui_widget *sel
     if (!self->data.yplot.cached) {
         return YETTY_OK_VOID();
     }
+    /* Figure-local emission: yplot is now its own YPLOT figure whose
+     * rect carries the widget's absolute position. Prims inside the
+     * figure are relative to that rect's origin, so dx=dy=0 — the
+     * receiver-side ygrid render adds rect.min on draw. The cached
+     * buffer is already authored in widget-local coords (bounds_x/y =
+     * 0 inside yplot_build_buffer), so no translation is needed. */
     return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.yplot.cached, self->layout_x, self->layout_y);
+        ctx, self->data.yplot.cached, 0.0f, 0.0f);
 }
 
 static void yplot_destroy(struct yetty_ygui_widget *self)

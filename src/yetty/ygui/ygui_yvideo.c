@@ -161,8 +161,9 @@ static struct yetty_ycore_void_result yvideo_render(struct yetty_ygui_widget *se
     if (!self->data.yvideo.cached) {
         return YETTY_OK_VOID();
     }
+    /* Figure-local: see ygui_yplot.c for rationale. */
     return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.yvideo.cached, self->layout_x, self->layout_y);
+        ctx, self->data.yvideo.cached, 0.0f, 0.0f);
 }
 
 static void yvideo_destroy(struct yetty_ygui_widget *self)

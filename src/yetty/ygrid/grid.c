@@ -34,6 +34,7 @@
 #include <yetty/ydraw-core/figure-types.h>
 #include <yetty/ydraw-core/flyweight.h>
 #include <yetty/ydraw-core/font-prim.h>
+#include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
@@ -304,6 +305,16 @@ struct yetty_ygrid_grid {
     uint32_t last_emitted_font_generation;
 
     int staging_dirty;
+
+    /* Complex-prim support — borrowed factory pointer (lifetime owned
+     * by the host: terminal / yui registers types yplot/yimage/yvideo/
+     * yzoo/yjungle once, then hands the same pointer to every ygrid
+     * via the factory args bundle). Each instance lives until the
+     * next clear() / destroy(). */
+    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ydraw_figure **figure_instances;
+    uint32_t figure_instance_count;
+    uint32_t figure_instance_cap;
 };
 
 /*===========================================================================
@@ -678,13 +689,43 @@ static struct yetty_ycore_void_result parse_and_index_record(
             .min = {.x = gx, .y = gy},
             .max = {.x = gx + gs, .y = gy + gs},
         }));
+    } else if (yetty_ydraw_is_figure(type) && g->figure_factory) {
+        /* Complex prim (yplot / yimage / yvideo / yzoo / yjungle …).
+         * Mint a figure instance via the host-supplied factory and
+         * stash it in figure_instances; the render path will paint
+         * it after the SDF / glyph pass. We do NOT also push the prim
+         * into prims[] — complex prims are rendered through the
+         * instance's own pipeline, not through the unified shader. */
+        if (g->figure_instance_count == g->figure_instance_cap) {
+            uint32_t cap = g->figure_instance_cap ? g->figure_instance_cap * 2u : 4u;
+            struct yetty_ydraw_figure **grown = (struct yetty_ydraw_figure **)realloc(
+                g->figure_instances, cap * sizeof(struct yetty_ydraw_figure *));
+            if (!grown)
+                return YETTY_ERR(yetty_ycore_void, "ygrid: figure_instances oom");
+            g->figure_instances = grown;
+            g->figure_instance_cap = cap;
+        }
+        struct yetty_ydraw_figure_ptr_result ir =
+            yetty_ydraw_raw_figure_factory_create_instance(
+                g->figure_factory, hdr, record_len, /*rolling_row=*/0u);
+        if (YETTY_IS_ERR(ir)) {
+            ydebug("ygrid: figure_factory create_instance failed for type=0x%08x: %s",
+                   type, ir.error.msg);
+            yetty_ycore_error_destroy(ir.error);
+            return YETTY_OK_VOID();
+        }
+        g->figure_instances[g->figure_instance_count++] = ir.value;
+        ir.value->dirty = 1;
+        g->base.dirty = 1;
+        return YETTY_OK_VOID();
     } else {
         struct yetty_ydraw_drawable_base_ops_ptr_result ops_r = yetty_ysdf_handler(type);
         if (YETTY_IS_ERR(ops_r)) {
             /* Not an SDF type and not a glyph — drop the error,
              * leave the wire bytes in place, and report success.
              * v1 renders nothing for unsupported types. */
-            ydebug("ygrid: drop unrenderable type=0x%08x len=%zu", type, record_len);
+            ydebug("ygrid: drop unrenderable type=0x%08x len=%zu (figure_factory=%p)",
+                   type, record_len, (void *)g->figure_factory);
             yetty_ycore_error_destroy(ops_r.error);
             return YETTY_OK_VOID();
         }
@@ -846,8 +887,26 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     free(g->prims);
     free(g->bytes);
 
+    /* figure_factory itself is BORROWED; only the instances we minted
+     * through it are ours to free. */
+    if (g->figure_instances) {
+        for (uint32_t i = 0; i < g->figure_instance_count; i++) {
+            if (g->figure_instances[i])
+                yetty_ydraw_figure_destroy(g->figure_instances[i]);
+        }
+        free(g->figure_instances);
+    }
+
     free(g);
     return YETTY_OK_VOID();
+}
+
+void yetty_ygrid_set_figure_factory(
+    struct yetty_ygrid_grid *grid,
+    struct yetty_ydraw_raw_figure_factory *factory)
+{
+    if (!grid) return;
+    grid->figure_factory = factory;
 }
 
 /* Defined further down (alongside the other shader-build helpers, after
@@ -994,6 +1053,24 @@ static struct yetty_ycore_void_result ygrid_render(
     wgpuQueueSubmit(g->queue, 1, &cb);
     wgpuCommandBufferRelease(cb);
     wgpuCommandEncoderRelease(enc);
+
+    /* Complex-prim pass — each instance has its own pipeline. Anchor at
+     * the figure's rect origin (rect.min.x, rect.min.y); the instance's
+     * own bounds_x/y within its prim payload is already widget-local,
+     * so the on-screen position is figure_rect.min + bounds. */
+    for (uint32_t i = 0; i < g->figure_instance_count; i++) {
+        struct yetty_ydraw_figure *inst = g->figure_instances[i];
+        if (!inst || !inst->render)
+            continue;
+        float sx = self->rect.min.x + inst->bounds.min.x;
+        float sy = self->rect.min.y + inst->bounds.min.y;
+        struct yetty_ycore_void_result fr = inst->render(inst, target, sx, sy);
+        if (YETTY_IS_ERR(fr)) {
+            ydebug("ygrid_render: figure instance render failed: %s", fr.error.msg);
+            yetty_ycore_error_destroy(fr.error);
+        }
+        inst->dirty = 0;
+    }
 
     self->dirty = 0;
     return YETTY_OK_VOID();
@@ -1368,8 +1445,11 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
     return YETTY_OK(yetty_ygrid_grid_ptr, g);
 }
 
-/* Factory used by yetty_yfigure_registry_mint for KIND_YGRID. `user`
- * is the default font set at register_factory time (borrowed). */
+/* Factory used by yetty_yfigure_registry_mint. `user` is a
+ * (borrowed) `yetty_ygrid_factory_args *` carrying the default font and
+ * (optional) complex-prim factory. NULL `user` is allowed — produces
+ * an ygrid with no font and no complex-prim support, useful for tests
+ * and tooling. */
 static struct yetty_yfigure_figure_ptr_result ygrid_factory(
     struct yetty_ycore_rectangle rect,
     const struct yetty_context *context,
@@ -1382,12 +1462,17 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(
     if (YETTY_IS_ERR(gr))
         return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: create", gr);
     if (user) {
-        struct yetty_ydraw_font *font = (struct yetty_ydraw_font *)user;
-        struct yetty_ycore_void_result fr =
-            yetty_ygrid_set_font(gr.value, 0u, font);
-        if (YETTY_IS_ERR(fr)) {
-            ydebug("ygrid_factory: set_font(slot 0) failed: %s", fr.error.msg);
-            yetty_ycore_error_destroy(fr.error);
+        const struct yetty_ygrid_factory_args *args = user;
+        if (args->default_font) {
+            struct yetty_ycore_void_result fr =
+                yetty_ygrid_set_font(gr.value, 0u, args->default_font);
+            if (YETTY_IS_ERR(fr)) {
+                ydebug("ygrid_factory: set_font(slot 0) failed: %s", fr.error.msg);
+                yetty_ycore_error_destroy(fr.error);
+            }
+        }
+        if (args->figure_factory) {
+            yetty_ygrid_set_figure_factory(gr.value, args->figure_factory);
         }
     }
     return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ygrid_as_figure(gr.value));
@@ -1395,19 +1480,19 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(
 
 struct yetty_ycore_void_result yetty_ygrid_register_factory(
     struct yetty_yfigure_registry *registry,
-    struct yetty_ydraw_font *default_font)
+    const struct yetty_ygrid_factory_args *args)
 {
     return yetty_yfigure_registry_register(
-        registry, YETTY_YFIGURE_KIND_YGRID, ygrid_factory, default_font);
+        registry, YETTY_YFIGURE_KIND_YGRID, ygrid_factory, (void *)args);
 }
 
 struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
     struct yetty_yfigure_registry *registry,
     uint32_t kind,
-    struct yetty_ydraw_font *default_font)
+    const struct yetty_ygrid_factory_args *args)
 {
     return yetty_yfigure_registry_register(
-        registry, kind, ygrid_factory, default_font);
+        registry, kind, ygrid_factory, (void *)args);
 }
 
 struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)

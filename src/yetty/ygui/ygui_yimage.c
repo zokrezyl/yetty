@@ -99,8 +99,12 @@ static struct yetty_ycore_void_result yimage_render(struct yetty_ygui_widget *se
     if (!self->data.yimage.cached) {
         return YETTY_OK_VOID();
     }
+    /* Figure-local: yimage is its own YIMAGE figure whose rect carries
+     * the widget's absolute position. Prims stay in widget-local coords
+     * (the cached buffer was authored that way); the receiver adds
+     * rect.min on draw. */
     return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.yimage.cached, self->layout_x, self->layout_y);
+        ctx, self->data.yimage.cached, 0.0f, 0.0f);
 }
 
 static void yimage_destroy(struct yetty_ygui_widget *self)

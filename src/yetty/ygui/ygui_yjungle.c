@@ -268,8 +268,9 @@ static struct yetty_ycore_void_result yj_render(struct yetty_ygui_widget *self,
     if (!self->data.yjungle.flat) {
         return YETTY_OK_VOID();
     }
+    /* Figure-local: see ygui_yplot.c for rationale. */
     return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.yjungle.flat, self->layout_x, self->layout_y);
+        ctx, self->data.yjungle.flat, 0.0f, 0.0f);
 }
 
 static void yj_destroy(struct yetty_ygui_widget *self)
