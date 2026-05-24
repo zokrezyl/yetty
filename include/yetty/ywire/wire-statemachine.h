@@ -34,6 +34,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -187,6 +188,104 @@ int yetty_ywire_wire_statemachine_code(const struct yetty_ywire_wire_statemachin
  */
 enum yetty_ywire_envelope_kind yetty_ywire_wire_statemachine_kind(
     const struct yetty_ywire_wire_statemachine *sm);
+
+/*===========================================================================
+ * Catch-all envelope handler
+ *
+ * Fires for any (kind, code) pair NOT covered by a specific register().
+ * Used by callers that consume every envelope regardless of code
+ * (yface's scanner, debug tools). Pull semantics — same contract as
+ * register(): the fn must loop forever, may read decoded bytes via
+ * _read, queries kind/code via the accessors.
+ *=========================================================================*/
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_default(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_process_input_fn fn, void *userdata);
+
+/*===========================================================================
+ * Buffered (push-callback) reader — sugar over the pull API
+ *
+ * Each variant registers an internal pull-handler that drains the
+ * envelope body into a heap buffer and fires the user's callback ONCE
+ * per envelope with everything pre-decoded. For callers that don't
+ * want to write a coroutine.
+ *=========================================================================*/
+
+/* args may be NULL/0 when the envelope has no args slot. */
+typedef struct yetty_ycore_void_result (*yetty_ywire_envelope_cb)(
+    void *userdata, enum yetty_ywire_envelope_kind kind, int code, const uint8_t *args,
+    size_t args_len, const uint8_t *payload, size_t payload_len);
+
+/* on_raw fires for runs of raw bytes outside any envelope. n is the
+ * length of the contiguous run; the buffer is the SM's decode-stack
+ * scratch and is only valid for the duration of the callback. */
+typedef struct yetty_ycore_void_result (*yetty_ywire_raw_cb)(void *userdata, const uint8_t *bytes,
+                                                             size_t n);
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register_buffered(
+    struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
+    yetty_ywire_envelope_cb cb, void *userdata);
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_default_buffered(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_envelope_cb cb, void *userdata);
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default_buffered(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_raw_cb cb, void *userdata);
+
+/*===========================================================================
+ * Streaming write — for producers that emit many envelopes
+ *
+ * The encoder state (b64 carry, LZ4F context) lives on the SM and is
+ * re-used across envelopes. Bytes go into `out_buf` (caller-owned;
+ * the SM borrows the pointer for the duration of the write). The same
+ * SM can drive read + write in either direction independently — the
+ * scanner state and the encoder state don't share buffers.
+ *
+ * Lifecycle: start_write → write* → finish_write. Only one write may
+ * be active on a given SM at a time.
+ *=========================================================================*/
+
+/* Begin emitting an envelope. Appends "ESC <kind> <code> ; <b64-args> ;"
+ * into out_buf, opens an LZ4F frame if compressed=1, and primes the
+ * streaming b64 encoder for the body. */
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
+    struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
+    int compressed, const void *args, size_t args_len, struct yetty_ycore_buffer *out_buf);
+
+/* Push body bytes through the active write codec. Zero-byte calls are
+ * a no-op; the encoder may emit zero output bytes (LZ4F batches up to
+ * its block size). */
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_write(
+    struct yetty_ywire_wire_statemachine *sm, const void *src, size_t len);
+
+/* Flush LZ4F (if active) + the b64 tail, then append the envelope
+ * terminator (ESC \\). out_buf now holds a complete envelope. */
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
+    struct yetty_ywire_wire_statemachine *sm);
+
+/*===========================================================================
+ * One-shot helpers — no SM required, no streaming state retained
+ *
+ * Internally spin a transient SM, do the work, tear it down. Use the
+ * streaming API above when emitting many envelopes back-to-back.
+ *=========================================================================*/
+
+/* Append a complete envelope ("ESC <kind> <code> ; <b64-args> ;
+ * <b64+lz4 body> ESC \\") to out_buf. */
+struct yetty_ycore_void_result yetty_ywire_emit(enum yetty_ywire_envelope_kind kind, int code,
+                                                int compressed, const void *args, size_t args_len,
+                                                const void *body, size_t body_len,
+                                                struct yetty_ycore_buffer *out_buf);
+
+/* Same, but blocking write(2) straight to fd. */
+struct yetty_ycore_void_result yetty_ywire_emit_to_fd(int fd, enum yetty_ywire_envelope_kind kind,
+                                                      int code, int compressed, const void *args,
+                                                      size_t args_len, const void *body,
+                                                      size_t body_len);
+
+/* Decode a b64 (optionally LZ4F-compressed) body — the bytes between
+ * the second `;` and the trailing terminator — into out_buf. */
+struct yetty_ycore_void_result yetty_ywire_decode(const char *b64, size_t n, int compressed,
+                                                  struct yetty_ycore_buffer *out_buf);
 
 #ifdef __cplusplus
 }

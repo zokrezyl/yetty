@@ -11,11 +11,22 @@
  */
 #include <yetty/ywire/wire-statemachine.h>
 
+#include <errno.h>
 #include <lz4frame.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <io.h>
+typedef long long ssize_t;
+#define write(fd, buf, n) _write((fd), (buf), (unsigned int)(n))
+#else
+#include <unistd.h>
+#endif
+
+#include <yetty/ycore/types.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ytrace/ytrace.h>
@@ -77,6 +88,19 @@ struct handler_coro {
     struct yetty_ycore_void_result result;
 };
 
+/* Buffered-handler wrapper. Owned by the SM; freed at destroy. Used by
+ * the register_buffered / set_envelope_default_buffered / set_default_buffered
+ * sugar layer to drain bytes into a heap buffer and fire a single
+ * envelope-level callback. */
+struct buffered_handler {
+    /* Exactly one of these two is non-NULL: env_cb for envelope sinks,
+     * raw_cb for the default-sink path. */
+    yetty_ywire_envelope_cb env_cb;
+    yetty_ywire_raw_cb raw_cb;
+    void *userdata;
+    struct yetty_ycore_buffer body; /* envelope body accumulator */
+};
+
 struct yetty_ywire_wire_statemachine {
     /* Non-owning. */
     struct yetty_platform_pty *pty;
@@ -97,10 +121,37 @@ struct yetty_ywire_wire_statemachine {
     yetty_ywire_process_input_fn default_fn;
     void *default_userdata;
 
+    /* Catch-all envelope handler — fires for any (kind, code) with no
+     * specific entry in handlers[]. NULL means "drain & drop". */
+    yetty_ywire_process_input_fn envelope_default_fn;
+    void *envelope_default_userdata;
+    /* Synthetic handler entry that points at the catch-all. Kept on the
+     * SM so the dispatcher can drive it through the same code path as
+     * regular handlers (one per-userdata coro etc.). Refreshed
+     * per-envelope before dispatch. */
+    struct wire_handler envelope_default_handler_slot;
+
     /* (kind, code) → handler registry (linear scan; small N). */
     struct wire_handler *handlers;
     size_t handler_count;
     size_t handler_cap;
+
+    /* Owned buffered-handler wrappers (env_cb / raw_cb). One per
+     * register_buffered + set_envelope_default_buffered +
+     * set_default_buffered call. Freed at destroy. */
+    struct buffered_handler **buffered;
+    size_t buffered_count;
+    size_t buffered_cap;
+
+    /* === Encoder state — for streaming writes === */
+    LZ4F_compressionContext_t enc_ctx;
+    uint8_t *enc_scratch;
+    size_t enc_scratch_cap;
+    int enc_active;
+    int enc_compressed;
+    uint8_t enc_b64_carry[2];
+    uint8_t enc_b64_carry_n;
+    struct yetty_ycore_buffer *enc_out_buf; /* borrowed during write */
 
     /* Args slot. Raw b64 chars accumulate here until the second `;`,
      * then we b64-decode once into args_decoded. Tiny by protocol. */
@@ -702,16 +753,25 @@ struct yetty_ywire_wire_statemachine_ptr_result yetty_ywire_wire_statemachine_cr
     sm->state = SCAN_RAW;
     sm->current_kind = WIRE_KIND_NONE;
 
+    /* The scanner coro is spawned lazily on first feed/process — emit-only
+     * callers (yetty_ywire_emit, transient SM) never need it and skip
+     * the 1MB stack alloc. */
+    return YETTY_OK(yetty_ywire_wire_statemachine_ptr, sm);
+}
+
+/* Spawn the scanner coro if it isn't running yet. */
+static struct yetty_ycore_void_result ensure_sm_coro(struct yetty_ywire_wire_statemachine *sm)
+{
+    if (sm->sm_coro) {
+        return YETTY_OK_VOID();
+    }
     struct yplatform_coro_ptr_result spawn_res =
         yetty_yplatform_coro_spawn(sm_coro_entry, sm, 1024 * 1024, "wire-sm");
     if (YETTY_IS_ERR(spawn_res)) {
-        free(sm);
-        return YETTY_ERR(yetty_ywire_wire_statemachine_ptr, "wire_sm: sm_coro spawn",
-                         spawn_res);
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm_coro spawn", spawn_res);
     }
     sm->sm_coro = spawn_res.value;
-
-    return YETTY_OK(yetty_ywire_wire_statemachine_ptr, sm);
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
@@ -742,6 +802,24 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
     if (sm->lz4_ctx) {
         LZ4F_freeDecompressionContext(sm->lz4_ctx);
     }
+    if (sm->enc_ctx) {
+        LZ4F_freeCompressionContext(sm->enc_ctx);
+        sm->enc_ctx = NULL;
+    }
+    free(sm->enc_scratch);
+    sm->enc_scratch = NULL;
+    /* Free buffered-handler wrappers (the handler coros they back have
+     * already been destroyed by the handler_coros loop above). */
+    for (size_t i = 0; i < sm->buffered_count; i++) {
+        if (sm->buffered[i]) {
+            yetty_ycore_buffer_destroy(&sm->buffered[i]->body);
+            free(sm->buffered[i]);
+        }
+    }
+    free(sm->buffered);
+    sm->buffered = NULL;
+    sm->buffered_count = 0;
+    sm->buffered_cap = 0;
     free(sm->ring);
     free(sm->handlers);
     free(sm);
@@ -812,6 +890,13 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
         memcpy(sm->ring, bytes + first, n - first);
     }
     sm->write_pos += n;
+
+    /* Lazy-spawn the scanner — emit-only callers may have never
+     * triggered it. */
+    {
+        struct yetty_ycore_void_result sr = ensure_sm_coro(sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "wire_sm: feed: ensure_sm_coro");
+    }
 
     if (sm->sm_coro && !yetty_yplatform_coro_is_finished(sm->sm_coro)) {
         yetty_yplatform_coro_resume(sm->sm_coro);
@@ -1055,6 +1140,16 @@ static void sm_coro_entry(void *arg)
                         return;
                     }
                     sm->current_handler = find_handler(sm, sm->current_kind, sm->current_code);
+                    if (!sm->current_handler && sm->envelope_default_fn) {
+                        /* Refresh the synthetic slot to reflect the
+                         * envelope we're about to dispatch. */
+                        sm->envelope_default_handler_slot.kind = sm->current_kind;
+                        sm->envelope_default_handler_slot.code = sm->current_code;
+                        sm->envelope_default_handler_slot.fn = sm->envelope_default_fn;
+                        sm->envelope_default_handler_slot.userdata =
+                            sm->envelope_default_userdata;
+                        sm->current_handler = &sm->envelope_default_handler_slot;
+                    }
                     sm->state = SCAN_OSC_BODY;
                 } else if (sm->args_b64_len < sizeof(sm->args_b64)) {
                     sm->args_b64[sm->args_b64_len++] = (char)c;
@@ -1155,8 +1250,9 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_process(
     if (!sm) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
     }
-    if (!sm->sm_coro) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm_coro not spawned");
+    {
+        struct yetty_ycore_void_result sr = ensure_sm_coro(sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "wire_sm: process: ensure_sm_coro");
     }
     yetty_yplatform_coro_resume(sm->sm_coro);
     if (yetty_yplatform_coro_is_finished(sm->sm_coro)) {
@@ -1242,4 +1338,644 @@ enum yetty_ywire_envelope_kind yetty_ywire_wire_statemachine_kind(
     const struct yetty_ywire_wire_statemachine *sm)
 {
     return sm ? sm->current_kind : WIRE_KIND_NONE;
+}
+
+/*===========================================================================
+ * Streaming write — start_write / write / finish_write
+ *
+ * Mirrors the receive pipeline but in reverse:
+ *
+ *   src bytes → [LZ4F encode]? → streaming b64 → out_buf
+ *
+ * b64 carry holds 0..2 bytes between writes; LZ4F context spans the
+ * envelope. Both reset per envelope via start_write / finish_write.
+ *=========================================================================*/
+
+#define ENC_SCRATCH_DEFAULT (64 * 1024) /* one LZ4 block worth */
+
+static const char b64_alpha[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static struct yetty_ycore_void_result b64_emit_triple(struct yetty_ycore_buffer *out, uint8_t a,
+                                                      uint8_t b, uint8_t c)
+{
+    char chars[4];
+    uint32_t v = ((uint32_t)a << 16) | ((uint32_t)b << 8) | (uint32_t)c;
+    chars[0] = b64_alpha[(v >> 18) & 0x3F];
+    chars[1] = b64_alpha[(v >> 12) & 0x3F];
+    chars[2] = b64_alpha[(v >> 6) & 0x3F];
+    chars[3] = b64_alpha[v & 0x3F];
+    return yetty_ycore_buffer_write(out, chars, 4);
+}
+
+/* Push `len` bytes through the streaming b64 encoder into sm->enc_out_buf. */
+static struct yetty_ycore_void_result b64_encode_push(struct yetty_ywire_wire_statemachine *sm,
+                                                      const uint8_t *src, size_t len)
+{
+    size_t i = 0;
+    /* Drain carry first: combine with new input to form full triples. */
+    while (sm->enc_b64_carry_n > 0 && i < len) {
+        if (sm->enc_b64_carry_n == 1 && i + 1 < len) {
+            struct yetty_ycore_void_result r =
+                b64_emit_triple(sm->enc_out_buf, sm->enc_b64_carry[0], src[i], src[i + 1]);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: b64 triple");
+            i += 2;
+            sm->enc_b64_carry_n = 0;
+        } else if (sm->enc_b64_carry_n == 2 && i < len) {
+            struct yetty_ycore_void_result r = b64_emit_triple(
+                sm->enc_out_buf, sm->enc_b64_carry[0], sm->enc_b64_carry[1], src[i]);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: b64 triple");
+            i += 1;
+            sm->enc_b64_carry_n = 0;
+        } else {
+            break; /* need more bytes to complete a triple */
+        }
+    }
+    /* Whole triples from src[i..]. */
+    while (i + 3 <= len) {
+        struct yetty_ycore_void_result r =
+            b64_emit_triple(sm->enc_out_buf, src[i], src[i + 1], src[i + 2]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: b64 triple");
+        i += 3;
+    }
+    /* Leftover into carry. */
+    while (i < len && sm->enc_b64_carry_n < 2) {
+        sm->enc_b64_carry[sm->enc_b64_carry_n++] = src[i++];
+    }
+    if (i != len) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: b64 carry overflow");
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result b64_encode_flush(struct yetty_ywire_wire_statemachine *sm)
+{
+    if (sm->enc_b64_carry_n == 0) {
+        return YETTY_OK_VOID();
+    }
+    char chars[4];
+    if (sm->enc_b64_carry_n == 1) {
+        uint32_t v = (uint32_t)sm->enc_b64_carry[0] << 16;
+        chars[0] = b64_alpha[(v >> 18) & 0x3F];
+        chars[1] = b64_alpha[(v >> 12) & 0x3F];
+        chars[2] = '=';
+        chars[3] = '=';
+    } else { /* 2 */
+        uint32_t v = ((uint32_t)sm->enc_b64_carry[0] << 16) |
+                     ((uint32_t)sm->enc_b64_carry[1] << 8);
+        chars[0] = b64_alpha[(v >> 18) & 0x3F];
+        chars[1] = b64_alpha[(v >> 12) & 0x3F];
+        chars[2] = b64_alpha[(v >> 6) & 0x3F];
+        chars[3] = '=';
+    }
+    sm->enc_b64_carry_n = 0;
+    return yetty_ycore_buffer_write(sm->enc_out_buf, chars, 4);
+}
+
+static struct yetty_ycore_void_result ensure_enc_scratch(struct yetty_ywire_wire_statemachine *sm,
+                                                         size_t need)
+{
+    if (need <= sm->enc_scratch_cap) {
+        return YETTY_OK_VOID();
+    }
+    size_t new_cap = sm->enc_scratch_cap ? sm->enc_scratch_cap : 1024;
+    while (new_cap < need) {
+        new_cap *= 2;
+    }
+    uint8_t *p = realloc(sm->enc_scratch, new_cap);
+    if (!p) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: enc scratch realloc");
+    }
+    sm->enc_scratch = p;
+    sm->enc_scratch_cap = new_cap;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
+    struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
+    int compressed, const void *args, size_t args_len, struct yetty_ycore_buffer *out_buf)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!out_buf) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: out_buf is NULL");
+    }
+    if (sm->enc_active) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: already active");
+    }
+    if (kind != YETTY_YWIRE_ENVELOPE_OSC && kind != YETTY_YWIRE_ENVELOPE_DCS) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: unknown envelope kind");
+    }
+
+    sm->enc_out_buf = out_buf;
+    sm->enc_b64_carry_n = 0;
+    sm->enc_compressed = compressed ? 1 : 0;
+
+    /* Wire shape: "ESC <kind> <code> ; <b64-args> ; <b64-payload> ESC \\".
+     * The args slot is always present (empty if args_len == 0) so the
+     * receiver always sees the same `;…;` split. */
+    char hdr[32];
+    int n = snprintf(hdr, sizeof(hdr), "\033%c%d;", (char)kind, code);
+    if (n <= 0 || (size_t)n >= sizeof(hdr)) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: bad code");
+    }
+    {
+        struct yetty_ycore_void_result r =
+            yetty_ycore_buffer_write(out_buf, hdr, (size_t)n);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: hdr");
+    }
+    if (args && args_len > 0) {
+        struct yetty_ycore_void_result r = b64_encode_push(sm, (const uint8_t *)args, args_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args push");
+        r = b64_encode_flush(sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args flush");
+        sm->enc_b64_carry_n = 0;
+    }
+    {
+        struct yetty_ycore_void_result r = yetty_ycore_buffer_write(out_buf, ";", 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args close");
+    }
+
+    if (!compressed) {
+        sm->enc_active = 1;
+        return YETTY_OK_VOID();
+    }
+
+    /* Compressed: lazy-alloc LZ4F context + scratch, write frame header
+     * through the b64 encoder. */
+    {
+        struct yetty_ycore_void_result r = ensure_enc_scratch(sm, ENC_SCRATCH_DEFAULT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: scratch");
+    }
+    if (!sm->enc_ctx) {
+        LZ4F_errorCode_t err = LZ4F_createCompressionContext(&sm->enc_ctx, LZ4F_VERSION);
+        if (LZ4F_isError(err)) {
+            return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(err));
+        }
+    }
+    LZ4F_preferences_t prefs = {0};
+    size_t hn = LZ4F_compressBegin(sm->enc_ctx, sm->enc_scratch, sm->enc_scratch_cap, &prefs);
+    if (LZ4F_isError(hn)) {
+        return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(hn));
+    }
+    if (hn > 0) {
+        struct yetty_ycore_void_result r = b64_encode_push(sm, sm->enc_scratch, hn);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: lz4 frame header");
+    }
+    sm->enc_active = 1;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_write(
+    struct yetty_ywire_wire_statemachine *sm, const void *src, size_t len)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!sm->enc_active) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: write outside frame");
+    }
+    if (len == 0) {
+        return YETTY_OK_VOID();
+    }
+    if (!src) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: write: src is NULL");
+    }
+    if (!sm->enc_compressed) {
+        return b64_encode_push(sm, (const uint8_t *)src, len);
+    }
+    size_t bound = LZ4F_compressBound(len, NULL);
+    {
+        struct yetty_ycore_void_result r = ensure_enc_scratch(sm, bound);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: write: scratch");
+    }
+    size_t out_n =
+        LZ4F_compressUpdate(sm->enc_ctx, sm->enc_scratch, sm->enc_scratch_cap, src, len, NULL);
+    if (LZ4F_isError(out_n)) {
+        return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(out_n));
+    }
+    if (out_n == 0) {
+        return YETTY_OK_VOID();
+    }
+    return b64_encode_push(sm, sm->enc_scratch, out_n);
+}
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
+    struct yetty_ywire_wire_statemachine *sm)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!sm->enc_active) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: finish_write: no active write");
+    }
+    if (!sm->enc_compressed) {
+        struct yetty_ycore_void_result r = b64_encode_flush(sm);
+        if (YETTY_IS_ERR(r)) {
+            sm->enc_active = 0;
+            return r;
+        }
+        r = yetty_ycore_buffer_write(sm->enc_out_buf, "\033\\", 2);
+        sm->enc_active = 0;
+        sm->enc_out_buf = NULL;
+        return r;
+    }
+    /* Compressed: flush LZ4F footer through b64, then ST. */
+    size_t bound = LZ4F_compressBound(0, NULL);
+    {
+        struct yetty_ycore_void_result r = ensure_enc_scratch(sm, bound);
+        if (YETTY_IS_ERR(r)) {
+            sm->enc_active = 0;
+            return r;
+        }
+    }
+    size_t end_n = LZ4F_compressEnd(sm->enc_ctx, sm->enc_scratch, sm->enc_scratch_cap, NULL);
+    if (LZ4F_isError(end_n)) {
+        sm->enc_active = 0;
+        return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(end_n));
+    }
+    struct yetty_ycore_void_result r = YETTY_OK_VOID();
+    if (end_n > 0) {
+        r = b64_encode_push(sm, sm->enc_scratch, end_n);
+        if (YETTY_IS_ERR(r)) {
+            goto out;
+        }
+    }
+    r = b64_encode_flush(sm);
+    if (YETTY_IS_ERR(r)) {
+        goto out;
+    }
+    r = yetty_ycore_buffer_write(sm->enc_out_buf, "\033\\", 2);
+out:
+    /* Reset the LZ4F context so the next envelope on this SM starts
+     * clean; keep the context allocated for reuse. */
+    if (sm->enc_ctx) {
+        LZ4F_freeCompressionContext(sm->enc_ctx);
+        sm->enc_ctx = NULL;
+    }
+    sm->enc_active = 0;
+    sm->enc_out_buf = NULL;
+    return r;
+}
+
+/*===========================================================================
+ * One-shot helpers — internally use a transient SM
+ *=========================================================================*/
+
+struct yetty_ycore_void_result yetty_ywire_emit(enum yetty_ywire_envelope_kind kind, int code,
+                                                int compressed, const void *args, size_t args_len,
+                                                const void *body, size_t body_len,
+                                                struct yetty_ycore_buffer *out_buf)
+{
+    if (!out_buf) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_emit: out_buf is NULL");
+    }
+    struct yetty_ywire_wire_statemachine_ptr_result sr =
+        yetty_ywire_wire_statemachine_create(NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ywire_emit: SM create");
+    struct yetty_ywire_wire_statemachine *sm = sr.value;
+
+    struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_start_write(
+        sm, kind, code, compressed, args, args_len, out_buf);
+    if (YETTY_IS_OK(r) && body && body_len > 0) {
+        r = yetty_ywire_wire_statemachine_write(sm, body, body_len);
+    }
+    if (YETTY_IS_OK(r)) {
+        r = yetty_ywire_wire_statemachine_finish_write(sm);
+    }
+    struct yetty_ycore_void_result dr = yetty_ywire_wire_statemachine_destroy(sm);
+    if (YETTY_IS_OK(r) && YETTY_IS_ERR(dr)) {
+        return dr;
+    }
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
+    return r;
+}
+
+struct yetty_ycore_void_result yetty_ywire_emit_to_fd(int fd, enum yetty_ywire_envelope_kind kind,
+                                                      int code, int compressed, const void *args,
+                                                      size_t args_len, const void *body,
+                                                      size_t body_len)
+{
+    struct yetty_ycore_buffer buf = {0};
+    struct yetty_ycore_void_result r =
+        yetty_ywire_emit(kind, code, compressed, args, args_len, body, body_len, &buf);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_buffer_destroy(&buf);
+        return r;
+    }
+    size_t off = 0;
+    while (off < buf.size) {
+        ssize_t w = write(fd, buf.data + off, buf.size - off);
+        if (w < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            yetty_ycore_buffer_destroy(&buf);
+            return YETTY_ERR(yetty_ycore_void, "ywire_emit_to_fd: write failed");
+        }
+        off += (size_t)w;
+    }
+    yetty_ycore_buffer_destroy(&buf);
+    return YETTY_OK_VOID();
+}
+
+/* One-shot body decode. Pipes b64 (optionally LZ4F-compressed) through
+ * the SM's existing body-pump by routing the bytes through a synthetic
+ * envelope. */
+struct yetty_ycore_void_result yetty_ywire_decode(const char *b64, size_t n, int compressed,
+                                                  struct yetty_ycore_buffer *out_buf)
+{
+    if (!out_buf) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_decode: out_buf is NULL");
+    }
+    if (n == 0) {
+        return YETTY_OK_VOID();
+    }
+    if (!b64) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_decode: b64 is NULL");
+    }
+
+    /* Streaming b64 decode + optional LZ4F. Local state — no SM needed,
+     * no envelope framing. */
+    LZ4F_decompressionContext_t lz4_ctx = NULL;
+    if (compressed) {
+        LZ4F_errorCode_t err = LZ4F_createDecompressionContext(&lz4_ctx, LZ4F_VERSION);
+        if (LZ4F_isError(err)) {
+            return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(err));
+        }
+    }
+
+    /* Strip trailing `=` padding before quartet decode. */
+    size_t valid_n = n;
+    while (valid_n > 0 && b64[valid_n - 1] == '=') {
+        valid_n--;
+    }
+
+    uint8_t scratch[8192];
+    size_t in_pos = 0;
+    struct yetty_ycore_void_result r = YETTY_OK_VOID();
+    while (in_pos + 4 <= valid_n) {
+        uint8_t triples[3 * 256];
+        size_t triples_n = 0;
+        while (in_pos + 4 <= valid_n && triples_n + 3 <= sizeof(triples)) {
+            uint8_t t[3];
+            uint8_t v[4];
+            int ok = 1;
+            for (int i = 0; i < 4; i++) {
+                if (!b64_decode_char(b64[in_pos + i], &v[i])) {
+                    ok = 0;
+                    break;
+                }
+            }
+            if (!ok) {
+                /* skip a single garbage byte */
+                in_pos++;
+                continue;
+            }
+            t[0] = (uint8_t)((v[0] << 2) | (v[1] >> 4));
+            t[1] = (uint8_t)((v[1] << 4) | (v[2] >> 2));
+            t[2] = (uint8_t)((v[2] << 6) | v[3]);
+            memcpy(triples + triples_n, t, 3);
+            triples_n += 3;
+            in_pos += 4;
+        }
+        if (compressed) {
+            size_t pos = 0;
+            while (pos < triples_n) {
+                size_t in_left = triples_n - pos;
+                size_t out_left = sizeof(scratch);
+                size_t lr =
+                    LZ4F_decompress(lz4_ctx, scratch, &out_left, triples + pos, &in_left, NULL);
+                if (LZ4F_isError(lr)) {
+                    r = YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(lr));
+                    goto out;
+                }
+                if (out_left > 0) {
+                    r = yetty_ycore_buffer_write(out_buf, scratch, out_left);
+                    if (YETTY_IS_ERR(r)) {
+                        goto out;
+                    }
+                }
+                pos += in_left;
+                if (in_left == 0 && out_left == 0) {
+                    break;
+                }
+            }
+        } else {
+            r = yetty_ycore_buffer_write(out_buf, triples, triples_n);
+            if (YETTY_IS_ERR(r)) {
+                goto out;
+            }
+        }
+    }
+    /* Tail of 2 or 3 valid chars decodes to 1 or 2 bytes. */
+    if (valid_n - in_pos >= 2) {
+        char tail[4] = {b64[in_pos], b64[in_pos + 1],
+                        valid_n - in_pos >= 3 ? b64[in_pos + 2] : 'A', 'A'};
+        uint8_t v[4];
+        int ok = 1;
+        for (int i = 0; i < 4; i++) {
+            if (!b64_decode_char(tail[i], &v[i])) {
+                ok = 0;
+                break;
+            }
+        }
+        if (ok) {
+            uint8_t t[3] = {(uint8_t)((v[0] << 2) | (v[1] >> 4)),
+                            (uint8_t)((v[1] << 4) | (v[2] >> 2)),
+                            (uint8_t)((v[2] << 6) | v[3])};
+            size_t out_n = (valid_n - in_pos >= 3) ? 2 : 1;
+            if (compressed) {
+                uint8_t lz4_scratch[8192];
+                size_t pos = 0;
+                while (pos < out_n) {
+                    size_t in_left = out_n - pos;
+                    size_t out_left = sizeof(lz4_scratch);
+                    size_t lr = LZ4F_decompress(lz4_ctx, lz4_scratch, &out_left, t + pos,
+                                                &in_left, NULL);
+                    if (LZ4F_isError(lr)) {
+                        r = YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(lr));
+                        goto out;
+                    }
+                    if (out_left > 0) {
+                        r = yetty_ycore_buffer_write(out_buf, lz4_scratch, out_left);
+                        if (YETTY_IS_ERR(r)) {
+                            goto out;
+                        }
+                    }
+                    pos += in_left;
+                    if (in_left == 0 && out_left == 0) {
+                        break;
+                    }
+                }
+            } else {
+                r = yetty_ycore_buffer_write(out_buf, t, out_n);
+            }
+        }
+    }
+
+out:
+    if (lz4_ctx) {
+        LZ4F_freeDecompressionContext(lz4_ctx);
+    }
+    return r;
+}
+
+/*===========================================================================
+ * Envelope-default handler — fires for any (kind, code) without a
+ * specific register() entry.
+ *=========================================================================*/
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_default(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_process_input_fn fn, void *userdata)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!fn || !userdata) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "wire_sm: set_envelope_default: fn and userdata must be non-NULL");
+    }
+    sm->envelope_default_fn = fn;
+    sm->envelope_default_userdata = userdata;
+    if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: envelope_default coro spawn failed");
+    }
+    return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Buffered (push-callback) helpers
+ *
+ * Each one allocates an owned buffered_handler struct and registers a
+ * synthetic pull-handler that drains the body / forwards raw bytes
+ * and fires the user's typed callback.
+ *=========================================================================*/
+
+/* Body-buffered dispatcher: one envelope per outer iteration. Reads
+ * decoded bytes into bh->body until EOE, fires env_cb, yields. */
+static struct yetty_ycore_void_result envelope_buffered_dispatch(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct buffered_handler *bh = userdata;
+    uint8_t chunk[4096];
+    for (;;) {
+        yetty_ycore_buffer_clear(&bh->body);
+        for (;;) {
+            struct yetty_ycore_size_result rr =
+                yetty_ywire_wire_statemachine_read(sm, chunk, sizeof(chunk));
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "buffered: SM read");
+            if (rr.value == 0) {
+                break;
+            }
+            struct yetty_ycore_void_result wr =
+                yetty_ycore_buffer_write(&bh->body, chunk, rr.value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "buffered: accumulate");
+        }
+        struct yetty_ywire_wire_statemachine_args a = yetty_ywire_wire_statemachine_args(sm);
+        enum yetty_ywire_envelope_kind k = yetty_ywire_wire_statemachine_kind(sm);
+        int c = yetty_ywire_wire_statemachine_code(sm);
+        struct yetty_ycore_void_result cr =
+            bh->env_cb(bh->userdata, k, c, a.bytes, a.len, bh->body.data, bh->body.size);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "buffered: env_cb");
+        yetty_yplatform_coro_yield();
+    }
+}
+
+/* Raw-buffered dispatcher: forwards runs of raw bytes via raw_cb. */
+static struct yetty_ycore_void_result raw_buffered_dispatch(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct buffered_handler *bh = userdata;
+    uint8_t chunk[4096];
+    for (;;) {
+        struct yetty_ycore_size_result rr =
+            yetty_ywire_wire_statemachine_read(sm, chunk, sizeof(chunk));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "raw_buffered: SM read");
+        if (rr.value == 0) {
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        struct yetty_ycore_void_result cr = bh->raw_cb(bh->userdata, chunk, rr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "raw_buffered: raw_cb");
+    }
+}
+
+/* Allocate + park a buffered_handler in the SM's owned list. Caller
+ * must check NULL return for OOM. */
+static struct buffered_handler *new_buffered(struct yetty_ywire_wire_statemachine *sm)
+{
+    if (sm->buffered_count == sm->buffered_cap) {
+        size_t nc = sm->buffered_cap ? sm->buffered_cap * 2 : 4;
+        struct buffered_handler **grown =
+            realloc(sm->buffered, nc * sizeof(struct buffered_handler *));
+        if (!grown) {
+            return NULL;
+        }
+        sm->buffered = grown;
+        sm->buffered_cap = nc;
+    }
+    struct buffered_handler *bh = calloc(1, sizeof(struct buffered_handler));
+    if (!bh) {
+        return NULL;
+    }
+    sm->buffered[sm->buffered_count++] = bh;
+    return bh;
+}
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register_buffered(
+    struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
+    yetty_ywire_envelope_cb cb, void *userdata)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!cb) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: register_buffered: cb is NULL");
+    }
+    struct buffered_handler *bh = new_buffered(sm);
+    if (!bh) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: register_buffered: oom");
+    }
+    bh->env_cb = cb;
+    bh->userdata = userdata;
+    return yetty_ywire_wire_statemachine_register(sm, kind, code, envelope_buffered_dispatch, bh);
+}
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_default_buffered(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_envelope_cb cb, void *userdata)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!cb) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: envelope_default_buffered: cb is NULL");
+    }
+    struct buffered_handler *bh = new_buffered(sm);
+    if (!bh) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: envelope_default_buffered: oom");
+    }
+    bh->env_cb = cb;
+    bh->userdata = userdata;
+    return yetty_ywire_wire_statemachine_set_envelope_default(sm, envelope_buffered_dispatch, bh);
+}
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default_buffered(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_raw_cb cb, void *userdata)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!cb) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: set_default_buffered: cb is NULL");
+    }
+    struct buffered_handler *bh = new_buffered(sm);
+    if (!bh) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: set_default_buffered: oom");
+    }
+    bh->raw_cb = cb;
+    bh->userdata = userdata;
+    return yetty_ywire_wire_statemachine_set_default(sm, raw_buffered_dispatch, bh);
 }
