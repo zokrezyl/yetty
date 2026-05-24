@@ -41,7 +41,8 @@ int main(void)
     } while (0)
 
     struct yetty_yrdawn_client *c = NULL;
-    struct yetty_yrdawn_canvas *canvas = demo_bringup_single_canvas(/*figure_id=*/1, trace, &c);
+    struct yetty_yrdawn_canvas *canvas =
+        demo_bringup_single_canvas(/*figure_id=*/1, (float)W, (float)H, trace, &c);
     if (!canvas) {
         LOG("02_gradient: bringup failed\n");
         return 1;

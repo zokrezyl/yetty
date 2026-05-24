@@ -264,7 +264,10 @@ static int render_frame(struct yetty_yrdawn_client *c, struct yetty_yrdawn_canva
                                           pixel_count, on_map, NULL);
     /* Server's dispatch ran WaitAny synchronously, so the REPLY is
      * already on the wire — pump once to deliver it. */
-    for (int i = 0; i < 50 && !s_map_done; ++i) {
+    /* Round-trip needs the BULK reply for the mapped pixels — under the
+     * figure-tree wire that's a few extra envelopes per frame. Give it
+     * up to ~500ms before declaring the frame failed. */
+    for (int i = 0; i < 500 && !s_map_done; ++i) {
         (void)yetty_yrdawn_client_pump(c);
         demo_sleep_ms(1);
     }
@@ -289,7 +292,8 @@ int main(void)
 #define LOG(...) do { if (trace) fprintf(trace, __VA_ARGS__); } while (0)
 
     struct yetty_yrdawn_client *c = NULL;
-    struct yetty_yrdawn_canvas *canvas = demo_bringup_single_canvas(/*figure_id=*/1, trace, &c);
+    struct yetty_yrdawn_canvas *canvas =
+        demo_bringup_single_canvas(/*figure_id=*/1, (float)W, (float)H, trace, &c);
     if (!canvas) {
         LOG("10: bringup failed\n");
         return 1;

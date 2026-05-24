@@ -171,7 +171,8 @@ int main(void)
 #define LOG(...) do { if (trace) fprintf(trace, __VA_ARGS__); } while (0)
 
     struct yetty_yrdawn_client *c = NULL;
-    struct yetty_yrdawn_canvas *canvas = demo_bringup_single_canvas(/*figure_id=*/1, trace, &c);
+    struct yetty_yrdawn_canvas *canvas =
+        demo_bringup_single_canvas(/*figure_id=*/1, 256.0f, 256.0f, trace, &c);
     if (!canvas) {
         LOG("08_glyph_shaders: bringup failed\n");
         return 1;

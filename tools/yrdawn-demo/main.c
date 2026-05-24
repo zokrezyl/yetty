@@ -130,7 +130,7 @@ int main(int argc, char **argv)
     DEMO_TRACE("demo: client created\n");
 
     struct yetty_yrdawn_canvas_ptr_result kr =
-        yetty_yrdawn_canvas_create(c, /*figure_id=*/1, 0.0f, 0.0f, 1024.0f, 1024.0f);
+        yetty_yrdawn_canvas_create(c, /*figure_id=*/1, 16.0f, 16.0f, (float)W, (float)H);
     if (kr.ok != 1) {
         DEMO_TRACE("demo: canvas_create failed: %s\n", kr.error.msg);
         return 1;

@@ -671,7 +671,28 @@ static struct yetty_ycore_void_result yrdawn_figure_render(struct yetty_yfigure_
         return YETTY_OK_VOID();
     }
 
-    ydebug("yrdawn-figure id=%u: render rect=(%.0f,%.0f,%.0fx%.0f)", f->figure_id, x, y, w, h);
+    /* WebGPU validates that scissor rect lies fully inside the render
+     * area. The figure's authored rect may extend past the host's
+     * surface (the producer doesn't know the host's pane size when it
+     * picks the canvas size). Clamp the scissor against the target's
+     * viewport; viewport stays at the authored rect so the texture
+     * mapping is unchanged for the visible portion. */
+    float target_w = target->viewport.w;
+    float target_h = target->viewport.h;
+    float scissor_x = x < 0.0f ? 0.0f : x;
+    float scissor_y = y < 0.0f ? 0.0f : y;
+    float scissor_right = x + w > target_w ? target_w : x + w;
+    float scissor_bottom = y + h > target_h ? target_h : y + h;
+    if (scissor_right <= scissor_x || scissor_bottom <= scissor_y) {
+        return YETTY_OK_VOID();
+    }
+    uint32_t sx = (uint32_t)scissor_x;
+    uint32_t sy = (uint32_t)scissor_y;
+    uint32_t sw = (uint32_t)(scissor_right - scissor_x);
+    uint32_t sh = (uint32_t)(scissor_bottom - scissor_y);
+
+    ydebug("yrdawn-figure id=%u: render rect=(%.0f,%.0f,%.0fx%.0f) scissor=(%u,%u,%ux%u)",
+           f->figure_id, x, y, w, h, sx, sy, sw, sh);
 
     WGPUDevice device = yetty_yrdawn_session_shared_device(f->session);
     WGPUQueue queue = yetty_yrdawn_session_shared_queue(f->session);
@@ -696,7 +717,7 @@ static struct yetty_ycore_void_result yrdawn_figure_render(struct yetty_yfigure_
     wgpuRenderPassEncoderSetPipeline(pass, f->pipeline);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, f->frame_bind_group, 0, NULL);
     wgpuRenderPassEncoderSetViewport(pass, x, y, w, h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h);
+    wgpuRenderPassEncoderSetScissorRect(pass, sx, sy, sw, sh);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);

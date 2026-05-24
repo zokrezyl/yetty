@@ -64,7 +64,8 @@ FILE *demo_trace_open(const char *demo_name)
     return f;
 }
 
-struct yetty_yrdawn_canvas *demo_bringup_single_canvas(uint32_t figure_id, FILE *trace,
+struct yetty_yrdawn_canvas *demo_bringup_single_canvas(uint32_t figure_id, float w, float h,
+                                                       FILE *trace,
                                                        struct yetty_yrdawn_client **out_client)
 {
     if (out_client) {
@@ -86,11 +87,10 @@ struct yetty_yrdawn_canvas *demo_bringup_single_canvas(uint32_t figure_id, FILE 
     }
     struct yetty_yrdawn_client *c = cr.value;
 
-    /* Full-pane canvas — the host's compositor will move/resize via
-     * SET_CHILD_RECT once we wire that. For now full pane keeps the
-     * "single-canvas demo" visual identical to the pre-migration look. */
+    /* Small inset from the pane's top-left so the canvas doesn't sit
+     * underneath the host's chrome (tab bar etc). */
     struct yetty_yrdawn_canvas_ptr_result kr =
-        yetty_yrdawn_canvas_create(c, figure_id, 0.0f, 0.0f, 1024.0f, 1024.0f);
+        yetty_yrdawn_canvas_create(c, figure_id, 16.0f, 16.0f, w, h);
     if (kr.ok != 1) {
         if (trace) {
             fprintf(trace, "demo_bringup: canvas_create failed: %s\n", kr.error.msg);
