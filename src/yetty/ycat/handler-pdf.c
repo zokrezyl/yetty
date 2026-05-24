@@ -97,8 +97,7 @@ struct page_bridge_ctx {
 };
 
 static struct yetty_ycore_void_result page_to_ycat_emit(
-    void *ud, int page_index, int page_count,
-    const struct yetty_ydraw_draw_list *envelope)
+    void *ud, int page_index, int page_count, const struct yetty_ydraw_draw_list *envelope)
 {
     (void)page_index;
     (void)page_count;
@@ -112,8 +111,8 @@ static struct yetty_ycore_void_result page_to_ycat_emit(
  * Handler
  *===========================================================================*/
 
-static struct yetty_ycore_void_result stream_from_path(
-    const char *path, yetty_ycat_emit_fn emit, void *emit_ud)
+static struct yetty_ycore_void_result stream_from_path(const char *path, yetty_ycat_emit_fn emit,
+                                                       void *emit_ud)
 {
     struct _pdfio_file_s *pdf = pdfioFileOpen(path, NULL, NULL, NULL, NULL);
     if (!pdf) {
@@ -132,8 +131,7 @@ static struct yetty_ycore_void_result stream_from_path(
 }
 
 struct yetty_ycore_void_result yetty_ycat_handler_pdf_streaming(
-    const uint8_t *bytes, size_t len, const char *path_hint,
-    const struct yetty_ycat_config *config,
+    const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config,
     yetty_ycat_emit_fn emit, void *emit_user_data)
 {
     (void)config;

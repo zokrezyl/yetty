@@ -1,4 +1,4 @@
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ywire/wire-statemachine.h>
@@ -51,8 +51,7 @@
 #define U_COUNT 15
 
 /* Setters */
-static inline void set_grid_size(struct yetty_ydraw_gpu_resource_set *rs, float cols,
-                                 float rows)
+static inline void set_grid_size(struct yetty_ydraw_gpu_resource_set *rs, float cols, float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
@@ -62,8 +61,7 @@ static inline void set_cell_size(struct yetty_ydraw_gpu_resource_set *rs, float 
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
-static inline void set_cursor_pos(struct yetty_ydraw_gpu_resource_set *rs, float col,
-                                  float row)
+static inline void set_cursor_pos(struct yetty_ydraw_gpu_resource_set *rs, float col, float row)
 {
     rs->uniforms[U_CURSOR_POS].vec2[0] = col;
     rs->uniforms[U_CURSOR_POS].vec2[1] = row;
@@ -100,8 +98,8 @@ static inline void set_root_row(struct yetty_ydraw_gpu_resource_set *rs, uint32_
     rs->uniforms[U_ROOT_ROW].u32 = r;
 }
 static inline void set_selection_state(struct yetty_ydraw_gpu_resource_set *rs, int active,
-                                       uint32_t anchor_row, uint32_t anchor_col,
-                                       uint32_t head_row, uint32_t head_col)
+                                       uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
+                                       uint32_t head_col)
 {
     rs->uniforms[U_SEL_ACTIVE].u32 = active ? 1u : 0u;
     rs->uniforms[U_SEL_ANCHOR].vec2[0] = (float)anchor_row;
@@ -242,9 +240,6 @@ struct yetty_yterm_terminal_text_layer {
 
 /* Forward declarations */
 static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result text_layer_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result text_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);
@@ -263,8 +258,8 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
 static struct yetty_ycore_void_result text_layer_get_selection_text(
     const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out);
 static struct yetty_ycore_void_result text_layer_set_selection(
-    struct yetty_yrender_terminal_layer *self, int active,
-    uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row, uint32_t head_col);
+    struct yetty_yrender_terminal_layer *self, int active, uint32_t anchor_row, uint32_t anchor_col,
+    uint32_t head_row, uint32_t head_col);
 
 /* VTerm callbacks */
 static int on_damage(VTermRect rect, void *user);
@@ -678,7 +673,6 @@ static struct yetty_ycore_void_result text_layer_set_visual_zoom(
 /* Ops */
 static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
     .destroy = text_layer_destroy,
-    .process_input = text_layer_process_input,
     .resize_grid = text_layer_resize_grid,
     .set_visual_zoom = text_layer_set_visual_zoom,
     .get_gpu_resource_set = text_layer_get_gpu_resource_set,
@@ -773,9 +767,9 @@ static int on_settermprop(VTermProp prop, VTermValue *val, void *user)
     }
 
     if (changed && layer->base.mouse_sub_fn) {
-        struct yetty_ycore_void_result r = layer->base.mouse_sub_fn(
-            layer->mouse_click_subscribed, layer->mouse_move_subscribed,
-            layer->base.mouse_sub_userdata);
+        struct yetty_ycore_void_result r =
+            layer->base.mouse_sub_fn(layer->mouse_click_subscribed, layer->mouse_move_subscribed,
+                                     layer->base.mouse_sub_userdata);
         if (YETTY_IS_ERR(r)) {
             yerror("text_layer on_settermprop: mouse_sub_fn failed: %s", r.error.msg);
             if (YETTY_IS_OK(layer->pending_error)) {
@@ -890,7 +884,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
             content_scale = 1.0f;
         }
         float msdf_font_size =
-            (float)config->ops->get_int(config, "terminal/text-layer/font/size", 14) * content_scale;
+            (float)config->ops->get_int(config, "terminal/text-layer/font/size", 14) *
+            content_scale;
 
         /* Cell padding around the glyph, fractions of glyph dim. Default 0
          * = cell exactly wraps the glyph extent, which fixes the "glyph too
@@ -917,8 +912,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     }
     if (YETTY_IS_ERR(font_res)) {
         free(text_layer);
-        return YETTY_ERR(yetty_yterm_terminal_layer,
-                         "text_layer_create: font creation failed", font_res);
+        return YETTY_ERR(yetty_yterm_terminal_layer, "text_layer_create: font creation failed",
+                         font_res);
     }
     ydebug("text_layer: font created");
     text_layer->font = font_res.value;
@@ -928,8 +923,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     struct pixel_size_result cs_res = text_layer->font->ops->get_cell_size(text_layer->font);
     if (YETTY_IS_ERR(cs_res)) {
         free(text_layer);
-        return YETTY_ERR(yetty_yterm_terminal_layer,
-                         "text_layer_create: font get_cell_size failed", cs_res);
+        return YETTY_ERR(yetty_yterm_terminal_layer, "text_layer_create: font get_cell_size failed",
+                         cs_res);
     }
     text_layer->base.cell_size.width = cs_res.value.width;
     text_layer->base.cell_size.height = cs_res.value.height;
@@ -1016,11 +1011,14 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
 /* Runs on the persistent default-layer coro spawned by the wire SM at
  * set_default. Never returns under normal operation — `sm_read` yields
  * when no raw bytes are deliverable, the SM scanner resumes us when
- * more arrive. A returned ERR would surface to the SM at the next tick. */
-static struct yetty_ycore_void_result text_layer_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine)
+ * more arrive. A returned ERR would surface to the SM at the next tick.
+ *
+ * userdata is the layer's base pointer (passed to set_default at
+ * registration time). */
+struct yetty_ycore_void_result yetty_yterm_text_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
+    struct yetty_yrender_terminal_layer *self = userdata;
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
 
@@ -1234,8 +1232,7 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
 
 /* Render layer to target - delegate to render_target */
 static struct yetty_ycore_int_result text_layer_render(struct yetty_yrender_terminal_layer *self,
-                                                       struct yetty_ydraw_target *target,
-                                                       int force)
+                                                       struct yetty_ydraw_target *target, int force)
 {
     /* Text-layer has no per-figure granularity — one big text/SDF
      * pass. Render iff dirty or forced. Return 1 when we drew so
@@ -1343,11 +1340,11 @@ static int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user
 
     /* Notify cursor callback */
     if (text_layer->base.cursor_fn) {
-        struct yetty_ycore_void_result r = text_layer->base.cursor_fn(
-            &text_layer->base,
-            (struct yetty_ycore_grid_cursor_pos){.cols = (uint32_t)pos.col,
-                                                 .rows = (uint32_t)pos.row},
-            text_layer->base.cursor_userdata);
+        struct yetty_ycore_void_result r =
+            text_layer->base.cursor_fn(&text_layer->base,
+                                       (struct yetty_ycore_grid_cursor_pos){
+                                           .cols = (uint32_t)pos.col, .rows = (uint32_t)pos.row},
+                                       text_layer->base.cursor_userdata);
         if (YETTY_IS_ERR(r)) {
             yerror("text_layer on_move_cursor: cursor_fn failed: %s", r.error.msg);
             if (YETTY_IS_OK(text_layer->pending_error)) {
@@ -1717,8 +1714,7 @@ static struct yetty_ycore_void_result text_layer_get_selection_text(
     }
 
     /* First row: from sc to end of row. */
-    struct yetty_ycore_void_result r =
-        text_layer_append_row_slice(text_layer, sr, sc, cols, out);
+    struct yetty_ycore_void_result r = text_layer_append_row_slice(text_layer, sr, sc, cols, out);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "selection first row");
     {
         struct yetty_ycore_void_result wr = yetty_ycore_buffer_write(out, "\n", 1);
@@ -1742,8 +1738,8 @@ static struct yetty_ycore_void_result text_layer_get_selection_text(
 }
 
 static struct yetty_ycore_void_result text_layer_set_selection(
-    struct yetty_yrender_terminal_layer *self, int active,
-    uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row, uint32_t head_col)
+    struct yetty_yrender_terminal_layer *self, int active, uint32_t anchor_row, uint32_t anchor_col,
+    uint32_t head_row, uint32_t head_col)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);

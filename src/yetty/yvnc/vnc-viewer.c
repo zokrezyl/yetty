@@ -10,7 +10,7 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>

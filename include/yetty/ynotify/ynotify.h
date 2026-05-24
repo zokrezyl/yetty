@@ -31,8 +31,8 @@ extern "C" {
 #endif
 
 enum yetty_ynotify_severity {
-    YETTY_YNOTIFY_INFO  = 0,
-    YETTY_YNOTIFY_WARN  = 1,
+    YETTY_YNOTIFY_INFO = 0,
+    YETTY_YNOTIFY_WARN = 1,
     YETTY_YNOTIFY_ERROR = 2,
 };
 

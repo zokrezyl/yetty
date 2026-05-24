@@ -61,8 +61,9 @@ struct yetty_yui_view {
 /* View operations - dispatch through vtable */
 struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yui_view *view);
 
-struct yetty_ycore_void_result yetty_yui_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target, int force_redraw);
+struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yui_view *view,
+                                                     struct yetty_ydraw_target *render_target,
+                                                     int force_redraw);
 
 struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yui_view *view,
                                                          struct yetty_yui_rect bounds);

@@ -63,7 +63,7 @@ struct yetty_ylexbor_color {
  * inside text never fire JS handlers. NULL for runs not nested under
  * any inline element (i.e. plain text directly inside a block). */
 struct yetty_ylexbor_inline_seg {
-    size_t start;  /* byte offset into box->text where this seg begins */
+    size_t start; /* byte offset into box->text where this seg begins */
     struct yetty_ylexbor_color fg;
     int font_weight;
     bool font_italic;

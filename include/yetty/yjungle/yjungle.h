@@ -73,7 +73,7 @@ struct yetty_yjungle_config {
      *   group_children_min/max   — N of sub-segments inside a group.
      */
     uint32_t max_depth;
-    float    group_prob_depth0;
+    float group_prob_depth0;
     uint32_t group_children_min;
     uint32_t group_children_max;
 
@@ -88,7 +88,7 @@ struct yetty_yjungle_config {
      */
     uint32_t initial_chain_length;
     uint32_t max_chain_length;
-    float    extend_probability;
+    float extend_probability;
 
     /* Event cadence — interval in milliseconds between mutation events.
      * Each event picks a new random delay in [min, max]. */
@@ -99,15 +99,15 @@ struct yetty_yjungle_config {
 struct yetty_yjungle_config yetty_yjungle_config_default(void);
 
 /* seed=0 → seed from CLOCK_MONOTONIC. */
-struct yetty_yjungle_ptr_result yetty_yjungle_create(
-    const struct yetty_yjungle_config *config, uint32_t seed);
+struct yetty_yjungle_ptr_result yetty_yjungle_create(const struct yetty_yjungle_config *config,
+                                                     uint32_t seed);
 
 void yetty_yjungle_destroy(struct yetty_yjungle *jungle);
 
 /* Update scene bounds; the random walk respects them on subsequent
  * extend/replace events. Existing segments are not relocated. */
-struct yetty_ycore_void_result yetty_yjungle_set_scene_size(
-    struct yetty_yjungle *jungle, float scene_width, float scene_height);
+struct yetty_ycore_void_result yetty_yjungle_set_scene_size(struct yetty_yjungle *jungle,
+                                                            float scene_width, float scene_height);
 
 /* Drive one frame. Writes the incremental commands for this tick into
  * `buf`. The buffer is cleared at the start of the call; if nothing
@@ -116,12 +116,11 @@ struct yetty_ycore_void_result yetty_yjungle_set_scene_size(
  *
  * `now_ms` is a monotonic millisecond clock — used to decide whether an
  * event fires this tick. */
-struct yetty_ycore_void_result yetty_yjungle_tick(
-    struct yetty_yjungle *jungle, struct yetty_ydraw_draw_list *buf,
-    uint64_t now_ms);
+struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *jungle,
+                                                  struct yetty_ydraw_draw_list *buf,
+                                                  uint64_t now_ms);
 
-const struct yetty_yjungle_config *yetty_yjungle_config_get(
-    const struct yetty_yjungle *jungle);
+const struct yetty_yjungle_config *yetty_yjungle_config_get(const struct yetty_yjungle *jungle);
 
 #ifdef __cplusplus
 }

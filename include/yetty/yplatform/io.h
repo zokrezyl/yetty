@@ -28,8 +28,8 @@ extern "C" {
  * re-checking errno each time. */
 YETTY_YRESULT_DECLARE(yetty_yplatform_io_size, size_t);
 
-struct yetty_yplatform_io_size_result
-yetty_yplatform_io_read_nonblocking(int fd, void *buf, size_t cap);
+struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd, void *buf,
+                                                                          size_t cap);
 
 #ifdef __cplusplus
 }

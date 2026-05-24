@@ -27,7 +27,7 @@
 
 struct slice {
     const char *p;
-    size_t      n;
+    size_t n;
 };
 
 static struct slice slice_make(const char *p, size_t n)
@@ -41,9 +41,8 @@ static struct slice slice_trim(struct slice s)
         s.p++;
         s.n--;
     }
-    while (s.n &&
-           (s.p[s.n - 1] == ' ' || s.p[s.n - 1] == '\t' || s.p[s.n - 1] == '\r' ||
-            s.p[s.n - 1] == '\n')) {
+    while (s.n && (s.p[s.n - 1] == ' ' || s.p[s.n - 1] == '\t' || s.p[s.n - 1] == '\r' ||
+                   s.p[s.n - 1] == '\n')) {
         s.n--;
     }
     return s;
@@ -98,8 +97,8 @@ static char *slice_to_cstr(struct slice s)
  *===========================================================================*/
 
 struct node_def {
-    struct slice                   id;
-    struct slice                   label;
+    struct slice id;
+    struct slice label;
     enum yetty_ydiagram_node_shape shape;
 };
 
@@ -115,8 +114,8 @@ static bool try_open_close(struct slice tok, const char *open, const char *close
     if (cp == (size_t)-1) {
         return false;
     }
-    size_t cl  = strlen(close);
-    out->id    = slice_make(tok.p, op);
+    size_t cl = strlen(close);
+    out->id = slice_make(tok.p, op);
     out->label = slice_make(tok.p + op + ol, cp - op - ol);
     out->shape = shape;
     return out->id.n > 0;
@@ -124,7 +123,7 @@ static bool try_open_close(struct slice tok, const char *open, const char *close
 
 static bool parse_node_def(struct slice token, struct node_def *out)
 {
-    out->id    = slice_make(NULL, 0);
+    out->id = slice_make(NULL, 0);
     out->label = slice_make(NULL, 0);
     out->shape = YETTY_YDIAGRAM_SHAPE_RECTANGLE;
     if (token.n == 0) {
@@ -132,19 +131,39 @@ static bool parse_node_def(struct slice token, struct node_def *out)
     }
 
     /* Order matters — longer / more specific delimiters first. */
-    if (try_open_close(token, "((", "))", YETTY_YDIAGRAM_SHAPE_CIRCLE, out)) return true;
-    if (try_open_close(token, "{{", "}}", YETTY_YDIAGRAM_SHAPE_HEXAGON, out)) return true;
-    if (try_open_close(token, "[(", ")]", YETTY_YDIAGRAM_SHAPE_CYLINDER, out)) return true;
-    if (try_open_close(token, "([", "])", YETTY_YDIAGRAM_SHAPE_STADIUM, out)) return true;
-    if (try_open_close(token, "[/", "/]", YETTY_YDIAGRAM_SHAPE_PARALLELOGRAM, out)) return true;
-    if (try_open_close(token, "[\\", "\\]", YETTY_YDIAGRAM_SHAPE_PARALLELOGRAM, out)) return true;
-    if (try_open_close(token, "[/", "\\]", YETTY_YDIAGRAM_SHAPE_TRAPEZOID, out)) return true;
-    if (try_open_close(token, "{", "}", YETTY_YDIAGRAM_SHAPE_DIAMOND, out)) return true;
-    if (try_open_close(token, "(", ")", YETTY_YDIAGRAM_SHAPE_ROUNDED_RECT, out)) return true;
-    if (try_open_close(token, "[", "]", YETTY_YDIAGRAM_SHAPE_RECTANGLE, out)) return true;
+    if (try_open_close(token, "((", "))", YETTY_YDIAGRAM_SHAPE_CIRCLE, out)) {
+        return true;
+    }
+    if (try_open_close(token, "{{", "}}", YETTY_YDIAGRAM_SHAPE_HEXAGON, out)) {
+        return true;
+    }
+    if (try_open_close(token, "[(", ")]", YETTY_YDIAGRAM_SHAPE_CYLINDER, out)) {
+        return true;
+    }
+    if (try_open_close(token, "([", "])", YETTY_YDIAGRAM_SHAPE_STADIUM, out)) {
+        return true;
+    }
+    if (try_open_close(token, "[/", "/]", YETTY_YDIAGRAM_SHAPE_PARALLELOGRAM, out)) {
+        return true;
+    }
+    if (try_open_close(token, "[\\", "\\]", YETTY_YDIAGRAM_SHAPE_PARALLELOGRAM, out)) {
+        return true;
+    }
+    if (try_open_close(token, "[/", "\\]", YETTY_YDIAGRAM_SHAPE_TRAPEZOID, out)) {
+        return true;
+    }
+    if (try_open_close(token, "{", "}", YETTY_YDIAGRAM_SHAPE_DIAMOND, out)) {
+        return true;
+    }
+    if (try_open_close(token, "(", ")", YETTY_YDIAGRAM_SHAPE_ROUNDED_RECT, out)) {
+        return true;
+    }
+    if (try_open_close(token, "[", "]", YETTY_YDIAGRAM_SHAPE_RECTANGLE, out)) {
+        return true;
+    }
 
     /* Bare id — no delimiter. */
-    out->id    = token;
+    out->id = token;
     out->label = token;
     out->shape = YETTY_YDIAGRAM_SHAPE_RECTANGLE;
     return true;
@@ -164,7 +183,7 @@ static const char *const k_arrows[] = {
 
 static int arrow_find(struct slice line, size_t *out_pos, const char **out_arrow)
 {
-    size_t      best_pos   = (size_t)-1;
+    size_t best_pos = (size_t)-1;
     const char *best_arrow = NULL;
     for (size_t i = 0; i < sizeof(k_arrows) / sizeof(k_arrows[0]); i++) {
         size_t pos = slice_find(line, k_arrows[i], 0);
@@ -175,21 +194,21 @@ static int arrow_find(struct slice line, size_t *out_pos, const char **out_arrow
          * already sorted longest-first). */
         if (best_pos == (size_t)-1 || pos < best_pos ||
             (pos == best_pos && strlen(k_arrows[i]) > strlen(best_arrow))) {
-            best_pos   = pos;
+            best_pos = pos;
             best_arrow = k_arrows[i];
         }
     }
     if (best_pos == (size_t)-1) {
         return -1;
     }
-    *out_pos   = best_pos;
+    *out_pos = best_pos;
     *out_arrow = best_arrow;
     return 0;
 }
 
 static void apply_arrow_style(const char *arrow, struct yetty_ydiagram_edge_style *style)
 {
-    size_t      len  = strlen(arrow);
+    size_t len = strlen(arrow);
     const char *body = arrow;
     /* Drop a trailing '|' (label opener) for style decisions. */
     if (len > 0 && body[len - 1] == '|') {
@@ -198,19 +217,25 @@ static void apply_arrow_style(const char *arrow, struct yetty_ydiagram_edge_styl
 
     style->source_arrow = YETTY_YDIAGRAM_ARROW_NONE;
     style->target_arrow = YETTY_YDIAGRAM_ARROW_NONE;
-    style->line_style   = YETTY_YDIAGRAM_LINE_SOLID;
+    style->line_style = YETTY_YDIAGRAM_LINE_SOLID;
 
-    bool has_dot   = false;
+    bool has_dot = false;
     bool has_thick = false;
     for (size_t i = 0; i + 1 < len; i++) {
-        if (body[i] == '-' && body[i + 1] == '.') has_dot = true;
-        if (body[i] == '.' && body[i + 1] == '-') has_dot = true;
-        if (body[i] == '=' && body[i + 1] == '=') has_thick = true;
+        if (body[i] == '-' && body[i + 1] == '.') {
+            has_dot = true;
+        }
+        if (body[i] == '.' && body[i + 1] == '-') {
+            has_dot = true;
+        }
+        if (body[i] == '=' && body[i + 1] == '=') {
+            has_thick = true;
+        }
     }
     if (has_dot) {
         style->line_style = YETTY_YDIAGRAM_LINE_DASHED;
     } else if (has_thick) {
-        style->line_style   = YETTY_YDIAGRAM_LINE_THICK;
+        style->line_style = YETTY_YDIAGRAM_LINE_THICK;
         style->stroke_width = 3.0f;
     }
 
@@ -239,16 +264,17 @@ bool yetty_ydiagram_mermaid_can_parse(const char *input, size_t len)
      * with `%% title` or similar metadata. */
     struct slice s = slice_make(input, len);
     while (s.n > 0) {
-        size_t       nl   = slice_find(s, "\n", 0);
+        size_t nl = slice_find(s, "\n", 0);
         struct slice line = (nl == (size_t)-1) ? s : slice_make(s.p, nl);
-        line              = slice_trim(line);
+        line = slice_trim(line);
         if (line.n > 0 && line.p[0] != '%') {
             return slice_starts_with(line, "graph ") || slice_starts_with(line, "graph\t") ||
                    slice_equals_cstr(line, "graph") || slice_starts_with(line, "flowchart ") ||
-                   slice_starts_with(line, "flowchart\t") ||
-                   slice_equals_cstr(line, "flowchart");
+                   slice_starts_with(line, "flowchart\t") || slice_equals_cstr(line, "flowchart");
         }
-        if (nl == (size_t)-1) break;
+        if (nl == (size_t)-1) {
+            break;
+        }
         s = slice_make(s.p + nl + 1, s.n - nl - 1);
     }
     return false;
@@ -283,7 +309,7 @@ static int ensure_node_idx(struct yetty_ydiagram_graph *g, struct slice id, stru
         return -1;
     }
     if (current_subgraph) {
-        g->nodes[ar.value].cluster_id   = strdup(current_subgraph);
+        g->nodes[ar.value].cluster_id = strdup(current_subgraph);
         struct yetty_ydiagram_cluster *c = yetty_ydiagram_graph_find_cluster(g, current_subgraph);
         if (c) {
             (void)yetty_ydiagram_cluster_add_node(c, id_z);
@@ -296,13 +322,13 @@ static int ensure_node_idx(struct yetty_ydiagram_graph *g, struct slice id, stru
 static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
                        const char *current_subgraph)
 {
-    size_t      arrow_pos = (size_t)-1;
+    size_t arrow_pos = (size_t)-1;
     const char *arrow_str = NULL;
 
     if (arrow_find(line, &arrow_pos, &arrow_str) != 0) {
         /* Standalone node definition. */
         struct node_def nd;
-        struct slice    trimmed = slice_trim(line);
+        struct slice trimmed = slice_trim(line);
         if (parse_node_def(trimmed, &nd)) {
             (void)ensure_node_idx(g, nd.id, nd.label, nd.shape, current_subgraph);
         }
@@ -312,21 +338,21 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
     size_t arrow_len = strlen(arrow_str);
 
     struct slice source_part = slice_trim(slice_make(line.p, arrow_pos));
-    struct slice after_arrow = slice_make(line.p + arrow_pos + arrow_len,
-                                          line.n - arrow_pos - arrow_len);
+    struct slice after_arrow =
+        slice_make(line.p + arrow_pos + arrow_len, line.n - arrow_pos - arrow_len);
 
     /* Edge label syntax: -->|label| or  -->| label | */
     struct slice edge_label = slice_make(NULL, 0);
     if (arrow_len > 0 && arrow_str[arrow_len - 1] == '|') {
         size_t end = slice_find(after_arrow, "|", 0);
         if (end != (size_t)-1) {
-            edge_label  = slice_make(after_arrow.p, end);
+            edge_label = slice_make(after_arrow.p, end);
             after_arrow = slice_make(after_arrow.p + end + 1, after_arrow.n - end - 1);
         }
     } else if (after_arrow.n > 0 && after_arrow.p[0] == '|') {
         size_t end = slice_find(after_arrow, "|", 1);
         if (end != (size_t)-1) {
-            edge_label  = slice_make(after_arrow.p + 1, end - 1);
+            edge_label = slice_make(after_arrow.p + 1, end - 1);
             after_arrow = slice_make(after_arrow.p + end + 1, after_arrow.n - end - 1);
         }
     }
@@ -337,7 +363,7 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
     /* Source */
     struct node_def src_nd;
     if (!parse_node_def(source_part, &src_nd)) {
-        src_nd.id    = source_part;
+        src_nd.id = source_part;
         src_nd.label = source_part;
         src_nd.shape = YETTY_YDIAGRAM_SHAPE_RECTANGLE;
     }
@@ -348,7 +374,7 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
 
     /* Detect a chained arrow in target_part: A --> B --> C. We pull out
      * the first target then recurse on `<first_target> <rest>`. */
-    size_t      chain_pos   = (size_t)-1;
+    size_t chain_pos = (size_t)-1;
     const char *chain_arrow = NULL;
     (void)arrow_find(target_part, &chain_pos, &chain_arrow);
 
@@ -359,7 +385,7 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
 
     struct node_def tgt_nd;
     if (!parse_node_def(first_target, &tgt_nd)) {
-        tgt_nd.id    = first_target;
+        tgt_nd.id = first_target;
         tgt_nd.label = first_target;
         tgt_nd.shape = YETTY_YDIAGRAM_SHAPE_RECTANGLE;
     }
@@ -375,7 +401,7 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
      * graph for these ids again in this iteration. */
     char *src_id = strdup(g->nodes[src_idx].id);
     char *tgt_id = strdup(g->nodes[tgt_idx].id);
-    char *lbl    = slice_to_cstr(edge_label);
+    char *lbl = slice_to_cstr(edge_label);
     if (src_id && tgt_id && lbl) {
         struct yetty_ydiagram_edge_style style = g->default_edge_style;
         apply_arrow_style(arrow_str, &style);
@@ -384,11 +410,11 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
 
     /* Recurse on the rest of the chain: <first_target_id> <chain_arrow>... */
     if (chain_pos != (size_t)-1 && tgt_id) {
-        size_t      rest_off = chain_pos;
-        const char *rest_p   = target_part.p + rest_off;
-        size_t      rest_n   = target_part.n - rest_off;
-        size_t      total    = strlen(tgt_id) + 1 + rest_n;
-        char       *buf      = malloc(total + 1);
+        size_t rest_off = chain_pos;
+        const char *rest_p = target_part.p + rest_off;
+        size_t rest_n = target_part.n - rest_off;
+        size_t total = strlen(tgt_id) + 1 + rest_n;
+        char *buf = malloc(total + 1);
         if (buf) {
             size_t off = 0;
             memcpy(buf + off, tgt_id, strlen(tgt_id));
@@ -407,25 +433,25 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
     free(lbl);
 }
 
-struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(
-    const char *input, size_t len, struct yetty_ydiagram_graph *g)
+struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(const char *input, size_t len,
+                                                            struct yetty_ydiagram_graph *g)
 {
     if (!input || !g) {
         return YETTY_ERR(yetty_ycore_void, "mermaid_parse: NULL input or graph");
     }
 
     struct slice cursor = slice_make(input, len);
-    bool         in_graph        = false;
-    char        *current_subgraph = NULL;
+    bool in_graph = false;
+    char *current_subgraph = NULL;
 
     while (cursor.n > 0) {
         /* Pull one line. */
-        size_t       nl     = slice_find(cursor, "\n", 0);
-        struct slice line   = (nl == (size_t)-1) ? cursor : slice_make(cursor.p, nl);
-        struct slice next   = (nl == (size_t)-1) ? slice_make(NULL, 0)
-                                                 : slice_make(cursor.p + nl + 1, cursor.n - nl - 1);
-        line                = slice_trim(line);
-        cursor              = next;
+        size_t nl = slice_find(cursor, "\n", 0);
+        struct slice line = (nl == (size_t)-1) ? cursor : slice_make(cursor.p, nl);
+        struct slice next = (nl == (size_t)-1) ? slice_make(NULL, 0)
+                                               : slice_make(cursor.p + nl + 1, cursor.n - nl - 1);
+        line = slice_trim(line);
+        cursor = next;
 
         if (line.n == 0 || line.p[0] == '%') {
             continue;
@@ -433,8 +459,8 @@ struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(
 
         if (slice_starts_with(line, "graph ") || slice_starts_with(line, "flowchart ") ||
             slice_equals_cstr(line, "graph") || slice_equals_cstr(line, "flowchart")) {
-            in_graph     = true;
-            size_t sp    = slice_find(line, " ", 0);
+            in_graph = true;
+            size_t sp = slice_find(line, " ", 0);
             if (sp != (size_t)-1) {
                 struct slice dir = slice_trim(slice_make(line.p + sp + 1, line.n - sp - 1));
                 if (slice_equals_cstr(dir, "TD") || slice_equals_cstr(dir, "TB")) {
@@ -452,19 +478,18 @@ struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(
 
         if (slice_starts_with(line, "subgraph ")) {
             struct slice rest = slice_trim(slice_make(line.p + 9, line.n - 9));
-            size_t       br   = slice_find(rest, "[", 0);
+            size_t br = slice_find(rest, "[", 0);
             struct slice sub_id, sub_label;
             if (br != (size_t)-1) {
-                sub_id              = slice_trim(slice_make(rest.p, br));
-                size_t end_b        = slice_find(rest, "]", br);
-                sub_label           = (end_b != (size_t)-1)
-                                       ? slice_make(rest.p + br + 1, end_b - br - 1)
-                                       : slice_make(NULL, 0);
+                sub_id = slice_trim(slice_make(rest.p, br));
+                size_t end_b = slice_find(rest, "]", br);
+                sub_label = (end_b != (size_t)-1) ? slice_make(rest.p + br + 1, end_b - br - 1)
+                                                  : slice_make(NULL, 0);
             } else {
-                sub_id    = rest;
+                sub_id = rest;
                 sub_label = rest;
             }
-            char *id_z  = slice_to_cstr(sub_id);
+            char *id_z = slice_to_cstr(sub_id);
             char *lbl_z = slice_to_cstr(sub_label);
             if (id_z && lbl_z) {
                 (void)yetty_ydiagram_graph_add_cluster(g, id_z, lbl_z);

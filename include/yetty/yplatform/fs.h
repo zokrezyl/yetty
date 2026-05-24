@@ -62,8 +62,7 @@ struct yetty_yplatform_dir *yetty_yplatform_dir_open(const char *path);
 /* Read the next entry. Returns 1 and fills *out on success, 0 at
  * end-of-directory or on error. Includes "." and ".." entries — filter
  * at the caller. */
-int yetty_yplatform_dir_next(struct yetty_yplatform_dir *d,
-                             struct yetty_yplatform_dir_entry *out);
+int yetty_yplatform_dir_next(struct yetty_yplatform_dir *d, struct yetty_yplatform_dir_entry *out);
 
 /* Close the handle. Safe on NULL. */
 void yetty_yplatform_dir_close(struct yetty_yplatform_dir *d);

@@ -23,10 +23,10 @@
 #include <string.h>
 
 enum {
-    DECODE_CHUNK_FRAMES = 65536,   /* float buffer of 256 KB */
+    DECODE_CHUNK_FRAMES = 65536, /* float buffer of 256 KB */
 };
 
-static const double EPSILON_RMS = 1e-12;   /* clamps the log of zero */
+static const double EPSILON_RMS = 1e-12; /* clamps the log of zero */
 
 void yetty_yaudio_intervals_config_defaults(struct yetty_yaudio_intervals_config *cfg)
 {
@@ -39,7 +39,7 @@ void yetty_yaudio_intervals_config_defaults(struct yetty_yaudio_intervals_config
     cfg->open_db_above_floor = 10.0f;
     cfg->close_db_above_floor = 6.0f;
     cfg->min_active_sec = 0.050;
-    cfg->min_gap_sec    = 0.150;
+    cfg->min_gap_sec = 0.150;
 }
 
 static float lin_to_dbfs(float lin)
@@ -61,13 +61,10 @@ static int cmp_float_asc(const void *a, const void *b)
 /* Stream-decode the channel one chunk at a time, computing per-frame
  * RMS into `rms_out`. Frames span [hop * i, hop * i + frame_samples);
  * a partial trailing frame is dropped. */
-static struct yetty_ycore_void_result
-compute_frame_rms(const struct yetty_yaudio_wav *w,
-                  uint32_t channel,
-                  uint32_t frame_samples,
-                  uint32_t hop_samples,
-                  float   *rms_out,
-                  size_t   total_frames)
+static struct yetty_ycore_void_result compute_frame_rms(const struct yetty_yaudio_wav *w,
+                                                        uint32_t channel, uint32_t frame_samples,
+                                                        uint32_t hop_samples, float *rms_out,
+                                                        size_t total_frames)
 {
     if (frame_samples == 0 || hop_samples == 0) {
         return YETTY_ERR(yetty_ycore_void, "compute_frame_rms: zero frame/hop");
@@ -85,10 +82,10 @@ compute_frame_rms(const struct yetty_yaudio_wav *w,
         return YETTY_ERR(yetty_ycore_void, "compute_frame_rms: buf alloc failed");
     }
 
-    size_t frame_idx = 0;          /* output frame index */
-    size_t buf_base_sample = 0;    /* sample-index of buf[0] */
-    size_t buf_fill = 0;           /* valid samples currently in buf */
-    size_t src_off = 0;            /* next sample to decode from the file */
+    size_t frame_idx = 0;       /* output frame index */
+    size_t buf_base_sample = 0; /* sample-index of buf[0] */
+    size_t buf_fill = 0;        /* valid samples currently in buf */
+    size_t src_off = 0;         /* next sample to decode from the file */
     const size_t src_total = w->frames;
 
     /* Initial fill. */
@@ -101,8 +98,7 @@ compute_frame_rms(const struct yetty_yaudio_wav *w,
             yetty_yaudio_wav_read_channel_f32(w, channel, src_off, buf, want);
         if (YETTY_IS_ERR(r)) {
             free(buf);
-            return YETTY_ERR(yetty_ycore_void,
-                             "compute_frame_rms: initial read failed", r);
+            return YETTY_ERR(yetty_ycore_void, "compute_frame_rms: initial read failed", r);
         }
         buf_fill = r.value;
         src_off += r.value;
@@ -117,8 +113,7 @@ compute_frame_rms(const struct yetty_yaudio_wav *w,
         if (frame_start < buf_base_sample) {
             /* Should never happen — we advance monotonically. */
             free(buf);
-            return YETTY_ERR(yetty_ycore_void,
-                             "compute_frame_rms: frame_start behind buffer");
+            return YETTY_ERR(yetty_ycore_void, "compute_frame_rms: frame_start behind buffer");
         }
         if (need_end > buf_base_sample + buf_fill) {
             /* Refill: shift the unread tail down, then read more. */
@@ -142,17 +137,15 @@ compute_frame_rms(const struct yetty_yaudio_wav *w,
                 break;
             }
             struct yetty_ycore_size_result r =
-                yetty_yaudio_wav_read_channel_f32(w, channel, src_off,
-                                                  buf + buf_fill, want);
+                yetty_yaudio_wav_read_channel_f32(w, channel, src_off, buf + buf_fill, want);
             if (YETTY_IS_ERR(r)) {
                 free(buf);
-                return YETTY_ERR(yetty_ycore_void,
-                                 "compute_frame_rms: chunk read failed", r);
+                return YETTY_ERR(yetty_ycore_void, "compute_frame_rms: chunk read failed", r);
             }
             buf_fill += r.value;
             src_off += r.value;
             if (need_end > buf_base_sample + buf_fill) {
-                break;  /* incomplete trailing frame */
+                break; /* incomplete trailing frame */
             }
         }
 
@@ -170,8 +163,7 @@ compute_frame_rms(const struct yetty_yaudio_wav *w,
 
     free(buf);
     if (frame_idx != total_frames) {
-        ywarn("compute_frame_rms: produced %zu / %zu frames",
-              frame_idx, total_frames);
+        ywarn("compute_frame_rms: produced %zu / %zu frames", frame_idx, total_frames);
     }
     return YETTY_OK_VOID();
 }
@@ -193,8 +185,12 @@ static float percentile_of(const float *rms, size_t n, float pct)
     memcpy(sorted, rms, n * sizeof(float));
     qsort(sorted, n, sizeof(float), cmp_float_asc);
 
-    if (pct < 0.0f) pct = 0.0f;
-    if (pct > 1.0f) pct = 1.0f;
+    if (pct < 0.0f) {
+        pct = 0.0f;
+    }
+    if (pct > 1.0f) {
+        pct = 1.0f;
+    }
     size_t idx = (size_t)((double)pct * (double)(n - 1));
     float v = sorted[idx];
     free(sorted);
@@ -202,19 +198,10 @@ static float percentile_of(const float *rms, size_t n, float pct)
 }
 
 /* Second pass: hysteresis + duration filters. */
-static struct yetty_yaudio_intervals_ptr_result
-build_intervals(const float *rms,
-                size_t n,
-                float open_lin,
-                float close_lin,
-                uint32_t hop_samples,
-                uint32_t frame_samples,
-                uint32_t sample_rate,
-                double min_active_sec,
-                double min_gap_sec,
-                float noise_floor_dbfs,
-                float open_thr_dbfs,
-                float close_thr_dbfs)
+static struct yetty_yaudio_intervals_ptr_result build_intervals(
+    const float *rms, size_t n, float open_lin, float close_lin, uint32_t hop_samples,
+    uint32_t frame_samples, uint32_t sample_rate, double min_active_sec, double min_gap_sec,
+    float noise_floor_dbfs, float open_thr_dbfs, float close_thr_dbfs)
 {
     /* Provisional intervals: produced by hysteresis only.
      * Then merge across short gaps, then drop short actives. */
@@ -224,14 +211,13 @@ build_intervals(const float *rms,
     size_t cap = n / 2 + 4;
     struct yetty_yaudio_interval *items = malloc(cap * sizeof(*items));
     if (!items) {
-        return YETTY_ERR(yetty_yaudio_intervals_ptr,
-                         "build_intervals: items alloc failed");
+        return YETTY_ERR(yetty_yaudio_intervals_ptr, "build_intervals: items alloc failed");
     }
     size_t count = 0;
 
     bool active = false;
     size_t start_frame = 0;
-    float  peak_lin = 0.0f;
+    float peak_lin = 0.0f;
     double sum_sq = 0.0;
     size_t inside_n = 0;
 
@@ -261,8 +247,7 @@ build_intervals(const float *rms,
                 double end_sec = (double)i * hop_d / sr_d + frame_dur;
                 if (count == cap) {
                     cap *= 2;
-                    struct yetty_yaudio_interval *nb =
-                        realloc(items, cap * sizeof(*items));
+                    struct yetty_yaudio_interval *nb = realloc(items, cap * sizeof(*items));
                     if (!nb) {
                         free(items);
                         return YETTY_ERR(yetty_yaudio_intervals_ptr,
@@ -272,9 +257,9 @@ build_intervals(const float *rms,
                 }
                 float rms_lin = (float)sqrt(sum_sq / (double)inside_n);
                 items[count].start_sec = start_sec;
-                items[count].end_sec   = end_sec;
+                items[count].end_sec = end_sec;
                 items[count].peak_dbfs = lin_to_dbfs(peak_lin);
-                items[count].rms_dbfs  = lin_to_dbfs(rms_lin);
+                items[count].rms_dbfs = lin_to_dbfs(rms_lin);
                 count++;
                 active = false;
             }
@@ -286,20 +271,18 @@ build_intervals(const float *rms,
         double end_sec = (double)(n - 1) * hop_d / sr_d + frame_dur;
         if (count == cap) {
             cap *= 2;
-            struct yetty_yaudio_interval *nb =
-                realloc(items, cap * sizeof(*items));
+            struct yetty_yaudio_interval *nb = realloc(items, cap * sizeof(*items));
             if (!nb) {
                 free(items);
-                return YETTY_ERR(yetty_yaudio_intervals_ptr,
-                                 "build_intervals: realloc failed");
+                return YETTY_ERR(yetty_yaudio_intervals_ptr, "build_intervals: realloc failed");
             }
             items = nb;
         }
         float rms_lin = (float)sqrt(sum_sq / (double)inside_n);
         items[count].start_sec = start_sec;
-        items[count].end_sec   = end_sec;
+        items[count].end_sec = end_sec;
         items[count].peak_dbfs = lin_to_dbfs(peak_lin);
-        items[count].rms_dbfs  = lin_to_dbfs(rms_lin);
+        items[count].rms_dbfs = lin_to_dbfs(rms_lin);
         count++;
     }
 
@@ -347,40 +330,40 @@ build_intervals(const float *rms,
     struct yetty_yaudio_intervals *iv = calloc(1, sizeof(*iv));
     if (!iv) {
         free(items);
-        return YETTY_ERR(yetty_yaudio_intervals_ptr,
-                         "build_intervals: result alloc failed");
+        return YETTY_ERR(yetty_yaudio_intervals_ptr, "build_intervals: result alloc failed");
     }
     iv->items = items;
     iv->n = count;
-    iv->noise_floor_dbfs    = noise_floor_dbfs;
+    iv->noise_floor_dbfs = noise_floor_dbfs;
     iv->open_threshold_dbfs = open_thr_dbfs;
-    iv->close_threshold_dbfs= close_thr_dbfs;
+    iv->close_threshold_dbfs = close_thr_dbfs;
     iv->frame_samples = frame_samples;
-    iv->hop_samples   = hop_samples;
-    iv->total_frames  = n;
+    iv->hop_samples = hop_samples;
+    iv->total_frames = n;
     return YETTY_OK(yetty_yaudio_intervals_ptr, iv);
 }
 
-struct yetty_yaudio_intervals_ptr_result
-yetty_yaudio_intervals_find(const struct yetty_yaudio_wav *w,
-                            uint32_t channel,
-                            const struct yetty_yaudio_intervals_config *cfg_in)
+struct yetty_yaudio_intervals_ptr_result yetty_yaudio_intervals_find(
+    const struct yetty_yaudio_wav *w, uint32_t channel,
+    const struct yetty_yaudio_intervals_config *cfg_in)
 {
     if (!w) {
-        return YETTY_ERR(yetty_yaudio_intervals_ptr,
-                         "intervals_find: NULL wav");
+        return YETTY_ERR(yetty_yaudio_intervals_ptr, "intervals_find: NULL wav");
     }
     if (channel >= w->channels) {
-        return YETTY_ERR(yetty_yaudio_intervals_ptr,
-                         "intervals_find: channel out of range");
+        return YETTY_ERR(yetty_yaudio_intervals_ptr, "intervals_find: channel out of range");
     }
 
     struct yetty_yaudio_intervals_config cfg;
     yetty_yaudio_intervals_config_defaults(&cfg);
     if (cfg_in) {
         cfg = *cfg_in;
-        if (cfg.frame_samples == 0) cfg.frame_samples = 1024;
-        if (cfg.hop_samples == 0) cfg.hop_samples = cfg.frame_samples;
+        if (cfg.frame_samples == 0) {
+            cfg.frame_samples = 1024;
+        }
+        if (cfg.hop_samples == 0) {
+            cfg.hop_samples = cfg.frame_samples;
+        }
     }
 
     if ((size_t)cfg.frame_samples > w->frames) {
@@ -389,43 +372,36 @@ yetty_yaudio_intervals_find(const struct yetty_yaudio_wav *w,
     }
 
     /* Number of complete frames we can extract. */
-    size_t total_frames =
-        (w->frames - cfg.frame_samples) / (size_t)cfg.hop_samples + 1;
+    size_t total_frames = (w->frames - cfg.frame_samples) / (size_t)cfg.hop_samples + 1;
 
     float *rms = malloc(total_frames * sizeof(float));
     if (!rms) {
-        return YETTY_ERR(yetty_yaudio_intervals_ptr,
-                         "intervals_find: rms alloc failed");
+        return YETTY_ERR(yetty_yaudio_intervals_ptr, "intervals_find: rms alloc failed");
     }
 
     struct yetty_ycore_void_result rr =
-        compute_frame_rms(w, channel, cfg.frame_samples, cfg.hop_samples,
-                          rms, total_frames);
+        compute_frame_rms(w, channel, cfg.frame_samples, cfg.hop_samples, rms, total_frames);
     if (YETTY_IS_ERR(rr)) {
         free(rms);
-        return YETTY_ERR(yetty_yaudio_intervals_ptr,
-                         "intervals_find: pass 1 failed", rr);
+        return YETTY_ERR(yetty_yaudio_intervals_ptr, "intervals_find: pass 1 failed", rr);
     }
 
     float noise_floor_lin = percentile_of(rms, total_frames, cfg.noise_percentile);
     float floor_dbfs = lin_to_dbfs(noise_floor_lin);
-    float open_thr_dbfs  = floor_dbfs + cfg.open_db_above_floor;
+    float open_thr_dbfs = floor_dbfs + cfg.open_db_above_floor;
     float close_thr_dbfs = floor_dbfs + cfg.close_db_above_floor;
-    float open_lin  = (float)pow(10.0, (double)open_thr_dbfs / 20.0);
+    float open_lin = (float)pow(10.0, (double)open_thr_dbfs / 20.0);
     float close_lin = (float)pow(10.0, (double)close_thr_dbfs / 20.0);
 
-    yinfo("intervals_find: ch=%u frames=%zu floor=%.1f dBFS open=%.1f close=%.1f",
-          channel, total_frames, floor_dbfs, open_thr_dbfs, close_thr_dbfs);
+    yinfo("intervals_find: ch=%u frames=%zu floor=%.1f dBFS open=%.1f close=%.1f", channel,
+          total_frames, floor_dbfs, open_thr_dbfs, close_thr_dbfs);
 
-    struct yetty_yaudio_intervals_ptr_result ir =
-        build_intervals(rms, total_frames, open_lin, close_lin,
-                        cfg.hop_samples, cfg.frame_samples, w->sample_rate,
-                        cfg.min_active_sec, cfg.min_gap_sec,
-                        floor_dbfs, open_thr_dbfs, close_thr_dbfs);
+    struct yetty_yaudio_intervals_ptr_result ir = build_intervals(
+        rms, total_frames, open_lin, close_lin, cfg.hop_samples, cfg.frame_samples, w->sample_rate,
+        cfg.min_active_sec, cfg.min_gap_sec, floor_dbfs, open_thr_dbfs, close_thr_dbfs);
     free(rms);
     if (YETTY_IS_ERR(ir)) {
-        return YETTY_ERR(yetty_yaudio_intervals_ptr,
-                         "intervals_find: pass 2 failed", ir);
+        return YETTY_ERR(yetty_yaudio_intervals_ptr, "intervals_find: pass 2 failed", ir);
     }
     return ir;
 }

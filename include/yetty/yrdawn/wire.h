@@ -71,14 +71,14 @@ extern "C" {
 
 #define YETTY_YRDAWN_WIRE_VERSION 1u
 
-#define YETTY_YRDAWN_MAGIC_HELLO 0x4D4C4859u     /* "YHLM" */
-#define YETTY_YRDAWN_MAGIC_HELLO_ACK 0x4D414859u /* "YHAM" */
-#define YETTY_YRDAWN_MAGIC_CMD 0x4D444D43u       /* "CMDM" */
-#define YETTY_YRDAWN_MAGIC_REPLY 0x4D504552u     /* "REPM" */
-#define YETTY_YRDAWN_MAGIC_EVENT 0x4D545645u     /* "EVTM" */
-#define YETTY_YRDAWN_MAGIC_BULK 0x4D4B4C42u      /* "BLKM" */
-#define YETTY_YRDAWN_MAGIC_ERROR 0x4D525245u     /* "ERRM" */
-#define YETTY_YRDAWN_MAGIC_BYE 0x4D455942u       /* "BYEM" */
+#define YETTY_YRDAWN_MAGIC_HELLO 0x4D4C4859u        /* "YHLM" */
+#define YETTY_YRDAWN_MAGIC_HELLO_ACK 0x4D414859u    /* "YHAM" */
+#define YETTY_YRDAWN_MAGIC_CMD 0x4D444D43u          /* "CMDM" */
+#define YETTY_YRDAWN_MAGIC_REPLY 0x4D504552u        /* "REPM" */
+#define YETTY_YRDAWN_MAGIC_EVENT 0x4D545645u        /* "EVTM" */
+#define YETTY_YRDAWN_MAGIC_BULK 0x4D4B4C42u         /* "BLKM" */
+#define YETTY_YRDAWN_MAGIC_ERROR 0x4D525245u        /* "ERRM" */
+#define YETTY_YRDAWN_MAGIC_BYE 0x4D455942u          /* "BYEM" */
 #define YETTY_YRDAWN_MAGIC_INPUT_KEY 0x4D59454Bu    /* "KEYM" */
 #define YETTY_YRDAWN_MAGIC_INPUT_RESIZE 0x4D525352u /* "RSRM" */
 
@@ -96,21 +96,21 @@ enum yetty_yrdawn_hello_status {
 };
 
 struct yetty_yrdawn_wire_hello {
-    uint32_t magic;      /* YETTY_YRDAWN_MAGIC_HELLO */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_HELLO */
     uint32_t version;
     uint32_t total_size; /* sizeof(this struct) */
     uint32_t _pad0;
 };
 
 struct yetty_yrdawn_wire_hello_ack {
-    uint32_t magic;      /* YETTY_YRDAWN_MAGIC_HELLO_ACK */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_HELLO_ACK */
     uint32_t version;
     uint32_t total_size; /* sizeof(this struct) */
     uint32_t status;     /* enum yetty_yrdawn_hello_status */
 };
 
 struct yetty_yrdawn_wire_bye {
-    uint32_t magic;      /* YETTY_YRDAWN_MAGIC_BYE */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_BYE */
     uint32_t version;
     uint32_t total_size; /* sizeof(this struct) */
     uint32_t _pad0;
@@ -133,7 +133,7 @@ struct yetty_yrdawn_wire_bye {
  *===========================================================================*/
 
 struct yetty_yrdawn_wire_cmd_hdr {
-    uint32_t magic;      /* YETTY_YRDAWN_MAGIC_CMD */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_CMD */
     uint32_t version;
     uint32_t total_size; /* whole CMD payload incl. method body */
     uint32_t method_id;  /* codegen-assigned; see build-tools/yrdawn-gen output */
@@ -172,7 +172,7 @@ enum yetty_yrdawn_reply_status {
 };
 
 struct yetty_yrdawn_wire_reply_hdr {
-    uint32_t magic;       /* YETTY_YRDAWN_MAGIC_REPLY */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_REPLY */
     uint32_t version;
     uint32_t total_size;  /* whole REPLY payload incl. method-specific body */
     uint32_t req_id;      /* matches the originating CMD's req_id (non-zero) */
@@ -200,7 +200,7 @@ enum yetty_yrdawn_event_kind {
 };
 
 struct yetty_yrdawn_wire_event_hdr {
-    uint32_t magic;         /* YETTY_YRDAWN_MAGIC_EVENT */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_EVENT */
     uint32_t version;
     uint32_t total_size;
     uint32_t kind;          /* enum yetty_yrdawn_event_kind */
@@ -227,7 +227,7 @@ struct yetty_yrdawn_wire_event_hdr {
 #define YETTY_YRDAWN_BULK_FLAG_LAST (1u << 0) /* this is the final chunk for ref */
 
 struct yetty_yrdawn_wire_bulk_hdr {
-    uint32_t magic;      /* YETTY_YRDAWN_MAGIC_BULK */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_BULK */
     uint32_t version;
     uint32_t total_size; /* sizeof header + chunk_size */
     uint32_t ref;        /* payload_ref this chunk belongs to (non-zero) */
@@ -258,10 +258,10 @@ enum yetty_yrdawn_error_code {
 };
 
 struct yetty_yrdawn_wire_error {
-    uint32_t magic;      /* YETTY_YRDAWN_MAGIC_ERROR */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_ERROR */
     uint32_t version;
     uint32_t total_size;
-    uint32_t code;       /* enum yetty_yrdawn_error_code */
+    uint32_t code; /* enum yetty_yrdawn_error_code */
     /* UTF-8 reason string follows, length = total_size - sizeof header. */
 };
 
@@ -285,7 +285,7 @@ enum yetty_yrdawn_input_key_kind {
 };
 
 struct yetty_yrdawn_wire_input_key {
-    uint32_t magic;     /* YETTY_YRDAWN_MAGIC_INPUT_KEY */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_INPUT_KEY */
     uint32_t version;
     uint32_t total_size;
     uint32_t kind;      /* enum yetty_yrdawn_input_key_kind */
@@ -298,12 +298,12 @@ struct yetty_yrdawn_wire_input_key {
 /* Pane (sub-region the layer occupies) pixel size changed. The client
  * uses (width, height) to reconfigure its swapchain-equivalent. */
 struct yetty_yrdawn_wire_input_resize {
-    uint32_t magic;   /* YETTY_YRDAWN_MAGIC_INPUT_RESIZE */
+    uint32_t magic; /* YETTY_YRDAWN_MAGIC_INPUT_RESIZE */
     uint32_t version;
     uint32_t total_size;
     uint32_t _pad0;
-    float width;      /* pixels */
-    float height;     /* pixels */
+    float width;  /* pixels */
+    float height; /* pixels */
 };
 
 #ifdef __cplusplus

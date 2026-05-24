@@ -39,14 +39,13 @@ WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void);
  * touch the bad state. */
 #include <stdio.h>
 #include <stdlib.h>
-#define YETTY_WGPU_CHECK(tag)                                                                   \
-    do {                                                                                        \
-        if (yetty_ywebgpu_error.has_error) {                                                    \
-            fprintf(stderr, "\n[FATAL] wgpu error at " tag ": %s\n",                            \
-                    yetty_ywebgpu_error.message);                                               \
-            fflush(stderr);                                                                     \
-            _Exit(2);                                                                           \
-        }                                                                                       \
+#define YETTY_WGPU_CHECK(tag)                                                                      \
+    do {                                                                                           \
+        if (yetty_ywebgpu_error.has_error) {                                                       \
+            fprintf(stderr, "\n[FATAL] wgpu error at " tag ": %s\n", yetty_ywebgpu_error.message); \
+            fflush(stderr);                                                                        \
+            _Exit(2);                                                                              \
+        }                                                                                          \
     } while (0)
 
 /* Device-lost callback — fires when Dawn invalidates the device (e.g. GPU

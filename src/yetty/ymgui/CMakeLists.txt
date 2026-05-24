@@ -1,14 +1,34 @@
 # ymgui — Dear ImGui ↔ yetty bridge.
 #
+# figure.c + pipeline.c — yetty_ymgui_figure: yfigure_figure subclass
+#   that renders one Dear-ImGui frame as a compositor figure. This is
+#   the new path. The old ymgui-layer in src/yetty/yterm/ stays alive
+#   in parallel until the figure path is validated.
+#
 # frontend/  — client-side library the app links against. Ships an
 #              ImGui renderer backend (imgui_impl_yetty.*) and the
 #              OSC/encode helpers.
-# (no backend/ subdir — the yetty-side receiver is the ymgui-layer
-#  terminal layer in src/yetty/yterm/. A layer, not a side-car lib.)
-#
-# Dear ImGui is fetched via CPM (build-tools/yetty/libs/imgui.cmake),
-# which exposes the lean imgui_core target the frontend links against.
-# No tmp/ vendoring.
+add_library(yetty_ymgui STATIC
+    figure.c
+    pipeline.c
+)
+
+target_include_directories(yetty_ymgui PUBLIC
+    ${YETTY_ROOT}/include
+)
+target_include_directories(yetty_ymgui PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(yetty_ymgui PUBLIC
+    yetty_ycore
+    yetty_yfigure
+    yetty_ydraw_core
+    yetty_yrender
+    yetty_ywire
+    webgpu
+)
+
 include(${YETTY_ROOT}/build-tools/yetty/libs/imgui.cmake)
 
 if(TARGET imgui_core)

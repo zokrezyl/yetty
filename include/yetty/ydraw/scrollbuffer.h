@@ -80,8 +80,8 @@ extern "C" {
  */
 
 struct yetty_ydraw_scrollbuffer_chunk {
-    uint32_t logical_start;        /* first logical byte in this chunk */
-    uint32_t logical_size;         /* uncompressed size */
+    uint32_t logical_start; /* first logical byte in this chunk */
+    uint32_t logical_size;  /* uncompressed size */
     uint32_t compressed_size;
     uint8_t *compressed_data;
 };
@@ -89,8 +89,8 @@ struct yetty_ydraw_scrollbuffer_chunk {
 struct yetty_ydraw_scrollbuffer {
     /* Uncompressed tail — most recently encoded bytes live here. */
     uint8_t *tail_data;
-    size_t   tail_size;
-    size_t   tail_capacity;
+    size_t tail_size;
+    size_t tail_capacity;
 
     /* Sealed LZ4 chunks, oldest first. */
     struct yetty_ydraw_scrollbuffer_chunk *chunks;
@@ -105,8 +105,8 @@ struct yetty_ydraw_scrollbuffer {
     /* Per-decode scratch — holds the most recently decompressed
      * chunk. Cached by index (-1 = empty). */
     uint8_t *decode_scratch;
-    size_t   decode_scratch_capacity;
-    int32_t  decode_scratch_chunk;
+    size_t decode_scratch_capacity;
+    int32_t decode_scratch_chunk;
 };
 
 void yetty_ydraw_scrollbuffer_init(struct yetty_ydraw_scrollbuffer *sb);
@@ -160,13 +160,9 @@ struct yetty_ydraw_scrollbuffer_prim {
 YETTY_YRESULT_DECLARE(yetty_ydraw_scrollbuffer_offset, size_t);
 
 struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_encode_line(
-    struct yetty_ydraw_scrollbuffer *sb,
-    uint32_t line_rolling_row,
-    uint32_t grid_cols,
-    const struct yetty_ydraw_scrollbuffer_cell *cells,
-    uint32_t n_cells,
-    const struct yetty_ydraw_scrollbuffer_prim *prims,
-    uint32_t n_prims);
+    struct yetty_ydraw_scrollbuffer *sb, uint32_t line_rolling_row, uint32_t grid_cols,
+    const struct yetty_ydraw_scrollbuffer_cell *cells, uint32_t n_cells,
+    const struct yetty_ydraw_scrollbuffer_prim *prims, uint32_t n_prims);
 
 /* ===========================================================================
  * Decoder
@@ -183,14 +179,12 @@ struct yetty_ydraw_scrollbuffer_decode_sinks {
     /* Optional: called once per record after the header is read, with
      * the line's own rolling_row and the drawable_count from the header.
      * Useful for the caller to pre-size its output arrays. */
-    struct yetty_ycore_void_result (*on_header)(void *ctx,
-                                                uint32_t line_rolling_row,
+    struct yetty_ycore_void_result (*on_header)(void *ctx, uint32_t line_rolling_row,
                                                 uint32_t drawable_count);
 
     /* Called for each non-empty cell, in ascending col order.
      * `refs` and `ref_count` describe that cell's refs. */
-    struct yetty_ycore_void_result (*on_cell)(void *ctx,
-                                              uint32_t col,
+    struct yetty_ycore_void_result (*on_cell)(void *ctx, uint32_t col,
                                               const struct yetty_ydraw_scrollbuffer_ref *refs,
                                               uint32_t ref_count);
 
@@ -199,10 +193,8 @@ struct yetty_ydraw_scrollbuffer_decode_sinks {
      * exact payload of the non-default record. `rolling_row` is the
      * prim's anchor row (line_rolling_row for default-style glyphs,
      * the explicit value for non-default records). */
-    struct yetty_ycore_void_result (*on_prim)(void *ctx,
-                                              uint32_t rolling_row,
-                                              const uint32_t *payload,
-                                              uint32_t word_count);
+    struct yetty_ycore_void_result (*on_prim)(void *ctx, uint32_t rolling_row,
+                                              const uint32_t *payload, uint32_t word_count);
 };
 
 /* For decoding non-default records, the codec needs to know the size
@@ -218,10 +210,8 @@ typedef uint32_t (*yetty_ydraw_scrollbuffer_word_count_fn)(uint32_t type_word, v
  * On any decoder/sink error the returned offset is the input offset
  * and the result carries the error. */
 struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_line(
-    const struct yetty_ydraw_scrollbuffer *sb,
-    size_t offset,
-    yetty_ydraw_scrollbuffer_word_count_fn word_count_fn,
-    void *word_count_ctx,
+    const struct yetty_ydraw_scrollbuffer *sb, size_t offset,
+    yetty_ydraw_scrollbuffer_word_count_fn word_count_fn, void *word_count_ctx,
     const struct yetty_ydraw_scrollbuffer_decode_sinks *sinks);
 
 #ifdef __cplusplus

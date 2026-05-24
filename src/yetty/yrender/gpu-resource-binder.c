@@ -133,9 +133,8 @@ struct yetty_yrender_gpu_resource_binder_impl {
 
 /* Forward declarations */
 static void binder_destroy(struct yetty_yrender_gpu_resource_binder *self);
-static struct yetty_ycore_void_result binder_submit(
-    struct yetty_yrender_gpu_resource_binder *self,
-    const struct yetty_ydraw_gpu_resource_set *rs);
+static struct yetty_ycore_void_result binder_submit(struct yetty_yrender_gpu_resource_binder *self,
+                                                    const struct yetty_ydraw_gpu_resource_set *rs);
 static struct yetty_ycore_void_result binder_finalize(
     struct yetty_yrender_gpu_resource_binder *self);
 static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_resource_binder *self);
@@ -1013,9 +1012,8 @@ static void binder_destroy(struct yetty_yrender_gpu_resource_binder *self)
     free(impl);
 }
 
-static struct yetty_ycore_void_result binder_submit(
-    struct yetty_yrender_gpu_resource_binder *self,
-    const struct yetty_ydraw_gpu_resource_set *rs)
+static struct yetty_ycore_void_result binder_submit(struct yetty_yrender_gpu_resource_binder *self,
+                                                    const struct yetty_ydraw_gpu_resource_set *rs)
 {
     struct yetty_yrender_gpu_resource_binder_impl *impl =
         (struct yetty_yrender_gpu_resource_binder_impl *)self;
@@ -1033,8 +1031,7 @@ static struct yetty_ycore_void_result binder_submit(
         return YETTY_ERR(yetty_ycore_void, "max resource sets reached");
     }
 
-    impl->resource_sets[impl->resource_set_count++] =
-        (struct yetty_ydraw_gpu_resource_set *)rs;
+    impl->resource_sets[impl->resource_set_count++] = (struct yetty_ydraw_gpu_resource_set *)rs;
     return YETTY_OK_VOID();
 }
 

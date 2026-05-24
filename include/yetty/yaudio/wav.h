@@ -33,30 +33,29 @@ enum yetty_yaudio_wav_sample_format {
 
 struct yetty_yaudio_wav {
     /* mmap state */
-    int            fd;
+    int fd;
     const uint8_t *map_base;
-    size_t         map_size;
+    size_t map_size;
 
     /* format */
     enum yetty_yaudio_wav_sample_format fmt;
-    uint32_t       sample_rate;
-    uint16_t       channels;
-    uint16_t       bits_per_sample;   /* container width: 16/24/32 */
-    uint16_t       bytes_per_sample;  /* 2/3/4 */
-    uint16_t       frame_stride;      /* channels * bytes_per_sample */
+    uint32_t sample_rate;
+    uint16_t channels;
+    uint16_t bits_per_sample;  /* container width: 16/24/32 */
+    uint16_t bytes_per_sample; /* 2/3/4 */
+    uint16_t frame_stride;     /* channels * bytes_per_sample */
 
     /* data chunk view (into mmap) */
     const uint8_t *data;
-    size_t         data_size;         /* bytes */
-    size_t         frames;            /* full multi-channel frames */
+    size_t data_size; /* bytes */
+    size_t frames;    /* full multi-channel frames */
 };
 
 YETTY_YRESULT_DECLARE(yetty_yaudio_wav_ptr, struct yetty_yaudio_wav *);
 
 /* Open + parse header. Returns a heap-allocated wav object on success;
  * destroy with wav_close(). */
-struct yetty_yaudio_wav_ptr_result
-yetty_yaudio_wav_open(const char *path);
+struct yetty_yaudio_wav_ptr_result yetty_yaudio_wav_open(const char *path);
 
 void yetty_yaudio_wav_close(struct yetty_yaudio_wav *w);
 
@@ -64,12 +63,9 @@ void yetty_yaudio_wav_close(struct yetty_yaudio_wav *w);
  * [-1, 1] float32. `frame_off` is the starting frame (0 = beginning of
  * data). Returns the number of frames actually written (clipped to
  * w->frames - frame_off). */
-struct yetty_ycore_size_result
-yetty_yaudio_wav_read_channel_f32(const struct yetty_yaudio_wav *w,
-                                  uint32_t channel,
-                                  size_t   frame_off,
-                                  float   *out,
-                                  size_t   n_frames);
+struct yetty_ycore_size_result yetty_yaudio_wav_read_channel_f32(const struct yetty_yaudio_wav *w,
+                                                                 uint32_t channel, size_t frame_off,
+                                                                 float *out, size_t n_frames);
 
 #ifdef __cplusplus
 }

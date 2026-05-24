@@ -26,8 +26,7 @@ static struct yetty_ycore_void_result chunk_to_ycat_emit(
 }
 
 struct yetty_ycore_void_result yetty_ycat_handler_markdown_streaming(
-    const uint8_t *bytes, size_t len, const char *path_hint,
-    const struct yetty_ycat_config *config,
+    const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config,
     yetty_ycat_emit_fn emit, void *emit_user_data)
 {
     (void)path_hint;

@@ -18,6 +18,7 @@
 
 #include <yetty/yetty/yetty.h>
 #include <yetty/yterm/terminal.h>
+#include <yetty/ywire/wire-statemachine.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +35,10 @@ extern "C" {
 struct yetty_yterm_terminal_layer_result yetty_yterm_yrdawn_layer_create(
     uint32_t cols, uint32_t rows, float cell_width, float cell_height,
     const struct yetty_context *context);
+
+/* Wire-SM dispatch entry. Pass the layer's base pointer as userdata. */
+struct yetty_ycore_void_result yetty_yterm_yrdawn_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm);
 
 #ifdef __cplusplus
 }

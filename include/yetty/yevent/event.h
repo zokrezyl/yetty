@@ -132,14 +132,14 @@ enum yetty_yevent_event_type {
  * helper can pass them through unchanged; the same constants are mapped
  * onto the relevant axes on other backends if/when they grow support. */
 enum yetty_ycore_resize_edge {
-    YETTY_YCORE_RESIZE_EDGE_NONE         = 0,
-    YETTY_YCORE_RESIZE_EDGE_TOP          = 1,
-    YETTY_YCORE_RESIZE_EDGE_BOTTOM       = 2,
-    YETTY_YCORE_RESIZE_EDGE_LEFT         = 4,
-    YETTY_YCORE_RESIZE_EDGE_TOP_LEFT     = 5,
-    YETTY_YCORE_RESIZE_EDGE_BOTTOM_LEFT  = 6,
-    YETTY_YCORE_RESIZE_EDGE_RIGHT        = 8,
-    YETTY_YCORE_RESIZE_EDGE_TOP_RIGHT    = 9,
+    YETTY_YCORE_RESIZE_EDGE_NONE = 0,
+    YETTY_YCORE_RESIZE_EDGE_TOP = 1,
+    YETTY_YCORE_RESIZE_EDGE_BOTTOM = 2,
+    YETTY_YCORE_RESIZE_EDGE_LEFT = 4,
+    YETTY_YCORE_RESIZE_EDGE_TOP_LEFT = 5,
+    YETTY_YCORE_RESIZE_EDGE_BOTTOM_LEFT = 6,
+    YETTY_YCORE_RESIZE_EDGE_RIGHT = 8,
+    YETTY_YCORE_RESIZE_EDGE_TOP_RIGHT = 9,
     YETTY_YCORE_RESIZE_EDGE_BOTTOM_RIGHT = 10,
 };
 
@@ -278,10 +278,10 @@ struct yetty_ycore_event_command_key {
  * so the union stays POD-copyable through the input pipe. */
 enum yetty_ycore_cursor_shape {
     YETTY_YCORE_CURSOR_DEFAULT = 0,
-    YETTY_YCORE_CURSOR_HRESIZE,    /* ↔  left-right resize (vertical bar) */
-    YETTY_YCORE_CURSOR_VRESIZE,    /* ↕  up-down resize (horizontal bar) */
-    YETTY_YCORE_CURSOR_IBEAM,      /* text I-beam */
-    YETTY_YCORE_CURSOR_HAND,       /* pointer / hand */
+    YETTY_YCORE_CURSOR_HRESIZE, /* ↔  left-right resize (vertical bar) */
+    YETTY_YCORE_CURSOR_VRESIZE, /* ↕  up-down resize (horizontal bar) */
+    YETTY_YCORE_CURSOR_IBEAM,   /* text I-beam */
+    YETTY_YCORE_CURSOR_HAND,    /* pointer / hand */
 };
 
 struct yetty_ycore_event_set_cursor {

@@ -46,8 +46,7 @@ struct yetty_ydraw_gpu_resource_set {
     uint32_t instance_count;
 };
 
-YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_set,
-                      const struct yetty_ydraw_gpu_resource_set *);
+YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_set, const struct yetty_ydraw_gpu_resource_set *);
 
 #ifdef __cplusplus
 }

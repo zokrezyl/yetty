@@ -26,7 +26,9 @@
 static int ysvg_str_eq_slice(const char *a, size_t alen, const char *lit)
 {
     size_t l = strlen(lit);
-    if (l != alen) return 0;
+    if (l != alen) {
+        return 0;
+    }
     return memcmp(a, lit, l) == 0;
 }
 
@@ -35,11 +37,17 @@ static void parse_paint(struct yetty_ysvg_paint *out, const char *s, size_t len,
 {
     /* Trim leading/trailing whitespace. */
     size_t i = 0;
-    while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r')) i++;
-    while (len > i && (s[len - 1] == ' ' || s[len - 1] == '\t' || s[len - 1] == '\n' ||
-                       s[len - 1] == '\r')) len--;
+    while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r')) {
+        i++;
+    }
+    while (len > i &&
+           (s[len - 1] == ' ' || s[len - 1] == '\t' || s[len - 1] == '\n' || s[len - 1] == '\r')) {
+        len--;
+    }
     if (i >= len) {
-        if (parent) *out = *parent;
+        if (parent) {
+            *out = *parent;
+        }
         return;
     }
     const char *p = s + i;
@@ -51,7 +59,9 @@ static void parse_paint(struct yetty_ysvg_paint *out, const char *s, size_t len,
         return;
     }
     if (ysvg_str_eq_slice(p, plen, "inherit")) {
-        if (parent) *out = *parent;
+        if (parent) {
+            *out = *parent;
+        }
         return;
     }
     if (ysvg_str_eq_slice(p, plen, "currentColor")) {
@@ -101,7 +111,9 @@ static void parse_paint(struct yetty_ysvg_paint *out, const char *s, size_t len,
         return;
     }
     /* Unrecognized — inherit or leave as-is. */
-    if (parent) *out = *parent;
+    if (parent) {
+        *out = *parent;
+    }
 }
 
 /*=============================================================================
@@ -119,9 +131,10 @@ void yetty_ysvg_style_apply_property(struct yetty_ysvg_style *out, const char *p
         val++;
         vlen--;
     }
-    while (vlen > 0 && (val[vlen - 1] == ' ' || val[vlen - 1] == '\t' ||
-                        val[vlen - 1] == '\n' || val[vlen - 1] == '\r'))
+    while (vlen > 0 && (val[vlen - 1] == ' ' || val[vlen - 1] == '\t' || val[vlen - 1] == '\n' ||
+                        val[vlen - 1] == '\r')) {
         vlen--;
+    }
 
     if (ysvg_str_eq_slice(prop, plen, "fill")) {
         parse_paint(&out->fill, val, vlen, NULL);
@@ -136,26 +149,36 @@ void yetty_ysvg_style_apply_property(struct yetty_ysvg_style *out, const char *p
     } else if (ysvg_str_eq_slice(prop, plen, "stroke-width")) {
         out->stroke_width = yetty_ysvg_parse_length(val, vlen, 100.0f, out->stroke_width);
     } else if (ysvg_str_eq_slice(prop, plen, "stroke-linecap")) {
-        if (ysvg_str_eq_slice(val, vlen, "round")) out->stroke_linecap = YETTY_YSVG_LINECAP_ROUND;
-        else if (ysvg_str_eq_slice(val, vlen, "square"))
+        if (ysvg_str_eq_slice(val, vlen, "round")) {
+            out->stroke_linecap = YETTY_YSVG_LINECAP_ROUND;
+        } else if (ysvg_str_eq_slice(val, vlen, "square")) {
             out->stroke_linecap = YETTY_YSVG_LINECAP_SQUARE;
-        else out->stroke_linecap = YETTY_YSVG_LINECAP_BUTT;
+        } else {
+            out->stroke_linecap = YETTY_YSVG_LINECAP_BUTT;
+        }
     } else if (ysvg_str_eq_slice(prop, plen, "stroke-linejoin")) {
-        if (ysvg_str_eq_slice(val, vlen, "round")) out->stroke_linejoin = YETTY_YSVG_LINEJOIN_ROUND;
-        else if (ysvg_str_eq_slice(val, vlen, "bevel"))
+        if (ysvg_str_eq_slice(val, vlen, "round")) {
+            out->stroke_linejoin = YETTY_YSVG_LINEJOIN_ROUND;
+        } else if (ysvg_str_eq_slice(val, vlen, "bevel")) {
             out->stroke_linejoin = YETTY_YSVG_LINEJOIN_BEVEL;
-        else out->stroke_linejoin = YETTY_YSVG_LINEJOIN_MITER;
+        } else {
+            out->stroke_linejoin = YETTY_YSVG_LINEJOIN_MITER;
+        }
     } else if (ysvg_str_eq_slice(prop, plen, "font-size")) {
         out->font_size = yetty_ysvg_parse_length(val, vlen, out->font_size, out->font_size);
     } else if (ysvg_str_eq_slice(prop, plen, "text-anchor")) {
-        if (ysvg_str_eq_slice(val, vlen, "middle")) out->text_anchor = YETTY_YSVG_ANCHOR_MIDDLE;
-        else if (ysvg_str_eq_slice(val, vlen, "end")) out->text_anchor = YETTY_YSVG_ANCHOR_END;
-        else out->text_anchor = YETTY_YSVG_ANCHOR_START;
+        if (ysvg_str_eq_slice(val, vlen, "middle")) {
+            out->text_anchor = YETTY_YSVG_ANCHOR_MIDDLE;
+        } else if (ysvg_str_eq_slice(val, vlen, "end")) {
+            out->text_anchor = YETTY_YSVG_ANCHOR_END;
+        } else {
+            out->text_anchor = YETTY_YSVG_ANCHOR_START;
+        }
     } else if (ysvg_str_eq_slice(prop, plen, "display")) {
         out->display = !ysvg_str_eq_slice(val, vlen, "none");
     } else if (ysvg_str_eq_slice(prop, plen, "visibility")) {
-        out->visibility = !ysvg_str_eq_slice(val, vlen, "hidden") &&
-                          !ysvg_str_eq_slice(val, vlen, "collapse");
+        out->visibility =
+            !ysvg_str_eq_slice(val, vlen, "hidden") && !ysvg_str_eq_slice(val, vlen, "collapse");
     }
 }
 
@@ -164,23 +187,34 @@ static void apply_style_attr(struct yetty_ysvg_style *out, const char *s, size_t
     size_t i = 0;
     while (i < len) {
         /* skip ws + leading ';' */
-        while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r' ||
-                           s[i] == ';'))
+        while (i < len &&
+               (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r' || s[i] == ';')) {
             i++;
-        if (i >= len) break;
+        }
+        if (i >= len) {
+            break;
+        }
         size_t pstart = i;
-        while (i < len && s[i] != ':' && s[i] != ';') i++;
+        while (i < len && s[i] != ':' && s[i] != ';') {
+            i++;
+        }
         if (i >= len || s[i] != ':') {
             /* malformed property — skip past next ';' */
-            while (i < len && s[i] != ';') i++;
+            while (i < len && s[i] != ';') {
+                i++;
+            }
             continue;
         }
         size_t plen = i - pstart;
         /* Trim trailing whitespace from property name */
-        while (plen > 0 && (s[pstart + plen - 1] == ' ' || s[pstart + plen - 1] == '\t')) plen--;
+        while (plen > 0 && (s[pstart + plen - 1] == ' ' || s[pstart + plen - 1] == '\t')) {
+            plen--;
+        }
         i++; /* skip ':' */
         size_t vstart = i;
-        while (i < len && s[i] != ';') i++;
+        while (i < len && s[i] != ';') {
+            i++;
+        }
         size_t vlen = i - vstart;
         yetty_ysvg_style_apply_property(out, s + pstart, plen, s + vstart, vlen);
     }
@@ -190,55 +224,70 @@ static void apply_style_attr(struct yetty_ysvg_style *out, const char *s, size_t
  * Presentation attributes
  *===========================================================================*/
 
-static void apply_presentation_attrs(struct yetty_ysvg_style *out,
-                                     const struct yetty_ysvg_node *n,
+static void apply_presentation_attrs(struct yetty_ysvg_style *out, const struct yetty_ysvg_node *n,
                                      const struct yetty_ysvg_style *parent)
 {
     const struct yetty_ysvg_attr *a;
 
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_FILL)))
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_FILL))) {
         parse_paint(&out->fill, a->value, a->value_len, &parent->fill);
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_STROKE)))
+    }
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_STROKE))) {
         parse_paint(&out->stroke, a->value, a->value_len, &parent->stroke);
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_FILL_OPACITY)))
-        out->fill_opacity = yetty_ysvg_parse_length(a->value, a->value_len, 1.0f, out->fill_opacity);
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_STROKE_OPACITY)))
+    }
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_FILL_OPACITY))) {
+        out->fill_opacity =
+            yetty_ysvg_parse_length(a->value, a->value_len, 1.0f, out->fill_opacity);
+    }
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_STROKE_OPACITY))) {
         out->stroke_opacity =
             yetty_ysvg_parse_length(a->value, a->value_len, 1.0f, out->stroke_opacity);
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_OPACITY)))
+    }
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_OPACITY))) {
         out->opacity = yetty_ysvg_parse_length(a->value, a->value_len, 1.0f, out->opacity);
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_STROKE_WIDTH)))
-        out->stroke_width = yetty_ysvg_parse_length(a->value, a->value_len, 100.0f,
-                                                    out->stroke_width);
+    }
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_STROKE_WIDTH))) {
+        out->stroke_width =
+            yetty_ysvg_parse_length(a->value, a->value_len, 100.0f, out->stroke_width);
+    }
     if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_STROKE_LINECAP))) {
-        if (ysvg_str_eq_slice(a->value, a->value_len, "round"))
+        if (ysvg_str_eq_slice(a->value, a->value_len, "round")) {
             out->stroke_linecap = YETTY_YSVG_LINECAP_ROUND;
-        else if (ysvg_str_eq_slice(a->value, a->value_len, "square"))
+        } else if (ysvg_str_eq_slice(a->value, a->value_len, "square")) {
             out->stroke_linecap = YETTY_YSVG_LINECAP_SQUARE;
-        else out->stroke_linecap = YETTY_YSVG_LINECAP_BUTT;
+        } else {
+            out->stroke_linecap = YETTY_YSVG_LINECAP_BUTT;
+        }
     }
     if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_STROKE_LINEJOIN))) {
-        if (ysvg_str_eq_slice(a->value, a->value_len, "round"))
+        if (ysvg_str_eq_slice(a->value, a->value_len, "round")) {
             out->stroke_linejoin = YETTY_YSVG_LINEJOIN_ROUND;
-        else if (ysvg_str_eq_slice(a->value, a->value_len, "bevel"))
+        } else if (ysvg_str_eq_slice(a->value, a->value_len, "bevel")) {
             out->stroke_linejoin = YETTY_YSVG_LINEJOIN_BEVEL;
-        else out->stroke_linejoin = YETTY_YSVG_LINEJOIN_MITER;
+        } else {
+            out->stroke_linejoin = YETTY_YSVG_LINEJOIN_MITER;
+        }
     }
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_FONT_SIZE)))
-        out->font_size = yetty_ysvg_parse_length(a->value, a->value_len, out->font_size,
-                                                 out->font_size);
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_FONT_SIZE))) {
+        out->font_size =
+            yetty_ysvg_parse_length(a->value, a->value_len, out->font_size, out->font_size);
+    }
     if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_TEXT_ANCHOR))) {
-        if (ysvg_str_eq_slice(a->value, a->value_len, "middle"))
+        if (ysvg_str_eq_slice(a->value, a->value_len, "middle")) {
             out->text_anchor = YETTY_YSVG_ANCHOR_MIDDLE;
-        else if (ysvg_str_eq_slice(a->value, a->value_len, "end"))
+        } else if (ysvg_str_eq_slice(a->value, a->value_len, "end")) {
             out->text_anchor = YETTY_YSVG_ANCHOR_END;
-        else out->text_anchor = YETTY_YSVG_ANCHOR_START;
+        } else {
+            out->text_anchor = YETTY_YSVG_ANCHOR_START;
+        }
     }
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_DISPLAY)))
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_DISPLAY))) {
         out->display = !ysvg_str_eq_slice(a->value, a->value_len, "none");
-    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_VISIBILITY)))
+    }
+    if ((a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_VISIBILITY))) {
         out->visibility = !ysvg_str_eq_slice(a->value, a->value_len, "hidden") &&
                           !ysvg_str_eq_slice(a->value, a->value_len, "collapse");
+    }
 }
 
 /*=============================================================================
@@ -269,8 +318,7 @@ void yetty_ysvg_style_init_root(struct yetty_ysvg_style *s, float default_font_s
 
 void yetty_ysvg_style_resolve(struct yetty_ysvg_style *out,
                               const struct yetty_ysvg_style *parent_style,
-                              const struct yetty_ysvg_doc *doc,
-                              const struct yetty_ysvg_node *node)
+                              const struct yetty_ysvg_doc *doc, const struct yetty_ysvg_node *node)
 {
     /* Start from inherited parent style. */
     *out = *parent_style;

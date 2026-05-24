@@ -22,8 +22,7 @@ struct yetty_yplatform_tty_redirected_result
 yetty_yplatform_tty_redirect_stderr_if_shared_with_stdout(const char *basename)
 {
     if (!basename || !*basename) {
-        return YETTY_ERR(yetty_yplatform_tty_redirected,
-                         "basename is required");
+        return YETTY_ERR(yetty_yplatform_tty_redirected, "basename is required");
     }
 
     /* Both fds must be ttys for the PTY-share case to apply. */
@@ -47,22 +46,19 @@ yetty_yplatform_tty_redirect_stderr_if_shared_with_stdout(const char *basename)
      * (XDG_RUNTIME_DIR semantics; /tmp/yetty-<uid> fallback). */
     char path[512];
     const char *runtime = yetty_yplatform_get_runtime_dir();
-    snprintf(path, sizeof(path), "%s/%s-%d.log",
-             runtime, basename, (int)getpid());
+    snprintf(path, sizeof(path), "%s/%s-%d.log", runtime, basename, (int)getpid());
 
     FILE *log = fopen(path, "w");
     if (!log) {
         char buf[256];
-        snprintf(buf, sizeof(buf), "open %s for stderr redirect: %s",
-                 path, strerror(errno));
+        snprintf(buf, sizeof(buf), "open %s for stderr redirect: %s", path, strerror(errno));
         return YETTY_ERR(yetty_yplatform_tty_redirected, buf);
     }
     setvbuf(log, NULL, _IOLBF, 0);
     int log_fd = fileno(log);
     if (log_fd < 0 || dup2(log_fd, STDERR_FILENO) < 0) {
         fclose(log);
-        return YETTY_ERR(yetty_yplatform_tty_redirected,
-                         "dup2 onto stderr failed");
+        return YETTY_ERR(yetty_yplatform_tty_redirected, "dup2 onto stderr failed");
     }
     fclose(log);
 

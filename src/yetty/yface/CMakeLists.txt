@@ -1,8 +1,9 @@
-# yetty_yface — streaming OSC stream:
-#   bytes → LZ4F → base64 → out_buf
-#   chars → base64 → LZ4F → in_buf
+# yetty_yface — semantic / message-type layer.
 #
-# Depends on: yetty_ycore (growable buffer), lz4_static (LZ4F compressor).
+# Wire mechanics (envelope framing, b64, LZ4F) live in yetty_ywire;
+# yface is a thin wrapper that delegates to ywire and adds typed
+# helpers for higher-level message kinds (bin meta today; mouse,
+# resize, key in upcoming passes).
 
 add_library(yetty_yface STATIC yface.c)
 
@@ -12,7 +13,7 @@ target_include_directories(yetty_yface PUBLIC
 
 target_link_libraries(yetty_yface PUBLIC
     yetty_ycore
-    lz4_static
+    yetty_ywire
 )
 
 set_target_properties(yetty_yface PROPERTIES

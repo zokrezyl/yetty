@@ -57,10 +57,8 @@ struct yetty_ygui_widget;
  * returns NULL. `bounds_w` / `bounds_h` of 0 in the config default
  * to the widget's (w, h). */
 struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_h264(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const uint8_t *nal_bytes, size_t nal_len,
-    const struct yetty_yvideo_render_config *config);
+    struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h,
+    const uint8_t *nal_bytes, size_t nal_len, const struct yetty_yvideo_render_config *config);
 
 /* Create a yvideo widget from MP4 container bytes. Delegates to
  * yetty_yvideo_render_from_mp4_bytes — SPS dimensions and demuxed
@@ -69,28 +67,24 @@ struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_h264(
  * matrix, flags, audio_*); `video_w` / `video_h` are always taken
  * from the parsed SPS. */
 struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_mp4_bytes(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
+    struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h,
     const uint8_t *mp4_bytes, size_t mp4_len,
     const struct yetty_yvideo_render_config *config_overrides);
 
 /* Same, but sourcing the bytes from a file path. */
 struct yetty_ygui_widget *yetty_ygui_engine_yvideo_from_mp4_file(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h, const char *path,
-    const struct yetty_yvideo_render_config *config_overrides);
+    struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *path, const struct yetty_yvideo_render_config *config_overrides);
 
 /* Replace the widget's content with a fresh INIT prim built from
  * the supplied NAL bytes + config. */
 struct yetty_ycore_void_result yetty_ygui_widget_yvideo_set_h264(
-    struct yetty_ygui_widget *widget,
-    const uint8_t *nal_bytes, size_t nal_len,
+    struct yetty_ygui_widget *widget, const uint8_t *nal_bytes, size_t nal_len,
     const struct yetty_yvideo_render_config *config);
 
 /* Replace the content with the bytes demuxed from MP4 input. */
 struct yetty_ycore_void_result yetty_ygui_widget_yvideo_set_mp4_bytes(
-    struct yetty_ygui_widget *widget,
-    const uint8_t *mp4_bytes, size_t mp4_len,
+    struct yetty_ygui_widget *widget, const uint8_t *mp4_bytes, size_t mp4_len,
     const struct yetty_yvideo_render_config *config_overrides);
 
 struct yetty_ycore_void_result yetty_ygui_widget_yvideo_set_mp4_file(
@@ -100,8 +94,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_yvideo_set_mp4_file(
 /* Drop the playback prim — the widget's draw_list is cleared. The
  * receiving canvas tears the yvideo entity down (decoder, audio
  * device, animation subscription all go with it). */
-struct yetty_ycore_void_result yetty_ygui_widget_yvideo_clear(
-    struct yetty_ygui_widget *widget);
+struct yetty_ycore_void_result yetty_ygui_widget_yvideo_clear(struct yetty_ygui_widget *widget);
 
 #ifdef __cplusplus
 }

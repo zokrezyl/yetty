@@ -20,7 +20,7 @@
 
 /* WAVE_FORMAT tag values (from MS RIFF spec) */
 enum {
-    WAVE_FORMAT_PCM        = 0x0001,
+    WAVE_FORMAT_PCM = 0x0001,
     WAVE_FORMAT_IEEE_FLOAT = 0x0003,
     WAVE_FORMAT_EXTENSIBLE = 0xFFFE,
 };
@@ -34,10 +34,7 @@ static uint16_t rd_u16le(const uint8_t *p)
 
 static uint32_t rd_u32le(const uint8_t *p)
 {
-    return (uint32_t)p[0]
-         | ((uint32_t)p[1] << 8)
-         | ((uint32_t)p[2] << 16)
-         | ((uint32_t)p[3] << 24);
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
 static bool tag_eq(const uint8_t *p, const char *tag)
@@ -45,8 +42,8 @@ static bool tag_eq(const uint8_t *p, const char *tag)
     return memcmp(p, tag, 4) == 0;
 }
 
-static struct yetty_yaudio_wav_ptr_result
-parse_fmt_chunk(struct yetty_yaudio_wav *w, const uint8_t *p, uint32_t size)
+static struct yetty_yaudio_wav_ptr_result parse_fmt_chunk(struct yetty_yaudio_wav *w,
+                                                          const uint8_t *p, uint32_t size)
 {
     if (size < 16) {
         return YETTY_ERR(yetty_yaudio_wav_ptr, "fmt chunk smaller than 16 bytes");
@@ -60,8 +57,7 @@ parse_fmt_chunk(struct yetty_yaudio_wav *w, const uint8_t *p, uint32_t size)
      * GUID (first 2 bytes of the 16-byte GUID at offset 24). */
     if (fmt_tag == WAVE_FORMAT_EXTENSIBLE) {
         if (size < 40) {
-            return YETTY_ERR(yetty_yaudio_wav_ptr,
-                             "extensible fmt chunk truncated");
+            return YETTY_ERR(yetty_yaudio_wav_ptr, "extensible fmt chunk truncated");
         }
         fmt_tag = rd_u16le(p + 24);
     }
@@ -70,9 +66,15 @@ parse_fmt_chunk(struct yetty_yaudio_wav *w, const uint8_t *p, uint32_t size)
     switch (fmt_tag) {
     case WAVE_FORMAT_PCM:
         switch (bits) {
-        case 16: sfmt = YETTY_YAUDIO_WAV_SAMPLE_FMT_S16; break;
-        case 24: sfmt = YETTY_YAUDIO_WAV_SAMPLE_FMT_S24; break;
-        case 32: sfmt = YETTY_YAUDIO_WAV_SAMPLE_FMT_S32; break;
+        case 16:
+            sfmt = YETTY_YAUDIO_WAV_SAMPLE_FMT_S16;
+            break;
+        case 24:
+            sfmt = YETTY_YAUDIO_WAV_SAMPLE_FMT_S24;
+            break;
+        case 32:
+            sfmt = YETTY_YAUDIO_WAV_SAMPLE_FMT_S32;
+            break;
         default:
             return YETTY_ERR(yetty_yaudio_wav_ptr,
                              "unsupported PCM bits-per-sample (need 16/24/32)");
@@ -80,8 +82,7 @@ parse_fmt_chunk(struct yetty_yaudio_wav *w, const uint8_t *p, uint32_t size)
         break;
     case WAVE_FORMAT_IEEE_FLOAT:
         if (bits != 32) {
-            return YETTY_ERR(yetty_yaudio_wav_ptr,
-                             "only float32 IEEE_FLOAT is supported");
+            return YETTY_ERR(yetty_yaudio_wav_ptr, "only float32 IEEE_FLOAT is supported");
         }
         sfmt = YETTY_YAUDIO_WAV_SAMPLE_FMT_F32;
         break;
@@ -91,8 +92,7 @@ parse_fmt_chunk(struct yetty_yaudio_wav *w, const uint8_t *p, uint32_t size)
     }
 
     if (channels == 0 || sample_rate == 0) {
-        return YETTY_ERR(yetty_yaudio_wav_ptr,
-                         "fmt chunk has zero channels or sample rate");
+        return YETTY_ERR(yetty_yaudio_wav_ptr, "fmt chunk has zero channels or sample rate");
     }
 
     w->fmt = sfmt;
@@ -104,8 +104,7 @@ parse_fmt_chunk(struct yetty_yaudio_wav *w, const uint8_t *p, uint32_t size)
     return YETTY_OK(yetty_yaudio_wav_ptr, w);
 }
 
-struct yetty_yaudio_wav_ptr_result
-yetty_yaudio_wav_open(const char *path)
+struct yetty_yaudio_wav_ptr_result yetty_yaudio_wav_open(const char *path)
 {
     if (!path) {
         return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: NULL path");
@@ -163,7 +162,7 @@ yetty_yaudio_wav_open(const char *path)
         const uint8_t *tag = p;
         uint32_t csz_field = rd_u32le(p + 4);
         p += 8;
-        size_t   remaining = (size_t)(end - p);
+        size_t remaining = (size_t)(end - p);
 
         if (tag_eq(tag, "data")) {
             /* The RIFF `data` chunk size is a uint32 — so a single
@@ -185,15 +184,15 @@ yetty_yaudio_wav_open(const char *path)
              * the Zoom 1-byte short) are absorbed by frame_stride
              * rounding when we compute w->frames. */
             size_t csz;
-            if (csz_field == 0x7FFFFFFFu
-                || csz_field == 0xFFFFFFFFu
-                || (size_t)csz_field > remaining) {
+            if (csz_field == 0x7FFFFFFFu || csz_field == 0xFFFFFFFFu ||
+                (size_t)csz_field > remaining) {
                 csz = remaining;
                 if ((size_t)csz_field != remaining) {
                     yinfo("wav_open: data csz=0x%08x %s file remaining=%zu — "
                           "using file size (%zu bytes)",
                           csz_field,
-                          (size_t)csz_field > remaining ? "overruns" : "= signed/unsigned max sentinel",
+                          (size_t)csz_field > remaining ? "overruns"
+                                                        : "= signed/unsigned max sentinel",
                           remaining, csz);
                 }
             } else {
@@ -215,8 +214,7 @@ yetty_yaudio_wav_open(const char *path)
          * small metadata blocks and a bogus size means real corruption. */
         if (remaining < (size_t)csz_field) {
             yetty_yaudio_wav_close(w);
-            return YETTY_ERR(yetty_yaudio_wav_ptr,
-                             "wav_open: chunk size overruns file");
+            return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: chunk size overruns file");
         }
         uint32_t csz = csz_field;
         if (tag_eq(tag, "fmt ")) {
@@ -245,10 +243,9 @@ yetty_yaudio_wav_open(const char *path)
     }
     w->frames = w->data_size / w->frame_stride;
 
-    yinfo("wav_open(%s): %u Hz, %u ch, %u-bit %s, %zu frames (%.3f s)",
-          path, w->sample_rate, w->channels, w->bits_per_sample,
-          w->fmt == YETTY_YAUDIO_WAV_SAMPLE_FMT_F32 ? "float" : "PCM",
-          w->frames,
+    yinfo("wav_open(%s): %u Hz, %u ch, %u-bit %s, %zu frames (%.3f s)", path, w->sample_rate,
+          w->channels, w->bits_per_sample,
+          w->fmt == YETTY_YAUDIO_WAV_SAMPLE_FMT_F32 ? "float" : "PCM", w->frames,
           (double)w->frames / (double)w->sample_rate);
 
     return YETTY_OK(yetty_yaudio_wav_ptr, w);
@@ -279,19 +276,15 @@ static inline float decode_s16(const uint8_t *p)
 
 static inline float decode_s24(const uint8_t *p)
 {
-    int32_t v = (int32_t)((uint32_t)p[0] << 8
-                        | (uint32_t)p[1] << 16
-                        | (uint32_t)p[2] << 24);
-    v >>= 8;   /* arithmetic shift sign-extends from bit 23 */
+    int32_t v = (int32_t)((uint32_t)p[0] << 8 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 24);
+    v >>= 8; /* arithmetic shift sign-extends from bit 23 */
     return (float)v * (1.0f / 8388608.0f);
 }
 
 static inline float decode_s32(const uint8_t *p)
 {
-    int32_t v = (int32_t)((uint32_t)p[0]
-                        | (uint32_t)p[1] << 8
-                        | (uint32_t)p[2] << 16
-                        | (uint32_t)p[3] << 24);
+    int32_t v = (int32_t)((uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 |
+                          (uint32_t)p[3] << 24);
     return (float)v * (1.0f / 2147483648.0f);
 }
 
@@ -302,12 +295,9 @@ static inline float decode_f32(const uint8_t *p)
     return v;
 }
 
-struct yetty_ycore_size_result
-yetty_yaudio_wav_read_channel_f32(const struct yetty_yaudio_wav *w,
-                                  uint32_t channel,
-                                  size_t   frame_off,
-                                  float   *out,
-                                  size_t   n_frames)
+struct yetty_ycore_size_result yetty_yaudio_wav_read_channel_f32(const struct yetty_yaudio_wav *w,
+                                                                 uint32_t channel, size_t frame_off,
+                                                                 float *out, size_t n_frames)
 {
     if (!w || !out) {
         return YETTY_ERR(yetty_ycore_size, "read_channel_f32: NULL arg");
@@ -323,8 +313,8 @@ yetty_yaudio_wav_read_channel_f32(const struct yetty_yaudio_wav *w,
         n_frames = avail;
     }
 
-    const uint8_t *base = w->data + frame_off * w->frame_stride
-                                  + (size_t)channel * w->bytes_per_sample;
+    const uint8_t *base =
+        w->data + frame_off * w->frame_stride + (size_t)channel * w->bytes_per_sample;
     const uint16_t stride = w->frame_stride;
 
     switch (w->fmt) {

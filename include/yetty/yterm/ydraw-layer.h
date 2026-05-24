@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <yetty/yterm/terminal.h>
+#include <yetty/ywire/wire-statemachine.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,25 +14,31 @@ extern "C" {
  * Implements the same terminal_layer_ops interface as text-layer.
  *
  * The layer is canvas-agnostic — it holds a `struct yetty_ydraw_canvas *`
- * and uses only the polymorphic surface. The variant is chosen at create
- * time via `kind`:
+ * and uses only the polymorphic surface. Only one variant exists now:
  *   - SCROLLING — primitives are cursor-relative and scroll with the
  *     terminal text. This is the "rich content" overlay (PDF, SVG, etc.).
- *   - SCENE     — entity-based, no scrolling. Used by yui (popups,
- *     statusbar) and any other place that wants persistent named
- *     primitives at absolute coordinates.
+ *
+ * KIND_SCENE was retired with the ycompositor migration — yui's chrome
+ * and ygui-emitted content (popups, statusbar, ygreeter, …) now flow
+ * through root container instead of through a scene-canvas-backed
+ * ydraw_layer. The enum stays single-valued for source compat with
+ * existing call sites that pass KIND_SCROLLING explicitly.
  */
 enum yetty_yterm_ydraw_layer_kind {
     YETTY_YDRAW_LAYER_KIND_SCROLLING,
-    YETTY_YDRAW_LAYER_KIND_SCENE,
 };
 
 struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
-    enum yetty_yterm_ydraw_layer_kind kind, uint32_t cols, uint32_t rows,
-    float cell_width, float cell_height,
-    const struct yetty_context *context, yetty_yterm_request_render_fn request_render_fn,
-    void *request_render_userdata, yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata,
-    yetty_yterm_cursor_fn cursor_fn, void *cursor_userdata);
+    enum yetty_yterm_ydraw_layer_kind kind, uint32_t cols, uint32_t rows, float cell_width,
+    float cell_height, const struct yetty_context *context,
+    yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
+    yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
+    void *cursor_userdata);
+
+/* Wire-SM dispatch entry. Pass the layer's base pointer as userdata
+ * when registering via yetty_ywire_wire_statemachine_register. */
+struct yetty_ycore_void_result yetty_yterm_ydraw_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm);
 
 #ifdef __cplusplus
 }

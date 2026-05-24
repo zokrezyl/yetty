@@ -30,4 +30,4 @@
 
 #include "dawn/webgpu.h"
 
-#endif  // INCLUDE_WEBGPU_WEBGPU_H_
+#endif // INCLUDE_WEBGPU_WEBGPU_H_

@@ -56,25 +56,22 @@ struct yetty_ydraw_drawable_ops {
 // Flyweight - wraps pointer to primitive data + base ops
 // Works for ALL primitives (SDF and complex)
 struct yetty_ydraw_drawable_flyweight {
-    const uint32_t *data;                              // type at data[0]
+    const uint32_t *data;                            // type at data[0]
     const struct yetty_ydraw_drawable_base_ops *ops; // base ops (size, aabb)
 };
 
 YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_base_ops_ptr,
                       const struct yetty_ydraw_drawable_base_ops *);
-YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_flyweight_ptr,
-                      struct yetty_ydraw_drawable_flyweight *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_flyweight_ptr, struct yetty_ydraw_drawable_flyweight *);
 
 // Flyweight registry instance (opaque)
 struct yetty_ydraw_flyweight_registry;
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_flyweight_registry_ptr,
-                      struct yetty_ydraw_flyweight_registry *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_flyweight_registry_ptr, struct yetty_ydraw_flyweight_registry *);
 
 // Create/destroy registry instance
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ydraw_flyweight_registry_ptr_result yetty_ydraw_flyweight_registry_create(
-    void);
+struct yetty_ydraw_flyweight_registry_ptr_result yetty_ydraw_flyweight_registry_create(void);
 
 void yetty_ydraw_flyweight_registry_destroy(
     struct yetty_ydraw_flyweight_registry *reg YETTY_ANNOT_CALLEE_OWNED);

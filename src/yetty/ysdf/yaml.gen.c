@@ -558,9 +558,9 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_draw_lis
     yaml_event_t event;
     struct yetty_ysdf_ydraw_yaml_parse_ctx yaml_parse_ctx = {0};
     int done = 0;
-    int depth = 0;        /* mapping depth */
-    int in_body = 0;      /* inside body sequence */
-    int in_prim = 0;      /* inside primitive map */
+    int depth = 0;            /* mapping depth */
+    int in_body = 0;          /* inside body sequence */
+    int in_prim = 0;          /* inside primitive map */
     int in_drawable_type = 0; /* inside primitive type map */
     int expect_value = 0;
 

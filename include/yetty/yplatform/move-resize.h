@@ -29,8 +29,7 @@ void yetty_yplatform_wayland_begin_interactive_move(struct GLFWwindow *window);
 /* `edge` is a yetty_ycore_resize_edge value (values match xdg-shell's
  * xdg_toplevel.resize_edge wire enum: 1=top, 2=bottom, 4=left, 8=right,
  * combine for corners). 0 (NONE) is a no-op. */
-void yetty_yplatform_wayland_begin_interactive_resize(struct GLFWwindow *window,
-                                                       unsigned int edge);
+void yetty_yplatform_wayland_begin_interactive_resize(struct GLFWwindow *window, unsigned int edge);
 
 #ifdef __cplusplus
 }

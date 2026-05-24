@@ -31,6 +31,61 @@ extern "C" {
  * for DELETE the id field carries the target. */
 #define YETTY_YDRAW_HAS_ID_FLAG 0x80000000u
 
+/*------------------------------------------------------------------------*
+ * Record-kind encoding — bits 31:30 of the type word.                    *
+ *                                                                        *
+ * The top two bits of every wire type word classify what the parser      *
+ * should expect after the type word:                                     *
+ *                                                                        *
+ *   bits 31:30 = 00   anonymous content    (today's plain prim)          *
+ *                                            shape: [type] [payload…]    *
+ *                                                                        *
+ *   bits 31:30 = 01   id + content         (declaration of an id'd       *
+ *                                            entity carrying its body)   *
+ *                                            shape: [type] [id]          *
+ *                                                    [payload_size]      *
+ *                                                    [payload…]          *
+ *                                                                        *
+ *   bits 31:30 = 10   id only              (back-reference / membership; *
+ *                                            no body — refers to a       *
+ *                                            previously-declared id)     *
+ *                                            shape: [type] [id]          *
+ *                                                                        *
+ *   bits 31:30 = 11   reserved             (parser must reject)          *
+ *                                                                        *
+ * Inside a group body, records of all three kinds may interleave: a      *
+ * group's children may be anonymous leaf prims (kind 00), declarations   *
+ * of sub-groups (kind 01), or back-references to groups declared         *
+ * elsewhere in the envelope (kind 10). The receiver dispatches on the    *
+ * top two bits to know how to consume each record.                       *
+ *                                                                        *
+ * Today's existing constants (CMD_GROUP, CMD_UPDATE in kind-10 bits with *
+ * an embedded body; TEXT_SPAN / FONT in kind-01 bits while anonymous;    *
+ * SDF prims spread across various ranges) predate this scheme and are    *
+ * NOT yet consistent with these bit assignments. A follow-up sweep will  *
+ * renumber them; for now use the kind-bit constants below for any        *
+ * record introduced by the new group/coord-frame work.                   *
+ *------------------------------------------------------------------------*/
+#define YETTY_YDRAW_KIND_MASK 0xC0000000u
+#define YETTY_YDRAW_KIND_ANON_CONTENT 0x00000000u /* 00 — payload follows */
+#define YETTY_YDRAW_KIND_DECL 0x40000000u         /* 01 — id + payload */
+#define YETTY_YDRAW_KIND_REF 0x80000000u          /* 10 — id only */
+#define YETTY_YDRAW_KIND_RESERVED 0xC0000000u     /* 11 — invalid */
+
+/* CMD_GROUP_REF: include an already-declared group (by id) as a child of
+ * the current parent group. Used when the same sub-group can be reached
+ * from multiple parents, or when the producer prefers to declare every
+ * group at envelope top-level and only reference them from parents.
+ *
+ * Wire layout (kind=REF / 10): [type] [id]
+ *
+ * Receiver behaviour: add `id` to the current parent group's child list.
+ * Forward references (id declared later in the same envelope) are
+ * allowed; the receiver resolves the link after the whole envelope has
+ * been walked. A reference to an id that never arrives is treated as
+ * "skip" (the child slot stays empty), not an error. */
+#define YETTY_YDRAW_CMD_GROUP_REF (YETTY_YDRAW_KIND_REF | 0x00000020u)
+
 /* CMD_ZERO: clear the receiving ydraw canvas AND reset the cursor to
  * (col=0, row=0). The canvas's cursor-set callback fires on the reset, so
  * sibling layers (text/vterm) see the cursor move too — that's how the

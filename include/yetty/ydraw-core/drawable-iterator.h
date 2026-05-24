@@ -140,8 +140,7 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
  *                          via the registry.
  */
 struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
-    const struct yetty_ydraw_flyweight_registry *reg,
-    const uint8_t *bytes, uint32_t bytes_len,
+    const struct yetty_ydraw_flyweight_registry *reg, const uint8_t *bytes, uint32_t bytes_len,
     struct yetty_ydraw_command *out_command);
 
 #ifdef __cplusplus

@@ -35,7 +35,7 @@ struct yetty_platform_clipboard_manager_ops {
      * but the cross-thread enqueue can fail (pipe full, allocation) —
      * the caller must learn about that. */
     struct yetty_ycore_void_result (*set_text)(struct yetty_platform_clipboard_manager *self,
-                                                const char *text, size_t len);
+                                               const char *text, size_t len);
     /* Ask the main thread to fetch the clipboard. The result arrives later
      * as a YETTY_YCORE_PASTE event on the input pipe with event->payload
      * set to a malloc'd UTF-8 C string the receiver must free. */

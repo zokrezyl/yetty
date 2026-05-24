@@ -194,8 +194,8 @@ static struct yetty_ycore_void_result encode_tile(struct yetty_yvnc_server *serv
                                                   uint8_t *out_encoding);
 static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_yvnc_server *server,
                                                                   uint32_t width, uint32_t height);
-static struct yetty_ycore_void_result ensure_client_owed(struct yetty_yvnc_vnc_client_ctx *client_ctx,
-                                                         uint32_t num_tiles);
+static struct yetty_ycore_void_result ensure_client_owed(
+    struct yetty_yvnc_vnc_client_ctx *client_ctx, uint32_t num_tiles);
 static void check_ack_timeouts(struct yetty_yvnc_server *server);
 
 /*===========================================================================
@@ -949,8 +949,8 @@ static void send_to_client(struct yetty_yvnc_server *server,
  * size. Grows / shrinks lazily. New cells start zero (no fabricated dirty
  * bits — need_full_frame handles initial coverage).
  */
-static struct yetty_ycore_void_result ensure_client_owed(struct yetty_yvnc_vnc_client_ctx *client_ctx,
-                                                         uint32_t num_tiles)
+static struct yetty_ycore_void_result ensure_client_owed(
+    struct yetty_yvnc_vnc_client_ctx *client_ctx, uint32_t num_tiles)
 {
     if (client_ctx->owed_tiles_count == num_tiles && client_ctx->owed_tiles) {
         return YETTY_OK_VOID();
@@ -961,8 +961,7 @@ static struct yetty_ycore_void_result ensure_client_owed(struct yetty_yvnc_vnc_c
     }
     /* If we just grew, zero the new tail. If we shrank, no init needed. */
     if (num_tiles > client_ctx->owed_tiles_count) {
-        memset(resized + client_ctx->owed_tiles_count, 0,
-               num_tiles - client_ctx->owed_tiles_count);
+        memset(resized + client_ctx->owed_tiles_count, 0, num_tiles - client_ctx->owed_tiles_count);
     }
     client_ctx->owed_tiles = resized;
     client_ctx->owed_tiles_count = num_tiles;
@@ -1184,8 +1183,8 @@ static void dispatch_input(struct yetty_yvnc_server *server,
             /* Spurious ack — we're not waiting on anything. Most likely a
              * late duplicate (TCP reorders nothing, but the same frame's
              * ack can arrive twice if the client sends from two layers). */
-            ydebug("VNC: ack %u on slot %d while not awaiting; ignoring",
-                   acked_seq, client_ctx->slot);
+            ydebug("VNC: ack %u on slot %d while not awaiting; ignoring", acked_seq,
+                   client_ctx->slot);
             break;
         }
         if (acked_seq != client_ctx->awaiting_seq) {
@@ -1193,8 +1192,8 @@ static void dispatch_input(struct yetty_yvnc_server *server,
              * we do NOT clear awaiting_ack — that would defeat the whole
              * point of stop-and-wait. The real ack will arrive next, or the
              * ACK_TIMEOUT_SEC path closes the client. */
-            ydebug("VNC: stale ack %u on slot %d (waiting on %u); ignoring",
-                   acked_seq, client_ctx->slot, client_ctx->awaiting_seq);
+            ydebug("VNC: stale ack %u on slot %d (waiting on %u); ignoring", acked_seq,
+                   client_ctx->slot, client_ctx->awaiting_seq);
             break;
         }
         client_ctx->awaiting_ack = 0;
@@ -1526,12 +1525,12 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
     uint8_t *v_plane = u_plane + uv_size;
 
     yetty_yvcodec_bgra_to_yuv420(pixels, enc_w, enc_h, width * 4, y_plane, u_plane, v_plane,
-                                server->yuv_y_stride, server->yuv_uv_stride);
+                                 server->yuv_y_stride, server->yuv_uv_stride);
 
     struct yetty_yvcodec_encoded_frame encoded;
     struct yetty_ycore_void_result res =
         yetty_yvcodec_encoder_encode(server->h264_encoder, y_plane, u_plane, v_plane,
-                                    server->yuv_y_stride, server->yuv_uv_stride, &encoded);
+                                     server->yuv_y_stride, server->yuv_uv_stride, &encoded);
     if (!YETTY_IS_OK(res)) {
         ywarn("VNC: H.264 encode failed: %s", res.error.msg);
         server->use_h264 = 0;

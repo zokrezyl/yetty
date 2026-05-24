@@ -501,9 +501,10 @@ static struct yetty_ycore_void_result ymd_emit(struct yetty_ydraw_draw_list *buf
 /* Emit a single markdown line's spans into `buf` at vertical cursor `cy`,
  * starting horizontally at `cx`. The caller is responsible for advancing
  * its own cursor by the line height — this function only mutates `buf`. */
-static struct yetty_ycore_void_result ymd_emit_one_line(
-    struct yetty_ydraw_draw_list *buf, const struct yetty_ymarkdown_ymd_line *line,
-    float cx_start, float cy, const struct yetty_ymarkdown_ymd_params *p)
+static struct yetty_ycore_void_result ymd_emit_one_line(struct yetty_ydraw_draw_list *buf,
+                                                        const struct yetty_ymarkdown_ymd_line *line,
+                                                        float cx_start, float cy,
+                                                        const struct yetty_ymarkdown_ymd_params *p)
 {
     float cursor_x = cx_start + line->indent;
     float scale = line->scale;
@@ -526,8 +527,8 @@ static struct yetty_ycore_void_result ymd_emit_one_line(
                 .half_height = scaled_size * 0.5f + 0.5f,
                 .corner_radius = 0.0f,
             };
-            struct yetty_ycore_void_result r = yetty_ydraw_draw_list_add_cmd_add_box(
-                buf, 0, 0, YMD_COLOR_CODE_BG, 0, 0.0f, &geom);
+            struct yetty_ycore_void_result r =
+                yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, 0, YMD_COLOR_CODE_BG, 0, 0.0f, &geom);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ymd line emit: code box add failed");
         }
 
@@ -594,8 +595,7 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ydraw_draw_list_result br =
-        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ymarkdown_render, br.error.msg);
     }
@@ -643,12 +643,11 @@ static struct yetty_ydraw_draw_list_result ymd_make_chunk(float scene_w, float c
 
 struct yetty_ymarkdown_stream_render_result yetty_ymarkdown_render_streaming(
     const char *content, size_t content_len, const char *args, size_t args_len,
-    const struct yetty_ymarkdown_render_config *config,
-    yetty_ymarkdown_chunk_emit_fn on_chunk, void *user_data)
+    const struct yetty_ymarkdown_render_config *config, yetty_ymarkdown_chunk_emit_fn on_chunk,
+    void *user_data)
 {
     if (!content && content_len > 0) {
-        return YETTY_ERR(yetty_ymarkdown_stream_render,
-                         "content is NULL but content_len > 0");
+        return YETTY_ERR(yetty_ymarkdown_stream_render, "content is NULL but content_len > 0");
     }
     if (!on_chunk) {
         return YETTY_ERR(yetty_ymarkdown_stream_render, "on_chunk is NULL");
@@ -709,8 +708,7 @@ struct yetty_ymarkdown_stream_render_result yetty_ymarkdown_render_streaming(
             chunk_index++;
             struct yetty_ydraw_draw_list_result nbr = ymd_make_chunk(scene_w, chunk_h);
             if (YETTY_IS_ERR(nbr)) {
-                fail = YETTY_ERR(yetty_ycore_void, "ymarkdown stream: chunk buffer alloc",
-                                 nbr);
+                fail = YETTY_ERR(yetty_ycore_void, "ymarkdown stream: chunk buffer alloc", nbr);
                 goto cleanup;
             }
             buf = nbr.value;
@@ -741,8 +739,7 @@ cleanup:
     ymd_doc_destroy(&doc);
 
     if (YETTY_IS_ERR(fail)) {
-        return YETTY_ERR(yetty_ymarkdown_stream_render,
-                         "ymarkdown streaming render aborted", fail);
+        return YETTY_ERR(yetty_ymarkdown_stream_render, "ymarkdown streaming render aborted", fail);
     }
 
     struct yetty_ymarkdown_stream_render_output out = {

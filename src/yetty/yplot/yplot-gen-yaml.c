@@ -202,8 +202,7 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
 
     if (has_source) {
         /* Full yexpr-plot parse → bytecode + data-buffer table. */
-        struct yetty_yexpr_plot_parse_result pr =
-            yetty_yexpr_parse_plot(source, strlen(source));
+        struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(source, strlen(source));
         if (YETTY_IS_OK(pr)) {
             /* Inline domain / viewport overrides whatever YAML set. */
             if (pr.value.plot.has_x_range) {
@@ -241,8 +240,7 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
             }
 
             /* Bytecode. */
-            struct yetty_yfsvm_program_result prog_res =
-                yetty_yfsvm_compile_multi(&pr.value.plot);
+            struct yetty_yfsvm_program_result prog_res = yetty_yfsvm_compile_multi(&pr.value.plot);
             if (YETTY_IS_OK(prog_res)) {
                 if (prog_res.value.uses_time) {
                     uniforms.flags |= 0x8u; /* YETTY_YPLOT_FLAG_USES_TIME */

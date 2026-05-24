@@ -70,13 +70,12 @@ struct yetty_ymarkdown_stream_render_output {
     float chunk_height; /* envelope height budget, same for every chunk */
 };
 
-YETTY_YRESULT_DECLARE(yetty_ymarkdown_stream_render,
-                      struct yetty_ymarkdown_stream_render_output);
+YETTY_YRESULT_DECLARE(yetty_ymarkdown_stream_render, struct yetty_ymarkdown_stream_render_output);
 
 struct yetty_ymarkdown_stream_render_result yetty_ymarkdown_render_streaming(
     const char *content, size_t content_len, const char *args, size_t args_len,
-    const struct yetty_ymarkdown_render_config *config,
-    yetty_ymarkdown_chunk_emit_fn on_chunk, void *user_data);
+    const struct yetty_ymarkdown_render_config *config, yetty_ymarkdown_chunk_emit_fn on_chunk,
+    void *user_data);
 
 #ifdef __cplusplus
 }

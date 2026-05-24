@@ -61,8 +61,7 @@ struct yetty_yplatform_audio_device {
 /* miniaudio drives playback by calling this callback in the backend
  * thread whenever it needs more output. We pull from our ring and let
  * the caller (decode side) keep filling it via write_pcm. */
-static void audio_data_callback(ma_device *device, void *out, const void *in,
-                                ma_uint32 frame_count)
+static void audio_data_callback(ma_device *device, void *out, const void *in, ma_uint32 frame_count)
 {
     (void)in;
     struct yetty_yplatform_audio_device *dev =
@@ -81,31 +80,28 @@ static void audio_data_callback(ma_device *device, void *out, const void *in,
              * its clock. The played-out counter still advances. */
             size_t silence_frames = (size_t)want;
             memset(dst, 0, silence_frames * dev->channels * sizeof(float));
-            atomic_fetch_add_explicit(&dev->frames_played_out,
-                                      silence_frames, memory_order_relaxed);
+            atomic_fetch_add_explicit(&dev->frames_played_out, silence_frames,
+                                      memory_order_relaxed);
             return;
         }
         memcpy(dst, read_ptr, (size_t)chunk * dev->channels * sizeof(float));
         ma_pcm_rb_commit_read(&dev->ring, chunk);
         dst += (size_t)chunk * dev->channels;
-        atomic_fetch_add_explicit(&dev->frames_played_out, chunk,
-                                  memory_order_relaxed);
+        atomic_fetch_add_explicit(&dev->frames_played_out, chunk, memory_order_relaxed);
         want -= chunk;
     }
 }
 
-struct yetty_yplatform_audio_device_ptr_result
-yetty_yplatform_audio_device_create(uint32_t sample_rate, uint32_t channels)
+struct yetty_yplatform_audio_device_ptr_result yetty_yplatform_audio_device_create(
+    uint32_t sample_rate, uint32_t channels)
 {
     if (sample_rate == 0u || channels == 0u || channels > 8u) {
-        return YETTY_ERR(yetty_yplatform_audio_device_ptr,
-                         "audio: invalid sample_rate/channels");
+        return YETTY_ERR(yetty_yplatform_audio_device_ptr, "audio: invalid sample_rate/channels");
     }
 
     struct yetty_yplatform_audio_device *dev = calloc(1u, sizeof(*dev));
     if (!dev) {
-        return YETTY_ERR(yetty_yplatform_audio_device_ptr,
-                         "audio: device alloc failed");
+        return YETTY_ERR(yetty_yplatform_audio_device_ptr, "audio: device alloc failed");
     }
     dev->sample_rate = sample_rate;
     dev->channels = channels;
@@ -116,19 +112,18 @@ yetty_yplatform_audio_device_create(uint32_t sample_rate, uint32_t channels)
      * headroom for the decode side without burning RAM (e.g. 48 kHz × 2
      * channels × 4 bytes ≈ 380 KB). */
     ma_uint32 ring_frames = sample_rate;
-    if (ma_pcm_rb_init(ma_format_f32, channels, ring_frames, NULL, NULL,
-                       &dev->ring) != MA_SUCCESS) {
+    if (ma_pcm_rb_init(ma_format_f32, channels, ring_frames, NULL, NULL, &dev->ring) !=
+        MA_SUCCESS) {
         free(dev);
-        return YETTY_ERR(yetty_yplatform_audio_device_ptr,
-                         "audio: ring buffer init failed");
+        return YETTY_ERR(yetty_yplatform_audio_device_ptr, "audio: ring buffer init failed");
     }
 
     ma_device_config cfg = ma_device_config_init(ma_device_type_playback);
-    cfg.playback.format   = ma_format_f32;
+    cfg.playback.format = ma_format_f32;
     cfg.playback.channels = channels;
-    cfg.sampleRate        = sample_rate;
-    cfg.dataCallback      = audio_data_callback;
-    cfg.pUserData         = dev;
+    cfg.sampleRate = sample_rate;
+    cfg.dataCallback = audio_data_callback;
+    cfg.pUserData = dev;
 
     if (ma_device_init(NULL, &cfg, &dev->device) != MA_SUCCESS) {
         ma_pcm_rb_uninit(&dev->ring);
@@ -136,8 +131,8 @@ yetty_yplatform_audio_device_create(uint32_t sample_rate, uint32_t channels)
         return YETTY_ERR(yetty_yplatform_audio_device_ptr,
                          "audio: ma_device_init failed (no backend?)");
     }
-    yinfo("audio: device opened %u Hz × %u ch (%s backend)",
-          sample_rate, channels, ma_get_backend_name(dev->device.pContext->backend));
+    yinfo("audio: device opened %u Hz × %u ch (%s backend)", sample_rate, channels,
+          ma_get_backend_name(dev->device.pContext->backend));
     return YETTY_OK(yetty_yplatform_audio_device_ptr, dev);
 }
 
@@ -154,8 +149,8 @@ void yetty_yplatform_audio_device_destroy(struct yetty_yplatform_audio_device *d
     free(dev);
 }
 
-struct yetty_ycore_void_result
-yetty_yplatform_audio_device_start(struct yetty_yplatform_audio_device *dev)
+struct yetty_ycore_void_result yetty_yplatform_audio_device_start(
+    struct yetty_yplatform_audio_device *dev)
 {
     if (!dev) {
         return YETTY_ERR(yetty_ycore_void, "audio: start on null device");
@@ -170,8 +165,8 @@ yetty_yplatform_audio_device_start(struct yetty_yplatform_audio_device *dev)
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result
-yetty_yplatform_audio_device_stop(struct yetty_yplatform_audio_device *dev)
+struct yetty_ycore_void_result yetty_yplatform_audio_device_stop(
+    struct yetty_yplatform_audio_device *dev)
 {
     if (!dev) {
         return YETTY_ERR(yetty_ycore_void, "audio: stop on null device");
@@ -186,9 +181,8 @@ yetty_yplatform_audio_device_stop(struct yetty_yplatform_audio_device *dev)
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_size_result
-yetty_yplatform_audio_device_write_pcm(struct yetty_yplatform_audio_device *dev,
-                                       const float *pcm, size_t frames)
+struct yetty_ycore_size_result yetty_yplatform_audio_device_write_pcm(
+    struct yetty_yplatform_audio_device *dev, const float *pcm, size_t frames)
 {
     if (!dev || !pcm) {
         return YETTY_ERR(yetty_ycore_size, "audio: write_pcm null arg");
@@ -197,29 +191,25 @@ yetty_yplatform_audio_device_write_pcm(struct yetty_yplatform_audio_device *dev,
     while (written < frames) {
         ma_uint32 want = (ma_uint32)(frames - written);
         void *dst = NULL;
-        if (ma_pcm_rb_acquire_write(&dev->ring, &want, &dst) != MA_SUCCESS ||
-            want == 0u) {
+        if (ma_pcm_rb_acquire_write(&dev->ring, &want, &dst) != MA_SUCCESS || want == 0u) {
             /* Ring full — drop the surplus. The audio clock continues
              * to advance from the consumer; the decode side just sees
              * a return value < frames and can decide what to do. */
             break;
         }
-        memcpy(dst, pcm + written * dev->channels,
-               (size_t)want * dev->channels * sizeof(float));
+        memcpy(dst, pcm + written * dev->channels, (size_t)want * dev->channels * sizeof(float));
         ma_pcm_rb_commit_write(&dev->ring, want);
         written += want;
     }
     return YETTY_OK(yetty_ycore_size, written);
 }
 
-double yetty_yplatform_audio_device_played_out_sec(
-    const struct yetty_yplatform_audio_device *dev)
+double yetty_yplatform_audio_device_played_out_sec(const struct yetty_yplatform_audio_device *dev)
 {
     if (!dev) {
         return 0.0;
     }
-    uint64_t played = atomic_load_explicit(&dev->frames_played_out,
-                                           memory_order_relaxed);
+    uint64_t played = atomic_load_explicit(&dev->frames_played_out, memory_order_relaxed);
     return (double)played / (double)dev->sample_rate;
 }
 
@@ -234,14 +224,12 @@ void yetty_yplatform_audio_device_flush(struct yetty_yplatform_audio_device *dev
     ma_pcm_rb_reset(&dev->ring);
 }
 
-uint32_t yetty_yplatform_audio_device_sample_rate(
-    const struct yetty_yplatform_audio_device *dev)
+uint32_t yetty_yplatform_audio_device_sample_rate(const struct yetty_yplatform_audio_device *dev)
 {
     return dev ? dev->sample_rate : 0u;
 }
 
-uint32_t yetty_yplatform_audio_device_channels(
-    const struct yetty_yplatform_audio_device *dev)
+uint32_t yetty_yplatform_audio_device_channels(const struct yetty_yplatform_audio_device *dev)
 {
     return dev ? dev->channels : 0u;
 }

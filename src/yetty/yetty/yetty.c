@@ -3,7 +3,7 @@
  */
 
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -36,8 +36,8 @@ struct yetty_yetty_yetty {
     /* Cached `app_context.runtime` — the generic services layer (event
      * loop, adapter/device/queue/allocator/msdf, wgpu await, optional
      * VNC + RPC, render target). Created and owned by ymain via
-     * yetty_yruntime_create; yetty borrows everything through it. */
-    struct yetty_yruntime *runtime;
+     * yetty_yframework_create; yetty borrows everything through it. */
+    struct yetty_yframework *runtime;
     /* Top-level UI. The tabbar owns N workspaces; only the active
      * workspace renders. Single-workspace boots create one tab so the
      * existing render/event paths see exactly the same shape as before
@@ -120,7 +120,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
         if (yetty->runtime->render_target->ops->is_busy &&
             yetty->runtime->render_target->ops->is_busy(yetty->runtime->render_target)) {
             if (yetty->runtime->render_target->ops->notify_render_skipped) {
-                yetty->runtime->render_target->ops->notify_render_skipped(yetty->runtime->render_target);
+                yetty->runtime->render_target->ops->notify_render_skipped(
+                    yetty->runtime->render_target);
             }
             ydebug("yetty: RENDER skipped (target busy)");
             return YETTY_OK(yetty_ycore_int, 1);
@@ -428,8 +429,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
         }
 
         struct yetty_ycore_void_result sr = yetty_yrender_utils_screenshot_capture(
-            yetty->runtime->gpu.device, yetty->runtime->gpu.queue,
-            yetty->runtime->wgpu, tex, path);
+            yetty->runtime->gpu.device, yetty->runtime->gpu.queue, yetty->runtime->wgpu, tex, path);
         if (!YETTY_IS_OK(sr)) {
             yerror("yetty: SCREENSHOT failed: %s", sr.error.msg);
             yetty_ycore_error_destroy(sr.error);
@@ -465,7 +465,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * runtime->gpu.app_gpu_context.surface_{width,height} so any
          * consumer reading those dimensions sees the post-resize size. */
         struct yetty_ycore_void_result rc =
-            yetty_yruntime_reconfigure_surface(yetty->runtime, width, height);
+            yetty_yframework_reconfigure_surface(yetty->runtime, width, height);
         if (YETTY_IS_ERR(rc)) {
             ywarn("yetty: surface reconfigure failed: %s", rc.error.msg);
             yetty_ycore_error_destroy(rc.error);
@@ -483,8 +483,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * area sits between [tabbar_strip .. H - statusbar_h]; without
          * this the bottom row of terminal cells is drawn under the
          * yui statusbar. */
-        float bottom_inset =
-            yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f;
+        float bottom_inset = yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f;
         float ws_height = (float)height - bottom_inset;
         if (ws_height < 0.0f) {
             ws_height = 0.0f;
@@ -532,8 +531,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
         if (yetty->tabbar) {
             struct yetty_yui_workspace *ws = NULL;
             struct yetty_ycore_void_result r = yetty_yui_tabbar_attach_empty_workspace(
-                yetty->tabbar, event->workspace_create.workspace_id,
-                yetty->context.runtime->config, &yetty->context, &ws);
+                yetty->tabbar, event->workspace_create.workspace_id, yetty->context.runtime->config,
+                &yetty->context, &ws);
             if (YETTY_IS_ERR(r)) {
                 yerror("yetty: WORKSPACE_CREATE failed: %s", r.error.msg);
                 yetty_ycore_error_destroy(r.error);
@@ -547,8 +546,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
     if (event->type == YETTY_YCORE_PANE_CREATE) {
         if (yetty->tabbar) {
-            struct yetty_yui_workspace *ws = yetty_yui_tabbar_find_workspace(
-                yetty->tabbar, event->pane_create.workspace_id);
+            struct yetty_yui_workspace *ws =
+                yetty_yui_tabbar_find_workspace(yetty->tabbar, event->pane_create.workspace_id);
             if (!ws) {
                 ywarn("yetty: PANE_CREATE: workspace %llu not found",
                       (unsigned long long)event->pane_create.workspace_id);
@@ -578,8 +577,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
                     yerror("yetty: PANE_CREATE: terminal create: %s", tr.error.msg);
                     yetty_ycore_error_destroy(tr.error);
                 } else {
-                    struct yetty_ycore_void_result pr = yetty_yui_tile_pane_push_view(
-                        pane, yetty_yterm_terminal_as_view(tr.value));
+                    struct yetty_ycore_void_result pr =
+                        yetty_yui_tile_pane_push_view(pane, yetty_yterm_terminal_as_view(tr.value));
                     if (YETTY_IS_ERR(pr)) {
                         yerror("yetty: PANE_CREATE: push_view: %s", pr.error.msg);
                         yetty_ycore_error_destroy(pr.error);
@@ -609,16 +608,15 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
     if (event->type == YETTY_YCORE_PANE_SPLIT) {
         if (yetty->tabbar) {
-            struct yetty_yui_workspace *ws = yetty_yui_tabbar_find_workspace(
-                yetty->tabbar, event->pane_split.workspace_id);
+            struct yetty_yui_workspace *ws =
+                yetty_yui_tabbar_find_workspace(yetty->tabbar, event->pane_split.workspace_id);
             if (!ws) {
                 ywarn("yetty: PANE_SPLIT: workspace %llu not found",
                       (unsigned long long)event->pane_split.workspace_id);
                 return YETTY_OK(yetty_ycore_int, 1);
             }
             enum yetty_yui_orientation orient =
-                event->pane_split.orientation ? YETTY_YUI_HORIZONTAL
-                                              : YETTY_YUI_VERTICAL;
+                event->pane_split.orientation ? YETTY_YUI_HORIZONTAL : YETTY_YUI_VERTICAL;
             struct yetty_ycore_void_result sr = yetty_yui_workspace_split_pane_with_ids(
                 ws, event->pane_split.target_pane_id, event->pane_split.new_pane_id,
                 event->pane_split.new_split_id, orient);
@@ -642,8 +640,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
                     yerror("yetty: PANE_SPLIT: terminal create: %s", tr.error.msg);
                     yetty_ycore_error_destroy(tr.error);
                 } else {
-                    yetty_yui_tile_pane_push_view(
-                        new_pane, yetty_yterm_terminal_as_view(tr.value));
+                    yetty_yui_tile_pane_push_view(new_pane, yetty_yterm_terminal_as_view(tr.value));
                 }
                 yetty_yui_tile_clear_focus(root);
                 yetty_yui_tile_pane_set_focused(new_pane, 1);
@@ -670,8 +667,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
     if (event->type == YETTY_YCORE_SPLIT_RESIZE) {
         if (yetty->tabbar) {
-            struct yetty_yui_workspace *ws = yetty_yui_tabbar_find_workspace(
-                yetty->tabbar, event->split_resize.workspace_id);
+            struct yetty_yui_workspace *ws =
+                yetty_yui_tabbar_find_workspace(yetty->tabbar, event->split_resize.workspace_id);
             if (ws) {
                 struct yetty_ycore_void_result r = yetty_yui_workspace_resize_split(
                     ws, event->split_resize.split_id, event->split_resize.ratio);
@@ -742,13 +739,12 @@ static struct yetty_ycore_int_result yetty_event_handler(
              * MOUSE_DOWN handler runs, but without forwarding the
              * click to the terminal (we don't want the inner program
              * to see a mouse event for a UI gesture). */
-            struct yetty_yui_workspace *ws =
-                yetty_yui_tabbar_active_workspace(yetty->tabbar);
+            struct yetty_yui_workspace *ws = yetty_yui_tabbar_active_workspace(yetty->tabbar);
             if (ws) {
                 struct yetty_yui_tile *root = yetty_yui_workspace_root(ws);
                 if (root) {
-                    struct yetty_yui_tile *clicked = yetty_yui_tile_find_pane_at(
-                        root, event->mouse.x, event->mouse.y);
+                    struct yetty_yui_tile *clicked =
+                        yetty_yui_tile_find_pane_at(root, event->mouse.x, event->mouse.y);
                     if (clicked) {
                         yetty_yui_tile_clear_focus(root);
                         yetty_yui_tile_pane_set_focused(clicked, 1);
@@ -849,15 +845,19 @@ static int yetty_apply_view_kind_to_config(struct yetty_yetty_yetty *yetty,
     case YETTY_YUI_VIEW_SSH: {
         const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
         const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
-        const char *key  = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
+        const char *key = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
         if (!host || !host[0]) {
             ywarn("yetty: SSH: empty host");
             return -1;
         }
         char cmd[1024];
         int n = snprintf(cmd, sizeof(cmd), "ssh");
-        if (port && port[0]) n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -p %s", port);
-        if (key && key[0])   n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -i %s", key);
+        if (port && port[0]) {
+            n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -p %s", port);
+        }
+        if (key && key[0]) {
+            n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -i %s", key);
+        }
         snprintf(cmd + n, sizeof(cmd) - (size_t)n, " %s", host);
         config->ops->set_string(config, "shell/command", cmd);
         return 0;
@@ -907,8 +907,7 @@ static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, in
         return;
     }
     if (kind == YETTY_YUI_VIEW_YVNC) {
-        ynotify(YETTY_YNOTIFY_INFO,
-                "yVNC-in-split not yet wired — opened a terminal instead");
+        ynotify(YETTY_YNOTIFY_INFO, "yVNC-in-split not yet wired — opened a terminal instead");
     }
 
     struct yetty_yui_workspace *ws = yetty_yui_tabbar_active_workspace(yetty->tabbar);
@@ -975,7 +974,7 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
     case YETTY_YUI_VIEW_SSH: {
         const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
         const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
-        const char *key  = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
+        const char *key = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
         if (!host || !host[0]) {
             ywarn("yetty: SSH connect with empty host — ignoring");
             return;
@@ -986,10 +985,12 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         }
         char cmd[1024];
         int n = snprintf(cmd, sizeof(cmd), "ssh");
-        if (port && port[0])
+        if (port && port[0]) {
             n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -p %s", port);
-        if (key && key[0])
+        }
+        if (key && key[0]) {
             n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -i %s", key);
+        }
         snprintf(cmd + n, sizeof(cmd) - (size_t)n, " %s", host);
         config->ops->set_string(config, "shell/command", cmd);
         ydebug("yetty: SSH connect via ssh(1): %s", cmd);
@@ -1021,8 +1022,11 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         tk = YETTY_YUI_TAB_TELNET;
         break;
     }
-    case YETTY_YUI_VIEW_YVNC:   tk = YETTY_YUI_TAB_YVNC;   break;
-    default: return;
+    case YETTY_YUI_VIEW_YVNC:
+        tk = YETTY_YUI_TAB_YVNC;
+        break;
+    default:
+        return;
     }
     struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_of_kind(yetty->tabbar, tk);
     if (YETTY_IS_ERR(r)) {
@@ -1030,14 +1034,13 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
          * sees it — silent failure was the original Telnet/SSH bug. The
          * label name is the human-readable view kind. */
         static const char *kind_label[] = {
-            [YETTY_YUI_VIEW_SHELL]  = "Shell",
-            [YETTY_YUI_VIEW_SSH]    = "SSH",
-            [YETTY_YUI_VIEW_TELNET] = "Telnet",
-            [YETTY_YUI_VIEW_YVNC]   = "yVNC",
-            [YETTY_YUI_VIEW_EXEC]   = "Exec",
+            [YETTY_YUI_VIEW_SHELL] = "Shell",   [YETTY_YUI_VIEW_SSH] = "SSH",
+            [YETTY_YUI_VIEW_TELNET] = "Telnet", [YETTY_YUI_VIEW_YVNC] = "yVNC",
+            [YETTY_YUI_VIEW_EXEC] = "Exec",
         };
         const char *label = ((unsigned)kind < (sizeof(kind_label) / sizeof(kind_label[0])))
-                                ? kind_label[kind] : "Connect";
+                                ? kind_label[kind]
+                                : "Connect";
         ynotify(YETTY_YNOTIFY_ERROR, "%s connect failed: %s", label, r.error.msg);
         yetty_ycore_error_destroy(r.error);
     } else {
@@ -1052,7 +1055,7 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
  * Public API
  *===========================================================================*/
 
-struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
+struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
                                              struct yetty_yplatform_pty_factory *pty_factory)
 {
     ydebug("yetty_create: Starting...");
@@ -1073,16 +1076,15 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
     /* Wire up the propagated context: runtime owns the GPU/event/RPC
      * services, pty_factory is yetty-specific, event_loop is a hot-path
      * alias. */
-    yetty->runtime             = runtime;
-    yetty->context.runtime     = runtime;
+    yetty->runtime = runtime;
+    yetty->context.runtime = runtime;
     yetty->context.pty_factory = pty_factory;
-    yetty->event_loop          = runtime->event_loop;
-    yetty->context.event_loop  = runtime->event_loop;
+    yetty->event_loop = runtime->event_loop;
+    yetty->context.event_loop = runtime->event_loop;
 
     struct yetty_yconfig_config *config = runtime->config;
     ydebug("yetty_create: context wired (event_loop=%p, device=%p, render_target=%p)",
-           (void *)yetty->event_loop, (void *)runtime->gpu.device,
-           (void *)runtime->render_target);
+           (void *)yetty->event_loop, (void *)runtime->gpu.device, (void *)runtime->render_target);
 
     /* Register event listeners */
     struct yetty_ycore_void_result res = register_event_listeners(yetty);
@@ -1104,8 +1106,8 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
     /* First workspace = the one defined by config; same payload the
      * pre-tabbar load_layout consumed. */
     ydebug("yetty_create: Loading initial workspace from config...");
-    struct yetty_ycore_void_result layout_res = yetty_yui_tabbar_add_workspace_from_config(
-        yetty->tabbar, config, &yetty->context);
+    struct yetty_ycore_void_result layout_res =
+        yetty_yui_tabbar_add_workspace_from_config(yetty->tabbar, config, &yetty->context);
     if (!YETTY_IS_OK(layout_res)) {
         yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, layout_res.error.msg);
@@ -1126,8 +1128,7 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
         if (sh == 0) {
             sh = 1;
         }
-        struct yetty_yui_ptr_result yr =
-            yetty_yui_create(&yetty->context, sw, sh, 10.0f, 16.0f);
+        struct yetty_yui_ptr_result yr = yetty_yui_create(&yetty->context, sw, sh, 10.0f, 16.0f);
         if (YETTY_IS_OK(yr)) {
             yetty->yui = yr.value;
             ydebug("yetty_create: yui created");
@@ -1167,8 +1168,8 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
 #endif
     if (needs_console_telnet_pair) {
         ydebug("yetty_create: %s — adding telnet tab", which);
-        struct yetty_ycore_void_result tab2_res = yetty_yui_tabbar_add_workspace_from_config(
-            yetty->tabbar, config, &yetty->context);
+        struct yetty_ycore_void_result tab2_res =
+            yetty_yui_tabbar_add_workspace_from_config(yetty->tabbar, config, &yetty->context);
         if (!YETTY_IS_OK(tab2_res)) {
             yerror("yetty_create: failed to add telnet tab: %s", tab2_res.error.msg);
             yetty_ycore_error_destroy(tab2_res.error);
@@ -1179,7 +1180,7 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yruntime *runtime,
     (void)is_temu;
     (void)is_qemu;
 
-    /* RPC server: owned by yruntime, already running by this point.
+    /* RPC server: owned by yframework, already running by this point.
      * Apps that want yetty-specific RPC methods can register handlers
      * on yetty->runtime->rpc_server here. None today. */
 
@@ -1200,7 +1201,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
     /* Tear down the yetty-owned chrome only. The render target, wgpu
      * await machinery, event loop, VNC, RPC, allocator, MSDF, queue,
      * device, adapter, and surface live on the runtime and are destroyed
-     * by yetty_yruntime_destroy — which the caller must run AFTER this
+     * by yetty_yframework_destroy — which the caller must run AFTER this
      * function returns. yui sits on top so it goes first. */
 
     if (yetty->yui) {

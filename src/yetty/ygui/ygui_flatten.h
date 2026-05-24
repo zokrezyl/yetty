@@ -21,7 +21,6 @@
 struct yetty_ydraw_draw_list;
 
 struct yetty_ycore_void_result yetty_ygui_flatten_draw_list(
-    struct yetty_ydraw_draw_list *dst,
-    const struct yetty_ydraw_draw_list *src);
+    struct yetty_ydraw_draw_list *dst, const struct yetty_ydraw_draw_list *src);
 
 #endif /* YETTY_YGUI_YGUI_FLATTEN_H */

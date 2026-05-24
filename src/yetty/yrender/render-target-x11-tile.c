@@ -294,8 +294,9 @@ static struct yetty_ycore_void_result x11_tile_resize(struct yetty_ydraw_target 
     return rt->inner->ops->resize(rt->inner, viewport);
 }
 
-static struct yetty_ycore_void_result x11_tile_set_visual_zoom(
-    struct yetty_ydraw_target *self, float scale, float off_x, float off_y)
+static struct yetty_ycore_void_result x11_tile_set_visual_zoom(struct yetty_ydraw_target *self,
+                                                               float scale, float off_x,
+                                                               float off_y)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
         (struct yetty_yrender_render_target_x11_tile *)self;

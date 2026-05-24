@@ -10,8 +10,8 @@
 #include <yetty/ydraw-core/figure-types.h>
 #include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/ydraw/canvas.h>
-#include <yetty/ydraw/scene-canvas.h>
 #include <yetty/ydraw/scrolling-canvas.h>
+#include <yetty/yrender/font-dispatcher.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-args.h>
@@ -19,7 +19,7 @@
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Uniform positions */
@@ -166,9 +166,6 @@ struct yetty_yterm_ydraw_layer {
 /* Forward declarations */
 static struct yetty_ycore_void_result ydraw_layer_destroy(
     struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result ydraw_layer_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ydraw_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);
@@ -262,7 +259,6 @@ static struct yetty_ycore_void_result ydraw_layer_set_visual_zoom(
 /* Ops */
 static const struct yetty_yterm_terminal_layer_ops ydraw_layer_ops = {
     .destroy = ydraw_layer_destroy,
-    .process_input = ydraw_layer_process_input,
     .resize_grid = ydraw_layer_resize_grid,
     .set_visual_zoom = ydraw_layer_set_visual_zoom,
     .get_gpu_resource_set = ydraw_layer_get_gpu_resource_set,
@@ -346,14 +342,20 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
     layer->create_context = context;
     layer->kind = kind;
 
-    /* Create the canvas variant matching `kind`. */
+    /* Create the canvas. Only KIND_SCROLLING remains — scene-canvas
+     * was retired with the ycompositor migration. The kind parameter
+     * is kept on the create signature for source compatibility with
+     * existing call sites that pass SCROLLING explicitly. */
     if (!context) {
         free(layer);
         return YETTY_ERR(yetty_yterm_terminal_layer, "context is NULL");
     }
-    struct yetty_ydraw_canvas_ptr_result canvas_res =
-        (kind == YETTY_YDRAW_LAYER_KIND_SCROLLING) ? yetty_ydraw_scrolling_canvas_create(context)
-                                                   : yetty_ydraw_scene_canvas_create(context);
+    if (kind != YETTY_YDRAW_LAYER_KIND_SCROLLING) {
+        free(layer);
+        return YETTY_ERR(yetty_yterm_terminal_layer,
+                         "ydraw-layer: only KIND_SCROLLING is supported");
+    }
+    struct yetty_ydraw_canvas_ptr_result canvas_res = yetty_ydraw_scrolling_canvas_create(context);
     if (YETTY_IS_ERR(canvas_res)) {
         free(layer);
         return YETTY_ERR(yetty_yterm_terminal_layer, "ydraw-layer: canvas create failed",
@@ -476,11 +478,13 @@ static struct yetty_ycore_void_result ydraw_layer_destroy(struct yetty_yrender_t
  *                        the outer for(;;) is reached only on the CLEAR
  *                        path. That's fine: only the layers registered
  *                        for CLEAR need the loop to survive that code.
- * YAML is no longer accepted on the wire — yaml is producer-side only. */
-static struct yetty_ycore_void_result ydraw_layer_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine)
+ * YAML is no longer accepted on the wire — yaml is producer-side only.
+ *
+ * userdata is the layer's base pointer. */
+struct yetty_ycore_void_result yetty_yterm_ydraw_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
+    struct yetty_yrender_terminal_layer *self = userdata;
     struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
 
     for (;;) {
@@ -492,7 +496,6 @@ static struct yetty_ycore_void_result ydraw_layer_process_input(
             break;
         case YETTY_OSC_YDRAW_BIN:
         case YETTY_OSC_YDRAW_OVERLAY:
-        case YETTY_OSC_YDRAW_SCENE_BIN:
             r = layer->canvas->ops->process_input(layer->canvas, osc_statemachine);
             break;
         default:
@@ -543,7 +546,8 @@ static struct yetty_ycore_void_result ydraw_layer_resize_grid(
     float base_h = layer->initial_cell_size.height;
     float cz = (base_h > 0.0f) ? (cell_size.height / base_h) : 1.0f;
     set_cell_zoom(&layer->rs, cz, 0.0f, 0.0f);
-    struct yetty_ydraw_raw_figure_factory *ff = layer->canvas->ops->get_figure_factory(layer->canvas);
+    struct yetty_ydraw_raw_figure_factory *ff =
+        layer->canvas->ops->get_figure_factory(layer->canvas);
     yetty_ydraw_raw_figure_factory_set_cell_zoom(ff, cz, 0.0f, 0.0f);
 
     self->dirty = 1;
@@ -636,80 +640,37 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
      * release, unlike font_count which is a high watermark. */
     uint32_t font_generation = layer->canvas->ops->font_generation(layer->canvas);
     if (font_generation != layer->last_font_generation) {
-        size_t cap = layer->shader_code.size + 4096 + (size_t)font_count * 512;
-        char *buf = malloc(cap);
-        if (buf) {
-            int n = snprintf(buf, cap, "// auto-generated font dispatcher (canvas slots 0..%u)\n",
-                             font_count);
-            size_t off = (n > 0) ? (size_t)n : 0;
+        const char *slot_namespaces[YETTY_YRENDER_RS_MAX_CHILDREN];
+        for (uint32_t slot = 0; slot < font_count; slot++) {
+            slot_namespaces[slot] = font_rss[slot] ? font_rss[slot]->namespace : NULL;
+        }
 
-            /* font_base_size(slot) */
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "fn font_base_size(slot: u32) -> f32 {\n"
-                                    "    switch slot {\n");
-            for (uint32_t s = 0; s < font_count; s++) {
-                if (!font_rss[s]) {
-                    continue;
-                }
-                off += (size_t)snprintf(buf + off, cap - off,
-                                        "        case %uu: { return uniforms.%s_base_size; }\n", s,
-                                        font_rss[s]->namespace);
-            }
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "        default: { return 1.0; }\n    }\n}\n");
-
-            /* font_glyph_size(slot, glyph_index) */
-            off +=
-                (size_t)snprintf(buf + off, cap - off,
-                                 "fn font_glyph_size(slot: u32, glyph_index: u32) -> vec2<f32> {\n"
-                                 "    switch slot {\n");
-            for (uint32_t s = 0; s < font_count; s++) {
-                if (!font_rss[s]) {
-                    continue;
-                }
-                off +=
-                    (size_t)snprintf(buf + off, cap - off,
-                                     "        case %uu: { return %s_glyph_size(glyph_index); }\n",
-                                     s, font_rss[s]->namespace);
-            }
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "        default: { return vec2<f32>(0.0, 0.0); }\n    }\n}\n");
-
-            /* font_glyph_sample(slot, glyph_index, uv, ps) */
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "fn font_glyph_sample(slot: u32, glyph_index: u32, "
-                                    "uv: vec2<f32>, ps: f32) -> f32 {\n"
-                                    "    switch slot {\n");
-            for (uint32_t s = 0; s < font_count; s++) {
-                if (!font_rss[s]) {
-                    continue;
-                }
-                off += (size_t)snprintf(
-                    buf + off, cap - off,
-                    "        case %uu: { return %s_glyph_sample(glyph_index, uv, ps); }\n", s,
-                    font_rss[s]->namespace);
-            }
-            off += (size_t)snprintf(buf + off, cap - off,
-                                    "        default: { return 0.0; }\n    }\n}\n\n");
-
-            /* Append the static layer source verbatim. */
-            if (off + layer->shader_code.size + 1 <= cap) {
-                memcpy(buf + off, layer->shader_code.data, layer->shader_code.size);
-                off += layer->shader_code.size;
-                buf[off] = '\0';
+        char *dispatcher_wgsl = NULL;
+        size_t dispatcher_size = 0;
+        struct yetty_ycore_void_result dispatcher_result = yetty_yrender_build_font_dispatcher_wgsl(
+            slot_namespaces, font_count, &dispatcher_wgsl, &dispatcher_size);
+        if (YETTY_IS_OK(dispatcher_result)) {
+            size_t combined_size = dispatcher_size + layer->shader_code.size;
+            char *combined_buffer = malloc(combined_size + 1u);
+            if (combined_buffer) {
+                memcpy(combined_buffer, dispatcher_wgsl, dispatcher_size);
+                memcpy(combined_buffer + dispatcher_size, layer->shader_code.data,
+                       layer->shader_code.size);
+                combined_buffer[combined_size] = '\0';
 
                 free(layer->combined_shader);
-                layer->combined_shader = buf;
-                layer->combined_shader_size = off;
+                layer->combined_shader = combined_buffer;
+                layer->combined_shader_size = combined_size;
                 layer->last_font_count = font_count;
                 layer->last_font_generation = font_generation;
                 yetty_yrender_shader_code_set(&layer->rs.shader, layer->combined_shader,
                                               layer->combined_shader_size);
                 ydebug("ydraw_layer: rebuilt dispatcher for %u fonts gen=%u (%zu bytes)",
-                       font_count, font_generation, off);
-            } else {
-                free(buf);
+                       font_count, font_generation, combined_size);
             }
+            free(dispatcher_wgsl);
+        } else {
+            yetty_ycore_error_destroy(dispatcher_result.error);
         }
     }
 
@@ -770,8 +731,7 @@ static int ydraw_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
     }
     uint32_t count = layer->canvas->ops->figure_count(layer->canvas);
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure *inst =
-            layer->canvas->ops->get_figure(layer->canvas, i);
+        struct yetty_ydraw_figure *inst = layer->canvas->ops->get_figure(layer->canvas, i);
         if (inst && inst->dirty) {
             return 1;
         }
@@ -855,15 +815,12 @@ static struct yetty_ycore_void_result ydraw_layer_set_alt_screen(
         return YETTY_OK_VOID();
     }
 
-    /* Lazy-build the saved-side canvas the first time we toggle. The
-   * empty side starts on the alt slot when we enter (alt_active=1),
-   * and on the primary slot if for some reason we exit before having
-   * entered (shouldn't happen, but cheap to handle). */
+    /* Lazy-build the saved-side canvas the first time we toggle. Only
+   * KIND_SCROLLING exists now — scene-canvas was retired with the
+   * ycompositor migration. */
     if (!layer->saved_canvas && layer->create_context) {
         struct yetty_ydraw_canvas_ptr_result saved_res =
-            (layer->kind == YETTY_YDRAW_LAYER_KIND_SCROLLING)
-                ? yetty_ydraw_scrolling_canvas_create(layer->create_context)
-                : yetty_ydraw_scene_canvas_create(layer->create_context);
+            yetty_ydraw_scrolling_canvas_create(layer->create_context);
         if (YETTY_IS_ERR(saved_res)) {
             return YETTY_ERR(yetty_ycore_void, "ydraw_layer_set_alt_screen: canvas create failed",
                              saved_res);
@@ -899,30 +856,17 @@ static struct yetty_ycore_void_result ydraw_layer_set_alt_screen(
     return YETTY_OK_VOID();
 }
 
-/* Full-screen erase (CSI 2J / 3J) on the active screen — wipe the
- * scene-kind canvas that's currently bound. The scrolling-kind canvas
- * is for the ydraw OSC stream (ycat images / plots) and is not in scope
- * for the libvterm grid erase — clearing it disturbs the layer's
- * cursor/rolling state and breaks the post-feed dirty handshake that
- * drives subsequent renders. Only the scene canvas (where ygui/ygreeter
- * lives) needs to be flushed on full-screen erase. No request_render
- * here either: terminal_pty_pipe_read's after-feed check already pumps
- * a render when text-layer is dirty, which it is by the time we get
- * here (the matching on_damage from erase_user fires just before). */
+/* Full-screen erase (CSI 2J / 3J). With scene-canvas retired, the only
+ * remaining canvas kind is SCROLLING — and that one is for the ydraw
+ * OSC stream (ycat images / plots), which is NOT in scope for the
+ * libvterm grid erase. Clearing it disturbs the layer's cursor /
+ * rolling state and breaks the post-feed dirty handshake. So this
+ * entry point is now a no-op; it stays on the vtable so the terminal's
+ * dispatch doesn't need an existence check. */
 static struct yetty_ycore_void_result ydraw_layer_clear_screen(
     struct yetty_yrender_terminal_layer *self)
 {
-    struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
-    if (layer->kind != YETTY_YDRAW_LAYER_KIND_SCENE) {
-        return YETTY_OK_VOID();
-    }
-    if (!layer->canvas) {
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ycore_void_result r = layer->canvas->ops->clear(layer->canvas);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw_layer_clear_screen: canvas clear failed");
-    layer->base.dirty = 1;
-    ydebug("ydraw scene: clear_screen");
+    (void)self;
     return YETTY_OK_VOID();
 }
 
@@ -974,8 +918,7 @@ static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_ter
     int simple_dirty = self->dirty || layer->canvas->ops->is_dirty(layer->canvas);
     if (simple_dirty || force) {
         struct yetty_ycore_void_result rr = target->ops->render_layer(target, self);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr,
-                            "ydraw_layer_render: render_layer (simple prims)");
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr, "ydraw_layer_render: render_layer (simple prims)");
         /* get_gpu_resource_set inside render_layer already cleared
          * self->dirty when it rebuilt the staging — we just record
          * that we drew. */
@@ -993,8 +936,7 @@ static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_ter
     struct yetty_ycore_pixel_size cell_size = layer->canvas->ops->get_cell_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure *inst =
-            layer->canvas->ops->get_figure(layer->canvas, i);
+        struct yetty_ydraw_figure *inst = layer->canvas->ops->get_figure(layer->canvas, i);
         if (!inst) {
             return YETTY_ERR(yetty_ycore_int,
                              "ydraw_layer_render: get_figure returned NULL within figure_count");
@@ -1011,10 +953,8 @@ static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_ter
         float screen_x = inst->bounds.min.x;
         float screen_y = inst->bounds.min.y + y_offset;
 
-        struct yetty_ycore_void_result rr =
-            inst->render(inst, target, screen_x, screen_y);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr,
-                            "ydraw_layer_render: figure inst->render");
+        struct yetty_ycore_void_result rr = inst->render(inst, target, screen_x, screen_y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr, "ydraw_layer_render: figure inst->render");
         inst->dirty = 0;
         drew = 1;
     }

@@ -82,12 +82,12 @@ void yetty_yplatform_teardown_window_callbacks(GLFWwindow *window);
  * thread boundary, then pokes the GLFW event loop awake when the
  * worker exits so the main thread doesn't sleep past process shutdown. */
 struct yinit_worker_args {
-    yetty_yinit_worker_fn         worker;
-    void                         *user;
-    struct yetty_yinit_runtime   *rt;
-    int                          *running;
-    GLFWwindow                   *window;
-    int                           result;
+    yetty_yinit_worker_fn worker;
+    void *user;
+    struct yetty_yinit_runtime *rt;
+    int *running;
+    GLFWwindow *window;
+    int result;
 };
 
 YETTY_EXTERNAL_CALLBACK
@@ -113,8 +113,7 @@ static int yinit_worker_trampoline(void *arg)
     return 0;
 }
 
-int yetty_yinit_run(int argc, char **argv,
-                    const struct yetty_yinit_app_config *app_cfg,
+int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *app_cfg,
                     yetty_yinit_worker_fn worker, void *user)
 {
     struct yetty_yinit_app_config defaults = {0};
@@ -141,10 +140,10 @@ int yetty_yinit_run(int argc, char **argv,
 
     //TODO: adapt path reading directly to yetty_yplatform_paths!
     struct yetty_yconfig_paths paths = {.shaders_dir = shaders_dir,
-                                          .fonts_dir = fonts_dir,
-                                          .runtime_dir = runtime_dir,
-                                          .bin_dir = NULL,
-                                          .config_dir = config_dir};
+                                        .fonts_dir = fonts_dir,
+                                        .runtime_dir = runtime_dir,
+                                        .bin_dir = NULL,
+                                        .config_dir = config_dir};
 
     /* Export platform paths as YETTY_* env vars so config files
      * (e.g. tinyemu .cfg) can reference them via $YETTY_RUNTIME_DIR etc. */
@@ -422,32 +421,32 @@ int yetty_yinit_run(int argc, char **argv,
 
     /* Hand everything to the worker through the runtime struct. */
     struct yetty_yinit_runtime rt = {
-        .argc                = argc,
-        .argv                = argv,
-        .config              = config,
-        .instance            = instance,
-        .surface             = surface,
-        .surface_width       = (uint32_t)fb_width,
-        .surface_height      = (uint32_t)fb_height,
-        .content_scale       = content_scale,
-        .x11_display         = x11_display,
-        .x11_window          = x11_window,
-        .window              = window,
+        .argc = argc,
+        .argv = argv,
+        .config = config,
+        .instance = instance,
+        .surface = surface,
+        .surface_width = (uint32_t)fb_width,
+        .surface_height = (uint32_t)fb_height,
+        .content_scale = content_scale,
+        .x11_display = x11_display,
+        .x11_window = x11_window,
+        .window = window,
         .platform_input_pipe = platform_input_pipe,
-        .output_pipe         = output_pipe,
-        .clipboard_manager   = clipboard_manager,
-        .window_manager      = window_manager,
+        .output_pipe = output_pipe,
+        .clipboard_manager = clipboard_manager,
+        .window_manager = window_manager,
     };
 
     /* Worker thread */
     int running = 1;
     struct yinit_worker_args wa = {
-        .worker  = worker,
-        .user    = user,
-        .rt      = &rt,
+        .worker = worker,
+        .user = user,
+        .rt = &rt,
         .running = &running,
-        .window  = window,
-        .result  = 0,
+        .window = window,
+        .result = 0,
     };
 
     struct yetty_yplatform_ythread *render_thread =

@@ -140,8 +140,7 @@ static struct yetty_ycore_void_result iter_pull(struct yetty_ydraw_drawable_iter
 
 /* Pull bytes specifically into the envelope header slot. Same yield
  * semantics as iter_pull. */
-static struct yetty_ycore_void_result iter_pull_header(
-    struct yetty_ydraw_drawable_iterator *iter)
+static struct yetty_ycore_void_result iter_pull_header(struct yetty_ydraw_drawable_iterator *iter)
 {
     while (iter->header_filled < DRAWABLE_ITER_ENVELOPE_HEADER_BYTES) {
         uint32_t need = DRAWABLE_ITER_ENVELOPE_HEADER_BYTES - iter->header_filled;
@@ -185,8 +184,7 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
         }
         if (iter->header_filled < DRAWABLE_ITER_ENVELOPE_HEADER_BYTES) {
             if (iter->header_filled == 0) {
-                return YETTY_OK(yetty_ydraw_drawable_iterator_status,
-                                YETTY_YDRAW_ITERATOR_EOE);
+                return YETTY_OK(yetty_ydraw_drawable_iterator_status, YETTY_YDRAW_ITERATOR_EOE);
             }
             return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "drawable_iter: truncated envelope header");
@@ -229,13 +227,12 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
         }
         struct yetty_ycore_void_result pr = iter_pull(iter, DRAWABLE_ITER_TYPE_BYTES);
         if (YETTY_IS_ERR(pr)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
-                             "drawable_iter: type-word pull", pr);
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "drawable_iter: type-word pull",
+                             pr);
         }
         if (iter->filled < DRAWABLE_ITER_TYPE_BYTES) {
             if (iter->filled == 0) {
-                return YETTY_OK(yetty_ydraw_drawable_iterator_status,
-                                YETTY_YDRAW_ITERATOR_EOE);
+                return YETTY_OK(yetty_ydraw_drawable_iterator_status, YETTY_YDRAW_ITERATOR_EOE);
             }
             return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "drawable_iter: truncated type word at envelope end");
@@ -303,8 +300,8 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
             }
             struct yetty_ycore_void_result pr2 = iter_pull(iter, DRAWABLE_ITER_HEADER_BYTES);
             if (YETTY_IS_ERR(pr2)) {
-                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
-                                 "drawable_iter: header pull", pr2);
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "drawable_iter: header pull",
+                                 pr2);
             }
             if (iter->filled < DRAWABLE_ITER_HEADER_BYTES) {
                 return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
@@ -312,8 +309,7 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
             }
 
             struct yetty_ydraw_drawable_flyweight_ptr_result flyweight_res =
-                yetty_ydraw_flyweight_registry_get(iter->reg, drawable_type,
-                                                   (const uint32_t *)iter->scratch);
+                yetty_ydraw_flyweight_registry_get(iter->reg, (const uint32_t *)iter->scratch);
             if (YETTY_IS_ERR(flyweight_res)) {
                 yerror("drawable_iter: registry lookup failed for type 0x%08x", drawable_type);
                 return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
@@ -343,8 +339,7 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
     if (iter->filled < iter->total_size) {
         struct yetty_ycore_void_result pr = iter_pull(iter, iter->total_size);
         if (YETTY_IS_ERR(pr)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
-                             "drawable_iter: body pull", pr);
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "drawable_iter: body pull", pr);
         }
         if (iter->filled < iter->total_size) {
             uint32_t type_seen = 0;
@@ -377,8 +372,7 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
         iter->command.update.size = payload_size;
     } else {
         struct yetty_ydraw_drawable_flyweight_ptr_result flyweight_res =
-            yetty_ydraw_flyweight_registry_get(iter->reg, drawable_type,
-                                               (const uint32_t *)iter->scratch);
+            yetty_ydraw_flyweight_registry_get(iter->reg, (const uint32_t *)iter->scratch);
         if (YETTY_IS_ERR(flyweight_res)) {
             return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "drawable_iter: re-resolve flyweight failed", flyweight_res);
@@ -393,8 +387,8 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
 }
 
 struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
-    const struct yetty_ydraw_flyweight_registry *reg, const uint8_t *bytes,
-    uint32_t bytes_len, struct yetty_ydraw_command *out_command)
+    const struct yetty_ydraw_flyweight_registry *reg, const uint8_t *bytes, uint32_t bytes_len,
+    struct yetty_ydraw_command *out_command)
 {
     if (!reg || !bytes || !out_command) {
         return YETTY_ERR(yetty_ycore_size, "command_parse: null arg");
@@ -452,7 +446,7 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
         out_command->kind = YETTY_YDRAW_COMMAND_ADD;
         out_command->flyweight.data = (const uint32_t *)bytes;
         struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-            yetty_ydraw_flyweight_registry_get(reg, drawable_type, (const uint32_t *)bytes);
+            yetty_ydraw_flyweight_registry_get(reg, (const uint32_t *)bytes);
         out_command->flyweight.ops = YETTY_IS_OK(fw_res) ? fw_res.value->ops : NULL;
         return YETTY_OK(yetty_ycore_size, (size_t)total);
     }
@@ -461,7 +455,7 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
         return YETTY_ERR(yetty_ycore_size, "command_parse: FAM header truncated");
     }
     struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-        yetty_ydraw_flyweight_registry_get(reg, drawable_type, (const uint32_t *)bytes);
+        yetty_ydraw_flyweight_registry_get(reg, (const uint32_t *)bytes);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, fw_res, "command_parse: registry lookup");
     struct yetty_ycore_size_result size_res = fw_res.value->ops->size((const uint32_t *)bytes);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, size_res, "command_parse: ops->size");

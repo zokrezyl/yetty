@@ -26,9 +26,9 @@ extern "C" {
 #endif
 
 struct yetty_ydiagram_render_options {
-    float    arrow_size;      /* px, default 8 */
-    float    dash_length;     /* px, default 6 */
-    float    dash_gap;        /* px, default 4 */
+    float arrow_size;          /* px, default 8 */
+    float dash_length;         /* px, default 6 */
+    float dash_gap;            /* px, default 4 */
     uint32_t background_color; /* 0 = transparent; otherwise emit a big box */
 };
 
@@ -36,8 +36,8 @@ struct yetty_ydiagram_render_options yetty_ydiagram_default_render_options(void)
 
 struct yetty_ycore_void_result yetty_ydiagram_render(
     const struct yetty_ydiagram_graph *g, struct yetty_ydraw_draw_list *buffer,
-    const struct yetty_ydiagram_render_options *options,
-    yetty_ydiagram_measure_text_fn measure, void *measure_userdata);
+    const struct yetty_ydiagram_render_options *options, yetty_ydiagram_measure_text_fn measure,
+    void *measure_userdata);
 
 #ifdef __cplusplus
 }

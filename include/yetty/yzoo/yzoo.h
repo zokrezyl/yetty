@@ -34,13 +34,13 @@ struct yetty_yzoo_config {
     float growth_rate;            /* exponential outward drift rate */
     float spawn_radius_min;       /* initial radius range when spawning */
     float spawn_radius_max;
-    float cp_marker_size;     /* base CP marker radius (grows with age) */
+    float cp_marker_size;      /* base CP marker radius (grows with age) */
     float max_connection_dist; /* drop connections beyond this */
     float stroke_min;          /* connection stroke-width range */
     float stroke_max;
-    float curve_ratio;         /* fraction of connections rendered as curves */
-    uint32_t bezier_segments;  /* line-segment count per bezier approximation */
-    uint32_t bg_color;         /* 0xAARRGGBB; advisory — frontend may ignore */
+    float curve_ratio;        /* fraction of connections rendered as curves */
+    uint32_t bezier_segments; /* line-segment count per bezier approximation */
+    uint32_t bg_color;        /* 0xAARRGGBB; advisory — frontend may ignore */
     float scene_width;
     float scene_height;
 };
@@ -53,8 +53,8 @@ struct yetty_yzoo_ptr_result yetty_yzoo_create(const struct yetty_yzoo_config *c
 
 void yetty_yzoo_destroy(struct yetty_yzoo *zoo);
 
-struct yetty_ycore_void_result yetty_yzoo_set_scene_size(struct yetty_yzoo *zoo,
-                                                         float scene_width, float scene_height);
+struct yetty_ycore_void_result yetty_yzoo_set_scene_size(struct yetty_yzoo *zoo, float scene_width,
+                                                         float scene_height);
 
 /* Spawn/cull/connect, then write all primitives for the current time into
  * `buf`. The buffer is cleared and its scene bounds are set to

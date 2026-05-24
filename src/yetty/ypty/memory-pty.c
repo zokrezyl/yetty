@@ -20,30 +20,30 @@
 
 struct memory_ring {
     uint8_t *data;
-    size_t   cap;       /* power of 2 */
-    size_t   mask;      /* cap - 1 */
-    size_t   read_pos;  /* monotonic */
-    size_t   write_pos; /* monotonic */
+    size_t cap;       /* power of 2 */
+    size_t mask;      /* cap - 1 */
+    size_t read_pos;  /* monotonic */
+    size_t write_pos; /* monotonic */
 };
 
 struct memory_pty_pair {
     struct memory_ring a_to_b;
     struct memory_ring b_to_a;
-    int                refs;
+    int refs;
 };
 
 struct memory_pty_endpoint {
     struct yetty_platform_pty base;
-    struct memory_pty_pair   *pair;
+    struct memory_pty_pair *pair;
     /* Side A reads from b_to_a and writes to a_to_b.
      * Side B reads from a_to_b and writes to b_to_a. */
     struct memory_ring *read_ring;
     struct memory_ring *write_ring;
     /* Peer endpoint — its wake_fn is fired by THIS endpoint's write so the
      * peer's reader-side event loop drains. */
-    struct memory_pty_endpoint        *peer;
+    struct memory_pty_endpoint *peer;
     yetty_yplatform_memory_pty_wake_fn wake_fn;
-    void                              *wake_userdata;
+    void *wake_userdata;
 };
 
 /*===========================================================================
@@ -183,7 +183,8 @@ static struct yetty_ycore_size_result memory_pty_write(struct yetty_platform_pty
 }
 
 static struct yetty_ycore_void_result memory_pty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows)
+                                                        uint32_t cols, uint32_t rows,
+                                                        uint32_t pixel_w, uint32_t pixel_h)
 {
     (void)self;
     (void)cols;
@@ -197,7 +198,8 @@ static struct yetty_ycore_void_result memory_pty_stop(struct yetty_platform_pty 
     return YETTY_OK_VOID();
 }
 
-static struct yetty_platform_pty_pipe_source *memory_pty_pipe_source(struct yetty_platform_pty *self)
+static struct yetty_platform_pty_pipe_source *memory_pty_pipe_source(
+    struct yetty_platform_pty *self)
 {
     (void)self;
     /* No fd. libuv async hookup is not applicable to a memory pty; the
@@ -218,7 +220,8 @@ static const struct yetty_platform_pty_ops memory_pty_ops = {
  * Public create
  *===========================================================================*/
 
-struct yetty_yplatform_memory_pty_pair_result yetty_yplatform_memory_pty_pair_create(size_t buf_size)
+struct yetty_yplatform_memory_pty_pair_result yetty_yplatform_memory_pty_pair_create(
+    size_t buf_size)
 {
     if (buf_size == 0) {
         buf_size = YETTY_MEMORY_PTY_DEFAULT_BUF_SIZE;
@@ -267,8 +270,7 @@ struct yetty_yplatform_memory_pty_pair_result yetty_yplatform_memory_pty_pair_cr
 }
 
 void yetty_yplatform_memory_pty_set_wake(struct yetty_platform_pty *endpoint,
-                                         yetty_yplatform_memory_pty_wake_fn wake,
-                                         void *userdata)
+                                         yetty_yplatform_memory_pty_wake_fn wake, void *userdata)
 {
     if (!endpoint || endpoint->ops != &memory_pty_ops) {
         return;

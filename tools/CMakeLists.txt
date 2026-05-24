@@ -46,6 +46,11 @@ if(YETTY_ENABLE_TOOL_YAUDIO AND YETTY_ENABLE_FEATURE_YAUDIO)
     add_subdirectory(yaudio)
 endif()
 
+if(YETTY_ENABLE_TOOL_YCOMPOSITOR)
+    add_subdirectory(ycompositor)
+    add_subdirectory(ycompositor-ygui)
+endif()
+
 if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
 endif()
@@ -120,6 +125,7 @@ endif()
 
 if(YETTY_ENABLE_TOOL_DECODE_YDRAW)
     add_subdirectory(decode-ydraw)
+    add_subdirectory(osc-analyzer)
 endif()
 
 # ydiagram CLI links the yetty_ydiagram static lib (built in

@@ -20,8 +20,7 @@ struct yetty_ydraw_flyweight_registry {
     size_t handler_count;
 };
 
-struct yetty_ydraw_flyweight_registry_ptr_result yetty_ydraw_flyweight_registry_create(
-    void)
+struct yetty_ydraw_flyweight_registry_ptr_result yetty_ydraw_flyweight_registry_create(void)
 {
     struct yetty_ydraw_flyweight_registry *reg =
         calloc(1, sizeof(struct yetty_ydraw_flyweight_registry));
@@ -36,8 +35,8 @@ void yetty_ydraw_flyweight_registry_destroy(struct yetty_ydraw_flyweight_registr
     free(reg);
 }
 
-void yetty_ydraw_flyweight_registry_set_default(
-    struct yetty_ydraw_flyweight_registry *reg, yetty_ydraw_drawable_handler_fn handler)
+void yetty_ydraw_flyweight_registry_set_default(struct yetty_ydraw_flyweight_registry *reg,
+                                                yetty_ydraw_drawable_handler_fn handler)
 {
     if (reg) {
         reg->default_handler = handler;
@@ -65,8 +64,7 @@ struct yetty_ycore_void_result yetty_ydraw_flyweight_registry_add(
 }
 
 struct yetty_ydraw_drawable_flyweight_ptr_result yetty_ydraw_flyweight_registry_get(
-    const struct yetty_ydraw_flyweight_registry *reg, uint32_t drawable_type,
-    const uint32_t *drawable_data)
+    const struct yetty_ydraw_flyweight_registry *reg, const uint32_t *drawable_data)
 {
     static struct yetty_ydraw_drawable_flyweight fw;
 
@@ -77,14 +75,17 @@ struct yetty_ydraw_drawable_flyweight_ptr_result yetty_ydraw_flyweight_registry_
         return YETTY_ERR(yetty_ydraw_drawable_flyweight_ptr, "drawable_data is NULL");
     }
 
+    uint32_t drawable_type = drawable_data[0];
     ydebug("flyweight_registry_get: drawable_type=0x%08x handler_count=%zu", drawable_type,
            reg->handler_count);
 
     // Try default handler first (fast path for SDF types)
     if (reg->default_handler) {
-        struct yetty_ydraw_drawable_base_ops_ptr_result ops_res = reg->default_handler(drawable_type);
+        struct yetty_ydraw_drawable_base_ops_ptr_result ops_res =
+            reg->default_handler(drawable_type);
         if (YETTY_IS_OK(ops_res)) {
-            ydebug("flyweight_registry_get: default handler matched drawable_type=0x%08x", drawable_type);
+            ydebug("flyweight_registry_get: default handler matched drawable_type=0x%08x",
+                   drawable_type);
             fw.data = drawable_data;
             fw.ops = ops_res.value;
             return YETTY_OK(yetty_ydraw_drawable_flyweight_ptr, &fw);
@@ -96,7 +97,8 @@ struct yetty_ydraw_drawable_flyweight_ptr_result yetty_ydraw_flyweight_registry_
     for (size_t i = 0; i < reg->handler_count; i++) {
         ydebug("flyweight_registry_get: checking handler[%zu] range=[0x%08x, 0x%08x]", i,
                reg->handlers[i].type_min, reg->handlers[i].type_max);
-        if (drawable_type >= reg->handlers[i].type_min && drawable_type <= reg->handlers[i].type_max) {
+        if (drawable_type >= reg->handlers[i].type_min &&
+            drawable_type <= reg->handlers[i].type_max) {
             struct yetty_ydraw_drawable_base_ops_ptr_result ops_res =
                 reg->handlers[i].handler(drawable_type);
             if (YETTY_IS_OK(ops_res)) {

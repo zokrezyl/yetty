@@ -19,8 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
-    const struct yetty_ydraw_draw_list *buffer, FILE *out)
+struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+                                                       FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: NULL buffer or out");
@@ -42,9 +42,8 @@ struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer envelope = {0};
-    struct yetty_ycore_void_result r =
-        yetty_yface_emit(YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw_bytes,
-                         raw_size, &envelope);
+    struct yetty_ycore_void_result r = yetty_yface_emit(
+        YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw_bytes, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: yface_emit failed", r);

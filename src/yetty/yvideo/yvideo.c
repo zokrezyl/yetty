@@ -22,13 +22,11 @@
 #include <string.h>
 
 struct yetty_ydraw_draw_list_result yetty_yvideo_render(
-    const uint8_t *nal_bytes, size_t nal_len,
-    const uint8_t *audio_bytes, size_t audio_len,
+    const uint8_t *nal_bytes, size_t nal_len, const uint8_t *audio_bytes, size_t audio_len,
     const struct yetty_yvideo_render_config *config)
 {
     if (!config || config->video_w == 0u || config->video_h == 0u) {
-        return YETTY_ERR(yetty_ydraw_draw_list,
-                         "yvideo: config NULL or video_w/h == 0");
+        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: config NULL or video_w/h == 0");
     }
     if (config->audio_codec != 0u) {
         if (config->audio_sample_rate == 0u || config->audio_channels == 0u) {
@@ -53,9 +51,9 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     u.color_matrix = config->color_matrix;
     u.flags = (config->flags != 0u) ? config->flags
                                     : (YETTY_YVIDEO_FLAG_LOOP | YETTY_YVIDEO_FLAG_AUTOPLAY);
-    u.audio_codec       = config->audio_codec;
+    u.audio_codec = config->audio_codec;
     u.audio_sample_rate = config->audio_sample_rate;
-    u.audio_channels    = config->audio_channels;
+    u.audio_channels = config->audio_channels;
 
     /* Pack each byte stream into a u32-aligned buffer. Trailing 0..3
      * padding bytes are valid for NAL Annex-B (start codes ignored) and
@@ -87,9 +85,9 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     }
 
     struct yetty_yvideo_buffers bufs = {
-        .nal_stream       = nal_words_buf,
-        .nal_stream_len   = nal_words,
-        .audio_stream     = audio_words_buf,
+        .nal_stream = nal_words_buf,
+        .nal_stream_len = nal_words,
+        .audio_stream = audio_words_buf,
         .audio_stream_len = audio_words,
     };
 
@@ -130,8 +128,8 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     return YETTY_OK(yetty_ydraw_draw_list, br.value);
 }
 
-struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(
-    const struct yetty_ydraw_draw_list *buffer, FILE *out)
+struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+                                                         FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: NULL buffer or out");

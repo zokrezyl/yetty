@@ -1126,22 +1126,25 @@ static int collect_codepoints(FT_Face face, struct u32_vec *out)
             continue;
         }
         int is_ms_symbol = (cm->platform_id == 3 && cm->encoding_id == 0);
-        ydebug("ymsdf-wgsl: cmap[%d] plat=%u enc=%u symbol=%d",
-               (int)i, (unsigned)cm->platform_id, (unsigned)cm->encoding_id,
-               is_ms_symbol);
+        ydebug("ymsdf-wgsl: cmap[%d] plat=%u enc=%u symbol=%d", (int)i, (unsigned)cm->platform_id,
+               (unsigned)cm->encoding_id, is_ms_symbol);
 
-        FT_UInt  gid;
+        FT_UInt gid;
         FT_ULong cp = FT_Get_First_Char(face, &gid);
         while (gid != 0) {
             if (push_unique(out, (uint32_t)cp) < 0) {
-                if (saved) FT_Set_Charmap(face, saved);
+                if (saved) {
+                    FT_Set_Charmap(face, saved);
+                }
                 return -1;
             }
             if (is_ms_symbol && cp >= 0xF000 && cp <= 0xF0FF) {
-                ydebug("ymsdf-wgsl:   ms-symbol cp=0x%lX -> stripped 0x%02lX",
-                       (unsigned long)cp, (unsigned long)(cp & 0xFFu));
+                ydebug("ymsdf-wgsl:   ms-symbol cp=0x%lX -> stripped 0x%02lX", (unsigned long)cp,
+                       (unsigned long)(cp & 0xFFu));
                 if (push_unique(out, (uint32_t)(cp & 0xFFu)) < 0) {
-                    if (saved) FT_Set_Charmap(face, saved);
+                    if (saved) {
+                        FT_Set_Charmap(face, saved);
+                    }
                     return -1;
                 }
             }

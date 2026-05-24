@@ -24,9 +24,9 @@
 #include <yetty/yplatform/paths.h>
 
 #ifdef _WIN32
-#  include <windows.h>
+#include <windows.h>
 #else
-#  include <pthread.h>
+#include <pthread.h>
 #endif
 
 static struct yetty_yplatform_paths *g_paths = NULL;
@@ -34,7 +34,9 @@ static struct yetty_yplatform_paths *g_paths = NULL;
 #ifdef _WIN32
 static void init_singleton(void)
 {
-    if (g_paths) return;
+    if (g_paths) {
+        return;
+    }
     struct yetty_yplatform_paths_ptr_result r = yetty_yplatform_paths_get_platform_paths();
     if (!r.ok) {
         if (r.error.msg) {
@@ -43,8 +45,8 @@ static void init_singleton(void)
         }
         return;
     }
-    struct yetty_yplatform_paths *prev = InterlockedCompareExchangePointer(
-        (PVOID volatile *)&g_paths, r.value, NULL);
+    struct yetty_yplatform_paths *prev =
+        InterlockedCompareExchangePointer((PVOID volatile *)&g_paths, r.value, NULL);
     if (prev != NULL) {
         /* Another thread beat us — discard our copy. */
         yetty_yplatform_paths_destroy(r.value);
@@ -65,16 +67,17 @@ static void init_singleton(void)
 }
 #endif
 
-#define FIELD_GETTER(name, field)                              \
-    const char *yetty_yplatform_get_##name##_dir(void)         \
-    {                                                          \
-        init_singleton();                                      \
-        if (!g_paths) return "";                               \
-        return g_paths->field##_buf;                           \
+#define FIELD_GETTER(name, field)                                                                  \
+    const char *yetty_yplatform_get_##name##_dir(void)                                             \
+    {                                                                                              \
+        init_singleton();                                                                          \
+        if (!g_paths)                                                                              \
+            return "";                                                                             \
+        return g_paths->field##_buf;                                                               \
     }
 
-FIELD_GETTER(cache,   cache_dir)
-FIELD_GETTER(data,    data_dir)
+FIELD_GETTER(cache, cache_dir)
+FIELD_GETTER(data, data_dir)
 FIELD_GETTER(runtime, runtime_dir)
-FIELD_GETTER(config,  config_dir)
-FIELD_GETTER(assets,  assets_dir)
+FIELD_GETTER(config, config_dir)
+FIELD_GETTER(assets, assets_dir)

@@ -122,7 +122,7 @@ void yetty_yvcodec_decoder_destroy(struct yetty_yvcodec_decoder *dec)
 }
 
 struct yetty_ycore_void_result yetty_yvcodec_decoder_feed(struct yetty_yvcodec_decoder *dec,
-                                                         const uint8_t *data, size_t size)
+                                                          const uint8_t *data, size_t size)
 {
     if (!dec || !dec->h264) {
         return YETTY_ERR(yetty_ycore_void, "decoder not initialized");
@@ -140,8 +140,8 @@ struct yetty_ycore_void_result yetty_yvcodec_decoder_feed(struct yetty_yvcodec_d
 }
 
 struct yetty_ycore_void_result yetty_yvcodec_decoder_get_frame(struct yetty_yvcodec_decoder *dec,
-                                                              struct yetty_yvcodec_yuv_frame *out,
-                                                              bool *out_has_frame)
+                                                               struct yetty_yvcodec_yuv_frame *out,
+                                                               bool *out_has_frame)
 {
     if (!dec || !dec->h264 || !out || !out_has_frame) {
         return YETTY_ERR(yetty_ycore_void, "null args");
@@ -227,7 +227,7 @@ void yetty_yvcodec_decoder_reset(struct yetty_yvcodec_decoder *dec)
  * full-range output. Supports BT.601 and BT.709 coefficients.
  *-------------------------------------------------------------------------*/
 void yetty_yvcodec_yuv_frame_yuv420_to_bgra(const struct yetty_yvcodec_yuv_frame *frame,
-                                           uint8_t *bgra_out)
+                                            uint8_t *bgra_out)
 {
     if (!frame || !bgra_out || !frame->y_plane || !frame->u_plane || !frame->v_plane) {
         return;

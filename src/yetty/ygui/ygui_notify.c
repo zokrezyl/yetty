@@ -28,12 +28,12 @@
 /* Geometry. The dialog dialog gap was 14; notifications use a slightly
  * larger 8-px inter-card gap (the cards themselves carry their padding)
  * so they're easier to distinguish at a glance. */
-#define NOTIF_CARD_W      340.0f
-#define NOTIF_RIGHT_PAD   12.0f
-#define NOTIF_TOP_PAD     12.0f
-#define NOTIF_CARD_GAP    8.0f
-#define NOTIF_CARD_PAD    "10 12 10 12" /* T R B L — keep stripe visible left */
-#define NOTIF_DEFAULT_TTL_MS       4000u
+#define NOTIF_CARD_W 340.0f
+#define NOTIF_RIGHT_PAD 12.0f
+#define NOTIF_TOP_PAD 12.0f
+#define NOTIF_CARD_GAP 8.0f
+#define NOTIF_CARD_PAD "10 12 10 12" /* T R B L — keep stripe visible left */
+#define NOTIF_DEFAULT_TTL_MS 4000u
 #define NOTIF_DEFAULT_TTL_ERROR_MS 10000u
 
 static uint64_t now_monotonic_ms(void)
@@ -47,20 +47,28 @@ static uint64_t now_monotonic_ms(void)
 static uint32_t severity_stripe_color(int sev)
 {
     switch (sev) {
-    case YETTY_YGUI_SEV_INFO:  return 0xFF6BA892u; /* BRAND_ACCENT mint */
-    case YETTY_YGUI_SEV_WARN:  return 0xFFD2A45Au; /* warm amber */
-    case YETTY_YGUI_SEV_ERROR: return 0xFFC25E5Eu; /* muted crimson */
-    default:                   return 0xFF6BA892u;
+    case YETTY_YGUI_SEV_INFO:
+        return 0xFF6BA892u; /* BRAND_ACCENT mint */
+    case YETTY_YGUI_SEV_WARN:
+        return 0xFFD2A45Au; /* warm amber */
+    case YETTY_YGUI_SEV_ERROR:
+        return 0xFFC25E5Eu; /* muted crimson */
+    default:
+        return 0xFF6BA892u;
     }
 }
 
 static const char *severity_tag(int sev)
 {
     switch (sev) {
-    case YETTY_YGUI_SEV_INFO:  return "INFO";
-    case YETTY_YGUI_SEV_WARN:  return "WARN";
-    case YETTY_YGUI_SEV_ERROR: return "ERROR";
-    default:                   return "INFO";
+    case YETTY_YGUI_SEV_INFO:
+        return "INFO";
+    case YETTY_YGUI_SEV_WARN:
+        return "WARN";
+    case YETTY_YGUI_SEV_ERROR:
+        return "ERROR";
+    default:
+        return "INFO";
     }
 }
 
@@ -68,7 +76,9 @@ static const char *severity_tag(int sev)
  * longer than info/warn so the user actually reads them. */
 static uint32_t severity_default_ttl_ms(int sev)
 {
-    if (sev == YETTY_YGUI_SEV_ERROR) return NOTIF_DEFAULT_TTL_ERROR_MS;
+    if (sev == YETTY_YGUI_SEV_ERROR) {
+        return NOTIF_DEFAULT_TTL_ERROR_MS;
+    }
     return NOTIF_DEFAULT_TTL_MS;
 }
 
@@ -161,21 +171,20 @@ static void notify_close_clicked(struct yetty_ygui_widget *btn, void *userdata)
  *
  * S is a 4-px-wide stripe coloured by severity. The actual brand
  * palette goes into the card via apply_css. */
-static struct yetty_ygui_widget *notify_build_card(struct yetty_ygui_engine *engine,
-                                                   int slot, int severity,
-                                                   const char *message)
+static struct yetty_ygui_widget *notify_build_card(struct yetty_ygui_engine *engine, int slot,
+                                                   int severity, const char *message)
 {
-    char card_id[48], stripe_id[48], lbl_id[48], close_id[48], row_id[48];
-    snprintf(card_id,   sizeof(card_id),   "ygui_notif_%d_card",   slot);
-    snprintf(row_id,    sizeof(row_id),    "ygui_notif_%d_row",    slot);
+    char figure_id[48], stripe_id[48], lbl_id[48], close_id[48], row_id[48];
+    snprintf(figure_id, sizeof(figure_id), "ygui_notif_%d_card", slot);
+    snprintf(row_id, sizeof(row_id), "ygui_notif_%d_row", slot);
     snprintf(stripe_id, sizeof(stripe_id), "ygui_notif_%d_stripe", slot);
-    snprintf(lbl_id,    sizeof(lbl_id),    "ygui_notif_%d_lbl",    slot);
-    snprintf(close_id,  sizeof(close_id),  "ygui_notif_%d_close",  slot);
+    snprintf(lbl_id, sizeof(lbl_id), "ygui_notif_%d_lbl", slot);
+    snprintf(close_id, sizeof(close_id), "ygui_notif_%d_close", slot);
 
     /* Card: a vbox that fills NOTIF_CARD_W and grows vertically with the
      * label. background BRAND_BG_LIFTED, rounded corners, 1-px BRAND_BORDER. */
     struct yetty_ygui_widget *card =
-        yetty_ygui_engine_vbox(engine, card_id, 0, 0, NOTIF_CARD_W, 0);
+        yetty_ygui_engine_vbox(engine, figure_id, 0, 0, NOTIF_CARD_W, 0);
     if (!card) {
         return NULL;
     }
@@ -183,23 +192,21 @@ static struct yetty_ygui_widget *notify_build_card(struct yetty_ygui_engine *eng
     char card_css[256];
     snprintf(card_css, sizeof(card_css),
              "background:#141A1F;border-radius:8;border:1 #364A47;"
-             "padding:%s;", NOTIF_CARD_PAD);
+             "padding:%s;",
+             NOTIF_CARD_PAD);
     yetty_ygui_widget_apply_css(card, card_css);
 
-    struct yetty_ygui_widget *row =
-        yetty_ygui_engine_hbox(engine, row_id, 0, 0, 0, 0);
+    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(engine, row_id, 0, 0, 0, 0);
     if (!row) {
         yetty_ygui_widget_remove(card);
         return NULL;
     }
-    yetty_ygui_widget_apply_css(row,
-        "display:flex;flex-direction:row;gap:10;align-items:start;");
+    yetty_ygui_widget_apply_css(row, "display:flex;flex-direction:row;gap:10;align-items:start;");
     yetty_ygui_widget_add_child(card, row);
 
     /* Severity stripe — a thin vertical bar. yetty_ygui_engine_separator
      * is the lightest widget for "a coloured rectangle". */
-    struct yetty_ygui_widget *stripe =
-        yetty_ygui_engine_separator(engine, stripe_id, 0, 0, 4, 0);
+    struct yetty_ygui_widget *stripe = yetty_ygui_engine_separator(engine, stripe_id, 0, 0, 4, 0);
     if (stripe) {
         char css[64];
         snprintf(css, sizeof(css), "background:#%06X;flex:0 0 4;align-self:stretch;",
@@ -212,10 +219,8 @@ static struct yetty_ygui_widget *notify_build_card(struct yetty_ygui_engine *eng
      * Multi-line labels grow the card vertically via the engine's flex
      * layout, which is what we want here. */
     char composed[1024];
-    snprintf(composed, sizeof(composed), "%s  %s", severity_tag(severity),
-             message ? message : "");
-    struct yetty_ygui_widget *lbl =
-        yetty_ygui_engine_label(engine, lbl_id, 0, 0, composed);
+    snprintf(composed, sizeof(composed), "%s  %s", severity_tag(severity), message ? message : "");
+    struct yetty_ygui_widget *lbl = yetty_ygui_engine_label(engine, lbl_id, 0, 0, composed);
     if (lbl) {
         yetty_ygui_widget_apply_css(lbl, "flex:1 0 0;");
         yetty_ygui_widget_add_child(row, lbl);
@@ -226,8 +231,7 @@ static struct yetty_ygui_widget *notify_build_card(struct yetty_ygui_engine *eng
     struct yetty_ygui_widget *close_btn =
         yetty_ygui_engine_button(engine, close_id, 0, 0, 22, 22, "x");
     if (close_btn) {
-        yetty_ygui_widget_apply_css(close_btn,
-            "flex:0 0 22;background:transparent;");
+        yetty_ygui_widget_apply_css(close_btn, "flex:0 0 22;background:transparent;");
         yetty_ygui_widget_button_on_click(close_btn, notify_close_clicked, engine);
         yetty_ygui_widget_add_child(row, close_btn);
         engine->notifications[slot].close_btn = close_btn;
@@ -238,8 +242,8 @@ static struct yetty_ygui_widget *notify_build_card(struct yetty_ygui_engine *eng
 /* Public: push a new notification. Auto-dismiss after `ttl_ms`; 0 means
  * sticky (user must click ✕). If the stack is full, the oldest entry is
  * dropped to make room. */
-static void notify_push(struct yetty_ygui_engine *engine, int severity,
-                        uint32_t ttl_ms, const char *message)
+static void notify_push(struct yetty_ygui_engine *engine, int severity, uint32_t ttl_ms,
+                        const char *message)
 {
     if (!engine || !message) {
         return;
@@ -253,11 +257,11 @@ static void notify_push(struct yetty_ygui_engine *engine, int severity,
 
     int idx = engine->notification_count;
     struct ygui_notification *n = &engine->notifications[idx];
-    n->message    = strdup(message);
-    n->severity   = severity;
+    n->message = strdup(message);
+    n->severity = severity;
     n->created_ms = now_monotonic_ms();
-    n->ttl_ms     = ttl_ms;
-    n->card       = notify_build_card(engine, idx, severity, message);
+    n->ttl_ms = ttl_ms;
+    n->card = notify_build_card(engine, idx, severity, message);
     if (!n->card) {
         free(n->message);
         n->message = NULL;
@@ -267,8 +271,8 @@ static void notify_push(struct yetty_ygui_engine *engine, int severity,
     notify_relayout(engine);
 }
 
-void yetty_ygui_engine_notify(struct yetty_ygui_engine *engine,
-                              enum yetty_ygui_severity sev, const char *fmt, ...)
+void yetty_ygui_engine_notify(struct yetty_ygui_engine *engine, enum yetty_ygui_severity sev,
+                              const char *fmt, ...)
 {
     if (!engine || !fmt) {
         return;
@@ -281,9 +285,8 @@ void yetty_ygui_engine_notify(struct yetty_ygui_engine *engine,
     notify_push(engine, (int)sev, severity_default_ttl_ms((int)sev), buf);
 }
 
-void yetty_ygui_engine_notify_ttl(struct yetty_ygui_engine *engine,
-                                  enum yetty_ygui_severity sev, uint32_t ttl_ms,
-                                  const char *fmt, ...)
+void yetty_ygui_engine_notify_ttl(struct yetty_ygui_engine *engine, enum yetty_ygui_severity sev,
+                                  uint32_t ttl_ms, const char *fmt, ...)
 {
     if (!engine || !fmt) {
         return;

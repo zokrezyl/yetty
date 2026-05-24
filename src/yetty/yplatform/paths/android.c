@@ -25,15 +25,14 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
 {
     struct yetty_yplatform_paths *p = calloc(1, sizeof(*p));
     if (!p) {
-        return YETTY_ERR(yetty_yplatform_paths_ptr,
-                         "OOM allocating yetty_yplatform_paths");
+        return YETTY_ERR(yetty_yplatform_paths_ptr, "OOM allocating yetty_yplatform_paths");
     }
 
-    strncpy(p->cache_dir_buf,   ANDROID_APP_ROOT "/cache",            sizeof(p->cache_dir_buf)   - 1);
-    strncpy(p->data_dir_buf,    ANDROID_APP_ROOT "/files/data",       sizeof(p->data_dir_buf)    - 1);
-    strncpy(p->runtime_dir_buf, ANDROID_APP_ROOT "/cache",            sizeof(p->runtime_dir_buf) - 1);
-    strncpy(p->config_dir_buf,  ANDROID_APP_ROOT "/files",            sizeof(p->config_dir_buf)  - 1);
-    strncpy(p->assets_dir_buf,  "/",                                  sizeof(p->assets_dir_buf)  - 1);
+    strncpy(p->cache_dir_buf, ANDROID_APP_ROOT "/cache", sizeof(p->cache_dir_buf) - 1);
+    strncpy(p->data_dir_buf, ANDROID_APP_ROOT "/files/data", sizeof(p->data_dir_buf) - 1);
+    strncpy(p->runtime_dir_buf, ANDROID_APP_ROOT "/cache", sizeof(p->runtime_dir_buf) - 1);
+    strncpy(p->config_dir_buf, ANDROID_APP_ROOT "/files", sizeof(p->config_dir_buf) - 1);
+    strncpy(p->assets_dir_buf, "/", sizeof(p->assets_dir_buf) - 1);
 
     return YETTY_OK(yetty_yplatform_paths_ptr, p);
 }

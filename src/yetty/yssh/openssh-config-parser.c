@@ -26,21 +26,21 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define LINE_BUF  2048
+#define LINE_BUF 2048
 #define MAX_DEPTH 8
 
 enum {
-    SET_HOSTNAME    = 1 << 0,
-    SET_PORT        = 1 << 1,
-    SET_USER        = 1 << 2,
-    SET_PROXY_JUMP  = 1 << 3,
+    SET_HOSTNAME = 1 << 0,
+    SET_PORT = 1 << 1,
+    SET_USER = 1 << 2,
+    SET_PROXY_JUMP = 1 << 3,
     SET_SA_INTERVAL = 1 << 4,
-    SET_SA_COUNT    = 1 << 5,
-    SET_TIMEOUT     = 1 << 6,
+    SET_SA_COUNT = 1 << 5,
+    SET_TIMEOUT = 1 << 6,
     SET_KNOWN_HOSTS = 1 << 7,
-    SET_STRICT_HKC  = 1 << 8,
-    SET_FWD_AGENT   = 1 << 9,
-    SET_BATCH_MODE  = 1 << 10,
+    SET_STRICT_HKC = 1 << 8,
+    SET_FWD_AGENT = 1 << 9,
+    SET_BATCH_MODE = 1 << 10,
 };
 
 struct parser_ctx {
@@ -53,8 +53,9 @@ struct parser_ctx {
 static char *get_home(void)
 {
     const char *h = getenv("HOME");
-    if (h && h[0])
+    if (h && h[0]) {
         return (char *)h;
+    }
     struct passwd *pw = getpwuid(getuid());
     return pw ? pw->pw_dir : NULL;
 }
@@ -62,19 +63,23 @@ static char *get_home(void)
 /* Expand a leading ~ to the home directory. Returns heap-allocated string. */
 static char *expand_tilde(const char *path)
 {
-    if (path[0] != '~')
+    if (path[0] != '~') {
         return strdup(path);
+    }
     const char *rest = path + 1;
-    if (rest[0] != '/' && rest[0] != '\0')
+    if (rest[0] != '/' && rest[0] != '\0') {
         return strdup(path); /* ~user form — leave as-is */
+    }
     char *home = get_home();
-    if (!home)
+    if (!home) {
         return strdup(path);
+    }
     size_t hlen = strlen(home);
     size_t rlen = strlen(rest);
     char *out = malloc(hlen + rlen + 1);
-    if (!out)
+    if (!out) {
         return NULL;
+    }
     memcpy(out, home, hlen);
     memcpy(out + hlen, rest, rlen + 1);
     return out;
@@ -82,16 +87,18 @@ static char *expand_tilde(const char *path)
 
 static char *ltrim(char *s)
 {
-    while (isspace((unsigned char)*s))
+    while (isspace((unsigned char)*s)) {
         s++;
+    }
     return s;
 }
 
 static void rtrim(char *s)
 {
     char *e = s + strlen(s);
-    while (e > s && isspace((unsigned char)e[-1]))
+    while (e > s && isspace((unsigned char)e[-1])) {
         e--;
+    }
     *e = '\0';
 }
 
@@ -105,8 +112,9 @@ static char *trim(char *s)
 static int streqi(const char *a, const char *b)
 {
     while (*a && *b) {
-        if (tolower((unsigned char)*a) != tolower((unsigned char)*b))
+        if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) {
             return 0;
+        }
         a++;
         b++;
     }
@@ -128,8 +136,9 @@ static int host_matches_patterns(const char *host_arg, const char *patterns_str)
         int negate = (tok[0] == '!');
         const char *pat = negate ? tok + 1 : tok;
         if (fnmatch(pat, host_arg, 0) == 0) {
-            if (negate)
+            if (negate) {
                 return 0;
+            }
             matched = 1;
         }
         tok = strtok_r(NULL, " \t", &save);
@@ -140,12 +149,15 @@ static int host_matches_patterns(const char *host_arg, const char *patterns_str)
 /* yes/no → 1/0, ask → 2, unrecognised → -1 */
 static int parse_tristate(const char *val)
 {
-    if (streqi(val, "yes"))
+    if (streqi(val, "yes")) {
         return 1;
-    if (streqi(val, "no"))
+    }
+    if (streqi(val, "no")) {
         return 0;
-    if (streqi(val, "ask"))
+    }
+    if (streqi(val, "ask")) {
         return 2;
+    }
     return -1;
 }
 
@@ -177,8 +189,9 @@ static void apply_keyword(struct parser_ctx *ctx, const char *key, const char *v
         /* Accumulates across all matching blocks, up to the cap. */
         if (cfg->num_identity_files < YETTY_YSSH_OPENSSH_CONFIG_MAX_IDENTITY_FILES) {
             char *expanded = expand_tilde(val);
-            if (expanded)
+            if (expanded) {
                 cfg->identity_files[cfg->num_identity_files++] = expanded;
+            }
         }
     } else if (streqi(key, "proxyjump")) {
         if (!(ctx->set & SET_PROXY_JUMP)) {
@@ -246,8 +259,9 @@ static void handle_include(struct parser_ctx *ctx, const char *pattern)
         return;
     }
     char *expanded = expand_tilde(pattern);
-    if (!expanded)
+    if (!expanded) {
         return;
+    }
 
     glob_t gl;
     memset(&gl, 0, sizeof(gl));
@@ -267,8 +281,9 @@ static void strip_inline_comment(char *val)
 {
     int in_quote = 0;
     for (char *p = val; *p; p++) {
-        if (*p == '"')
+        if (*p == '"') {
             in_quote = !in_quote;
+        }
         if (!in_quote && *p == '#') {
             *p = '\0';
             break;
@@ -280,8 +295,9 @@ static void strip_inline_comment(char *val)
 static void parse_file(struct parser_ctx *ctx, const char *path)
 {
     FILE *f = fopen(path, "r");
-    if (!f)
+    if (!f) {
         return;
+    }
 
     char line[LINE_BUF];
     int in_match = 0;
@@ -289,27 +305,32 @@ static void parse_file(struct parser_ctx *ctx, const char *path)
 
     while (fgets(line, sizeof(line), f)) {
         char *p = trim(line);
-        if (*p == '#' || *p == '\0')
+        if (*p == '#' || *p == '\0') {
             continue;
+        }
 
         /* Split key from value at first whitespace or '='. */
         char *key = p;
         char *val = p;
-        while (*val && !isspace((unsigned char)*val) && *val != '=')
+        while (*val && !isspace((unsigned char)*val) && *val != '=') {
             val++;
-        if (*val == '=')
+        }
+        if (*val == '=') {
             *val++ = '\0';
-        else if (*val)
+        } else if (*val) {
             *val++ = '\0';
+        }
         val = ltrim(val);
         /* Remove optional leading '=' after whitespace (key = value) */
-        if (*val == '=')
+        if (*val == '=') {
             val = ltrim(val + 1);
+        }
 
         strip_inline_comment(val);
 
-        if (!*key || !*val)
+        if (!*key || !*val) {
             continue;
+        }
 
         if (streqi(key, "host")) {
             global_section = 0;
@@ -325,13 +346,15 @@ static void parse_file(struct parser_ctx *ctx, const char *path)
         }
 
         if (streqi(key, "include")) {
-            if (global_section || in_match)
+            if (global_section || in_match) {
                 handle_include(ctx, val);
+            }
             continue;
         }
 
-        if (global_section || in_match)
+        if (global_section || in_match) {
             apply_keyword(ctx, key, val);
+        }
     }
 
     fclose(f);
@@ -340,22 +363,23 @@ static void parse_file(struct parser_ctx *ctx, const char *path)
 struct yetty_yssh_openssh_config *yetty_yssh_openssh_config_resolve(const char *host_arg)
 {
     struct yetty_yssh_openssh_config *cfg = calloc(1, sizeof(*cfg));
-    if (!cfg)
+    if (!cfg) {
         return NULL;
+    }
 
-    cfg->port                     = 0;
-    cfg->server_alive_interval    = -1;
-    cfg->server_alive_count_max   = -1;
-    cfg->connect_timeout          = -1;
+    cfg->port = 0;
+    cfg->server_alive_interval = -1;
+    cfg->server_alive_count_max = -1;
+    cfg->connect_timeout = -1;
     cfg->strict_host_key_checking = -1;
-    cfg->forward_agent            = -1;
-    cfg->batch_mode               = -1;
+    cfg->forward_agent = -1;
+    cfg->batch_mode = -1;
 
     struct parser_ctx ctx = {
-        .cfg      = cfg,
+        .cfg = cfg,
         .host_arg = host_arg,
-        .set      = 0,
-        .depth    = 0,
+        .set = 0,
+        .depth = 0,
     };
 
     char *home = get_home();
@@ -366,11 +390,8 @@ struct yetty_yssh_openssh_config *yetty_yssh_openssh_config_resolve(const char *
     }
     parse_file(&ctx, "/etc/ssh/ssh_config");
 
-    ydebug("ssh config '%s': host=%s port=%d user=%s identities=%d",
-           host_arg,
-           cfg->hostname ? cfg->hostname : "(none)",
-           cfg->port,
-           cfg->user ? cfg->user : "(none)",
+    ydebug("ssh config '%s': host=%s port=%d user=%s identities=%d", host_arg,
+           cfg->hostname ? cfg->hostname : "(none)", cfg->port, cfg->user ? cfg->user : "(none)",
            cfg->num_identity_files);
 
     return cfg;
@@ -378,12 +399,14 @@ struct yetty_yssh_openssh_config *yetty_yssh_openssh_config_resolve(const char *
 
 void yetty_yssh_openssh_config_free(struct yetty_yssh_openssh_config *cfg)
 {
-    if (!cfg)
+    if (!cfg) {
         return;
+    }
     free(cfg->hostname);
     free(cfg->user);
-    for (int i = 0; i < cfg->num_identity_files; i++)
+    for (int i = 0; i < cfg->num_identity_files; i++) {
         free(cfg->identity_files[i]);
+    }
     free(cfg->proxy_jump);
     free(cfg->known_hosts_file);
     free(cfg);

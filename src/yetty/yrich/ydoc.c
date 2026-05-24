@@ -97,8 +97,8 @@ static struct yetty_ycore_void_result paragraph_render(struct yetty_yrich_elemen
             .half_height = p->bounds.h * 0.5f,
             .corner_radius = 0.0f,
         };
-        struct yetty_ycore_void_result br =
-            yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, layer + 1, 0, YETTY_YRICH_RGBA(0, 100, 200, 96), 1.0f, &border);
+        struct yetty_ycore_void_result br = yetty_ydraw_draw_list_add_cmd_add_box(
+            buf, 0, layer + 1, 0, YETTY_YRICH_RGBA(0, 100, 200, 96), 1.0f, &border);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "paragraph_render: selection box add failed");
     }
     return YETTY_OK_VOID();
@@ -253,8 +253,8 @@ static struct yetty_ycore_void_result image_render(struct yetty_yrich_element *e
     };
     uint32_t border =
         selected ? YETTY_YRICH_RGBA(0, 100, 200, 255) : YETTY_YRICH_RGBA(150, 150, 150, 255);
-    struct yetty_ycore_void_result br =
-        yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, layer, YETTY_YRICH_RGBA(245, 245, 245, 255), border, 1.0f, &body);
+    struct yetty_ycore_void_result br = yetty_ydraw_draw_list_add_cmd_add_box(
+        buf, 0, layer, YETTY_YRICH_RGBA(245, 245, 245, 255), border, 1.0f, &body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "image_render: body box add failed");
 
     if (im->caption) {

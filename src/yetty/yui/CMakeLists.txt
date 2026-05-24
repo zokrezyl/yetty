@@ -19,7 +19,13 @@ target_include_directories(yetty_yui
 target_link_libraries(yetty_yui
     PRIVATE
         webgpu
+        yetty_yfigure
+        yetty_ygrid
         yetty_yui_core
         yetty_yterm
         ygui_core
 )
+
+if(YETTY_ENABLE_FEATURE_YMGUI)
+    target_link_libraries(yetty_yui PRIVATE yetty_ymgui)
+endif()

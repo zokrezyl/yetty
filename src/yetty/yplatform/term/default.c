@@ -36,11 +36,15 @@ int yetty_yplatform_term_get_size(int *cols, int *rows)
      * both, but a pipe on stdout (e.g. `yetty | tee`) shouldn't make us
      * report (0, 0). */
     struct winsize ws = {0};
-    int fds[] = { STDOUT_FILENO, STDIN_FILENO, STDERR_FILENO };
+    int fds[] = {STDOUT_FILENO, STDIN_FILENO, STDERR_FILENO};
     for (size_t i = 0; i < sizeof(fds) / sizeof(fds[0]); i++) {
         if (ioctl(fds[i], TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
-            if (cols) *cols = ws.ws_col;
-            if (rows) *rows = ws.ws_row;
+            if (cols) {
+                *cols = ws.ws_col;
+            }
+            if (rows) {
+                *rows = ws.ws_row;
+            }
             return 0;
         }
     }

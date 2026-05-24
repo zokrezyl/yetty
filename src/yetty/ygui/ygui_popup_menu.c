@@ -169,7 +169,8 @@ static struct yetty_ycore_void_result popup_menu_render(struct yetty_ygui_widget
         if (!label) {
             /* Separator row — short horizontal divider centred in its
              * MENU_SEPARATOR_H band. */
-            float y = self->y + menu_item_top(self, i) + (MENU_SEPARATOR_H - MENU_SEPARATOR_LINE) * 0.5f;
+            float y =
+                self->y + menu_item_top(self, i) + (MENU_SEPARATOR_H - MENU_SEPARATOR_LINE) * 0.5f;
             yetty_ygui_render_ctx_render_box(ctx, self->x + MENU_PAD_X * 0.5f, y,
                                              self->w - MENU_PAD_X, MENU_SEPARATOR_LINE,
                                              theme->border_muted, 0.0f);
@@ -184,8 +185,8 @@ static struct yetty_ycore_void_result popup_menu_render(struct yetty_ygui_widget
         }
 
         float ty = row_y + (ih - fs) * 0.5f;
-        yetty_ygui_render_ctx_render_text(ctx, label, self->x + MENU_PAD_X, ty,
-                                          theme->text_primary, fs);
+        yetty_ygui_render_ctx_render_text(ctx, label, self->x + MENU_PAD_X, ty, theme->text_primary,
+                                          fs);
     }
     return YETTY_OK_VOID();
 }
@@ -234,7 +235,8 @@ static int popup_menu_on_press(struct yetty_ygui_widget *self, float lx, float l
     if (lx < 0 || lx > self->w || ly < 0 || ly > self->h) {
         self->flags &= ~YETTY_YGUI_FLAG_OPEN;
         if (self->engine) {
-            self->engine->dirty = 1; self->dirty = 1;
+            self->engine->dirty = 1;
+            self->dirty = 1;
             yetty_ygui_internal_queue_delete_subtree_rendered(self);
         }
         return 1;
@@ -257,9 +259,8 @@ static int popup_menu_on_press(struct yetty_ygui_widget *self, float lx, float l
     int idx = menu_hit_item(self, ly);
     int is_drill = 0;
     if (idx >= 0 && self->data.popup_menu.item_callbacks[idx]) {
-        is_drill = self->data.popup_menu.item_is_drill
-                       ? self->data.popup_menu.item_is_drill[idx]
-                       : 0;
+        is_drill =
+            self->data.popup_menu.item_is_drill ? self->data.popup_menu.item_is_drill[idx] : 0;
         self->data.popup_menu.item_callbacks[idx](self, self->data.popup_menu.item_userdata[idx]);
     }
     /* Drill-down items keep the menu open so the callback's in-place
@@ -309,8 +310,7 @@ static void popup_menu_destroy(struct yetty_ygui_widget *self)
 static struct yetty_ycore_void_result popup_menu_render_all(struct yetty_ygui_widget *self,
                                                             struct yetty_ygui_render_ctx *ctx)
 {
-    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE) ||
-        !(self->flags & YETTY_YGUI_FLAG_OPEN)) {
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE) || !(self->flags & YETTY_YGUI_FLAG_OPEN)) {
         return YETTY_OK_VOID();
     }
     self->was_rendered = 1;
@@ -372,14 +372,21 @@ static int menu_grow(struct yetty_ygui_widget *self, int need)
         self->data.popup_menu.item_callbacks, (size_t)cap * sizeof(ygui_widget_click_fn));
     void **udata =
         (void **)realloc(self->data.popup_menu.item_userdata, (size_t)cap * sizeof(void *));
-    int *drills =
-        (int *)realloc(self->data.popup_menu.item_is_drill, (size_t)cap * sizeof(int));
+    int *drills = (int *)realloc(self->data.popup_menu.item_is_drill, (size_t)cap * sizeof(int));
     if (!labels || !cbs || !udata || !drills) {
         /* Partial grows are fine — next call retries. Free nothing. */
-        if (labels) self->data.popup_menu.item_labels = labels;
-        if (cbs) self->data.popup_menu.item_callbacks = cbs;
-        if (udata) self->data.popup_menu.item_userdata = udata;
-        if (drills) self->data.popup_menu.item_is_drill = drills;
+        if (labels) {
+            self->data.popup_menu.item_labels = labels;
+        }
+        if (cbs) {
+            self->data.popup_menu.item_callbacks = cbs;
+        }
+        if (udata) {
+            self->data.popup_menu.item_userdata = udata;
+        }
+        if (drills) {
+            self->data.popup_menu.item_is_drill = drills;
+        }
         return 0;
     }
     self->data.popup_menu.item_labels = labels;
@@ -418,8 +425,7 @@ void yetty_ygui_widget_popup_menu_add_item(struct yetty_ygui_widget *menu, const
     menu_add_row(menu, label ? label : "", cb, userdata, /*is_drill=*/0);
 }
 
-void yetty_ygui_widget_popup_menu_add_drill_item(struct yetty_ygui_widget *menu,
-                                                 const char *label,
+void yetty_ygui_widget_popup_menu_add_drill_item(struct yetty_ygui_widget *menu, const char *label,
                                                  ygui_click_callback_t cb, void *userdata)
 {
     menu_add_row(menu, label ? label : "", cb, userdata, /*is_drill=*/1);
@@ -493,7 +499,8 @@ void yetty_ygui_widget_popup_menu_open_at(struct yetty_ygui_widget *menu, float 
     /* Float above everything painted earlier in the frame. */
     yetty_ygui_internal_bring_to_front(menu);
     if (menu->engine) {
-        menu->engine->dirty = 1; menu->dirty = 1;
+        menu->engine->dirty = 1;
+        menu->dirty = 1;
     }
 }
 
@@ -504,7 +511,8 @@ void yetty_ygui_widget_popup_menu_close(struct yetty_ygui_widget *menu)
     }
     menu->flags &= ~YETTY_YGUI_FLAG_OPEN;
     if (menu->engine) {
-        menu->engine->dirty = 1; menu->dirty = 1;
+        menu->engine->dirty = 1;
+        menu->dirty = 1;
         yetty_ygui_internal_queue_delete_subtree_rendered(menu);
     }
 }

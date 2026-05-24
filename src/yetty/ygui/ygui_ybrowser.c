@@ -83,10 +83,10 @@ static char *base_url_from_file(const char *path)
     return url;
 }
 
-static struct yetty_ygui_widget *render_with_base(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const char *html, size_t html_len, const char *base_url)
+static struct yetty_ygui_widget *render_with_base(struct yetty_ygui_engine *engine, const char *id,
+                                                  float x, float y, float w, float h,
+                                                  const char *html, size_t html_len,
+                                                  const char *base_url)
 {
     struct yetty_ylexbor_config cfg = {
         .viewport_width = (int)w,
@@ -114,8 +114,7 @@ static struct yetty_ygui_widget *render_with_base(
         return NULL;
     }
 
-    struct yetty_ydraw_draw_list_result br =
-        yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(br)) {
         yetty_ycore_error_destroy(br.error);
         yetty_ylexbor_destroy(yl);
@@ -140,9 +139,9 @@ static struct yetty_ygui_widget *render_with_base(
     return widget;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_from_file(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h, const char *path)
+struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_from_file(struct yetty_ygui_engine *engine,
+                                                               const char *id, float x, float y,
+                                                               float w, float h, const char *path)
 {
     if (!path) {
         return NULL;
@@ -160,16 +159,16 @@ struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_from_file(
     return widget;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_from_buffer(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const uint8_t *data, size_t len, const char *base_url)
+struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_from_buffer(struct yetty_ygui_engine *engine,
+                                                                 const char *id, float x, float y,
+                                                                 float w, float h,
+                                                                 const uint8_t *data, size_t len,
+                                                                 const char *base_url)
 {
     if (!data || len == 0) {
         return NULL;
     }
-    return render_with_base(engine, id, x, y, w, h,
-                            (const char *)data, len, base_url);
+    return render_with_base(engine, id, x, y, w, h, (const char *)data, len, base_url);
 }
 
 /* Built-in default sample (demo/ygui/26_ybrowser/sample.html), baked
@@ -178,8 +177,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_from_buffer(
 
 static const uint8_t *g_ybrowser_default_data = NULL;
 static size_t g_ybrowser_default_size = 0;
-static void ybrowser_capture_default(const char *name, const uint8_t *data,
-                                      size_t size, int compressed)
+static void ybrowser_capture_default(const char *name, const uint8_t *data, size_t size,
+                                     int compressed)
 {
     (void)name;
     (void)compressed;
@@ -187,15 +186,14 @@ static void ybrowser_capture_default(const char *name, const uint8_t *data,
     g_ybrowser_default_size = size;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_default(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h)
+struct yetty_ygui_widget *yetty_ygui_engine_ybrowser_default(struct yetty_ygui_engine *engine,
+                                                             const char *id, float x, float y,
+                                                             float w, float h)
 {
     if (!g_ybrowser_default_data) {
         register_ybrowser_default_assets_c(ybrowser_capture_default);
     }
     /* base_url=NULL — sample.html is self-contained. */
-    return yetty_ygui_engine_ybrowser_from_buffer(
-        engine, id, x, y, w, h,
-        g_ybrowser_default_data, g_ybrowser_default_size, NULL);
+    return yetty_ygui_engine_ybrowser_from_buffer(engine, id, x, y, w, h, g_ybrowser_default_data,
+                                                  g_ybrowser_default_size, NULL);
 }

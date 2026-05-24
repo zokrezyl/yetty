@@ -63,10 +63,8 @@ static int parse_hex_color(const char *s, uint32_t *out)
  * also handed back to the caller in `*out_plot` so it can synthesise
  * data buffers from `name=buffer` declarations. */
 static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
-    const char *source, size_t source_len,
-    const struct yetty_yplot_render_config *config,
-    uint32_t *bc_buf, uint32_t bc_cap,
-    struct yetty_yplot_uniforms *u, uint32_t *out_bc_len,
+    const char *source, size_t source_len, const struct yetty_yplot_render_config *config,
+    uint32_t *bc_buf, uint32_t bc_cap, struct yetty_yplot_uniforms *u, uint32_t *out_bc_len,
     struct yetty_yexpr_plot_parse_output *out_plot)
 {
     memset(u, 0, sizeof(*u));
@@ -175,8 +173,8 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
 }
 
 /* Pack uniforms + buffers into a fresh ydraw buffer carrying one yplot prim. */
-static struct yetty_ydraw_draw_list_result yplot_emit_prim(
-    const struct yetty_yplot_uniforms *u, const struct yetty_yplot_buffers *bufs)
+static struct yetty_ydraw_draw_list_result yplot_emit_prim(const struct yetty_yplot_uniforms *u,
+                                                           const struct yetty_yplot_buffers *bufs)
 {
     size_t required = yetty_yplot_uniforms_serialized_size(u, bufs);
     uint8_t *drawable_buf = malloc(required);
@@ -219,9 +217,8 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render(
 }
 
 struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
-    const char *source, size_t len,
-    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
-    const struct yetty_yplot_render_config *config)
+    const char *source, size_t len, const struct yetty_yplot_buffer_input *buffers,
+    size_t buffer_count, const struct yetty_yplot_render_config *config)
 {
     if (!source && len > 0) {
         return YETTY_ERR(yetty_ydraw_draw_list, "source is NULL");
@@ -235,10 +232,9 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
     uint32_t bc_len = 0;
     struct yetty_yexpr_plot_parse_output parsed = {0};
 
-    struct yetty_ycore_void_result ub =
-        yplot_build_uniforms_and_bytecode(source, len, config, bc_buf,
-                                          (uint32_t)(sizeof bc_buf / sizeof bc_buf[0]),
-                                          &u, &bc_len, &parsed);
+    struct yetty_ycore_void_result ub = yplot_build_uniforms_and_bytecode(
+        source, len, config, bc_buf, (uint32_t)(sizeof bc_buf / sizeof bc_buf[0]), &u, &bc_len,
+        &parsed);
     YETTY_RETURN_IF_ERR(yetty_ydraw_draw_list, ub, "yplot: uniforms/bytecode build failed");
 
     /* Buffer slots come from TWO sources, layered in this order so that
@@ -261,8 +257,7 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
     size_t zero_fill_total = 0;
 
     if (total_bufs > 0) {
-        wire_bufs = (total_bufs <= 8) ? wire_bufs_stack
-                                      : malloc(total_bufs * sizeof(*wire_bufs));
+        wire_bufs = (total_bufs <= 8) ? wire_bufs_stack : malloc(total_bufs * sizeof(*wire_bufs));
         if (!wire_bufs) {
             return YETTY_ERR(yetty_ydraw_draw_list, "yplot: buffer view alloc failed");
         }
@@ -336,15 +331,14 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
     return out;
 }
 
-struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
-    const struct yetty_ydraw_draw_list *buffer, FILE *out)
+struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+                                                        FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
-    size_t raw_size =
-        yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)buffer, &raw);
+    size_t raw_size = yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: empty serialize");
     }

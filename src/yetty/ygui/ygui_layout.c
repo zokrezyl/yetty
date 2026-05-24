@@ -656,8 +656,8 @@ static void layout_widget(struct yetty_ygui_widget *w, float parent_abs_x, float
     w->layout_w = resolved_w;
     w->layout_h = resolved_h;
 
-    if (w->layout_x != prev_lx || w->layout_y != prev_ly ||
-        w->layout_w != prev_lw || w->layout_h != prev_lh) {
+    if (w->layout_x != prev_lx || w->layout_y != prev_ly || w->layout_w != prev_lw ||
+        w->layout_h != prev_lh) {
         w->dirty = 1;
     }
 
@@ -784,8 +784,7 @@ static void preflight_intrinsic_size(struct yetty_ygui_widget *w)
         float sum = 0.0f;
         int count = 0;
         for (struct yetty_ygui_widget *c = w->first_child; c; c = c->next_sibling) {
-            if (!layout_is_visible(c) ||
-                c->layout.position == YETTY_YGUI_POSITION_ABSOLUTE) {
+            if (!layout_is_visible(c) || c->layout.position == YETTY_YGUI_POSITION_ABSOLUTE) {
                 continue;
             }
             sum += c->authored_h;

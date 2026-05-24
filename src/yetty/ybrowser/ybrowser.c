@@ -291,8 +291,8 @@ static void css_collect_walk(struct yetty_ylexbor *r, lxb_dom_node_t *node, stru
                     lxb_dom_element_get_attribute(el, (const lxb_char_t *)"rel", 3, &rl);
                 if (rel && rl == 10 && strncasecmp((const char *)rel, "stylesheet", 10) == 0) {
                     size_t hl = 0;
-                    const lxb_char_t *href = lxb_dom_element_get_attribute(
-                        el, (const lxb_char_t *)"href", 4, &hl);
+                    const lxb_char_t *href =
+                        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"href", 4, &hl);
                     if (href && hl > 0) {
                         char *h = malloc(hl + 1);
                         if (h) {
@@ -599,10 +599,18 @@ int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x
         return -1;
     }
     const struct yetty_ylexbor_box *b = &r->boxes.data[index];
-    if (x) *x = b->x;
-    if (y) *y = b->y;
-    if (w) *w = b->w;
-    if (h) *h = b->h;
+    if (x) {
+        *x = b->x;
+    }
+    if (y) {
+        *y = b->y;
+    }
+    if (w) {
+        *w = b->w;
+    }
+    if (h) {
+        *h = b->h;
+    }
     if (tag_out && tag_cap > 0) {
         tag_out[0] = '\0';
         if (b->element) {
@@ -628,10 +636,18 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
         return -1;
     }
     const struct yetty_ylexbor_box *b = &r->boxes.data[index];
-    if (kind_out) *kind_out = (int)b->kind;
-    if (font_weight_out) *font_weight_out = b->font_weight;
-    if (italic_out) *italic_out = b->font_italic ? 1 : 0;
-    if (underline_out) *underline_out = b->underline ? 1 : 0;
+    if (kind_out) {
+        *kind_out = (int)b->kind;
+    }
+    if (font_weight_out) {
+        *font_weight_out = b->font_weight;
+    }
+    if (italic_out) {
+        *italic_out = b->font_italic ? 1 : 0;
+    }
+    if (underline_out) {
+        *underline_out = b->underline ? 1 : 0;
+    }
     if (text_out && text_cap > 0) {
         text_out[0] = '\0';
         if (b->kind == YL_BOX_INLINE_TEXT && b->text && b->text_len > 0) {
@@ -643,7 +659,7 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
 			 * tests can search for them with the inline-text helpers.
 			 * Block boxes without a marker still come back as empty. */
             int n = b->marker_text_len < (size_t)(text_cap - 1) ? (int)b->marker_text_len
-                                                                 : text_cap - 1;
+                                                                : text_cap - 1;
             memcpy(text_out, b->marker_text, (size_t)n);
             text_out[n] = '\0';
         }

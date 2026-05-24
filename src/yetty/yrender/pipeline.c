@@ -379,6 +379,20 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
     memcpy(merged + bindings_len + 1, st->shader_data, st->shader_size);
     merged[total - 1] = '\0';
 
+    /* Dump merged shader for inspection. Single file gets overwritten
+     * on each pipeline create; debugging is per-failure so the last
+     * write is the relevant one. */
+    {
+        FILE *df = fopen("tmp/yrender_pipeline_merged.wgsl", "wb");
+        if (df) {
+            fwrite(merged, 1, total - 1, df);
+            fclose(df);
+            ydebug("yrender_pipeline: dumped merged shader (%zu bytes) to "
+                   "tmp/yrender_pipeline_merged.wgsl",
+                   total - 1);
+        }
+    }
+
     WGPUShaderSourceWGSL wgsl = {0};
     wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
     wgsl.code.data = merged;
@@ -465,8 +479,7 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
  *===========================================================================*/
 
 struct yetty_yrender_pipeline_ptr_result yetty_yrender_pipeline_create(
-    WGPUDevice device, WGPUTextureFormat target_format,
-    struct yetty_ydraw_gpu_allocator *allocator,
+    WGPUDevice device, WGPUTextureFormat target_format, struct yetty_ydraw_gpu_allocator *allocator,
     const struct yetty_ydraw_gpu_resource_set *template_rs)
 {
     if (!device || !allocator || !template_rs) {

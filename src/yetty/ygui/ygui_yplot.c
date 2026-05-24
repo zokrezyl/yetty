@@ -8,6 +8,7 @@
  */
 
 #include "ygui_internal.h"
+#include <yetty/yfigure/wire.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -49,8 +50,8 @@ static void yplot_free_buffers(struct yetty_ygui_widget *self)
     self->data.yplot.buffer_count = 0;
 }
 
-static struct yetty_ydraw_draw_list *yplot_build_buffer(struct yetty_ygui_widget *self,
-                                                        float w, float h)
+static struct yetty_ydraw_draw_list *yplot_build_buffer(struct yetty_ygui_widget *self, float w,
+                                                        float h)
 {
     if (w <= 0.0f || h <= 0.0f) {
         return NULL;
@@ -78,8 +79,7 @@ static struct yetty_ydraw_draw_list *yplot_build_buffer(struct yetty_ygui_widget
     cfg.bounds_w = w;
     cfg.bounds_h = h;
     ydebug("yplot_build_buffer id=%s WIDGET-LOCAL bounds=(x=%.1f y=%.1f w=%.1f h=%.1f)",
-           self->id ? self->id : "?",
-           cfg.bounds_x, cfg.bounds_y, cfg.bounds_w, cfg.bounds_h);
+           self->id ? self->id : "?", cfg.bounds_x, cfg.bounds_y, cfg.bounds_w, cfg.bounds_h);
 
     const char *src = self->data.yplot.source ? self->data.yplot.source : "";
     size_t src_len = self->data.yplot.source_len;
@@ -96,9 +96,8 @@ static struct yetty_ydraw_draw_list *yplot_build_buffer(struct yetty_ygui_widget
         struct yetty_yplot_buffer_input *bufs = stack;
         int heap = 0;
         if (self->data.yplot.buffer_count > STACK_BUFS) {
-            bufs = (struct yetty_yplot_buffer_input *)
-                       calloc(self->data.yplot.buffer_count,
-                              sizeof(struct yetty_yplot_buffer_input));
+            bufs = (struct yetty_yplot_buffer_input *)calloc(
+                self->data.yplot.buffer_count, sizeof(struct yetty_yplot_buffer_input));
             if (!bufs) {
                 return NULL;
             }
@@ -106,11 +105,11 @@ static struct yetty_ydraw_draw_list *yplot_build_buffer(struct yetty_ygui_widget
         }
         for (size_t i = 0; i < self->data.yplot.buffer_count; i++) {
             bufs[i].samples = self->data.yplot.buffers[i].samples;
-            bufs[i].count   = self->data.yplot.buffers[i].count;
-            bufs[i].color   = self->data.yplot.buffers[i].color;
+            bufs[i].count = self->data.yplot.buffers[i].count;
+            bufs[i].color = self->data.yplot.buffers[i].color;
         }
-        r = yetty_yplot_render_with_buffers(src, src_len, bufs,
-                                            self->data.yplot.buffer_count, &cfg);
+        r = yetty_yplot_render_with_buffers(src, src_len, bufs, self->data.yplot.buffer_count,
+                                            &cfg);
         if (heap) {
             free(bufs);
         }
@@ -133,17 +132,18 @@ static struct yetty_ycore_void_result yplot_render(struct yetty_ygui_widget *sel
 {
     float w = self->layout_w;
     float h = self->layout_h;
-    ydebug("yplot_render id=%s layout=(%.1f,%.1f %.1fx%.1f) parent=%s parent_layout=(%.1f,%.1f %.1fx%.1f) parent_content=(%.1f,%.1f %.1fx%.1f)",
-           self->id ? self->id : "?",
-           self->layout_x, self->layout_y, self->layout_w, self->layout_h,
-           self->parent && self->parent->id ? self->parent->id : "?",
-           self->parent ? self->parent->layout_x : 0.0f, self->parent ? self->parent->layout_y : 0.0f,
-           self->parent ? self->parent->layout_w : 0.0f, self->parent ? self->parent->layout_h : 0.0f,
-           self->parent ? self->parent->content_x : 0.0f, self->parent ? self->parent->content_y : 0.0f,
-           self->parent ? self->parent->content_w : 0.0f, self->parent ? self->parent->content_h : 0.0f);
-    if (!self->data.yplot.cached ||
-        self->data.yplot.last_w != w ||
-        self->data.yplot.last_h != h) {
+    ydebug(
+        "yplot_render id=%s layout=(%.1f,%.1f %.1fx%.1f) parent=%s parent_layout=(%.1f,%.1f "
+        "%.1fx%.1f) parent_content=(%.1f,%.1f %.1fx%.1f)",
+        self->id ? self->id : "?", self->layout_x, self->layout_y, self->layout_w, self->layout_h,
+        self->parent && self->parent->id ? self->parent->id : "?",
+        self->parent ? self->parent->layout_x : 0.0f, self->parent ? self->parent->layout_y : 0.0f,
+        self->parent ? self->parent->layout_w : 0.0f, self->parent ? self->parent->layout_h : 0.0f,
+        self->parent ? self->parent->content_x : 0.0f,
+        self->parent ? self->parent->content_y : 0.0f,
+        self->parent ? self->parent->content_w : 0.0f,
+        self->parent ? self->parent->content_h : 0.0f);
+    if (!self->data.yplot.cached || self->data.yplot.last_w != w || self->data.yplot.last_h != h) {
         if (self->data.yplot.cached) {
             yetty_ydraw_draw_list_destroy(self->data.yplot.cached);
             self->data.yplot.cached = NULL;
@@ -155,8 +155,13 @@ static struct yetty_ycore_void_result yplot_render(struct yetty_ygui_widget *sel
     if (!self->data.yplot.cached) {
         return YETTY_OK_VOID();
     }
-    return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.yplot.cached, self->layout_x, self->layout_y);
+    /* Figure-local emission: yplot is now its own YPLOT figure whose
+     * rect carries the widget's absolute position. Prims inside the
+     * figure are relative to that rect's origin, so dx=dy=0 — the
+     * receiver-side ygrid render adds rect.min on draw. The cached
+     * buffer is already authored in widget-local coords (bounds_x/y =
+     * 0 inside yplot_build_buffer), so no translation is needed. */
+    return yetty_ygui_internal_emit_buffer_translated(ctx, self->data.yplot.cached, 0.0f, 0.0f);
 }
 
 static void yplot_destroy(struct yetty_ygui_widget *self)
@@ -167,10 +172,29 @@ static void yplot_destroy(struct yetty_ygui_widget *self)
     yplot_free_buffers(self);
 }
 
+/* Custom render_all — yplot lives in its OWN figure kind (YPLOT), not
+ * inside the surrounding chrome ygrid. The yplot's body bytes are the
+ * cached prim stream; the figure rect is the widget rect. Receiver
+ * still routes YPLOT through the ygrid factory today (same SDF/glyph
+ * pipeline), but the wire stays semantically labelled. */
+static struct yetty_ycore_void_result yplot_render_all(struct yetty_ygui_widget *self,
+                                                       struct yetty_ygui_render_ctx *ctx)
+{
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
+    uint32_t marker =
+        yetty_ygui_widget_open_group_as_kind(self, ctx, YETTY_YFIGURE_KIND_YPLOT, yplot_render);
+    yetty_ygui_widget_close_group(self, ctx, marker);
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_ygui_widget_vtable *yplot_vtable_ptr(void)
 {
     static const struct yetty_ygui_widget_vtable vt = {
         .render = yplot_render,
+        .render_all = yplot_render_all,
         .destroy = yplot_destroy,
     };
     return &vt;
@@ -180,8 +204,7 @@ static const struct yetty_ygui_widget_vtable *yplot_vtable_ptr(void)
  * Construction + setters
  *===========================================================================*/
 
-static struct yetty_ygui_widget *yplot_alloc(struct yetty_ygui_engine *engine,
-                                             const char *id,
+static struct yetty_ygui_widget *yplot_alloc(struct yetty_ygui_engine *engine, const char *id,
                                              float x, float y, float w, float h)
 {
     struct yetty_ygui_widget *widget =
@@ -204,8 +227,8 @@ static struct yetty_ygui_widget *yplot_alloc(struct yetty_ygui_engine *engine,
     return widget;
 }
 
-static int yplot_set_source_locked(struct yetty_ygui_widget *widget,
-                                   const char *source, size_t source_len)
+static int yplot_set_source_locked(struct yetty_ygui_widget *widget, const char *source,
+                                   size_t source_len)
 {
     if (!source) {
         free(widget->data.yplot.source);
@@ -234,8 +257,8 @@ static int yplot_set_buffers_locked(struct yetty_ygui_widget *widget,
     if (!buffers || buffer_count == 0) {
         return 1;
     }
-    struct yplot_buffer_slot *slots = (struct yplot_buffer_slot *)
-        calloc(buffer_count, sizeof(struct yplot_buffer_slot));
+    struct yplot_buffer_slot *slots =
+        (struct yplot_buffer_slot *)calloc(buffer_count, sizeof(struct yplot_buffer_slot));
     if (!slots) {
         return 0;
     }
@@ -251,8 +274,7 @@ static int yplot_set_buffers_locked(struct yetty_ygui_widget *widget,
                 free(slots);
                 return 0;
             }
-            memcpy(slots[i].samples, buffers[i].samples,
-                   buffers[i].count * sizeof(float));
+            memcpy(slots[i].samples, buffers[i].samples, buffers[i].count * sizeof(float));
         }
     }
     widget->data.yplot.buffers = slots;
@@ -261,23 +283,17 @@ static int yplot_set_buffers_locked(struct yetty_ygui_widget *widget,
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_yplot_from_source(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const char *source, size_t source_len,
-    const struct yetty_yplot_render_config *config)
+    struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *source, size_t source_len, const struct yetty_yplot_render_config *config)
 {
-    return yetty_ygui_engine_yplot_from_buffers(engine, id, x, y, w, h,
-                                                source, source_len,
-                                                /*buffers=*/NULL, /*buffer_count=*/0,
-                                                config);
+    return yetty_ygui_engine_yplot_from_buffers(engine, id, x, y, w, h, source, source_len,
+                                                /*buffers=*/NULL, /*buffer_count=*/0, config);
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_yplot_from_buffers(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const char *source, size_t source_len,
-    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
-    const struct yetty_yplot_render_config *config)
+    struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *source, size_t source_len, const struct yetty_yplot_buffer_input *buffers,
+    size_t buffer_count, const struct yetty_yplot_render_config *config)
 {
     struct yetty_ygui_widget *widget = yplot_alloc(engine, id, x, y, w, h);
     if (!widget) {
@@ -299,18 +315,15 @@ struct yetty_ygui_widget *yetty_ygui_engine_yplot_from_buffers(
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_yplot_set_source(
-    struct yetty_ygui_widget *widget,
-    const char *source, size_t source_len,
+    struct yetty_ygui_widget *widget, const char *source, size_t source_len,
     const struct yetty_yplot_render_config *config)
 {
     return yetty_ygui_widget_yplot_set_buffers(widget, source, source_len,
-                                               /*buffers=*/NULL, /*buffer_count=*/0,
-                                               config);
+                                               /*buffers=*/NULL, /*buffer_count=*/0, config);
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_yplot_set_buffers(
-    struct yetty_ygui_widget *widget,
-    const char *source, size_t source_len,
+    struct yetty_ygui_widget *widget, const char *source, size_t source_len,
     const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
     const struct yetty_yplot_render_config *config)
 {

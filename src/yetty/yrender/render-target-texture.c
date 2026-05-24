@@ -93,8 +93,7 @@ static struct yetty_yrender_present_watchdog *present_watchdog_start(void)
         ywarn("present watchdog: alloc failed — running without watchdog");
         return NULL;
     }
-    struct yetty_yplatform_ythread *t =
-        yetty_yplatform_ythread_create(present_watchdog_thread, wd);
+    struct yetty_yplatform_ythread *t = yetty_yplatform_ythread_create(present_watchdog_thread, wd);
     if (!t) {
         ywarn("present watchdog: ythread_create failed — running without watchdog");
         free(wd);
@@ -250,8 +249,7 @@ static void render_target_texture_destroy(struct yetty_ydraw_target *self)
  * Clear
  *===========================================================================*/
 
-static struct yetty_ycore_void_result render_target_texture_clear(
-    struct yetty_ydraw_target *self)
+static struct yetty_ycore_void_result render_target_texture_clear(struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -521,8 +519,8 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
          * neighboring panes. pane_render() in yui/tile.c writes the pane
          * bounds into self->viewport before calling our render_layer. */
         struct yetty_yrender_viewport vp = self->viewport;
-        ydebug("render_layer: GPU SetViewport=(%.1f,%.1f,%.1f,%.1f) layer=%p",
-               vp.x, vp.y, vp.w, vp.h, (void *)layer);
+        ydebug("render_layer: GPU SetViewport=(%.1f,%.1f,%.1f,%.1f) layer=%p", vp.x, vp.y, vp.w,
+               vp.h, (void *)layer);
         wgpuRenderPassEncoderSetViewport(pass, vp.x, vp.y, vp.w, vp.h, 0.0f, 1.0f);
         wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y, (uint32_t)vp.w,
                                             (uint32_t)vp.h);
@@ -908,8 +906,7 @@ static bool render_target_texture_is_busy(const struct yetty_ydraw_target *self)
     return rt->present_in_flight != 0;
 }
 
-static struct yetty_ycore_void_result render_target_texture_present(
-    struct yetty_ydraw_target *self)
+static struct yetty_ycore_void_result render_target_texture_present(struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -992,6 +989,9 @@ static struct yetty_ycore_void_result render_target_texture_present(
     ydebug("present: AFTER  QueueWriteBuffer (uniforms)");
 
     /* Create bind group with this target's texture as source */
+    ydebug("present: blit source rt->view=%p rt->texture=%p (the view ygrid/clear "
+           "wrote to should match this)",
+           (void *)rt->view, (void *)rt->texture);
     WGPUTextureView source_views[MAX_BLEND_SOURCES];
     source_views[0] = rt->view;
     for (int i = 1; i < MAX_BLEND_SOURCES; i++) {
@@ -1110,8 +1110,8 @@ static struct yetty_ycore_void_result render_target_texture_present(
         }
         args->rt = rt;
         args->surface_view = surface_view;
-        struct yplatform_coro_ptr_result cr = yetty_yplatform_coro_spawn(
-            render_target_texture_present_coro, args, 0, "presenter");
+        struct yplatform_coro_ptr_result cr =
+            yetty_yplatform_coro_spawn(render_target_texture_present_coro, args, 0, "presenter");
         if (!YETTY_IS_OK(cr)) {
             free(args);
             wgpuTextureViewRelease(surface_view);

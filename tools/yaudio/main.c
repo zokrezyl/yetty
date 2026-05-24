@@ -2,7 +2,7 @@
  * tools/yaudio/main.c - audio analyzer GUI.
  *
  * Opens a window via yinit_run, hands the yinit_runtime to
- * yetty_yruntime_create for the standard adapter / device / queue /
+ * yetty_yframework_create for the standard adapter / device / queue /
  * allocator / msdf / event-loop / render-target bring-up (same code
  * path the yetty terminal uses), then attaches a yui with a yplot
  * widget showing the RMS envelope and Prev/Next buttons that pan
@@ -13,7 +13,7 @@
  */
 
 #include <yetty/yinit/yinit.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yaudio/wav.h>
 #include <yetty/yaudio/envelope.h>
 #include <yetty/yaudio/intervals.h>
@@ -57,7 +57,7 @@ struct yaudio_app {
 
     /* Generic GPU/event/render bring-up — owned here, lives for the
      * lifetime of the worker. yui borrows everything through ctx.runtime. */
-    struct yetty_yruntime         *runtime;
+    struct yetty_yframework         *runtime;
     struct yetty_context           ctx;
 
     /* Render-target alias for the loop (= runtime->render_target). */
@@ -626,7 +626,7 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
     case YETTY_YCORE_RESIZE:
         /* Mirror the new size into the runtime + texture target so
          * surface present uses the live framebuffer dims. */
-        yetty_yruntime_reconfigure_surface(app->runtime,
+        yetty_yframework_reconfigure_surface(app->runtime,
                                            (uint32_t)ev->resize.width,
                                            (uint32_t)ev->resize.height);
         if (app->render_target && app->render_target->ops->resize) {
@@ -739,8 +739,8 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
      * main uses — adapter, device, queue, allocator, msdf generator,
      * surface configuration, event loop, render target. The runtime
      * owns all of it; we just borrow via app->ctx.runtime->X. */
-    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(rt);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yrt_res, "yaudio: yruntime_create failed");
+    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(rt);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, yrt_res, "yaudio: yframework_create failed");
     app->runtime           = yrt_res.value;
     app->ctx.runtime       = app->runtime;
     app->ctx.pty_factory   = NULL;          /* yaudio has no terminal */
@@ -786,7 +786,7 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
      * then the runtime (render target, msdf, allocator, event loop,
      * surface, queue, device, adapter, in reverse-creation order). */
     if (app->yui)     yetty_yui_destroy(app->yui);
-    if (app->runtime) yetty_yruntime_destroy(app->runtime);
+    if (app->runtime) yetty_yframework_destroy(app->runtime);
 
     yetty_yaudio_intervals_destroy(app->iv);
     yetty_yaudio_envelope_destroy(app->env);

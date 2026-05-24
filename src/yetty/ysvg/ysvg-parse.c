@@ -120,7 +120,9 @@ static enum yetty_ysvg_elem elem_lookup(const char *name)
 {
     const char *local = name;
     const char *colon = strchr(name, ':');
-    if (colon) local = colon + 1;
+    if (colon) {
+        local = colon + 1;
+    }
     for (size_t i = 0; i < sizeof(k_elems) / sizeof(k_elems[0]); i++) {
         if (strcmp(local, k_elems[i].name) == 0) {
             return (enum yetty_ysvg_elem)k_elems[i].code;
@@ -148,7 +150,9 @@ static struct yetty_ysvg_node *doc_alloc_node(struct yetty_ysvg_doc *doc)
     struct yetty_ysvg_node_chunk *c = doc->node_chunks;
     if (!c || c->used == YSVG_NODE_CHUNK_SIZE) {
         struct yetty_ysvg_node_chunk *nc = calloc(1, sizeof(struct yetty_ysvg_node_chunk));
-        if (!nc) return NULL;
+        if (!nc) {
+            return NULL;
+        }
         nc->next = doc->node_chunks;
         doc->node_chunks = nc;
         c = nc;
@@ -173,12 +177,18 @@ static void node_append_child(struct yetty_ysvg_node *parent, struct yetty_ysvg_
 /* Append a byte to a growable heap buffer. */
 static int buf_append(char **buf, size_t *len, size_t *cap, const char *src, size_t n)
 {
-    if (n == 0) return 0;
+    if (n == 0) {
+        return 0;
+    }
     if (*len + n + 1 > *cap) {
         size_t nc = *cap ? *cap : 16;
-        while (nc < *len + n + 1) nc *= 2;
+        while (nc < *len + n + 1) {
+            nc *= 2;
+        }
         char *nb = realloc(*buf, nc);
-        if (!nb) return -1;
+        if (!nb) {
+            return -1;
+        }
         *buf = nb;
         *cap = nc;
     }
@@ -266,14 +276,18 @@ static int handle_elemend(struct ysvg_parse_ctx *ctx)
     if (ctx->text_buf) {
         size_t s = 0, e = ctx->text_len;
         while (s < e && (ctx->text_buf[s] == ' ' || ctx->text_buf[s] == '\t' ||
-                         ctx->text_buf[s] == '\n' || ctx->text_buf[s] == '\r'))
+                         ctx->text_buf[s] == '\n' || ctx->text_buf[s] == '\r')) {
             s++;
+        }
         while (e > s && (ctx->text_buf[e - 1] == ' ' || ctx->text_buf[e - 1] == '\t' ||
-                         ctx->text_buf[e - 1] == '\n' || ctx->text_buf[e - 1] == '\r'))
+                         ctx->text_buf[e - 1] == '\n' || ctx->text_buf[e - 1] == '\r')) {
             e--;
+        }
         if (e > s) {
             size_t tl = e - s;
-            if (s > 0) memmove(ctx->text_buf, ctx->text_buf + s, tl);
+            if (s > 0) {
+                memmove(ctx->text_buf, ctx->text_buf + s, tl);
+            }
             ctx->text_buf[tl] = '\0';
             n->text = ctx->text_buf;
             n->text_len = tl;
@@ -410,27 +424,41 @@ struct yetty_ysvg_doc_ptr_result yetty_ysvg_parse(const char *src, size_t len)
         case YXML_PIEND:
             break;
         case YXML_ELEMSTART:
-            if (handle_elemstart(&ctx, x.elem) < 0) rc = -1;
+            if (handle_elemstart(&ctx, x.elem) < 0) {
+                rc = -1;
+            }
             break;
         case YXML_ELEMEND:
-            if (handle_elemend(&ctx) < 0) rc = -1;
+            if (handle_elemend(&ctx) < 0) {
+                rc = -1;
+            }
             break;
         case YXML_ATTRSTART:
-            if (handle_attrstart(&ctx, x.attr) < 0) rc = -1;
+            if (handle_attrstart(&ctx, x.attr) < 0) {
+                rc = -1;
+            }
             break;
         case YXML_ATTRVAL:
-            if (handle_attrval(&ctx, x.data) < 0) rc = -1;
+            if (handle_attrval(&ctx, x.data) < 0) {
+                rc = -1;
+            }
             break;
         case YXML_ATTREND:
-            if (handle_attrend(&ctx) < 0) rc = -1;
+            if (handle_attrend(&ctx) < 0) {
+                rc = -1;
+            }
             break;
         case YXML_CONTENT:
-            if (handle_content(&ctx, x.data) < 0) rc = -1;
+            if (handle_content(&ctx, x.data) < 0) {
+                rc = -1;
+            }
             break;
         default:
             break;
         }
-        if (rc < 0) break;
+        if (rc < 0) {
+            break;
+        }
     }
     if (rc == 0) {
         yxml_ret_t r = yxml_eof(&x);
@@ -456,7 +484,9 @@ struct yetty_ysvg_doc_ptr_result yetty_ysvg_parse(const char *src, size_t len)
 
 void yetty_ysvg_doc_destroy(struct yetty_ysvg_doc *doc)
 {
-    if (!doc) return;
+    if (!doc) {
+        return;
+    }
 
     for (struct yetty_ysvg_node_chunk *c = doc->node_chunks; c; c = c->next) {
         for (size_t i = 0; i < c->used; i++) {
@@ -487,9 +517,13 @@ void yetty_ysvg_doc_destroy(struct yetty_ysvg_doc *doc)
 const struct yetty_ysvg_attr *yetty_ysvg_attr_find(const struct yetty_ysvg_node *node,
                                                    enum yetty_ysvg_attr_key key)
 {
-    if (!node || key == YETTY_YSVG_ATTR_UNKNOWN) return NULL;
+    if (!node || key == YETTY_YSVG_ATTR_UNKNOWN) {
+        return NULL;
+    }
     for (size_t i = 0; i < node->attr_count; i++) {
-        if (node->attrs[i].key == key) return &node->attrs[i];
+        if (node->attrs[i].key == key) {
+            return &node->attrs[i];
+        }
     }
     return NULL;
 }
@@ -497,7 +531,9 @@ const struct yetty_ysvg_attr *yetty_ysvg_attr_find(const struct yetty_ysvg_node 
 const struct yetty_ysvg_attr *yetty_ysvg_attr_find_named(const struct yetty_ysvg_node *node,
                                                          const char *name)
 {
-    if (!node || !name) return NULL;
+    if (!node || !name) {
+        return NULL;
+    }
     size_t nl = strlen(name);
     for (size_t i = 0; i < node->attr_count; i++) {
         if (node->attrs[i].name_len == nl && memcmp(node->attrs[i].name, name, nl) == 0) {

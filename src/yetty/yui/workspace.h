@@ -26,8 +26,7 @@ YETTY_YRESULT_DECLARE(yetty_yui_workspace_ptr, struct yetty_yui_workspace *);
  * on the identifier without a discovery round-trip. */
 struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create(void);
 
-struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create_with_id(
-    yetty_ycore_object_id id);
+struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create_with_id(yetty_ycore_object_id id);
 
 struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_workspace *ws);
 
@@ -37,8 +36,9 @@ yetty_ycore_object_id yetty_yui_workspace_id(const struct yetty_yui_workspace *w
 
 /* Core operations. force_redraw forwarded to tile_render — see
  * yetty_yui_tile_render. */
-struct yetty_ycore_void_result yetty_yui_workspace_render(
-    struct yetty_yui_workspace *ws, struct yetty_ydraw_target *render_target, int force_redraw);
+struct yetty_ycore_void_result yetty_yui_workspace_render(struct yetty_yui_workspace *ws,
+                                                          struct yetty_ydraw_target *render_target,
+                                                          int force_redraw);
 
 struct yetty_ycore_void_result yetty_yui_workspace_resize(struct yetty_yui_workspace *ws,
                                                           float width, float height);
@@ -95,14 +95,15 @@ struct yetty_ycore_void_result yetty_yui_workspace_split_pane_with_ids(
 
 /* Chrome reports a splitter drag — update split_id's ratio and re-lay
  * out. No-op if split_id isn't found. */
-struct yetty_ycore_void_result yetty_yui_workspace_resize_split(
-    struct yetty_yui_workspace *ws, yetty_ycore_object_id split_id, float ratio);
+struct yetty_ycore_void_result yetty_yui_workspace_resize_split(struct yetty_yui_workspace *ws,
+                                                                yetty_ycore_object_id split_id,
+                                                                float ratio);
 
 /* Append an empty pane to a workspace that has no root yet. The pane is
  * created with the caller-supplied id (chrome pre-mints it). Today only
  * used for the first-pane-in-a-fresh-workspace path. */
-struct yetty_ycore_void_result yetty_yui_workspace_create_first_pane(
-    struct yetty_yui_workspace *ws, yetty_ycore_object_id pane_id);
+struct yetty_ycore_void_result yetty_yui_workspace_create_first_pane(struct yetty_yui_workspace *ws,
+                                                                     yetty_ycore_object_id pane_id);
 
 struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_workspace *ws,
                                                               yetty_ycore_object_id tile_id);

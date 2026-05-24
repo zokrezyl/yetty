@@ -62,7 +62,8 @@ static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_platform_pty
 static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_platform_pty *self,
                                                         const char *data, size_t len);
 static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_platform_pty *self,
-                                                         uint32_t cols, uint32_t rows);
+                                                         uint32_t cols, uint32_t rows,
+                                                         uint32_t pixel_w, uint32_t pixel_h);
 static struct yetty_ycore_void_result tinyemu_pty_stop(struct yetty_platform_pty *self);
 static struct yetty_platform_pty_pipe_source *tinyemu_pty_pipe_source(
     struct yetty_platform_pty *self);
@@ -521,7 +522,8 @@ static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_platform_pt
 }
 
 static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_platform_pty *self,
-                                                         uint32_t cols, uint32_t rows)
+                                                         uint32_t cols, uint32_t rows,
+                                                         uint32_t pixel_w, uint32_t pixel_h)
 {
     struct yetty_yplatform_tinyemu_pty *pty =
         container_of(self, struct yetty_yplatform_tinyemu_pty, base);
@@ -679,7 +681,8 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
             close(pty->pty_pipe[0]);
             close(pty->pty_pipe[1]);
             free(pty);
-            return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to prepare temu cfg under config dir");
+            return YETTY_ERR(yetty_yplatform_pty_ptr,
+                             "failed to prepare temu cfg under config dir");
         }
 
         pty->config_path = strdup(cfg_path);

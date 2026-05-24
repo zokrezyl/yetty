@@ -20,9 +20,13 @@
 #include <yetty/yrdawn/server.h>
 #include <yetty/yrdawn/wire.h>
 
-uint32_t yrdawn_server_dispatch(void *ctx, uint32_t method_id, uint32_t req_id,
-                                const void *body, size_t body_len)
+uint32_t yrdawn_server_dispatch(void *ctx, uint32_t method_id, uint32_t req_id, const void *body,
+                                size_t body_len)
 {
-    (void)ctx; (void)method_id; (void)req_id; (void)body; (void)body_len;
+    (void)ctx;
+    (void)method_id;
+    (void)req_id;
+    (void)body;
+    (void)body_len;
     return YETTY_YRDAWN_REPLY_UNKNOWN_METHOD;
 }

@@ -78,8 +78,8 @@ static float find_descendant_img_width(struct yetty_ylexbor *r, uint32_t idx, in
 
 /* Helper — return the seg index covering byte offset `off`. Linear walk
  * from `start_hint` since segs are appended in order. */
-static size_t seg_index_at(const struct yetty_ylexbor_inline_seg *segs, size_t segs_count,
-                           size_t n, size_t off, size_t start_hint)
+static size_t seg_index_at(const struct yetty_ylexbor_inline_seg *segs, size_t segs_count, size_t n,
+                           size_t off, size_t start_hint)
 {
     if (segs_count == 0) {
         return 0;
@@ -268,13 +268,11 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
             int break_after = 0;
             if (c == ' ') {
                 break_after = 1;
-            } else if (step == 2 && c == 0xC2 && k + 1 < n &&
-                       (unsigned char)text[k + 1] == 0xAD) {
+            } else if (step == 2 && c == 0xC2 && k + 1 < n && (unsigned char)text[k + 1] == 0xAD) {
                 /* U+00AD SOFT HYPHEN */
                 zero_width = 1;
                 break_after = 1;
-            } else if (step == 3 && c == 0xE2 && k + 2 < n &&
-                       (unsigned char)text[k + 1] == 0x80) {
+            } else if (step == 3 && c == 0xE2 && k + 2 < n && (unsigned char)text[k + 1] == 0x80) {
                 unsigned char c2 = (unsigned char)text[k + 2];
                 if (c2 == 0x8B || c2 == 0x8C || c2 == 0x8D) {
                     /* U+200B / U+200C / U+200D — zero-width
@@ -410,8 +408,7 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
                     break;
                 }
             }
-            float frag_w =
-                yetty_ylexbor_naive_text_width(text + s0, s1 - s0, font_size);
+            float frag_w = yetty_ylexbor_naive_text_width(text + s0, s1 - s0, font_size);
             /* When justify is on, this fragment's effective render
 			 * width grows by word_spacing per space — bump frag_w so
 			 * the next fragment in the same line starts where the
@@ -448,9 +445,8 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
                 continue;
             }
             uint32_t reuse = first_fragment_emitted ? 0 : idx;
-            (void)emit_fragment(r, reuse, frag_x, y, frag_w + frag_extra, line_height,
-                                font_size, text + s0, s1 - s0, &segs[si],
-                                justify_word_spacing);
+            (void)emit_fragment(r, reuse, frag_x, y, frag_w + frag_extra, line_height, font_size,
+                                text + s0, s1 - s0, &segs[si], justify_word_spacing);
             first_fragment_emitted = 1;
             frag_x += frag_w + frag_extra;
             seg_hint = si;
@@ -537,8 +533,7 @@ static float layout_flex(struct yetty_ylexbor *r, uint32_t idx, float origin_x, 
 	 * separately and don't participate in the flex line). */
     uint32_t children[YL_FLEX_MAX_CHILDREN];
     uint32_t n_children = 0;
-    for (uint32_t cidx = self->first_child; cidx != 0;
-         cidx = r->boxes.data[cidx].next_sibling) {
+    for (uint32_t cidx = self->first_child; cidx != 0; cidx = r->boxes.data[cidx].next_sibling) {
         if (n_children >= YL_FLEX_MAX_CHILDREN) {
             break;
         }
@@ -734,8 +729,7 @@ static float layout_flex(struct yetty_ylexbor *r, uint32_t idx, float origin_x, 
         }
     }
 
-    float total_main =
-        (column_dir ? cursor - content_origin_y : 0.0f);
+    float total_main = (column_dir ? cursor - content_origin_y : 0.0f);
     if (!column_dir) {
         /* Row direction — cross_budget is the row's vertical size. */
         return cross_budget + pad_top + pad_bottom;
@@ -783,8 +777,8 @@ static float layout_flex_column(struct yetty_ylexbor *r, uint32_t idx, float ori
  * which is wrong but also rare in real content). */
 typedef void (*table_row_visitor)(void *ctx, uint32_t row_idx);
 
-static void collect_table_rows(struct yetty_ylexbor *r, uint32_t idx,
-                               table_row_visitor visit, void *ctx)
+static void collect_table_rows(struct yetty_ylexbor *r, uint32_t idx, table_row_visitor visit,
+                               void *ctx)
 {
     for (uint32_t cidx = r->boxes.data[idx].first_child; cidx != 0;
          cidx = r->boxes.data[cidx].next_sibling) {
@@ -851,8 +845,7 @@ static uint32_t row_cell_count(struct yetty_ylexbor *r, uint32_t row_idx)
  * the whole row. */
 #define YL_CELL_MEASURE_BUDGET 256
 
-static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_idx,
-                                        int *budget)
+static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_idx, int *budget)
 {
     if (*budget <= 0) {
         return 0;
@@ -950,7 +943,9 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
     if (!col_max) {
         /* Fall back to even split on OOM. */
         float col_w = content_width / (float)cols;
-        if (col_w < 1.0f) col_w = 1.0f;
+        if (col_w < 1.0f) {
+            col_w = 1.0f;
+        }
         for (size_t i = 0; i < rows.count; i++) {
             uint32_t row_idx = rows.rows[i];
             struct yetty_ylexbor_box *row = &r->boxes.data[row_idx];
@@ -970,7 +965,9 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
             if (r->boxes.data[cidx].kind != YL_BOX_BLOCK) {
                 continue;
             }
-            if (col >= cols) break;
+            if (col >= cols) {
+                break;
+            }
             int budget = YL_CELL_MEASURE_BUDGET;
             float w = measure_cell_content_width(r, cidx, &budget);
             /* +small padding budget so cells aren't packed to the
@@ -1018,7 +1015,9 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
         float remaining = content_width - floor_used;
         float scale_basis = 0;
         for (uint32_t i = 0; i < cols; i++) {
-            if (col_w[i] < 0) scale_basis += col_max[i];
+            if (col_w[i] < 0) {
+                scale_basis += col_max[i];
+            }
         }
         if (scale_basis > 0 && remaining > 0) {
             float scale = remaining / scale_basis;
@@ -1052,14 +1051,15 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
         float row_h = 0;
         float cell_x = content_origin_x;
         uint32_t col = 0;
-        for (uint32_t cidx = row->first_child; cidx != 0;
-             cidx = r->boxes.data[cidx].next_sibling) {
+        for (uint32_t cidx = row->first_child; cidx != 0; cidx = r->boxes.data[cidx].next_sibling) {
             struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
             if (c->kind != YL_BOX_BLOCK) {
                 continue;
             }
             float this_col_w = (col < cols) ? col_w[col] : (content_width / (float)cols);
-            if (this_col_w < 1.0f) this_col_w = 1.0f;
+            if (this_col_w < 1.0f) {
+                this_col_w = 1.0f;
+            }
             c->x = cell_x;
             c->y = cursor_y;
             c->w = this_col_w;
@@ -1078,8 +1078,7 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
         /* Equalise cell heights to the row's tallest cell so adjacent
 		 * cells line up at the bottom edge — same convention CSS uses
 		 * for vertical-align: top. */
-        for (uint32_t cidx = row->first_child; cidx != 0;
-             cidx = r->boxes.data[cidx].next_sibling) {
+        for (uint32_t cidx = row->first_child; cidx != 0; cidx = r->boxes.data[cidx].next_sibling) {
             struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
             if (c->kind != YL_BOX_BLOCK) {
                 continue;
@@ -1108,8 +1107,8 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
  * patterns that real pages use floats for. Anything fancier degrades
  * to floats laying out under one another, which still reads. */
 struct yl_float_ctx {
-    float left_bottom;   /* absolute y where the active left float ends */
-    float left_width;    /* horizontal pixels consumed by the left float
+    float left_bottom; /* absolute y where the active left float ends */
+    float left_width;  /* horizontal pixels consumed by the left float
 	                      * at any y < left_bottom */
     float right_bottom;
     float right_width;
@@ -1228,8 +1227,7 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
                     for (uint32_t scan = c->first_child; scan != 0;
                          scan = r->boxes.data[scan].next_sibling) {
                         struct yetty_ylexbor_box *cs = &r->boxes.data[scan];
-                        if (cs->kind == YL_BOX_INLINE_IMAGE && cs->w > 0.0f &&
-                            cs->w > img_w) {
+                        if (cs->kind == YL_BOX_INLINE_IMAGE && cs->w > 0.0f && cs->w > img_w) {
                             img_w = cs->w;
                         }
                     }

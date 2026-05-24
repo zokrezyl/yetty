@@ -1,23 +1,23 @@
 /*
- * imgui_impl_yetty.cpp — Dear ImGui ↔ yetty bridge (multi-card).
+ * imgui_impl_yetty.cpp — Dear ImGui ↔ yetty bridge (multi-figure).
  *
- * Every "card" is one placed sub-region of the terminal grid. Each
- * card carries its own ImGuiContext (own DisplaySize, own font atlas,
+ * Every ymgui figure is one placed sub-region of the terminal pane.
+ * Each carries its own ImGuiContext (own DisplaySize, own font atlas,
  * own focus state), so an app can render multiple independent ImGui
  * UIs side by side. Wire details live in <yetty/ymgui/wire.h>.
  *
- * Renderer flow per card:
- *   - CreateCard ships a CARD_PLACE OSC with grid coords; the server
- *     resolves rolling-row anchor and ships back a RESIZE confirming
- *     pixel size.
- *   - BeginCardFrame makes that card's context current; first time
- *     also uploads the card's font atlas via --tex.
- *   - RenderCardDrawData serializes ImDrawData into wire format and
- *     sends a --frame OSC tagged with the card_id.
+ * Renderer flow per figure:
+ *   - CreateFigure ships a CREATE_CHILD admin record on the figure-tree
+ *     OSC (yfigure wire) when YMGUI_USE_FIGURE_TREE=1, or a legacy
+ *     CARD_PLACE on the per-kind OSC otherwise.
+ *   - BeginFigureFrame makes that figure's context current; first time
+ *     also uploads the figure's font atlas.
+ *   - RenderFigureDrawData serializes ImDrawData into wire format and
+ *     ships it as a per-figure record tagged with the figure_id.
  *
  * Input flow:
- *   - The server hit-tests each event against the live cards and
- *     ships the result with a card_id. The bridge looks up the card,
+ *   - The server hit-tests each event against the live figures and
+ *     ships the result with a figure_id. The bridge looks up the figure,
  *     switches its ImGuiContext, calls AddXxxEvent.
  */
 
@@ -26,8 +26,11 @@
 
 #include <yetty/yclient/event-loop.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yfigure/wire.h>
+#include <yetty/yterm/osc-codes.h>
 
 #include <float.h>
 #include <stdio.h>
@@ -46,6 +49,7 @@
 #else
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 #define YMGUI_STDOUT_FD STDOUT_FILENO
@@ -53,10 +57,10 @@
 #endif
 
 /*===========================================================================
- * Per-card state
+ * Per-figure state
  *=========================================================================*/
 
-struct ymgui_card_state {
+struct ymgui_figure_state {
     uint32_t id;
     ImGuiContext *ctx;
     bool atlas_uploaded;
@@ -64,7 +68,7 @@ struct ymgui_card_state {
      * the first RESIZE confirms placement. */
     float w_pixels;
     float h_pixels;
-    /* Latest grid coords / cell counts, kept so MoveCard can re-emit
+    /* Latest grid coords / cell counts, kept so MoveFigure can re-emit
      * CARD_PLACE without re-asking the app. */
     int col;
     int row;
@@ -91,11 +95,18 @@ struct ymgui_impl_state {
     struct termios saved_termios;
 #endif
 
-    std::vector<ymgui_card_state *> cards;
-    uint32_t next_auto_card_id;
-    uint32_t focused_card_id;
+    std::vector<ymgui_figure_state *> figures;
+    uint32_t next_auto_figure_id;
+    uint32_t focused_figure_id;
     /* Wire-dedup flags (Stage 1 / Stage 2). Both default ON. */
     uint32_t opt_flags;
+    /* Cell size used to translate (col, row, w_cells, h_cells) supplied
+     * by the app into an absolute pixel rect at CREATE_CHILD time. The
+     * figure-tree wire is pixel-addressed; there's no server-side cell
+     * resolution any more. Defaults are conservative and can be
+     * overridden via env YMGUI_CELL_PX=WxH. */
+    float cell_w_px;
+    float cell_h_px;
 };
 
 static struct ymgui_impl_state g_state = {
@@ -110,16 +121,24 @@ static struct ymgui_impl_state g_state = {
     {},
     1u,
     0u,
-    YETTY_YMGUI_OPT_DEDUP_CMDLIST | YETTY_YMGUI_OPT_DEDUP_CMD,
+    /* Server-side dedup cache (REPEAT / CMD_DIFF rehydration) hasn't been
+     * ported to the figure-tree path yet. Until it is, the frontend MUST
+     * emit SLOT_FULL every frame — otherwise the second frame's REPEAT
+     * slot reaches a server that has no prior bytes to copy from, the
+     * measure returns zero geometry, the figure render bails, and the
+     * pane background erases the previous frame's pixels. */
+    0u,
+    8.0f,
+    16.0f,
 };
 
 /*===========================================================================
  * Helpers
  *=========================================================================*/
 
-static ymgui_card_state *find_card(uint32_t id)
+static ymgui_figure_state *find_figure(uint32_t id)
 {
-    for (auto *c : g_state.cards) {
+    for (auto *c : g_state.figures) {
         if (c->id == id) {
             return c;
         }
@@ -152,6 +171,160 @@ static int flush_yface_to_fd(void)
     return 0;
 }
 
+/*===========================================================================
+ * Figure-tree record helpers.
+ *
+ * Each call ships ONE yfigure record on YETTY_OSC_YCOMPOSITOR_BIN.
+ * The record layout is:
+ *
+ *   u32 length        # payload bytes after this header
+ *   u32 id            # 0 = admin, !=0 = child figure id
+ *   bytes payload[length]
+ *
+ * For admin records (id=0), the payload starts with u32 admin_op
+ * (see yetty_yfigure_wire_admin_op). For child-targeted records, the
+ * payload begins with u32 sub_op (see yetty_ymgui_figure_sub_op).
+ *=========================================================================*/
+
+static bool emit_record(uint32_t id, bool compressed,
+                        const void *body, size_t body_len)
+{
+    if (!g_state.yface_out) {
+        return false;
+    }
+    struct yetty_yfigure_wire_record hdr = {(uint32_t)body_len, id};
+    if (!yetty_yface_start_write(g_state.yface_out, YETTY_OSC_YCOMPOSITOR_BIN,
+                                 compressed ? 1 : 0, /*args=*/NULL, 0)
+             .ok) {
+        return false;
+    }
+    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) {
+        return false;
+    }
+    if (body_len > 0 && !yetty_yface_write(g_state.yface_out, body, body_len).ok) {
+        return false;
+    }
+    if (!yetty_yface_finish_write(g_state.yface_out).ok) {
+        return false;
+    }
+    return flush_yface_to_fd() >= 0;
+}
+
+/* ADMIN_CREATE_CHILD with kind=YMGUI and no init payload. The receiver
+ * uses `rect` as the figure's absolute target rect. */
+static bool emit_admin_create_child_ymgui(uint32_t child_id,
+                                          float x0, float y0, float x1, float y1)
+{
+    uint8_t body[8 + 4 + 4 + 16 + 4]; /* admin_op + child_id + kind + rect[4] + init_size */
+    uint32_t admin_op = YETTY_YFIGURE_ADMIN_CREATE_CHILD;
+    uint32_t kind = YETTY_YFIGURE_KIND_YMGUI;
+    uint32_t init_size = 0;
+    float r[4] = {x0, y0, x1, y1};
+    size_t off = 0;
+    memcpy(body + off, &admin_op, 4); off += 4;
+    memcpy(body + off, &child_id, 4); off += 4;
+    memcpy(body + off, &kind, 4);     off += 4;
+    memcpy(body + off, r, 16);        off += 16;
+    memcpy(body + off, &init_size, 4); off += 4;
+    return emit_record(/*id=*/0, /*compressed=*/false, body, off);
+}
+
+/* ADMIN_SET_CHILD_RECT — update an existing figure's rect. */
+static bool emit_admin_set_child_rect(uint32_t child_id,
+                                      float x0, float y0, float x1, float y1)
+{
+    uint8_t body[4 + 4 + 16];
+    uint32_t admin_op = YETTY_YFIGURE_ADMIN_SET_CHILD_RECT;
+    float r[4] = {x0, y0, x1, y1};
+    memcpy(body + 0, &admin_op, 4);
+    memcpy(body + 4, &child_id, 4);
+    memcpy(body + 8, r, 16);
+    return emit_record(/*id=*/0, /*compressed=*/false, body, sizeof(body));
+}
+
+/* ADMIN_DELETE_CHILD. */
+static bool emit_admin_delete_child(uint32_t child_id)
+{
+    uint8_t body[4 + 4];
+    uint32_t admin_op = YETTY_YFIGURE_ADMIN_DELETE_CHILD;
+    memcpy(body + 0, &admin_op, 4);
+    memcpy(body + 4, &child_id, 4);
+    return emit_record(/*id=*/0, /*compressed=*/false, body, sizeof(body));
+}
+
+/* Read the PTY winsize. yetty's terminal_create pushes ws_xpixel /
+ * ws_ypixel (full pane pixel area) AND ws_col / ws_row (cell counts);
+ * we prefer the pixel area when non-zero. Returns false if the ioctl
+ * fails — out_fd not a tty, headless test, … */
+static bool query_pane_winsize(uint32_t *cols, uint32_t *rows,
+                               uint32_t *pixel_w, uint32_t *pixel_h)
+{
+#ifdef _WIN32
+    (void)cols; (void)rows; (void)pixel_w; (void)pixel_h;
+    return false;
+#else
+    struct winsize ws = {};
+    int fd = g_state.out_fd >= 0 ? g_state.out_fd : STDOUT_FILENO;
+    if (ioctl(fd, TIOCGWINSZ, &ws) != 0 || ws.ws_col == 0 || ws.ws_row == 0) {
+        return false;
+    }
+    *cols = ws.ws_col;
+    *rows = ws.ws_row;
+    *pixel_w = ws.ws_xpixel;
+    *pixel_h = ws.ws_ypixel;
+    return true;
+#endif
+}
+
+/* Pre-compute the pixel rect a figure maps to when the producer emits in
+ * figure-tree mode. Uses the figure's last-known w_pixels/h_pixels when
+ * available (set by SC_RESIZE) otherwise falls back to TIOCGWINSZ-derived
+ * pane dims. The placement still anchors at (col*cell_w, row*cell_h) —
+ * the host has no col/row concept on the new wire, so the producer
+ * takes responsibility for the layout. w_cells/h_cells == 0 means "fill
+ * to the right/bottom edge" — resolved against TIOCGWINSZ: pixel area
+ * first (yetty sets ws_xpixel/ws_ypixel after the terminal grid is
+ * laid out), cells × default cell size as fallback. */
+static void figure_tree_rect_for_figure(const ymgui_figure_state *c,
+                                      float *x0, float *y0,
+                                      float *x1, float *y1)
+{
+    *x0 = (float)c->col * g_state.cell_w_px;
+    *y0 = (float)c->row * g_state.cell_h_px;
+
+    uint32_t pane_cols = 0, pane_rows = 0;
+    uint32_t pane_px_w = 0, pane_px_h = 0;
+    bool have_pane = (c->w_cells == 0 || c->h_cells == 0)
+                     && query_pane_winsize(&pane_cols, &pane_rows,
+                                           &pane_px_w, &pane_px_h);
+
+    float w_px, h_px;
+    if (c->w_pixels > 0.0f) {
+        w_px = c->w_pixels;
+    } else if (c->w_cells == 0 && have_pane && pane_px_w > 0
+               && pane_px_w > (uint32_t)(*x0)) {
+        w_px = (float)pane_px_w - *x0;
+    } else if (c->w_cells == 0 && have_pane && pane_cols > (uint32_t)c->col) {
+        w_px = (float)(pane_cols - (uint32_t)c->col) * g_state.cell_w_px;
+    } else {
+        w_px = (float)c->w_cells * g_state.cell_w_px;
+    }
+
+    if (c->h_pixels > 0.0f) {
+        h_px = c->h_pixels;
+    } else if (c->h_cells == 0 && have_pane && pane_px_h > 0
+               && pane_px_h > (uint32_t)(*y0)) {
+        h_px = (float)pane_px_h - *y0;
+    } else if (c->h_cells == 0 && have_pane && pane_rows > (uint32_t)c->row) {
+        h_px = (float)(pane_rows - (uint32_t)c->row) * g_state.cell_h_px;
+    } else {
+        h_px = (float)c->h_cells * g_state.cell_h_px;
+    }
+
+    *x1 = *x0 + w_px;
+    *y1 = *y0 + h_px;
+}
+
 /* Build a no-args OSC envelope around `payload` and ship it. flush_yface
  * blocks until the entire envelope is drained, so every emit either
  * fully reaches the server or returns an error. */
@@ -182,8 +355,8 @@ void yetty_ymgui_ImGui_ImplYetty_SetOptimizations(uint32_t flags)
 {
     g_state.opt_flags = flags;
     /* Hash caches are now stale w.r.t. the new policy — drop them so the
-     * next frame starts fresh on every card. */
-    for (auto *c : g_state.cards) {
+     * next frame starts fresh on every figure. */
+    for (auto *c : g_state.figures) {
         c->prev_cl_hashes.clear();
         c->prev_cmd_hashes.clear();
     }
@@ -222,20 +395,31 @@ bool yetty_ymgui_ImGui_ImplYetty_Init(void)
         }
         g_state.yface_in = yr.value;
     }
+
+    {
+        const char *env = getenv("YMGUI_CELL_PX");
+        if (env && env[0]) {
+            float w = 0.0f, h = 0.0f;
+            if (sscanf(env, "%fx%f", &w, &h) == 2 && w > 0.0f && h > 0.0f) {
+                g_state.cell_w_px = w;
+                g_state.cell_h_px = h;
+            }
+        }
+    }
     return true;
 }
 
 void yetty_ymgui_ImGui_ImplYetty_Shutdown(void)
 {
-    /* Destroy any remaining cards (does NOT emit CARD_REMOVE — that's
+    /* Destroy any remaining figures (does NOT emit figure removal — that's
      * the app's call via Clear()). */
-    for (auto *c : g_state.cards) {
+    for (auto *c : g_state.figures) {
         if (c->ctx) {
             ImGui::DestroyContext(c->ctx);
         }
         delete c;
     }
-    g_state.cards.clear();
+    g_state.figures.clear();
 
     if (g_state.yface_out) {
         yetty_yface_destroy(g_state.yface_out);
@@ -249,35 +433,36 @@ void yetty_ymgui_ImGui_ImplYetty_Shutdown(void)
 
 void yetty_ymgui_ImGui_ImplYetty_Clear(bool keep_visible)
 {
-    struct yetty_ymgui_wire_clear msg = {};
-    msg.magic = YMGUI_WIRE_MAGIC_CLEAR;
-    msg.version = YMGUI_WIRE_VERSION;
-    msg.card_id = YMGUI_CARD_ID_NONE;
-    msg.flags = keep_visible ? YMGUI_CLEAR_FLAG_KEEP_VISIBLE : 0u;
-    emit_osc(YMGUI_OSC_CS_CLEAR, /*compressed=*/false, &msg, sizeof(msg));
+    /* Figure-tree CLEAR_ALL admin record on the root. keep_visible has
+     * no archive path yet on the new wire — always drop. */
+    (void)keep_visible;
+    uint8_t body[4];
+    uint32_t admin_op = YETTY_YFIGURE_ADMIN_CLEAR_ALL;
+    memcpy(body, &admin_op, 4);
+    emit_record(/*id=*/0, /*compressed=*/false, body, sizeof(body));
 }
 
 /*===========================================================================
- * Card lifecycle
+ * Figure lifecycle
  *=========================================================================*/
 
-uint32_t yetty_ymgui_ImGui_ImplYetty_CreateCard(uint32_t card_id, int col, int row,
+uint32_t yetty_ymgui_ImGui_ImplYetty_CreateFigure(uint32_t figure_id, int col, int row,
                                                 uint32_t w_cells, uint32_t h_cells)
 {
-    if (card_id == YMGUI_CARD_ID_NONE) {
-        card_id = g_state.next_auto_card_id++;
-    } else if (card_id >= g_state.next_auto_card_id) {
-        g_state.next_auto_card_id = card_id + 1u;
+    if (figure_id == YMGUI_FIGURE_ID_NONE) {
+        figure_id = g_state.next_auto_figure_id++;
+    } else if (figure_id >= g_state.next_auto_figure_id) {
+        g_state.next_auto_figure_id = figure_id + 1u;
     }
 
-    if (find_card(card_id)) {
+    if (find_figure(figure_id)) {
         /* Already exists — treat as move. */
-        yetty_ymgui_ImGui_ImplYetty_MoveCard(card_id, col, row, w_cells, h_cells);
-        return card_id;
+        yetty_ymgui_ImGui_ImplYetty_MoveFigure(figure_id, col, row, w_cells, h_cells);
+        return figure_id;
     }
 
-    auto *c = new ymgui_card_state{};
-    c->id = card_id;
+    auto *c = new ymgui_figure_state{};
+    c->id = figure_id;
     c->ctx = ImGui::CreateContext();
     c->col = col;
     c->row = row;
@@ -285,9 +470,9 @@ uint32_t yetty_ymgui_ImGui_ImplYetty_CreateCard(uint32_t card_id, int col, int r
     c->h_cells = h_cells;
     c->w_pixels = 0.0f;
     c->h_pixels = 0.0f;
-    g_state.cards.push_back(c);
+    g_state.figures.push_back(c);
 
-    /* Configure the card's ImGui context defaults. */
+    /* Configure the figure's ImGui context defaults. */
     {
         ImGuiContext *prev = ImGui::GetCurrentContext();
         ImGui::SetCurrentContext(c->ctx);
@@ -301,25 +486,22 @@ uint32_t yetty_ymgui_ImGui_ImplYetty_CreateCard(uint32_t card_id, int col, int r
         ImGui::SetCurrentContext(prev);
     }
 
-    /* Send CARD_PLACE — server allocates the rolling-row anchor and
-     * advances the cursor below the card. */
-    struct yetty_ymgui_wire_card_place msg = {};
-    msg.magic = YMGUI_WIRE_MAGIC_CARD_PLACE;
-    msg.version = YMGUI_WIRE_VERSION;
-    msg.card_id = card_id;
-    msg.col = col;
-    msg.row = row;
-    msg.w_cells = w_cells;
-    msg.h_cells = h_cells;
-    emit_osc(YMGUI_OSC_CS_CARD_PLACE, /*compressed=*/false, &msg, sizeof(msg));
-
-    return card_id;
+    /* Producer computes the pixel rect and ships a single CREATE_CHILD
+     * on OSC 630000. Placement is purely client-driven — no rolling-row
+     * anchor, no cursor advance, no server-side SC_RESIZE echo. We set
+     * DisplaySize ourselves so the app's "skip until DisplaySize is
+     * real" gate clears immediately. */
+    float x0, y0, x1, y1;
+    figure_tree_rect_for_figure(c, &x0, &y0, &x1, &y1);
+    emit_admin_create_child_ymgui(figure_id, x0, y0, x1, y1);
+    yetty_ymgui_ImGui_ImplYetty_OnFigureResize(figure_id, x1 - x0, y1 - y0);
+    return figure_id;
 }
 
-void yetty_ymgui_ImGui_ImplYetty_MoveCard(uint32_t card_id, int col, int row, uint32_t w_cells,
+void yetty_ymgui_ImGui_ImplYetty_MoveFigure(uint32_t figure_id, int col, int row, uint32_t w_cells,
                                           uint32_t h_cells)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
@@ -327,59 +509,53 @@ void yetty_ymgui_ImGui_ImplYetty_MoveCard(uint32_t card_id, int col, int row, ui
     c->row = row;
     c->w_cells = w_cells;
     c->h_cells = h_cells;
-    struct yetty_ymgui_wire_card_place msg = {};
-    msg.magic = YMGUI_WIRE_MAGIC_CARD_PLACE;
-    msg.version = YMGUI_WIRE_VERSION;
-    msg.card_id = card_id;
-    msg.col = col;
-    msg.row = row;
-    msg.w_cells = w_cells;
-    msg.h_cells = h_cells;
-    emit_osc(YMGUI_OSC_CS_CARD_PLACE, /*compressed=*/false, &msg, sizeof(msg));
+    /* Drop the cached pixel size so the new cell counts drive the rect
+     * rather than the stale dimensions of the previous frame. */
+    c->w_pixels = 0.0f;
+    c->h_pixels = 0.0f;
+    float x0, y0, x1, y1;
+    figure_tree_rect_for_figure(c, &x0, &y0, &x1, &y1);
+    emit_admin_set_child_rect(figure_id, x0, y0, x1, y1);
+    yetty_ymgui_ImGui_ImplYetty_OnFigureResize(figure_id, x1 - x0, y1 - y0);
 }
 
-void yetty_ymgui_ImGui_ImplYetty_RemoveCard(uint32_t card_id, bool keep_visible)
+void yetty_ymgui_ImGui_ImplYetty_RemoveFigure(uint32_t figure_id, bool keep_visible)
 {
-    /* Tell the server first so it can archive the last frame. */
-    struct yetty_ymgui_wire_card_remove msg = {};
-    msg.magic = YMGUI_WIRE_MAGIC_CARD_REMOVE;
-    msg.version = YMGUI_WIRE_VERSION;
-    msg.card_id = card_id;
-    msg.flags = keep_visible ? YMGUI_CLEAR_FLAG_KEEP_VISIBLE : 0u;
-    emit_osc(YMGUI_OSC_CS_CARD_REMOVE, /*compressed=*/false, &msg, sizeof(msg));
+    (void)keep_visible; /* no static-archive path yet on the new wire */
+    emit_admin_delete_child(figure_id);
 
     /* Then drop our local state. */
-    for (auto it = g_state.cards.begin(); it != g_state.cards.end(); ++it) {
-        if ((*it)->id == card_id) {
+    for (auto it = g_state.figures.begin(); it != g_state.figures.end(); ++it) {
+        if ((*it)->id == figure_id) {
             if ((*it)->ctx) {
                 ImGui::DestroyContext((*it)->ctx);
             }
             delete *it;
-            g_state.cards.erase(it);
+            g_state.figures.erase(it);
             break;
         }
     }
-    if (g_state.focused_card_id == card_id) {
-        g_state.focused_card_id = 0;
+    if (g_state.focused_figure_id == figure_id) {
+        g_state.focused_figure_id = 0;
     }
 }
 
-ImGuiContext *yetty_ymgui_ImGui_ImplYetty_GetCardContext(uint32_t card_id)
+ImGuiContext *yetty_ymgui_ImGui_ImplYetty_GetFigureContext(uint32_t figure_id)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     return c ? c->ctx : nullptr;
 }
 
-uint32_t yetty_ymgui_ImGui_ImplYetty_FocusedCard(void)
+uint32_t yetty_ymgui_ImGui_ImplYetty_FocusedFigure(void)
 {
-    return g_state.focused_card_id;
+    return g_state.focused_figure_id;
 }
 
 /*===========================================================================
- * Per-card frame
+ * Per-figure frame
  *=========================================================================*/
 
-static bool upload_card_atlas(ymgui_card_state *c)
+static bool upload_figure_atlas(ymgui_figure_state *c)
 {
     /* Caller has ImGui::SetCurrentContext(c->ctx). */
     ImGuiIO &io = ImGui::GetIO();
@@ -396,45 +572,50 @@ static bool upload_card_atlas(ymgui_card_state *c)
     struct yetty_ymgui_wire_tex hdr = {};
     hdr.magic = YMGUI_WIRE_MAGIC_TEX;
     hdr.version = YMGUI_WIRE_VERSION;
-    hdr.card_id = c->id;
+    hdr.figure_id = c->id;
     hdr.tex_id = YMGUI_TEX_ID_FONT_ATLAS;
     hdr.format = YMGUI_TEX_FMT_R8;
     hdr.width = (uint32_t)w;
     hdr.height = (uint32_t)h;
     hdr.total_size = (uint32_t)payload_sz;
 
-    if (!yetty_yface_start_write(g_state.yface_out, YMGUI_OSC_CS_TEX,
-                                 /*compressed=*/1, /*args=*/NULL, 0)
-             .ok) {
+    /* Ship the texture as one record targeted at the figure's child id.
+     * Record body = [u32 sub_op] + [yetty_ymgui_wire_tex hdr] + [pixels].
+     * The outer record length covers all three. */
+    uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD;
+    uint32_t body_len = (uint32_t)(sizeof(sub_op) + sizeof(hdr) + pixel_bytes);
+    struct yetty_yfigure_wire_record outer = {body_len, c->id};
+    if (!yetty_yface_start_write(g_state.yface_out, YETTY_OSC_YCOMPOSITOR_BIN,
+                                 /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return false;
     }
-    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) {
-        return false;
-    }
-    if (!yetty_yface_write(g_state.yface_out, pixels, pixel_bytes).ok) {
-        return false;
-    }
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) {
-        return false;
-    }
-    if (flush_yface_to_fd() < 0) {
-        return false;
-    }
+    if (!yetty_yface_write(g_state.yface_out, &outer, sizeof(outer)).ok) { return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, &sub_op, sizeof(sub_op)).ok) { return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) { return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, pixels, pixel_bytes).ok) { return false;
+}
+    if (!yetty_yface_finish_write(g_state.yface_out).ok) { return false;
+}
+    if (flush_yface_to_fd() < 0) { return false;
+}
 
     io.Fonts->SetTexID((ImTextureID)(intptr_t)YMGUI_TEX_ID_FONT_ATLAS);
     c->atlas_uploaded = true;
     return true;
 }
 
-void yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(uint32_t card_id)
+void yetty_ymgui_ImGui_ImplYetty_BeginFigureFrame(uint32_t figure_id)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
     ImGui::SetCurrentContext(c->ctx);
     if (!c->atlas_uploaded) {
-        upload_card_atlas(c);
+        upload_figure_atlas(c);
     }
 }
 
@@ -571,9 +752,9 @@ struct slot_plan {
      * the cache from scratch; SLOT_REPEAT keeps it as is. */
 };
 
-void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
+void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDrawData *draw_data)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
@@ -700,7 +881,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
     fh.version = YMGUI_WIRE_VERSION;
     fh.flags = (sizeof(ImDrawIdx) == 4) ? YMGUI_FRAME_FLAG_IDX32 : 0;
     fh.total_size = (uint32_t)total_size;
-    fh.card_id = card_id;
+    fh.figure_id = figure_id;
     fh.cmd_list_count = (uint32_t)cl_count;
     fh.display_pos_x = draw_data->DisplayPos.x;
     fh.display_pos_y = draw_data->DisplayPos.y;
@@ -709,11 +890,20 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
     fh.fb_scale_x = draw_data->FramebufferScale.x;
     fh.fb_scale_y = draw_data->FramebufferScale.y;
 
-    if (!yetty_yface_start_write(g_state.yface_out, YMGUI_OSC_CS_FRAME,
-                                 /*compressed=*/1, /*args=*/NULL, 0)
-             .ok) {
+    /* Ship the frame as one record targeted at the figure's child id.
+     * Payload = [u32 sub_op] + [yetty_ymgui_wire_frame] + cmd lists.
+     * Outer length covers the sub_op + the entire frame total_size. */
+    uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_FRAME;
+    uint32_t outer_len = (uint32_t)(sizeof(sub_op) + total_size);
+    struct yetty_yfigure_wire_record outer = {outer_len, figure_id};
+    if (!yetty_yface_start_write(g_state.yface_out, YETTY_OSC_YCOMPOSITOR_BIN,
+                                 /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return;
     }
+    if (!yetty_yface_write(g_state.yface_out, &outer, sizeof(outer)).ok) { return;
+}
+    if (!yetty_yface_write(g_state.yface_out, &sub_op, sizeof(sub_op)).ok) { return;
+}
     if (!yetty_yface_write(g_state.yface_out, &fh, sizeof(fh)).ok) {
         return;
     }
@@ -964,7 +1154,7 @@ void yetty_ymgui_ImGui_ImplYetty_PlatformShutdown(void)
 }
 
 /*===========================================================================
- * Push-input hooks — feed events into the right card's ImGuiIO
+ * Push-input hooks — feed events into the right figure's ImGuiIO
  *=========================================================================*/
 
 namespace
@@ -982,11 +1172,11 @@ struct context_scope {
 };
 } // namespace
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(uint32_t card_id, double x, double y,
+void yetty_ymgui_ImGui_ImplYetty_OnFigureMousePos(uint32_t figure_id, double x, double y,
                                                 uint32_t buttons_held)
 {
     (void)buttons_held;
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
@@ -994,10 +1184,10 @@ void yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(uint32_t card_id, double x, doub
     ImGui::GetIO().AddMousePosEvent((float)x, (float)y);
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(uint32_t card_id, int button, int pressed,
+void yetty_ymgui_ImGui_ImplYetty_OnFigureMouseButton(uint32_t figure_id, int button, int pressed,
                                                    double x, double y)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
@@ -1009,9 +1199,9 @@ void yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(uint32_t card_id, int button,
     }
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(uint32_t card_id, double dy, double x, double y)
+void yetty_ymgui_ImGui_ImplYetty_OnFigureMouseWheel(uint32_t figure_id, double dy, double x, double y)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
@@ -1021,9 +1211,9 @@ void yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(uint32_t card_id, double dy, d
     io.AddMouseWheelEvent(0.0f, (float)dy);
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardResize(uint32_t card_id, double width, double height)
+void yetty_ymgui_ImGui_ImplYetty_OnFigureResize(uint32_t figure_id, double width, double height)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
@@ -1036,16 +1226,16 @@ void yetty_ymgui_ImGui_ImplYetty_OnCardResize(uint32_t card_id, double width, do
     ImGui::GetIO().DisplaySize = ImVec2((float)width, (float)height);
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardFocus(uint32_t card_id, int gained)
+void yetty_ymgui_ImGui_ImplYetty_OnFigureFocus(uint32_t figure_id, int gained)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
     if (gained) {
-        g_state.focused_card_id = card_id;
-    } else if (g_state.focused_card_id == card_id) {
-        g_state.focused_card_id = 0;
+        g_state.focused_figure_id = figure_id;
+    } else if (g_state.focused_figure_id == figure_id) {
+        g_state.focused_figure_id = 0;
     }
 
     context_scope cs(c->ctx);
@@ -1222,10 +1412,10 @@ static ImGuiKey glfw_to_imgui_key(int key)
     }
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnCardKey(uint32_t card_id, int kind, int key, int mods,
+void yetty_ymgui_ImGui_ImplYetty_OnFigureKey(uint32_t figure_id, int kind, int key, int mods,
                                            uint32_t codepoint)
 {
-    auto *c = find_card(card_id);
+    auto *c = find_figure(figure_id);
     if (!c) {
         return;
     }
@@ -1261,63 +1451,63 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
     (void)args;
     (void)args_len;
     switch (osc_code) {
-    case YMGUI_OSC_SC_MOUSE: {
-        if (len < sizeof(struct yetty_ymgui_wire_input_mouse)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE: {
+        if (len < sizeof(struct yetty_client_input_mouse)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_mouse *m =
-            (const struct yetty_ymgui_wire_input_mouse *)payload;
-        if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) {
+        const struct yetty_client_input_mouse *m =
+            (const struct yetty_client_input_mouse *)payload;
+        if (m->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             return;
         }
         switch (m->kind) {
         case YETTY_YMGUI_INPUT_MOUSE_POS:
-            yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(m->card_id, m->x, m->y, m->buttons_held);
+            yetty_ymgui_ImGui_ImplYetty_OnFigureMousePos(m->figure_id, m->x, m->y, m->buttons_held);
             break;
         case YETTY_YMGUI_INPUT_MOUSE_BUTTON:
-            yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(m->card_id, m->button, m->pressed, m->x,
+            yetty_ymgui_ImGui_ImplYetty_OnFigureMouseButton(m->figure_id, m->button, m->pressed, m->x,
                                                           m->y);
             break;
         case YETTY_YMGUI_INPUT_MOUSE_WHEEL:
-            yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(m->card_id, m->wheel_dy, m->x, m->y);
+            yetty_ymgui_ImGui_ImplYetty_OnFigureMouseWheel(m->figure_id, m->wheel_dy, m->x, m->y);
             break;
         }
         break;
     }
-    case YMGUI_OSC_SC_RESIZE: {
-        if (len < sizeof(struct yetty_ymgui_wire_input_resize)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE: {
+        if (len < sizeof(struct yetty_client_input_resize)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_resize *r =
-            (const struct yetty_ymgui_wire_input_resize *)payload;
-        if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) {
+        const struct yetty_client_input_resize *r =
+            (const struct yetty_client_input_resize *)payload;
+        if (r->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC) {
             return;
         }
-        yetty_ymgui_ImGui_ImplYetty_OnCardResize(r->card_id, r->width, r->height);
+        yetty_ymgui_ImGui_ImplYetty_OnFigureResize(r->figure_id, r->width, r->height);
         break;
     }
-    case YMGUI_OSC_SC_FOCUS: {
-        if (len < sizeof(struct yetty_ymgui_wire_input_focus)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS: {
+        if (len < sizeof(struct yetty_client_input_focus)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_focus *f =
-            (const struct yetty_ymgui_wire_input_focus *)payload;
-        if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) {
+        const struct yetty_client_input_focus *f =
+            (const struct yetty_client_input_focus *)payload;
+        if (f->magic != YETTY_CLIENT_INPUT_FOCUS_MAGIC) {
             return;
         }
-        yetty_ymgui_ImGui_ImplYetty_OnCardFocus(f->card_id, f->gained);
+        yetty_ymgui_ImGui_ImplYetty_OnFigureFocus(f->figure_id, f->gained);
         break;
     }
-    case YMGUI_OSC_SC_KEY: {
-        if (len < sizeof(struct yetty_ymgui_wire_input_key)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY: {
+        if (len < sizeof(struct yetty_client_input_key)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_key *k =
-            (const struct yetty_ymgui_wire_input_key *)payload;
-        if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) {
+        const struct yetty_client_input_key *k =
+            (const struct yetty_client_input_key *)payload;
+        if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
             return;
         }
-        yetty_ymgui_ImGui_ImplYetty_OnCardKey(k->card_id, (int)k->kind, k->key, k->mods,
+        yetty_ymgui_ImGui_ImplYetty_OnFigureKey(k->figure_id, (int)k->kind, k->key, k->mods,
                                               k->codepoint);
         break;
     }
@@ -1384,39 +1574,39 @@ bool yetty_ymgui_ImGui_ImplYetty_WaitInput(int timeout_ms)
 }
 
 /*===========================================================================
- * Async — bridge ymgui_event_loop callbacks into per-card ImGuiIO
+ * Async — bridge ymgui_event_loop callbacks into per-figure ImGuiIO
  *=========================================================================*/
 
 extern "C" {
-static void loop_on_pos(void *u, uint32_t card_id, double x, double y, uint32_t held)
+static void loop_on_pos(void *u, uint32_t figure_id, double x, double y, uint32_t held)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardMousePos(card_id, x, y, held);
+    yetty_ymgui_ImGui_ImplYetty_OnFigureMousePos(figure_id, x, y, held);
 }
-static void loop_on_btn(void *u, uint32_t card_id, int b, int p, double x, double y)
+static void loop_on_btn(void *u, uint32_t figure_id, int b, int p, double x, double y)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardMouseButton(card_id, b, p, x, y);
+    yetty_ymgui_ImGui_ImplYetty_OnFigureMouseButton(figure_id, b, p, x, y);
 }
-static void loop_on_wheel(void *u, uint32_t card_id, double dy, double x, double y)
+static void loop_on_wheel(void *u, uint32_t figure_id, double dy, double x, double y)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardMouseWheel(card_id, dy, x, y);
+    yetty_ymgui_ImGui_ImplYetty_OnFigureMouseWheel(figure_id, dy, x, y);
 }
-static void loop_on_resize(void *u, uint32_t card_id, double w, double h)
+static void loop_on_resize(void *u, uint32_t figure_id, double w, double h)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardResize(card_id, w, h);
+    yetty_ymgui_ImGui_ImplYetty_OnFigureResize(figure_id, w, h);
 }
-static void loop_on_focus(void *u, uint32_t card_id, int gained)
+static void loop_on_focus(void *u, uint32_t figure_id, int gained)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardFocus(card_id, gained);
+    yetty_ymgui_ImGui_ImplYetty_OnFigureFocus(figure_id, gained);
 }
-static void loop_on_key(void *u, uint32_t card_id, int kind, int key, int mods, uint32_t codepoint)
+static void loop_on_key(void *u, uint32_t figure_id, int kind, int key, int mods, uint32_t codepoint)
 {
     (void)u;
-    yetty_ymgui_ImGui_ImplYetty_OnCardKey(card_id, kind, key, mods, codepoint);
+    yetty_ymgui_ImGui_ImplYetty_OnFigureKey(figure_id, kind, key, mods, codepoint);
 }
 } /* extern "C" */
 
@@ -1432,4 +1622,9 @@ void yetty_ymgui_ImGui_ImplYetty_AttachEventLoop(struct yetty_yclient_event_loop
     yetty_yclient_event_loop_set_resize_cb(loop, loop_on_resize);
     yetty_yclient_event_loop_set_focus_cb(loop, loop_on_focus);
     yetty_yclient_event_loop_set_key_cb(loop, loop_on_key);
+    /* The new figure-tree wire no longer triggers an initial server-side
+     * SC_RESIZE, so the render-on-input loop would never fire on_frame
+     * without an explicit nudge. Kick once so any figures already created
+     * before attach get a first render. */
+    yetty_yclient_event_loop_request_frame(loop);
 }

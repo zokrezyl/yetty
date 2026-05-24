@@ -597,24 +597,39 @@ static uint32_t yzoo_emit_curve(struct yetty_ydraw_draw_list *buf, uint32_t z_or
  * box and skip anything that would spill out the left/top/right/bottom.
  *===========================================================================*/
 
-static int yzoo_aabb_in_bounds(const struct yetty_yzoo *z,
-                               float x0, float y0, float x1, float y1)
+static int yzoo_aabb_in_bounds(const struct yetty_yzoo *z, float x0, float y0, float x1, float y1)
 {
     /* Half-open on the high edge; matches the SDF shader's `>=` discard
      * convention for complex prims. The check is conservative: any prim
      * whose AABB touches the outside fails. */
-    if (x0 < 0.0f || y0 < 0.0f) return 0;
-    if (x1 > z->config.scene_width)  return 0;
-    if (y1 > z->config.scene_height) return 0;
+    if (x0 < 0.0f || y0 < 0.0f) {
+        return 0;
+    }
+    if (x1 > z->config.scene_width) {
+        return 0;
+    }
+    if (y1 > z->config.scene_height) {
+        return 0;
+    }
     return 1;
 }
 
-static inline float yzoo_min2(float a, float b) { return a < b ? a : b; }
-static inline float yzoo_max2(float a, float b) { return a > b ? a : b; }
+static inline float yzoo_min2(float a, float b)
+{
+    return a < b ? a : b;
+}
+static inline float yzoo_max2(float a, float b)
+{
+    return a > b ? a : b;
+}
 static inline float yzoo_min3(float a, float b, float c)
-{ return yzoo_min2(yzoo_min2(a, b), c); }
+{
+    return yzoo_min2(yzoo_min2(a, b), c);
+}
 static inline float yzoo_max3(float a, float b, float c)
-{ return yzoo_max2(yzoo_max2(a, b), c); }
+{
+    return yzoo_max2(yzoo_max2(a, b), c);
+}
 
 static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
                                                        struct yetty_ydraw_draw_list *buf,
@@ -662,8 +677,8 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
             float ax1 = yzoo_max3(pa.x, pb.x, ctrl_x) + half;
             float ay1 = yzoo_max3(pa.y, pb.y, ctrl_y) + half;
             if (!yzoo_aabb_in_bounds(z, ax0, ay0, ax1, ay1)) {
-                ydebug("yzoo: skip CURVE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
-                       ax0, ay0, ax1, ay1, z->config.scene_width, z->config.scene_height);
+                ydebug("yzoo: skip CURVE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f", ax0, ay0,
+                       ax1, ay1, z->config.scene_width, z->config.scene_height);
                 skipped++;
                 break;
             }
@@ -679,8 +694,8 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
             float ax1 = yzoo_max2(pa.x, pb.x) + half;
             float ay1 = yzoo_max2(pa.y, pb.y) + half;
             if (!yzoo_aabb_in_bounds(z, ax0, ay0, ax1, ay1)) {
-                ydebug("yzoo: skip LINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
-                       ax0, ay0, ax1, ay1, z->config.scene_width, z->config.scene_height);
+                ydebug("yzoo: skip LINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f", ax0, ay0,
+                       ax1, ay1, z->config.scene_width, z->config.scene_height);
                 skipped++;
                 break;
             }
@@ -704,11 +719,10 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
              * on y, so use 1.5*size as a safe over-approximation for the
              * AABB on both axes. */
             float ext = size * 1.5f;
-            if (!yzoo_aabb_in_bounds(z, mid_x - ext, mid_y - ext,
-                                        mid_x + ext, mid_y + ext)) {
+            if (!yzoo_aabb_in_bounds(z, mid_x - ext, mid_y - ext, mid_x + ext, mid_y + ext)) {
                 ydebug("yzoo: skip SHAPE choice=%d mid=(%.1f,%.1f) ext=%.1f scene=%.1fx%.1f",
-                       c->shape_choice, mid_x, mid_y, ext,
-                       z->config.scene_width, z->config.scene_height);
+                       c->shape_choice, mid_x, mid_y, ext, z->config.scene_width,
+                       z->config.scene_height);
                 skipped++;
                 break;
             }
@@ -740,11 +754,10 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
             marker_size = 12.0f;
         }
 
-        if (!yzoo_aabb_in_bounds(z, p.x - marker_size, p.y - marker_size,
-                                    p.x + marker_size, p.y + marker_size)) {
-            ydebug("yzoo: skip MARKER pos=(%.1f,%.1f) r=%.1f scene=%.1fx%.1f",
-                   p.x, p.y, marker_size,
-                   z->config.scene_width, z->config.scene_height);
+        if (!yzoo_aabb_in_bounds(z, p.x - marker_size, p.y - marker_size, p.x + marker_size,
+                                 p.y + marker_size)) {
+            ydebug("yzoo: skip MARKER pos=(%.1f,%.1f) r=%.1f scene=%.1fx%.1f", p.x, p.y,
+                   marker_size, z->config.scene_width, z->config.scene_height);
             skipped++;
             continue;
         }
@@ -753,9 +766,8 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
         emitted++;
     }
 
-    ydebug("yzoo_build_prims: cps=%u conns=%u scene=%.1fx%.1f emitted=%u skipped=%u",
-           z->cp_len, z->conn_len, z->config.scene_width, z->config.scene_height,
-           emitted, skipped);
+    ydebug("yzoo_build_prims: cps=%u conns=%u scene=%.1fx%.1f emitted=%u skipped=%u", z->cp_len,
+           z->conn_len, z->config.scene_width, z->config.scene_height, emitted, skipped);
     return YETTY_OK_VOID();
 }
 
@@ -939,7 +951,7 @@ struct yetty_ycore_void_result yetty_yzoo_render(struct yetty_yzoo *zoo,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yzoo_render: add_cmd_zero");
 
     yetty_ydraw_draw_list_set_scene_bounds(buf, 0.0f, 0.0f, zoo->config.scene_width,
-                                                zoo->config.scene_height);
+                                           zoo->config.scene_height);
 
     struct yetty_ycore_void_result br = yzoo_build_prims(zoo, buf, time);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yzoo_render: build_prims");

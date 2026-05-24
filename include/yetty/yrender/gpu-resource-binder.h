@@ -41,8 +41,7 @@ struct yetty_yrender_gpu_resource_binder_ops {
      * data, size     bytes to write.
      */
     struct yetty_ycore_void_result (*write_buffer_chunk)(
-        struct yetty_yrender_gpu_resource_binder *self,
-        size_t buffer_index, size_t byte_offset,
+        struct yetty_yrender_gpu_resource_binder *self, size_t buffer_index, size_t byte_offset,
         const void *data, size_t size);
 };
 

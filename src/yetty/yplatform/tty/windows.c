@@ -64,8 +64,7 @@ int yetty_yplatform_tty_set_raw(void)
     /* Disable line buffering, echo, and Ctrl-C/Ctrl-Break processing
      * so keystrokes arrive immediately as raw bytes. Mirrors what
      * cfmakeraw() does on POSIX. */
-    raw &= ~(DWORD)(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT |
-                    ENABLE_PROCESSED_INPUT);
+    raw &= ~(DWORD)(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
     if (!SetConsoleMode(h, raw)) {
         return -1;
     }

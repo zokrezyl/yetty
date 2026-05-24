@@ -155,9 +155,9 @@ static void translate_prim_inplace(uint32_t *prim, size_t bytes, float dx, float
 
 /* Emit page sub-buffer translated by (dx, dy), skipping FONT prims
  * (the widget's font_header carries them once at envelope head). */
-static struct yetty_ycore_void_result emit_page_translated(
-    struct yetty_ydraw_draw_list *dst, const struct yetty_ydraw_draw_list *src,
-    float dx, float dy)
+static struct yetty_ycore_void_result emit_page_translated(struct yetty_ydraw_draw_list *dst,
+                                                           const struct yetty_ydraw_draw_list *src,
+                                                           float dx, float dy)
 {
     const uint8_t *bytes = (const uint8_t *)yetty_ydraw_draw_list_data(src);
     size_t size = yetty_ydraw_draw_list_size(src);
@@ -196,8 +196,7 @@ static struct yetty_ycore_void_result emit_page_translated(
         }
         memcpy(work, bytes + off, s);
         translate_prim_inplace((uint32_t *)work, s, dx, dy);
-        struct yetty_ydraw_id_result r =
-            yetty_ydraw_draw_list_add_prim(dst, work, s);
+        struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(dst, work, s);
         if (YETTY_IS_ERR(r)) {
             free(heap);
             return YETTY_ERR(yetty_ycore_void, "ypdf emit: add_prim failed", r);
@@ -286,8 +285,7 @@ static struct yetty_ycore_void_result harvest_fonts_from_page(
                 if (YETTY_IS_ERR(ar)) {
                     return YETTY_ERR(yetty_ycore_void, "ypdf harvest: add_prim", ar);
                 }
-                struct yetty_ycore_void_result sr =
-                    font_seen_add(seen, view.name, view.name_len);
+                struct yetty_ycore_void_result sr = font_seen_add(seen, view.name, view.name_len);
                 if (YETTY_IS_ERR(sr)) {
                     return sr;
                 }
@@ -310,9 +308,8 @@ struct page_collector {
 };
 
 YETTY_EXTERNAL_CALLBACK
-static struct yetty_ycore_void_result on_page_emit(
-    void *user_data, int page_index, int page_count,
-    const struct yetty_ydraw_draw_list *envelope)
+static struct yetty_ycore_void_result on_page_emit(void *user_data, int page_index, int page_count,
+                                                   const struct yetty_ydraw_draw_list *envelope)
 {
     (void)page_index;
     (void)page_count;
@@ -331,8 +328,7 @@ static struct yetty_ycore_void_result on_page_emit(
     /* The envelope passed to the callback is owned by the renderer and
      * destroyed after this call returns. Copy its bytes into a fresh
      * sub-buffer we own. */
-    struct yetty_ydraw_draw_list_result br =
-        yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(br)) {
         c->err = 1;
         return YETTY_ERR(yetty_ycore_void, "ypdf collector: buf create", br);
@@ -355,8 +351,7 @@ static struct yetty_ycore_void_result on_page_emit(
             off += s;
             continue;
         }
-        struct yetty_ydraw_id_result ar =
-            yetty_ydraw_draw_list_add_prim(dst, bytes + off, s);
+        struct yetty_ydraw_id_result ar = yetty_ydraw_draw_list_add_prim(dst, bytes + off, s);
         if (YETTY_IS_ERR(ar)) {
             yetty_ydraw_draw_list_destroy(dst);
             c->err = 1;
@@ -379,7 +374,7 @@ static struct yetty_ycore_void_result on_page_emit(
  *===========================================================================*/
 
 static struct yetty_ycore_void_result ypdf_render(struct yetty_ygui_widget *self,
-                                                   struct yetty_ygui_render_ctx *ctx)
+                                                  struct yetty_ygui_render_ctx *ctx)
 {
     if (!ctx || !ctx->buffer) {
         return YETTY_OK_VOID();
@@ -390,8 +385,7 @@ static struct yetty_ycore_void_result ypdf_render(struct yetty_ygui_widget *self
             (const uint8_t *)yetty_ydraw_draw_list_data(self->data.ypdf.font_header);
         size_t hs = yetty_ydraw_draw_list_size(self->data.ypdf.font_header);
         if (hb && hs > 0) {
-            struct yetty_ydraw_id_result ar =
-                yetty_ydraw_draw_list_add_prim(ctx->buffer, hb, hs);
+            struct yetty_ydraw_id_result ar = yetty_ydraw_draw_list_add_prim(ctx->buffer, hb, hs);
             if (YETTY_IS_ERR(ar)) {
                 return YETTY_ERR(yetty_ycore_void, "ypdf render: font header", ar);
             }
@@ -419,8 +413,7 @@ static struct yetty_ycore_void_result ypdf_render(struct yetty_ygui_widget *self
     return YETTY_OK_VOID();
 }
 
-static int ypdf_on_scroll(struct yetty_ygui_widget *self, float dx, float dy,
-                           ygui_event_t *out)
+static int ypdf_on_scroll(struct yetty_ygui_widget *self, float dx, float dy, ygui_event_t *out)
 {
     (void)dx;
     /* Route through the public scroll_to so observer notify + scroll_observer
@@ -515,8 +508,7 @@ static const struct yetty_ygui_scrollable *ypdf_scrollable_ptr(void)
     return &ops;
 }
 
-static void build_stacking(struct ypdf_page_entry *pages, int n, float page_gap,
-                           float *out_total)
+static void build_stacking(struct ypdf_page_entry *pages, int n, float page_gap, float *out_total)
 {
     float y = 0.0f;
     for (int i = 0; i < n; i++) {
@@ -529,9 +521,9 @@ static void build_stacking(struct ypdf_page_entry *pages, int n, float page_gap,
     *out_total = y;
 }
 
-static struct yetty_ygui_widget *build_widget_from_pdf(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h, pdfio_file_t *pdf)
+static struct yetty_ygui_widget *build_widget_from_pdf(struct yetty_ygui_engine *engine,
+                                                       const char *id, float x, float y, float w,
+                                                       float h, pdfio_file_t *pdf)
 {
     if (!pdf) {
         return NULL;
@@ -557,8 +549,7 @@ static struct yetty_ygui_widget *build_widget_from_pdf(
     }
 
     /* Font header — walk pages in order, collect first full FONT per name. */
-    struct yetty_ydraw_draw_list_result fhr =
-        yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_draw_list_result fhr = yetty_ydraw_draw_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(fhr)) {
         yetty_ycore_error_destroy(fhr.error);
         for (int i = 0; i < col.count; i++) {
@@ -603,17 +594,16 @@ static struct yetty_ygui_widget *build_widget_from_pdf(
     widget->data.ypdf.scroll_y = 0.0f;
     widget->data.ypdf.on_scroll_change = NULL;
     widget->data.ypdf.on_scroll_change_userdata = NULL;
-    build_stacking(col.pages, col.count, widget->data.ypdf.page_gap,
-                   &widget->data.ypdf.total_h);
+    build_stacking(col.pages, col.count, widget->data.ypdf.page_gap, &widget->data.ypdf.total_h);
     widget->vtable = ypdf_vtable_ptr();
     widget->scrollable = ypdf_scrollable_ptr();
     yetty_ygui_engine_attach_widget(engine, widget);
     return widget;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_file(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h, const char *path)
+struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_file(struct yetty_ygui_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h, const char *path)
 {
     if (!path) {
         return NULL;
@@ -622,10 +612,10 @@ struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_file(
     return build_widget_from_pdf(engine, id, x, y, w, h, pdf);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const uint8_t *data, size_t len)
+struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(struct yetty_ygui_engine *engine,
+                                                             const char *id, float x, float y,
+                                                             float w, float h, const uint8_t *data,
+                                                             size_t len)
 {
     if (!data || len == 0) {
         return NULL;
@@ -651,8 +641,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(
     fclose(fp);
 
     pdfio_file_t *pdf = pdfioFileOpen(path, NULL, NULL, pdfio_silent, NULL);
-    struct yetty_ygui_widget *widget =
-        build_widget_from_pdf(engine, id, x, y, w, h, pdf);
+    struct yetty_ygui_widget *widget = build_widget_from_pdf(engine, id, x, y, w, h, pdf);
     yetty_yplatform_unlink(path);
     return widget;
 }
@@ -663,8 +652,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(
 
 static const uint8_t *g_ypdf_default_data = NULL;
 static size_t g_ypdf_default_size = 0;
-static void ypdf_capture_default(const char *name, const uint8_t *data,
-                                  size_t size, int compressed)
+static void ypdf_capture_default(const char *name, const uint8_t *data, size_t size, int compressed)
 {
     (void)name;
     (void)compressed;
@@ -672,16 +660,15 @@ static void ypdf_capture_default(const char *name, const uint8_t *data,
     g_ypdf_default_size = size;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ypdf_default(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h)
+struct yetty_ygui_widget *yetty_ygui_engine_ypdf_default(struct yetty_ygui_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h)
 {
     if (!g_ypdf_default_data) {
         register_ypdf_default_assets_c(ypdf_capture_default);
     }
-    return yetty_ygui_engine_ypdf_from_buffer(
-        engine, id, x, y, w, h,
-        g_ypdf_default_data, g_ypdf_default_size);
+    return yetty_ygui_engine_ypdf_from_buffer(engine, id, x, y, w, h, g_ypdf_default_data,
+                                              g_ypdf_default_size);
 }
 
 /*=============================================================================
@@ -715,7 +702,7 @@ void yetty_ygui_widget_ypdf_scroll_to(struct yetty_ygui_widget *widget, float y)
     }
     if (widget->data.ypdf.on_scroll_change) {
         widget->data.ypdf.on_scroll_change(widget, widget->data.ypdf.scroll_y, max_scroll,
-                                            widget->data.ypdf.on_scroll_change_userdata);
+                                           widget->data.ypdf.on_scroll_change_userdata);
     }
 }
 
@@ -755,9 +742,8 @@ int yetty_ygui_widget_ypdf_page_count(const struct yetty_ygui_widget *widget)
     return is_ypdf(widget) ? widget->data.ypdf.n_pages : 0;
 }
 
-void yetty_ygui_widget_ypdf_on_scroll_change(
-    struct yetty_ygui_widget *widget,
-    yetty_ygui_ypdf_scroll_change_fn cb, void *userdata)
+void yetty_ygui_widget_ypdf_on_scroll_change(struct yetty_ygui_widget *widget,
+                                             yetty_ygui_ypdf_scroll_change_fn cb, void *userdata)
 {
     if (!is_ypdf(widget)) {
         return;

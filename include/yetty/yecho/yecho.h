@@ -144,8 +144,8 @@ struct yetty_ydraw_draw_list_result yetty_yecho_render_string(
  * success.
  *===========================================================================*/
 
-struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
-    const struct yetty_ydraw_draw_list *buffer, FILE *out);
+struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+                                                        FILE *out);
 
 #ifdef __cplusplus
 }

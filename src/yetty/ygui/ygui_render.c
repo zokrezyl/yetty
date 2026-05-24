@@ -51,7 +51,8 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box(struct yetty_ygu
     float cy = ay + h * 0.5f;
     float hw = w * 0.5f;
     float hh = h * 0.5f;
-    ydebug("render_box: in=(%.1f,%.1f,%.1f,%.1f) off=(%.1f,%.1f) abs=(%.1f,%.1f)..(%.1f,%.1f) color=0x%08x r=%.1f",
+    ydebug("render_box: in=(%.1f,%.1f,%.1f,%.1f) off=(%.1f,%.1f) abs=(%.1f,%.1f)..(%.1f,%.1f) "
+           "color=0x%08x r=%.1f",
            x, y, w, h, ctx->offset_x, ctx->offset_y, ax, ay, ax + w, ay + h, color, radius);
 
     struct yetty_ycore_void_result r;
@@ -108,7 +109,8 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_outline(
             .radius_top_left = radius,
             .radius_bottom_left = radius,
         };
-        r = yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->buffer, 0, 0, 0, color, stroke_width, &geom);
+        r = yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->buffer, 0, 0, 0, color, stroke_width,
+                                                          &geom);
     } else {
         struct yetty_ysdf_box geom = {
             .center_x = cx,
@@ -145,10 +147,10 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_text(struct yetty_yg
         .size = tlen,
         .capacity = tlen,
     };
-    return yetty_ydraw_draw_list_add_text(ctx->buffer, ax, ay + font_size * 0.8f, &tbuf,
-                                             font_size, color,
-                                             /*layer*/ 0, /*font_id*/ -1,
-                                             /*rotation*/ 0.0f);
+    return yetty_ydraw_draw_list_add_text(ctx->buffer, ax, ay + font_size * 0.8f, &tbuf, font_size,
+                                          color,
+                                          /*layer*/ 0, /*font_id*/ -1,
+                                          /*rotation*/ 0.0f);
 }
 
 struct yetty_ycore_void_result yetty_ygui_render_ctx_render_circle(
@@ -270,8 +272,8 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_linear_gradient(
         .color0 = color0,
         .color1 = color1,
     };
-    struct yetty_ycore_void_result r =
-        yetty_ydraw_draw_list_add_cmd_add_linear_gradient_box(ctx->buffer, 0, 0, /*fill=*/0, 0, 0.0f, &geom);
+    struct yetty_ycore_void_result r = yetty_ydraw_draw_list_add_cmd_add_linear_gradient_box(
+        ctx->buffer, 0, 0, /*fill=*/0, 0, 0.0f, &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ygui_render_box_linear_gradient: add failed");
     return YETTY_OK_VOID();
 }
@@ -298,8 +300,8 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_radial_gradient(
         .color_inner = color_inner,
         .color_outer = color_outer,
     };
-    struct yetty_ycore_void_result r =
-        yetty_ydraw_draw_list_add_cmd_add_radial_gradient_box(ctx->buffer, 0, 0, /*fill=*/0, 0, 0.0f, &geom);
+    struct yetty_ycore_void_result r = yetty_ydraw_draw_list_add_cmd_add_radial_gradient_box(
+        ctx->buffer, 0, 0, /*fill=*/0, 0, 0.0f, &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ygui_render_box_radial_gradient: add failed");
     return YETTY_OK_VOID();
 }

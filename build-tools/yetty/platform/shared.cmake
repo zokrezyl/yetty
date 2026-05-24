@@ -394,7 +394,6 @@ if(YETTY_ENABLE_FEATURE_TESTS)
         add_subdirectory(${YETTY_ROOT}/test/ut/ydiagram ${CMAKE_BINARY_DIR}/test/ut/ydiagram)
     endif()
     add_subdirectory(${YETTY_ROOT}/test/ut/ygui ${CMAKE_BINARY_DIR}/test/ut/ygui)
-    add_subdirectory(${YETTY_ROOT}/test/ut/ydraw ${CMAKE_BINARY_DIR}/test/ut/ydraw)
     add_subdirectory(${YETTY_ROOT}/test/ut/ybrowser ${CMAKE_BINARY_DIR}/test/ut/ybrowser)
     # Integration: ylexbor harness driver. Self-skips when QuickJS or
     # the ylexbor target isn't built.
@@ -415,6 +414,12 @@ set(YETTY_DEFINITIONS
 
 if(YETTY_ENABLE_LIB_THORVG)
     list(APPEND YETTY_DEFINITIONS YETTY_HAS_THORVG=1)
+endif()
+
+# YETTY_HAS_YMGUI gates yframework's ymgui figure-kind registration. Off on
+# webasm (imgui prebuilt unavailable) — see webasm/variables.cmake.
+if(YETTY_ENABLE_FEATURE_YMGUI)
+    list(APPEND YETTY_DEFINITIONS YETTY_HAS_YMGUI=1)
 endif()
 
 # Common libraries to link (only include what's enabled)
@@ -592,7 +597,7 @@ function(yetty_embed_assets TARGET)
     # Collect shaders from module locations
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    file(COPY "${YETTY_ROOT}/src/yetty/yterm/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # Generated SDF dispatcher + sdf_* functions — attached at runtime as a
     # child resource set of ydraw-layer; see src/yetty/ysdf/gen-sdf-code.py.

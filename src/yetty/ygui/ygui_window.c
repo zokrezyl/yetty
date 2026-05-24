@@ -92,19 +92,17 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_widget *se
            self->id ? self->id : "?", self->x, self->y, self->w, self->h, th, bsz,
            th + 2 * (bsz + WINDOW_BUTTON_PAD));
     if (self->w < (th + 2 * (bsz + WINDOW_BUTTON_PAD))) {
-        ydebug("window_render EARLY-RETURN (self->w=%.1f < threshold=%.1f)",
-               self->w, th + 2 * (bsz + WINDOW_BUTTON_PAD));
+        ydebug("window_render EARLY-RETURN (self->w=%.1f < threshold=%.1f)", self->w,
+               th + 2 * (bsz + WINDOW_BUTTON_PAD));
         return YETTY_OK_VOID();
     }
 
     /* Frame: a single rounded box behind everything; the title bar
      * sits as a solid band on top. */
-    ydebug("window_render: frame box=(%.1f,%.1f,%.1f,%.1f)",
-           self->x, self->y, self->w, self->h);
+    ydebug("window_render: frame box=(%.1f,%.1f,%.1f,%.1f)", self->x, self->y, self->w, self->h);
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, theme->bg_primary,
                                      WINDOW_CORNER_RADIUS);
-    ydebug("window_render: titlebar box=(%.1f,%.1f,%.1f,%.1f)",
-           self->x, self->y, self->w, th);
+    ydebug("window_render: titlebar box=(%.1f,%.1f,%.1f,%.1f)", self->x, self->y, self->w, th);
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, th, theme->bg_header,
                                      WINDOW_CORNER_RADIUS);
     /* Hairline at the bottom of the title bar separates header from body. */
@@ -116,8 +114,7 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_widget *se
     if (title && *title) {
         float fs = theme->font_size > 0 ? theme->font_size : 14.0f;
         float ty = self->y + (th - fs) * 0.5f;
-        yetty_ygui_render_ctx_render_text(ctx, title, self->x + 14.0f, ty,
-                                          theme->text_primary, fs);
+        yetty_ygui_render_ctx_render_text(ctx, title, self->x + 14.0f, ty, theme->text_primary, fs);
     }
 
     /* Hamburger button — soft-bg square with three horizontal bars. */
@@ -125,8 +122,8 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_widget *se
     menu_button_rect(self, &cx, &cy, &cw, &ch);
     float ax = self->x + cx;
     float ay = self->y + cy;
-    int menu_open = self->data.window.menu &&
-                    (self->data.window.menu->flags & YETTY_YGUI_FLAG_OPEN);
+    int menu_open =
+        self->data.window.menu && (self->data.window.menu->flags & YETTY_YGUI_FLAG_OPEN);
     uint32_t bg = menu_open ? theme->bg_hover : theme->bg_header;
     yetty_ygui_render_ctx_render_box(ctx, ax, ay, cw, ch, bg, WINDOW_CORNER_RADIUS * 0.5f);
 
@@ -316,7 +313,8 @@ void yetty_ygui_widget_window_set_title(struct yetty_ygui_widget *window, const 
     free(window->data.window.title);
     window->data.window.title = title ? ygui_strdup(title) : NULL;
     if (window->engine) {
-        window->engine->dirty = 1; window->dirty = 1;
+        window->engine->dirty = 1;
+        window->dirty = 1;
     }
 }
 
@@ -355,6 +353,7 @@ void yetty_ygui_widget_window_set_menu(struct yetty_ygui_widget *window,
     }
     window->data.window.menu = menu;
     if (window->engine) {
-        window->engine->dirty = 1; window->dirty = 1;
+        window->engine->dirty = 1;
+        window->dirty = 1;
     }
 }

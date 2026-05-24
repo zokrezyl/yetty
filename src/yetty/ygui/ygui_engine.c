@@ -7,6 +7,7 @@
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/yfont/raster-font.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yterm/client-input.h>
 #include <yetty/yplatform/term.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
@@ -262,8 +263,9 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *name,
         engine->owns_theme = 1;
     }
 
-    /* Initial state — actual pixel size is set by SC_RESIZE; this 1×1
-     * placeholder is what the first (placeholder) frame ships. */
+    /* Initial state — placeholder dims; the TIOCGWINSZ seeding below
+     * overrides display_pixel_w/h with real numbers when the ioctl
+     * succeeds. */
     engine->dirty = 1;
     engine->width = 1.0f;
     engine->height = 1.0f;
@@ -294,17 +296,53 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *name,
     engine->display_pixel_h = 0.0f;
     engine->have_pixel_size = 0;
 
+    /* Seed the pixel size from TIOCGWINSZ.ws_xpixel/ws_ypixel — yetty
+     * populates those alongside ws_col/ws_row in terminal_resize_grid.
+     * Going through display_pixel_w/h + needs_resize (rather than
+     * setting engine->width/height directly) makes the first render
+     * fire handle_resize, which in turn invokes the user's
+     * resize_callback. Tools like ygreeter rely on that callback to
+     * stretch their outer window widget; without it the widget tree
+     * stays at its authored 100×100 (the literal in the
+     * `engine_window("outer", 0, 0, 100, 100, ...)` call) — the bug
+     * the user reported as "all widgets packed in the upper-left
+     * corner". */
+#ifndef _WIN32
+    {
+        struct winsize ws;
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
+            engine->display_pixel_w = (float)ws.ws_xpixel;
+            engine->display_pixel_h = (float)ws.ws_ypixel;
+            engine->have_pixel_size = 1;
+            engine->reference_w = engine->display_pixel_w;
+            engine->reference_h = engine->display_pixel_h;
+            engine->needs_resize = 1;
+            engine->needs_full_redraw = 1;
+        }
+    }
+    /* The SIGWINCH from yetty's `terminal_resize_grid` is racy: yetty
+     * fires the resize as soon as the YUI layout settles, which can
+     * happen before the child has even called yetty_ygui_init (and so
+     * before our SIGWINCH handler is installed — the default
+     * disposition is "ignore"). The signal is then dropped silently
+     * and our card stays at the fork-time 80x24 cells / 1x1 pixel
+     * canvas forever. Force a re-read of TIOCGWINSZ on the very first
+     * prepare_cb iteration so we catch any size that landed during
+     * the gap, regardless of whether SIGWINCH was actually caught. */
+    yetty_ygui_internal_resize_pending = 1;
+#endif
+
     /* I/O endpoints. STDIN for inbound OSCs, STDOUT for outbound. The
      * libuv pipe wrapping STDOUT becomes output_pty inside
      * engine_internal_bootstrap_runtime. */
     engine->input_fd = STDIN_FILENO;
     engine->output_fd = STDOUT_FILENO;
 
-    /* Allocate a non-zero card_id (0 = "no card" sentinel on the wire).
+    /* Allocate a non-zero figure_id (0 = "no card" sentinel on the wire).
      * One process can hold several engines so we hand out monotonically
      * increasing ids. */
     static uint32_t s_next_card_id = 1;
-    engine->card_id = s_next_card_id++;
+    engine->figure_id = s_next_card_id++;
 
     /* Long-lived yface used to parse inbound binary OSC envelopes
      * (mouse/resize/focus/key from the ymgui-layer hit router). */
@@ -334,8 +372,8 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
  * library and implements the public engine_create on top of this +
  * bootstrap_runtime). ygui_core stays libuv-free; the public entry
  * lives in the libuv-coupled layer. */
-struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(
-    const char *name, struct yetty_ygui_theme *theme)
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(const char *name,
+                                                               struct yetty_ygui_theme *theme)
 {
     return engine_alloc_init(name, theme);
 }
@@ -367,9 +405,46 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
         }
     }
 
-    /* Kill card (= clear the ydraw canvas) if shown — UNLESS the
-     * preserve flag is set. The window widget's close button sets it
-     * so the user's final view stays on screen after the app exits. */
+    /* Wipe the host's root container of every figure this engine ever
+     * authored. With the flat-wire model each widget is its OWN top-
+     * level child of the root container (no nested CMD_GROUPs), so a
+     * single DELETE_CHILD(root) no longer cascades — we'd have to
+     * enumerate every group_id we ever minted. CLEAR_ALL is the right
+     * shape for "the app is going away, drop everything I shipped."
+     *
+     * Without this the figures persist on the host after the producer
+     * exits, leaving stale UI floating over whatever takes over the
+     * pane (the text-layer's shell prompt, the next view, …).
+     *
+     * Not gated by preserve_canvas_on_destroy — that flag was for
+     * scrolling-canvas graphical scrollback; ygui compositor chrome
+     * is transient. */
+    if (engine->card_shown && engine->buffer) {
+        yetty_ydraw_draw_list_clear(engine->buffer);
+        struct yetty_ycore_void_result zr =
+            yetty_ydraw_draw_list_add_admin_clear_all(engine->buffer);
+        if (YETTY_IS_ERR(zr)) {
+            yerror("ygui_engine_destroy: add_admin_clear_all: %s", zr.error.msg);
+            yetty_ycore_error_destroy(zr.error);
+        } else {
+            /* Raw record stream — same path engine_render uses now. */
+            const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(engine->buffer);
+            uint32_t size = (uint32_t)yetty_ydraw_draw_list_size(engine->buffer);
+            if (size > 0 && data) {
+                struct yetty_ycore_void_result wr =
+                    yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size);
+                if (YETTY_IS_ERR(wr)) {
+                    yerror("ygui_engine_destroy: CLEAR_ALL emit: %s", wr.error.msg);
+                    yetty_ycore_error_destroy(wr.error);
+                }
+            }
+        }
+    }
+
+    /* Scrolling-canvas clear — only when preserve is NOT set. This is
+     * the path that respects "leave my graphical scrollback intact"
+     * for things like inline yimage / yplot / yvideo the engine pushed
+     * to the user's command history. */
     if (engine->card_shown && engine->card_name && !engine->preserve_canvas_on_destroy) {
         struct yetty_ycore_void_result r =
             yetty_ygui_osc_kill_card(engine->output_pty, engine->card_name);
@@ -380,9 +455,9 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
     }
 
     /* Drop the ymgui-layer card so the server stops routing mouse to us. */
-    if (engine->card_id != 0) {
+    if (engine->figure_id != 0) {
         struct yetty_ycore_void_result r =
-            yetty_ygui_osc_card_remove(engine->output_pty, engine->card_id);
+            yetty_ygui_osc_card_remove(engine->output_pty, engine->figure_id);
         if (YETTY_IS_ERR(r)) {
             first_err = r;
         }
@@ -464,8 +539,7 @@ void yetty_ygui_engine_set_size(struct yetty_ygui_engine *engine, float width, f
     engine->needs_full_redraw = 1;
 }
 
-struct pixel_size_result yetty_ygui_engine_get_size(
-    const struct yetty_ygui_engine *engine)
+struct pixel_size_result yetty_ygui_engine_get_size(const struct yetty_ygui_engine *engine)
 {
     if (!engine) {
         return YETTY_ERR(pixel_size, "engine_get_size: NULL engine");
@@ -518,14 +592,12 @@ int yetty_ygui_engine_has_pressed_widget(const struct yetty_ygui_engine *engine)
     return engine && engine->pressed ? 1 : 0;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_hovered_widget(
-    const struct yetty_ygui_engine *engine)
+struct yetty_ygui_widget *yetty_ygui_engine_hovered_widget(const struct yetty_ygui_engine *engine)
 {
     return engine ? engine->hovered : NULL;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_pressed_widget(
-    const struct yetty_ygui_engine *engine)
+struct yetty_ygui_widget *yetty_ygui_engine_pressed_widget(const struct yetty_ygui_engine *engine)
 {
     return engine ? engine->pressed : NULL;
 }
@@ -563,7 +635,7 @@ static void reset_was_rendered_recursive(struct yetty_ygui_widget *w)
 }
 
 static struct yetty_ycore_void_result engine_rebuild_with_mode(struct yetty_ygui_engine *engine,
-                                                                int full_redraw)
+                                                               int full_redraw)
 {
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (!engine || !engine->buffer) {
@@ -672,25 +744,40 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
      * effect on the receiver until we ship the envelope). */
     yetty_ydraw_draw_list_clear(engine->buffer);
 
-    /* 1a. Full-redraw frames open with CMD_ZERO so the receiver wipes
-     * any prior entity state before we re-emit the whole tree. After
-     * the first frame we run in incremental mode: no CMD_ZERO, just a
-     * batch of `DELETE(group_id)` records for widgets that died since
-     * last render, followed by `DELETE+GROUP` pairs for every dirty
-     * widget (emitted inside the tree walk below). */
-    int full_redraw = engine->needs_full_redraw || !engine->card_shown;
+    /* 1a. Force full-redraw on every frame — the ycompositor receiver
+     * (current production target) builds one yfigure_group + ygrid per
+     * TOP-LEVEL CMD_GROUP and merges nested CMD_GROUPs into the
+     * outermost figure's ygrid via offset accumulation. That model
+     * does not support incremental updates to nested widgets: a
+     * mid-tree CMD_GROUP on a dirty descendant ends up as a NEW
+     * top-level figure layered on top of the still-existing parent
+     * (whose ygrid already paints that widget's pixels) — visible as
+     * double-paint + z-order jump on every hover. Issue #229 covers
+     * the analysis.
+     *
+     * Until per-widget figures (or a parent_id wire field) land,
+     * every emission re-emits the whole tree. CMD_ZERO at the head
+     * wipes the producer's previous frame from the receiver; the
+     * nested CMD_GROUPs re-create the figure with stable insertion
+     * order (= stable z-order). The cost is a full WebGPU rebuild
+     * per frame, which is acceptable while ygreeter / ytop are the
+     * dominant producers. */
+    int full_redraw = 1;
+    (void)engine->card_shown;
+    (void)engine->needs_full_redraw;
     if (full_redraw) {
-        struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(engine->buffer);
+        struct yetty_ycore_void_result zr =
+            yetty_ydraw_draw_list_add_admin_clear_all(engine->buffer);
         if (YETTY_IS_ERR(zr)) {
             yetty_ycore_error_destroy(zr.error);
         }
-        /* CMD_ZERO supersedes any queued deletes from the prior frame. */
+        /* CLEAR_ALL supersedes any queued deletes from the prior frame. */
         engine->pending_delete_count = 0;
     } else {
         /* Flush all queued DELETEs for destroyed / unparented widgets. */
         for (uint32_t i = 0; i < engine->pending_delete_count; i++) {
-            struct yetty_ycore_void_result dr =
-                yetty_ydraw_draw_list_add_cmd_delete(engine->buffer, engine->pending_deletes[i]);
+            struct yetty_ycore_void_result dr = yetty_ydraw_draw_list_add_admin_delete_child(
+                engine->buffer, engine->pending_deletes[i]);
             if (YETTY_IS_ERR(dr)) {
                 yetty_ycore_error_destroy(dr.error);
             }
@@ -709,9 +796,13 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     }
     engine->needs_full_redraw = 0;
 
-    /* 4. Serialize (framed: prims + text_spans + scene_bounds) */
-    const uint8_t *data = NULL;
-    uint32_t size = (uint32_t)yetty_ydraw_draw_list_serialize(engine->buffer, &data);
+    /* 4. Ship the RAW record stream (no legacy magic/scene-bounds
+     * header). The receiving root container parses `{length, id, payload}`
+     * records starting at byte 0; any prefix bytes get reinterpreted as
+     * a garbage record header and block consume_envelope forever waiting
+     * for bytes that will never arrive. */
+    const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(engine->buffer);
+    uint32_t size = (uint32_t)yetty_ydraw_draw_list_size(engine->buffer);
     if (size == 0 || !data) {
         return YETTY_OK_VOID();
     }
@@ -746,9 +837,9 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
 
     /* 5. Send OSC */
     if (!engine->card_shown) {
-        struct yetty_ycore_void_result r = yetty_ygui_osc_create_card(
-            engine->output_pty, engine->card_name, engine->card_x, engine->card_y, engine->card_w,
-            engine->card_h, data, size);
+        struct yetty_ycore_void_result r =
+            yetty_ygui_osc_create_card(engine->output_pty, engine->card_name, engine->card_x,
+                                       engine->card_y, engine->card_w, engine->card_h, data, size);
         engine->card_shown = 1;
         return r;
     }
@@ -767,9 +858,8 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
         return YETTY_ERR(yetty_ycore_void, "engine_emit_handshake: NULL engine");
     }
     if (!engine->output_pty) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "engine_emit_handshake: output_pty not installed — "
-                         "bootstrap must run before any OSC emission");
+        return YETTY_ERR(yetty_ycore_void, "engine_emit_handshake: output_pty not installed — "
+                                           "bootstrap must run before any OSC emission");
     }
 
     /* Cell size query — host replies via OSC and runtime stores it. */
@@ -785,31 +875,31 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
     engine->moves_subscribed = 1;
 
     /* Register the card with the ymgui-layer so the server hit-tests
-     * the cursor against our rect and emits YMGUI_OSC_SC_MOUSE with
-     * card-local coordinates. Triggers the host's YMGUI_OSC_SC_RESIZE
+     * the cursor against our rect and emits YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE with
+     * card-local coordinates. Triggers the host's YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE
      * reply carrying the actual pixel size. */
-    struct yetty_ycore_void_result place_r =
-        yetty_ygui_osc_card_place(engine->output_pty, engine->card_id, engine->card_x,
-                                  engine->card_y, (uint32_t)engine->card_w,
-                                  (uint32_t)engine->card_h);
+    struct yetty_ycore_void_result place_r = yetty_ygui_osc_card_place(
+        engine->output_pty, engine->figure_id, engine->card_x, engine->card_y,
+        (uint32_t)engine->card_w, (uint32_t)engine->card_h);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, place_r, "engine_emit_handshake: card_place failed");
 
     /* Send a minimal placeholder envelope so the host has a card to
      * size against. The real render fires after SC_RESIZE updates
      * width/height — that prevents the visual "zoom jump" of doing the
-     * first render at the initial 1×1 dims. */
+     * first render at the initial 1×1 dims.
+     *
+     * Raw record stream (no legacy magic/scene-bounds header). The
+     * placeholder body is empty — the host sees an empty envelope, the
+     * card is registered via CARD_PLACE already, no records to apply. */
     yetty_ydraw_draw_list_clear(engine->buffer);
-    yetty_ydraw_draw_list_set_scene_bounds(engine->buffer, 0, 0, 1, 1);
-    const uint8_t *data = NULL;
-    uint32_t size = (uint32_t)yetty_ydraw_draw_list_serialize(engine->buffer, &data);
-    if (size > 0 && data) {
-        struct yetty_ycore_void_result cr = yetty_ygui_osc_create_card(
-            engine->output_pty, engine->card_name, engine->card_x, engine->card_y,
-            engine->card_w, engine->card_h, data, size);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
-                            "engine_emit_handshake: create_card placeholder failed");
-        engine->card_shown = 1;
-    }
+    const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(engine->buffer);
+    uint32_t size = (uint32_t)yetty_ydraw_draw_list_size(engine->buffer);
+    struct yetty_ycore_void_result cr =
+        yetty_ygui_osc_create_card(engine->output_pty, engine->card_name, engine->card_x,
+                                   engine->card_y, engine->card_w, engine->card_h, data, size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
+                        "engine_emit_handshake: create_card placeholder failed");
+    engine->card_shown = 1;
     engine->dirty = 1;
     YGUI_LOG("ygui: handshake sent, waiting for SC_RESIZE");
     return YETTY_OK_VOID();
@@ -884,12 +974,14 @@ static int point_in_subtree(struct yetty_ygui_widget *w, float x, float y)
     if (!w || !(w->flags & YETTY_YGUI_FLAG_VISIBLE)) {
         return 0;
     }
-    if (x >= w->layout_x && x < w->layout_x + w->layout_w &&
-        y >= w->layout_y && y < w->layout_y + w->layout_h) {
+    if (x >= w->layout_x && x < w->layout_x + w->layout_w && y >= w->layout_y &&
+        y < w->layout_y + w->layout_h) {
         return 1;
     }
     for (struct yetty_ygui_widget *c = w->first_child; c; c = c->next_sibling) {
-        if (point_in_subtree(c, x, y)) return 1;
+        if (point_in_subtree(c, x, y)) {
+            return 1;
+        }
     }
     return 0;
 }
@@ -901,12 +993,16 @@ static void close_open_overlays_outside(struct yetty_ygui_engine *engine, float 
             continue;
         }
         if (w->type == YETTY_YGUI_WIDGET_POPUP) {
-            if (w->data.popup.modal) continue;
+            if (w->data.popup.modal) {
+                continue;
+            }
             if (!point_in_subtree(w, x, y)) {
                 yetty_ygui_widget_popup_set_open(w, 0);
             }
         } else if (w->type == YETTY_YGUI_WIDGET_POPUP_MENU) {
-            if (w->data.popup_menu.modal) continue;
+            if (w->data.popup_menu.modal) {
+                continue;
+            }
             if (!point_in_subtree(w, x, y)) {
                 yetty_ygui_widget_popup_menu_close(w);
             }
@@ -945,9 +1041,8 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
         }
     }
     YGUI_LOG("  grid_query returned: %s (ptr=%p)", hit ? hit->id : "NULL", (void *)hit);
-    ydebug("mouse_down: hit=%s ptr=%p has_on_press=%d",
-           hit ? (hit->id ? hit->id : "?") : "NULL", (void *)hit,
-           (hit && hit->vtable && hit->vtable->on_press) ? 1 : 0);
+    ydebug("mouse_down: hit=%s ptr=%p has_on_press=%d", hit ? (hit->id ? hit->id : "?") : "NULL",
+           (void *)hit, (hit && hit->vtable && hit->vtable->on_press) ? 1 : 0);
 
     if (hit) {
         hit->flags |= YETTY_YGUI_FLAG_PRESSED;
@@ -974,8 +1069,8 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
             float ly = y - hit->effective_y;
             ygui_event_t event = {0};
             int handled = hit->vtable->on_press(hit, lx, ly, &event);
-            ydebug("mouse_down: on_press(%s, lx=%.1f, ly=%.1f) -> %d",
-                   hit->id ? hit->id : "?", lx, ly, handled);
+            ydebug("mouse_down: on_press(%s, lx=%.1f, ly=%.1f) -> %d", hit->id ? hit->id : "?", lx,
+                   ly, handled);
             if (handled) {
                 emit_event(engine, &event);
             } else if (!hit->vtable->on_drag) {
@@ -1111,7 +1206,7 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
      * ygui_widgets.c so we don't re-implement byte/cursor splicing
      * here too. */
     if (engine->focused->type == YETTY_YGUI_WIDGET_TEXTAREA) {
-        extern void yetty_ygui_internal_textarea_insert(struct yetty_ygui_widget *w,
+        extern void yetty_ygui_internal_textarea_insert(struct yetty_ygui_widget * w,
                                                         const char *text);
         yetty_ygui_internal_textarea_insert(engine->focused, text);
         return;
@@ -1127,8 +1222,12 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
         size_t old_len = old_text ? strlen(old_text) : 0;
         size_t add_len = strlen(text);
         int cursor = engine->focused->data.textinput.cursor_pos;
-        if (cursor < 0) cursor = 0;
-        if ((size_t)cursor > old_len) cursor = (int)old_len;
+        if (cursor < 0) {
+            cursor = 0;
+        }
+        if ((size_t)cursor > old_len) {
+            cursor = (int)old_len;
+        }
 
         char *new_text = (char *)malloc(old_len + add_len + 1);
         if (new_text) {
@@ -1137,8 +1236,7 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
             }
             memcpy(new_text + cursor, text, add_len);
             if ((size_t)cursor < old_len && old_text) {
-                memcpy(new_text + cursor + add_len, old_text + cursor,
-                       old_len - (size_t)cursor);
+                memcpy(new_text + cursor + add_len, old_text + cursor, old_len - (size_t)cursor);
             }
             new_text[old_len + add_len] = '\0';
             free(old_text);
@@ -1852,14 +1950,14 @@ void yetty_ygui_internal_process_input(struct yetty_ygui_engine *engine, const c
  * yface input — decode binary OSC envelopes from the ymgui-layer hit router
  *
  * The server (yetty/src/yterm/terminal.c) hit-tests the cursor against live
- * cards and emits YMGUI_OSC_SC_MOUSE / RESIZE / FOCUS / KEY with
+ * cards and emits YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE / RESIZE / FOCUS / KEY with
  * card-local coordinates. We only react to events tagged with our own
- * card_id. Bytes that don't form an OSC envelope (CSI replies, plain
+ * figure_id. Bytes that don't form an OSC envelope (CSI replies, plain
  * keystrokes) are forwarded through on_raw to the existing parser.
  *===========================================================================*/
 
-void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
-                         const uint8_t *payload, size_t payload_len)
+void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *args,
+                                      size_t args_len, const uint8_t *payload, size_t payload_len)
 {
     (void)args;
     (void)args_len;
@@ -1867,21 +1965,26 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
     if (!engine) {
         return;
     }
+    ydebug("ygui_yface_on_osc: code=%d payload_len=%zu", osc_code, payload_len);
 
     switch (osc_code) {
-    case YMGUI_OSC_SC_MOUSE: {
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_mouse)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE: {
+        if (payload_len < sizeof(struct yetty_client_input_mouse)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_mouse *m =
-            (const struct yetty_ymgui_wire_input_mouse *)payload;
-        if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) {
+        const struct yetty_client_input_mouse *m = (const struct yetty_client_input_mouse *)payload;
+        if (m->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             return;
         }
-        if (m->card_id != engine->card_id) {
+        if (m->figure_id != engine->figure_id) {
+            ydebug("ygui_yface_on_osc: SC_MOUSE figure_id=%u != engine->figure_id=%u, ignoring",
+                   m->figure_id, engine->figure_id);
             return; /* not ours */
         }
 
+        ydebug(
+            "ygui_yface_on_osc: SC_MOUSE kind=%d figure_id=%u x=%.1f y=%.1f button=%d pressed=%d",
+            (int)m->kind, m->figure_id, m->x, m->y, (int)m->button, (int)m->pressed);
         switch (m->kind) {
         case YETTY_YMGUI_INPUT_MOUSE_POS:
             yetty_ygui_engine_mouse_move(engine, m->x, m->y);
@@ -1899,16 +2002,16 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
         }
         break;
     }
-    case YMGUI_OSC_SC_RESIZE: {
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_resize)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE: {
+        if (payload_len < sizeof(struct yetty_client_input_resize)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_resize *r =
-            (const struct yetty_ymgui_wire_input_resize *)payload;
-        if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) {
+        const struct yetty_client_input_resize *r =
+            (const struct yetty_client_input_resize *)payload;
+        if (r->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC) {
             return;
         }
-        if (r->card_id != engine->card_id) {
+        if (r->figure_id != engine->figure_id) {
             return;
         }
 
@@ -1928,34 +2031,32 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
          * actually change. */
         break;
     }
-    case YMGUI_OSC_SC_FOCUS: {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS: {
         /* Focus tracking is internal to the engine for now — no public API
          * surface. The server tells us when our card gains/loses focus;
          * widget-level focus stays driven by mouse/key events. */
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_focus)) {
+        if (payload_len < sizeof(struct yetty_client_input_focus)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_focus *f =
-            (const struct yetty_ymgui_wire_input_focus *)payload;
-        if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) {
+        const struct yetty_client_input_focus *f = (const struct yetty_client_input_focus *)payload;
+        if (f->magic != YETTY_CLIENT_INPUT_FOCUS_MAGIC) {
             return;
         }
-        if (f->card_id != engine->card_id) {
+        if (f->figure_id != engine->figure_id) {
             return;
         }
         /* Currently unused — wire it through if/when we add a focus API. */
         break;
     }
-    case YMGUI_OSC_SC_KEY: {
-        if (payload_len < sizeof(struct yetty_ymgui_wire_input_key)) {
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY: {
+        if (payload_len < sizeof(struct yetty_client_input_key)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_key *k =
-            (const struct yetty_ymgui_wire_input_key *)payload;
-        if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) {
+        const struct yetty_client_input_key *k = (const struct yetty_client_input_key *)payload;
+        if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
             return;
         }
-        if (k->card_id != engine->card_id) {
+        if (k->figure_id != engine->figure_id) {
             return;
         }
 

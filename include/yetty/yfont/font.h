@@ -62,8 +62,8 @@ struct yetty_yfont_font_ops {
 	 * Must not require glyph rasterization, atlas placement, or shader.
 	 * Implementations may override to handle kerning/shaping; the default
 	 * behaviour is to sum get_advance() over codepoints. */
-    struct float_result (*measure_text)(struct yetty_ydraw_font *self, const char *utf8,
-                                        size_t len, float font_size);
+    struct float_result (*measure_text)(struct yetty_ydraw_font *self, const char *utf8, size_t len,
+                                        float font_size);
 
     /* Base size the CDB was generated at */
     float (*get_base_size)(const struct yetty_ydraw_font *self);

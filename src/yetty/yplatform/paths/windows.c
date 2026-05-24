@@ -25,17 +25,16 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
 {
     struct yetty_yplatform_paths *p = calloc(1, sizeof(*p));
     if (!p) {
-        return YETTY_ERR(yetty_yplatform_paths_ptr,
-                         "OOM allocating yetty_yplatform_paths");
+        return YETTY_ERR(yetty_yplatform_paths_ptr, "OOM allocating yetty_yplatform_paths");
     }
 
     const char *localAppData = getenv("LOCALAPPDATA");
     if (localAppData && *localAppData) {
         snprintf(p->cache_dir_buf, sizeof(p->cache_dir_buf), "%s\\yetty\\cache", localAppData);
-        snprintf(p->data_dir_buf,  sizeof(p->data_dir_buf),  "%s\\yetty\\data",  localAppData);
+        snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "%s\\yetty\\data", localAppData);
     } else {
         snprintf(p->cache_dir_buf, sizeof(p->cache_dir_buf), "C:\\temp\\yetty");
-        snprintf(p->data_dir_buf,  sizeof(p->data_dir_buf),  "C:\\temp\\yetty");
+        snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "C:\\temp\\yetty");
     }
 
     const char *temp = getenv("TEMP");

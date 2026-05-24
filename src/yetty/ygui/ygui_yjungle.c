@@ -10,6 +10,7 @@
 
 #include "ygui_internal.h"
 #include "ygui_flatten.h"
+#include <yetty/yfigure/wire.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -40,21 +41,19 @@ static void live_remove(struct yetty_ygui_widget *self, uint32_t id)
     for (size_t i = 0; i < self->data.yjungle.live_count; i++) {
         if (self->data.yjungle.live[i].id == id) {
             free(self->data.yjungle.live[i].bytes);
-            self->data.yjungle.live[i] =
-                self->data.yjungle.live[self->data.yjungle.live_count - 1];
+            self->data.yjungle.live[i] = self->data.yjungle.live[self->data.yjungle.live_count - 1];
             self->data.yjungle.live_count--;
             return;
         }
     }
 }
 
-static int live_append(struct yetty_ygui_widget *self, uint32_t id,
-                       const uint8_t *src, size_t size)
+static int live_append(struct yetty_ygui_widget *self, uint32_t id, const uint8_t *src, size_t size)
 {
     if (self->data.yjungle.live_count == self->data.yjungle.live_cap) {
         size_t nc = self->data.yjungle.live_cap ? self->data.yjungle.live_cap * 2 : 64;
-        struct yjungle_live_seg *nl = (struct yjungle_live_seg *)
-            realloc(self->data.yjungle.live, nc * sizeof(*nl));
+        struct yjungle_live_seg *nl =
+            (struct yjungle_live_seg *)realloc(self->data.yjungle.live, nc * sizeof(*nl));
         if (!nl) {
             return -1;
         }
@@ -87,23 +86,31 @@ static void apply_delta(struct yetty_ygui_widget *self)
         uint32_t type = *(const uint32_t *)(bytes + off);
         if (type == YETTY_YDRAW_CMD_ZERO) {
             live_clear(self);
-            if (off + 8 > len) break;
+            if (off + 8 > len) {
+                break;
+            }
             off += 8;
             continue;
         }
         if (type == YETTY_YDRAW_CMD_DELETE) {
-            if (off + 12 > len) break;
+            if (off + 12 > len) {
+                break;
+            }
             uint32_t id = ((const uint32_t *)(bytes + off))[1];
             live_remove(self, id);
             off += 12;
             continue;
         }
         if (type == YETTY_YDRAW_CMD_GROUP) {
-            if (off + 12 > len) break;
+            if (off + 12 > len) {
+                break;
+            }
             uint32_t id = ((const uint32_t *)(bytes + off))[1];
             uint32_t payload_size = ((const uint32_t *)(bytes + off))[2];
             size_t total = (size_t)12 + payload_size;
-            if (off + total > len) break;
+            if (off + total > len) {
+                break;
+            }
             if (live_append(self, id, bytes + off, total) != 0) {
                 return;
             }
@@ -144,11 +151,12 @@ static void yj_drop_producer(struct yetty_ygui_widget *self)
 static int yj_alloc_buffer(struct yetty_ydraw_draw_list **out, float w, float h)
 {
     struct yetty_ydraw_draw_list_config bcfg = {
-        .scene_min_x = 0.0f, .scene_min_y = 0.0f,
-        .scene_max_x = w,    .scene_max_y = h,
+        .scene_min_x = 0.0f,
+        .scene_min_y = 0.0f,
+        .scene_max_x = w,
+        .scene_max_y = h,
     };
-    struct yetty_ydraw_draw_list_result r =
-        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_result r = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return 0;
@@ -165,8 +173,7 @@ static int yj_ensure_attached(struct yetty_ygui_widget *self, float w, float h)
     if (w <= 0.0f || h <= 0.0f) {
         return 0;
     }
-    if (self->data.yjungle.producer &&
-        self->data.yjungle.last_w == w &&
+    if (self->data.yjungle.producer && self->data.yjungle.last_w == w &&
         self->data.yjungle.last_h == h) {
         return 1;
     }
@@ -180,12 +187,10 @@ static int yj_ensure_attached(struct yetty_ygui_widget *self, float w, float h)
     }
     if (!self->data.yjungle.producer) {
         struct yetty_yjungle_config cfg =
-            self->data.yjungle.has_cfg ? self->data.yjungle.cfg
-                                       : yetty_yjungle_config_default();
+            self->data.yjungle.has_cfg ? self->data.yjungle.cfg : yetty_yjungle_config_default();
         cfg.scene_width = w;
         cfg.scene_height = h;
-        struct yetty_yjungle_ptr_result jr =
-            yetty_yjungle_create(&cfg, self->data.yjungle.seed);
+        struct yetty_yjungle_ptr_result jr = yetty_yjungle_create(&cfg, self->data.yjungle.seed);
         if (YETTY_IS_ERR(jr)) {
             yetty_ycore_error_destroy(jr.error);
             return 0;
@@ -194,9 +199,15 @@ static int yj_ensure_attached(struct yetty_ygui_widget *self, float w, float h)
         live_clear(self);
         self->data.yjungle.t0_ms = 0;
     }
-    if (!yj_alloc_buffer(&self->data.yjungle.delta, w, h)) return 0;
-    if (!yj_alloc_buffer(&self->data.yjungle.acc,   w, h)) return 0;
-    if (!yj_alloc_buffer(&self->data.yjungle.flat,  w, h)) return 0;
+    if (!yj_alloc_buffer(&self->data.yjungle.delta, w, h)) {
+        return 0;
+    }
+    if (!yj_alloc_buffer(&self->data.yjungle.acc, w, h)) {
+        return 0;
+    }
+    if (!yj_alloc_buffer(&self->data.yjungle.flat, w, h)) {
+        return 0;
+    }
     self->data.yjungle.last_w = w;
     self->data.yjungle.last_h = h;
     return 1;
@@ -208,28 +219,22 @@ static int yj_rebuild_flat(struct yetty_ygui_widget *self)
         return 0;
     }
     yetty_ydraw_draw_list_clear(self->data.yjungle.acc);
-    yetty_ydraw_draw_list_set_scene_bounds(self->data.yjungle.acc,
-                                           0.0f, 0.0f,
-                                           self->data.yjungle.last_w,
-                                           self->data.yjungle.last_h);
+    yetty_ydraw_draw_list_set_scene_bounds(self->data.yjungle.acc, 0.0f, 0.0f,
+                                           self->data.yjungle.last_w, self->data.yjungle.last_h);
     for (size_t i = 0; i < self->data.yjungle.live_count; i++) {
-        struct yetty_ydraw_id_result ar = yetty_ydraw_draw_list_add_prim(
-            self->data.yjungle.acc,
-            self->data.yjungle.live[i].bytes,
-            self->data.yjungle.live[i].size);
+        struct yetty_ydraw_id_result ar =
+            yetty_ydraw_draw_list_add_prim(self->data.yjungle.acc, self->data.yjungle.live[i].bytes,
+                                           self->data.yjungle.live[i].size);
         if (YETTY_IS_ERR(ar)) {
             yetty_ycore_error_destroy(ar.error);
             return 0;
         }
     }
     yetty_ydraw_draw_list_clear(self->data.yjungle.flat);
-    yetty_ydraw_draw_list_set_scene_bounds(self->data.yjungle.flat,
-                                           0.0f, 0.0f,
-                                           self->data.yjungle.last_w,
-                                           self->data.yjungle.last_h);
+    yetty_ydraw_draw_list_set_scene_bounds(self->data.yjungle.flat, 0.0f, 0.0f,
+                                           self->data.yjungle.last_w, self->data.yjungle.last_h);
     struct yetty_ycore_void_result fr =
-        yetty_ygui_flatten_draw_list(self->data.yjungle.flat,
-                                     self->data.yjungle.acc);
+        yetty_ygui_flatten_draw_list(self->data.yjungle.flat, self->data.yjungle.acc);
     if (YETTY_IS_ERR(fr)) {
         yetty_ycore_error_destroy(fr.error);
         return 0;
@@ -255,8 +260,7 @@ static struct yetty_ycore_void_result yj_render(struct yetty_ygui_widget *self,
          * initial chain regardless of clock value. */
         yetty_ydraw_draw_list_clear(self->data.yjungle.delta);
         struct yetty_ycore_void_result tr =
-            yetty_yjungle_tick(self->data.yjungle.producer,
-                               self->data.yjungle.delta, 0);
+            yetty_yjungle_tick(self->data.yjungle.producer, self->data.yjungle.delta, 0);
         if (YETTY_IS_ERR(tr)) {
             yetty_ycore_error_destroy(tr.error);
         } else if (yetty_ydraw_draw_list_size(self->data.yjungle.delta) > 0u) {
@@ -267,8 +271,8 @@ static struct yetty_ycore_void_result yj_render(struct yetty_ygui_widget *self,
     if (!self->data.yjungle.flat) {
         return YETTY_OK_VOID();
     }
-    return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.yjungle.flat, self->layout_x, self->layout_y);
+    /* Figure-local: see ygui_yplot.c for rationale. */
+    return yetty_ygui_internal_emit_buffer_translated(ctx, self->data.yjungle.flat, 0.0f, 0.0f);
 }
 
 static void yj_destroy(struct yetty_ygui_widget *self)
@@ -279,10 +283,24 @@ static void yj_destroy(struct yetty_ygui_widget *self)
     self->data.yjungle.live_cap = 0;
 }
 
+static struct yetty_ycore_void_result yj_render_all(struct yetty_ygui_widget *self,
+                                                    struct yetty_ygui_render_ctx *ctx)
+{
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
+    uint32_t marker =
+        yetty_ygui_widget_open_group_as_kind(self, ctx, YETTY_YFIGURE_KIND_YJUNGLE, yj_render);
+    yetty_ygui_widget_close_group(self, ctx, marker);
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_ygui_widget_vtable *yj_vtable_ptr(void)
 {
     static const struct yetty_ygui_widget_vtable vt = {
         .render = yj_render,
+        .render_all = yj_render_all,
         .destroy = yj_destroy,
     };
     return &vt;
@@ -292,10 +310,11 @@ static const struct yetty_ygui_widget_vtable *yj_vtable_ptr(void)
  * Construction + public API
  *===========================================================================*/
 
-struct yetty_ygui_widget *yetty_ygui_engine_yjungle(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const struct yetty_yjungle_config *config, uint32_t seed)
+struct yetty_ygui_widget *yetty_ygui_engine_yjungle(struct yetty_ygui_engine *engine,
+                                                    const char *id, float x, float y, float w,
+                                                    float h,
+                                                    const struct yetty_yjungle_config *config,
+                                                    uint32_t seed)
 {
     struct yetty_ygui_widget *widget =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_YJUNGLE, id);
@@ -330,8 +349,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_yjungle(
     return widget;
 }
 
-struct yetty_ycore_void_result yetty_ygui_widget_yjungle_tick(
-    struct yetty_ygui_widget *widget, uint64_t now_ms)
+struct yetty_ycore_void_result yetty_ygui_widget_yjungle_tick(struct yetty_ygui_widget *widget,
+                                                              uint64_t now_ms)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_YJUNGLE) {
         return YETTY_ERR(yetty_ycore_void, "yjungle_tick: not a yjungle widget");
@@ -343,8 +362,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_yjungle_tick(
     }
     yetty_ydraw_draw_list_clear(widget->data.yjungle.delta);
     struct yetty_ycore_void_result tr =
-        yetty_yjungle_tick(widget->data.yjungle.producer,
-                           widget->data.yjungle.delta, now_ms);
+        yetty_yjungle_tick(widget->data.yjungle.producer, widget->data.yjungle.delta, now_ms);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "yjungle_tick: producer tick failed");
     if (yetty_ydraw_draw_list_size(widget->data.yjungle.delta) == 0u) {
         return YETTY_OK_VOID();

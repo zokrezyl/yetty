@@ -34,17 +34,17 @@ YETTY_YRESULT_DECLARE(yetty_yrdawn_client_ptr, struct yetty_yrdawn_client *);
  * status is enum yetty_yrdawn_reply_status. The slot is freed before
  * the callback runs. */
 typedef void (*yetty_yrdawn_reply_cb)(void *user, uint32_t status, uint32_t method_id,
-                                     const uint8_t *body, size_t body_len);
+                                      const uint8_t *body, size_t body_len);
 
 /* Fires when an EVENT arrives (device-lost, uncaptured-error, logging).
  * kind is enum yetty_yrdawn_event_kind; body is the kind-specific tail. */
 typedef void (*yetty_yrdawn_event_cb)(void *user, uint32_t kind, uint64_t device_handle,
-                                     const uint8_t *body, size_t body_len);
+                                      const uint8_t *body, size_t body_len);
 
 /* Fires when a SC_KEY input frame arrives. kind is enum
  * yetty_yrdawn_input_key_kind; key/mods/codepoint match the wire struct. */
-typedef void (*yetty_yrdawn_input_key_cb)(void *user, uint32_t kind, int32_t key,
-                                         int32_t mods, uint32_t codepoint);
+typedef void (*yetty_yrdawn_input_key_cb)(void *user, uint32_t kind, int32_t key, int32_t mods,
+                                          uint32_t codepoint);
 
 /* Fires when the layer's pane pixel size changes. */
 typedef void (*yetty_yrdawn_input_resize_cb)(void *user, float width, float height);
@@ -56,14 +56,14 @@ struct yetty_yrdawn_client_ptr_result yetty_yrdawn_client_create(int in_fd, int 
 
 struct yetty_ycore_void_result yetty_yrdawn_client_destroy(struct yetty_yrdawn_client *c);
 
-void yetty_yrdawn_client_set_event_cb(struct yetty_yrdawn_client *c,
-                                     yetty_yrdawn_event_cb cb, void *user);
+void yetty_yrdawn_client_set_event_cb(struct yetty_yrdawn_client *c, yetty_yrdawn_event_cb cb,
+                                      void *user);
 
 void yetty_yrdawn_client_set_input_key_cb(struct yetty_yrdawn_client *c,
-                                         yetty_yrdawn_input_key_cb cb, void *user);
+                                          yetty_yrdawn_input_key_cb cb, void *user);
 
 void yetty_yrdawn_client_set_input_resize_cb(struct yetty_yrdawn_client *c,
-                                            yetty_yrdawn_input_resize_cb cb, void *user);
+                                             yetty_yrdawn_input_resize_cb cb, void *user);
 
 /* Emit a HELLO. Connected flag flips on the next _pump() call that
  * sees a HELLO_ACK with status OK. */
@@ -78,17 +78,18 @@ uint64_t yetty_yrdawn_client_alloc_handle(struct yetty_yrdawn_client *c);
 
 /* Send a CMD whose entrypoint has no callback. body is the codegen-
  * emitted method-specific args. */
-struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_sync(
-    struct yetty_yrdawn_client *c, uint32_t method_id,
-    const void *body, size_t body_len);
+struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_sync(struct yetty_yrdawn_client *c,
+                                                                 uint32_t method_id,
+                                                                 const void *body, size_t body_len);
 
 /* Send a CMD whose entrypoint has a callback. Allocates a non-zero
  * req_id, registers (cb, user), writes the frame. cb fires from a
  * later _pump() call when the matching REPLY arrives. */
-struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_async(
-    struct yetty_yrdawn_client *c, uint32_t method_id,
-    const void *body, size_t body_len,
-    yetty_yrdawn_reply_cb cb, void *user);
+struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_async(struct yetty_yrdawn_client *c,
+                                                                  uint32_t method_id,
+                                                                  const void *body, size_t body_len,
+                                                                  yetty_yrdawn_reply_cb cb,
+                                                                  void *user);
 
 /* Send a CMD with a fixed-size return value, wait for the matching
  * REPLY, copy its payload into *out (caller-supplied buffer, must hold
@@ -99,33 +100,31 @@ struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_async(
  * owns the client. `out_status` receives the REPLY status (NULL OK).
  * Returns failure on timeout or wire error. */
 struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_blocking(
-    struct yetty_yrdawn_client *c, uint32_t method_id,
-    const void *body, size_t body_len,
-    void *out, size_t out_size, uint32_t *out_status);
+    struct yetty_yrdawn_client *c, uint32_t method_id, const void *body, size_t body_len, void *out,
+    size_t out_size, uint32_t *out_status);
 
 /* Variant that allocates the reply payload buffer (variable-length).
  * On success *out_buf points to a malloc'd buffer of *out_len bytes —
  * caller frees with free(). For methods that fill an output struct
  * which itself contains variable-length inner data. */
 struct yetty_ycore_void_result yetty_yrdawn_client_send_cmd_blocking_dyn(
-    struct yetty_yrdawn_client *c, uint32_t method_id,
-    const void *body, size_t body_len,
+    struct yetty_yrdawn_client *c, uint32_t method_id, const void *body, size_t body_len,
     uint8_t **out_buf, size_t *out_len, uint32_t *out_status);
 
 struct yetty_ycore_void_result yetty_yrdawn_client_send_bye(struct yetty_yrdawn_client *c);
 
 /* Emit a complete BULK payload as one or more chunk frames under a
  * caller-supplied non-zero ref. The receiver reassembles by seq. */
-struct yetty_ycore_void_result yetty_yrdawn_client_send_bulk(
-    struct yetty_yrdawn_client *c, uint32_t ref,
-    const void *bytes, size_t len);
+struct yetty_ycore_void_result yetty_yrdawn_client_send_bulk(struct yetty_yrdawn_client *c,
+                                                             uint32_t ref, const void *bytes,
+                                                             size_t len);
 
 /* Ship a single RGBA8 frame to the local yetty's yrdawn-layer. The
  * pixels travel over the BULK channel; a follow-up CMD references
  * them. Caller-owned bytes; safe to free after return. */
-struct yetty_ycore_void_result yetty_yrdawn_client_present_frame(
-    struct yetty_yrdawn_client *c, uint32_t width, uint32_t height,
-    const void *pixels, size_t bytes);
+struct yetty_ycore_void_result yetty_yrdawn_client_present_frame(struct yetty_yrdawn_client *c,
+                                                                 uint32_t width, uint32_t height,
+                                                                 const void *pixels, size_t bytes);
 
 /* Read available bytes from in_fd, parse OSC envelopes, dispatch by
  * code (HELLO_ACK / REPLY / EVENT / BULK / ERROR), fire any matching

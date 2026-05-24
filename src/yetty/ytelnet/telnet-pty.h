@@ -52,8 +52,8 @@ struct yetty_yplatform_pty_ptr_result yetty_ytelnet_telnet_pty_create_tcp(
  * factory->ops->create_pty(factory, event_loop) — same shape as
  * before the transport refactor, so existing callers don't change.
  */
-struct yetty_yplatform_pty_factory_ptr_result yetty_ytelnet_telnet_pty_factory_create(const char *host,
-                                                                                  uint16_t port);
+struct yetty_yplatform_pty_factory_ptr_result yetty_ytelnet_telnet_pty_factory_create(
+    const char *host, uint16_t port);
 
 #ifdef __cplusplus
 }

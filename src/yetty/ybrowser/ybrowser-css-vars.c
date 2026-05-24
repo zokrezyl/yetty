@@ -198,8 +198,7 @@ void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *src, size_
             const char *kw_start = p + 1;
             const char *kw_end = kw_start;
             while (kw_end < end && ((*kw_end >= 'a' && *kw_end <= 'z') ||
-                                    (*kw_end >= 'A' && *kw_end <= 'Z') ||
-                                    *kw_end == '-')) {
+                                    (*kw_end >= 'A' && *kw_end <= 'Z') || *kw_end == '-')) {
                 kw_end++;
             }
             size_t kw_len = (size_t)(kw_end - kw_start);

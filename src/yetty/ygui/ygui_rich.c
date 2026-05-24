@@ -233,9 +233,7 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
  * widget (yimage / yplot / yvideo / yzoo / yjungle) so they all share
  * one rendering substrate without going through rich. */
 struct yetty_ycore_void_result yetty_ygui_internal_emit_buffer_translated(
-    struct yetty_ygui_render_ctx *ctx,
-    const struct yetty_ydraw_draw_list *src,
-    float dx, float dy)
+    struct yetty_ygui_render_ctx *ctx, const struct yetty_ydraw_draw_list *src, float dx, float dy)
 {
     if (!ctx || !ctx->buffer || !src) {
         return YETTY_OK_VOID();
@@ -265,8 +263,7 @@ struct yetty_ycore_void_result yetty_ygui_internal_emit_buffer_translated(
                 uint8_t *grown = (uint8_t *)realloc(heap, s);
                 if (!grown) {
                     free(heap);
-                    return YETTY_ERR(yetty_ycore_void,
-                                     "emit_buffer_translated: oom");
+                    return YETTY_ERR(yetty_ycore_void, "emit_buffer_translated: oom");
                 }
                 heap = grown;
                 heap_cap = s;
@@ -280,25 +277,23 @@ struct yetty_ycore_void_result yetty_ygui_internal_emit_buffer_translated(
          * float[5]/[6] (after [type, z, fill, stroke, sw]). Log both
          * so we can see which slot actually got translated. */
         size_t wc = s / sizeof(float);
-        float pre_b23x  = (wc > 3)  ? ((float *)work)[2] : 0.0f;
-        float pre_b23y  = (wc > 3)  ? ((float *)work)[3] : 0.0f;
-        float pre_sdfx  = (wc > 6)  ? ((float *)work)[5] : 0.0f;
-        float pre_sdfy  = (wc > 6)  ? ((float *)work)[6] : 0.0f;
+        float pre_b23x = (wc > 3) ? ((float *)work)[2] : 0.0f;
+        float pre_b23y = (wc > 3) ? ((float *)work)[3] : 0.0f;
+        float pre_sdfx = (wc > 6) ? ((float *)work)[5] : 0.0f;
+        float pre_sdfy = (wc > 6) ? ((float *)work)[6] : 0.0f;
         translate_prim((uint32_t *)work, s, dx, dy);
-        float post_b23x = (wc > 3)  ? ((float *)work)[2] : 0.0f;
-        float post_b23y = (wc > 3)  ? ((float *)work)[3] : 0.0f;
-        float post_sdfx = (wc > 6)  ? ((float *)work)[5] : 0.0f;
-        float post_sdfy = (wc > 6)  ? ((float *)work)[6] : 0.0f;
-        ydebug("emit_buffer_translated: type=0x%08x size=%zu dx=%.1f dy=%.1f bounds[2,3]: pre=(%.1f,%.1f) post=(%.1f,%.1f) sdf[5,6]: pre=(%.1f,%.1f) post=(%.1f,%.1f)",
-               pre_t, s, dx, dy,
-               pre_b23x, pre_b23y, post_b23x, post_b23y,
-               pre_sdfx, pre_sdfy, post_sdfx, post_sdfy);
-        struct yetty_ydraw_id_result r =
-            yetty_ydraw_draw_list_add_prim(ctx->buffer, work, s);
+        float post_b23x = (wc > 3) ? ((float *)work)[2] : 0.0f;
+        float post_b23y = (wc > 3) ? ((float *)work)[3] : 0.0f;
+        float post_sdfx = (wc > 6) ? ((float *)work)[5] : 0.0f;
+        float post_sdfy = (wc > 6) ? ((float *)work)[6] : 0.0f;
+        ydebug("emit_buffer_translated: type=0x%08x size=%zu dx=%.1f dy=%.1f bounds[2,3]: "
+               "pre=(%.1f,%.1f) post=(%.1f,%.1f) sdf[5,6]: pre=(%.1f,%.1f) post=(%.1f,%.1f)",
+               pre_t, s, dx, dy, pre_b23x, pre_b23y, post_b23x, post_b23y, pre_sdfx, pre_sdfy,
+               post_sdfx, post_sdfy);
+        struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(ctx->buffer, work, s);
         if (YETTY_IS_ERR(r)) {
             free(heap);
-            return YETTY_ERR(yetty_ycore_void,
-                             "emit_buffer_translated: add_prim failed", r);
+            return YETTY_ERR(yetty_ycore_void, "emit_buffer_translated: add_prim failed", r);
         }
         p += s;
         remaining -= s;
@@ -310,8 +305,8 @@ struct yetty_ycore_void_result yetty_ygui_internal_emit_buffer_translated(
 static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self,
                                                   struct yetty_ygui_render_ctx *ctx)
 {
-    return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.rich.buffer, self->layout_x, self->layout_y);
+    return yetty_ygui_internal_emit_buffer_translated(ctx, self->data.rich.buffer, self->layout_x,
+                                                      self->layout_y);
 }
 
 static void rich_destroy(struct yetty_ygui_widget *self)
@@ -368,7 +363,8 @@ void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
     }
     widget->data.rich.buffer = buffer;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 

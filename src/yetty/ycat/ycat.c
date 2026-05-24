@@ -44,13 +44,11 @@ extern struct yetty_ydraw_draw_list_result yetty_ycat_handler_video(
 /* Streaming handlers (multi-envelope: PDF page-per-envelope, markdown
  * screen-height-tile-per-envelope). */
 extern struct yetty_ycore_void_result yetty_ycat_handler_markdown_streaming(
-    const uint8_t *bytes, size_t len, const char *path_hint,
-    const struct yetty_ycat_config *config,
+    const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config,
     yetty_ycat_emit_fn emit, void *emit_user_data);
 
 extern struct yetty_ycore_void_result yetty_ycat_handler_pdf_streaming(
-    const uint8_t *bytes, size_t len, const char *path_hint,
-    const struct yetty_ycat_config *config,
+    const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config,
     yetty_ycat_emit_fn emit, void *emit_user_data);
 
 /*=============================================================================
@@ -162,8 +160,8 @@ int yetty_ycat_register_handler_streaming(enum yetty_ycat_type type,
  *===========================================================================*/
 
 struct yetty_ydraw_draw_list_result yetty_ycat_render(const uint8_t *bytes, size_t len,
-                                                         const char *path_hint,
-                                                         const struct yetty_ycat_config *config)
+                                                      const char *path_hint,
+                                                      const struct yetty_ycat_config *config)
 {
     enum yetty_ycat_type type = yetty_ycat_detect(bytes, len, path_hint);
     yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);

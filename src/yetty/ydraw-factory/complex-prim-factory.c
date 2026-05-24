@@ -30,11 +30,9 @@ struct yetty_ydraw_raw_figure_factory {
 // Abstract factory lifecycle
 //=============================================================================
 
-struct yetty_ydraw_raw_figure_factory_ptr_result
-yetty_ydraw_raw_figure_factory_create(WGPUDevice device, WGPUQueue queue,
-                                              WGPUTextureFormat target_format,
-                                              struct yetty_ydraw_gpu_allocator *allocator,
-                                              struct yetty_yevent_event_loop *event_loop)
+struct yetty_ydraw_raw_figure_factory_ptr_result yetty_ydraw_raw_figure_factory_create(
+    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
+    struct yetty_ydraw_gpu_allocator *allocator, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_ydraw_raw_figure_factory *factory =
         calloc(1, sizeof(struct yetty_ydraw_raw_figure_factory));
@@ -51,8 +49,7 @@ yetty_ydraw_raw_figure_factory_create(WGPUDevice device, WGPUQueue queue,
     return YETTY_OK(yetty_ydraw_raw_figure_factory_ptr, factory);
 }
 
-void yetty_ydraw_raw_figure_factory_destroy(
-    struct yetty_ydraw_raw_figure_factory *factory)
+void yetty_ydraw_raw_figure_factory_destroy(struct yetty_ydraw_raw_figure_factory *factory)
 {
     if (!factory) {
         return;
@@ -66,8 +63,7 @@ void yetty_ydraw_raw_figure_factory_destroy(
 //=============================================================================
 
 struct yetty_ycore_void_result yetty_ydraw_raw_figure_factory_register(
-    struct yetty_ydraw_raw_figure_factory *factory,
-    struct yetty_ydraw_concrete_factory *concrete)
+    struct yetty_ydraw_raw_figure_factory *factory, struct yetty_ydraw_concrete_factory *concrete)
 {
     if (!factory) {
         return YETTY_ERR(yetty_ycore_void, "factory is NULL");
@@ -94,8 +90,7 @@ struct yetty_ycore_void_result yetty_ydraw_raw_figure_factory_register(
     if (concrete->compile_pipeline) {
         struct yetty_ycore_void_result res = concrete->compile_pipeline(
             concrete, factory->device, factory->queue, factory->target_format, factory->allocator);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, res,
-                            "figure_factory: compile_pipeline failed");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "figure_factory: compile_pipeline failed");
     }
 
     factory->factories[factory->count++] = concrete;
@@ -126,8 +121,7 @@ static struct yetty_ydraw_concrete_factory *figure_factory_get(
 // Abstract factory instance creation
 //=============================================================================
 
-struct yetty_ydraw_figure_ptr_result
-yetty_ydraw_raw_figure_factory_create_instance(
+struct yetty_ydraw_figure_ptr_result yetty_ydraw_raw_figure_factory_create_instance(
     struct yetty_ydraw_raw_figure_factory *factory, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
@@ -143,8 +137,7 @@ yetty_ydraw_raw_figure_factory_create_instance(
     uint32_t type_id = prim->type;
 
     // Get concrete factory
-    struct yetty_ydraw_concrete_factory *concrete =
-        figure_factory_get(factory, type_id);
+    struct yetty_ydraw_concrete_factory *concrete = figure_factory_get(factory, type_id);
     if (!concrete) {
         return YETTY_ERR(yetty_ydraw_figure_ptr, "type not registered");
     }
@@ -159,9 +152,8 @@ yetty_ydraw_raw_figure_factory_create_instance(
 // so its fragment shader can transform the incoming pixel at fs_main entry.
 //=============================================================================
 
-void yetty_ydraw_raw_figure_factory_set_visual_zoom(
-    struct yetty_ydraw_raw_figure_factory *factory, float scale, float offset_x,
-    float offset_y)
+void yetty_ydraw_raw_figure_factory_set_visual_zoom(struct yetty_ydraw_raw_figure_factory *factory,
+                                                    float scale, float offset_x, float offset_y)
 {
     if (!factory) {
         return;
@@ -174,16 +166,15 @@ void yetty_ydraw_raw_figure_factory_set_visual_zoom(
     }
 }
 
-void yetty_ydraw_raw_figure_factory_set_cell_zoom(
-    struct yetty_ydraw_raw_figure_factory *factory, float scale, float offset_x,
-    float offset_y)
+void yetty_ydraw_raw_figure_factory_set_cell_zoom(struct yetty_ydraw_raw_figure_factory *factory,
+                                                  float scale, float offset_x, float offset_y)
 {
     if (!factory) {
         ydebug("figure_factory_set_cell_zoom: factory is NULL");
         return;
     }
-    ydebug("figure_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale,
-           offset_x, offset_y, factory->count);
+    ydebug("figure_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale, offset_x,
+           offset_y, factory->count);
     for (uint32_t i = 0; i < factory->count; i++) {
         struct yetty_ydraw_concrete_factory *cf = factory->factories[i];
         if (!cf) {
@@ -201,8 +192,7 @@ void yetty_ydraw_raw_figure_factory_set_cell_zoom(
 // Instance destruction (uses back-pointer)
 //=============================================================================
 
-void yetty_ydraw_figure_destroy(
-    struct yetty_ydraw_figure *instance)
+void yetty_ydraw_figure_destroy(struct yetty_ydraw_figure *instance)
 {
     if (!instance) {
         return;

@@ -10,7 +10,7 @@
 #include <pthread.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yinit/yinit.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
@@ -107,7 +107,7 @@ static void *render_thread_func(void *arg)
     struct yetty_yetty_yetty *_yetty;
     /* Owned here; outlives _yetty. Built from a synthetic yinit_runtime
      * in viewDidLoad and torn down after yetty_destroy. */
-    struct yetty_yruntime *_yruntime;
+    struct yetty_yframework *_yframework;
     struct yetty_ycore_xthread_event_pipe *_pipe;
     struct yetty_yconfig_config *_config;
     struct yetty_yplatform_pty_factory *_ptyFactory;
@@ -242,9 +242,9 @@ static void *render_thread_func(void *arg)
 
     /* Build a synthetic yinit_runtime (iOS doesn't go through
      * yetty_yinit_run — UIKit drives the main loop and we bootstrap
-     * inline) and hand it to yruntime_create for the standard
+     * inline) and hand it to yframework_create for the standard
      * adapter/device/queue/allocator/render-target setup. */
-    ydebug("creating yruntime");
+    ydebug("creating yframework");
     struct yetty_yinit_runtime yinit_rt;
     memset(&yinit_rt, 0, sizeof(yinit_rt));
     yinit_rt.config              = _config;
@@ -255,21 +255,21 @@ static void *render_thread_func(void *arg)
     yinit_rt.content_scale       = (float)scale;
     yinit_rt.platform_input_pipe = _pipe;
 
-    struct yetty_yruntime_ptr_result yrt_res = yetty_yruntime_create(&yinit_rt);
+    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(&yinit_rt);
     if (!YETTY_IS_OK(yrt_res)) {
-        yerror("failed to create yruntime: %s",
+        yerror("failed to create yframework: %s",
                yrt_res.error.msg ? yrt_res.error.msg : "(no msg)");
         yetty_ycore_error_destroy(yrt_res.error);
         return;
     }
-    _yruntime = yrt_res.value;
+    _yframework = yrt_res.value;
 
     ydebug("creating yetty");
-    struct yetty_yetty_yetty_result yetty_result = yetty_create(_yruntime, _ptyFactory);
+    struct yetty_yetty_yetty_result yetty_result = yetty_create(_yframework, _ptyFactory);
     if (!YETTY_IS_OK(yetty_result)) {
         yerror("failed to create yetty: %s", yetty_result.error.msg);
-        yetty_yruntime_destroy(_yruntime);
-        _yruntime = NULL;
+        yetty_yframework_destroy(_yframework);
+        _yframework = NULL;
         return;
     }
     _yetty = yetty_result.value;
@@ -566,12 +566,12 @@ static void *render_thread_func(void *arg)
         pthread_join(_renderThread, NULL);
     }
     if (_yetty) yetty_destroy(_yetty);
-    if (_yruntime) {
-        /* yruntime_destroy unconfigures + releases the surface and
+    if (_yframework) {
+        /* yframework_destroy unconfigures + releases the surface and
          * device; null both so the legacy fallbacks below don't double-
          * release. */
-        yetty_yruntime_destroy(_yruntime);
-        _yruntime = NULL;
+        yetty_yframework_destroy(_yframework);
+        _yframework = NULL;
         _surface = NULL;
         _instance = NULL;
     }

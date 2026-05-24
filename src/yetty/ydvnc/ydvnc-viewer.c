@@ -17,7 +17,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
@@ -409,9 +409,9 @@ struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
         return YETTY_ERR(yetty_ydvnc_viewer_ptr, "ydvnc: strdup failed");
     }
 
-    struct yetty_ydvnc_rfb_client_ptr_result cres =
-        yetty_ydvnc_rfb_client_create(yetty_ctx->runtime->gpu.device, yetty_ctx->runtime->gpu.queue,
-                                      yetty_ctx->runtime->gpu.surface_format, yetty_ctx->event_loop);
+    struct yetty_ydvnc_rfb_client_ptr_result cres = yetty_ydvnc_rfb_client_create(
+        yetty_ctx->runtime->gpu.device, yetty_ctx->runtime->gpu.queue,
+        yetty_ctx->runtime->gpu.surface_format, yetty_ctx->event_loop);
     if (YETTY_IS_ERR(cres)) {
         free(v->host);
         free(v);

@@ -52,8 +52,8 @@ struct yetty_ydraw_draw_list_result yetty_yimage_render_path(
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
-struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(
-    const struct yetty_ydraw_draw_list *buffer, FILE *out);
+struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+                                                         FILE *out);
 
 #ifdef __cplusplus
 }

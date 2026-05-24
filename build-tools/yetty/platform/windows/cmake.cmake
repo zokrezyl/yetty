@@ -4,8 +4,18 @@ include(${CMAKE_CURRENT_LIST_DIR}/variables.cmake)
 # YETTY_ERR(...) uses __VA_ARGS__ count-based dispatch; MSVC's traditional
 # preprocessor mishandles it. The conformant preprocessor (/Zc:preprocessor)
 # ships in VS 2019 16.5+ and is a no-op rewrite for well-behaved code.
+#
+# /std:clatest + /experimental:c11atomics — several of our C TUs include
+# <stdatomic.h> (ywire's coroutine impl, yui, …). MSVC sets
+# __STDC_NO_ATOMICS__ by default and only clears it when BOTH flags are
+# present. Applied globally at directory scope so every static lib added
+# under shared.cmake picks them up — avoids a per-target C_STANDARD 11
+# stanza in every CMakeLists that pulls stdatomic in transitively.
 if(MSVC)
     add_compile_options(/Zc:preprocessor)
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:C>:/std:clatest>
+        $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>)
 endif()
 
 # Embedded asset bytes ride into the binary as RCDATA resources on Windows
@@ -100,13 +110,6 @@ target_compile_definitions(yetty PRIVATE
 )
 
 set_target_properties(yetty PROPERTIES ENABLE_EXPORTS TRUE)
-
-# shared/ycoroutine.c uses <stdatomic.h>. MSVC sets __STDC_NO_ATOMICS__ by
-# default and only clears it when both /std:clatest (or /std:c11) and
-# /experimental:c11atomics are passed.
-target_compile_options(yetty PRIVATE
-    $<$<COMPILE_LANGUAGE:C>:/std:clatest>
-    $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>)
 
 target_link_libraries(yetty PRIVATE
     ${YETTY_LIBS}

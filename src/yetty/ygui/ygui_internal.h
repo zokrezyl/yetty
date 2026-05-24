@@ -70,6 +70,29 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *));
 
+/* Open the widget's CREATE_CHILD record under an explicit figure-kind
+ * code (instead of the default YGRID). Used by complex producer widgets
+ * (yplot/yimage/yvideo/yzoo/yjungle) so their content lands as its own
+ * kind on the wire — a sibling figure of the surrounding ygrid chrome,
+ * not prims inlined into it. Caller must pair with widget_close_group.
+ *
+ * The default-kind sibling, yetty_ygui_widget_open_group, is just this
+ * with kind=YETTY_YFIGURE_KIND_YGRID. */
+uint32_t yetty_ygui_widget_open_group_as_kind(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx, uint32_t kind,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *));
+
+uint32_t yetty_ygui_widget_open_group(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *));
+
+void yetty_ygui_widget_close_group(struct yetty_ygui_widget *self,
+                                   struct yetty_ygui_render_ctx *ctx, uint32_t marker);
+
+#define YETTY_YGUI_GROUP_SKIPPED UINT32_MAX
+
 /*=============================================================================
  * Theme Structure
  *===========================================================================*/
@@ -203,7 +226,7 @@ struct yetty_ygui_scrollable {
     float (*get_viewport_h)(const struct yetty_ygui_widget *self);
     float (*get_scroll)(const struct yetty_ygui_widget *self);
     float (*get_max_scroll)(const struct yetty_ygui_widget *self);
-    void  (*scroll_to)(struct yetty_ygui_widget *self, float y);
+    void (*scroll_to)(struct yetty_ygui_widget *self, float y);
 };
 
 /*=============================================================================
@@ -367,10 +390,10 @@ struct yetty_ygui_widget {
         } splitter;
 
         struct {
-            char *text;     /* owned, NUL-terminated; may be NULL=="" */
-            int   length;   /* bytes (excluding NUL) */
-            int   cursor;   /* byte offset, 0..length */
-            int   scroll_line; /* first visible line index */
+            char *text;      /* owned, NUL-terminated; may be NULL=="" */
+            int length;      /* bytes (excluding NUL) */
+            int cursor;      /* byte offset, 0..length */
+            int scroll_line; /* first visible line index */
             /* Word-wrap mode. When non-zero, the renderer breaks each
              * logical line into visual sub-lines that fit the widget's
              * inner width at word boundaries (falling back to a hard
@@ -378,7 +401,7 @@ struct yetty_ygui_widget {
              * zero, lines that don't fit are truncated at the widget's
              * right edge so no glyph is ever painted outside the
              * widget's surface. */
-            int   wrap;
+            int wrap;
         } textarea;
 
         struct {
@@ -389,13 +412,13 @@ struct yetty_ygui_widget {
         } scrollarea;
 
         struct {
-            int on; /* 0 = off, 1 = on */
+            int on;      /* 0 = off, 1 = on */
             char *label; /* optional, drawn to the right of the pill */
         } toggle;
 
         struct {
             char *label;
-            int closable;        /* 1 = render ✕ button */
+            int closable; /* 1 = render ✕ button */
             ygui_widget_click_fn on_remove;
             void *on_remove_userdata;
         } chip;
@@ -414,7 +437,7 @@ struct yetty_ygui_widget {
         } combo;
 
         struct {
-            char **labels;                  /* menu button labels */
+            char **labels;                    /* menu button labels */
             struct yetty_ygui_widget **menus; /* per-button popup_menu pointers (borrowed) */
             int n;
             int capacity;
@@ -434,11 +457,11 @@ struct yetty_ygui_widget {
         } datepicker;
 
         struct {
-            char *cwd;          /* current directory (owned) */
-            char **entries;     /* listing (owned strings) */
+            char *cwd;      /* current directory (owned) */
+            char **entries; /* listing (owned strings) */
             int entry_count;
-            int selected;       /* -1 if none */
-            int scroll;         /* first visible row */
+            int selected; /* -1 if none */
+            int scroll;   /* first visible row */
         } filepicker;
 
         struct {
@@ -466,8 +489,8 @@ struct yetty_ygui_widget {
 
         struct {
             float value;
-            int   indeterminate; /* 1 = render sliding bar; ignore value */
-            float anim_phase;    /* 0..1 sliding-bar position, updated on render */
+            int indeterminate; /* 1 = render sliding bar; ignore value */
+            float anim_phase;  /* 0..1 sliding-bar position, updated on render */
         } progress;
 
         struct {
@@ -484,9 +507,9 @@ struct yetty_ygui_widget {
              * the popup. Coordinates are widget-local at press time
              * (lx, ly) plus the popup's widget-coord origin (orig_x/y)
              * so the on_drag delta math is press-relative. */
-            int   dragging;
+            int dragging;
             float drag_press_lx, drag_press_ly;
-            float drag_orig_x,    drag_orig_y;
+            float drag_orig_x, drag_orig_y;
         } popup;
 
         struct {
@@ -586,47 +609,47 @@ struct yetty_ygui_widget {
          * time or after a resize. */
         struct {
             /* One of these two is set; the other is NULL. */
-            char    *path;        /* heap-owned mp4/image file path */
-            uint8_t *data;        /* heap-owned in-memory image bytes */
-            size_t   data_len;
+            char *path;    /* heap-owned mp4/image file path */
+            uint8_t *data; /* heap-owned in-memory image bytes */
+            size_t data_len;
 
             struct yetty_ydraw_draw_list *cached;
-            float    last_w;
-            float    last_h;
+            float last_w;
+            float last_h;
         } yimage;
 
         struct {
-            char *source;                            /* yexpr-plot text */
+            char *source; /* yexpr-plot text */
             size_t source_len;
-            struct yetty_yplot_render_config cfg;    /* x/y range, flags */
+            struct yetty_yplot_render_config cfg; /* x/y range, flags */
             int has_cfg;
             /* Optional data buffers (live audio scopes etc.). The
              * caller's f32 sample arrays are copied so the widget can
              * hand them straight back to yplot_render on every
              * rebuild without burdening the caller. */
             struct yplot_buffer_slot {
-                float    *samples;     /* heap-owned copy */
-                size_t    count;
-                uint32_t  color;
+                float *samples; /* heap-owned copy */
+                size_t count;
+                uint32_t color;
             } *buffers;
             size_t buffer_count;
 
             struct yetty_ydraw_draw_list *cached;
-            float    last_w;
-            float    last_h;
+            float last_w;
+            float last_h;
         } yplot;
 
         struct {
             /* The wire NAL bytes (heap-owned). When this is set the
              * render config carries the SPS dims + fps etc. */
             uint8_t *nal_bytes;
-            size_t   nal_len;
+            size_t nal_len;
             struct yetty_yvideo_render_config cfg;
             int has_cfg;
 
             struct yetty_ydraw_draw_list *cached;
-            float    last_w;
-            float    last_h;
+            float last_w;
+            float last_h;
         } yvideo;
 
         /* yzoo: snapshot-style producer driven by host ticks. Each
@@ -635,13 +658,13 @@ struct yetty_ygui_widget {
          * yetty_yzoo_set_scene_size when layout_w/h changes and
          * repaints from the cached flat buffer. */
         struct {
-            struct yetty_yzoo            *producer;
-            struct yetty_ydraw_draw_list *raw;   /* yzoo_render target */
-            struct yetty_ydraw_draw_list *flat;  /* flattened render output */
+            struct yetty_yzoo *producer;
+            struct yetty_ydraw_draw_list *raw;  /* yzoo_render target */
+            struct yetty_ydraw_draw_list *flat; /* flattened render output */
             struct yetty_yzoo_config cfg;
             int has_cfg;
             uint32_t seed;
-            float t_seconds;                     /* virtual playback clock */
+            float t_seconds; /* virtual playback clock */
             float last_w;
             float last_h;
         } yzoo;
@@ -652,18 +675,18 @@ struct yetty_ygui_widget {
          * rebuilds an accumulator buffer from `live[]` and flattens
          * into `flat` for paint. */
         struct {
-            struct yetty_yjungle         *producer;
+            struct yetty_yjungle *producer;
             struct yetty_ydraw_draw_list *delta;
             struct yetty_ydraw_draw_list *acc;
             struct yetty_ydraw_draw_list *flat;
             struct yetty_yjungle_config cfg;
             int has_cfg;
             uint32_t seed;
-            uint64_t t0_ms;                      /* start of monotonic clock */
+            uint64_t t0_ms; /* start of monotonic clock */
             struct yjungle_live_seg {
                 uint32_t id;
                 uint8_t *bytes;
-                size_t   size;
+                size_t size;
             } *live;
             size_t live_count;
             size_t live_cap;
@@ -695,9 +718,8 @@ struct yetty_ygui_widget {
             /* Fired AFTER the widget mutates scroll_y so a bound
              * scrollbar (or any other observer) can sync. NULL = no
              * observer; the widget still updates internally. */
-            void (*on_scroll_change)(struct yetty_ygui_widget *self,
-                                     float scroll_y, float max_scroll,
-                                     void *userdata);
+            void (*on_scroll_change)(struct yetty_ygui_widget *self, float scroll_y,
+                                     float max_scroll, void *userdata);
             void *on_scroll_change_userdata;
         } ypdf;
 
@@ -735,9 +757,9 @@ struct yetty_ygui_widget {
              * drag_press_l[xy] are widget-local at press time;
              * drag_orig_[xy] capture the window's authored position
              * at press so on_drag deltas are press-relative. */
-            int   dragging;
+            int dragging;
             float drag_press_lx, drag_press_ly;
-            float drag_orig_x,    drag_orig_y;
+            float drag_orig_x, drag_orig_y;
         } window;
 
         struct {
@@ -875,8 +897,8 @@ struct yetty_ygui_engine {
     /* Card info for OSC output */
     char *card_name;
     int card_x, card_y, card_w, card_h;
-    int card_shown;   /* 0 = not shown yet, 1 = shown (use update) */
-    uint32_t card_id; /* ymgui-layer card id (for CARD_PLACE / hit routing) */
+    int card_shown;     /* 0 = not shown yet, 1 = shown (use update) */
+    uint32_t figure_id; /* ymgui-layer card id (for CARD_PLACE / hit routing) */
 
     /* When set, engine_destroy skips the YDRAW_CLEAR OSC so the last
      * rendered frame stays painted on the canvas (the ydraw primitives
@@ -887,7 +909,7 @@ struct yetty_ygui_engine {
     int preserve_canvas_on_destroy;
 
     /* Long-lived yface for parsing inbound binary OSC envelopes
-     * (YMGUI_OSC_SC_MOUSE / RESIZE / FOCUS / KEY). */
+     * (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE / RESIZE / FOCUS / KEY). */
     struct yetty_yface *yface_in;
 
     /* State */
@@ -972,10 +994,10 @@ struct yetty_ygui_engine {
      * for transient toast stacks). Each entry owns its message string
      * and a `card` widget tree on the engine; dismiss frees both. */
     struct ygui_notification {
-        char    *message;            /* owned (strdup) */
-        int      severity;           /* enum yetty_ygui_severity */
-        uint64_t created_ms;         /* clock_gettime(CLOCK_MONOTONIC) */
-        uint32_t ttl_ms;             /* 0 = sticky */
+        char *message;       /* owned (strdup) */
+        int severity;        /* enum yetty_ygui_severity */
+        uint64_t created_ms; /* clock_gettime(CLOCK_MONOTONIC) */
+        uint32_t ttl_ms;     /* 0 = sticky */
         struct yetty_ygui_widget *card;
         struct yetty_ygui_widget *close_btn;
     } notifications[8];
@@ -1125,8 +1147,8 @@ struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_
                                                           uint32_t size);
 struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pty *output_pty,
                                                         const char *name);
-struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(struct yetty_platform_pty *output_pty,
-                                                               int enable);
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(
+    struct yetty_platform_pty *output_pty, int enable);
 struct yetty_ycore_void_result yetty_ygui_osc_subscribe_moves(struct yetty_platform_pty *output_pty,
                                                               int enable);
 struct yetty_ycore_void_result yetty_ygui_osc_subscribe_view_changes(
@@ -1134,18 +1156,17 @@ struct yetty_ycore_void_result yetty_ygui_osc_subscribe_view_changes(
 struct yetty_ycore_void_result yetty_ygui_osc_query_cell_size(
     struct yetty_platform_pty *output_pty);
 struct yetty_ycore_void_result yetty_ygui_osc_card_place(struct yetty_platform_pty *output_pty,
-                                                         uint32_t card_id, int col, int row,
+                                                         uint32_t figure_id, int col, int row,
                                                          uint32_t w_cells, uint32_t h_cells);
 struct yetty_ycore_void_result yetty_ygui_osc_card_remove(struct yetty_platform_pty *output_pty,
-                                                          uint32_t card_id);
+                                                          uint32_t figure_id);
 struct yetty_ycore_void_result yetty_ygui_osc_zoom_card(struct yetty_platform_pty *output_pty,
                                                         const char *name, float level);
 struct yetty_ycore_void_result yetty_ygui_osc_scroll_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, float x, float y,
                                                           int absolute);
-struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(struct yetty_platform_pty *output_pty,
-                                                                const char *name, float dx,
-                                                                float dy);
+struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(
+    struct yetty_platform_pty *output_pty, const char *name, float dx, float dy);
 
 /* Error */
 void yetty_ygui_set_error(const char *msg);
@@ -1170,18 +1191,14 @@ void yetty_ygui_internal_bring_to_front(struct yetty_ygui_widget *w);
  * widget (yimage / yplot / yvideo / yzoo / yjungle). */
 struct yetty_ydraw_draw_list;
 struct yetty_ycore_void_result yetty_ygui_internal_emit_buffer_translated(
-    struct yetty_ygui_render_ctx *ctx,
-    const struct yetty_ydraw_draw_list *src,
-    float dx, float dy);
+    struct yetty_ygui_render_ctx *ctx, const struct yetty_ydraw_draw_list *src, float dx, float dy);
 
 /* Internal helpers shared between the ygui-core (libuv-free) and the
  * libuv-driven runtime in ygui_engine_uv.c. Not part of the public API
  * — `yetty_ygui_internal_` prefix makes the intent obvious. */
-void yetty_ygui_internal_process_input(struct yetty_ygui_engine *engine,
-                                       const char *data, int len);
-void yetty_ygui_internal_yface_on_osc(void *user, int osc_code,
-                                      const uint8_t *args, size_t args_len,
-                                      const uint8_t *payload, size_t payload_len);
+void yetty_ygui_internal_process_input(struct yetty_ygui_engine *engine, const char *data, int len);
+void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *args,
+                                      size_t args_len, const uint8_t *payload, size_t payload_len);
 void yetty_ygui_internal_yface_on_raw(void *user, const char *bytes, size_t n);
 extern volatile int yetty_ygui_internal_resize_pending;
 extern struct yetty_ygui_engine *yetty_ygui_internal_active_engine;
@@ -1219,14 +1236,20 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_bootstrap_runtime(
  * (yetty_ygui_engine_create, in ygui_engine_uv.c, which follows up
  * with bootstrap_runtime) and the yui in-process path. Lives in
  * ygui_engine.c so ygui_core stays libuv-free. */
-struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(
-    const char *name, struct yetty_ygui_theme *theme);
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(const char *name,
+                                                               struct yetty_ygui_theme *theme);
 
 /* yui-specific allocator. Behaviour is currently identical to
  * internal_alloc; kept as a named alias so the yui call-site is
  * self-documenting and so we can diverge later without touching yui. */
 struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
     const char *name, struct yetty_ygui_theme *theme);
+
+/* Headless rebuild — runs layout + render_all over the engine's
+ * widget tree into engine->buffer, but skips the OSC serialize + send
+ * that public engine_render does. Used by in-process consumers
+ * (yui, tools/ycompositor-ygui) that read engine->buffer directly. */
+struct yetty_ycore_void_result yetty_ygui_engine_rebuild(struct yetty_ygui_engine *engine);
 
 /* Emit the init OSC handshake (cell size query, subscribe_clicks/moves,
  * CARD_PLACE, CANVAS_FIT placeholder). Called from

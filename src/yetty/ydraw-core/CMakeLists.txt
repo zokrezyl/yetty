@@ -1,5 +1,5 @@
 add_library(yetty_ydraw_core STATIC
-    buffer.c
+    draw-list.c
     cmds.c
     complex-prim-types.c
     flyweight.c

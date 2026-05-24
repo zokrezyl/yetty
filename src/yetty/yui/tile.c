@@ -5,7 +5,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/background-layer.h>
 #include <yetty/yvnc/vnc-viewer.h>
@@ -288,8 +288,8 @@ static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
         struct yetty_yui_rect bounds = pane->base.bounds;
         render_target->viewport = (struct yetty_yrender_viewport){
             .x = bounds.x, .y = bounds.y, .w = bounds.w, .h = bounds.h};
-        ydebug("pane_render: bounds=(%.1f,%.1f,%.1f,%.1f) -> render_target viewport",
-               bounds.x, bounds.y, bounds.w, bounds.h);
+        ydebug("pane_render: bounds=(%.1f,%.1f,%.1f,%.1f) -> render_target viewport", bounds.x,
+               bounds.y, bounds.w, bounds.h);
 
         /* Pane background — opaque RGBA fill across the pane viewport,
          * rendered before the view. Provides the per-pane wipe so the

@@ -21,29 +21,27 @@ extern "C" {
 #endif
 
 struct yetty_yaudio_envelope {
-    float    *rms;             /* n floats, linear [0..1] */
-    size_t    n;
-    uint32_t  sample_rate;
-    uint32_t  frame_samples;
-    uint32_t  hop_samples;
-    uint32_t  channel;
+    float *rms; /* n floats, linear [0..1] */
+    size_t n;
+    uint32_t sample_rate;
+    uint32_t frame_samples;
+    uint32_t hop_samples;
+    uint32_t channel;
 };
 
 YETTY_YRESULT_DECLARE(yetty_yaudio_envelope_ptr, struct yetty_yaudio_envelope *);
 
 /* Compute the RMS envelope. Pass 0 for frame_samples / hop_samples to
  * use the defaults (1024 each — same as intervals_find). */
-struct yetty_yaudio_envelope_ptr_result
-yetty_yaudio_envelope_create(const struct yetty_yaudio_wav *w,
-                             uint32_t channel,
-                             uint32_t frame_samples,
-                             uint32_t hop_samples);
+struct yetty_yaudio_envelope_ptr_result yetty_yaudio_envelope_create(
+    const struct yetty_yaudio_wav *w, uint32_t channel, uint32_t frame_samples,
+    uint32_t hop_samples);
 
 void yetty_yaudio_envelope_destroy(struct yetty_yaudio_envelope *env);
 
 /* Seconds <-> envelope-frame helpers. */
-static inline double
-yetty_yaudio_envelope_frame_to_sec(const struct yetty_yaudio_envelope *env, size_t frame)
+static inline double yetty_yaudio_envelope_frame_to_sec(const struct yetty_yaudio_envelope *env,
+                                                        size_t frame)
 {
     return (double)frame * (double)env->hop_samples / (double)env->sample_rate;
 }

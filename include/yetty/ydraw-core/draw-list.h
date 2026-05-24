@@ -43,8 +43,7 @@ YETTY_ANNOT_CALLER_OWNED
 struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_create_from_bytes(
     const uint8_t *data YETTY_ANNOT_ARRAY(len), size_t len);
 
-void yetty_ydraw_draw_list_destroy(
-    struct yetty_ydraw_draw_list *buf YETTY_ANNOT_CALLEE_OWNED);
+void yetty_ydraw_draw_list_destroy(struct yetty_ydraw_draw_list *buf YETTY_ANNOT_CALLEE_OWNED);
 
 // Scene bounds accessors (populated from config at create time, 0s otherwise)
 float yetty_ydraw_draw_list_scene_max_x(const struct yetty_ydraw_draw_list *buf);
@@ -72,14 +71,51 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_add_prim(
  * DELETE(id) before a fresh GROUP(id, …) when a widget's drawables
  * have changed since the last frame.
  */
-struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group(
-    struct yetty_ydraw_draw_list *buf, uint32_t group_id);
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group(struct yetty_ydraw_draw_list *buf,
+                                                               uint32_t group_id);
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(
-    struct yetty_ydraw_draw_list *buf, uint32_t group_marker_offset);
+/* New-format CMD_GROUP that carries the group's screen rect inline so
+ * the ycompositor receiver can place a yfigure_group + ygrid figure at
+ * `(x, y, w, h)` without inferring bounds from children. Wire layout:
+ *
+ *   u32 type = CMD_GROUP
+ *   u32 id   = group_id
+ *   u32 payload_size                  (patched by _end_group)
+ *   u32 z_order        = 0            ← style header, kept at canonical
+ *   u32 fill_color     = 0              drawable position so geometry
+ *   u32 stroke_color   = 0              sits at the same offset as any
+ *   u32 stroke_width   = 0              SDF prim's geometry
+ *   f32 x
+ *   f32 y
+ *   f32 w
+ *   f32 h
+ *   bytes body[]                      (prim records with coords
+ *                                      LOCAL to (x, y))
+ *
+ * Records inside the body whose coords are widget-local (not absolute
+ * screen) flow into the receiver's per-group ygrid figure. Same
+ * _end_group call patches payload_size — the marker semantics are
+ * unchanged. */
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group_with_rect(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_id, float x, float y, float w, float h);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(struct yetty_ydraw_draw_list *buf,
+                                                               uint32_t group_marker_offset);
 
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
     struct yetty_ydraw_draw_list *buf, uint32_t group_id);
+
+/* Append a CMD_GROUP_REF (kind=REF / bits 31:30 = 10) at the current
+ * write head. Wire layout: 2 u32 words = [CMD_GROUP_REF][target_id].
+ *
+ * Use inside a group's body to express "the group identified by
+ * `target_id` is one of my children" without re-declaring the target's
+ * geometry / payload. The target is expected to be declared elsewhere
+ * in the same envelope via a CMD_GROUP (kind=DECL / 01); forward
+ * references are allowed because the receiver resolves child links
+ * only after the envelope is fully walked. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_group_ref(
+    struct yetty_ydraw_draw_list *buf, uint32_t target_id);
 
 /* CMD_UPDATE: hand `payload` (size = `payload_size` bytes) to the prim
  * addressed by `target_id`. Wire layout written:
@@ -92,6 +128,65 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_update(
     struct yetty_ydraw_draw_list *buf, uint32_t target_id, const void *payload,
     size_t payload_size);
+
+/*===========================================================================
+ * Figure-tree wire records (new envelope format).
+ *
+ * Each record on the wire: `{length: u32, id: u32, payload[length]}`.
+ * length-first so a pipeline tool can walk and validate without knowing
+ * ids; id=0 means admin (the receiving container consumes the payload
+ * itself, payload starts with a u32 admin_op from
+ * <yetty/yfigure/wire.h>); id!=0 routes to the child figure of the
+ * receiving container.
+ *=========================================================================*/
+
+/* Append a routed record `{length=payload_size, id, payload}`. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_record(struct yetty_ydraw_draw_list *buf,
+                                                                uint32_t id, const void *payload,
+                                                                size_t payload_size);
+
+/* Begin a routed record `{length=<filled>, id}` and return a marker.
+ * The caller emits the body via add_prim / add_record / etc., then
+ * calls end_record(buf, marker) to backfill the length. */
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_record(struct yetty_ydraw_draw_list *buf,
+                                                                uint32_t id);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_end_record(struct yetty_ydraw_draw_list *buf,
+                                                                uint32_t record_marker_offset);
+
+/* Admin record emitters. id=0 admin records the receiving container
+ * consumes itself; the sub-cmd byte is encoded in the payload. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_clear_all(
+    struct yetty_ydraw_draw_list *buf);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_delete_child(
+    struct yetty_ydraw_draw_list *buf, uint32_t child_id);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_set_rect(
+    struct yetty_ydraw_draw_list *buf, float min_x, float min_y, float max_x, float max_y);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_set_child_rect(
+    struct yetty_ydraw_draw_list *buf, uint32_t child_id, float min_x, float min_y, float max_x,
+    float max_y);
+
+/* CREATE_CHILD admin. The init_payload is forwarded to the freshly-
+ * minted child's process_input(sm, init_payload_size). Pass init=NULL,
+ * init_size=0 to create an empty figure. */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_create_child(
+    struct yetty_ydraw_draw_list *buf, uint32_t child_id, uint32_t kind, float min_x, float min_y,
+    float max_x, float max_y, const void *init_payload, size_t init_payload_size);
+
+/* Begin an admin CREATE_CHILD record. The caller emits the init payload
+ * inline (e.g. via add_prim, or further admin records for sub-containers),
+ * then calls end_admin_create_child to backfill both `length` and
+ * `init_payload_bytes`. Returns marker (the offset of the outer record's
+ * length field). */
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_admin_create_child(
+    struct yetty_ydraw_draw_list *buf, uint32_t child_id, uint32_t kind, float min_x, float min_y,
+    float max_x, float max_y);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_end_admin_create_child(
+    struct yetty_ydraw_draw_list *buf, uint32_t record_marker_offset);
 
 // Read-only view of the raw primitive byte stream (no scene-bounds framing,
 // just the concatenated FAM/SDF prim bytes). Used by producers that need to
@@ -106,11 +201,11 @@ size_t yetty_ydraw_draw_list_size(const struct yetty_ydraw_draw_list *buf);
  * sections. Lifetime of *out_data = until next serialize/clear/destroy.
  * Returns byte count. */
 size_t yetty_ydraw_draw_list_serialize(struct yetty_ydraw_draw_list *buf,
-                                          const uint8_t **out_data YETTY_ANNOT_OUT);
+                                       const uint8_t **out_data YETTY_ANNOT_OUT);
 
 // Update scene bounds on an existing buffer.
 void yetty_ydraw_draw_list_set_scene_bounds(struct yetty_ydraw_draw_list *buf, float min_x,
-                                               float min_y, float max_x, float max_y);
+                                            float min_y, float max_x, float max_y);
 
 // Primitive iterator
 struct yetty_ydraw_primitive_iter {
@@ -120,12 +215,10 @@ struct yetty_ydraw_primitive_iter {
 YETTY_YRESULT_DECLARE(yetty_ydraw_primitive_iter, struct yetty_ydraw_primitive_iter);
 
 struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_first(
-    const struct yetty_ydraw_draw_list *buf,
-    const struct yetty_ydraw_flyweight_registry *reg);
+    const struct yetty_ydraw_draw_list *buf, const struct yetty_ydraw_flyweight_registry *reg);
 
 struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_next(
-    const struct yetty_ydraw_draw_list *buf,
-    const struct yetty_ydraw_flyweight_registry *reg,
+    const struct yetty_ydraw_draw_list *buf, const struct yetty_ydraw_flyweight_registry *reg,
     const struct yetty_ydraw_primitive_iter *iter);
 
 /*=============================================================================

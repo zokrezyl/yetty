@@ -22,8 +22,7 @@
 
 #include <yetty/yplatform/paths.h>
 
-static void fill_xdg(char *dst, size_t dst_sz,
-                     const char *xdg_var, const char *home_fallback)
+static void fill_xdg(char *dst, size_t dst_sz, const char *xdg_var, const char *home_fallback)
 {
     const char *xdg = getenv(xdg_var);
     if (xdg && *xdg) {
@@ -42,12 +41,11 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
 {
     struct yetty_yplatform_paths *p = calloc(1, sizeof(*p));
     if (!p) {
-        return YETTY_ERR(yetty_yplatform_paths_ptr,
-                         "OOM allocating yetty_yplatform_paths");
+        return YETTY_ERR(yetty_yplatform_paths_ptr, "OOM allocating yetty_yplatform_paths");
     }
 
-    fill_xdg(p->cache_dir_buf,  sizeof(p->cache_dir_buf),  "XDG_CACHE_HOME",  ".cache");
-    fill_xdg(p->data_dir_buf,   sizeof(p->data_dir_buf),   "XDG_DATA_HOME",   ".local/share");
+    fill_xdg(p->cache_dir_buf, sizeof(p->cache_dir_buf), "XDG_CACHE_HOME", ".cache");
+    fill_xdg(p->data_dir_buf, sizeof(p->data_dir_buf), "XDG_DATA_HOME", ".local/share");
     fill_xdg(p->config_dir_buf, sizeof(p->config_dir_buf), "XDG_CONFIG_HOME", ".config");
 
     /* runtime_dir has a uid-suffixed fallback (per XDG spec). */
@@ -55,8 +53,7 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
     if (xdg_runtime && *xdg_runtime) {
         snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf), "%s/yetty", xdg_runtime);
     } else {
-        snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf),
-                 "/tmp/yetty-%d", (int)getuid());
+        snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf), "/tmp/yetty-%d", (int)getuid());
     }
 
     /* assets_dir = $YETTY_ASSETS_DIR || dirname(/proc/self/exe)/assets ||

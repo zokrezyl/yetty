@@ -33,10 +33,9 @@ size_t yetty_ydraw_text_span_drawable_size_for(uint32_t text_len)
 }
 
 void yetty_ydraw_text_span_drawable_write_full(uint8_t *out, float x, float y, float font_size,
-                                                 float rotation, uint32_t color, uint32_t layer,
-                                                 int32_t font_id, const char *text,
-                                                 uint32_t text_len, float char_spacing,
-                                                 float word_spacing)
+                                               float rotation, uint32_t color, uint32_t layer,
+                                               int32_t font_id, const char *text, uint32_t text_len,
+                                               float char_spacing, float word_spacing)
 {
     uint32_t payload_size = text_span_payload_size(text_len);
     size_t total = TEXT_SPAN_PRIM_HEADER + payload_size;
@@ -73,15 +72,15 @@ void yetty_ydraw_text_span_drawable_write_full(uint8_t *out, float x, float y, f
 }
 
 void yetty_ydraw_text_span_drawable_write(uint8_t *out, float x, float y, float font_size,
-                                            float rotation, uint32_t color, uint32_t layer,
-                                            int32_t font_id, const char *text, uint32_t text_len)
+                                          float rotation, uint32_t color, uint32_t layer,
+                                          int32_t font_id, const char *text, uint32_t text_len)
 {
-    yetty_ydraw_text_span_drawable_write_full(out, x, y, font_size, rotation, color, layer,
-                                                font_id, text, text_len, 0.0f, 0.0f);
+    yetty_ydraw_text_span_drawable_write_full(out, x, y, font_size, rotation, color, layer, font_id,
+                                              text, text_len, 0.0f, 0.0f);
 }
 
 int yetty_ydraw_text_span_drawable_parse(const uint32_t *prim,
-                                           struct yetty_ydraw_text_span_drawable_view *out)
+                                         struct yetty_ydraw_text_span_drawable_view *out)
 {
     if (!prim || !out) {
         return -1;

@@ -15,15 +15,15 @@ struct yetty_ydraw_gpu_allocator;
  * high-water mark since allocator creation. Useful for the yui info
  * dialog and any future telemetry / leak hunting. */
 struct yetty_yrender_gpu_allocator_stats {
-    uint64_t total_bytes;       /* sum of all live allocations */
-    uint32_t buffer_count;      /* number of live buffers */
-    uint32_t texture_count;     /* number of live textures */
-    uint64_t buffer_bytes;      /* sum of live buffer sizes */
-    uint64_t texture_bytes;     /* sum of live texture sizes */
-    uint32_t live_allocations;  /* buffer_count + texture_count */
-    uint32_t peak_allocations;  /* highest live_allocations ever observed */
-    uint64_t peak_total_bytes;  /* highest total_bytes ever observed */
-    uint32_t capacity;          /* MAX_ALLOCATIONS — pool size cap */
+    uint64_t total_bytes;      /* sum of all live allocations */
+    uint32_t buffer_count;     /* number of live buffers */
+    uint32_t texture_count;    /* number of live textures */
+    uint64_t buffer_bytes;     /* sum of live buffer sizes */
+    uint64_t texture_bytes;    /* sum of live texture sizes */
+    uint32_t live_allocations; /* buffer_count + texture_count */
+    uint32_t peak_allocations; /* highest live_allocations ever observed */
+    uint64_t peak_total_bytes; /* highest total_bytes ever observed */
+    uint32_t capacity;         /* MAX_ALLOCATIONS — pool size cap */
 };
 
 struct yetty_yrender_gpu_allocator_ops {

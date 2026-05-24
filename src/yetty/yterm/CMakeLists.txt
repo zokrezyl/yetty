@@ -25,7 +25,6 @@ add_library(yetty_yterm
     terminal.c
     text-layer.c
     ydraw-layer.c
-    ymgui-layer.c
     yrdawn-layer.c
     ${_yrdawn_server_src}
     shader-glyph-layer.c
@@ -54,14 +53,23 @@ target_link_libraries(yetty_yterm
     yetty_yface
     yetty_ywire
     yetty_yrdawn
+    yetty_yfigure
+    yetty_ygrid
     lz4_static
 )
+
+# yterm's sources reference only header-only constants from
+# <yetty/ymgui/wire.h> (YMGUI_WIRE_VERSION) — no compiled symbols. Pull
+# yetty_ymgui in transitively only when the feature is built, so webasm
+# (FEATURE_YMGUI=OFF) doesn't request -lyetty_ymgui at link time.
+if(YETTY_ENABLE_FEATURE_YMGUI)
+    target_link_libraries(yetty_yterm yetty_ymgui)
+endif()
 
 # Embed shaders via incbin (or stubs on Emscripten)
 incbin_add_resources(yetty_yterm
     text_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/text-layer.wgsl"
     ydraw_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/ydraw-layer.wgsl"
-    ymgui_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/ymgui-layer.wgsl"
     shader_glyph_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/shader-glyph-layer.wgsl"
     background_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/background-layer.wgsl"
 )

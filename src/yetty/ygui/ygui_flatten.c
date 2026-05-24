@@ -53,8 +53,8 @@ static size_t paint_prim_size(const uint8_t *p, size_t remaining)
     return (s <= remaining) ? s : 0;
 }
 
-static struct yetty_ycore_void_result flatten_bytes(
-    struct yetty_ydraw_draw_list *dst, const uint8_t *src, size_t len)
+static struct yetty_ycore_void_result flatten_bytes(struct yetty_ydraw_draw_list *dst,
+                                                    const uint8_t *src, size_t len)
 {
     size_t off = 0;
     while (off + sizeof(uint32_t) <= len) {
@@ -87,8 +87,7 @@ static struct yetty_ycore_void_result flatten_bytes(
             if (off + total > len) {
                 break;
             }
-            struct yetty_ycore_void_result r =
-                flatten_bytes(dst, src + off + 12, payload_size);
+            struct yetty_ycore_void_result r = flatten_bytes(dst, src + off + 12, payload_size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "flatten: nested group");
             off += total;
             continue;
@@ -99,17 +98,15 @@ static struct yetty_ycore_void_result flatten_bytes(
         if (s == 0 || off + s > len) {
             return YETTY_ERR(yetty_ycore_void, "flatten: malformed paint prim");
         }
-        struct yetty_ydraw_id_result ar =
-            yetty_ydraw_draw_list_add_prim(dst, src + off, s);
+        struct yetty_ydraw_id_result ar = yetty_ydraw_draw_list_add_prim(dst, src + off, s);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "flatten: add_prim failed");
         off += s;
     }
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_flatten_draw_list(
-    struct yetty_ydraw_draw_list *dst,
-    const struct yetty_ydraw_draw_list *src)
+struct yetty_ycore_void_result yetty_ygui_flatten_draw_list(struct yetty_ydraw_draw_list *dst,
+                                                            const struct yetty_ydraw_draw_list *src)
 {
     if (!dst || !src) {
         return YETTY_ERR(yetty_ycore_void, "flatten: NULL arg");

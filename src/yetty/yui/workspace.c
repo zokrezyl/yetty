@@ -28,8 +28,7 @@ struct yetty_yui_workspace {
  * Create/destroy
  *===========================================================================*/
 
-struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create_with_id(
-    yetty_ycore_object_id id)
+struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create_with_id(yetty_ycore_object_id id)
 {
     struct yetty_yui_workspace *ws;
 
@@ -77,8 +76,9 @@ struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_work
  * Core operations
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_yui_workspace_render(
-    struct yetty_yui_workspace *ws, struct yetty_ydraw_target *render_target, int force_redraw)
+struct yetty_ycore_void_result yetty_yui_workspace_render(struct yetty_yui_workspace *ws,
+                                                          struct yetty_ydraw_target *render_target,
+                                                          int force_redraw)
 {
     if (!ws) {
         return YETTY_ERR(yetty_ycore_void, "workspace is NULL");
@@ -318,12 +318,12 @@ struct yetty_ycore_void_result yetty_yui_workspace_split_pane_with_ids(
     yetty_ycore_object_id new_pane_id, yetty_ycore_object_id new_split_id,
     enum yetty_yui_orientation orientation)
 {
-    return workspace_split_pane_impl(ws, target_pane_id, new_pane_id, new_split_id,
-                                     orientation);
+    return workspace_split_pane_impl(ws, target_pane_id, new_pane_id, new_split_id, orientation);
 }
 
-struct yetty_ycore_void_result yetty_yui_workspace_resize_split(
-    struct yetty_yui_workspace *ws, yetty_ycore_object_id split_id, float ratio)
+struct yetty_ycore_void_result yetty_yui_workspace_resize_split(struct yetty_yui_workspace *ws,
+                                                                yetty_ycore_object_id split_id,
+                                                                float ratio)
 {
     struct yetty_yui_tile *split;
 
@@ -350,8 +350,8 @@ struct yetty_ycore_void_result yetty_yui_workspace_resize_split(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yui_workspace_create_first_pane(
-    struct yetty_yui_workspace *ws, yetty_ycore_object_id pane_id)
+struct yetty_ycore_void_result yetty_yui_workspace_create_first_pane(struct yetty_yui_workspace *ws,
+                                                                     yetty_ycore_object_id pane_id)
 {
     if (!ws) {
         return YETTY_ERR(yetty_ycore_void, "workspace is NULL");

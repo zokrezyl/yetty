@@ -3,8 +3,10 @@
  */
 
 #include "ygui_internal.h"
+#include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /*=============================================================================
  * Widget Base Functions
@@ -142,56 +144,127 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
     free(widget);
 }
 
+/* Sentinel for widget_open_group: caller passes this to widget_close_group
+ * when the widget was skipped (no group opened). */
+/* YETTY_YGUI_GROUP_SKIPPED — defined in ygui_internal.h. */
+
+/* Open this widget's CMD_GROUP and emit its body (the widget's own
+ * drawables, NOT its children). Leaves the group OPEN — the caller is
+ * responsible for emitting any nested child groups (typically by
+ * recursing into children's render_all) and then calling
+ * yetty_ygui_widget_close_group with the returned marker.
+ *
+ * Returns the group marker on success, or YETTY_YGUI_GROUP_SKIPPED if
+ * the widget was skipped (e.g. incremental mode + non-dirty). When
+ * skipped, the caller must NOT call close_group.
+ *
+ * The group rect is parent-RELATIVE: (self->x, self->y, layout_w,
+ * layout_h). The receiver accumulates the parent chain to resolve
+ * coords back to absolute. */
+uint32_t yetty_ygui_widget_open_group_as_kind(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx, uint32_t kind,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *))
+{
+    if (!self || !ctx || !ctx->buffer) {
+        return YETTY_YGUI_GROUP_SKIPPED;
+    }
+    /* Skip emission for clean widgets in incremental mode — the receiver
+     * already has the entity from a prior frame. */
+    if (!self->dirty && !ctx->force_full_redraw) {
+        return YETTY_YGUI_GROUP_SKIPPED;
+    }
+    /* Always emit DELETE before CREATE — idempotent. In full-redraw
+     * mode the envelope head already CLEAR_ALL'd everything; the
+     * extra DELETE_CHILD record on a non-existent id is a benign no-op
+     * on the receiver (the container's remove_child_by_id returns OK
+     * for unbound ids). */
+    {
+        struct yetty_ycore_void_result dr =
+            yetty_ydraw_draw_list_add_admin_delete_child(ctx->buffer, self->group_id);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+    }
+
+    /* New wire: every widget is a TOP-LEVEL child of the root container
+     * with ABSOLUTE coords. The layout pass resolved effective_x/y as
+     * `self->x + sum(ancestor x's)` — use that for the figure rect.
+     * No nesting on the wire, no parent-chain accumulation.
+     *
+     * Body prim coords stay widget-local. Render fns call
+     * `render_box(self->x + dx, …)` with self->x in PARENT-local space,
+     * so offset by -self->x to land at widget-local `dx` on the wire.
+     * (effective_x would only cancel for top-level widgets.) */
+    float gx = (float)self->effective_x;
+    float gy = (float)self->effective_y;
+    float gw = (float)self->layout_w;
+    float gh = (float)self->layout_h;
+    struct yetty_ydraw_id_result mark_res = yetty_ydraw_draw_list_begin_admin_create_child(
+        ctx->buffer, self->group_id, kind, gx, gy, gx + gw, gy + gh);
+    if (YETTY_IS_ERR(mark_res)) {
+        yetty_ycore_error_destroy(mark_res.error);
+        return YETTY_YGUI_GROUP_SKIPPED;
+    }
+
+    if (render_fn) {
+        float saved_off_x = ctx->offset_x;
+        float saved_off_y = ctx->offset_y;
+        ctx->offset_x = -(float)self->x;
+        ctx->offset_y = -(float)self->y;
+        struct yetty_ycore_void_result r = render_fn(self, ctx);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+        ctx->offset_x = saved_off_x;
+        ctx->offset_y = saved_off_y;
+    }
+
+    return mark_res.value;
+}
+
+/* Convenience wrapper — most widgets ship as YGRID (the default kind for
+ * widget chrome: boxes, borders, text). Producer widgets that need their
+ * own kind tag on the wire (yplot/yimage/yvideo/yzoo/yjungle) call
+ * open_group_as_kind directly. */
+uint32_t yetty_ygui_widget_open_group(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *))
+{
+    return yetty_ygui_widget_open_group_as_kind(self, ctx, YETTY_YFIGURE_KIND_YGRID, render_fn);
+}
+
+/* Close a group previously opened by yetty_ygui_widget_open_group.
+ * NO-OP when `marker == YETTY_YGUI_GROUP_SKIPPED`. */
+void yetty_ygui_widget_close_group(struct yetty_ygui_widget *self,
+                                   struct yetty_ygui_render_ctx *ctx, uint32_t marker)
+{
+    if (!ctx || !ctx->buffer || marker == YETTY_YGUI_GROUP_SKIPPED) {
+        return;
+    }
+    struct yetty_ycore_void_result er =
+        yetty_ydraw_draw_list_end_admin_create_child(ctx->buffer, marker);
+    if (YETTY_IS_ERR(er)) {
+        yetty_ycore_error_destroy(er.error);
+    }
+    if (self) {
+        self->dirty = 0;
+    }
+}
+
+/* Convenience: open group, emit body, close — no nested children. Use
+ * for widgets that have no own paint of children inside the group.
+ * Custom render_all that recurses into children should call open/close
+ * directly so the recursion lands inside the open scope. */
 struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *))
 {
-    if (!self || !ctx || !ctx->buffer) {
-        return YETTY_OK_VOID();
-    }
-    /* Skip emission for clean widgets in incremental mode — the receiver
-     * already has the entity from a prior frame. */
-    if (!self->dirty && !ctx->force_full_redraw) {
-        return YETTY_OK_VOID();
-    }
-    /* In incremental mode, the receiver's existing entity for this
-     * group_id must be wiped before we re-emit a fresh GROUP. CMD_ZERO
-     * at the envelope head (force_full_redraw=1) handles this for the
-     * whole canvas at once, so no per-widget DELETE is needed there. */
-    if (!ctx->force_full_redraw) {
-        struct yetty_ycore_void_result dr =
-            yetty_ydraw_draw_list_add_cmd_delete(ctx->buffer, self->group_id);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
-        }
-    }
-    struct yetty_ydraw_id_result mark_res =
-        yetty_ydraw_draw_list_begin_group(ctx->buffer, self->group_id);
-    if (YETTY_IS_ERR(mark_res)) {
-        yetty_ycore_error_destroy(mark_res.error);
-        return YETTY_OK_VOID();
-    }
-    uint32_t group_marker = mark_res.value;
-
-    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
-    if (render_fn) {
-        struct yetty_ycore_void_result r = render_fn(self, ctx);
-        if (YETTY_IS_ERR(r)) {
-            first_err = r;
-        }
-    }
-
-    struct yetty_ycore_void_result er = yetty_ydraw_draw_list_end_group(ctx->buffer, group_marker);
-    if (YETTY_IS_ERR(er)) {
-        if (YETTY_IS_OK(first_err)) {
-            first_err = er;
-        } else {
-            yetty_ycore_error_destroy(er.error);
-        }
-    }
-    self->dirty = 0;
-    return first_err;
+    uint32_t marker = yetty_ygui_widget_open_group(self, ctx, render_fn);
+    yetty_ygui_widget_close_group(self, ctx, marker);
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
@@ -207,55 +280,38 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
     self->was_rendered = 1;
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
-    /* Emit this widget's own drawables as a flat GROUP at the current
-     * scope (envelope root for engine-driven walks). Children are
-     * emitted as siblings in their own GROUPs by the recursion below,
-     * each addressable by its own group_id — no nested GROUPs. This
-     * matters because the producer drives lifecycle by widget id, and
-     * the receiver's recursive DELETE only follows wire-time nesting;
-     * keeping all widgets flat under root makes DELETE(id) target just
-     * that widget. */
+    /* Open this widget's CREATE_CHILD record, emit my own body, close it
+     * — THEN recurse into children at the ROOT envelope level. The new
+     * wire is flat: each widget produces exactly one CREATE_CHILD record
+     * at the root container's level. Children's records aren't nested
+     * inside parents' bodies any more (the ygrid figure body is a flat
+     * stream of SDF/glyph records, no nested admin allowed). The UI
+     * hierarchy is preserved purely by the order in which records
+     * arrive — siblings render in z-order; absolute coords come from
+     * the layout pass (effective_x/y). */
     {
-        struct yetty_ycore_void_result e = yetty_ygui_widget_emit_self_in_group(
-            self, ctx,
-            self->vtable && self->vtable->render ? self->vtable->render : NULL);
-        if (YETTY_IS_ERR(e)) {
-            first_err = e;
-        }
+        uint32_t marker = yetty_ygui_widget_open_group(
+            self, ctx, self->vtable && self->vtable->render ? self->vtable->render : NULL);
+        yetty_ygui_widget_close_group(self, ctx, marker);
     }
 
-    /* Recurse into children with offset = self's absolute origin so each
-     * child can keep drawing at its own (relative) self->x / self->y.
-     * Children are siblings of `self` on the wire — each child's own
-     * render_all emits another flat GROUP. */
-    if (self->first_child) {
-        float old_offset_x = ctx->offset_x;
-        float old_offset_y = ctx->offset_y;
-        ctx->offset_x = self->layout_x;
-        ctx->offset_y = self->layout_y;
-
-        for (struct yetty_ygui_widget *child = self->first_child; child;
-             child = child->next_sibling) {
-            if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
-                continue;
-            }
-            struct yetty_ycore_void_result r;
-            if (child->vtable && child->vtable->render_all) {
-                r = child->vtable->render_all(child, ctx);
+    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
+        if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+            continue;
+        }
+        struct yetty_ycore_void_result r;
+        if (child->vtable && child->vtable->render_all) {
+            r = child->vtable->render_all(child, ctx);
+        } else {
+            r = yetty_ygui_widget_render_all_default(child, ctx);
+        }
+        if (YETTY_IS_ERR(r)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = r;
             } else {
-                r = yetty_ygui_widget_render_all_default(child, ctx);
-            }
-            if (YETTY_IS_ERR(r)) {
-                if (YETTY_IS_OK(first_err)) {
-                    first_err = r;
-                } else {
-                    yetty_ycore_error_destroy(r.error);
-                }
+                yetty_ycore_error_destroy(r.error);
             }
         }
-
-        ctx->offset_x = old_offset_x;
-        ctx->offset_y = old_offset_y;
     }
 
     return first_err;
@@ -442,7 +498,8 @@ void yetty_ygui_widget_remove_child(struct yetty_ygui_widget *parent,
     child->next_sibling = NULL;
 
     if (parent->engine) {
-        parent->engine->dirty = 1; parent->dirty = 1;
+        parent->engine->dirty = 1;
+        parent->dirty = 1;
         /* Unparented subtree leaves the render pipeline. Queue DELETE
          * for the child AND every rendered descendant — the receiver's
          * scene-canvas keeps each widget as an independent root-level
@@ -519,12 +576,12 @@ void yetty_ygui_widget_set_position(struct yetty_ygui_widget *widget, float x, f
     widget->x = x;
     widget->y = y;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
-struct pixel_coord_result yetty_ygui_widget_get_position(
-    const struct yetty_ygui_widget *widget)
+struct pixel_coord_result yetty_ygui_widget_get_position(const struct yetty_ygui_widget *widget)
 {
     if (!widget) {
         return YETTY_ERR(pixel_coord, "widget_get_position: NULL widget");
@@ -543,12 +600,12 @@ void yetty_ygui_widget_set_size(struct yetty_ygui_widget *widget, float w, float
     widget->w = w;
     widget->h = h;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
-struct pixel_size_result yetty_ygui_widget_get_size(
-    const struct yetty_ygui_widget *widget)
+struct pixel_size_result yetty_ygui_widget_get_size(const struct yetty_ygui_widget *widget)
 {
     if (!widget) {
         return YETTY_ERR(pixel_size, "widget_get_size: NULL widget");
@@ -558,8 +615,7 @@ struct pixel_size_result yetty_ygui_widget_get_size(
     return YETTY_OK(pixel_size, size);
 }
 
-struct rectangle_result yetty_ygui_widget_get_layout_box(
-    const struct yetty_ygui_widget *widget)
+struct rectangle_result yetty_ygui_widget_get_layout_box(const struct yetty_ygui_widget *widget)
 {
     if (!widget) {
         return YETTY_ERR(rectangle, "widget_get_layout_box: NULL widget");
@@ -571,8 +627,7 @@ struct rectangle_result yetty_ygui_widget_get_layout_box(
     return YETTY_OK(rectangle, box);
 }
 
-struct rectangle_result yetty_ygui_widget_get_content_box(
-    const struct yetty_ygui_widget *widget)
+struct rectangle_result yetty_ygui_widget_get_content_box(const struct yetty_ygui_widget *widget)
 {
     if (!widget) {
         return YETTY_ERR(rectangle, "widget_get_content_box: NULL widget");
@@ -596,7 +651,8 @@ void yetty_ygui_widget_set_visible(struct yetty_ygui_widget *widget, int visible
         widget->flags &= ~YETTY_YGUI_FLAG_VISIBLE;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
         /* visible → hidden: render_all_default will early-return for
          * this subtree, so its entities on the receiver will never get
          * a DELETE through emit_self_in_group. Queue them explicitly. */
@@ -622,7 +678,8 @@ void yetty_ygui_widget_set_enabled(struct yetty_ygui_widget *widget, int enabled
         widget->flags |= YETTY_YGUI_FLAG_DISABLED;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -643,7 +700,8 @@ void yetty_ygui_widget_set_bg_color(struct yetty_ygui_widget *widget, uint32_t c
     }
     widget->bg_color = color;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -654,7 +712,8 @@ void yetty_ygui_widget_set_fg_color(struct yetty_ygui_widget *widget, uint32_t c
     }
     widget->fg_color = color;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -665,7 +724,8 @@ void yetty_ygui_widget_set_accent_color(struct yetty_ygui_widget *widget, uint32
     }
     widget->accent_color = color;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -676,7 +736,8 @@ void yetty_ygui_widget_set_accent_color(struct yetty_ygui_widget *widget, uint32
 static void layout_widget_dirty(struct yetty_ygui_widget *widget)
 {
     if (widget && widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -925,13 +986,13 @@ static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *se
     if (hovered && !pressed) {
         if (focused) {
             float r = t->radius_medium + 2.0f;
-            yetty_ygui_render_ctx_render_box_outline(
-                ctx, self->x - 2.0f, self->y - 2.0f + press_offset, self->w + 4.0f,
-                self->h + 4.0f, self->accent_color, r, 2.0f);
+            yetty_ygui_render_ctx_render_box_outline(ctx, self->x - 2.0f,
+                                                     self->y - 2.0f + press_offset, self->w + 4.0f,
+                                                     self->h + 4.0f, self->accent_color, r, 2.0f);
         } else {
-            yetty_ygui_render_ctx_render_box_outline(
-                ctx, self->x, self->y + press_offset, self->w, self->h, self->accent_color,
-                t->radius_medium, 1.5f);
+            yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y + press_offset, self->w,
+                                                     self->h, self->accent_color, t->radius_medium,
+                                                     1.5f);
         }
     }
 
@@ -1010,7 +1071,8 @@ void yetty_ygui_widget_button_set_label(struct yetty_ygui_widget *widget, const 
     free(widget->data.button.label);
     widget->data.button.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1084,7 +1146,8 @@ void yetty_ygui_widget_label_set_text(struct yetty_ygui_widget *widget, const ch
     free(widget->data.label.text);
     widget->data.label.text = ygui_strdup(text);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1103,7 +1166,8 @@ void yetty_ygui_widget_label_set_font_size(struct yetty_ygui_widget *widget, flo
     }
     widget->data.label.font_size = size;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1223,7 +1287,8 @@ void yetty_ygui_widget_slider_set_value(struct yetty_ygui_widget *widget, float 
     widget->data.slider.value =
         ygui_clamp(value, widget->data.slider.min_val, widget->data.slider.max_val);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1245,7 +1310,8 @@ void yetty_ygui_widget_slider_set_range(struct yetty_ygui_widget *widget, float 
     widget->data.slider.max_val = max_val;
     widget->data.slider.value = ygui_clamp(widget->data.slider.value, min_val, max_val);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1340,7 +1406,8 @@ void yetty_ygui_widget_checkbox_set_checked(struct yetty_ygui_widget *widget, in
     }
     widget->data.checkbox.checked = checked;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1360,7 +1427,8 @@ void yetty_ygui_widget_checkbox_set_label(struct yetty_ygui_widget *widget, cons
     free(widget->data.checkbox.label);
     widget->data.checkbox.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1411,32 +1479,39 @@ static struct yetty_ycore_void_result panel_render(struct yetty_ygui_widget *sel
 static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget *self,
                                                        struct yetty_ygui_render_ctx *ctx)
 {
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
+    /* effective_{x,y} stays as layout_{x,y} (absolute pane coords) set
+     * during layout_compute_engine. The render walk must NOT overwrite
+     * it with `self->{x,y} + ctx->offset_{x,y}` — ctx->offset is 0 at
+     * call time and self->{x,y} is parent-relative, so the result
+     * would be parent-relative and break mouse-coord computation
+     * (on_press receives lx = absolute - parent-relative = wrong). */
     self->was_rendered = 1;
-
-    /* Render panel background and scrollbar — wrapped in its own GROUP. */
-    {
-        struct yetty_ycore_void_result e =
-            yetty_ygui_widget_emit_self_in_group(self, ctx, panel_render);
-        if (YETTY_IS_ERR(e)) {
-            yetty_ycore_error_destroy(e.error);
-        }
-    }
 
     const struct yetty_ygui_theme *t = ctx->theme;
     float header_h = self->data.panel.header_h;
     float scrollable_h = self->h - header_h;
     float content_h = self->data.panel.content_h;
     float sb_w = (content_h > scrollable_h && scrollable_h > 0) ? t->scrollbar_size : 0;
+    (void)sb_w;
 
-    /* Save context state */
-    float old_offset_x = ctx->offset_x;
-    float old_offset_y = ctx->offset_y;
+    /* Flat-wire emission: open this widget's CREATE_CHILD record, emit
+     * own body (background + scrollbar) into it, CLOSE IT, then recurse
+     * children at the ROOT envelope level. Each child becomes its own
+     * top-level CREATE_CHILD at the root container — the receiver
+     * preserves z-order via record order (back-to-front) and resolves
+     * absolute coords from the figure rect (effective_x/y), not from
+     * any parent-chain accumulation.
+     *
+     * Scroll/header partition: header children stay at their layout
+     * coords; scrollable children get their effective_y mutated by
+     * -scroll temporarily so the emitted figure rect lands at the
+     * on-screen position. Both child sets recurse at root level. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, panel_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
 
-    /* Render header children (no scrolling) */
-    ctx->offset_x = old_offset_x + self->x;
-    ctx->offset_y = old_offset_y + self->y;
+    /* Header children (no scroll). */
     for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
         if (child->y < header_h) {
             if (child->vtable && child->vtable->render_all) {
@@ -1447,23 +1522,34 @@ static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget 
         }
     }
 
-    /* Render scrollable children */
-    ctx->offset_x = old_offset_x + self->x - self->data.panel.scroll_x;
-    ctx->offset_y = old_offset_y + self->y - self->data.panel.scroll_y;
+    /* Scrollable children — mutate stored x/y by -scroll so the figure
+     * rect emitted by open_group reflects the scrolled position. The
+     * layout pass already wrote effective_x/y absolute, so we shift
+     * those too. */
+    float scroll_x = self->data.panel.scroll_x;
+    float scroll_y = self->data.panel.scroll_y;
     for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
         if (child->y >= header_h) {
-            /* TODO: proper clipping */
+            float saved_x = (float)child->x;
+            float saved_y = (float)child->y;
+            float saved_ex = child->effective_x;
+            float saved_ey = child->effective_y;
+            child->x = (int)(saved_x - scroll_x);
+            child->y = (int)(saved_y - scroll_y);
+            child->effective_x = saved_ex - scroll_x;
+            child->effective_y = saved_ey - scroll_y;
             if (child->vtable && child->vtable->render_all) {
                 child->vtable->render_all(child, ctx);
             } else {
                 yetty_ygui_widget_render_all_default(child, ctx);
             }
+            child->x = (int)saved_x;
+            child->y = (int)saved_y;
+            child->effective_x = saved_ex;
+            child->effective_y = saved_ey;
         }
     }
 
-    /* Restore context */
-    ctx->offset_x = old_offset_x;
-    ctx->offset_y = old_offset_y;
     return YETTY_OK_VOID();
 }
 
@@ -1518,7 +1604,8 @@ void yetty_ygui_widget_panel_set_scroll(struct yetty_ygui_widget *widget, float 
     widget->data.panel.scroll_x = x;
     widget->data.panel.scroll_y = y;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1543,7 +1630,8 @@ void yetty_ygui_widget_panel_set_content_size(struct yetty_ygui_widget *widget, 
     widget->data.panel.content_w = w;
     widget->data.panel.content_h = h;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1554,7 +1642,8 @@ void yetty_ygui_widget_panel_set_header_height(struct yetty_ygui_widget *widget,
     }
     widget->data.panel.header_h = h;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1587,11 +1676,13 @@ static struct yetty_ycore_void_result progress_render(struct yetty_ygui_widget *
         /* Triangle wave (0..1..0) over phase so the slug bounces. */
         float t01 = p < 0.5f ? p * 2.0f : (1.0f - p) * 2.0f;
         float slug_x = self->x + t01 * travel;
-        yetty_ygui_render_ctx_render_box(ctx, slug_x, self->y, slug_w, self->h,
-                                         self->accent_color, t->radius_small);
+        yetty_ygui_render_ctx_render_box(ctx, slug_x, self->y, slug_w, self->h, self->accent_color,
+                                         t->radius_small);
         /* Keep ourselves dirty so we re-emit next frame. */
         self->dirty = 1;
-        if (self->engine) self->engine->dirty = 1;
+        if (self->engine) {
+            self->engine->dirty = 1;
+        }
         return YETTY_OK_VOID();
     }
 
@@ -1633,7 +1724,8 @@ void yetty_ygui_widget_progress_set_value(struct yetty_ygui_widget *widget, floa
     }
     widget->data.progress.value = ygui_clamp(value, 0, 1);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1733,29 +1825,29 @@ static struct yetty_ycore_void_result textinput_render(struct yetty_ygui_widget 
 /* Modifier bits — match yetty's GLFW-derived layout (see yetty/yetty.c,
  * tabbar.c). We only key off CTRL for emacs bindings; SHIFT is already
  * applied at the platform layer when emitting CHAR events. */
-#define YGUI_MOD_CTRL  0x0002
+#define YGUI_MOD_CTRL 0x0002
 
 /* GLFW key codes for the special keys the textinput needs to react to.
  * Inlining the constants avoids pulling GLFW headers into ygui. */
 enum {
-    YGUI_KEY_ESCAPE    = 256,
-    YGUI_KEY_ENTER     = 257,
-    YGUI_KEY_TAB       = 258,
+    YGUI_KEY_ESCAPE = 256,
+    YGUI_KEY_ENTER = 257,
+    YGUI_KEY_TAB = 258,
     YGUI_KEY_BACKSPACE = 259,
-    YGUI_KEY_DELETE    = 261,
-    YGUI_KEY_RIGHT     = 262,
-    YGUI_KEY_LEFT      = 263,
-    YGUI_KEY_HOME      = 268,
-    YGUI_KEY_END       = 269,
-    YGUI_KEY_A         = 65,
-    YGUI_KEY_B         = 66,
-    YGUI_KEY_D         = 68,
-    YGUI_KEY_E         = 69,
-    YGUI_KEY_F         = 70,
-    YGUI_KEY_H         = 72,
-    YGUI_KEY_K         = 75,
-    YGUI_KEY_U         = 85,
-    YGUI_KEY_W         = 87,
+    YGUI_KEY_DELETE = 261,
+    YGUI_KEY_RIGHT = 262,
+    YGUI_KEY_LEFT = 263,
+    YGUI_KEY_HOME = 268,
+    YGUI_KEY_END = 269,
+    YGUI_KEY_A = 65,
+    YGUI_KEY_B = 66,
+    YGUI_KEY_D = 68,
+    YGUI_KEY_E = 69,
+    YGUI_KEY_F = 70,
+    YGUI_KEY_H = 72,
+    YGUI_KEY_K = 75,
+    YGUI_KEY_U = 85,
+    YGUI_KEY_W = 87,
 };
 
 /* Find the start of the word boundary to the left of `pos`. Used by
@@ -1776,9 +1868,15 @@ static int textinput_word_start(const char *text, int pos)
  * the new length; caller must update cursor afterwards. */
 static int textinput_delete_range(char *text, int len, int from, int to)
 {
-    if (from < 0) from = 0;
-    if (to > len) to = len;
-    if (from >= to) return len;
+    if (from < 0) {
+        from = 0;
+    }
+    if (to > len) {
+        to = len;
+    }
+    if (from >= to) {
+        return len;
+    }
     memmove(text + from, text + to, len - to + 1 /* NUL */);
     return len - (to - from);
 }
@@ -1789,8 +1887,12 @@ static int textinput_on_key(struct yetty_ygui_widget *self, uint32_t key, int mo
     char *text = self->data.textinput.text;
     int len = text ? (int)strlen(text) : 0;
     int cursor = self->data.textinput.cursor_pos;
-    if (cursor < 0) cursor = 0;
-    if (cursor > len) cursor = len;
+    if (cursor < 0) {
+        cursor = 0;
+    }
+    if (cursor > len) {
+        cursor = len;
+    }
     int handled = 0;
 
     int ctrl = (mods & YGUI_MOD_CTRL) ? 1 : 0;
@@ -1805,72 +1907,99 @@ static int textinput_on_key(struct yetty_ygui_widget *self, uint32_t key, int mo
      * the chord is unambiguous regardless of the shift state. */
     if (ctrl) {
         switch (key) {
-        case YGUI_KEY_A:                /* go to start of line */
-            cursor = 0; handled = 1; break;
-        case YGUI_KEY_E:                /* go to end of line */
-            cursor = len; handled = 1; break;
-        case YGUI_KEY_B:                /* back one char */
-            if (cursor > 0) cursor--;
-            handled = 1; break;
-        case YGUI_KEY_F:                /* forward one char */
-            if (cursor < len) cursor++;
-            handled = 1; break;
-        case YGUI_KEY_H:                /* backspace */
+        case YGUI_KEY_A: /* go to start of line */
+            cursor = 0;
+            handled = 1;
+            break;
+        case YGUI_KEY_E: /* go to end of line */
+            cursor = len;
+            handled = 1;
+            break;
+        case YGUI_KEY_B: /* back one char */
+            if (cursor > 0) {
+                cursor--;
+            }
+            handled = 1;
+            break;
+        case YGUI_KEY_F: /* forward one char */
+            if (cursor < len) {
+                cursor++;
+            }
+            handled = 1;
+            break;
+        case YGUI_KEY_H: /* backspace */
             if (text && cursor > 0) {
                 len = textinput_delete_range(text, len, cursor - 1, cursor);
                 cursor--;
             }
-            handled = 1; break;
-        case YGUI_KEY_D:                /* delete-char-forward */
+            handled = 1;
+            break;
+        case YGUI_KEY_D: /* delete-char-forward */
             if (text && cursor < len) {
                 len = textinput_delete_range(text, len, cursor, cursor + 1);
             }
-            handled = 1; break;
-        case YGUI_KEY_K:                /* kill to end-of-line */
+            handled = 1;
+            break;
+        case YGUI_KEY_K: /* kill to end-of-line */
             if (text && cursor < len) {
                 len = textinput_delete_range(text, len, cursor, len);
             }
-            handled = 1; break;
-        case YGUI_KEY_U:                /* kill to start-of-line */
+            handled = 1;
+            break;
+        case YGUI_KEY_U: /* kill to start-of-line */
             if (text && cursor > 0) {
                 len = textinput_delete_range(text, len, 0, cursor);
                 cursor = 0;
             }
-            handled = 1; break;
-        case YGUI_KEY_W: {              /* kill previous word */
+            handled = 1;
+            break;
+        case YGUI_KEY_W: { /* kill previous word */
             if (text && cursor > 0) {
                 int ws = textinput_word_start(text, cursor);
                 len = textinput_delete_range(text, len, ws, cursor);
                 cursor = ws;
             }
-            handled = 1; break;
+            handled = 1;
+            break;
         }
         }
     } else {
         switch (key) {
         case YGUI_KEY_BACKSPACE:
-        case 8:                          /* ASCII BS (some platforms) */
-        case 127:                        /* ASCII DEL (some platforms) */
+        case 8:   /* ASCII BS (some platforms) */
+        case 127: /* ASCII DEL (some platforms) */
             if (text && cursor > 0) {
                 len = textinput_delete_range(text, len, cursor - 1, cursor);
                 cursor--;
             }
-            handled = 1; break;
+            handled = 1;
+            break;
         case YGUI_KEY_DELETE:
             if (text && cursor < len) {
                 len = textinput_delete_range(text, len, cursor, cursor + 1);
             }
-            handled = 1; break;
+            handled = 1;
+            break;
         case YGUI_KEY_LEFT:
-            if (cursor > 0) cursor--;
-            handled = 1; break;
+            if (cursor > 0) {
+                cursor--;
+            }
+            handled = 1;
+            break;
         case YGUI_KEY_RIGHT:
-            if (cursor < len) cursor++;
-            handled = 1; break;
+            if (cursor < len) {
+                cursor++;
+            }
+            handled = 1;
+            break;
         case YGUI_KEY_HOME:
-            cursor = 0; handled = 1; break;
+            cursor = 0;
+            handled = 1;
+            break;
         case YGUI_KEY_END:
-            cursor = len; handled = 1; break;
+            cursor = len;
+            handled = 1;
+            break;
         }
     }
 
@@ -1928,7 +2057,8 @@ void yetty_ygui_widget_textinput_set_text(struct yetty_ygui_widget *widget, cons
     free(widget->data.textinput.text);
     widget->data.textinput.text = ygui_strdup(text);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -1948,7 +2078,8 @@ void yetty_ygui_widget_textinput_set_placeholder(struct yetty_ygui_widget *widge
     free(widget->data.textinput.placeholder);
     widget->data.textinput.placeholder = ygui_strdup(text);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2173,7 +2304,8 @@ void yetty_ygui_widget_dropdown_set_options(struct yetty_ygui_widget *widget, co
         widget->data.dropdown.selected = count > 0 ? 0 : -1;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2184,7 +2316,8 @@ void yetty_ygui_widget_dropdown_set_selected(struct yetty_ygui_widget *widget, i
     }
     widget->data.dropdown.selected = index;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2394,7 +2527,8 @@ void yetty_ygui_widget_colorpicker_set_color(struct yetty_ygui_widget *widget, f
                &widget->data.colorpicker.val);
     widget->data.colorpicker.alpha = a;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2447,12 +2581,14 @@ void yetty_ygui_widget_colorpicker_get_color(const struct yetty_ygui_widget *wid
 static float popup_title_h(const struct yetty_ygui_theme *t)
 {
     float h = t->row_height + t->pad_medium;
-    if (h < 24.0f) h = 24.0f;
+    if (h < 24.0f) {
+        h = 24.0f;
+    }
     return h;
 }
 
 #define POPUP_CLOSE_BTN_SIZE 18.0f
-#define POPUP_CLOSE_BTN_PAD  6.0f
+#define POPUP_CLOSE_BTN_PAD 6.0f
 
 static struct yetty_ycore_void_result popup_render(struct yetty_ygui_widget *self,
                                                    struct yetty_ygui_render_ctx *ctx)
@@ -2481,8 +2617,7 @@ static struct yetty_ycore_void_result popup_render(struct yetty_ygui_widget *sel
     /* Header strip — always painted so the drag area is visible. */
     float hdr_h = popup_title_h(t);
     uint32_t hdr = self->data.popup.header_color ? self->data.popup.header_color : t->bg_header;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, hdr_h, hdr,
-                                     t->radius_large);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, hdr_h, hdr, t->radius_large);
     const char *label = self->data.popup.label;
     if (label && label[0]) {
         yetty_ygui_render_ctx_render_text(ctx, label, self->x + t->pad_large,
@@ -2516,26 +2651,26 @@ static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget 
         return YETTY_OK_VOID();
     }
 
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
+    /* effective_{x,y} kept at the absolute value layout wrote; render
+     * must not clobber with `self->{x,y} + ctx->offset_{x,y}` — see
+     * panel_render_all for the full rationale. */
     self->was_rendered = 1;
 
+    /* Flat-wire emission: open + close own group, recurse children at
+     * root level. */
     {
-        struct yetty_ycore_void_result e =
-            yetty_ygui_widget_emit_self_in_group(self, ctx, popup_render);
-        if (YETTY_IS_ERR(e)) {
-            yetty_ycore_error_destroy(e.error);
-        }
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, popup_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
     }
 
-    for (struct yetty_ygui_widget *child = self->first_child; child;
-         child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
         if (child->vtable && child->vtable->render_all) {
             child->vtable->render_all(child, ctx);
         } else {
             yetty_ygui_widget_render_all_default(child, ctx);
         }
     }
+
     return YETTY_OK_VOID();
 }
 
@@ -2559,7 +2694,8 @@ static int popup_on_press(struct yetty_ygui_widget *self, float lx, float ly, yg
         int was_open = (self->flags & YETTY_YGUI_FLAG_OPEN) != 0;
         self->flags &= ~YETTY_YGUI_FLAG_OPEN;
         if (self->engine) {
-            self->engine->dirty = 1; self->dirty = 1;
+            self->engine->dirty = 1;
+            self->dirty = 1;
             if (was_open) {
                 yetty_ygui_internal_queue_delete_subtree_rendered(self);
             }
@@ -2599,7 +2735,9 @@ static int popup_on_press(struct yetty_ygui_widget *self, float lx, float ly, yg
 
 static int popup_on_drag(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
-    if (!self->data.popup.dragging) return 0;
+    if (!self->data.popup.dragging) {
+        return 0;
+    }
     /* `lx + effective_x` is the invariant: it always equals the
      * absolute mouse_x regardless of any intervening layout that
      * updated effective_x (see comment in popup_on_press). Using that
@@ -2614,16 +2752,19 @@ static int popup_on_drag(struct yetty_ygui_widget *self, float lx, float ly, ygu
     self->authored_x = self->x;
     self->authored_y = self->y;
     self->dirty = 1;
-    if (self->engine) self->engine->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CHANGE;
     return 1;
 }
 
-static int popup_on_release(struct yetty_ygui_widget *self, float lx, float ly,
-                            ygui_event_t *out)
+static int popup_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
-    (void)lx; (void)ly; (void)out;
+    (void)lx;
+    (void)ly;
+    (void)out;
     self->data.popup.dragging = 0;
     return 0;
 }
@@ -2669,7 +2810,8 @@ void yetty_ygui_widget_popup_set_label(struct yetty_ygui_widget *widget, const c
     free(widget->data.popup.label);
     widget->data.popup.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2688,7 +2830,8 @@ void yetty_ygui_widget_popup_set_modal(struct yetty_ygui_widget *widget, int mod
     }
     widget->data.popup.modal = modal ? 1 : 0;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2718,7 +2861,8 @@ void yetty_ygui_widget_popup_set_open(struct yetty_ygui_widget *widget, int open
         widget->flags &= ~YETTY_YGUI_FLAG_OPEN;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
         /* OPEN → close: popup_render_all early-returns for the rest of
          * the subtree, so the children's entities on the receiver would
          * never get a DELETE through emit_self_in_group. Queue them. */
@@ -2744,7 +2888,8 @@ void yetty_ygui_widget_popup_set_scene_size(struct yetty_ygui_widget *widget, fl
     widget->data.popup.scene_w = w;
     widget->data.popup.scene_h = h;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2755,7 +2900,8 @@ void yetty_ygui_widget_popup_set_header_color(struct yetty_ygui_widget *widget, 
     }
     widget->data.popup.header_color = color;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2827,54 +2973,46 @@ static struct yetty_ycore_void_result collapsing_header_render(struct yetty_ygui
 static struct yetty_ycore_void_result collapsing_header_render_all(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
 {
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
+    /* effective_{x,y} kept at the absolute value layout wrote; render
+     * must not clobber with `self->{x,y} + ctx->offset_{x,y}` — see
+     * panel_render_all for the full rationale. Without this fix the
+     * Elements tab's section headers wouldn't toggle: on_press received
+     * ly relative to the scrollarea (not the header), so the strip
+     * test treated every click as "below the header" and propagated. */
     self->was_rendered = 1;
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
-    /* Header strip — always rendered, wrapped in this widget's GROUP. */
+    /* Flat-wire emission: open + close own group (header strip only),
+     * recurse children at the root envelope level. Children are
+     * skipped when the collapser is closed. */
     {
-        struct yetty_ycore_void_result e =
-            yetty_ygui_widget_emit_self_in_group(self, ctx, collapsing_header_render);
-        if (YETTY_IS_ERR(e)) {
-            first_err = e;
-        }
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, collapsing_header_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
     }
 
-    if (!(self->flags & YETTY_YGUI_FLAG_OPEN) || !self->first_child) {
-        return first_err;
-    }
-
-    /* Children were positioned by the flex pass into the box just below
-     * the header (padding_top = header_h). Recurse with offset = our
-     * absolute origin so each child's already-resolved (x, y) lands at
-     * its layout_x / layout_y on screen — identical to the contract the
-     * default render_all uses for its children. */
-    float old_offset_x = ctx->offset_x;
-    float old_offset_y = ctx->offset_y;
-    ctx->offset_x = self->layout_x;
-    ctx->offset_y = self->layout_y;
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
-        if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
-            continue;
-        }
-        struct yetty_ycore_void_result r;
-        if (child->vtable && child->vtable->render_all) {
-            r = child->vtable->render_all(child, ctx);
-        } else {
-            r = yetty_ygui_widget_render_all_default(child, ctx);
-        }
-        if (YETTY_IS_ERR(r)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = r;
+    if ((self->flags & YETTY_YGUI_FLAG_OPEN) && self->first_child) {
+        for (struct yetty_ygui_widget *child = self->first_child; child;
+             child = child->next_sibling) {
+            if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+                continue;
+            }
+            struct yetty_ycore_void_result r;
+            if (child->vtable && child->vtable->render_all) {
+                r = child->vtable->render_all(child, ctx);
             } else {
-                yetty_ycore_error_destroy(r.error);
+                r = yetty_ygui_widget_render_all_default(child, ctx);
+            }
+            if (YETTY_IS_ERR(r)) {
+                if (YETTY_IS_OK(first_err)) {
+                    first_err = r;
+                } else {
+                    yetty_ycore_error_destroy(r.error);
+                }
             }
         }
     }
-    ctx->offset_x = old_offset_x;
-    ctx->offset_y = old_offset_y;
+
     return first_err;
 }
 
@@ -2895,7 +3033,8 @@ static int collapsing_header_on_press(struct yetty_ygui_widget *self, float lx, 
     self->flags ^= YETTY_YGUI_FLAG_OPEN;
     int now_open = (self->flags & YETTY_YGUI_FLAG_OPEN) != 0;
     if (self->engine) {
-        self->engine->dirty = 1; self->dirty = 1;
+        self->engine->dirty = 1;
+        self->dirty = 1;
         if (was_open && !now_open) {
             /* Header keeps rendering; only children stopped. */
             for (struct yetty_ygui_widget *c = self->first_child; c; c = c->next_sibling) {
@@ -2934,7 +3073,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_collapsing_header(struct yetty_ygui_
     c->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
     c->layout.direction = YETTY_YGUI_FLEX_COLUMN;
     c->layout.align_items = YETTY_YGUI_ALIGN_STRETCH;
-    c->layout.padding_top = h + 8.0f;   /* header strip + inset above first child */
+    c->layout.padding_top = h + 8.0f; /* header strip + inset above first child */
     c->layout.padding_bottom = 8.0f;
     c->layout.padding_left = 12.0f;
     c->layout.padding_right = 12.0f;
@@ -2959,7 +3098,8 @@ void yetty_ygui_widget_collapsing_header_set_label(struct yetty_ygui_widget *wid
     free(widget->data.collapsing_header.label);
     widget->data.collapsing_header.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -2983,7 +3123,8 @@ void yetty_ygui_widget_collapsing_header_set_open(struct yetty_ygui_widget *widg
         widget->flags &= ~YETTY_YGUI_FLAG_OPEN;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
         /* OPEN → close: the header keeps rendering, but the children
          * stop. Queue deletes for the children's subtrees only — the
          * header itself will re-emit via emit_self_in_group normally. */
@@ -3059,7 +3200,8 @@ void yetty_ygui_widget_tooltip_set_label(struct yetty_ygui_widget *widget, const
     free(widget->data.tooltip.label);
     widget->data.tooltip.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -3141,7 +3283,8 @@ void yetty_ygui_widget_selectable_set_label(struct yetty_ygui_widget *widget, co
     free(widget->data.selectable.label);
     widget->data.selectable.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -3164,7 +3307,8 @@ void yetty_ygui_widget_selectable_set_checked(struct yetty_ygui_widget *widget, 
         widget->flags &= ~YETTY_YGUI_FLAG_CHECKED;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -3302,7 +3446,8 @@ void yetty_ygui_widget_choicebox_set_options(struct yetty_ygui_widget *widget, c
         widget->data.choicebox.selected = count > 0 ? 0 : -1;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -3313,7 +3458,8 @@ void yetty_ygui_widget_choicebox_set_selected(struct yetty_ygui_widget *widget, 
     }
     widget->data.choicebox.selected = index;
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -3560,7 +3706,8 @@ void yetty_ygui_widget_scrollbar_set_value(struct yetty_ygui_widget *widget, flo
     }
     widget->data.scrollbar.value = ygui_clamp(value, 0.0f, 1.0f);
     if (widget->engine) {
-        widget->engine->dirty = 1; widget->dirty = 1;
+        widget->engine->dirty = 1;
+        widget->dirty = 1;
     }
 }
 
@@ -3636,19 +3783,11 @@ static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *
     }
     self->was_rendered = 1;
 
-    float old_offset_x = ctx->offset_x;
-    float old_offset_y = ctx->offset_y;
-    ctx->offset_x = self->layout_x;
-    ctx->offset_y = self->layout_y;
-
-    /* Selection background — drawn before children so they sit on top.
-     * Wrapped in this widget's GROUP. */
+    /* Flat-wire emission: open + close own group (selection background),
+     * recurse children at the root envelope level. */
     {
-        struct yetty_ycore_void_result e =
-            yetty_ygui_widget_emit_self_in_group(self, ctx, list_render);
-        if (YETTY_IS_ERR(e)) {
-            yetty_ycore_error_destroy(e.error);
-        }
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, list_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
     }
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
@@ -3669,8 +3808,6 @@ static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *
         }
     }
 
-    ctx->offset_x = old_offset_x;
-    ctx->offset_y = old_offset_y;
     return first_err;
 }
 
@@ -3699,7 +3836,8 @@ static int list_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygu
     if (self->data.list.selected != child) {
         self->data.list.selected = child;
         if (self->engine) {
-            self->engine->dirty = 1; self->dirty = 1;
+            self->engine->dirty = 1;
+            self->dirty = 1;
         }
     }
     if (self->data.list.on_select) {
@@ -3742,7 +3880,8 @@ void yetty_ygui_widget_list_set_selected(struct yetty_ygui_widget *list,
     }
     list->data.list.selected = child;
     if (list->engine) {
-        list->engine->dirty = 1; list->dirty = 1;
+        list->engine->dirty = 1;
+        list->dirty = 1;
     }
 }
 
@@ -3948,12 +4087,16 @@ static void table_apply_sort(struct yetty_ygui_widget *self)
      * values, qsort that, then write the rows array back. Preserves
      * row pointer identity so selection survives. */
     char ***rows = self->data.table.rows;
-    char **prev_sel_ptr = (self->data.table.selected_row >= 0 &&
-                           self->data.table.selected_row < n)
+    char **prev_sel_ptr = (self->data.table.selected_row >= 0 && self->data.table.selected_row < n)
                               ? rows[self->data.table.selected_row]
                               : NULL;
-    struct pair { char *key; char **row; } *pairs = malloc((size_t)n * sizeof(*pairs));
-    if (!pairs) return;
+    struct pair {
+        char *key;
+        char **row;
+    } *pairs = malloc((size_t)n * sizeof(*pairs));
+    if (!pairs) {
+        return;
+    }
     for (int i = 0; i < n; i++) {
         pairs[i].key = (rows[i] && col < nc) ? rows[i][col] : NULL;
         pairs[i].row = rows[i];
@@ -3970,7 +4113,9 @@ static void table_apply_sort(struct yetty_ygui_widget *self)
     int new_sel = -1;
     for (int i = 0; i < n; i++) {
         rows[i] = pairs[i].row;
-        if (rows[i] == prev_sel_ptr) new_sel = i;
+        if (rows[i] == prev_sel_ptr) {
+            new_sel = i;
+        }
     }
     free(pairs);
     self->data.table.selected_row = new_sel;
@@ -3978,7 +4123,9 @@ static void table_apply_sort(struct yetty_ygui_widget *self)
 
 static void table_header_clicked(struct yetty_ygui_widget *self, int col)
 {
-    if (col < 0 || col >= self->data.table.n_columns) return;
+    if (col < 0 || col >= self->data.table.n_columns) {
+        return;
+    }
     if (self->data.table.sort_column != col) {
         self->data.table.sort_column = col;
         self->data.table.sort_order = 0; /* asc */
@@ -3990,7 +4137,9 @@ static void table_header_clicked(struct yetty_ygui_widget *self, int col)
     }
     table_apply_sort(self);
     self->dirty = 1;
-    if (self->engine) self->engine->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
 }
 
 #define TABLE_RESIZE_GRIP_W 6.0f
@@ -4004,19 +4153,24 @@ static int table_on_drag(struct yetty_ygui_widget *self, float lx, float ly, ygu
     int col = self->data.table.resizing_column;
     float delta = lx - self->data.table.resize_start_x;
     float new_w = self->data.table.resize_start_w + delta;
-    if (new_w < 20.0f) new_w = 20.0f;
+    if (new_w < 20.0f) {
+        new_w = 20.0f;
+    }
     self->data.table.column_widths[col] = new_w;
     self->dirty = 1;
-    if (self->engine) self->engine->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CHANGE;
     return 1;
 }
 
-static int table_on_release(struct yetty_ygui_widget *self, float lx, float ly,
-                            ygui_event_t *out)
+static int table_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
-    (void)lx; (void)ly; (void)out;
+    (void)lx;
+    (void)ly;
+    (void)out;
     self->data.table.resizing_column = -1;
     return 0;
 }
@@ -4046,9 +4200,9 @@ static int table_on_press(struct yetty_ygui_widget *self, float lx, float ly, yg
              * (it stretches; no fixed-width semantics for it). */
             if (c < nc - 1 && lx >= col_right - TABLE_RESIZE_GRIP_W && lx < col_right) {
                 self->data.table.resizing_column = c;
-                self->data.table.resize_start_w =
-                    self->data.table.column_widths[c] > 0 ? self->data.table.column_widths[c]
-                                                          : widths[c];
+                self->data.table.resize_start_w = self->data.table.column_widths[c] > 0
+                                                      ? self->data.table.column_widths[c]
+                                                      : widths[c];
                 self->data.table.resize_start_x = lx;
                 return 0;
             }
@@ -4160,7 +4314,8 @@ void yetty_ygui_widget_table_set_columns(struct yetty_ygui_widget *table, const 
     }
     table->data.table.n_columns = n_columns;
     if (table->engine) {
-        table->engine->dirty = 1; table->dirty = 1;
+        table->engine->dirty = 1;
+        table->dirty = 1;
     }
 }
 
@@ -4176,7 +4331,8 @@ void yetty_ygui_widget_table_clear_rows(struct yetty_ygui_widget *table)
     table->data.table.n_rows = 0;
     table->data.table.selected_row = -1;
     if (table->engine) {
-        table->engine->dirty = 1; table->dirty = 1;
+        table->engine->dirty = 1;
+        table->dirty = 1;
     }
 }
 
@@ -4208,7 +4364,8 @@ void yetty_ygui_widget_table_add_row(struct yetty_ygui_widget *table, const char
     }
     table->data.table.rows[table->data.table.n_rows++] = row;
     if (table->engine) {
-        table->engine->dirty = 1; table->dirty = 1;
+        table->engine->dirty = 1;
+        table->dirty = 1;
     }
 }
 
@@ -4231,7 +4388,8 @@ void yetty_ygui_widget_table_set_row(struct yetty_ygui_widget *table, int row,
     table_free_row(table->data.table.rows[row], n_cells);
     table->data.table.rows[row] = new_row;
     if (table->engine) {
-        table->engine->dirty = 1; table->dirty = 1;
+        table->engine->dirty = 1;
+        table->dirty = 1;
     }
 }
 
@@ -4253,7 +4411,8 @@ void yetty_ygui_widget_table_set_selected(struct yetty_ygui_widget *table, int r
     }
     table->data.table.selected_row = row;
     if (table->engine) {
-        table->engine->dirty = 1; table->dirty = 1;
+        table->engine->dirty = 1;
+        table->dirty = 1;
     }
 }
 
@@ -4282,7 +4441,8 @@ void yetty_ygui_widget_table_set_row_height(struct yetty_ygui_widget *table, flo
     }
     table->data.table.row_height = h;
     if (table->engine) {
-        table->engine->dirty = 1; table->dirty = 1;
+        table->engine->dirty = 1;
+        table->dirty = 1;
     }
 }
 
@@ -4293,7 +4453,9 @@ void yetty_ygui_widget_table_set_sortable(struct yetty_ygui_widget *table, int e
      * in header). Today it just leaves sort_column at -1 when
      * disabled — clicks on headers still trigger sort. */
     (void)enabled;
-    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) return;
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return;
+    }
     if (!enabled) {
         table->data.table.sort_column = -1;
         table_apply_sort(table);
@@ -4302,23 +4464,32 @@ void yetty_ygui_widget_table_set_sortable(struct yetty_ygui_widget *table, int e
 
 int yetty_ygui_widget_table_get_sort_column(const struct yetty_ygui_widget *table)
 {
-    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) return -1;
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return -1;
+    }
     return table->data.table.sort_column;
 }
 
 int yetty_ygui_widget_table_get_sort_order(const struct yetty_ygui_widget *table)
 {
-    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) return 0;
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return 0;
+    }
     return table->data.table.sort_order;
 }
 
 void yetty_ygui_widget_table_sort_by(struct yetty_ygui_widget *table, int column, int descending)
 {
-    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) return;
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return;
+    }
     table->data.table.sort_column = column;
     table->data.table.sort_order = descending ? 1 : 0;
     table_apply_sort(table);
-    if (table->engine) { table->engine->dirty = 1; table->dirty = 1; }
+    if (table->engine) {
+        table->engine->dirty = 1;
+        table->dirty = 1;
+    }
 }
 
 /*=============================================================================
@@ -4402,38 +4573,25 @@ static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_wid
     }
     self->was_rendered = 1;
 
-    /* Always render the header. Wrapped in this widget's GROUP. */
-    struct yetty_ycore_void_result first_err =
-        yetty_ygui_widget_emit_self_in_group(self, ctx, tree_node_render);
-    if (YETTY_IS_ERR(first_err)) {
-        return first_err;
+    /* Flat-wire emission: open + close own group (header chrome only),
+     * then recurse the children-list at the root envelope level when
+     * expanded. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, tree_node_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
     }
 
-    /* Render the children list below the header when expanded. The
-     * layout pass already placed children_list at the right position
-     * because we set its authored x/y in the constructor. */
     struct yetty_ygui_widget *kids = self->data.tree_node.children_list;
-    if (!kids || !self->data.tree_node.expanded) {
-        return YETTY_OK_VOID();
-    }
-    if (!(kids->flags & YETTY_YGUI_FLAG_VISIBLE)) {
-        return YETTY_OK_VOID();
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    if (kids && self->data.tree_node.expanded && (kids->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        if (kids->vtable && kids->vtable->render_all) {
+            first_err = kids->vtable->render_all(kids, ctx);
+        } else {
+            first_err = yetty_ygui_widget_render_all_default(kids, ctx);
+        }
     }
 
-    /* Push offset so kids->x/y are interpreted relative to self. */
-    float old_offset_x = ctx->offset_x;
-    float old_offset_y = ctx->offset_y;
-    ctx->offset_x = self->layout_x;
-    ctx->offset_y = self->layout_y;
-    struct yetty_ycore_void_result r;
-    if (kids->vtable && kids->vtable->render_all) {
-        r = kids->vtable->render_all(kids, ctx);
-    } else {
-        r = yetty_ygui_widget_render_all_default(kids, ctx);
-    }
-    ctx->offset_x = old_offset_x;
-    ctx->offset_y = old_offset_y;
-    return r;
+    return first_err;
 }
 
 static int tree_node_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
@@ -4457,7 +4615,8 @@ static int tree_node_on_press(struct yetty_ygui_widget *self, float lx, float ly
                                            self->data.tree_node.on_toggle_userdata);
         }
         if (self->engine) {
-            self->engine->dirty = 1; self->dirty = 1;
+            self->engine->dirty = 1;
+            self->dirty = 1;
         }
         out->widget_id = self->id;
         out->type = YETTY_YGUI_EVENT_CHANGE;
@@ -4545,7 +4704,8 @@ void yetty_ygui_widget_tree_node_set_label(struct yetty_ygui_widget *node, const
     free(node->data.tree_node.label);
     node->data.tree_node.label = ygui_strdup(label);
     if (node->engine) {
-        node->engine->dirty = 1; node->dirty = 1;
+        node->engine->dirty = 1;
+        node->dirty = 1;
     }
 }
 
@@ -4567,7 +4727,8 @@ void yetty_ygui_widget_tree_node_set_expanded(struct yetty_ygui_widget *node, in
         yetty_ygui_widget_set_visible(node->data.tree_node.children_list, expanded);
     }
     if (node->engine) {
-        node->engine->dirty = 1; node->dirty = 1;
+        node->engine->dirty = 1;
+        node->dirty = 1;
     }
 }
 
@@ -4803,8 +4964,12 @@ static float spinner_btn_w(const struct yetty_ygui_widget *self)
 static void spinner_format(const struct yetty_ygui_widget *self, char *out, size_t cap)
 {
     int p = self->data.spinner.precision;
-    if (p < 0) p = 0;
-    if (p > 6) p = 6;
+    if (p < 0) {
+        p = 0;
+    }
+    if (p > 6) {
+        p = 6;
+    }
     char fmt[16];
     snprintf(fmt, sizeof(fmt), "%%.%df", p);
     snprintf(out, cap, fmt, self->data.spinner.value);
@@ -4898,8 +5063,7 @@ static int spinner_on_scroll(struct yetty_ygui_widget *self, float dx, float dy,
 }
 
 /* KEY_UP=0x1000, KEY_DOWN=0x1001 — same convention demos use. */
-static int spinner_on_key(struct yetty_ygui_widget *self, uint32_t key, int mods,
-                          ygui_event_t *out)
+static int spinner_on_key(struct yetty_ygui_widget *self, uint32_t key, int mods, ygui_event_t *out)
 {
     (void)mods;
     float prev = self->data.spinner.value;
@@ -5011,8 +5175,7 @@ static int splitter_axis_row(const struct yetty_ygui_widget *self)
 {
     /* Explicit override wins — set by external-drive callers that pin
      * the splitter over a non-flex region (yui's pane tree). */
-    if (self->data.splitter.axis_override == 0 ||
-        self->data.splitter.axis_override == 1) {
+    if (self->data.splitter.axis_override == 0 || self->data.splitter.axis_override == 1) {
         return self->data.splitter.axis_override;
     }
     return self->parent && self->parent->layout.mode == YETTY_YGUI_LAYOUT_FLEX
@@ -5084,10 +5247,12 @@ static int splitter_on_drag(struct yetty_ygui_widget *self, float lx, float ly, 
     return 1;
 }
 
-static int splitter_on_press(struct yetty_ygui_widget *self, float lx, float ly,
-                             ygui_event_t *out)
+static int splitter_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
-    (void)self; (void)lx; (void)ly; (void)out;
+    (void)self;
+    (void)lx;
+    (void)ly;
+    (void)out;
     /* Press alone doesn't move; engine sets PRESSED flag so render
      * highlights immediately. Drag will pick up from here. */
     return 0;
@@ -5169,9 +5334,9 @@ int yetty_ygui_widget_get_type(const struct yetty_ygui_widget *widget)
 
 struct dialog_button_ud {
     struct yetty_ygui_widget *dialog;
-    int                       index;
+    int index;
     yetty_ygui_dialog_button_fn cb;
-    void                     *userdata;
+    void *userdata;
 };
 
 static void dialog_button_click(struct yetty_ygui_widget *btn, void *u)
@@ -5195,12 +5360,11 @@ struct yetty_ygui_widget *yetty_ygui_engine_dialog(struct yetty_ygui_engine *eng
     }
 
     float dlg_w = 420.0f, dlg_h = 200.0f;
-    float dlg_x = (engine->width  > dlg_w ? (engine->width  - dlg_w) * 0.5f : 0);
+    float dlg_x = (engine->width > dlg_w ? (engine->width - dlg_w) * 0.5f : 0);
     float dlg_y = (engine->height > dlg_h ? (engine->height - dlg_h) * 0.5f : 0);
 
-    struct yetty_ygui_widget *dlg = yetty_ygui_engine_popup(engine, args->id, dlg_x, dlg_y,
-                                                            dlg_w, dlg_h,
-                                                            args->title ? args->title : "");
+    struct yetty_ygui_widget *dlg = yetty_ygui_engine_popup(engine, args->id, dlg_x, dlg_y, dlg_w,
+                                                            dlg_h, args->title ? args->title : "");
     if (!dlg) {
         return NULL;
     }
@@ -5217,24 +5381,22 @@ struct yetty_ygui_widget *yetty_ygui_engine_dialog(struct yetty_ygui_engine *eng
     yetty_ygui_widget_add_child(dlg, body);
 
     if (args->message) {
-        struct yetty_ygui_widget *msg = yetty_ygui_engine_label(engine, args->id, 0, 0,
-                                                                args->message);
+        struct yetty_ygui_widget *msg =
+            yetty_ygui_engine_label(engine, args->id, 0, 0, args->message);
         yetty_ygui_widget_add_child(body, msg);
     }
 
     /* Button row, right-aligned. */
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(engine, args->id, 0, 0,
-                                                           dlg_w - 32, 36);
+    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(engine, args->id, 0, 0, dlg_w - 32, 36);
     yetty_ygui_widget_apply_css(row,
                                 "padding: 0; gap: 8; justify-content: end; align-items: stretch;");
     yetty_ygui_widget_add_child(body, row);
 
     for (int i = 0; i < args->button_count; i++) {
         const char *label = args->buttons[i] ? args->buttons[i] : "OK";
-        struct yetty_ygui_widget *b = yetty_ygui_engine_button(engine, args->id, 0, 0, 88, 32,
-                                                               label);
-        struct dialog_button_ud *ud =
-            (struct dialog_button_ud *)calloc(1, sizeof(*ud));
+        struct yetty_ygui_widget *b =
+            yetty_ygui_engine_button(engine, args->id, 0, 0, 88, 32, label);
+        struct dialog_button_ud *ud = (struct dialog_button_ud *)calloc(1, sizeof(*ud));
         if (!ud) {
             continue;
         }
@@ -5257,18 +5419,18 @@ struct yetty_ygui_widget *yetty_ygui_engine_dialog(struct yetty_ygui_engine *eng
  * word wrap.
  *===========================================================================*/
 
-#define TEXTAREA_KEY_LEFT  0x1002
+#define TEXTAREA_KEY_LEFT 0x1002
 #define TEXTAREA_KEY_RIGHT 0x1003
-#define TEXTAREA_KEY_UP    0x1000
-#define TEXTAREA_KEY_DOWN  0x1001
-#define TEXTAREA_KEY_HOME  0x1006
-#define TEXTAREA_KEY_END   0x1007
+#define TEXTAREA_KEY_UP 0x1000
+#define TEXTAREA_KEY_DOWN 0x1001
+#define TEXTAREA_KEY_HOME 0x1006
+#define TEXTAREA_KEY_END 0x1007
 #define TEXTAREA_KEY_BACKSPACE 0x08
-#define TEXTAREA_KEY_DELETE    0x7F
-#define TEXTAREA_KEY_ENTER     0x0D
-#define TEXTAREA_LINE_HEIGHT   18.0f
-#define TEXTAREA_CHAR_WIDTH    8.0f  /* monospaced approximation */
-#define TEXTAREA_PAD           6.0f
+#define TEXTAREA_KEY_DELETE 0x7F
+#define TEXTAREA_KEY_ENTER 0x0D
+#define TEXTAREA_LINE_HEIGHT 18.0f
+#define TEXTAREA_CHAR_WIDTH 8.0f /* monospaced approximation */
+#define TEXTAREA_PAD 6.0f
 
 /* Allocate-or-grow the text buffer to at least new_size bytes (excluding
  * the NUL terminator). Returns 0 on success, -1 on OOM. */
@@ -5303,7 +5465,9 @@ void yetty_ygui_internal_textarea_insert(struct yetty_ygui_widget *w, const char
     if (textarea_reserve(w, w->data.textarea.length + add) < 0) {
         return;
     }
-    if (w->data.textarea.cursor < 0) w->data.textarea.cursor = 0;
+    if (w->data.textarea.cursor < 0) {
+        w->data.textarea.cursor = 0;
+    }
     if (w->data.textarea.cursor > w->data.textarea.length) {
         w->data.textarea.cursor = w->data.textarea.length;
     }
@@ -5374,13 +5538,23 @@ static void textarea_cursor_pos(const struct yetty_ygui_widget *w, int *out_line
     const char *t = w->data.textarea.text;
     int len = w->data.textarea.length;
     int c = w->data.textarea.cursor;
-    if (c > len) c = len;
-    for (int i = 0; i < c; i++) {
-        if (t[i] == '\n') { line++; col = 0; }
-        else              { col++; }
+    if (c > len) {
+        c = len;
     }
-    if (out_line) *out_line = line;
-    if (out_col)  *out_col = col;
+    for (int i = 0; i < c; i++) {
+        if (t[i] == '\n') {
+            line++;
+            col = 0;
+        } else {
+            col++;
+        }
+    }
+    if (out_line) {
+        *out_line = line;
+    }
+    if (out_col) {
+        *out_col = col;
+    }
 }
 
 /* Byte offset of the start of line `line`. */
@@ -5389,11 +5563,15 @@ static int textarea_line_start(const struct yetty_ygui_widget *w, int line)
     int cur = 0;
     const char *t = w->data.textarea.text;
     int len = w->data.textarea.length;
-    if (!t || line == 0) return 0;
+    if (!t || line == 0) {
+        return 0;
+    }
     for (int i = 0; i < len; i++) {
         if (t[i] == '\n') {
             cur++;
-            if (cur == line) return i + 1;
+            if (cur == line) {
+                return i + 1;
+            }
         }
     }
     return len;
@@ -5406,7 +5584,9 @@ static int textarea_line_len(const struct yetty_ygui_widget *w, int line)
     const char *t = w->data.textarea.text;
     int len = w->data.textarea.length;
     int i = start;
-    while (i < len && t[i] != '\n') i++;
+    while (i < len && t[i] != '\n') {
+        i++;
+    }
     return i - start;
 }
 
@@ -5416,7 +5596,9 @@ static int textarea_total_lines(const struct yetty_ygui_widget *w)
     const char *t = w->data.textarea.text;
     int len = w->data.textarea.length;
     for (int i = 0; i < len; i++) {
-        if (t[i] == '\n') lines++;
+        if (t[i] == '\n') {
+            lines++;
+        }
     }
     return lines;
 }
@@ -5427,7 +5609,9 @@ static void textarea_ensure_cursor_visible(struct yetty_ygui_widget *w)
     int line, col;
     textarea_cursor_pos(w, &line, &col);
     int viewport_lines = (int)((w->h - TEXTAREA_PAD * 2) / TEXTAREA_LINE_HEIGHT);
-    if (viewport_lines < 1) viewport_lines = 1;
+    if (viewport_lines < 1) {
+        viewport_lines = 1;
+    }
     if (line < w->data.textarea.scroll_line) {
         w->data.textarea.scroll_line = line;
     } else if (line >= w->data.textarea.scroll_line + viewport_lines) {
@@ -5445,11 +5629,25 @@ static int textarea_on_key(struct yetty_ygui_widget *self, uint32_t key, int mod
     const char *t = self->data.textarea.text;
 
     switch (key) {
-    case TEXTAREA_KEY_BACKSPACE: textarea_delete_back(self); break;
-    case TEXTAREA_KEY_DELETE:    textarea_delete_forward(self); break;
-    case TEXTAREA_KEY_ENTER:     yetty_ygui_internal_textarea_insert(self, "\n"); break;
-    case TEXTAREA_KEY_LEFT:      if (*c > 0) (*c)--; break;
-    case TEXTAREA_KEY_RIGHT:     if (*c < len) (*c)++; break;
+    case TEXTAREA_KEY_BACKSPACE:
+        textarea_delete_back(self);
+        break;
+    case TEXTAREA_KEY_DELETE:
+        textarea_delete_forward(self);
+        break;
+    case TEXTAREA_KEY_ENTER:
+        yetty_ygui_internal_textarea_insert(self, "\n");
+        break;
+    case TEXTAREA_KEY_LEFT:
+        if (*c > 0) {
+            (*c)--;
+        }
+        break;
+    case TEXTAREA_KEY_RIGHT:
+        if (*c < len) {
+            (*c)++;
+        }
+        break;
     case TEXTAREA_KEY_HOME: {
         int line, col;
         textarea_cursor_pos(self, &line, &col);
@@ -5465,7 +5663,9 @@ static int textarea_on_key(struct yetty_ygui_widget *self, uint32_t key, int mod
     case TEXTAREA_KEY_UP: {
         int line, col;
         textarea_cursor_pos(self, &line, &col);
-        if (line == 0) break;
+        if (line == 0) {
+            break;
+        }
         int prev_len = textarea_line_len(self, line - 1);
         int newcol = col < prev_len ? col : prev_len;
         *c = textarea_line_start(self, line - 1) + newcol;
@@ -5475,19 +5675,25 @@ static int textarea_on_key(struct yetty_ygui_widget *self, uint32_t key, int mod
         int line, col;
         textarea_cursor_pos(self, &line, &col);
         int total = textarea_total_lines(self);
-        if (line + 1 >= total) break;
+        if (line + 1 >= total) {
+            break;
+        }
         int next_len = textarea_line_len(self, line + 1);
         int newcol = col < next_len ? col : next_len;
         *c = textarea_line_start(self, line + 1) + newcol;
         break;
     }
-    default: handled = 0; break;
+    default:
+        handled = 0;
+        break;
     }
 
     if (handled) {
         textarea_ensure_cursor_visible(self);
         self->dirty = 1;
-        if (self->engine) self->engine->dirty = 1;
+        if (self->engine) {
+            self->engine->dirty = 1;
+        }
         out->widget_id = self->id;
         out->type = YETTY_YGUI_EVENT_KEY;
         out->data.key.key = key;
@@ -5497,27 +5703,38 @@ static int textarea_on_key(struct yetty_ygui_widget *self, uint32_t key, int mod
     return handled;
 }
 
-static int textarea_on_press(struct yetty_ygui_widget *self, float lx, float ly,
-                             ygui_event_t *out)
+static int textarea_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
     /* Position the cursor at the click. Monospaced approximation —
      * good enough for v1; selection / pixel-accurate hit testing land
      * with the proper text-measurement integration. */
     (void)out;
     float fy = ly - TEXTAREA_PAD;
-    if (fy < 0) fy = 0;
+    if (fy < 0) {
+        fy = 0;
+    }
     int line_idx = (int)(fy / TEXTAREA_LINE_HEIGHT) + self->data.textarea.scroll_line;
     int total = textarea_total_lines(self);
-    if (line_idx >= total) line_idx = total - 1;
-    if (line_idx < 0) line_idx = 0;
+    if (line_idx >= total) {
+        line_idx = total - 1;
+    }
+    if (line_idx < 0) {
+        line_idx = 0;
+    }
     float fx = lx - TEXTAREA_PAD;
-    if (fx < 0) fx = 0;
+    if (fx < 0) {
+        fx = 0;
+    }
     int col = (int)(fx / TEXTAREA_CHAR_WIDTH);
     int line_len = textarea_line_len(self, line_idx);
-    if (col > line_len) col = line_len;
+    if (col > line_len) {
+        col = line_len;
+    }
     self->data.textarea.cursor = textarea_line_start(self, line_idx) + col;
     self->dirty = 1;
-    if (self->engine) self->engine->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
     return 0; /* let the engine still take focus */
 }
 
@@ -5527,8 +5744,7 @@ static int textarea_on_press(struct yetty_ygui_widget *self, float lx, float ly,
  * up to min(src_len, max_cols) into a stack buffer, NUL-terminate, and
  * emit one TEXT_SPAN. This guarantees no glyph is painted past
  * self->x + self->w - PAD. */
-static void textarea_paint_line(struct yetty_ygui_widget *self,
-                                struct yetty_ygui_render_ctx *ctx,
+static void textarea_paint_line(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
                                 const char *src, int src_len, int max_cols, float row_y)
 {
     if (src_len <= 0 || max_cols <= 0) {
@@ -5536,7 +5752,9 @@ static void textarea_paint_line(struct yetty_ygui_widget *self,
     }
     int n = src_len < max_cols ? src_len : max_cols;
     char tmp[1024];
-    if (n >= (int)sizeof(tmp)) n = (int)sizeof(tmp) - 1;
+    if (n >= (int)sizeof(tmp)) {
+        n = (int)sizeof(tmp) - 1;
+    }
     memcpy(tmp, src, (size_t)n);
     tmp[n] = '\0';
     yetty_ygui_render_ctx_render_text(ctx, tmp, self->x + TEXTAREA_PAD, row_y, self->fg_color,
@@ -5579,11 +5797,10 @@ static struct yetty_ycore_void_result textarea_render(struct yetty_ygui_widget *
     const struct yetty_ygui_theme *t = ctx->theme;
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color,
                                      t->radius_small);
-    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h,
-                                             (self->flags & YETTY_YGUI_FLAG_FOCUSED)
-                                                 ? self->accent_color
-                                                 : t->border,
-                                             t->radius_small, 1.0f);
+    yetty_ygui_render_ctx_render_box_outline(
+        ctx, self->x, self->y, self->w, self->h,
+        (self->flags & YETTY_YGUI_FLAG_FOCUSED) ? self->accent_color : t->border, t->radius_small,
+        1.0f);
 
     /* Inner width in pixels and the corresponding character cap. The
      * cap is the source-of-truth for both the no-wrap truncation and
@@ -5601,19 +5818,22 @@ static struct yetty_ycore_void_result textarea_render(struct yetty_ygui_widget *
     if (!self->data.textarea.text || self->data.textarea.length == 0) {
         /* Just paint the cursor when empty so the user knows it's focused. */
         if (self->flags & YETTY_YGUI_FLAG_FOCUSED) {
-            yetty_ygui_render_ctx_render_box(ctx, self->x + TEXTAREA_PAD,
-                                             self->y + TEXTAREA_PAD, 2.0f, TEXTAREA_LINE_HEIGHT,
-                                             self->fg_color, 1.0f);
+            yetty_ygui_render_ctx_render_box(ctx, self->x + TEXTAREA_PAD, self->y + TEXTAREA_PAD,
+                                             2.0f, TEXTAREA_LINE_HEIGHT, self->fg_color, 1.0f);
         }
         return YETTY_OK_VOID();
     }
 
     int viewport_lines = (int)((self->h - TEXTAREA_PAD * 2) / TEXTAREA_LINE_HEIGHT);
-    if (viewport_lines < 1) viewport_lines = 1;
+    if (viewport_lines < 1) {
+        viewport_lines = 1;
+    }
     int first = self->data.textarea.scroll_line;
     int total = textarea_total_lines(self);
     int last = first + viewport_lines;
-    if (last > total) last = total;
+    if (last > total) {
+        last = total;
+    }
 
     int rows_emitted = 0;
     for (int li = first; li < last && rows_emitted < viewport_lines; li++) {
@@ -5706,8 +5926,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_textarea_wrapped(struct yetty_ygui_e
                                                              float w, float h,
                                                              const char *initial_text)
 {
-    struct yetty_ygui_widget *ta =
-        yetty_ygui_engine_textarea(engine, id, x, y, w, h, initial_text);
+    struct yetty_ygui_widget *ta = yetty_ygui_engine_textarea(engine, id, x, y, w, h, initial_text);
     if (ta) {
         ta->data.textarea.wrap = 1;
     }
@@ -5746,7 +5965,9 @@ void yetty_ygui_widget_textarea_set_text(struct yetty_ygui_widget *widget, const
         }
     }
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 const char *yetty_ygui_widget_textarea_get_text(const struct yetty_ygui_widget *widget)
@@ -5757,8 +5978,8 @@ const char *yetty_ygui_widget_textarea_get_text(const struct yetty_ygui_widget *
     return widget->data.textarea.text;
 }
 
-void yetty_ygui_widget_textarea_on_change(struct yetty_ygui_widget *widget,
-                                          ygui_text_callback_t cb, void *userdata)
+void yetty_ygui_widget_textarea_on_change(struct yetty_ygui_widget *widget, ygui_text_callback_t cb,
+                                          void *userdata)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_TEXTAREA) {
         return;
@@ -5800,7 +6021,9 @@ static float scrollarea_compute_content_h(const struct yetty_ygui_widget *self)
             continue;
         }
         float b = c->y + c->h;
-        if (b > bottom) bottom = b;
+        if (b > bottom) {
+            bottom = b;
+        }
     }
     return bottom;
 }
@@ -5824,8 +6047,12 @@ void yetty_ygui_widget_scrollarea_scroll_to(struct yetty_ygui_widget *widget, fl
         return;
     }
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
-    if (widget->scroll_observer) widget->scroll_observer->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
+    if (widget->scroll_observer) {
+        widget->scroll_observer->dirty = 1;
+    }
 }
 
 void yetty_ygui_widget_scrollarea_scroll_by(struct yetty_ygui_widget *widget, float dy)
@@ -5849,7 +6076,10 @@ static float scrollarea_get_content(const struct yetty_ygui_widget *w)
 {
     return scrollarea_compute_content_h(w);
 }
-static float scrollarea_get_viewport(const struct yetty_ygui_widget *w) { return w->layout_h; }
+static float scrollarea_get_viewport(const struct yetty_ygui_widget *w)
+{
+    return w->layout_h;
+}
 static float scrollarea_get_scroll(const struct yetty_ygui_widget *w)
 {
     return w->data.scrollarea.scroll_y;
@@ -5858,7 +6088,7 @@ static float scrollarea_get_max_scroll(const struct yetty_ygui_widget *w)
 {
     return scrollarea_max_scroll(w);
 }
-static void  scrollarea_scroll_to_iface(struct yetty_ygui_widget *w, float y)
+static void scrollarea_scroll_to_iface(struct yetty_ygui_widget *w, float y)
 {
     yetty_ygui_widget_scrollarea_scroll_to(w, y);
 }
@@ -5898,7 +6128,8 @@ static struct yetty_ycore_void_result scrollarea_render(struct yetty_ygui_widget
     /* No background by default — just clip area logically (no real
      * GPU clipping yet; off-viewport children still emit but the
      * receiver layer occludes them naturally). */
-    (void)self; (void)ctx;
+    (void)self;
+    (void)ctx;
     return YETTY_OK_VOID();
 }
 
@@ -5910,55 +6141,56 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
     }
     self->was_rendered = 1;
 
-    /* Emit our own (empty) group so the receiver has an entity for us. */
-    struct yetty_ycore_void_result first_err =
-        yetty_ygui_widget_emit_self_in_group(self, ctx, scrollarea_render);
-
     /* Clamp scroll on every render so resizing the viewport (and thus
      * shrinking max_scroll) doesn't strand us past the new bottom. */
     float max_s = scrollarea_max_scroll(self);
     if (self->data.scrollarea.scroll_y > max_s) {
         self->data.scrollarea.scroll_y = max_s;
     }
-
     float scroll = self->data.scrollarea.scroll_y;
-    if (self->first_child) {
-        float old_off_x = ctx->offset_x;
-        float old_off_y = ctx->offset_y;
-        ctx->offset_x = self->layout_x;
-        ctx->offset_y = self->layout_y - scroll;
 
-        for (struct yetty_ygui_widget *child = self->first_child; child;
-             child = child->next_sibling) {
-            if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
-                continue;
-            }
-            struct yetty_ycore_void_result r;
-            if (child->vtable && child->vtable->render_all) {
-                r = child->vtable->render_all(child, ctx);
+    /* Flat-wire emission: open + close the scrollarea's own group first
+     * (chrome only — bg/scrollbar), THEN recurse children at the root
+     * envelope level. Children's figure rects are shifted by -scroll
+     * via temporary effective_y mutation so they land on-screen. */
+    {
+        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, scrollarea_render);
+        yetty_ygui_widget_close_group(self, ctx, marker);
+    }
+
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
+        if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+            continue;
+        }
+        float saved_y = (float)child->y;
+        float saved_ey = child->effective_y;
+        child->y = (int)(saved_y - scroll);
+        child->effective_y = saved_ey - scroll;
+        struct yetty_ycore_void_result r;
+        if (child->vtable && child->vtable->render_all) {
+            r = child->vtable->render_all(child, ctx);
+        } else {
+            r = yetty_ygui_widget_render_all_default(child, ctx);
+        }
+        child->y = (int)saved_y;
+        child->effective_y = saved_ey;
+        if (YETTY_IS_ERR(r)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = r;
             } else {
-                r = yetty_ygui_widget_render_all_default(child, ctx);
-            }
-            if (YETTY_IS_ERR(r)) {
-                if (YETTY_IS_OK(first_err)) {
-                    first_err = r;
-                } else {
-                    yetty_ycore_error_destroy(r.error);
-                }
+                yetty_ycore_error_destroy(r.error);
             }
         }
+    }
 
-        ctx->offset_x = old_off_x;
-        ctx->offset_y = old_off_y;
-
-        /* Patch every descendant's layout_y by -scroll so the spatial
-         * grid sees the on-screen positions. The grid rebuild runs
-         * AFTER render. */
-        if (scroll != 0.0f) {
-            for (struct yetty_ygui_widget *child = self->first_child; child;
-                 child = child->next_sibling) {
-                scrollarea_shift_subtree_y(child, -scroll);
-            }
+    /* Patch every descendant's layout_y by -scroll so the spatial
+     * grid sees the on-screen positions. The grid rebuild runs
+     * AFTER render. */
+    if (scroll != 0.0f) {
+        for (struct yetty_ygui_widget *child = self->first_child; child;
+             child = child->next_sibling) {
+            scrollarea_shift_subtree_y(child, -scroll);
         }
     }
 
@@ -5966,8 +6198,8 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_scrollarea(struct yetty_ygui_engine *engine,
-                                                       const char *id, float x, float y,
-                                                       float w, float h)
+                                                       const char *id, float x, float y, float w,
+                                                       float h)
 {
     struct yetty_ygui_widget *s =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_SCROLLAREA, id);
@@ -6004,7 +6236,9 @@ static struct yetty_ycore_void_result toggle_render(struct yetty_ygui_widget *se
     const struct yetty_ygui_theme *t = ctx->theme;
     float pill_w = ygui_max(36.0f, self->h * 1.8f);
     float pill_h = self->h - 4.0f;
-    if (pill_h < 14.0f) pill_h = 14.0f;
+    if (pill_h < 14.0f) {
+        pill_h = 14.0f;
+    }
     float pill_x = self->x;
     float pill_y = self->y + (self->h - pill_h) * 0.5f;
 
@@ -6023,26 +6257,22 @@ static struct yetty_ycore_void_result toggle_render(struct yetty_ygui_widget *se
 
     float thumb_d = pill_h - 4.0f;
     float thumb_y = pill_y + 2.0f;
-    float thumb_x = self->data.toggle.on
-                        ? pill_x + pill_w - thumb_d - 2.0f
-                        : pill_x + 2.0f;
+    float thumb_x = self->data.toggle.on ? pill_x + pill_w - thumb_d - 2.0f : pill_x + 2.0f;
     /* Off-state thumb uses text_muted (visible against dark pill);
      * on-state uses pure white-ish for contrast against the accent. */
     uint32_t thumb_col = self->data.toggle.on ? t->text_primary : t->text_muted;
-    yetty_ygui_render_ctx_render_box(ctx, thumb_x, thumb_y, thumb_d, thumb_d,
-                                     thumb_col, thumb_d * 0.5f);
+    yetty_ygui_render_ctx_render_box(ctx, thumb_x, thumb_y, thumb_d, thumb_d, thumb_col,
+                                     thumb_d * 0.5f);
 
     if (self->data.toggle.label) {
         yetty_ygui_render_ctx_render_text(ctx, self->data.toggle.label,
-                                          pill_x + pill_w + t->pad_medium,
-                                          self->y + t->pad_medium, self->fg_color,
-                                          t->font_size);
+                                          pill_x + pill_w + t->pad_medium, self->y + t->pad_medium,
+                                          self->fg_color, t->font_size);
     }
     return YETTY_OK_VOID();
 }
 
-static int toggle_on_release(struct yetty_ygui_widget *self, float lx, float ly,
-                             ygui_event_t *out)
+static int toggle_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
     if (lx < 0 || lx >= self->w || ly < 0 || ly >= self->h) {
         return 0;
@@ -6062,9 +6292,9 @@ static void toggle_destroy(struct yetty_ygui_widget *self)
     free(self->data.toggle.label);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_toggle(struct yetty_ygui_engine *engine,
-                                                   const char *id, float x, float y,
-                                                   float w, float h, const char *label, int on)
+struct yetty_ygui_widget *yetty_ygui_engine_toggle(struct yetty_ygui_engine *engine, const char *id,
+                                                   float x, float y, float w, float h,
+                                                   const char *label, int on)
 {
     struct yetty_ygui_widget *t =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_TOGGLE, id);
@@ -6086,23 +6316,33 @@ struct yetty_ygui_widget *yetty_ygui_engine_toggle(struct yetty_ygui_engine *eng
 
 void yetty_ygui_widget_toggle_set_on(struct yetty_ygui_widget *widget, int on)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_TOGGLE) return;
-    if (widget->data.toggle.on == (on ? 1 : 0)) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_TOGGLE) {
+        return;
+    }
+    if (widget->data.toggle.on == (on ? 1 : 0)) {
+        return;
+    }
     widget->data.toggle.on = on ? 1 : 0;
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 int yetty_ygui_widget_toggle_get_on(const struct yetty_ygui_widget *widget)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_TOGGLE) return 0;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_TOGGLE) {
+        return 0;
+    }
     return widget->data.toggle.on;
 }
 
-void yetty_ygui_widget_toggle_on_change(struct yetty_ygui_widget *widget,
-                                        ygui_check_callback_t cb, void *userdata)
+void yetty_ygui_widget_toggle_on_change(struct yetty_ygui_widget *widget, ygui_check_callback_t cb,
+                                        void *userdata)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_TOGGLE) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_TOGGLE) {
+        return;
+    }
     widget->check_callback = cb;
     widget->check_userdata = userdata;
 }
@@ -6120,11 +6360,10 @@ static struct yetty_ycore_void_result chip_render(struct yetty_ygui_widget *self
                                                   struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h,
-                                     t->bg_secondary, self->h * 0.5f);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->bg_secondary,
+                                     self->h * 0.5f);
     if (self->data.chip.label) {
-        yetty_ygui_render_ctx_render_text(ctx, self->data.chip.label,
-                                          self->x + self->h * 0.5f,
+        yetty_ygui_render_ctx_render_text(ctx, self->data.chip.label, self->x + self->h * 0.5f,
                                           self->y + t->pad_small, self->fg_color, t->font_size);
     }
     if (self->data.chip.closable) {
@@ -6161,9 +6400,9 @@ static void chip_destroy(struct yetty_ygui_widget *self)
     free(self->data.chip.label);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_chip(struct yetty_ygui_engine *engine,
-                                                 const char *id, float x, float y,
-                                                 float w, float h, const char *label, int closable)
+struct yetty_ygui_widget *yetty_ygui_engine_chip(struct yetty_ygui_engine *engine, const char *id,
+                                                 float x, float y, float w, float h,
+                                                 const char *label, int closable)
 {
     struct yetty_ygui_widget *c =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_CHIP, id);
@@ -6185,10 +6424,12 @@ struct yetty_ygui_widget *yetty_ygui_engine_chip(struct yetty_ygui_engine *engin
     return c;
 }
 
-void yetty_ygui_widget_chip_on_remove(struct yetty_ygui_widget *widget,
-                                      ygui_click_callback_t cb, void *userdata)
+void yetty_ygui_widget_chip_on_remove(struct yetty_ygui_widget *widget, ygui_click_callback_t cb,
+                                      void *userdata)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_CHIP) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_CHIP) {
+        return;
+    }
     widget->data.chip.on_remove = cb;
     widget->data.chip.on_remove_userdata = userdata;
 }
@@ -6203,12 +6444,13 @@ void yetty_ygui_widget_chip_on_remove(struct yetty_ygui_widget *widget,
 
 static int breadcrumbs_seg_at(const struct yetty_ygui_widget *self, float lx)
 {
-    if (lx < 0) return -1;
+    if (lx < 0) {
+        return -1;
+    }
     float cursor = 0;
     for (int i = 0; i < self->data.breadcrumbs.n; i++) {
-        int len = self->data.breadcrumbs.labels[i]
-                      ? (int)strlen(self->data.breadcrumbs.labels[i])
-                      : 0;
+        int len =
+            self->data.breadcrumbs.labels[i] ? (int)strlen(self->data.breadcrumbs.labels[i]) : 0;
         float seg_w = len * BREADCRUMB_CHAR_W;
         if (lx >= cursor && lx < cursor + seg_w) {
             return i;
@@ -6222,20 +6464,22 @@ static int breadcrumbs_seg_at(const struct yetty_ygui_widget *self, float lx)
 }
 
 static struct yetty_ycore_void_result breadcrumbs_render(struct yetty_ygui_widget *self,
-                                                          struct yetty_ygui_render_ctx *ctx)
+                                                         struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     float cursor = self->x;
     for (int i = 0; i < self->data.breadcrumbs.n; i++) {
         const char *label = self->data.breadcrumbs.labels[i];
-        if (!label) continue;
+        if (!label) {
+            continue;
+        }
         uint32_t col = (i == self->data.breadcrumbs.n - 1) ? self->fg_color : t->text_muted;
         yetty_ygui_render_ctx_render_text(ctx, label, cursor, self->y + t->pad_small, col,
                                           t->font_size);
         cursor += strlen(label) * BREADCRUMB_CHAR_W;
         if (i + 1 < self->data.breadcrumbs.n) {
-            yetty_ygui_render_ctx_render_text(ctx, BREADCRUMB_SEP, cursor,
-                                              self->y + t->pad_small, t->text_muted, t->font_size);
+            yetty_ygui_render_ctx_render_text(ctx, BREADCRUMB_SEP, cursor, self->y + t->pad_small,
+                                              t->text_muted, t->font_size);
             cursor += BREADCRUMB_SEP_LEN * BREADCRUMB_CHAR_W;
         }
     }
@@ -6247,7 +6491,9 @@ static int breadcrumbs_on_release(struct yetty_ygui_widget *self, float lx, floa
 {
     (void)ly;
     int idx = breadcrumbs_seg_at(self, lx);
-    if (idx < 0) return 0;
+    if (idx < 0) {
+        return 0;
+    }
     if (self->change_callback) {
         self->change_callback(self, (float)idx, self->change_userdata);
     }
@@ -6266,13 +6512,14 @@ static void breadcrumbs_destroy(struct yetty_ygui_widget *self)
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_breadcrumbs(struct yetty_ygui_engine *engine,
-                                                        const char *id,
-                                                        float x, float y, float w, float h,
-                                                        const char *const *labels, int n)
+                                                        const char *id, float x, float y, float w,
+                                                        float h, const char *const *labels, int n)
 {
     struct yetty_ygui_widget *b =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_BREADCRUMBS, id);
-    if (!b) return NULL;
+    if (!b) {
+        return NULL;
+    }
     yetty_ygui_widget_init_base(b, x, y, w, h);
     b->data.breadcrumbs.n = n;
     b->data.breadcrumbs.labels = NULL;
@@ -6299,7 +6546,9 @@ struct yetty_ygui_widget *yetty_ygui_engine_breadcrumbs(struct yetty_ygui_engine
 void yetty_ygui_widget_breadcrumbs_on_change(struct yetty_ygui_widget *widget,
                                              ygui_change_callback_t cb, void *userdata)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_BREADCRUMBS) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_BREADCRUMBS) {
+        return;
+    }
     widget->change_callback = cb;
     widget->change_userdata = userdata;
 }
@@ -6315,10 +6564,14 @@ void yetty_ygui_widget_breadcrumbs_on_change(struct yetty_ygui_widget *widget,
 void yetty_ygui_widget_progress_set_indeterminate(struct yetty_ygui_widget *widget,
                                                   int indeterminate)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_PROGRESS) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_PROGRESS) {
+        return;
+    }
     widget->data.progress.indeterminate = indeterminate ? 1 : 0;
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 /*=============================================================================
@@ -6333,7 +6586,9 @@ void yetty_ygui_widget_progress_set_indeterminate(struct yetty_ygui_widget *widg
 void yetty_ygui_widget_set_context_menu(struct yetty_ygui_widget *widget,
                                         struct yetty_ygui_widget *menu)
 {
-    if (!widget) return;
+    if (!widget) {
+        return;
+    }
     widget->context_menu = menu;
 }
 
@@ -6341,7 +6596,10 @@ void yetty_ygui_widget_set_context_menu(struct yetty_ygui_widget *widget,
  * Combo box — editable textinput with a dropdown of suggestions.
  *===========================================================================*/
 
-static float combo_arrow_w(const struct yetty_ygui_widget *self) { return self->h; }
+static float combo_arrow_w(const struct yetty_ygui_widget *self)
+{
+    return self->h;
+}
 
 static struct yetty_ycore_void_result combo_render(struct yetty_ygui_widget *self,
                                                    struct yetty_ygui_render_ctx *ctx)
@@ -6349,16 +6607,15 @@ static struct yetty_ycore_void_result combo_render(struct yetty_ygui_widget *sel
     const struct yetty_ygui_theme *t = ctx->theme;
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color,
                                      t->radius_small);
-    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h,
-                                             (self->flags & YETTY_YGUI_FLAG_FOCUSED)
-                                                 ? self->accent_color
-                                                 : t->border,
-                                             t->radius_small, 1.0f);
+    yetty_ygui_render_ctx_render_box_outline(
+        ctx, self->x, self->y, self->w, self->h,
+        (self->flags & YETTY_YGUI_FLAG_FOCUSED) ? self->accent_color : t->border, t->radius_small,
+        1.0f);
     /* Text */
     const char *txt = self->data.combo.text ? self->data.combo.text : "";
     yetty_ygui_render_ctx_render_text(ctx, txt, self->x + 8.0f,
-                                      self->y + (self->h - t->font_size) * 0.5f,
-                                      self->fg_color, t->font_size);
+                                      self->y + (self->h - t->font_size) * 0.5f, self->fg_color,
+                                      t->font_size);
     /* Arrow button */
     float aw = combo_arrow_w(self);
     float ax = self->x + self->w - aw;
@@ -6378,8 +6635,7 @@ static struct yetty_ycore_void_result combo_render(struct yetty_ygui_widget *sel
         yetty_ygui_render_ctx_render_box_outline(ctx, self->x, dy, self->w, dh, t->border,
                                                  t->radius_small, 1.0f);
         for (int i = 0; i < self->data.combo.option_count; i++) {
-            yetty_ygui_render_ctx_render_text(ctx, self->data.combo.options[i],
-                                              self->x + 8.0f,
+            yetty_ygui_render_ctx_render_text(ctx, self->data.combo.options[i], self->x + 8.0f,
                                               dy + i * row_h + (row_h - t->font_size) * 0.5f,
                                               self->fg_color, t->font_size);
         }
@@ -6387,8 +6643,7 @@ static struct yetty_ycore_void_result combo_render(struct yetty_ygui_widget *sel
     return YETTY_OK_VOID();
 }
 
-static int combo_on_release(struct yetty_ygui_widget *self, float lx, float ly,
-                            ygui_event_t *out)
+static int combo_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
     float aw = combo_arrow_w(self);
     /* Click on arrow: toggle dropdown */
@@ -6429,14 +6684,16 @@ static void combo_destroy(struct yetty_ygui_widget *self)
     free(self->data.combo.options);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_combo(struct yetty_ygui_engine *engine,
-                                                  const char *id, float x, float y,
-                                                  float w, float h, const char *initial_text,
+struct yetty_ygui_widget *yetty_ygui_engine_combo(struct yetty_ygui_engine *engine, const char *id,
+                                                  float x, float y, float w, float h,
+                                                  const char *initial_text,
                                                   const char *const *options, int option_count)
 {
     struct yetty_ygui_widget *c =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_COMBO, id);
-    if (!c) return NULL;
+    if (!c) {
+        return NULL;
+    }
     yetty_ygui_widget_init_base(c, x, y, w, h);
     c->data.combo.text = ygui_strdup(initial_text);
     c->data.combo.option_count = option_count;
@@ -6462,23 +6719,31 @@ struct yetty_ygui_widget *yetty_ygui_engine_combo(struct yetty_ygui_engine *engi
 
 void yetty_ygui_widget_combo_set_text(struct yetty_ygui_widget *widget, const char *text)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_COMBO) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_COMBO) {
+        return;
+    }
     free(widget->data.combo.text);
     widget->data.combo.text = ygui_strdup(text);
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 const char *yetty_ygui_widget_combo_get_text(const struct yetty_ygui_widget *widget)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_COMBO) return NULL;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_COMBO) {
+        return NULL;
+    }
     return widget->data.combo.text;
 }
 
-void yetty_ygui_widget_combo_on_change(struct yetty_ygui_widget *widget,
-                                       ygui_text_callback_t cb, void *userdata)
+void yetty_ygui_widget_combo_on_change(struct yetty_ygui_widget *widget, ygui_text_callback_t cb,
+                                       void *userdata)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_COMBO) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_COMBO) {
+        return;
+    }
     widget->text_callback = cb;
     widget->text_userdata = userdata;
 }
@@ -6505,7 +6770,9 @@ static int menubar_item_at(const struct yetty_ygui_widget *self, float lx)
     float cx = 0;
     for (int i = 0; i < self->data.menubar.n; i++) {
         float w = menubar_item_w(self, i);
-        if (lx >= cx && lx < cx + w) return i;
+        if (lx >= cx && lx < cx + w) {
+            return i;
+        }
         cx += w;
     }
     return -1;
@@ -6522,19 +6789,20 @@ static struct yetty_ycore_void_result menubar_render(struct yetty_ygui_widget *s
         float w = menubar_item_w(self, i);
         const char *l = self->data.menubar.labels[i];
         yetty_ygui_render_ctx_render_text(ctx, l ? l : "", cx + MENUBAR_ITEM_PAD_X,
-                                          self->y + (self->h - t->font_size) * 0.5f,
-                                          self->fg_color, t->font_size);
+                                          self->y + (self->h - t->font_size) * 0.5f, self->fg_color,
+                                          t->font_size);
         cx += w;
     }
     return YETTY_OK_VOID();
 }
 
-static int menubar_on_release(struct yetty_ygui_widget *self, float lx, float ly,
-                              ygui_event_t *out)
+static int menubar_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
     (void)ly;
     int idx = menubar_item_at(self, lx);
-    if (idx < 0 || !self->data.menubar.menus[idx]) return 0;
+    if (idx < 0 || !self->data.menubar.menus[idx]) {
+        return 0;
+    }
     struct yetty_ygui_widget *clicked = self->data.menubar.menus[idx];
     int was_open = yetty_ygui_widget_popup_menu_is_open(clicked);
     /* Close every sibling menu first — at most one menu in this bar
@@ -6549,9 +6817,10 @@ static int menubar_on_release(struct yetty_ygui_widget *self, float lx, float ly
         yetty_ygui_widget_popup_menu_close(clicked);
     } else {
         float cx = self->layout_x;
-        for (int i = 0; i < idx; i++) cx += menubar_item_w(self, i);
-        yetty_ygui_widget_popup_menu_open_at(clicked, cx,
-                                              self->layout_y + self->layout_h);
+        for (int i = 0; i < idx; i++) {
+            cx += menubar_item_w(self, i);
+        }
+        yetty_ygui_widget_popup_menu_open_at(clicked, cx, self->layout_y + self->layout_h);
     }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CHANGE;
@@ -6561,18 +6830,22 @@ static int menubar_on_release(struct yetty_ygui_widget *self, float lx, float ly
 
 static void menubar_destroy(struct yetty_ygui_widget *self)
 {
-    for (int i = 0; i < self->data.menubar.n; i++) free(self->data.menubar.labels[i]);
+    for (int i = 0; i < self->data.menubar.n; i++) {
+        free(self->data.menubar.labels[i]);
+    }
     free(self->data.menubar.labels);
     free(self->data.menubar.menus);
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_menubar(struct yetty_ygui_engine *engine,
-                                                    const char *id, float x, float y,
-                                                    float w, float h)
+                                                    const char *id, float x, float y, float w,
+                                                    float h)
 {
     struct yetty_ygui_widget *m =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_MENUBAR, id);
-    if (!m) return NULL;
+    if (!m) {
+        return NULL;
+    }
     yetty_ygui_widget_init_base(m, x, y, w, h);
     static const struct yetty_ygui_widget_vtable menubar_vtable = {
         .render = menubar_render,
@@ -6587,13 +6860,19 @@ struct yetty_ygui_widget *yetty_ygui_engine_menubar(struct yetty_ygui_engine *en
 void yetty_ygui_widget_menubar_add(struct yetty_ygui_widget *menubar, const char *label,
                                    struct yetty_ygui_widget *menu)
 {
-    if (!menubar || menubar->type != YETTY_YGUI_WIDGET_MENUBAR) return;
+    if (!menubar || menubar->type != YETTY_YGUI_WIDGET_MENUBAR) {
+        return;
+    }
     if (menubar->data.menubar.n == menubar->data.menubar.capacity) {
         int nc = menubar->data.menubar.capacity ? menubar->data.menubar.capacity * 2 : 4;
         char **gl = realloc(menubar->data.menubar.labels, (size_t)nc * sizeof(char *));
         struct yetty_ygui_widget **gm =
             realloc(menubar->data.menubar.menus, (size_t)nc * sizeof(struct yetty_ygui_widget *));
-        if (!gl || !gm) { free(gl); free(gm); return; }
+        if (!gl || !gm) {
+            free(gl);
+            free(gm);
+            return;
+        }
         menubar->data.menubar.labels = gl;
         menubar->data.menubar.menus = gm;
         menubar->data.menubar.capacity = nc;
@@ -6603,7 +6882,9 @@ void yetty_ygui_widget_menubar_add(struct yetty_ygui_widget *menubar, const char
     menubar->data.menubar.menus[i] = menu;
     menubar->data.menubar.n++;
     menubar->dirty = 1;
-    if (menubar->engine) menubar->engine->dirty = 1;
+    if (menubar->engine) {
+        menubar->engine->dirty = 1;
+    }
 }
 
 /*=============================================================================
@@ -6617,14 +6898,18 @@ static struct yetty_ycore_void_result stepper_render(struct yetty_ygui_widget *s
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     int n = self->data.stepper.n_steps;
-    if (n <= 0) return YETTY_OK_VOID();
+    if (n <= 0) {
+        return YETTY_OK_VOID();
+    }
     float gap = (self->w - n * STEPPER_CIRCLE_R * 2) / (float)(n > 1 ? n - 1 : 1);
-    if (gap < 0) gap = 0;
+    if (gap < 0) {
+        gap = 0;
+    }
     float cy = self->y + STEPPER_CIRCLE_R + 4;
     float cx = self->x + STEPPER_CIRCLE_R;
     for (int i = 0; i < n; i++) {
         int complete = (i < self->data.stepper.current);
-        int current  = (i == self->data.stepper.current);
+        int current = (i == self->data.stepper.current);
         uint32_t fill = (complete || current) ? self->accent_color : t->bg_secondary;
         yetty_ygui_render_ctx_render_circle(ctx, cx, cy, STEPPER_CIRCLE_R, fill);
         if (current) {
@@ -6639,11 +6924,9 @@ static struct yetty_ycore_void_result stepper_render(struct yetty_ygui_widget *s
         /* Label below */
         const char *l = self->data.stepper.labels[i];
         if (l) {
-            yetty_ygui_render_ctx_render_text(ctx, l,
-                                              cx - (int)strlen(l) * 4.0f,
-                                              cy + STEPPER_CIRCLE_R + 6,
-                                              complete ? self->accent_color : t->text_muted,
-                                              t->font_size);
+            yetty_ygui_render_ctx_render_text(
+                ctx, l, cx - (int)strlen(l) * 4.0f, cy + STEPPER_CIRCLE_R + 6,
+                complete ? self->accent_color : t->text_muted, t->font_size);
         }
         /* Connecting line to next step */
         if (i + 1 < n) {
@@ -6659,25 +6942,30 @@ static struct yetty_ycore_void_result stepper_render(struct yetty_ygui_widget *s
 
 static void stepper_destroy(struct yetty_ygui_widget *self)
 {
-    for (int i = 0; i < self->data.stepper.n_steps; i++) free(self->data.stepper.labels[i]);
+    for (int i = 0; i < self->data.stepper.n_steps; i++) {
+        free(self->data.stepper.labels[i]);
+    }
     free(self->data.stepper.labels);
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_stepper(struct yetty_ygui_engine *engine,
-                                                    const char *id, float x, float y,
-                                                    float w, float h,
-                                                    const char *const *labels, int n_steps)
+                                                    const char *id, float x, float y, float w,
+                                                    float h, const char *const *labels, int n_steps)
 {
     struct yetty_ygui_widget *s =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_STEPPER, id);
-    if (!s) return NULL;
+    if (!s) {
+        return NULL;
+    }
     yetty_ygui_widget_init_base(s, x, y, w, h);
     s->data.stepper.n_steps = n_steps;
     s->data.stepper.current = 0;
     if (n_steps > 0 && labels) {
         s->data.stepper.labels = (char **)calloc((size_t)n_steps, sizeof(char *));
         if (s->data.stepper.labels) {
-            for (int i = 0; i < n_steps; i++) s->data.stepper.labels[i] = ygui_strdup(labels[i]);
+            for (int i = 0; i < n_steps; i++) {
+                s->data.stepper.labels[i] = ygui_strdup(labels[i]);
+            }
         } else {
             s->data.stepper.n_steps = 0;
         }
@@ -6693,18 +6981,30 @@ struct yetty_ygui_widget *yetty_ygui_engine_stepper(struct yetty_ygui_engine *en
 
 void yetty_ygui_widget_stepper_set_current(struct yetty_ygui_widget *widget, int step)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_STEPPER) return;
-    if (step < 0) step = 0;
-    if (step > widget->data.stepper.n_steps - 1) step = widget->data.stepper.n_steps - 1;
-    if (widget->data.stepper.current == step) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_STEPPER) {
+        return;
+    }
+    if (step < 0) {
+        step = 0;
+    }
+    if (step > widget->data.stepper.n_steps - 1) {
+        step = widget->data.stepper.n_steps - 1;
+    }
+    if (widget->data.stepper.current == step) {
+        return;
+    }
     widget->data.stepper.current = step;
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 int yetty_ygui_widget_stepper_get_current(const struct yetty_ygui_widget *widget)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_STEPPER) return 0;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_STEPPER) {
+        return 0;
+    }
     return widget->data.stepper.current;
 }
 
@@ -6715,8 +7015,12 @@ int yetty_ygui_widget_stepper_get_current(const struct yetty_ygui_widget *widget
 static int days_in_month(int year, int m0)
 {
     static const int dim[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if (m0 < 0 || m0 > 11) return 30;
-    if (m0 != 1) return dim[m0];
+    if (m0 < 0 || m0 > 11) {
+        return 30;
+    }
+    if (m0 != 1) {
+        return dim[m0];
+    }
     int leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 1 : 0;
     return 28 + leap;
 }
@@ -6726,7 +7030,10 @@ static int weekday_of(int year, int m0, int day)
 {
     int m = m0 + 1;
     int y = year;
-    if (m < 3) { m += 12; y -= 1; }
+    if (m < 3) {
+        m += 12;
+        y -= 1;
+    }
     int k = y % 100;
     int j = y / 100;
     int h = (day + (13 * (m + 1)) / 5 + k + k / 4 + j / 4 + 5 * j) % 7;
@@ -6735,17 +7042,19 @@ static int weekday_of(int year, int m0, int day)
 }
 
 #define DATEPICKER_HEADER_H 28.0f
-#define DATEPICKER_CELL_W   28.0f
-#define DATEPICKER_CELL_H   24.0f
-#define DATEPICKER_PAD      6.0f
-#define DATEPICKER_NAV_W    28.0f
+#define DATEPICKER_CELL_W 28.0f
+#define DATEPICKER_CELL_H 24.0f
+#define DATEPICKER_PAD 6.0f
+#define DATEPICKER_NAV_W 28.0f
 
 static const char *month_name(int m0)
 {
-    static const char *names[] = {"January", "February", "March", "April", "May", "June",
-                                  "July", "August", "September", "October", "November",
-                                  "December"};
-    if (m0 < 0 || m0 > 11) return "?";
+    static const char *names[] = {"January",   "February", "March",    "April",
+                                  "May",       "June",     "July",     "August",
+                                  "September", "October",  "November", "December"};
+    if (m0 < 0 || m0 > 11) {
+        return "?";
+    }
     return names[m0];
 }
 
@@ -6779,15 +7088,14 @@ static struct yetty_ycore_void_result datepicker_render(struct yetty_ygui_widget
     float grid_x = self->x + DATEPICKER_PAD;
     float grid_y = self->y + DATEPICKER_HEADER_H + 4;
     for (int i = 0; i < 7; i++) {
-        yetty_ygui_render_ctx_render_text(ctx, wd[i], grid_x + i * DATEPICKER_CELL_W + 6,
-                                          grid_y, t->text_muted, t->font_size);
+        yetty_ygui_render_ctx_render_text(ctx, wd[i], grid_x + i * DATEPICKER_CELL_W + 6, grid_y,
+                                          t->text_muted, t->font_size);
     }
     /* Days */
     grid_y += DATEPICKER_CELL_H;
-    int first_wd = weekday_of(self->data.datepicker.shown_year,
-                               self->data.datepicker.shown_month, 1);
-    int dim = days_in_month(self->data.datepicker.shown_year,
-                             self->data.datepicker.shown_month);
+    int first_wd =
+        weekday_of(self->data.datepicker.shown_year, self->data.datepicker.shown_month, 1);
+    int dim = days_in_month(self->data.datepicker.shown_year, self->data.datepicker.shown_month);
     for (int d = 1; d <= dim; d++) {
         int cell = (first_wd + d - 1);
         int row = cell / 7;
@@ -6798,9 +7106,8 @@ static struct yetty_ycore_void_result datepicker_render(struct yetty_ygui_widget
                       self->data.datepicker.sel_month == self->data.datepicker.shown_month &&
                       self->data.datepicker.sel_day == d);
         if (is_sel) {
-            yetty_ygui_render_ctx_render_box(ctx, cx, cy, DATEPICKER_CELL_W,
-                                             DATEPICKER_CELL_H, self->accent_color,
-                                             t->radius_small);
+            yetty_ygui_render_ctx_render_box(ctx, cx, cy, DATEPICKER_CELL_W, DATEPICKER_CELL_H,
+                                             self->accent_color, t->radius_small);
         }
         char buf[8];
         snprintf(buf, sizeof(buf), "%d", d);
@@ -6831,33 +7138,41 @@ static int datepicker_on_release(struct yetty_ygui_widget *self, float lx, float
             return 0;
         }
         self->dirty = 1;
-        if (self->engine) self->engine->dirty = 1;
+        if (self->engine) {
+            self->engine->dirty = 1;
+        }
         return 0;
     }
     /* Day grid */
     float grid_x = DATEPICKER_PAD;
     float grid_y = DATEPICKER_HEADER_H + 4 + DATEPICKER_CELL_H;
-    if (ly < grid_y) return 0;
+    if (ly < grid_y) {
+        return 0;
+    }
     int col = (int)((lx - grid_x) / DATEPICKER_CELL_W);
     int row = (int)((ly - grid_y) / DATEPICKER_CELL_H);
-    if (col < 0 || col > 6 || row < 0 || row > 5) return 0;
-    int first_wd = weekday_of(self->data.datepicker.shown_year,
-                               self->data.datepicker.shown_month, 1);
-    int dim = days_in_month(self->data.datepicker.shown_year,
-                             self->data.datepicker.shown_month);
+    if (col < 0 || col > 6 || row < 0 || row > 5) {
+        return 0;
+    }
+    int first_wd =
+        weekday_of(self->data.datepicker.shown_year, self->data.datepicker.shown_month, 1);
+    int dim = days_in_month(self->data.datepicker.shown_year, self->data.datepicker.shown_month);
     int d = row * 7 + col - first_wd + 1;
-    if (d < 1 || d > dim) return 0;
+    if (d < 1 || d > dim) {
+        return 0;
+    }
     self->data.datepicker.sel_year = self->data.datepicker.shown_year;
     self->data.datepicker.sel_month = self->data.datepicker.shown_month;
     self->data.datepicker.sel_day = d;
     int packed = self->data.datepicker.sel_year * 10000 +
-                 (self->data.datepicker.sel_month + 1) * 100 +
-                 self->data.datepicker.sel_day;
+                 (self->data.datepicker.sel_month + 1) * 100 + self->data.datepicker.sel_day;
     if (self->change_callback) {
         self->change_callback(self, (float)packed, self->change_userdata);
     }
     self->dirty = 1;
-    if (self->engine) self->engine->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CHANGE;
     out->data.int_value = packed;
@@ -6865,12 +7180,14 @@ static int datepicker_on_release(struct yetty_ygui_widget *self, float lx, float
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_datepicker(struct yetty_ygui_engine *engine,
-                                                       const char *id,
-                                                       float x, float y, float w, float h)
+                                                       const char *id, float x, float y, float w,
+                                                       float h)
 {
     struct yetty_ygui_widget *d =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_DATEPICKER, id);
-    if (!d) return NULL;
+    if (!d) {
+        return NULL;
+    }
     yetty_ygui_widget_init_base(d, x, y, w, h);
     /* Default to today (compile-time fallback if no clock). */
     d->data.datepicker.shown_year = 2025;
@@ -6890,34 +7207,52 @@ struct yetty_ygui_widget *yetty_ygui_engine_datepicker(struct yetty_ygui_engine 
 void yetty_ygui_widget_datepicker_set_date(struct yetty_ygui_widget *widget, int year,
                                            int month_0_based, int day)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_DATEPICKER) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_DATEPICKER) {
+        return;
+    }
     widget->data.datepicker.shown_year = year;
     widget->data.datepicker.shown_month = month_0_based;
     widget->data.datepicker.sel_year = year;
     widget->data.datepicker.sel_month = month_0_based;
     widget->data.datepicker.sel_day = day;
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 void yetty_ygui_widget_datepicker_get_date(const struct yetty_ygui_widget *widget, int *year,
                                            int *month_0_based, int *day)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_DATEPICKER) {
-        if (year) *year = -1;
-        if (month_0_based) *month_0_based = -1;
-        if (day) *day = -1;
+        if (year) {
+            *year = -1;
+        }
+        if (month_0_based) {
+            *month_0_based = -1;
+        }
+        if (day) {
+            *day = -1;
+        }
         return;
     }
-    if (year) *year = widget->data.datepicker.sel_year;
-    if (month_0_based) *month_0_based = widget->data.datepicker.sel_month;
-    if (day) *day = widget->data.datepicker.sel_day;
+    if (year) {
+        *year = widget->data.datepicker.sel_year;
+    }
+    if (month_0_based) {
+        *month_0_based = widget->data.datepicker.sel_month;
+    }
+    if (day) {
+        *day = widget->data.datepicker.sel_day;
+    }
 }
 
 void yetty_ygui_widget_datepicker_on_change(struct yetty_ygui_widget *widget,
                                             ygui_change_callback_t cb, void *userdata)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_DATEPICKER) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_DATEPICKER) {
+        return;
+    }
     widget->change_callback = cb;
     widget->change_userdata = userdata;
 }
@@ -6945,18 +7280,27 @@ static void filepicker_load_dir(struct yetty_ygui_widget *self)
     self->data.filepicker.scroll = 0;
 
     struct yetty_yplatform_dir *d = yetty_yplatform_dir_open(self->data.filepicker.cwd);
-    if (!d) return;
+    if (!d) {
+        return;
+    }
     int cap = 16, n = 0;
     char **list = (char **)malloc((size_t)cap * sizeof(char *));
-    if (!list) { yetty_yplatform_dir_close(d); return; }
+    if (!list) {
+        yetty_yplatform_dir_close(d);
+        return;
+    }
     struct yetty_yplatform_dir_entry e;
     while (yetty_yplatform_dir_next(d, &e)) {
         /* Skip "." but keep ".." for navigation. */
-        if (strcmp(e.name, ".") == 0) continue;
+        if (strcmp(e.name, ".") == 0) {
+            continue;
+        }
         if (n == cap) {
             int nc = cap * 2;
             char **g = realloc(list, (size_t)nc * sizeof(char *));
-            if (!g) break;
+            if (!g) {
+                break;
+            }
             list = g;
             cap = nc;
         }
@@ -6964,10 +7308,16 @@ static void filepicker_load_dir(struct yetty_ygui_widget *self)
          * navigable. */
         size_t name_len = strlen(e.name);
         char *entry = (char *)malloc(name_len + 2);
-        if (!entry) continue;
+        if (!entry) {
+            continue;
+        }
         memcpy(entry, e.name, name_len);
-        if (e.is_dir) { entry[name_len] = '/'; entry[name_len + 1] = '\0'; }
-        else          { entry[name_len] = '\0'; }
+        if (e.is_dir) {
+            entry[name_len] = '/';
+            entry[name_len + 1] = '\0';
+        } else {
+            entry[name_len] = '\0';
+        }
         list[n++] = entry;
     }
     yetty_yplatform_dir_close(d);
@@ -6992,8 +7342,7 @@ static struct yetty_ycore_void_result filepicker_render(struct yetty_ygui_widget
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, FILEPICKER_HEADER_H,
                                      t->bg_header, t->radius_small);
     if (self->data.filepicker.cwd) {
-        yetty_ygui_render_ctx_render_text(ctx, self->data.filepicker.cwd,
-                                          self->x + FILEPICKER_PAD,
+        yetty_ygui_render_ctx_render_text(ctx, self->data.filepicker.cwd, self->x + FILEPICKER_PAD,
                                           self->y + (FILEPICKER_HEADER_H - t->font_size) * 0.5f,
                                           self->fg_color, t->font_size);
     }
@@ -7001,22 +7350,26 @@ static struct yetty_ycore_void_result filepicker_render(struct yetty_ygui_widget
     float list_y = self->y + FILEPICKER_HEADER_H + 2;
     float list_h = self->h - FILEPICKER_HEADER_H - 4;
     int visible = (int)(list_h / FILEPICKER_ROW_H);
-    if (visible < 1) visible = 1;
+    if (visible < 1) {
+        visible = 1;
+    }
     int n = self->data.filepicker.entry_count;
     int first = self->data.filepicker.scroll;
     int last = first + visible;
-    if (last > n) last = n;
+    if (last > n) {
+        last = n;
+    }
     for (int i = first; i < last; i++) {
         float ry = list_y + (i - first) * FILEPICKER_ROW_H;
         if (i == self->data.filepicker.selected) {
-            yetty_ygui_render_ctx_render_box(ctx, self->x + 2, ry, self->w - 4,
-                                             FILEPICKER_ROW_H, t->selection_bg, 0);
+            yetty_ygui_render_ctx_render_box(ctx, self->x + 2, ry, self->w - 4, FILEPICKER_ROW_H,
+                                             t->selection_bg, 0);
         }
         const char *e = self->data.filepicker.entries[i];
         uint32_t col = (e && strchr(e, '/')) ? self->accent_color : self->fg_color;
         yetty_ygui_render_ctx_render_text(ctx, e ? e : "", self->x + FILEPICKER_PAD,
-                                          ry + (FILEPICKER_ROW_H - t->font_size) * 0.5f,
-                                          col, t->font_size);
+                                          ry + (FILEPICKER_ROW_H - t->font_size) * 0.5f, col,
+                                          t->font_size);
     }
     return YETTY_OK_VOID();
 }
@@ -7028,14 +7381,24 @@ static int filepicker_on_scroll(struct yetty_ygui_widget *self, float dx, float 
     int delta = dy > 0 ? -1 : 1;
     int prev = self->data.filepicker.scroll;
     self->data.filepicker.scroll += delta;
-    if (self->data.filepicker.scroll < 0) self->data.filepicker.scroll = 0;
+    if (self->data.filepicker.scroll < 0) {
+        self->data.filepicker.scroll = 0;
+    }
     int max_scroll = self->data.filepicker.entry_count -
                      (int)((self->h - FILEPICKER_HEADER_H - 4) / FILEPICKER_ROW_H);
-    if (max_scroll < 0) max_scroll = 0;
-    if (self->data.filepicker.scroll > max_scroll) self->data.filepicker.scroll = max_scroll;
-    if (self->data.filepicker.scroll == prev) return 0;
+    if (max_scroll < 0) {
+        max_scroll = 0;
+    }
+    if (self->data.filepicker.scroll > max_scroll) {
+        self->data.filepicker.scroll = max_scroll;
+    }
+    if (self->data.filepicker.scroll == prev) {
+        return 0;
+    }
     self->dirty = 1;
-    if (self->engine) self->engine->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_SCROLL;
     return 1;
@@ -7045,12 +7408,18 @@ static int filepicker_on_release(struct yetty_ygui_widget *self, float lx, float
                                  ygui_event_t *out)
 {
     (void)lx;
-    if (ly < FILEPICKER_HEADER_H + 2) return 0;
-    int row = (int)((ly - FILEPICKER_HEADER_H - 2) / FILEPICKER_ROW_H) +
-              self->data.filepicker.scroll;
-    if (row < 0 || row >= self->data.filepicker.entry_count) return 0;
+    if (ly < FILEPICKER_HEADER_H + 2) {
+        return 0;
+    }
+    int row =
+        (int)((ly - FILEPICKER_HEADER_H - 2) / FILEPICKER_ROW_H) + self->data.filepicker.scroll;
+    if (row < 0 || row >= self->data.filepicker.entry_count) {
+        return 0;
+    }
     const char *name = self->data.filepicker.entries[row];
-    if (!name) return 0;
+    if (!name) {
+        return 0;
+    }
     int is_dir = strchr(name, '/') != NULL;
     if (is_dir) {
         /* Navigate */
@@ -7060,12 +7429,17 @@ static int filepicker_on_release(struct yetty_ygui_widget *self, float lx, float
             strncpy(newcwd, self->data.filepicker.cwd, sizeof(newcwd) - 1);
             newcwd[sizeof(newcwd) - 1] = '\0';
             char *slash = strrchr(newcwd, '/');
-            if (slash && slash != newcwd) *slash = '\0';
-            else if (slash == newcwd) newcwd[1] = '\0'; /* keep "/" root */
+            if (slash && slash != newcwd) {
+                *slash = '\0';
+            } else if (slash == newcwd) {
+                newcwd[1] = '\0'; /* keep "/" root */
+            }
         } else {
             size_t namelen = strlen(name);
             size_t cwdlen = strlen(self->data.filepicker.cwd);
-            if (cwdlen + 1 + namelen >= sizeof(newcwd)) return 0;
+            if (cwdlen + 1 + namelen >= sizeof(newcwd)) {
+                return 0;
+            }
             if (strcmp(self->data.filepicker.cwd, "/") == 0) {
                 snprintf(newcwd, sizeof(newcwd), "/%s", name);
             } else {
@@ -7073,13 +7447,17 @@ static int filepicker_on_release(struct yetty_ygui_widget *self, float lx, float
             }
             /* Strip the trailing "/" we appended to dirs. */
             size_t L = strlen(newcwd);
-            if (L > 1 && newcwd[L - 1] == '/') newcwd[L - 1] = '\0';
+            if (L > 1 && newcwd[L - 1] == '/') {
+                newcwd[L - 1] = '\0';
+            }
         }
         free(self->data.filepicker.cwd);
         self->data.filepicker.cwd = ygui_strdup(newcwd);
         filepicker_load_dir(self);
         self->dirty = 1;
-        if (self->engine) self->engine->dirty = 1;
+        if (self->engine) {
+            self->engine->dirty = 1;
+        }
         out->widget_id = self->id;
         out->type = YETTY_YGUI_EVENT_CHANGE;
         return 1;
@@ -7090,7 +7468,9 @@ static int filepicker_on_release(struct yetty_ygui_widget *self, float lx, float
         self->text_callback(self, name, self->text_userdata);
     }
     self->dirty = 1;
-    if (self->engine) self->engine->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CHANGE;
     out->data.string_value = name;
@@ -7107,13 +7487,14 @@ static void filepicker_destroy(struct yetty_ygui_widget *self)
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_filepicker(struct yetty_ygui_engine *engine,
-                                                       const char *id,
-                                                       float x, float y, float w, float h,
-                                                       const char *initial_dir)
+                                                       const char *id, float x, float y, float w,
+                                                       float h, const char *initial_dir)
 {
     struct yetty_ygui_widget *f =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_FILEPICKER, id);
-    if (!f) return NULL;
+    if (!f) {
+        return NULL;
+    }
     yetty_ygui_widget_init_base(f, x, y, w, h);
     f->data.filepicker.cwd = ygui_strdup(initial_dir && *initial_dir ? initial_dir : "/");
     f->data.filepicker.selected = -1;
@@ -7131,22 +7512,30 @@ struct yetty_ygui_widget *yetty_ygui_engine_filepicker(struct yetty_ygui_engine 
 
 const char *yetty_ygui_widget_filepicker_get_cwd(const struct yetty_ygui_widget *widget)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_FILEPICKER) return NULL;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_FILEPICKER) {
+        return NULL;
+    }
     return widget->data.filepicker.cwd;
 }
 
 const char *yetty_ygui_widget_filepicker_get_selected(const struct yetty_ygui_widget *widget)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_FILEPICKER) return NULL;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_FILEPICKER) {
+        return NULL;
+    }
     int s = widget->data.filepicker.selected;
-    if (s < 0 || s >= widget->data.filepicker.entry_count) return NULL;
+    if (s < 0 || s >= widget->data.filepicker.entry_count) {
+        return NULL;
+    }
     return widget->data.filepicker.entries[s];
 }
 
 void yetty_ygui_widget_filepicker_on_change(struct yetty_ygui_widget *widget,
                                             ygui_text_callback_t cb, void *userdata)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_FILEPICKER) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_FILEPICKER) {
+        return;
+    }
     widget->text_callback = cb;
     widget->text_userdata = userdata;
 }
@@ -7162,15 +7551,14 @@ static struct yetty_ycore_void_result statusbar_render(struct yetty_ygui_widget 
                                                        struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->bg_header,
-                                     0.0f);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->bg_header, 0.0f);
     /* Top separator line for visual delineation from the body. */
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, 1.0f, t->border_muted, 0.0f);
     float ty = self->y + (self->h - t->font_size) * 0.5f;
     if (self->data.statusbar.left_text) {
         yetty_ygui_render_ctx_render_text(ctx, self->data.statusbar.left_text,
-                                          self->x + STATUSBAR_PAD_X, ty,
-                                          t->text_primary, t->font_size);
+                                          self->x + STATUSBAR_PAD_X, ty, t->text_primary,
+                                          t->font_size);
     }
     if (self->data.statusbar.right_text) {
         int len = (int)strlen(self->data.statusbar.right_text);
@@ -7188,12 +7576,14 @@ static void statusbar_destroy(struct yetty_ygui_widget *self)
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_statusbar(struct yetty_ygui_engine *engine,
-                                                      const char *id, float x, float y,
-                                                      float w, float h, const char *left_text)
+                                                      const char *id, float x, float y, float w,
+                                                      float h, const char *left_text)
 {
     struct yetty_ygui_widget *s =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_STATUSBAR, id);
-    if (!s) return NULL;
+    if (!s) {
+        return NULL;
+    }
     yetty_ygui_widget_init_base(s, x, y, w, h);
     s->data.statusbar.left_text = ygui_strdup(left_text);
     s->data.statusbar.right_text = NULL;
@@ -7208,20 +7598,28 @@ struct yetty_ygui_widget *yetty_ygui_engine_statusbar(struct yetty_ygui_engine *
 
 void yetty_ygui_widget_statusbar_set_left(struct yetty_ygui_widget *widget, const char *text)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_STATUSBAR) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_STATUSBAR) {
+        return;
+    }
     free(widget->data.statusbar.left_text);
     widget->data.statusbar.left_text = ygui_strdup(text);
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 void yetty_ygui_widget_statusbar_set_right(struct yetty_ygui_widget *widget, const char *text)
 {
-    if (!widget || widget->type != YETTY_YGUI_WIDGET_STATUSBAR) return;
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_STATUSBAR) {
+        return;
+    }
     free(widget->data.statusbar.right_text);
     widget->data.statusbar.right_text = ygui_strdup(text);
     widget->dirty = 1;
-    if (widget->engine) widget->engine->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 /*=============================================================================
@@ -7233,7 +7631,9 @@ void yetty_ygui_widget_statusbar_set_right(struct yetty_ygui_widget *widget, con
 void yetty_ygui_engine_set_titlebar(struct yetty_ygui_engine *engine,
                                     struct yetty_ygui_widget *widget)
 {
-    if (!engine) return;
+    if (!engine) {
+        return;
+    }
     engine->engine_titlebar = widget;
     engine->dirty = 1;
 }
@@ -7241,7 +7641,9 @@ void yetty_ygui_engine_set_titlebar(struct yetty_ygui_engine *engine,
 void yetty_ygui_engine_set_menubar(struct yetty_ygui_engine *engine,
                                    struct yetty_ygui_widget *widget)
 {
-    if (!engine) return;
+    if (!engine) {
+        return;
+    }
     engine->engine_menubar = widget;
     engine->dirty = 1;
 }
@@ -7249,7 +7651,9 @@ void yetty_ygui_engine_set_menubar(struct yetty_ygui_engine *engine,
 void yetty_ygui_engine_set_statusbar(struct yetty_ygui_engine *engine,
                                      struct yetty_ygui_widget *widget)
 {
-    if (!engine) return;
+    if (!engine) {
+        return;
+    }
     engine->engine_statusbar = widget;
     engine->dirty = 1;
 }
@@ -7261,7 +7665,9 @@ void yetty_ygui_engine_set_statusbar(struct yetty_ygui_engine *engine,
 void yetty_ygui_internal_engine_pin_bars(struct yetty_ygui_engine *engine);
 void yetty_ygui_internal_engine_pin_bars(struct yetty_ygui_engine *engine)
 {
-    if (!engine) return;
+    if (!engine) {
+        return;
+    }
     float W = engine->width;
     float H = engine->height;
     float top_y = 0.0f;
@@ -7312,7 +7718,9 @@ void yetty_ygui_internal_engine_pin_bars(struct yetty_ygui_engine *engine)
 
 static void window_detach_slot(struct yetty_ygui_widget *window, struct yetty_ygui_widget **slot)
 {
-    if (!*slot) return;
+    if (!*slot) {
+        return;
+    }
     yetty_ygui_widget_remove_child(window, *slot);
     /* Reinsert at engine top level so the widget remains tracked. */
     if (window->engine) {
@@ -7324,35 +7732,53 @@ static void window_detach_slot(struct yetty_ygui_widget *window, struct yetty_yg
 void yetty_ygui_widget_window_set_menubar(struct yetty_ygui_widget *window,
                                           struct yetty_ygui_widget *menubar)
 {
-    if (!window || window->type != YETTY_YGUI_WIDGET_WINDOW) return;
+    if (!window || window->type != YETTY_YGUI_WIDGET_WINDOW) {
+        return;
+    }
     window_detach_slot(window, &window->data.window.menubar);
-    if (!menubar) return;
+    if (!menubar) {
+        return;
+    }
     /* Reparent menubar into the window. We want it BEFORE body in
      * child order so the flex column places it above. The body was
      * added in window's constructor; if it's still the only child,
      * inserting before it means swapping the head. The simpler
      * approach: remove body, append menubar, re-append body. */
     struct yetty_ygui_widget *body = window->data.window.body;
-    struct yetty_ygui_widget *sb   = window->data.window.statusbar;
-    if (body) yetty_ygui_widget_remove_child(window, body);
-    if (sb)   yetty_ygui_widget_remove_child(window, sb);
+    struct yetty_ygui_widget *sb = window->data.window.statusbar;
+    if (body) {
+        yetty_ygui_widget_remove_child(window, body);
+    }
+    if (sb) {
+        yetty_ygui_widget_remove_child(window, sb);
+    }
     if (menubar->parent) {
         yetty_ygui_widget_remove_child(menubar->parent, menubar);
     }
     yetty_ygui_widget_add_child(window, menubar);
-    if (body) yetty_ygui_widget_add_child(window, body);
-    if (sb)   yetty_ygui_widget_add_child(window, sb);
+    if (body) {
+        yetty_ygui_widget_add_child(window, body);
+    }
+    if (sb) {
+        yetty_ygui_widget_add_child(window, sb);
+    }
     window->data.window.menubar = menubar;
     window->dirty = 1;
-    if (window->engine) window->engine->dirty = 1;
+    if (window->engine) {
+        window->engine->dirty = 1;
+    }
 }
 
 void yetty_ygui_widget_window_set_statusbar(struct yetty_ygui_widget *window,
                                             struct yetty_ygui_widget *statusbar)
 {
-    if (!window || window->type != YETTY_YGUI_WIDGET_WINDOW) return;
+    if (!window || window->type != YETTY_YGUI_WIDGET_WINDOW) {
+        return;
+    }
     window_detach_slot(window, &window->data.window.statusbar);
-    if (!statusbar) return;
+    if (!statusbar) {
+        return;
+    }
     /* Statusbar goes at the END of the child list so flex stacks it
      * below body (which has flex_grow=1, so it occupies remaining
      * space leaving the statusbar at the bottom). */
@@ -7362,5 +7788,7 @@ void yetty_ygui_widget_window_set_statusbar(struct yetty_ygui_widget *window,
     yetty_ygui_widget_add_child(window, statusbar);
     window->data.window.statusbar = statusbar;
     window->dirty = 1;
-    if (window->engine) window->engine->dirty = 1;
+    if (window->engine) {
+        window->engine->dirty = 1;
+    }
 }

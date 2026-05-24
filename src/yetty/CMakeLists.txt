@@ -40,14 +40,14 @@ endif()
 # webgpu PUBLIC so consumers of that header get the include path.
 add_subdirectory(yetty)
 
-# yruntime — generic GPU/event/RPC services layer. Same INTERFACE wrapper
-# pattern as yetty; yruntime.c is compiled inline via YETTY_SOURCES.
-add_subdirectory(yruntime)
+# yframework — generic GPU/event/RPC services layer. Same INTERFACE wrapper
+# pattern as yetty; yframework.c is compiled inline via YETTY_SOURCES.
+add_subdirectory(yframework)
 
 # Yetty sources (src/yetty/*.c)
 set(YETTY_SOURCES
     ${YETTY_ROOT}/src/yetty/yetty/yetty.c
-    ${YETTY_ROOT}/src/yetty/yruntime/yruntime.c
+    ${YETTY_ROOT}/src/yetty/yframework/yframework.c
     ${YETTY_ROOT}/src/yetty/yconfig/config.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
@@ -120,6 +120,14 @@ if(YETTY_ENABLE_FEATURE_YCORE)
     add_subdirectory(ycore)
 endif()
 
+# yfigure — base type (figure + group) for compositor figures.
+# Foundational, depends only on ycore.
+add_subdirectory(yfigure)
+
+# ygrid — concrete figure kind: spatial-bucketed batch of SDF prims
+# and glyphs. First migration target for ygui's scene content.
+add_subdirectory(ygrid)
+
 # yplatform — split into two libs (core + full). Must come after ycore
 # (PUBLIC dep) and before any tool / consumer of its target names.
 add_subdirectory(yplatform)
@@ -172,10 +180,6 @@ endif()
 
 if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     add_subdirectory(ydiagram)
-endif()
-
-if(YETTY_ENABLE_FEATURE_YGRID)
-    add_subdirectory(ygrid)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YTHORVG)

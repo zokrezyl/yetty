@@ -31,8 +31,8 @@ YETTY_YRESULT_DECLARE(yetty_ydraw_scrolling_grid_ptr, struct yetty_ydraw_scrolli
 /* Glyph visitor — fires once per glyph primitive in the grid. The (x, y)
  * are absolute canvas pixel coordinates (rolling-row converted to abs y
  * using cell_h passed to for_each_glyph). */
-typedef void (*yetty_ydraw_scrolling_grid_glyph_cb)(
-    float x, float y, uint32_t glyph_idx, int32_t font_slot, void *user);
+typedef void (*yetty_ydraw_scrolling_grid_glyph_cb)(float x, float y, uint32_t glyph_idx,
+                                                    int32_t font_slot, void *user);
 
 /*===========================================================================
  * Lifecycle
@@ -82,9 +82,9 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_dirty_line(
 
 /* Push a primitive payload onto line `line_idx`. Returns the prim's local
  * index within that line on success. */
-struct uint32_result yetty_ydraw_scrolling_grid_push_prim(
-    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx,
-    uint32_t rolling_row, const float *data, uint32_t word_count);
+struct uint32_result yetty_ydraw_scrolling_grid_push_prim(struct yetty_ydraw_scrolling_grid *grid,
+                                                          uint32_t line_idx, uint32_t rolling_row,
+                                                          const float *data, uint32_t word_count);
 
 /* Make sure line `line_idx` has at least `min_cells` cells allocated. */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_ensure_cells(
@@ -93,14 +93,13 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_ensure_cells(
 /* Append a cell ref to (line_idx, col). The ref points back at the prim
  * placed at `lines_ahead` rows down at local index `drawable_idx`. */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
-    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, uint32_t col,
-    uint16_t lines_ahead, uint16_t drawable_idx);
+    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, uint32_t col, uint16_t lines_ahead,
+    uint16_t drawable_idx);
 
 /* Attach a complex-prim instance to line `line_idx`. The grid takes
  * ownership (destroys on grid_line_free / grid_clear). */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
-    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx,
-    struct yetty_ydraw_figure *figure);
+    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, struct yetty_ydraw_figure *figure);
 
 /* Attach a font cache handle to line `target_row`. If the handle is
  * already attached to some other line, migrate (no refcount change);
@@ -108,8 +107,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
  * default or invalid, or when target_row is 0. */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_attach_font(
     struct yetty_ydraw_scrolling_grid *grid, struct yetty_yfont_cache *font_cache,
-    yetty_yfont_cache_handle default_handle, yetty_yfont_cache_handle handle,
-    uint32_t target_row);
+    yetty_yfont_cache_handle default_handle, yetty_yfont_cache_handle handle, uint32_t target_row);
 
 /*===========================================================================
  * Scrollbuffer eviction / restore
@@ -140,22 +138,20 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_restore_range(
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
-    struct yetty_ydraw_scrolling_grid *grid,
-    uint32_t window_top, uint32_t grid_rows, uint32_t effective_grid_cols,
-    uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count);
+    struct yetty_ydraw_scrolling_grid *grid, uint32_t window_top, uint32_t grid_rows,
+    uint32_t effective_grid_cols, uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count);
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_build_drawable_staging(
-    struct yetty_ydraw_scrolling_grid *grid,
-    uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count,
-    uint32_t *out_drawable_count);
+    struct yetty_ydraw_scrolling_grid *grid, uint32_t **out_buf, uint32_t *out_capacity,
+    uint32_t *out_count, uint32_t *out_drawable_count);
 
 /*===========================================================================
  * Glyph iteration
  *===========================================================================*/
 
-void yetty_ydraw_scrolling_grid_for_each_glyph(
-    const struct yetty_ydraw_scrolling_grid *grid, float cell_h,
-    yetty_ydraw_scrolling_grid_glyph_cb cb, void *user);
+void yetty_ydraw_scrolling_grid_for_each_glyph(const struct yetty_ydraw_scrolling_grid *grid,
+                                               float cell_h, yetty_ydraw_scrolling_grid_glyph_cb cb,
+                                               void *user);
 
 #ifdef __cplusplus
 }

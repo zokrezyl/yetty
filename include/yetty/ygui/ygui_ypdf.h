@@ -39,20 +39,20 @@ extern "C" {
 struct yetty_ygui_engine;
 struct yetty_ygui_widget;
 
-struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_file(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h, const char *path);
+struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_file(struct yetty_ygui_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h, const char *path);
 
-struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const uint8_t *data, size_t len);
+struct yetty_ygui_widget *yetty_ygui_engine_ypdf_from_buffer(struct yetty_ygui_engine *engine,
+                                                             const char *id, float x, float y,
+                                                             float w, float h, const uint8_t *data,
+                                                             size_t len);
 
 /* Default sample PDF embedded into ygui_ypdf. Returns NULL on failure
  * or when the library was built without an asset. */
-struct yetty_ygui_widget *yetty_ygui_engine_ypdf_default(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h);
+struct yetty_ygui_widget *yetty_ygui_engine_ypdf_default(struct yetty_ygui_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h);
 
 /*=============================================================================
  * Scroll API
@@ -86,16 +86,14 @@ float yetty_ygui_widget_ypdf_max_scroll(const struct yetty_ygui_widget *widget);
 /* Number of pages in the document. */
 int yetty_ygui_widget_ypdf_page_count(const struct yetty_ygui_widget *widget);
 
-typedef void (*yetty_ygui_ypdf_scroll_change_fn)(
-    struct yetty_ygui_widget *widget, float scroll_y, float max_scroll,
-    void *userdata);
+typedef void (*yetty_ygui_ypdf_scroll_change_fn)(struct yetty_ygui_widget *widget, float scroll_y,
+                                                 float max_scroll, void *userdata);
 
 /* Fired AFTER scroll_y mutates (via wheel, the scroll API above, or a
  * future on_key handler). A bound scrollbar typically translates
  * (scroll_y / max_scroll) into its 0..1 value. */
-void yetty_ygui_widget_ypdf_on_scroll_change(
-    struct yetty_ygui_widget *widget,
-    yetty_ygui_ypdf_scroll_change_fn cb, void *userdata);
+void yetty_ygui_widget_ypdf_on_scroll_change(struct yetty_ygui_widget *widget,
+                                             yetty_ygui_ypdf_scroll_change_fn cb, void *userdata);
 
 #ifdef __cplusplus
 }

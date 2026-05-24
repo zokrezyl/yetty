@@ -1,18 +1,18 @@
 /*
- * yruntime.c — lifts the WebGPU / event-loop / VNC / RPC / render-target
+ * yframework.c — lifts the WebGPU / event-loop / VNC / RPC / render-target
  * bring-up out of the yetty terminal so the same bring-up serves any app
  * that wants a window + GPU + event loop. The actual logic is the same
  * one yetty/yetty.c carried as the static init_webgpu(); the deltas are:
  *
  *   - inputs come from a yinit_runtime (not an app-context bundle),
- *   - the result is an owned struct yetty_yruntime (not stamped onto a
+ *   - the result is an owned struct yetty_yframework (not stamped onto a
  *     yetty struct),
  *   - the event_loop + wgpu await machinery + RPC server live here too,
  *     since they were already needed by VNC/render-target bring-up and
  *     are equally generic.
  */
 
-#include <yetty/yruntime/yruntime.h>
+#include <yetty/yframework/yframework.h>
 
 #include <yetty/yinit/yinit.h>
 #include <yetty/yconfig/config.h>
@@ -32,6 +32,10 @@
 #include <yetty/yrpc/rpc-server.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/yfigure/registry.h>
+#ifdef YETTY_HAS_YMGUI
+#include <yetty/ymgui/figure.h>
+#endif
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -43,16 +47,35 @@
 #include <emscripten/emscripten.h>
 #endif
 
-void yetty_yruntime_log_gpu_info(WGPUAdapter adapter)
+/*===========================================================================
+ * Figure-kind factory args
+ *
+ * Each figure kind exports its own `register_factory(registry, &args)`
+ * call. The args bundle (e.g. ymgui's lazy pipeline cache) must outlive
+ * every figure minted from any registry it was registered on. yframework
+ * is the natural owner — it sits below every host (yterm, yui, …) and
+ * outlives them all. The bundle is kept opaque to yframework.h so the
+ * header doesn't acquire kind-specific dependencies.
+ *=========================================================================*/
+
+struct yetty_yframework_factory_state {
+#ifdef YETTY_HAS_YMGUI
+    struct yetty_ymgui_factory_args ymgui_args;
+#endif
+    /* Future kinds: yrdawn_args, ygui_args, ygrid_args ... */
+    int _unused; /* keep the struct non-empty when no kinds compile in */
+};
+
+void yetty_yframework_log_gpu_info(WGPUAdapter adapter)
 {
     if (!adapter) {
-        ywarn("yetty_yruntime_log_gpu_info: adapter is NULL");
+        ywarn("yetty_yframework_log_gpu_info: adapter is NULL");
         return;
     }
 
     char *desc = yetty_ywebgpu_get_webgpu_description(adapter);
     if (!desc) {
-        ywarn("yetty_yruntime_log_gpu_info: failed to get WebGPU description");
+        ywarn("yetty_yframework_log_gpu_info: failed to get WebGPU description");
         return;
     }
     yinfo("WebGPU adapter description:\n%s", desc);
@@ -65,17 +88,17 @@ void yetty_yruntime_log_gpu_info(WGPUAdapter adapter)
  * spin up VNC if requested, and create the render target (vnc / x11-tile
  * / texture, chosen the same way the terminal used to). All side effects
  * land on `rt`. */
-static struct yetty_ycore_void_result
-init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
+static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPUInstance instance,
+                                               WGPUSurface surface)
 {
     if (!instance) {
-        return YETTY_ERR(yetty_ycore_void, "yruntime: no WebGPU instance");
+        return YETTY_ERR(yetty_ycore_void, "yframework: no WebGPU instance");
     }
-    ydebug("yruntime: instance=%p surface=%p", (void *)instance, (void *)surface);
+    ydebug("yframework: instance=%p surface=%p", (void *)instance, (void *)surface);
 
     /* Adapter. */
     WGPURequestAdapterOptions adapter_opts = {0};
-    adapter_opts.compatibleSurface = surface;   /* NULL OK for headless */
+    adapter_opts.compatibleSurface = surface; /* NULL OK for headless */
     adapter_opts.powerPreference = WGPUPowerPreference_HighPerformance;
 
     int adapter_ready = 0;
@@ -85,7 +108,7 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
     adapter_cb.userdata1 = &rt->gpu.adapter;
     adapter_cb.userdata2 = &adapter_ready;
 
-    ydebug("yruntime: requesting adapter");
+    ydebug("yframework: requesting adapter");
     wgpuInstanceRequestAdapter(instance, &adapter_opts, adapter_cb);
 
 #ifdef __EMSCRIPTEN__
@@ -94,17 +117,17 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
     }
 #endif
     if (!rt->gpu.adapter) {
-        return YETTY_ERR(yetty_ycore_void, "yruntime: adapter request failed");
+        return YETTY_ERR(yetty_ycore_void, "yframework: adapter request failed");
     }
 
-    yetty_yruntime_log_gpu_info(rt->gpu.adapter);
+    yetty_yframework_log_gpu_info(rt->gpu.adapter);
 
     /* Device + queue. */
     WGPULimits limits;
     yetty_ywebgpu_fill_default_limits(rt->gpu.adapter, rt->config, &limits);
 
     WGPUStringView device_label = {.data = "yetty device", .length = 12};
-    WGPUStringView queue_label  = {.data = "default queue", .length = 13};
+    WGPUStringView queue_label = {.data = "default queue", .length = 13};
 
     WGPUDeviceDescriptor device_desc = {0};
     device_desc.label = device_label;
@@ -136,7 +159,7 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
     device_cb.userdata1 = &rt->gpu.device;
     device_cb.userdata2 = &device_cb_data;
 
-    ydebug("yruntime: requesting device");
+    ydebug("yframework: requesting device");
     wgpuAdapterRequestDevice(rt->gpu.adapter, &device_desc, device_cb);
 
 #ifdef __EMSCRIPTEN__
@@ -145,9 +168,9 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
     }
 #endif
     if (!rt->gpu.device) {
-        yerror("yruntime: device request failed: %s",
+        yerror("yframework: device request failed: %s",
                device_cb_data.error_msg[0] ? device_cb_data.error_msg : "(no message)");
-        return YETTY_ERR(yetty_ycore_void, "yruntime: device request failed");
+        return YETTY_ERR(yetty_ycore_void, "yframework: device request failed");
     }
     rt->gpu.queue = wgpuDeviceGetQueue(rt->gpu.device);
 
@@ -160,17 +183,26 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
         if (caps.formatCount > 0) {
             rt->gpu.surface_format = caps.formats[0];
         }
-        const char *want = rt->config->ops->get_string(
-            rt->config, "rendering/present-mode", "auto");
+        const char *want =
+            rt->config->ops->get_string(rt->config, "rendering/present-mode", "auto");
 
         int have_fifo = 0, have_fifo_relaxed = 0, have_mailbox = 0, have_immediate = 0;
         for (size_t i = 0; i < caps.presentModeCount; i++) {
             switch (caps.presentModes[i]) {
-            case WGPUPresentMode_Fifo:        have_fifo = 1;         break;
-            case WGPUPresentMode_FifoRelaxed: have_fifo_relaxed = 1; break;
-            case WGPUPresentMode_Mailbox:     have_mailbox = 1;      break;
-            case WGPUPresentMode_Immediate:   have_immediate = 1;    break;
-            default: break;
+            case WGPUPresentMode_Fifo:
+                have_fifo = 1;
+                break;
+            case WGPUPresentMode_FifoRelaxed:
+                have_fifo_relaxed = 1;
+                break;
+            case WGPUPresentMode_Mailbox:
+                have_mailbox = 1;
+                break;
+            case WGPUPresentMode_Immediate:
+                have_immediate = 1;
+                break;
+            default:
+                break;
             }
         }
 
@@ -215,26 +247,25 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
         sc.height = rt->gpu.app_gpu_context.surface_height;
         sc.presentMode = rt->present_mode;
         wgpuSurfaceConfigure(surface, &sc);
-        ydebug("yruntime: surface configured %ux%u present_mode=%d",
-               sc.width, sc.height, (int)sc.presentMode);
+        ydebug("yframework: surface configured %ux%u present_mode=%d", sc.width, sc.height,
+               (int)sc.presentMode);
     }
 
     /* GPU allocator. */
     struct yetty_yrender_gpu_allocator_result alloc_res =
         yetty_yrender_gpu_allocator_create(rt->gpu.device);
     if (!YETTY_IS_OK(alloc_res)) {
-        return YETTY_ERR(yetty_ycore_void, "yruntime: gpu_allocator_create failed", alloc_res);
+        return YETTY_ERR(yetty_ycore_void, "yframework: gpu_allocator_create failed", alloc_res);
     }
     rt->gpu.allocator = alloc_res.value;
 
     /* MSDF generator. */
     {
-        const char *shaders_dir = rt->config->ops->get_string(
-            rt->config, "paths/shaders", "");
+        const char *shaders_dir = rt->config->ops->get_string(rt->config, "paths/shaders", "");
         struct yetty_ymsdf_generator_ptr_result gres = yetty_ymsdf_generator_create_from_config(
             rt->config, rt->gpu.device, instance, shaders_dir);
         if (YETTY_IS_ERR(gres)) {
-            return YETTY_ERR(yetty_ycore_void, "yruntime: msdf_generator create failed", gres);
+            return YETTY_ERR(yetty_ycore_void, "yframework: msdf_generator create failed", gres);
         }
         rt->gpu.msdf_generator = gres.value;
         yinfo("ymsdf: generator = %s", gres.value->ops->name(gres.value));
@@ -251,11 +282,11 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
     int vnc_enabled = vnc_listen_enabled || vnc_record_enabled;
 
     if (vnc_enabled) {
-        struct yetty_vnc_server_ptr_result vnc_res = yetty_yvnc_server_create(
-            instance, rt->gpu.device, rt->gpu.queue, rt->event_loop, rt->wgpu,
-            rt->platform_input_pipe, rt->config);
+        struct yetty_vnc_server_ptr_result vnc_res =
+            yetty_yvnc_server_create(instance, rt->gpu.device, rt->gpu.queue, rt->event_loop,
+                                     rt->wgpu, rt->platform_input_pipe, rt->config);
         if (!YETTY_IS_OK(vnc_res)) {
-            return YETTY_ERR(yetty_ycore_void, "yruntime: vnc_server_create failed", vnc_res);
+            return YETTY_ERR(yetty_ycore_void, "yframework: vnc_server_create failed", vnc_res);
         }
         rt->vnc_server = vnc_res.value;
 
@@ -264,14 +295,15 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
             struct yetty_ycore_void_result start_res =
                 yetty_yvnc_server_start(rt->vnc_server, (uint16_t)vnc_port);
             if (!YETTY_IS_OK(start_res)) {
-                return YETTY_ERR(yetty_ycore_void, "yruntime: vnc_server_start failed", start_res);
+                return YETTY_ERR(yetty_ycore_void, "yframework: vnc_server_start failed",
+                                 start_res);
             }
             yinfo("VNC server started on port %d", vnc_port);
         } else {
             struct yetty_ycore_void_result act_res =
                 yetty_yvnc_server_start_record_only(rt->vnc_server);
             if (!YETTY_IS_OK(act_res)) {
-                return YETTY_ERR(yetty_ycore_void, "yruntime: vnc record-only activate failed",
+                return YETTY_ERR(yetty_ycore_void, "yframework: vnc record-only activate failed",
                                  act_res);
             }
             yinfo("VNC record mode: %s", vnc_record_str);
@@ -282,7 +314,8 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
      * terminal used to. set_wgpu must only fire on the texture target;
      * it casts to render_target_texture and writes through a raw offset. */
     struct yetty_yrender_viewport vp = {
-        .x = 0, .y = 0,
+        .x = 0,
+        .y = 0,
         .w = (float)rt->gpu.app_gpu_context.surface_width,
         .h = (float)rt->gpu.app_gpu_context.surface_height,
     };
@@ -290,82 +323,87 @@ init_gpu(struct yetty_yruntime *rt, WGPUInstance instance, WGPUSurface surface)
     struct yetty_yrender_target_ptr_result target_res;
     bool x11_tile_available = false;
 #ifdef YETTY_HAS_X11_TILE
-    x11_tile_available = rt->gpu.app_gpu_context.x11_display != NULL &&
-                         rt->gpu.app_gpu_context.x11_window != 0UL;
+    x11_tile_available =
+        rt->gpu.app_gpu_context.x11_display != NULL && rt->gpu.app_gpu_context.x11_window != 0UL;
 #endif
     bool target_is_texture = false;
 
     if (vnc_enabled) {
-        target_res = yetty_yrender_target_vnc_create(
-            rt->gpu.device, rt->gpu.queue, rt->gpu.surface_format, rt->gpu.allocator,
-            surface, rt->vnc_server, vp);
+        target_res =
+            yetty_yrender_target_vnc_create(rt->gpu.device, rt->gpu.queue, rt->gpu.surface_format,
+                                            rt->gpu.allocator, surface, rt->vnc_server, vp);
 #ifdef YETTY_HAS_X11_TILE
     } else if (x11_tile_available) {
         yinfo("render target: X11-tile (XShmPutImage per dirty tile)");
         target_res = yetty_yrender_target_x11_tile_create(
-            rt->gpu.device, rt->gpu.queue, rt->gpu.surface_format, rt->gpu.allocator,
-            rt->wgpu, rt->event_loop,
-            rt->gpu.app_gpu_context.x11_display, rt->gpu.app_gpu_context.x11_window, vp);
+            rt->gpu.device, rt->gpu.queue, rt->gpu.surface_format, rt->gpu.allocator, rt->wgpu,
+            rt->event_loop, rt->gpu.app_gpu_context.x11_display, rt->gpu.app_gpu_context.x11_window,
+            vp);
         if (!YETTY_IS_OK(target_res)) {
-            ywarn("yruntime: x11-tile target failed (%s); falling back to texture",
+            ywarn("yframework: x11-tile target failed (%s); falling back to texture",
                   target_res.error.msg);
             yetty_ycore_error_destroy(target_res.error);
-            target_res = yetty_yrender_target_texture_create(
-                rt->gpu.device, rt->gpu.queue, rt->gpu.surface_format, rt->gpu.allocator,
-                surface, vp);
+            target_res = yetty_yrender_target_texture_create(rt->gpu.device, rt->gpu.queue,
+                                                             rt->gpu.surface_format,
+                                                             rt->gpu.allocator, surface, vp);
             target_is_texture = true;
         }
 #endif
     } else {
         target_res = yetty_yrender_target_texture_create(
-            rt->gpu.device, rt->gpu.queue, rt->gpu.surface_format, rt->gpu.allocator,
-            surface, vp);
+            rt->gpu.device, rt->gpu.queue, rt->gpu.surface_format, rt->gpu.allocator, surface, vp);
         target_is_texture = true;
     }
     if (!YETTY_IS_OK(target_res)) {
-        return YETTY_ERR(yetty_ycore_void, "yruntime: render_target create failed", target_res);
+        return YETTY_ERR(yetty_ycore_void, "yframework: render_target create failed", target_res);
     }
     rt->render_target = target_res.value;
     if (surface && target_is_texture) {
         yetty_yrender_target_texture_set_wgpu(rt->render_target, rt->wgpu);
     }
-    ydebug("yruntime: render target created %.0fx%.0f vnc=%d", vp.w, vp.h, vnc_enabled);
+    ydebug("yframework: render target created %.0fx%.0f vnc=%d", vp.w, vp.h, vnc_enabled);
     return YETTY_OK_VOID();
 }
 
-struct yetty_yruntime_ptr_result yetty_yruntime_create(
+struct yetty_yframework_ptr_result yetty_yframework_create(
     const struct yetty_yinit_runtime *yinit_rt)
 {
     if (!yinit_rt) {
-        return YETTY_ERR(yetty_yruntime_ptr, "yruntime_create: yinit_rt is NULL");
+        return YETTY_ERR(yetty_yframework_ptr, "yframework_create: yinit_rt is NULL");
     }
 
-    struct yetty_yruntime *rt = calloc(1, sizeof(struct yetty_yruntime));
+    struct yetty_yframework *rt = calloc(1, sizeof(struct yetty_yframework));
     if (!rt) {
-        return YETTY_ERR(yetty_yruntime_ptr, "yruntime_create: alloc failed");
+        return YETTY_ERR(yetty_yframework_ptr, "yframework_create: alloc failed");
+    }
+
+    rt->factory_state = calloc(1, sizeof(struct yetty_yframework_factory_state));
+    if (!rt->factory_state) {
+        free(rt);
+        return YETTY_ERR(yetty_yframework_ptr, "yframework_create: factory_state alloc failed");
     }
 
     /* Wire the borrowed fields and the platform GPU slice. */
-    rt->config              = yinit_rt->config;
+    rt->config = yinit_rt->config;
     rt->platform_input_pipe = yinit_rt->platform_input_pipe;
-    rt->output_pipe         = yinit_rt->output_pipe;
-    rt->clipboard_manager   = yinit_rt->clipboard_manager;
-    rt->window_manager      = yinit_rt->window_manager;
+    rt->output_pipe = yinit_rt->output_pipe;
+    rt->clipboard_manager = yinit_rt->clipboard_manager;
+    rt->window_manager = yinit_rt->window_manager;
 
-    rt->gpu.app_gpu_context.instance       = yinit_rt->instance;
-    rt->gpu.app_gpu_context.surface        = yinit_rt->surface;
-    rt->gpu.app_gpu_context.surface_width  = yinit_rt->surface_width;
+    rt->gpu.app_gpu_context.instance = yinit_rt->instance;
+    rt->gpu.app_gpu_context.surface = yinit_rt->surface;
+    rt->gpu.app_gpu_context.surface_width = yinit_rt->surface_width;
     rt->gpu.app_gpu_context.surface_height = yinit_rt->surface_height;
-    rt->gpu.app_gpu_context.content_scale  = yinit_rt->content_scale;
-    rt->gpu.app_gpu_context.x11_display    = yinit_rt->x11_display;
-    rt->gpu.app_gpu_context.x11_window     = yinit_rt->x11_window;
+    rt->gpu.app_gpu_context.content_scale = yinit_rt->content_scale;
+    rt->gpu.app_gpu_context.x11_display = yinit_rt->x11_display;
+    rt->gpu.app_gpu_context.x11_window = yinit_rt->x11_window;
 
     /* Event loop — VNC + render-target callbacks need it. */
     struct yetty_ycore_event_loop_result el_res =
         yetty_ycore_event_loop_create(rt->platform_input_pipe);
     if (!YETTY_IS_OK(el_res)) {
-        yetty_yruntime_destroy(rt);
-        return YETTY_ERR(yetty_yruntime_ptr, "yruntime: event_loop_create failed", el_res);
+        yetty_yframework_destroy(rt);
+        return YETTY_ERR(yetty_yframework_ptr, "yframework: event_loop_create failed", el_res);
     }
     rt->event_loop = el_res.value;
 
@@ -374,15 +412,15 @@ struct yetty_yruntime_ptr_result yetty_yruntime_create(
     struct yplatform_wgpu_ptr_result wgpu_res =
         yetty_yplatform_wgpu_create(yinit_rt->instance, rt->event_loop);
     if (!YETTY_IS_OK(wgpu_res)) {
-        yetty_yruntime_destroy(rt);
-        return YETTY_ERR(yetty_yruntime_ptr, "yruntime: wgpu_create failed", wgpu_res);
+        yetty_yframework_destroy(rt);
+        return YETTY_ERR(yetty_yframework_ptr, "yframework: wgpu_create failed", wgpu_res);
     }
     rt->wgpu = wgpu_res.value;
 
     struct yetty_ycore_void_result gpu_res = init_gpu(rt, yinit_rt->instance, yinit_rt->surface);
     if (!YETTY_IS_OK(gpu_res)) {
-        yetty_yruntime_destroy(rt);
-        return YETTY_ERR(yetty_yruntime_ptr, "yruntime: gpu init failed", gpu_res);
+        yetty_yframework_destroy(rt);
+        return YETTY_ERR(yetty_yframework_ptr, "yframework: gpu init failed", gpu_res);
     }
 
     /* RPC server (optional). Created here so any app that wants the
@@ -392,11 +430,10 @@ struct yetty_yruntime_ptr_result yetty_yruntime_create(
     const char *rpc_port_str =
         rt->config->ops->get_string(rt->config, YETTY_YCONFIG_KEY_RPC_PORT, NULL);
     if (rpc_port_str) {
-        const char *rpc_host = rt->config->ops->get_string(
-            rt->config, YETTY_YCONFIG_KEY_RPC_HOST, "127.0.0.1");
+        const char *rpc_host =
+            rt->config->ops->get_string(rt->config, YETTY_YCONFIG_KEY_RPC_HOST, "127.0.0.1");
         int rpc_port = atoi(rpc_port_str);
-        struct yetty_rpc_server_ptr_result rpc_res =
-            yetty_yrpc_server_create(rt->event_loop);
+        struct yetty_rpc_server_ptr_result rpc_res = yetty_yrpc_server_create(rt->event_loop);
         if (YETTY_IS_OK(rpc_res)) {
             rt->rpc_server = rpc_res.value;
             struct yetty_ycore_void_result sr =
@@ -404,21 +441,21 @@ struct yetty_yruntime_ptr_result yetty_yruntime_create(
             if (YETTY_IS_OK(sr)) {
                 yinfo("yetty: RPC server listening on %s:%d", rpc_host, rpc_port);
             } else {
-                yerror("yruntime: rpc_server_start failed: %s", sr.error.msg);
+                yerror("yframework: rpc_server_start failed: %s", sr.error.msg);
                 yetty_ycore_error_destroy(sr.error);
                 yetty_yrpc_server_destroy(rt->rpc_server);
                 rt->rpc_server = NULL;
             }
         } else {
-            yerror("yruntime: rpc_server_create failed: %s", rpc_res.error.msg);
+            yerror("yframework: rpc_server_create failed: %s", rpc_res.error.msg);
             yetty_ycore_error_destroy(rpc_res.error);
         }
     }
 
-    return YETTY_OK(yetty_yruntime_ptr, rt);
+    return YETTY_OK(yetty_yframework_ptr, rt);
 }
 
-struct yetty_ycore_void_result yetty_yruntime_destroy(struct yetty_yruntime *rt)
+struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework *rt)
 {
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
@@ -432,6 +469,25 @@ struct yetty_ycore_void_result yetty_yruntime_destroy(struct yetty_yruntime *rt)
             first_err = r;
         }
         rt->rpc_server = NULL;
+    }
+
+    /* Tear down the per-kind factory bundles BEFORE the GPU goes away
+     * — ymgui_factory_args holds an owned pipeline (textures, shader
+     * module) whose destroy issues wgpu calls. */
+    if (rt->factory_state) {
+#ifdef YETTY_HAS_YMGUI
+        struct yetty_ycore_void_result r =
+            yetty_ymgui_factory_args_release(&rt->factory_state->ymgui_args);
+        if (YETTY_IS_ERR(r)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = r;
+            } else {
+                yetty_ycore_error_destroy(r.error);
+            }
+        }
+#endif
+        free(rt->factory_state);
+        rt->factory_state = NULL;
     }
 
     /* render_target before wgpu/event_loop: buffer-map callbacks the
@@ -454,13 +510,19 @@ struct yetty_ycore_void_result yetty_yruntime_destroy(struct yetty_yruntime *rt)
     if (rt->vnc_server) {
         struct yetty_ycore_void_result vsr = yetty_yvnc_server_stop(rt->vnc_server);
         if (YETTY_IS_ERR(vsr)) {
-            if (YETTY_IS_OK(first_err)) first_err = vsr;
-            else yetty_ycore_error_destroy(vsr.error);
+            if (YETTY_IS_OK(first_err)) {
+                first_err = vsr;
+            } else {
+                yetty_ycore_error_destroy(vsr.error);
+            }
         }
         struct yetty_ycore_void_result vdr = yetty_yvnc_server_destroy(rt->vnc_server);
         if (YETTY_IS_ERR(vdr)) {
-            if (YETTY_IS_OK(first_err)) first_err = vdr;
-            else yetty_ycore_error_destroy(vdr.error);
+            if (YETTY_IS_OK(first_err)) {
+                first_err = vdr;
+            } else {
+                yetty_ycore_error_destroy(vdr.error);
+            }
         }
         rt->vnc_server = NULL;
     }
@@ -485,23 +547,61 @@ struct yetty_ycore_void_result yetty_yruntime_destroy(struct yetty_yruntime *rt)
         rt->gpu.app_gpu_context.surface = NULL;
     }
 
-    if (rt->gpu.queue)   wgpuQueueRelease(rt->gpu.queue);
-    if (rt->gpu.device)  wgpuDeviceRelease(rt->gpu.device);
-    if (rt->gpu.adapter) wgpuAdapterRelease(rt->gpu.adapter);
+    if (rt->gpu.queue) {
+        wgpuQueueRelease(rt->gpu.queue);
+    }
+    if (rt->gpu.device) {
+        wgpuDeviceRelease(rt->gpu.device);
+    }
+    if (rt->gpu.adapter) {
+        wgpuAdapterRelease(rt->gpu.adapter);
+    }
 
     free(rt);
 
     if (YETTY_IS_ERR(first_err)) {
-        return YETTY_ERR(yetty_ycore_void, "yruntime_destroy: subsystem teardown failed", first_err);
+        return YETTY_ERR(yetty_ycore_void, "yframework_destroy: subsystem teardown failed",
+                         first_err);
     }
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yruntime_reconfigure_surface(
-    struct yetty_yruntime *rt, uint32_t width, uint32_t height)
+struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
+    struct yetty_yframework *framework, struct yetty_yfigure_registry *registry,
+    const struct yetty_context *context)
+{
+    if (!framework || !registry || !context) {
+        return YETTY_ERR(yetty_ycore_void, "yframework_register_figure_factories: NULL arg");
+    }
+    if (!framework->factory_state) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yframework_register_figure_factories: factory_state missing");
+    }
+
+#ifdef YETTY_HAS_YMGUI
+    /* ymgui — the args bundle's context is the host's context for this
+     * registration. A single yframework can register the same bundle on
+     * multiple hosts' registries; the last context wins, which is fine
+     * because every host shares the same yframework so the GPU /
+     * runtime members the factory actually reads are identical. */
+    framework->factory_state->ymgui_args.context = context;
+    struct yetty_ycore_void_result mr =
+        yetty_ymgui_register_factory(registry, &framework->factory_state->ymgui_args);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr,
+                        "yframework_register_figure_factories: ymgui register");
+#else
+    (void)registry;
+    (void)context;
+#endif
+
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(struct yetty_yframework *rt,
+                                                                    uint32_t width, uint32_t height)
 {
     if (!rt) {
-        return YETTY_ERR(yetty_ycore_void, "yruntime_reconfigure_surface: rt is NULL");
+        return YETTY_ERR(yetty_ycore_void, "yframework_reconfigure_surface: rt is NULL");
     }
     if (width == 0 || height == 0) {
         return YETTY_OK_VOID();
@@ -518,7 +618,7 @@ struct yetty_ycore_void_result yetty_yruntime_reconfigure_surface(
         sc.presentMode = rt->present_mode;
         wgpuSurfaceConfigure(surface, &sc);
     }
-    rt->gpu.app_gpu_context.surface_width  = width;
+    rt->gpu.app_gpu_context.surface_width = width;
     rt->gpu.app_gpu_context.surface_height = height;
     return YETTY_OK_VOID();
 }

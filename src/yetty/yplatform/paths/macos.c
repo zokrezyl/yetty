@@ -31,26 +31,23 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
 {
     struct yetty_yplatform_paths *p = calloc(1, sizeof(*p));
     if (!p) {
-        return YETTY_ERR(yetty_yplatform_paths_ptr,
-                         "OOM allocating yetty_yplatform_paths");
+        return YETTY_ERR(yetty_yplatform_paths_ptr, "OOM allocating yetty_yplatform_paths");
     }
 
     const char *home = getenv("HOME");
     if (home && *home) {
-        snprintf(p->cache_dir_buf,  sizeof(p->cache_dir_buf),
-                 "%s/Library/Caches/yetty", home);
-        snprintf(p->data_dir_buf,   sizeof(p->data_dir_buf),
-                 "%s/Library/Application Support/yetty", home);
+        snprintf(p->cache_dir_buf, sizeof(p->cache_dir_buf), "%s/Library/Caches/yetty", home);
+        snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "%s/Library/Application Support/yetty",
+                 home);
         snprintf(p->config_dir_buf, sizeof(p->config_dir_buf),
                  "%s/Library/Application Support/yetty", home);
     } else {
-        snprintf(p->cache_dir_buf,  sizeof(p->cache_dir_buf),  "/tmp/yetty");
-        snprintf(p->data_dir_buf,   sizeof(p->data_dir_buf),   "/tmp/yetty");
+        snprintf(p->cache_dir_buf, sizeof(p->cache_dir_buf), "/tmp/yetty");
+        snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "/tmp/yetty");
         snprintf(p->config_dir_buf, sizeof(p->config_dir_buf), "/tmp/yetty");
     }
 
-    snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf),
-             "/tmp/yetty-%d", (int)getuid());
+    snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf), "/tmp/yetty-%d", (int)getuid());
 
     /* assets_dir = $YETTY_ASSETS_DIR || dirname(_NSGetExecutablePath())/assets */
     const char *env = getenv("YETTY_ASSETS_DIR");
@@ -63,11 +60,9 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
             char *slash = strrchr(exe_path, '/');
             if (slash) {
                 *slash = '\0';
-                snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf),
-                         "%s/assets", exe_path);
+                snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf), "%s/assets", exe_path);
             } else {
-                snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf),
-                         "./assets");
+                snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf), "./assets");
             }
         } else {
             snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf), "./assets");

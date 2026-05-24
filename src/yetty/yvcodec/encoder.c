@@ -65,7 +65,7 @@ struct yetty_yvcodec_encoder {
 };
 
 void yetty_yvcodec_encoder_config_defaults(struct yetty_yvcodec_encoder_config *cfg, uint32_t width,
-                                          uint32_t height)
+                                           uint32_t height)
 {
     if (!cfg) {
         return;
@@ -193,11 +193,11 @@ static int ensure_out_cap(struct yetty_yvcodec_encoder *enc, size_t need)
 }
 
 struct yetty_ycore_void_result yetty_yvcodec_encoder_encode(struct yetty_yvcodec_encoder *enc,
-                                                           const uint8_t *y_plane,
-                                                           const uint8_t *u_plane,
-                                                           const uint8_t *v_plane,
-                                                           uint32_t y_stride, uint32_t uv_stride,
-                                                           struct yetty_yvcodec_encoded_frame *out)
+                                                            const uint8_t *y_plane,
+                                                            const uint8_t *u_plane,
+                                                            const uint8_t *v_plane,
+                                                            uint32_t y_stride, uint32_t uv_stride,
+                                                            struct yetty_yvcodec_encoded_frame *out)
 {
     if (!enc || !enc->h264 || !y_plane || !u_plane || !v_plane || !out) {
         return YETTY_ERR(yetty_ycore_void, "null args");
@@ -271,7 +271,7 @@ void yetty_yvcodec_encoder_force_idr(struct yetty_yvcodec_encoder *enc)
 }
 
 struct yetty_ycore_void_result yetty_yvcodec_encoder_set_bitrate(struct yetty_yvcodec_encoder *enc,
-                                                                uint32_t bitrate)
+                                                                 uint32_t bitrate)
 {
     if (!enc || !enc->h264) {
         return YETTY_ERR(yetty_ycore_void, "null encoder");
@@ -301,8 +301,8 @@ uint32_t yetty_yvcodec_encoder_height(const struct yetty_yvcodec_encoder *enc)
  * terminal resolutions. Ported from yetty-poc's convertBgraToYuv420Cpu.
  *-------------------------------------------------------------------------*/
 void yetty_yvcodec_bgra_to_yuv420(const uint8_t *bgra, uint32_t width, uint32_t height,
-                                 uint32_t bgra_stride, uint8_t *y_plane, uint8_t *u_plane,
-                                 uint8_t *v_plane, uint32_t y_stride, uint32_t uv_stride)
+                                  uint32_t bgra_stride, uint8_t *y_plane, uint8_t *u_plane,
+                                  uint8_t *v_plane, uint32_t y_stride, uint32_t uv_stride)
 {
     for (uint32_t y = 0; y < height; y++) {
         const uint8_t *row = bgra + (size_t)y * bgra_stride;

@@ -13,8 +13,9 @@
 #include <yetty/yimage/yimage.h>
 #include <yetty/ytrace/ytrace.h>
 
-struct yetty_ydraw_draw_list_result yetty_ycat_handler_image(
-    const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config)
+struct yetty_ydraw_draw_list_result yetty_ycat_handler_image(const uint8_t *bytes, size_t len,
+                                                             const char *path_hint,
+                                                             const struct yetty_ycat_config *config)
 {
     (void)path_hint; /* yimage decodes from in-memory bytes; no need for a path. */
 

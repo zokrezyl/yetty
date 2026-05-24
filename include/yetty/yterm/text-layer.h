@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <yetty/yterm/terminal.h>
+#include <yetty/ywire/wire-statemachine.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +16,12 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
     yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
     void *cursor_userdata);
+
+/* Wire-SM dispatch entry for the default (raw passthrough) sink. Pass
+ * the layer's base pointer as userdata when registering via
+ * yetty_ywire_wire_statemachine_set_default. */
+struct yetty_ycore_void_result yetty_yterm_text_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm);
 
 /* Borrow the GPU cell buffer (12 bytes per cell, see text-layer.wgsl).
  * Pointer is owned by the text layer (or libvterm). Valid only until the

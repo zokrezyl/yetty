@@ -47,14 +47,12 @@ extern "C" {
  * Caller owns the returned draw_list (free with
  * yetty_ydraw_draw_list_destroy). */
 struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
-    const uint8_t *mp4_bytes, size_t mp4_len,
-    const struct yetty_yvideo_render_config *overrides);
+    const uint8_t *mp4_bytes, size_t mp4_len, const struct yetty_yvideo_render_config *overrides);
 
 /* Same as above, sourcing the bytes from a file path. The file is
  * slurped into memory first; minimp4 needs a byte-addressable buffer. */
 struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_file(
-    const char *path,
-    const struct yetty_yvideo_render_config *overrides);
+    const char *path, const struct yetty_yvideo_render_config *overrides);
 
 #ifdef __cplusplus
 }

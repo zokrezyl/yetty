@@ -71,8 +71,8 @@ static bool cell_is_editing(const struct yetty_yrich_element *e)
 }
 
 static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
-                                                  struct yetty_ydraw_draw_list *buf,
-                                                  uint32_t layer, bool selected)
+                                                  struct yetty_ydraw_draw_list *buf, uint32_t layer,
+                                                  bool selected)
 {
     struct yetty_yrich_cell *c = (struct yetty_yrich_cell *)e;
     if (!buf) {
@@ -91,8 +91,8 @@ static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
         .half_height = c->bounds.h * 0.5f,
         .corner_radius = 0.0f,
     };
-    struct yetty_ycore_void_result br =
-        yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, layer, fill, c->border.color, c->border.width, &body);
+    struct yetty_ycore_void_result br = yetty_ydraw_draw_list_add_cmd_add_box(
+        buf, 0, layer, fill, c->border.color, c->border.width, &body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "cell_render: body box add failed");
 
     if (c->text_len > 0) {
@@ -112,7 +112,7 @@ static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
         };
         struct yetty_ycore_void_result tr =
             yetty_ydraw_draw_list_add_text(buf, text_x, text_y, &text, c->style.font_size,
-                                              c->style.color, layer + 1, c->style.font_id, 0.0f);
+                                           c->style.color, layer + 1, c->style.font_id, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "cell_render: add_text failed");
     }
 
@@ -124,8 +124,8 @@ static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
             .end_x = cursor_x,
             .end_y = c->bounds.y + c->bounds.h - 2.0f,
         };
-        struct yetty_ycore_void_result sr =
-            yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, layer + 2, 0, YETTY_YRICH_COLOR_BLACK, 1.0f, &seg);
+        struct yetty_ycore_void_result sr = yetty_ydraw_draw_list_add_cmd_add_segment(
+            buf, 0, layer + 2, 0, YETTY_YRICH_COLOR_BLACK, 1.0f, &seg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "cell_render: cursor segment add failed");
     }
 

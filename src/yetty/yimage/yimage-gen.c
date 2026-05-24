@@ -166,9 +166,9 @@ static void yimage_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
 // supplies only the shared pipeline + zoom state.
 //=============================================================================
 
-static struct yetty_ycore_void_result yimage_instance_render(
-    struct yetty_ydraw_figure *self, struct yetty_ydraw_target *target,
-    float x, float y)
+static struct yetty_ycore_void_result yimage_instance_render(struct yetty_ydraw_figure *self,
+                                                             struct yetty_ydraw_target *target,
+                                                             float x, float y)
 {
     if (!self || !self->buffer_data || !self->factory) {
         return YETTY_ERR(yetty_ycore_void, "invalid instance");
@@ -273,8 +273,7 @@ static struct yetty_ycore_void_result yimage_instance_render(
     wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
                                      target->viewport.w, target->viewport.h, 0.0f, 1.0f);
     wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)target->viewport.x,
-                                        (uint32_t)target->viewport.y,
-                                        (uint32_t)target->viewport.w,
+                                        (uint32_t)target->viewport.y, (uint32_t)target->viewport.w,
                                         (uint32_t)target->viewport.h);
 
     float w = self->bounds.max.x - self->bounds.min.x;
@@ -354,12 +353,10 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
 
     struct yetty_yimage_factory *factory = yetty_yimage_factory_from_base(self);
     if (!factory->pipeline) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr,
-                         "yimage factory pipeline not compiled");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "yimage factory pipeline not compiled");
     }
 
-    struct yetty_ydraw_figure *instance =
-        calloc(1, sizeof(struct yetty_ydraw_figure));
+    struct yetty_ydraw_figure *instance = calloc(1, sizeof(struct yetty_ydraw_figure));
     if (!instance) {
         return YETTY_ERR(yetty_ydraw_figure_ptr, "allocation failed");
     }
@@ -426,8 +423,7 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr,
-                         "instance binder create failed", br);
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "instance binder create failed", br);
     }
     instance->binder = br.value;
 
@@ -457,10 +453,9 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
     }
 
     ydebug("yimage_create_instance: OK %ux%u bounds=(%.0f,%.0f,%.0f,%.0f)",
-           instance->resource_set->textures[0].width,
-           instance->resource_set->textures[0].height,
-           instance->bounds.min.x, instance->bounds.min.y,
-           instance->bounds.max.x, instance->bounds.max.y);
+           instance->resource_set->textures[0].width, instance->resource_set->textures[0].height,
+           instance->bounds.min.x, instance->bounds.min.y, instance->bounds.max.x,
+           instance->bounds.max.y);
     return YETTY_OK(yetty_ydraw_figure_ptr, instance);
 }
 
@@ -482,7 +477,7 @@ static void yimage_instance_destroy(struct yetty_ydraw_figure *instance)
  * if the image source changes). */
 static const struct yetty_ydraw_figure_ops yimage_figure_ops = {
     .destroy = yimage_instance_destroy,
-    .update  = NULL,
+    .update = NULL,
 };
 
 /* Legacy factory adapter — see yplot / yvideo equivalents. */

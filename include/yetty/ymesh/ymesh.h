@@ -71,8 +71,8 @@ struct yetty_ydraw_draw_list_result yetty_ymesh_render_path(
     const char *path, const struct yetty_ymesh_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as yimage). */
-struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
-    const struct yetty_ydraw_draw_list *buffer, FILE *out);
+struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+                                                        FILE *out);
 
 #ifdef __cplusplus
 }

@@ -53,11 +53,11 @@ struct yetty_yplatform_yworkpool {
     struct yworkpool_node *tail;
     uint32_t queue_len;
 
-    uint32_t live_count;   /* total threads that have been spawned */
-    uint32_t idle_count;   /* threads currently waiting on cond */
-    int shutdown;          /* destroy() flag; workers exit when seen */
+    uint32_t live_count; /* total threads that have been spawned */
+    uint32_t idle_count; /* threads currently waiting on cond */
+    int shutdown;        /* destroy() flag; workers exit when seen */
 
-    struct yworkpool_worker *workers;  /* size = max_threads */
+    struct yworkpool_worker *workers; /* size = max_threads */
 };
 
 /* Pop the head job. Caller must hold `lock` and ensure the queue is
@@ -132,7 +132,8 @@ struct yetty_yplatform_yworkpool_ptr_result yetty_yplatform_yworkpool_create(
                          "yworkpool_create: loop or post_to_loop is NULL");
     }
     if (max_threads == 0) {
-        return YETTY_ERR(yetty_yplatform_yworkpool_ptr, "yworkpool_create: max_threads must be >= 1");
+        return YETTY_ERR(yetty_yplatform_yworkpool_ptr,
+                         "yworkpool_create: max_threads must be >= 1");
     }
 
     struct yetty_yplatform_yworkpool *pool = calloc(1, sizeof(*pool));
@@ -158,8 +159,12 @@ struct yetty_yplatform_yworkpool_ptr_result yetty_yplatform_yworkpool_create(
     pool->lock = yetty_yplatform_ymutex_create();
     pool->cond = yetty_yplatform_ycond_create();
     if (!pool->lock || !pool->cond) {
-        if (pool->lock) yetty_yplatform_ymutex_destroy(pool->lock);
-        if (pool->cond) yetty_yplatform_ycond_destroy(pool->cond);
+        if (pool->lock) {
+            yetty_yplatform_ymutex_destroy(pool->lock);
+        }
+        if (pool->cond) {
+            yetty_yplatform_ycond_destroy(pool->cond);
+        }
         free(pool->workers);
         free(pool->name);
         free(pool);
