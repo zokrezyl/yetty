@@ -174,18 +174,12 @@ uint32_t yetty_ygui_widget_open_group_as_kind(
     if (!self->dirty && !ctx->force_full_redraw) {
         return YETTY_YGUI_GROUP_SKIPPED;
     }
-    /* Always emit DELETE before CREATE — idempotent. In full-redraw
-     * mode the envelope head already CLEAR_ALL'd everything; the
-     * extra DELETE_CHILD record on a non-existent id is a benign no-op
-     * on the receiver (the container's remove_child_by_id returns OK
-     * for unbound ids). */
-    {
-        struct yetty_ycore_void_result dr =
-            yetty_ydraw_draw_list_add_admin_delete_child(ctx->buffer, self->group_id);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
-        }
-    }
+    /* No DELETE before CREATE. The receiver treats CREATE_CHILD on an
+     * existing id as an in-place swap of the figure pointer (the hash
+     * entry stays put, so uthash insertion order — the z-order — is
+     * preserved). DELETE is only emitted for widgets that are
+     * genuinely destroyed / unparented, via engine->pending_deletes
+     * which the engine flushes once per frame. */
 
     /* New wire: every widget is a TOP-LEVEL child of the root container
      * with ABSOLUTE coords. The layout pass resolved effective_x/y as

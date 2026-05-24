@@ -431,11 +431,6 @@ static void prepare_cb(uv_prepare_t *handle)
             }
         }
 #endif
-        struct yetty_ycore_void_result qr = yetty_ygui_osc_query_cell_size(engine->output_pty);
-        if (YETTY_IS_ERR(qr)) {
-            yerror("ygui_uv: query_cell_size on SIGWINCH: %s", qr.error.msg);
-            yetty_ycore_error_destroy(qr.error);
-        }
     }
 
     /* Auto-render if dirty */

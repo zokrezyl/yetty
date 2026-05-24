@@ -744,27 +744,13 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
      * effect on the receiver until we ship the envelope). */
     yetty_ydraw_draw_list_clear(engine->buffer);
 
-    /* 1a. Force full-redraw on every frame — the ycompositor receiver
-     * (current production target) builds one yfigure_group + ygrid per
-     * TOP-LEVEL CMD_GROUP and merges nested CMD_GROUPs into the
-     * outermost figure's ygrid via offset accumulation. That model
-     * does not support incremental updates to nested widgets: a
-     * mid-tree CMD_GROUP on a dirty descendant ends up as a NEW
-     * top-level figure layered on top of the still-existing parent
-     * (whose ygrid already paints that widget's pixels) — visible as
-     * double-paint + z-order jump on every hover. Issue #229 covers
-     * the analysis.
-     *
-     * Until per-widget figures (or a parent_id wire field) land,
-     * every emission re-emits the whole tree. CMD_ZERO at the head
-     * wipes the producer's previous frame from the receiver; the
-     * nested CMD_GROUPs re-create the figure with stable insertion
-     * order (= stable z-order). The cost is a full WebGPU rebuild
-     * per frame, which is acceptable while ygreeter / ytop are the
-     * dominant producers. */
-    int full_redraw = 1;
-    (void)engine->card_shown;
-    (void)engine->needs_full_redraw;
+    /* Full redraw on the first frame (no card yet) or when something
+     * affects the whole tree (resize, theme swap, engine_clear,
+     * mark_dirty). Everything else goes incremental: only dirty
+     * widgets re-emit their CREATE_CHILD, which the receiver applies
+     * as an in-place swap of the figure pointer — the hash entry
+     * stays put, so z-order is preserved even for overlays. */
+    int full_redraw = engine->needs_full_redraw || !engine->card_shown;
     if (full_redraw) {
         struct yetty_ycore_void_result zr =
             yetty_ydraw_draw_list_add_admin_clear_all(engine->buffer);
@@ -862,9 +848,10 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
                                            "bootstrap must run before any OSC emission");
     }
 
-    /* Cell size query — host replies via OSC and runtime stores it. */
-    struct yetty_ycore_void_result qr = yetty_ygui_osc_query_cell_size(engine->output_pty);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, qr, "engine_emit_handshake: query_cell_size failed");
+    /* No cell-size query. engine->cell_width / cell_height are written
+     * by the CSI response handler but only read by a debug log; the
+     * coordinate path uses pixel-size from TIOCGWINSZ. ymarkdown bakes
+     * its own monospace defaults (cell_w=8, cell_h=16). */
 
     /* Subscribe to click AND move events (move needed for slider drag) */
     struct yetty_ycore_void_result sc_r = yetty_ygui_osc_subscribe_clicks(engine->output_pty, 1);
@@ -2320,6 +2307,12 @@ void yetty_ygui_engine_subscribe_moves(struct yetty_ygui_engine *engine, int ena
 struct yetty_ycore_void_result yetty_ygui_engine_rebuild(struct yetty_ygui_engine *engine)
 {
     return engine_rebuild_with_mode(engine, /*full_redraw=*/1);
+}
+
+struct yetty_ycore_void_result yetty_ygui_engine_rebuild_with_mode(
+    struct yetty_ygui_engine *engine, int full_redraw)
+{
+    return engine_rebuild_with_mode(engine, full_redraw);
 }
 
 /*=============================================================================

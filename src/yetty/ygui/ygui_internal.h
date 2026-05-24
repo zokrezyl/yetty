@@ -1251,6 +1251,16 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
  * (yui, tools/ycompositor-ygui) that read engine->buffer directly. */
 struct yetty_ycore_void_result yetty_ygui_engine_rebuild(struct yetty_ygui_engine *engine);
 
+/* Same as above but parameterised. full_redraw=1 → every visible
+ * widget re-emits its CREATE_CHILD regardless of its dirty bit (caller
+ * is expected to lead the buffer with CLEAR_ALL). full_redraw=0 → only
+ * widgets with dirty=1 emit, and engine->pending_deletes are flushed
+ * as DELETE_CHILD records first. Combined with the receiver's reset_
+ * content fast path this turns yui chrome hover into a tiny upload
+ * instead of a full pipeline rebuild per frame. */
+struct yetty_ycore_void_result yetty_ygui_engine_rebuild_with_mode(
+    struct yetty_ygui_engine *engine, int full_redraw);
+
 /* Emit the init OSC handshake (cell size query, subscribe_clicks/moves,
  * CARD_PLACE, CANVAS_FIT placeholder). Called from
  * engine_internal_bootstrap_runtime after output_pty is wired up.

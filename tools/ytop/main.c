@@ -417,7 +417,9 @@ static void refresh(struct app_state *s)
     memcpy(s->prev_procs, s->procs, sizeof(struct proc_entry) * (size_t)s->n_procs);
     s->n_prev_procs = s->n_procs;
 
-    yetty_ygui_engine_mark_dirty(s->engine);
+    /* No engine_mark_dirty — that forces a full redraw. The setters
+     * above already dirty the widgets they touch, which is what
+     * incremental mode needs. */
 }
 
 /* ------------------------------------------------------------------ */

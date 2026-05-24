@@ -80,6 +80,18 @@ struct yetty_yfigure_figure_ops {
      * path; will be deleted once every figure kind speaks `process_input`. */
     struct yetty_ycore_void_result (*process_bytes)(struct yetty_yfigure_figure *self,
                                                     const uint8_t *bytes, size_t bytes_len);
+
+    /* Drop the figure's content (prims / record buffer / per-frame
+     * scratch) WITHOUT touching its GPU resources (buffers, textures,
+     * binder, pipeline). Followed by process_bytes(new_payload), this
+     * gives "refresh content, keep GPU state" — the receiver path for
+     * CREATE_CHILD on an existing id with the same kind. Without it
+     * the only option is destroy + mint, which throws away the binder
+     * cache and forces a full pipeline rebuild on the next render
+     * (visible as ~100 ms hover lag in yui chrome). NULL = figure
+     * doesn't support in-place content reset; CREATE_CHILD on an
+     * existing id falls back to destroy + mint. */
+    struct yetty_ycore_void_result (*reset_content)(struct yetty_yfigure_figure *self);
 };
 
 struct yetty_yfigure_figure {

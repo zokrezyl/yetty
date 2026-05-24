@@ -372,6 +372,10 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
     rt->render_target = target_res.value;
     if (surface && target_is_texture) {
         yetty_yrender_target_texture_set_wgpu(rt->render_target, rt->wgpu);
+        /* Same target gets the event loop so its present coro can
+         * fire a catch-up RENDER after a notify_render_skipped — fixes
+         * the input-to-paint lag when a present is in flight. */
+        yetty_yrender_target_texture_set_event_loop(rt->render_target, rt->event_loop);
     }
     ydebug("yframework: render target created %.0fx%.0f vnc=%d", vp.w, vp.h, vnc_enabled);
     return YETTY_OK_VOID();

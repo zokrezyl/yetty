@@ -80,6 +80,12 @@ struct yetty_yui {
      * framing, no wire-statemachine on the receive side. */
     struct yetty_ygui_engine *engine;
 
+    /* Gate for incremental yui_render. The first frame must emit
+     * CLEAR_ALL + every visible widget; subsequent frames go through
+     * the incremental path (only dirty widgets re-emit, receiver hits
+     * reset_content). */
+    int yui_first_frame_done;
+
     /* Single hamburger / app menu, parked on `engine` and starting
      * closed. Drill-down levels reuse the same popup widget — when
      * the user clicks "New view ▸" the callback clears the items in
@@ -1385,20 +1391,40 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
      * push the bytes into yui's compositor via process_records. No PTY,
      * no OSC framing.
      *
-     * engine_rebuild appends to the existing buffer (engine_render is
-     * the one that clears + ships); for the compositor path we clear
-     * the buffer ourselves and lead with CMD_ZERO so the compositor
-     * wipes any prior frame's yui groups before applying the new ones.
-     * CMD_ZERO's clear is scoped to yui's compositor instance — it
-     * does NOT touch the terminal's compositor. */
+     * Full vs incremental gate mirrors ygui's engine_render. Full =
+     * CLEAR_ALL + every visible widget re-emits its CREATE_CHILD.
+     * Incremental = flush pending_deletes, then only dirty widgets
+     * emit CREATE_CHILD; the receiver's reset_content fast path
+     * reuses each figure (and its binder + pipeline cache) instead
+     * of destroying and re-minting it. Without this, hovering ygreeter
+     * buttons (or anything that dirties yui) destroys + recreates every
+     * yui chrome ygrid, recompiling pipelines and producing visible lag
+     * (~100 ms per frame). */
     if (yui->engine && yetty_ygui_engine_is_dirty(yui->engine)) {
+        int full_redraw = yui->engine->needs_full_redraw || !yui->yui_first_frame_done;
         yetty_ydraw_draw_list_clear(yui->engine->buffer);
-        struct yetty_ycore_void_result zr =
-            yetty_ydraw_draw_list_add_admin_clear_all(yui->engine->buffer);
-        if (YETTY_IS_ERR(zr)) {
-            yetty_ycore_error_destroy(zr.error);
+        if (full_redraw) {
+            struct yetty_ycore_void_result zr =
+                yetty_ydraw_draw_list_add_admin_clear_all(yui->engine->buffer);
+            if (YETTY_IS_ERR(zr)) {
+                yetty_ycore_error_destroy(zr.error);
+            }
+            yui->engine->pending_delete_count = 0;
+        } else {
+            for (uint32_t i = 0; i < yui->engine->pending_delete_count; i++) {
+                struct yetty_ycore_void_result dr =
+                    yetty_ydraw_draw_list_add_admin_delete_child(
+                        yui->engine->buffer, yui->engine->pending_deletes[i]);
+                if (YETTY_IS_ERR(dr)) {
+                    yetty_ycore_error_destroy(dr.error);
+                }
+            }
+            yui->engine->pending_delete_count = 0;
         }
-        struct yetty_ycore_void_result rr = yetty_ygui_engine_rebuild(yui->engine);
+        struct yetty_ycore_void_result rr =
+            yetty_ygui_engine_rebuild_with_mode(yui->engine, full_redraw);
+        yui->engine->needs_full_redraw = 0;
+        yui->yui_first_frame_done = 1;
         if (YETTY_IS_ERR(rr)) {
             ywarn("yui_render: engine_rebuild: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);

@@ -1166,12 +1166,38 @@ static struct yetty_ycore_void_result ygrid_process_bytes(struct yetty_yfigure_f
     return YETTY_OK_VOID();
 }
 
+/* Drop content (records, prims, complex-prim instances, per-cell
+ * buckets) WITHOUT touching the GPU resource set, binder, pipeline,
+ * atlases, or the font slots. Lets CREATE_CHILD on an existing id
+ * refresh a widget's content in place — followed by process_bytes
+ * with the new payload — so the binder cache survives and the next
+ * render is a cheap upload instead of a full pipeline rebuild. */
+static struct yetty_ycore_void_result ygrid_reset_content(struct yetty_yfigure_figure *self)
+{
+    struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
+    g->bytes_len = 0;
+    g->prim_count = 0;
+    for (uint32_t i = 0; i < g->figure_instance_count; i++) {
+        if (g->figure_instances[i]) {
+            yetty_ydraw_figure_destroy(g->figure_instances[i]);
+            g->figure_instances[i] = NULL;
+        }
+    }
+    g->figure_instance_count = 0;
+    if (g->cells) {
+        cells_clear(g);
+    }
+    g->staging_dirty = 1;
+    return YETTY_OK_VOID();
+}
+
 static const struct yetty_yfigure_figure_ops *ygrid_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
         .destroy = ygrid_destroy,
         .render = ygrid_render,
         .process_bytes = ygrid_process_bytes,
+        .reset_content = ygrid_reset_content,
     };
     return &ops;
 }

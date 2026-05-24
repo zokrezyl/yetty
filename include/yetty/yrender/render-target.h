@@ -125,6 +125,15 @@ struct yetty_yplatform_wgpu;
 void yetty_yrender_target_texture_set_wgpu(struct yetty_ydraw_target *target,
                                            struct yetty_yplatform_wgpu *wgpu);
 
+/* Plumb in the event loop so the present coro can schedule a catch-up
+ * RENDER after notify_render_skipped fired. Without this the texture
+ * target's notify_render_skipped is a no-op and the display lags one
+ * event behind the user's input (hover highlights delayed, etc.).
+ * Only meaningful on surface-backed targets. */
+struct yetty_yevent_event_loop;
+void yetty_yrender_target_texture_set_event_loop(struct yetty_ydraw_target *target,
+                                                 struct yetty_yevent_event_loop *event_loop);
+
 /*=============================================================================
  * VNC render target - renders to texture and sends to VNC clients
  *
