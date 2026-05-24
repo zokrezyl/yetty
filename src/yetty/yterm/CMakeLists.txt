@@ -2,7 +2,7 @@ add_library(yetty_yterm
     terminal.c
     text-layer.c
     ydraw-layer.c
-    shader-glyph-layer.c
+    shader-glyph-figure.c
     background-layer.c
     osc-args.c
 )
