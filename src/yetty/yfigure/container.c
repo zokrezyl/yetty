@@ -591,6 +591,21 @@ struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_yfigure_container_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yfigure_container *container = userdata;
+    if (!container) {
+        return YETTY_ERR(yetty_ycore_void, "container_process_input: NULL container");
+    }
+    for (;;) {
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_container_consume_envelope(container, sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "container_process_input: consume_envelope");
+        yetty_yplatform_coro_yield();
+    }
+}
+
 struct yetty_ycore_void_result yetty_yfigure_container_process_records(
     struct yetty_yfigure_container *container, const uint8_t *bytes, size_t bytes_len)
 {

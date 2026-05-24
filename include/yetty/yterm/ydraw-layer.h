@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <yetty/yterm/terminal.h>
+#include <yetty/ywire/wire-statemachine.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,11 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
     yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
     yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
     void *cursor_userdata);
+
+/* Wire-SM dispatch entry. Pass the layer's base pointer as userdata
+ * when registering via yetty_ywire_wire_statemachine_register. */
+struct yetty_ycore_void_result yetty_yterm_ydraw_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm);
 
 #ifdef __cplusplus
 }

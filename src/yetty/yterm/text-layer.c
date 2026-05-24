@@ -240,9 +240,6 @@ struct yetty_yterm_terminal_text_layer {
 
 /* Forward declarations */
 static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result text_layer_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result text_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);
@@ -676,7 +673,6 @@ static struct yetty_ycore_void_result text_layer_set_visual_zoom(
 /* Ops */
 static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
     .destroy = text_layer_destroy,
-    .process_input = text_layer_process_input,
     .resize_grid = text_layer_resize_grid,
     .set_visual_zoom = text_layer_set_visual_zoom,
     .get_gpu_resource_set = text_layer_get_gpu_resource_set,
@@ -1015,11 +1011,14 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
 /* Runs on the persistent default-layer coro spawned by the wire SM at
  * set_default. Never returns under normal operation — `sm_read` yields
  * when no raw bytes are deliverable, the SM scanner resumes us when
- * more arrive. A returned ERR would surface to the SM at the next tick. */
-static struct yetty_ycore_void_result text_layer_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine)
+ * more arrive. A returned ERR would surface to the SM at the next tick.
+ *
+ * userdata is the layer's base pointer (passed to set_default at
+ * registration time). */
+struct yetty_ycore_void_result yetty_yterm_text_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
+    struct yetty_yrender_terminal_layer *self = userdata;
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
 

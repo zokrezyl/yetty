@@ -435,22 +435,13 @@ static void walk_records(const uint8_t *bytes, size_t bytes_len, int depth)
  *=========================================================================*/
 
 struct raw_sink_layer {
-    struct yetty_yrender_terminal_layer base;
     uint64_t bytes_drained;
 };
 
-static struct yetty_ycore_void_result raw_sink_destroy(
-    struct yetty_yrender_terminal_layer *self)
-{
-    (void)self;
-    return YETTY_OK_VOID();
-}
-
 static struct yetty_ycore_void_result raw_sink_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *sm)
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
 {
-    struct raw_sink_layer *r = (struct raw_sink_layer *)self;
+    struct raw_sink_layer *r = userdata;
     uint8_t junk[1024];
     for (;;) {
         for (;;) {
@@ -467,13 +458,7 @@ static struct yetty_ycore_void_result raw_sink_process_input(
     }
 }
 
-static const struct yetty_yterm_terminal_layer_ops raw_sink_ops = {
-    .destroy = raw_sink_destroy,
-    .process_input = raw_sink_process_input,
-};
-
 struct envelope_mock_layer {
-    struct yetty_yrender_terminal_layer base;
     int expected_code;            /* the one OSC code we're registered for */
     uint8_t *buf;
     size_t   cap;
@@ -481,16 +466,6 @@ struct envelope_mock_layer {
     int      env_count;
     int      err_count;
 };
-
-static struct yetty_ycore_void_result envelope_mock_destroy(
-    struct yetty_yrender_terminal_layer *self)
-{
-    struct envelope_mock_layer *m = (struct envelope_mock_layer *)self;
-    free(m->buf);
-    m->buf = NULL;
-    m->cap = m->len = 0;
-    return YETTY_OK_VOID();
-}
 
 static int mock_grow(struct envelope_mock_layer *m, size_t need)
 {
@@ -515,10 +490,9 @@ static int mock_grow(struct envelope_mock_layer *m, size_t need)
  * dispatch bug; we surface it as an error so the analyzer doubles as a
  * dispatch correctness check. */
 static struct yetty_ycore_void_result envelope_mock_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *sm)
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
 {
-    struct envelope_mock_layer *m = (struct envelope_mock_layer *)self;
+    struct envelope_mock_layer *m = userdata;
 
     for (;;) {
         int code = yetty_ywire_wire_statemachine_code(sm);
@@ -612,11 +586,6 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
         yetty_yplatform_coro_yield();
     }
 }
-
-static const struct yetty_yterm_terminal_layer_ops envelope_mock_ops = {
-    .destroy = envelope_mock_destroy,
-    .process_input = envelope_mock_process_input,
-};
 
 /*===========================================================================
  * Input pumps — three forms (forkpty / stdin / file), all of them push
@@ -899,10 +868,9 @@ int main(int argc, char **argv)
      * out_carry — where unrecognised "ESC <x>" pairs are queued —
      * never drains and the scanner spins. */
     struct raw_sink_layer raw_sink = {0};
-    raw_sink.base.ops = &raw_sink_ops;
     {
-        struct yetty_ycore_void_result r =
-            yetty_ywire_wire_statemachine_set_default(sm, &raw_sink.base);
+        struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_set_default(
+            sm, raw_sink_process_input, &raw_sink);
         if (YETTY_IS_ERR(r)) {
             fprintf(stderr, "osc-analyzer: SM set_default failed: %s\n",
                     r.error.msg);
@@ -927,11 +895,10 @@ int main(int argc, char **argv)
         return 1;
     }
     for (int i = 0; i < kAnalyzedCodes_n; i++) {
-        mocks[i].base.ops = &envelope_mock_ops;
         mocks[i].expected_code = kAnalyzedCodes[i];
-        struct yetty_ycore_void_result r =
-            yetty_ywire_wire_statemachine_register(sm, kAnalyzedCodes[i],
-                                                   &mocks[i].base);
+        struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_register(
+            sm, YETTY_YWIRE_ENVELOPE_OSC, kAnalyzedCodes[i],
+            envelope_mock_process_input, &mocks[i]);
         if (YETTY_IS_ERR(r)) {
             fprintf(stderr,
                     "osc-analyzer: SM register code=%d failed: %s\n",

@@ -68,24 +68,9 @@ static const struct yetty_yui_view_ops terminal_view_ops = {
     .on_event = terminal_view_on_event,
 };
 
-/* Forward decl for the compositor SM shim's process_input. The shim
- * fronts the compositor (which isn't a terminal_layer) for the wire
- * SM, which only knows how to dispatch via layer->ops->process_input.
- * comp_sm_shim is `terminal->comp_sm_shim` — use container_of to
- * recover the terminal pointer and the compositor inside. */
-static struct yetty_ycore_void_result terminal_compositor_shim_process_input(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ywire_wire_statemachine *sm);
-
-static const struct yetty_yterm_terminal_layer_ops *terminal_compositor_shim_ops(void)
-{
-    static const struct yetty_yterm_terminal_layer_ops ops = {
-        .process_input = terminal_compositor_shim_process_input,
-        /* All other ops are NULL — the shim is never rendered, never
-         * scrolled, never queried by the terminal's layer loop. Only
-         * the wire-SM dispatch reaches it, and only for process_input. */
-    };
-    return &ops;
-}
+/* The compositor's wire-SM entry now lives in yfigure/container.c as
+ * yetty_yfigure_container_process_input — it's registered directly with
+ * userdata = terminal->root_container, no terminal-local wrapper. */
 
 struct yetty_yterm_terminal {
     struct yetty_yui_view view; /* MUST be first - allows cast to view */
@@ -162,11 +147,9 @@ struct yetty_yterm_terminal {
      * mint. */
     struct yetty_ygrid_factory_args figure_args;
 
-    /* Wire-SM shim. The SM only knows how to dispatch process_input
-     * via terminal_layer.ops — this static-base instance forwards its
-     * process_input to yetty_yfigure_container_consume_envelope. It
-     * lives only for SM registration; never added to layers[]. */
-    struct yetty_yrender_terminal_layer comp_sm_shim;
+    /* No wire-SM shim — the compositor's process_input is registered
+     * directly with the wire SM (userdata = terminal). The figure tree
+     * is reached via yetty_yfigure_container_as_figure(root_container). */
 
     /* Cached text-layer pointer — needed by the YGRID_USE_NEW_OSC=1
      * render path to keep text-layer ON while bypassing every other
@@ -1128,25 +1111,6 @@ static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterm_termi
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result terminal_compositor_shim_process_input(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ywire_wire_statemachine *sm)
-{
-    struct yetty_yterm_terminal *terminal =
-        container_of(self, struct yetty_yterm_terminal, comp_sm_shim);
-    if (!terminal->root_container) {
-        return YETTY_ERR(yetty_ycore_void, "compositor shim: root_container not built");
-    }
-    /* Hand the SM straight to the root container's process_input — the
-     * figure does the routing. This shim only exists because the SM
-     * still talks to terminal_layer; when layers become figures the
-     * shim vanishes and the SM dispatches the container directly. */
-    struct yetty_yfigure_figure *root = yetty_yfigure_container_as_figure(terminal->root_container);
-    for (;;) {
-        struct yetty_ycore_void_result r = root->ops->process_input(root, sm);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "comp_sm_shim: container process_input failed");
-        yetty_yplatform_coro_yield();
-    }
-}
 
 /* Terminal creation/destruction */
 
@@ -1272,8 +1236,8 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     ydebug("terminal_create: text_layer created and added");
 
     /* Register text layer as default (raw-passthrough) sink */
-    struct yetty_ycore_void_result rr =
-        yetty_ywire_wire_statemachine_set_default(terminal->sm, text_layer_res.value);
+    struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_set_default(
+        terminal->sm, yetty_yterm_text_layer_process_input, text_layer_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: wire_statemachine_set_default(text_layer) failed");
     ydebug("terminal_create: text_layer registered as default sink");
@@ -1307,14 +1271,21 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: terminal_layer_add(ydraw scrolling) failed");
     ydebug("terminal_create: ydraw scrolling layer created and added");
 
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_CLEAR,
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
+                                                YETTY_OSC_YDRAW_CLEAR,
+                                                yetty_yterm_ydraw_layer_process_input,
                                                 ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_CLEAR failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_BIN, ydraw_res.value);
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
+                                                YETTY_OSC_YDRAW_BIN,
+                                                yetty_yterm_ydraw_layer_process_input,
+                                                ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_BIN failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_OVERLAY,
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
+                                                YETTY_OSC_YDRAW_OVERLAY,
+                                                yetty_yterm_ydraw_layer_process_input,
                                                 ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_OVERLAY failed");
@@ -1355,22 +1326,30 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     yrdawn_res.value->request_render_fn = terminal_request_render_callback;
     yrdawn_res.value->request_render_userdata = terminal;
 
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YRDAWN_OSC_CS_HELLO,
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
+                                                YETTY_YRDAWN_OSC_CS_HELLO,
+                                                yetty_yterm_yrdawn_layer_process_input,
                                                 yrdawn_res.value);
     YETTY_RETURN_IF_ERR(
         yetty_yterm_terminal, rr,
         "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_HELLO failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YRDAWN_OSC_CS_CMD,
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
+                                                YETTY_YRDAWN_OSC_CS_CMD,
+                                                yetty_yterm_yrdawn_layer_process_input,
                                                 yrdawn_res.value);
     YETTY_RETURN_IF_ERR(
         yetty_yterm_terminal, rr,
         "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_CMD failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YRDAWN_OSC_CS_BULK,
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
+                                                YETTY_YRDAWN_OSC_CS_BULK,
+                                                yetty_yterm_yrdawn_layer_process_input,
                                                 yrdawn_res.value);
     YETTY_RETURN_IF_ERR(
         yetty_yterm_terminal, rr,
         "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_BULK failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YRDAWN_OSC_CS_BYE,
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
+                                                YETTY_YRDAWN_OSC_CS_BYE,
+                                                yetty_yterm_yrdawn_layer_process_input,
                                                 yrdawn_res.value);
     YETTY_RETURN_IF_ERR(
         yetty_yterm_terminal, rr,
@@ -1494,19 +1473,14 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     terminal->root_container = cont_res.value;
     ydebug("terminal_create: root container ready");
 
-    /* Wire-SM shim — the SM dispatches by `layer->ops->process_input`,
-     * so the compositor (which is NOT a layer) is wrapped in a thin
-     * static terminal_layer that forwards to yetty_yfigure_container_consume_envelope.
-     * The shim instance lives on the terminal struct; only its base
-     * pointer is given to the SM. */
-    terminal->comp_sm_shim.ops = terminal_compositor_shim_ops();
-    terminal->comp_sm_shim.grid_size.cols = cols;
-    terminal->comp_sm_shim.grid_size.rows = rows;
-    terminal->comp_sm_shim.cell_size = text_layer->cell_size;
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YCOMPOSITOR_BIN,
-                                                &terminal->comp_sm_shim);
+    /* Register the root container directly with the wire SM —
+     * userdata is the container itself; no terminal-local wrapper. */
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
+                                                YETTY_OSC_YCOMPOSITOR_BIN,
+                                                yetty_yfigure_container_process_input,
+                                                terminal->root_container);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
-                        "terminal_create: register compositor shim for YCOMPOSITOR_BIN");
+                        "terminal_create: register compositor for YCOMPOSITOR_BIN");
     ydebug("terminal_create: ycompositor registered for OSC %d", YETTY_OSC_YCOMPOSITOR_BIN);
 
     /* Create render targets for each layer */

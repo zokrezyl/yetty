@@ -124,8 +124,6 @@ static const char *yrdawn_layer_wgsl(void)
  *=========================================================================*/
 
 static struct yetty_ycore_void_result yrdawn_destroy(struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result yrdawn_process_input(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ywire_wire_statemachine *sm);
 static struct yetty_ycore_void_result yrdawn_resize_grid(struct yetty_yrender_terminal_layer *self,
                                                          struct yetty_ycore_grid_size gs,
                                                          struct yetty_ycore_pixel_size cs);
@@ -142,7 +140,6 @@ static const struct yetty_yterm_terminal_layer_ops *yrdawn_ops(void)
 {
     static const struct yetty_yterm_terminal_layer_ops ops = {
         .destroy = yrdawn_destroy,
-        .process_input = yrdawn_process_input,
         .resize_grid = yrdawn_resize_grid,
         .get_gpu_resource_set = yrdawn_get_gpu_resource_set,
         .render = yrdawn_render,
@@ -456,9 +453,10 @@ static struct yetty_ycore_void_result dispatch(struct yetty_yterm_yrdawn_layer *
  * Same shape as ymgui-layer's: accumulate until at_end, dispatch, repeat.
  *=========================================================================*/
 
-static struct yetty_ycore_void_result yrdawn_process_input(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ywire_wire_statemachine *sm)
+struct yetty_ycore_void_result yetty_yterm_yrdawn_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
 {
+    struct yetty_yrender_terminal_layer *self = userdata;
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)self;
 
     for (;;) {

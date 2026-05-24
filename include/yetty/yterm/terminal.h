@@ -83,31 +83,6 @@ typedef struct yetty_ycore_void_result (*yetty_yterm_clear_screen_fn)(void *user
 /* Layer ops */
 struct yetty_yterm_terminal_layer_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yrender_terminal_layer *self);
-    /* Pull-mode dispatch from the OSC state machine. Called by the SM
-   * either as the registered owner of an OSC code or as the default
-   * sink (raw bytes outside any envelope). The layer pulls decoded
-   * bytes via osc_statemachine_read and runs its own framing on top.
-   * Accessors usable inside this call:
-   *
-   *   - yetty_ywire_wire_statemachine_read(osc_statemachine, dst, n)
-   *       — copy up to n DECODED bytes (b64+lz4 already applied for
-   *         payloads; passthrough for raw); returns count copied.
-   *   - yetty_ywire_wire_statemachine_at_end(osc_statemachine)
-   *       — true once the framer reached the envelope terminator;
-   *         read() returns 0 forever in this dispatch.
-   *   - yetty_ywire_wire_statemachine_code(osc_statemachine)
-   *       — 0 for the default sink, the OSC code for an envelope
-   *         dispatch (e.g. 600001 = ydraw BIN).
-   *   - yetty_ywire_wire_statemachine_args(osc_statemachine)
-   *       — decoded args view (envelope dispatch only).
-   *
-   * The layer may return early at any byte boundary; the SM keeps
-   * its current_layer + scan position + decode state, so the next
-   * cycle re-enters this op and the layer resumes seamlessly.
-   */
-    struct yetty_ycore_void_result (*process_input)(
-        struct yetty_yrender_terminal_layer *self,
-        struct yetty_ywire_wire_statemachine *osc_statemachine);
     /* Single atomic update: grid (cols/rows) AND cell pixel size. The
      * canvas's grid_pixel area is `cols * cell_w x rows * cell_h`, and
      * widget/primitive coordinates are mapped to fragments via that

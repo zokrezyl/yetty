@@ -166,9 +166,6 @@ struct yetty_yterm_ydraw_layer {
 /* Forward declarations */
 static struct yetty_ycore_void_result ydraw_layer_destroy(
     struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result ydraw_layer_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ydraw_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);
@@ -262,7 +259,6 @@ static struct yetty_ycore_void_result ydraw_layer_set_visual_zoom(
 /* Ops */
 static const struct yetty_yterm_terminal_layer_ops ydraw_layer_ops = {
     .destroy = ydraw_layer_destroy,
-    .process_input = ydraw_layer_process_input,
     .resize_grid = ydraw_layer_resize_grid,
     .set_visual_zoom = ydraw_layer_set_visual_zoom,
     .get_gpu_resource_set = ydraw_layer_get_gpu_resource_set,
@@ -482,11 +478,13 @@ static struct yetty_ycore_void_result ydraw_layer_destroy(struct yetty_yrender_t
  *                        the outer for(;;) is reached only on the CLEAR
  *                        path. That's fine: only the layers registered
  *                        for CLEAR need the loop to survive that code.
- * YAML is no longer accepted on the wire — yaml is producer-side only. */
-static struct yetty_ycore_void_result ydraw_layer_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine)
+ * YAML is no longer accepted on the wire — yaml is producer-side only.
+ *
+ * userdata is the layer's base pointer. */
+struct yetty_ycore_void_result yetty_yterm_ydraw_layer_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
+    struct yetty_yrender_terminal_layer *self = userdata;
     struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
 
     for (;;) {

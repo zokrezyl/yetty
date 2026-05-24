@@ -407,9 +407,6 @@ static char *splice_marker(const char *template, size_t template_size, const cha
 /* Forward declarations */
 static struct yetty_ycore_void_result shader_glyph_destroy(
     struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result shader_glyph_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result shader_glyph_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);
@@ -435,7 +432,6 @@ static struct yetty_ycore_void_result shader_glyph_set_cursor(
 
 static const struct yetty_yterm_terminal_layer_ops shader_glyph_layer_ops = {
     .destroy = shader_glyph_destroy,
-    .process_input = shader_glyph_process_input,
     .resize_grid = shader_glyph_resize_grid,
     .set_visual_zoom = shader_glyph_set_visual_zoom,
     .get_gpu_resource_set = shader_glyph_get_gpu_resource_set,
@@ -623,16 +619,6 @@ static struct yetty_ycore_void_result shader_glyph_destroy(
     free(layer->shader_source);
     free(layer->instances);
     free(layer);
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result shader_glyph_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *osc_statemachine)
-{
-    (void)self;
-    (void)osc_statemachine;
-    /* Passive consumer of the text grid; not registered with the SM. */
     return YETTY_OK_VOID();
 }
 

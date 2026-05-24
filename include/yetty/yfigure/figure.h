@@ -135,14 +135,21 @@ struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create(
 
 /* Consume one full OSC envelope's body off the SM as a record stream
  * targeted at this (root) container. Loops until the SM signals
- * end-of-envelope. This is the top-level entry the terminal's wire-SM
- * coro spawns; nested containers use the bounded `process_input` op
- * instead.
+ * end-of-envelope. This is the per-envelope helper; nested containers
+ * use the bounded `process_input` figure op instead, and the wire-SM
+ * coro entry below wraps this in a forever loop.
  *
  * After this returns, the container's child set reflects every CREATE/
  * DELETE/UPDATE in the envelope. */
 struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
     struct yetty_yfigure_container *container, struct yetty_ywire_wire_statemachine *sm);
+
+/* Wire-SM coroutine entry. Pass the container pointer as `userdata`
+ * when registering via yetty_ywire_wire_statemachine_register. Loops
+ * forever: consume one envelope, yield, repeat — matching the
+ * "process_input must loop forever" contract of the wire SM. */
+struct yetty_ycore_void_result yetty_yfigure_container_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm);
 
 /* Shift every child rect arriving via admin CREATE_CHILD / SET_CHILD_RECT
  * records by (offset_x, offset_y). Producers emit coords in pane-local
