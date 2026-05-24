@@ -46,10 +46,6 @@ struct yetty_ymgui_pipeline;
 YETTY_YRESULT_DECLARE(yetty_ymgui_figure_ptr, struct yetty_ymgui_figure *);
 YETTY_YRESULT_DECLARE(yetty_ymgui_pipeline_ptr, struct yetty_ymgui_pipeline *);
 
-/* Result of a hit-test against the compositor's live ymgui figures.
- * figure_id == 0 means no figure was under the queried point. When
- * figure_id != 0, local_x/local_y are the cursor's coordinates in the
- * figure's own pixel space (origin = figure's top-left). */
 /* Callback the compositor uses to ship server-to-client ymgui OSCs
  * (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE / SC_FOCUS) back to the client process. The
  * compositor passes the OSC code + raw payload bytes; the host wraps
