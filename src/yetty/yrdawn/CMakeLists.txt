@@ -62,3 +62,49 @@ target_link_libraries(yetty_yrdawn
         # (poll(2), nanosleep) into the Windows build.
         yetty_yplatform_core
 )
+
+# yetty_yrdawn_server — desktop-side host of remote canvases.
+#
+# Holds the yfigure subclass (figure.c) and the per-client shared state
+# (session.c). The codegen dispatcher (server-dispatch.gen.c, or the
+# UNKNOWN_METHOD stub on platforms whose Dawn prebuilt is incomplete)
+# lives next to it. Hosts (yetty_yterm) link this library to get the
+# register_factory entrypoint; yframework's register_figure_factories
+# resolves it at link time.
+#
+# Skipped on webasm: the client end of the bridge runs in the wasm
+# process; the server only ever lives on the host that's hosting
+# canvases. The .gen.c also has incompatible-pointer-types issues
+# under emscripten's clang.
+if(NOT EMSCRIPTEN)
+    set(_yrdawn_server_dispatch ${CMAKE_CURRENT_SOURCE_DIR}/server-dispatch.gen.c)
+    # Same reasoning as the old yterm/CMakeLists.txt logic: mobile Dawn
+    # prebuilts don't export every entrypoint the generated dispatcher
+    # calls. Swap in the stub on those targets so the link succeeds and
+    # CMDs simply answer UNKNOWN_METHOD.
+    if(ANDROID OR YETTY_ANDROID OR YETTY_IOS OR YETTY_TVOS)
+        set(_yrdawn_server_dispatch ${CMAKE_CURRENT_SOURCE_DIR}/server-dispatch-stub.c)
+    endif()
+
+    add_library(yetty_yrdawn_server STATIC
+        figure.c
+        session.c
+        ${_yrdawn_server_dispatch}
+    )
+
+    target_include_directories(yetty_yrdawn_server BEFORE PUBLIC
+        ${YETTY_ROOT}/include/yetty/yrdawn
+    )
+    target_include_directories(yetty_yrdawn_server PUBLIC
+        ${YETTY_ROOT}/include
+    )
+
+    target_link_libraries(yetty_yrdawn_server PUBLIC
+        yetty_ycore
+        yetty_yfigure
+        yetty_yframework
+        yetty_yrender
+        yetty_ywire
+        webgpu
+    )
+endif()

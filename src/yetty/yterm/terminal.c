@@ -22,6 +22,7 @@
  * hit-test lives in yfigure now. */
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterm/client-input.h>
+#include <yetty/yrdawn/figure.h>
 #include <yetty/yrdawn/wire.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
@@ -39,7 +40,6 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/yterm/yrdawn-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
@@ -1111,7 +1111,6 @@ static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterm_termi
     return YETTY_OK_VOID();
 }
 
-
 /* Terminal creation/destruction */
 
 struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
@@ -1271,22 +1270,19 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: terminal_layer_add(ydraw scrolling) failed");
     ydebug("terminal_create: ydraw scrolling layer created and added");
 
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
-                                                YETTY_OSC_YDRAW_CLEAR,
-                                                yetty_yterm_ydraw_layer_process_input,
-                                                ydraw_res.value);
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_CLEAR,
+        yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_CLEAR failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
-                                                YETTY_OSC_YDRAW_BIN,
-                                                yetty_yterm_ydraw_layer_process_input,
-                                                ydraw_res.value);
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_BIN,
+        yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_BIN failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
-                                                YETTY_OSC_YDRAW_OVERLAY,
-                                                yetty_yterm_ydraw_layer_process_input,
-                                                ydraw_res.value);
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_OVERLAY,
+        yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_OVERLAY failed");
     ydebug("terminal_create: ydraw layer registered for OSC CLEAR/BIN/OVERLAY");
@@ -1312,49 +1308,11 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * container, the figures paint themselves, and ymgui-layer.c is
      * gone. */
 
-    /* yrdawn layer (WebGPU-over-OSC bridge — remote wasm process renders
-     * here as if our Dawn were its local GPU). */
-    struct yetty_yterm_terminal_layer_result yrdawn_res = yetty_yterm_yrdawn_layer_create(
-        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height, yetty_context);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, yrdawn_res,
-                        "terminal_create: yrdawn layer create failed");
-    add_r = yetty_yterm_terminal_layer_add(terminal, yrdawn_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
-                        "terminal_create: terminal_layer_add(yrdawn) failed");
-    yrdawn_res.value->emit_osc_fn = terminal_layer_emit_osc;
-    yrdawn_res.value->emit_osc_userdata = terminal;
-    yrdawn_res.value->request_render_fn = terminal_request_render_callback;
-    yrdawn_res.value->request_render_userdata = terminal;
-
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
-                                                YETTY_YRDAWN_OSC_CS_HELLO,
-                                                yetty_yterm_yrdawn_layer_process_input,
-                                                yrdawn_res.value);
-    YETTY_RETURN_IF_ERR(
-        yetty_yterm_terminal, rr,
-        "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_HELLO failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
-                                                YETTY_YRDAWN_OSC_CS_CMD,
-                                                yetty_yterm_yrdawn_layer_process_input,
-                                                yrdawn_res.value);
-    YETTY_RETURN_IF_ERR(
-        yetty_yterm_terminal, rr,
-        "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_CMD failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
-                                                YETTY_YRDAWN_OSC_CS_BULK,
-                                                yetty_yterm_yrdawn_layer_process_input,
-                                                yrdawn_res.value);
-    YETTY_RETURN_IF_ERR(
-        yetty_yterm_terminal, rr,
-        "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_BULK failed");
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
-                                                YETTY_YRDAWN_OSC_CS_BYE,
-                                                yetty_yterm_yrdawn_layer_process_input,
-                                                yrdawn_res.value);
-    YETTY_RETURN_IF_ERR(
-        yetty_yterm_terminal, rr,
-        "terminal_create: register yrdawn layer for YETTY_YRDAWN_OSC_CS_BYE failed");
-    ydebug("terminal_create: yrdawn layer registered for OSC 620000-620003");
+    /* yrdawn now flows through the figure-tree wire like ymgui — the
+     * factory args wired into yframework_register_figure_factories
+     * below carry the emit/request_render callbacks, and CREATE_CHILD
+     * kind=YRDAWN admin records inside YCOMPOSITOR_BIN mint each
+     * remote canvas. yrdawn-layer.c is gone. */
 
     /* Root container — new positioned-figure root of the rendering
      * stack. Owned directly by the terminal (NOT in the layers[]
@@ -1451,10 +1409,20 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                                 "terminal_create: ygrid register_factory_for_kind");
         }
 
-        /* Framework-owned figure kinds (ymgui today; yrdawn/ygui as
-         * they migrate). The framework holds the per-kind args bundles
-         * so terminal stays kind-agnostic — same call would serve any
-         * other host that builds its own registry. */
+        /* Framework-owned figure kinds (ymgui, yrdawn; ygui as it
+         * migrates). yrdawn's emit_osc / request_render are
+         * terminal-scoped — install them on the framework's per-kind
+         * bundle before registration so the freshly-minted yrdawn
+         * factory captures them. */
+        struct yetty_yrdawn_factory_args *yrdawn_args =
+            yetty_yframework_factory_args_yrdawn(yetty_context->runtime);
+        if (yrdawn_args) {
+            yrdawn_args->emit_osc_fn = terminal_layer_emit_osc;
+            yrdawn_args->emit_osc_user = terminal;
+            yrdawn_args->request_render_fn = terminal_request_render_callback;
+            yrdawn_args->request_render_user = terminal;
+        }
+
         struct yetty_ycore_void_result fr = yetty_yframework_register_figure_factories(
             yetty_context->runtime, terminal->figure_registry, yetty_context);
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, fr,
@@ -1475,10 +1443,9 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
 
     /* Register the root container directly with the wire SM —
      * userdata is the container itself; no terminal-local wrapper. */
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_OSC,
-                                                YETTY_OSC_YCOMPOSITOR_BIN,
-                                                yetty_yfigure_container_process_input,
-                                                terminal->root_container);
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN,
+        yetty_yfigure_container_process_input, terminal->root_container);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register compositor for YCOMPOSITOR_BIN");
     ydebug("terminal_create: ycompositor registered for OSC %d", YETTY_OSC_YCOMPOSITOR_BIN);

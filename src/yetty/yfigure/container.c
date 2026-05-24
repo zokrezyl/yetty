@@ -599,8 +599,7 @@ struct yetty_ycore_void_result yetty_yfigure_container_process_input(
         return YETTY_ERR(yetty_ycore_void, "container_process_input: NULL container");
     }
     for (;;) {
-        struct yetty_ycore_void_result r =
-            yetty_yfigure_container_consume_envelope(container, sm);
+        struct yetty_ycore_void_result r = yetty_yfigure_container_consume_envelope(container, sm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "container_process_input: consume_envelope");
         yetty_yplatform_coro_yield();
     }

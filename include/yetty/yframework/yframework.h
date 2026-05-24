@@ -123,6 +123,14 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
     struct yetty_yframework *framework, struct yetty_yfigure_registry *registry,
     const struct yetty_context *context);
 
+/* Per-host accessor for the yrdawn factory args. Host installs its
+ * own emit_osc / request_render before calling
+ * register_figure_factories. Returns NULL when the build has no yrdawn
+ * server (webasm). The pointer is owned by `framework`; do not free. */
+struct yetty_yrdawn_factory_args;
+struct yetty_yrdawn_factory_args *yetty_yframework_factory_args_yrdawn(
+    struct yetty_yframework *framework);
+
 #ifdef __cplusplus
 }
 #endif

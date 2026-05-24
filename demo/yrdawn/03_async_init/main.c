@@ -54,21 +54,14 @@ int main(void)
     FILE *trace = demo_trace_open("03-async-init");
 #define LOG(...) do { if (trace) fprintf(trace, __VA_ARGS__); } while (0)
 
-    struct yetty_yrdawn_client_ptr_result cr =
-        yetty_yrdawn_client_create(STDIN_FILENO, STDOUT_FILENO);
-    if (cr.ok != 1) {
-        LOG("03_async_init: client_create failed: %s\n", cr.error.msg);
+    struct yetty_yrdawn_client *c = NULL;
+    struct yetty_yrdawn_canvas *canvas =
+        demo_bringup_single_canvas(/*figure_id=*/1, 256.0f, 256.0f, trace, &c);
+    if (!canvas) {
+        LOG("03_async_init: bringup failed\n");
         return 1;
     }
-    struct yetty_yrdawn_client *c = cr.value;
-    demo_install_quit_on_q(c);
-
-    (void)yetty_yrdawn_client_send_hello(c);
-    for (int i = 0; i < 200 && !yetty_yrdawn_client_connected(c); ++i) {
-        (void)yetty_yrdawn_client_pump(c);
-        demo_sleep_ms(10);
-    }
-    LOG("03_async_init: connected=%d\n", yetty_yrdawn_client_connected(c));
+    LOG("03_async_init: connected=%d\n", yetty_yrdawn_canvas_connected(canvas));
 
     uint64_t instance = yrdawn_client_wgpuCreateInstance(c);
     LOG("03_async_init: instance=%lu\n", (unsigned long)instance);
@@ -127,7 +120,7 @@ cleanup_instance:
         demo_sleep_ms(10);
     }
 
-    (void)yetty_yrdawn_client_send_bye(c);
+    (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
     LOG("03_async_init: done\n");
     if (trace) fclose(trace);

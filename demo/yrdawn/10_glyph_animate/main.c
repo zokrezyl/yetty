@@ -216,8 +216,8 @@ static void unload_glyph(struct yetty_yrdawn_client *c, struct glyph_rt *g)
 
 /* Render one frame at `time`, read pixels back, present. Returns 1 on
  * success, 0 if the round-trip failed. */
-static int render_frame(struct yetty_yrdawn_client *c, uint64_t instance,
-                        uint64_t device, uint64_t queue, uint64_t view,
+static int render_frame(struct yetty_yrdawn_client *c, struct yetty_yrdawn_canvas *canvas,
+                        uint64_t instance, uint64_t device, uint64_t queue, uint64_t view,
                         uint64_t tex, uint64_t ubo, uint64_t readback,
                         const struct glyph_rt *g, float time,
                         uint8_t *pixels, size_t pixel_count)
@@ -264,7 +264,10 @@ static int render_frame(struct yetty_yrdawn_client *c, uint64_t instance,
                                           pixel_count, on_map, NULL);
     /* Server's dispatch ran WaitAny synchronously, so the REPLY is
      * already on the wire — pump once to deliver it. */
-    for (int i = 0; i < 50 && !s_map_done; ++i) {
+    /* Round-trip needs the BULK reply for the mapped pixels — under the
+     * figure-tree wire that's a few extra envelopes per frame. Give it
+     * up to ~500ms before declaring the frame failed. */
+    for (int i = 0; i < 500 && !s_map_done; ++i) {
         (void)yetty_yrdawn_client_pump(c);
         demo_sleep_ms(1);
     }
@@ -273,7 +276,7 @@ static int render_frame(struct yetty_yrdawn_client *c, uint64_t instance,
         (void)yrdawn_client_wgpuBufferReadMappedRange(c, readback, 0, pixels, pixel_count);
         (void)yrdawn_client_wgpuBufferUnmap(c, readback);
         struct yetty_ycore_void_result pr =
-            yetty_yrdawn_client_present_frame(c, W, H, pixels, pixel_count);
+            yetty_yrdawn_canvas_present_frame(canvas, W, H, pixels, pixel_count);
         if (pr.ok != 1) ok = 0;
     }
 
@@ -288,16 +291,14 @@ int main(void)
     FILE *trace = demo_trace_open("10-glyph-animate");
 #define LOG(...) do { if (trace) fprintf(trace, __VA_ARGS__); } while (0)
 
-    struct yetty_yrdawn_client_ptr_result cr =
-        yetty_yrdawn_client_create(STDIN_FILENO, STDOUT_FILENO);
-    if (cr.ok != 1) { LOG("10: client_create failed\n"); return 1; }
-    struct yetty_yrdawn_client *c = cr.value;
-    demo_install_quit_on_q(c);
-    (void)yetty_yrdawn_client_send_hello(c);
-    for (int i = 0; i < 200 && !yetty_yrdawn_client_connected(c); ++i) {
-        (void)yetty_yrdawn_client_pump(c); demo_sleep_ms(10);
+    struct yetty_yrdawn_client *c = NULL;
+    struct yetty_yrdawn_canvas *canvas =
+        demo_bringup_single_canvas(/*figure_id=*/1, (float)W, (float)H, trace, &c);
+    if (!canvas) {
+        LOG("10: bringup failed\n");
+        return 1;
     }
-    LOG("10: connected=%d\n", yetty_yrdawn_client_connected(c));
+    LOG("10: connected=%d\n", yetty_yrdawn_canvas_connected(canvas));
 
     uint64_t instance = yrdawn_client_wgpuCreateInstance(c);
     uint64_t adapter  = yrdawn_client_wgpuInstanceRequestAdapter(c, instance, on_adapter, NULL);
@@ -358,7 +359,7 @@ int main(void)
         int glyph_frames = 0;
         for (int f = 0; f < FRAMES_PER_GLYPH && !demo_quit_flag; ++f) {
             float t = (float)f * 0.05f;
-            if (!render_frame(c, instance, device, queue, view, tex, ubo,
+            if (!render_frame(c, canvas, instance, device, queue, view, tex, ubo,
                               readback, &g, t, pixels, pixel_count)) {
                 LOG("10: glyph %s frame %d failed\n", GLYPH_FILES[gi], f);
                 break;
@@ -385,7 +386,7 @@ cleanup_buffers:
 cleanup:
     (void)yrdawn_client_wgpuAdapterRelease(c, adapter);
     (void)yrdawn_client_wgpuInstanceRelease(c, instance);
-    (void)yetty_yrdawn_client_send_bye(c);
+    (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
     LOG("10: done\n");
     if (trace) fclose(trace);
