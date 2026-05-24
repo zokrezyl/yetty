@@ -52,6 +52,52 @@ struct yetty_ygui_render_ctx {
      * after create / CMD_ZERO. When 0: emit only widgets whose dirty
      * bit is set, prefixing each with a DELETE record. */
     int force_full_redraw;
+
+    /* YGRID nesting depth. 0 at engine_render entry. Incremented when
+     * a widget opens an ygrid scope (top-level CREATE_CHILD or nested
+     * CMD_GROUP); decremented on close. open_group_as_kind uses this
+     * to decide between CREATE_CHILD (depth=0) and CMD_GROUP (depth>0):
+     * a top-level widget mints one ygrid figure on the receiver; its
+     * descendants live as named entities (CMD_GROUP) inside that one
+     * ygrid's body. */
+    int ygrid_depth;
+
+    /* Absolute origin of the enclosing top-level ygrid figure. Set
+     * when open_group_as_kind opens a top-level CREATE_CHILD(YGRID)
+     * record; restored when that scope closes. Used to translate
+     * body prim coordinates from widget-local into FIGURE-LOCAL
+     * ABSOLUTE before they hit the wire — the receiver stores prim
+     * coords as-is and the shader expects them figure-local, so the
+     * translation has to happen producer-side.
+     *
+     * Why not "relative on the wire, translate on the receiver" (the
+     * canonical scene-canvas model)? Because per-type coord patching
+     * (SDF prims, glyph records, complex prims …) would have to live
+     * inside ygrid for every prim kind it can carry. Doing the math
+     * once here, in ctx, keeps the receiver coord-agnostic. CMD_GROUP
+     * on the wire is therefore just an entity marker — its body
+     * prims already carry figure-local coords. Move support would
+     * later replace this with the canonical relative model + a
+     * per-handler translate op.
+     *
+     * Formula for any widget:
+     *   ctx->offset_x = self->effective_x - figure_origin_x - self->x
+     *   ctx->offset_y = self->effective_y - figure_origin_y - self->y
+     * Top-level widget (self == figure): offset = -self->x → body
+     * coord = dx (figure-local). Nested widget: offset >= 0 → body
+     * coord = (widget-pos-relative-to-figure) + dx (figure-local). */
+    float figure_origin_x;
+    float figure_origin_y;
+
+    /* Side buffer for figures that can't live inside an ygrid body
+     * (yplot/yimage/yvideo/yzoo/yjungle/etc. — kinds with their own
+     * pipeline). When a non-YGRID widget is reached at ygrid_depth>0,
+     * its CREATE_CHILD record is appended here instead of the main
+     * buffer. engine_render appends deferred_buf to buffer after the
+     * tree walk so those figures land at the root container level
+     * as siblings of the chrome ygrid. NULL means "emit everything
+     * to ctx->buffer" (legacy path / tests). */
+    struct yetty_ydraw_draw_list *deferred_buf;
 };
 
 /* Wrap one widget's own drawables in a scene-canvas GROUP keyed by
@@ -70,6 +116,14 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *));
 
+/* Result type returned by open_group / open_group_as_kind. The value
+ * is an opaque marker (encoding byte offset + record kind + dest
+ * buffer + depth-bump flag — see YETTY_YGUI_GROUP_MARKER_* below) that
+ * the caller hands back to close_group. The sentinel
+ * YETTY_YGUI_GROUP_SKIPPED is a legitimate OK value meaning "the
+ * widget was clean and skipped" — close_group treats it as a no-op. */
+YETTY_YRESULT_DECLARE(yetty_ygui_group_marker, uint32_t);
+
 /* Open the widget's CREATE_CHILD record under an explicit figure-kind
  * code (instead of the default YGRID). Used by complex producer widgets
  * (yplot/yimage/yvideo/yzoo/yjungle) so their content lands as its own
@@ -78,20 +132,46 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
  *
  * The default-kind sibling, yetty_ygui_widget_open_group, is just this
  * with kind=YETTY_YFIGURE_KIND_YGRID. */
-uint32_t yetty_ygui_widget_open_group_as_kind(
+struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx, uint32_t kind,
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *));
 
-uint32_t yetty_ygui_widget_open_group(
+struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *));
 
-void yetty_ygui_widget_close_group(struct yetty_ygui_widget *self,
-                                   struct yetty_ygui_render_ctx *ctx, uint32_t marker);
+struct yetty_ycore_void_result yetty_ygui_widget_close_group(struct yetty_ygui_widget *self,
+                                                             struct yetty_ygui_render_ctx *ctx,
+                                                             uint32_t marker);
 
 #define YETTY_YGUI_GROUP_SKIPPED UINT32_MAX
+
+/* open_group_as_kind returns a uint32_t marker that close_group hands
+ * back to the matching ydraw end_*. The marker encodes both the byte
+ * offset of the record's length slot AND the record's kind (so
+ * close_group can call the right end_ helper) and the destination
+ * buffer (main vs deferred). Low 30 bits = byte offset (more than
+ * enough — ygui buffers are tens of KB at most). High two bits select
+ * the close path:
+ *
+ *   bit 31  bit 30   meaning
+ *      0       0     CREATE_CHILD record in ctx->buffer
+ *      0       1     CREATE_CHILD record in ctx->deferred_buf
+ *      1       0     CMD_GROUP record in ctx->buffer
+ *      1       1     (reserved)
+ *
+ * YETTY_YGUI_GROUP_SKIPPED is still the all-ones sentinel — its high
+ * two bits set don't collide with any real marker because the offset
+ * field would be 0x3FFFFFFF, far beyond any realistic buffer size. */
+#define YETTY_YGUI_GROUP_MARKER_OFFSET_MASK  0x1FFFFFFFu
+#define YETTY_YGUI_GROUP_MARKER_KIND_CMD_GRP 0x80000000u
+#define YETTY_YGUI_GROUP_MARKER_BUF_DEFERRED 0x40000000u
+/* close_group's matching decrement of ctx->ygrid_depth (open_group
+ * bumps depth between begin and close so descendant emits see the
+ * enclosing ygrid scope). 1 = bumped, 0 = not (non-YGRID kinds). */
+#define YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH 0x20000000u
 
 /*=============================================================================
  * Theme Structure

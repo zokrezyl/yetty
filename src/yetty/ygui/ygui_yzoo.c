@@ -169,9 +169,11 @@ static struct yetty_ycore_void_result yzoo_render_all(struct yetty_ygui_widget *
         return YETTY_OK_VOID();
     }
     self->was_rendered = 1;
-    uint32_t marker =
+    struct yetty_ygui_group_marker_result mr =
         yetty_ygui_widget_open_group_as_kind(self, ctx, YETTY_YFIGURE_KIND_YZOO, yzoo_render);
-    yetty_ygui_widget_close_group(self, ctx, marker);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "yzoo_render_all: open_group");
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "yzoo_render_all: close_group");
     return YETTY_OK_VOID();
 }
 

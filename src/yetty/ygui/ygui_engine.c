@@ -670,7 +670,24 @@ static struct yetty_ycore_void_result engine_rebuild_with_mode(struct yetty_ygui
     yetty_ygui_render_ctx_init(&ctx, engine->buffer, engine->theme);
     ctx.force_full_redraw = full_redraw;
 
-    /* Render all top-level widgets */
+    /* Allocate a per-frame deferred buffer. Non-YGRID figures (yplot /
+     * yimage / yvideo / yzoo / yjungle) that get reached from inside an
+     * enclosing window's ygrid body cannot live in that body (they need
+     * their own pipeline), so open_group_as_kind routes their
+     * CREATE_CHILD here. The bytes are concatenated to engine->buffer
+     * after the tree walk → they land at the root container level as
+     * siblings of the chrome ygrid. */
+    {
+        struct yetty_ydraw_draw_list_result dr =
+            yetty_ydraw_draw_list_config_buffer_create(NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr,
+                            "engine_rebuild: deferred buffer create failed");
+        ctx.deferred_buf = dr.value;
+    }
+
+    /* Render all top-level widgets. Errors are chained: bail to the
+     * cleanup tail on first widget error so the deferred buffer is
+     * always destroyed. */
     for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
         struct yetty_ycore_void_result r;
         if (w->vtable && w->vtable->render_all) {
@@ -679,12 +696,33 @@ static struct yetty_ycore_void_result engine_rebuild_with_mode(struct yetty_ygui
             r = yetty_ygui_widget_render_all_default(w, &ctx);
         }
         if (YETTY_IS_ERR(r)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = r;
-            } else {
-                yetty_ycore_error_destroy(r.error);
+            first_err = r;
+            break;
+        }
+    }
+
+    /* Drain deferred CREATE_CHILD records into the main buffer. They
+     * land AFTER every top-level widget's CREATE_CHILD has been
+     * appended, so on the receiver they're container-level siblings of
+     * the chrome ygrids — drawn on top of the window they're logically
+     * nested in (which matches their previous behaviour as flat
+     * top-level figures). Always destroy the deferred buffer; chain
+     * any drain error into first_err if it isn't already set. */
+    if (ctx.deferred_buf) {
+        if (YETTY_IS_OK(first_err)) {
+            const uint8_t *bytes = (const uint8_t *)yetty_ydraw_draw_list_data(ctx.deferred_buf);
+            size_t sz = yetty_ydraw_draw_list_size(ctx.deferred_buf);
+            if (bytes && sz > 0) {
+                struct yetty_ydraw_id_result wr =
+                    yetty_ydraw_draw_list_add_prim(engine->buffer, bytes, sz);
+                if (YETTY_IS_ERR(wr)) {
+                    first_err = YETTY_ERR(yetty_ycore_void,
+                                          "engine_rebuild: deferred buffer drain failed", wr);
+                }
             }
         }
+        yetty_ydraw_draw_list_destroy(ctx.deferred_buf);
+        ctx.deferred_buf = NULL;
     }
 
     /* Rebuild spatial grid with rendered widgets */

@@ -31,6 +31,11 @@ void yetty_ygui_render_ctx_init(struct yetty_ygui_render_ctx *ctx,
     ctx->clip_w = 0;
     ctx->clip_h = 0;
     ctx->has_clip = 0;
+    ctx->force_full_redraw = 0;
+    ctx->ygrid_depth = 0;
+    ctx->deferred_buf = NULL;
+    ctx->figure_origin_x = 0.0f;
+    ctx->figure_origin_y = 0.0f;
 }
 
 /*=============================================================================

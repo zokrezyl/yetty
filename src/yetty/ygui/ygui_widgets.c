@@ -161,67 +161,118 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
  * The group rect is parent-RELATIVE: (self->x, self->y, layout_w,
  * layout_h). The receiver accumulates the parent chain to resolve
  * coords back to absolute. */
-uint32_t yetty_ygui_widget_open_group_as_kind(
+struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx, uint32_t kind,
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *))
 {
     if (!self || !ctx || !ctx->buffer) {
-        return YETTY_YGUI_GROUP_SKIPPED;
+        return YETTY_ERR(yetty_ygui_group_marker, "open_group: NULL self/ctx/buffer");
     }
     /* Skip emission for clean widgets in incremental mode — the receiver
-     * already has the entity from a prior frame. */
+     * already has the entity from a prior frame. Skip is OK, not an
+     * error; the SKIPPED sentinel signals it. */
     if (!self->dirty && !ctx->force_full_redraw) {
-        return YETTY_YGUI_GROUP_SKIPPED;
+        return YETTY_OK(yetty_ygui_group_marker, YETTY_YGUI_GROUP_SKIPPED);
     }
-    /* No DELETE before CREATE. The receiver treats CREATE_CHILD on an
-     * existing id as an in-place swap of the figure pointer (the hash
-     * entry stays put, so uthash insertion order — the z-order — is
-     * preserved). DELETE is only emitted for widgets that are
-     * genuinely destroyed / unparented, via engine->pending_deletes
-     * which the engine flushes once per frame. */
 
-    /* New wire: every widget is a TOP-LEVEL child of the root container
-     * with ABSOLUTE coords. The layout pass resolved effective_x/y as
-     * `self->x + sum(ancestor x's)` — use that for the figure rect.
-     * No nesting on the wire, no parent-chain accumulation.
-     *
-     * Body prim coords stay widget-local. Render fns call
-     * `render_box(self->x + dx, …)` with self->x in PARENT-local space,
-     * so offset by -self->x to land at widget-local `dx` on the wire.
-     * (effective_x would only cancel for top-level widgets.) */
     float gx = (float)self->effective_x;
     float gy = (float)self->effective_y;
     float gw = (float)self->layout_w;
     float gh = (float)self->layout_h;
-    struct yetty_ydraw_id_result mark_res = yetty_ydraw_draw_list_begin_admin_create_child(
-        ctx->buffer, self->group_id, kind, gx, gy, gx + gw, gy + gh);
-    if (YETTY_IS_ERR(mark_res)) {
-        yetty_ycore_error_destroy(mark_res.error);
-        return YETTY_YGUI_GROUP_SKIPPED;
+
+    /* Three emission cases:
+     *   1. Top-level YGRID (ygrid_depth=0):
+     *        emit CREATE_CHILD(YGRID) into ctx->buffer; mints one
+     *        ygrid figure on the receiver. Descendants nest as
+     *        CMD_GROUP entities inside this ygrid's body.
+     *   2. Nested YGRID (ygrid_depth>0):
+     *        emit CMD_GROUP(id) into ctx->buffer — the bytes go inside
+     *        the enclosing ygrid's body and become a named entity.
+     *        No new figure on the receiver — same binder, same atlas,
+     *        same pipeline.
+     *   3. Non-YGRID widget (yplot/yimage/yvideo/…):
+     *        these need their own pipeline; can't live inside an ygrid
+     *        body. If at depth=0, emit CREATE_CHILD into ctx->buffer.
+     *        If at depth>0, route the CREATE_CHILD to ctx->deferred_buf
+     *        so it lands at the root container level as a sibling of
+     *        the enclosing window's ygrid (engine_render concatenates
+     *        deferred_buf after the main pass). */
+    uint32_t marker;
+    uint32_t depth_bit = 0;
+    if (kind == YETTY_YFIGURE_KIND_YGRID && ctx->ygrid_depth > 0) {
+        struct yetty_ydraw_id_result mark_res =
+            yetty_ydraw_draw_list_begin_group(ctx->buffer, self->group_id);
+        YETTY_RETURN_IF_ERR(yetty_ygui_group_marker, mark_res, "open_group: begin_group");
+        marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) |
+                 YETTY_YGUI_GROUP_MARKER_KIND_CMD_GRP;
+        depth_bit = YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH;
+    } else {
+        struct yetty_ydraw_draw_list *dst = ctx->buffer;
+        uint32_t buf_bit = 0;
+        if (kind != YETTY_YFIGURE_KIND_YGRID && ctx->ygrid_depth > 0 && ctx->deferred_buf) {
+            dst = ctx->deferred_buf;
+            buf_bit = YETTY_YGUI_GROUP_MARKER_BUF_DEFERRED;
+        }
+        struct yetty_ydraw_id_result mark_res = yetty_ydraw_draw_list_begin_admin_create_child(
+            dst, self->group_id, kind, gx, gy, gx + gw, gy + gh);
+        YETTY_RETURN_IF_ERR(yetty_ygui_group_marker, mark_res,
+                            "open_group: begin_admin_create_child");
+        marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) | buf_bit;
+        if (kind == YETTY_YFIGURE_KIND_YGRID) {
+            depth_bit = YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH;
+        }
+    }
+
+    /* Bump depth FOR THE LIFETIME of this group — render_fn, the
+     * caller's child-recursion, and the close_group call all run with
+     * the bumped depth. close_group decrements it via the marker bit.
+     * Only YGRID kinds nest; non-YGRID figures don't accept CMD_GROUP
+     * children, so they don't change the depth gate. */
+    int we_are_top_level_ygrid = (kind == YETTY_YFIGURE_KIND_YGRID && ctx->ygrid_depth == 0);
+    if (depth_bit) {
+        ctx->ygrid_depth++;
+        marker |= depth_bit;
+    }
+
+    /* Coordinate frame for the body:
+     *   render_box (and friends) emit prims at (caller_x + ctx->offset).
+     *   Callers pass PARENT-LOCAL coords (self->x + dx).
+     *   We want the wire to carry FIGURE-LOCAL absolute coords (=
+     *   self's position relative to the enclosing top-level ygrid
+     *   figure's origin + body dx) so the receiver stores them as-is
+     *   and the shader sees absolute. See ctx->figure_origin_x doc. */
+    if (we_are_top_level_ygrid) {
+        ctx->figure_origin_x = (float)self->effective_x;
+        ctx->figure_origin_y = (float)self->effective_y;
     }
 
     if (render_fn) {
         float saved_off_x = ctx->offset_x;
         float saved_off_y = ctx->offset_y;
-        ctx->offset_x = -(float)self->x;
-        ctx->offset_y = -(float)self->y;
+        ctx->offset_x = (float)self->effective_x - ctx->figure_origin_x - (float)self->x;
+        ctx->offset_y = (float)self->effective_y - ctx->figure_origin_y - (float)self->y;
         struct yetty_ycore_void_result r = render_fn(self, ctx);
-        if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
-        }
         ctx->offset_x = saved_off_x;
         ctx->offset_y = saved_off_y;
+        if (YETTY_IS_ERR(r)) {
+            /* Roll back the depth bump so close_group's matching
+             * decrement (which won't run — caller will bail) doesn't
+             * leave ygrid_depth negative on the next render. */
+            if (depth_bit) {
+                ctx->ygrid_depth--;
+            }
+            return YETTY_ERR(yetty_ygui_group_marker, "open_group: render_fn", r);
+        }
     }
-
-    return mark_res.value;
+    return YETTY_OK(yetty_ygui_group_marker, marker);
 }
 
 /* Convenience wrapper — most widgets ship as YGRID (the default kind for
  * widget chrome: boxes, borders, text). Producer widgets that need their
  * own kind tag on the wire (yplot/yimage/yvideo/yzoo/yjungle) call
  * open_group_as_kind directly. */
-uint32_t yetty_ygui_widget_open_group(
+struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *))
@@ -230,21 +281,47 @@ uint32_t yetty_ygui_widget_open_group(
 }
 
 /* Close a group previously opened by yetty_ygui_widget_open_group.
- * NO-OP when `marker == YETTY_YGUI_GROUP_SKIPPED`. */
-void yetty_ygui_widget_close_group(struct yetty_ygui_widget *self,
-                                   struct yetty_ygui_render_ctx *ctx, uint32_t marker)
+ * NO-OP when `marker == YETTY_YGUI_GROUP_SKIPPED`. The marker's high
+ * bits select which end_ helper to call and which buffer to patch;
+ * see YETTY_YGUI_GROUP_MARKER_* in ygui_internal.h. */
+struct yetty_ycore_void_result yetty_ygui_widget_close_group(struct yetty_ygui_widget *self,
+                                                             struct yetty_ygui_render_ctx *ctx,
+                                                             uint32_t marker)
 {
     if (!ctx || !ctx->buffer || marker == YETTY_YGUI_GROUP_SKIPPED) {
-        return;
+        return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result er =
-        yetty_ydraw_draw_list_end_admin_create_child(ctx->buffer, marker);
-    if (YETTY_IS_ERR(er)) {
-        yetty_ycore_error_destroy(er.error);
+    uint32_t offset = marker & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK;
+    int is_cmd_group = (marker & YETTY_YGUI_GROUP_MARKER_KIND_CMD_GRP) != 0;
+    int is_deferred = (marker & YETTY_YGUI_GROUP_MARKER_BUF_DEFERRED) != 0;
+    int bumped_depth = (marker & YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH) != 0;
+    struct yetty_ydraw_draw_list *buf = is_deferred ? ctx->deferred_buf : ctx->buffer;
+    if (!buf) {
+        buf = ctx->buffer;
+    }
+    struct yetty_ycore_void_result er = is_cmd_group
+                                            ? yetty_ydraw_draw_list_end_group(buf, offset)
+                                            : yetty_ydraw_draw_list_end_admin_create_child(buf,
+                                                                                           offset);
+    /* Depth must be restored AND dirty must be cleared even if end_
+     * failed — otherwise the bumped depth (and the widget's dirty
+     * bit) would leak into the next render. Treat as best-effort
+     * cleanup: chain the error if the end_ call failed. */
+    if (bumped_depth && ctx->ygrid_depth > 0) {
+        ctx->ygrid_depth--;
+        /* Leaving the outermost ygrid scope → no enclosing figure,
+         * reset the figure origin so the next top-level open captures
+         * a fresh one from its own widget. */
+        if (ctx->ygrid_depth == 0) {
+            ctx->figure_origin_x = 0.0f;
+            ctx->figure_origin_y = 0.0f;
+        }
     }
     if (self) {
         self->dirty = 0;
     }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "close_group: end record");
+    return YETTY_OK_VOID();
 }
 
 /* Convenience: open group, emit body, close — no nested children. Use
@@ -256,8 +333,11 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *))
 {
-    uint32_t marker = yetty_ygui_widget_open_group(self, ctx, render_fn);
-    yetty_ygui_widget_close_group(self, ctx, marker);
+    struct yetty_ygui_group_marker_result mr =
+        yetty_ygui_widget_open_group(self, ctx, render_fn);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "emit_self_in_group: open_group");
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "emit_self_in_group: close_group");
     return YETTY_OK_VOID();
 }
 
@@ -272,22 +352,14 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
     /* Layout pass already wrote effective_x/y and live x/y/w/h; nothing to
      * recompute here. */
     self->was_rendered = 1;
-    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
-    /* Open this widget's CREATE_CHILD record, emit my own body, close it
-     * — THEN recurse into children at the ROOT envelope level. The new
-     * wire is flat: each widget produces exactly one CREATE_CHILD record
-     * at the root container's level. Children's records aren't nested
-     * inside parents' bodies any more (the ygrid figure body is a flat
-     * stream of SDF/glyph records, no nested admin allowed). The UI
-     * hierarchy is preserved purely by the order in which records
-     * arrive — siblings render in z-order; absolute coords come from
-     * the layout pass (effective_x/y). */
-    {
-        uint32_t marker = yetty_ygui_widget_open_group(
-            self, ctx, self->vtable && self->vtable->render ? self->vtable->render : NULL);
-        yetty_ygui_widget_close_group(self, ctx, marker);
-    }
+    /* Open this widget's CREATE_CHILD (top-level) or CMD_GROUP (nested)
+     * record, emit my own body, recurse into children inside the same
+     * scope (so they nest as CMD_GROUP within this widget's body if I'm
+     * a YGRID figure), then close. */
+    struct yetty_ygui_group_marker_result mr = yetty_ygui_widget_open_group(
+        self, ctx, self->vtable && self->vtable->render ? self->vtable->render : NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "render_all_default: open_group");
 
     for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
         if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
@@ -300,15 +372,21 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
             r = yetty_ygui_widget_render_all_default(child, ctx);
         }
         if (YETTY_IS_ERR(r)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = r;
-            } else {
-                yetty_ycore_error_destroy(r.error);
+            /* Bail on first child error. Close our open scope first
+             * so depth + dirty bookkeeping stay consistent — that's
+             * resource cleanup, allowed even on the error path. */
+            struct yetty_ycore_void_result cr =
+                yetty_ygui_widget_close_group(self, ctx, mr.value);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
             }
+            return YETTY_ERR(yetty_ycore_void, "render_all_default: child", r);
         }
     }
 
-    return first_err;
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "render_all_default: close_group");
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -1500,29 +1578,34 @@ static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget 
      * coords; scrollable children get their effective_y mutated by
      * -scroll temporarily so the emitted figure rect lands at the
      * on-screen position. Both child sets recurse at root level. */
-    {
-        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, panel_render);
-        yetty_ygui_widget_close_group(self, ctx, marker);
-    }
+    struct yetty_ygui_group_marker_result mr =
+        yetty_ygui_widget_open_group(self, ctx, panel_render);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "panel_render_all: open_group");
+
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
     /* Header children (no scroll). */
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = self->first_child; child && YETTY_IS_OK(first_err);
+         child = child->next_sibling) {
         if (child->y < header_h) {
+            struct yetty_ycore_void_result r;
             if (child->vtable && child->vtable->render_all) {
-                child->vtable->render_all(child, ctx);
+                r = child->vtable->render_all(child, ctx);
             } else {
-                yetty_ygui_widget_render_all_default(child, ctx);
+                r = yetty_ygui_widget_render_all_default(child, ctx);
+            }
+            if (YETTY_IS_ERR(r)) {
+                first_err = YETTY_ERR(yetty_ycore_void, "panel_render_all: header child", r);
             }
         }
     }
 
     /* Scrollable children — mutate stored x/y by -scroll so the figure
-     * rect emitted by open_group reflects the scrolled position. The
-     * layout pass already wrote effective_x/y absolute, so we shift
-     * those too. */
+     * rect emitted by open_group reflects the scrolled position. */
     float scroll_x = self->data.panel.scroll_x;
     float scroll_y = self->data.panel.scroll_y;
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = self->first_child; child && YETTY_IS_OK(first_err);
+         child = child->next_sibling) {
         if (child->y >= header_h) {
             float saved_x = (float)child->x;
             float saved_y = (float)child->y;
@@ -1532,19 +1615,32 @@ static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget 
             child->y = (int)(saved_y - scroll_y);
             child->effective_x = saved_ex - scroll_x;
             child->effective_y = saved_ey - scroll_y;
+            struct yetty_ycore_void_result r;
             if (child->vtable && child->vtable->render_all) {
-                child->vtable->render_all(child, ctx);
+                r = child->vtable->render_all(child, ctx);
             } else {
-                yetty_ygui_widget_render_all_default(child, ctx);
+                r = yetty_ygui_widget_render_all_default(child, ctx);
             }
             child->x = (int)saved_x;
             child->y = (int)saved_y;
             child->effective_x = saved_ex;
             child->effective_y = saved_ey;
+            if (YETTY_IS_ERR(r)) {
+                first_err = YETTY_ERR(yetty_ycore_void, "panel_render_all: scroll child", r);
+            }
         }
     }
 
-    return YETTY_OK_VOID();
+    /* Always close — depth + dirty cleanup is required even on error. */
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    if (YETTY_IS_ERR(cr)) {
+        if (YETTY_IS_OK(first_err)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "panel_render_all: close_group", cr);
+        } else {
+            yetty_ycore_error_destroy(cr.error);
+        }
+    }
+    return first_err;
 }
 
 static int panel_on_scroll(struct yetty_ygui_widget *self, float dx, float dy, ygui_event_t *out)
@@ -2650,22 +2746,34 @@ static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget 
      * panel_render_all for the full rationale. */
     self->was_rendered = 1;
 
-    /* Flat-wire emission: open + close own group, recurse children at
-     * root level. */
-    {
-        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, popup_render);
-        yetty_ygui_widget_close_group(self, ctx, marker);
-    }
+    /* Open own group, recurse children inside the same scope so they
+     * nest as CMD_GROUP entities in our ygrid body, then close. */
+    struct yetty_ygui_group_marker_result mr =
+        yetty_ygui_widget_open_group(self, ctx, popup_render);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "popup_render_all: open_group");
 
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    for (struct yetty_ygui_widget *child = self->first_child; child && YETTY_IS_OK(first_err);
+         child = child->next_sibling) {
+        struct yetty_ycore_void_result r;
         if (child->vtable && child->vtable->render_all) {
-            child->vtable->render_all(child, ctx);
+            r = child->vtable->render_all(child, ctx);
         } else {
-            yetty_ygui_widget_render_all_default(child, ctx);
+            r = yetty_ygui_widget_render_all_default(child, ctx);
+        }
+        if (YETTY_IS_ERR(r)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "popup_render_all: child", r);
         }
     }
-
-    return YETTY_OK_VOID();
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    if (YETTY_IS_ERR(cr)) {
+        if (YETTY_IS_OK(first_err)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "popup_render_all: close_group", cr);
+        } else {
+            yetty_ycore_error_destroy(cr.error);
+        }
+    }
+    return first_err;
 }
 
 /* Returns 1 if (lx, ly) falls inside the close-button × glyph rect. */
@@ -2975,19 +3083,17 @@ static struct yetty_ycore_void_result collapsing_header_render_all(
      * test treated every click as "below the header" and propagated. */
     self->was_rendered = 1;
 
+    /* Open own group, recurse children inside the scope so they nest as
+     * CMD_GROUP entities in our ygrid body. Children skipped when the
+     * collapser is closed. */
+    struct yetty_ygui_group_marker_result mr =
+        yetty_ygui_widget_open_group(self, ctx, collapsing_header_render);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "collapsing_header_render_all: open_group");
+
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
-
-    /* Flat-wire emission: open + close own group (header strip only),
-     * recurse children at the root envelope level. Children are
-     * skipped when the collapser is closed. */
-    {
-        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, collapsing_header_render);
-        yetty_ygui_widget_close_group(self, ctx, marker);
-    }
-
     if ((self->flags & YETTY_YGUI_FLAG_OPEN) && self->first_child) {
-        for (struct yetty_ygui_widget *child = self->first_child; child;
-             child = child->next_sibling) {
+        for (struct yetty_ygui_widget *child = self->first_child;
+             child && YETTY_IS_OK(first_err); child = child->next_sibling) {
             if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
                 continue;
             }
@@ -2998,15 +3104,20 @@ static struct yetty_ycore_void_result collapsing_header_render_all(
                 r = yetty_ygui_widget_render_all_default(child, ctx);
             }
             if (YETTY_IS_ERR(r)) {
-                if (YETTY_IS_OK(first_err)) {
-                    first_err = r;
-                } else {
-                    yetty_ycore_error_destroy(r.error);
-                }
+                first_err = YETTY_ERR(yetty_ycore_void, "collapsing_header_render_all: child", r);
             }
         }
     }
 
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    if (YETTY_IS_ERR(cr)) {
+        if (YETTY_IS_OK(first_err)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "collapsing_header_render_all: close_group",
+                                  cr);
+        } else {
+            yetty_ycore_error_destroy(cr.error);
+        }
+    }
     return first_err;
 }
 
@@ -3777,15 +3888,15 @@ static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *
     }
     self->was_rendered = 1;
 
-    /* Flat-wire emission: open + close own group (selection background),
-     * recurse children at the root envelope level. */
-    {
-        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, list_render);
-        yetty_ygui_widget_close_group(self, ctx, marker);
-    }
+    /* Open own group (selection background), recurse children inside the
+     * scope so they nest as CMD_GROUP entities in our ygrid body. */
+    struct yetty_ygui_group_marker_result mr =
+        yetty_ygui_widget_open_group(self, ctx, list_render);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "list_render_all: open_group");
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = self->first_child; child && YETTY_IS_OK(first_err);
+         child = child->next_sibling) {
         if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
             continue;
         }
@@ -3795,13 +3906,19 @@ static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *
         } else {
             r = yetty_ygui_widget_render_all_default(child, ctx);
         }
-        if (YETTY_IS_ERR(r) && YETTY_IS_OK(first_err)) {
-            first_err = r;
-        } else if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "list_render_all: child", r);
         }
     }
 
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    if (YETTY_IS_ERR(cr)) {
+        if (YETTY_IS_OK(first_err)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "list_render_all: close_group", cr);
+        } else {
+            yetty_ycore_error_destroy(cr.error);
+        }
+    }
     return first_err;
 }
 
@@ -4567,13 +4684,11 @@ static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_wid
     }
     self->was_rendered = 1;
 
-    /* Flat-wire emission: open + close own group (header chrome only),
-     * then recurse the children-list at the root envelope level when
-     * expanded. */
-    {
-        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, tree_node_render);
-        yetty_ygui_widget_close_group(self, ctx, marker);
-    }
+    /* Open own group (header chrome only), recurse the children-list
+     * INSIDE the scope when expanded, then close. */
+    struct yetty_ygui_group_marker_result mr =
+        yetty_ygui_widget_open_group(self, ctx, tree_node_render);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "tree_node_render_all: open_group");
 
     struct yetty_ygui_widget *kids = self->data.tree_node.children_list;
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
@@ -4583,8 +4698,19 @@ static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_wid
         } else {
             first_err = yetty_ygui_widget_render_all_default(kids, ctx);
         }
+        if (YETTY_IS_ERR(first_err)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "tree_node_render_all: kids", first_err);
+        }
     }
 
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    if (YETTY_IS_ERR(cr)) {
+        if (YETTY_IS_OK(first_err)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "tree_node_render_all: close_group", cr);
+        } else {
+            yetty_ycore_error_destroy(cr.error);
+        }
+    }
     return first_err;
 }
 
@@ -6143,17 +6269,18 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
     }
     float scroll = self->data.scrollarea.scroll_y;
 
-    /* Flat-wire emission: open + close the scrollarea's own group first
-     * (chrome only — bg/scrollbar), THEN recurse children at the root
-     * envelope level. Children's figure rects are shifted by -scroll
-     * via temporary effective_y mutation so they land on-screen. */
-    {
-        uint32_t marker = yetty_ygui_widget_open_group(self, ctx, scrollarea_render);
-        yetty_ygui_widget_close_group(self, ctx, marker);
-    }
+    /* Open the scrollarea's own group (chrome only — bg/scrollbar),
+     * recurse children INSIDE the scope so they nest as CMD_GROUP
+     * entities in our ygrid body. Children's figure rects are shifted
+     * by -scroll via temporary effective_y mutation so they land
+     * on-screen. */
+    struct yetty_ygui_group_marker_result mr =
+        yetty_ygui_widget_open_group(self, ctx, scrollarea_render);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "scrollarea_render_all: open_group");
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = self->first_child; child && YETTY_IS_OK(first_err);
+         child = child->next_sibling) {
         if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
             continue;
         }
@@ -6170,11 +6297,7 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
         child->y = (int)saved_y;
         child->effective_y = saved_ey;
         if (YETTY_IS_ERR(r)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = r;
-            } else {
-                yetty_ycore_error_destroy(r.error);
-            }
+            first_err = YETTY_ERR(yetty_ycore_void, "scrollarea_render_all: child", r);
         }
     }
 
@@ -6188,6 +6311,14 @@ static struct yetty_ycore_void_result scrollarea_render_all(struct yetty_ygui_wi
         }
     }
 
+    struct yetty_ycore_void_result cr = yetty_ygui_widget_close_group(self, ctx, mr.value);
+    if (YETTY_IS_ERR(cr)) {
+        if (YETTY_IS_OK(first_err)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "scrollarea_render_all: close_group", cr);
+        } else {
+            yetty_ycore_error_destroy(cr.error);
+        }
+    }
     return first_err;
 }
 
