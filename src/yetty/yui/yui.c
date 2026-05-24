@@ -48,6 +48,9 @@
 #include <yetty/yplatform/window-manager.h>
 
 #include "config-dialog.h"
+#include "debug-window.h"
+
+#include <yetty/ywire/wire-statemachine.h>
 #include "tabbar.h"
 
 struct yetty_yui {
@@ -181,6 +184,20 @@ struct yetty_yui {
     } *splitters;
     size_t splitter_count;
     size_t splitter_cap;
+
+    /* Per-pane debug window widgets. yui creates one panel + label per
+     * pane in the active workspace and positions it absolutely at the
+     * pane's top-right corner. Same lifecycle pattern as `splitters`:
+     * walked + reconciled every render against the active workspace's
+     * tile tree. */
+    struct yetty_yui_debug_window_entry {
+        yetty_ycore_object_id pane_id;
+        yetty_ycore_object_id workspace_id;
+        struct yetty_yui_debug_window *dw;
+        int seen; /* per-sync mark */
+    } *debug_windows;
+    size_t debug_window_count;
+    size_t debug_window_cap;
 
     /* Last cursor shape we asked the OS to display. Cached so the
      * MOUSE_MOVE → cursor decision can skip the cross-thread post when
@@ -934,6 +951,13 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         yui->font = NULL;
     }
     free(yui->splitters);
+    /* Debug window widgets were owned by the engine (destroyed above);
+     * free only the per-pane bookkeeping wrappers and the entry array. */
+    for (size_t i = 0; i < yui->debug_window_count; i++) {
+        free(yui->debug_windows[i].dw);
+        yui->debug_windows[i].dw = NULL;
+    }
+    free(yui->debug_windows);
     free(yui);
     return YETTY_OK_VOID();
 }
@@ -1174,6 +1198,166 @@ static void yui_splitter_on_change(struct yetty_ygui_widget *widget, float delta
 }
 
 /*===========================================================================
+ * Per-pane debug window reconciliation
+ *
+ * Mirrors yui_splitters_sync exactly — array of entries keyed by pane_id,
+ * walked recursively against the active workspace's tile tree on every
+ * frame. Entries that disappear (workspace switched, pane closed, …) are
+ * removed; new panes get a fresh debug window widget tree.
+ *===========================================================================*/
+
+static struct yetty_yui_debug_window_entry *yui_debug_window_find_entry(
+    struct yetty_yui *yui, yetty_ycore_object_id pane_id)
+{
+    if (!yui) {
+        return NULL;
+    }
+    for (size_t i = 0; i < yui->debug_window_count; i++) {
+        if (yui->debug_windows[i].pane_id == pane_id) {
+            return &yui->debug_windows[i];
+        }
+    }
+    return NULL;
+}
+
+static struct yetty_yui_debug_window_entry *yui_debug_window_alloc_entry(struct yetty_yui *yui)
+{
+    if (yui->debug_window_count == yui->debug_window_cap) {
+        size_t new_cap = yui->debug_window_cap ? yui->debug_window_cap * 2 : 4;
+        struct yetty_yui_debug_window_entry *arr =
+            realloc(yui->debug_windows, new_cap * sizeof(*yui->debug_windows));
+        if (!arr) {
+            return NULL;
+        }
+        yui->debug_windows = arr;
+        yui->debug_window_cap = new_cap;
+    }
+    struct yetty_yui_debug_window_entry *e = &yui->debug_windows[yui->debug_window_count++];
+    memset(e, 0, sizeof(*e));
+    return e;
+}
+
+static void yui_debug_window_entry_destroy_widget(struct yetty_yui_debug_window_entry *e)
+{
+    if (!e) {
+        return;
+    }
+    if (e->dw) {
+        struct yetty_ycore_void_result r = yetty_yui_debug_window_destroy(e->dw);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+        e->dw = NULL;
+    }
+}
+
+static void yui_debug_window_remove_at(struct yetty_yui *yui, size_t idx)
+{
+    if (!yui || idx >= yui->debug_window_count) {
+        return;
+    }
+    yui_debug_window_entry_destroy_widget(&yui->debug_windows[idx]);
+    if (idx != yui->debug_window_count - 1) {
+        yui->debug_windows[idx] = yui->debug_windows[yui->debug_window_count - 1];
+    }
+    yui->debug_window_count--;
+}
+
+static void yui_debug_window_walk_tree(struct yetty_yui *yui, struct yetty_yui_tile *tile,
+                                       yetty_ycore_object_id workspace_id)
+{
+    if (!tile) {
+        return;
+    }
+
+    if (yetty_yui_tile_type(tile) == YETTY_YUI_TILE_SPLIT) {
+        yui_debug_window_walk_tree(yui, yetty_yui_tile_split_first(tile), workspace_id);
+        yui_debug_window_walk_tree(yui, yetty_yui_tile_split_second(tile), workspace_id);
+        return;
+    }
+
+    yetty_ycore_object_id pane_id = yetty_yui_tile_id(tile);
+    struct yetty_yui_rect b = yetty_yui_tile_bounds(tile);
+
+    struct yetty_yui_debug_window_entry *e = yui_debug_window_find_entry(yui, pane_id);
+    if (!e) {
+        e = yui_debug_window_alloc_entry(yui);
+        if (!e) {
+            return;
+        }
+        e->pane_id = pane_id;
+        e->workspace_id = workspace_id;
+        struct yetty_yui_debug_window_ptr_result dr =
+            yetty_yui_debug_window_create(yui->engine, pane_id);
+        if (YETTY_IS_ERR(dr)) {
+            ywarn("yui: debug_window_create pane=%llu failed: %s", (unsigned long long)pane_id,
+                  dr.error.msg);
+            yetty_ycore_error_destroy(dr.error);
+            /* Drop the empty entry so we retry next sync. */
+            yui->debug_window_count--;
+            return;
+        }
+        e->dw = dr.value;
+    } else {
+        e->workspace_id = workspace_id;
+    }
+    e->seen = 1;
+
+    if (e->dw) {
+        struct yetty_ycore_void_result lr = yetty_yui_debug_window_layout(e->dw, b.x, b.y, b.w, b.h);
+        if (YETTY_IS_ERR(lr)) {
+            yetty_ycore_error_destroy(lr.error);
+        }
+
+        /* Pull wire-stats from the pane's terminal (if it is a
+         * terminal — other view kinds get cleared). Live pull is fine:
+         * the SM is single-threaded with us and the snapshot is O(60)
+         * arithmetic over a small fixed array. */
+        struct yetty_yui_view *view = yetty_yui_tile_pane_active_view(tile);
+        struct yetty_yterm_terminal *term = yetty_yterm_terminal_from_view(view);
+        struct yetty_ywire_wire_statemachine *sm =
+            term ? yetty_yterm_terminal_wire_sm(term) : NULL;
+        if (sm) {
+            struct yetty_ywire_stats_snapshot s =
+                yetty_ywire_wire_statemachine_stats_snapshot(sm);
+            struct yetty_ycore_void_result sr =
+                yetty_yui_debug_window_set_stats(e->dw, &s);
+            if (YETTY_IS_ERR(sr)) {
+                yetty_ycore_error_destroy(sr.error);
+            }
+        } else {
+            struct yetty_ycore_void_result sr =
+                yetty_yui_debug_window_set_stats(e->dw, NULL);
+            if (YETTY_IS_ERR(sr)) {
+                yetty_ycore_error_destroy(sr.error);
+            }
+        }
+    }
+}
+
+static void yui_debug_windows_sync(struct yetty_yui *yui)
+{
+    if (!yui || !yui->engine || !yui->tabbar_model) {
+        return;
+    }
+    struct yetty_yui_workspace *ws = yetty_yui_tabbar_active_workspace(yui->tabbar_model);
+    yetty_ycore_object_id ws_id = ws ? yetty_yui_workspace_id(ws) : 0;
+    struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
+
+    for (size_t i = 0; i < yui->debug_window_count; i++) {
+        yui->debug_windows[i].seen = 0;
+    }
+    if (root && ws_id != 0) {
+        yui_debug_window_walk_tree(yui, root, ws_id);
+    }
+    for (size_t i = yui->debug_window_count; i-- > 0;) {
+        if (!yui->debug_windows[i].seen) {
+            yui_debug_window_remove_at(yui, i);
+        }
+    }
+}
+
+/*===========================================================================
  * Render
  *===========================================================================*/
 
@@ -1193,6 +1377,9 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
 
     /* Same reconciliation pattern for the per-split divider widgets. */
     yui_splitters_sync(yui);
+
+    /* And for the per-pane debug window overlays. */
+    yui_debug_windows_sync(yui);
 
     /* When dirty, rerun layout + render_all into engine->buffer, then
      * push the bytes into yui's compositor via process_records. No PTY,
@@ -1277,6 +1464,7 @@ int yetty_yui_is_dirty(const struct yetty_yui *yui)
     struct yetty_yui *mut = (struct yetty_yui *)yui;
     yui_titlebar_sync(mut);
     yui_splitters_sync(mut);
+    yui_debug_windows_sync(mut);
     return mut->engine ? yetty_ygui_engine_is_dirty(mut->engine) : 0;
 }
 
