@@ -719,8 +719,15 @@ static struct yetty_ycore_void_result entity_lookup_or_create(struct yetty_ygrid
     }
     uint32_t existing = id_index_lookup(g, external_id);
     if (existing != YGRID_INVALID_SLOT) {
-        /* Re-opening an existing scope. parent_slot must match the
-         * entity's recorded parent — different parent => caller error. */
+        /* Re-opening an existing scope. The producer's incremental
+         * path emits CMD_GROUP(id, new_body) when a widget is dirty;
+         * the body's prims REPLACE the entity's previous content, so
+         * drop the old prims (out of cells + tombstone in g->prims +
+         * reset the entity's prim_indices list) before returning. The
+         * entity's children are NOT touched — dirty children re-emit
+         * via their own CMD_GROUP scope (which lands here and clears
+         * them in turn); clean children's prims survive untouched. */
+        entity_drop_prims(g, &g->entities[existing]);
         *out_slot = existing;
         return YETTY_OK_VOID();
     }
@@ -1398,12 +1405,53 @@ void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
  * render path can pull it in when the font set changes mid-frame. */
 static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid_grid *grid);
 
+/* Defined further down (in the factory section). Declared here so the
+ * render path can recompute grid dims when the figure's rect changes. */
+static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *out_cols,
+                                 uint32_t *out_rows);
+
+/* Recompute grid_cols/grid_rows from the figure's current rect (which
+ * may have changed since create / last resize). When the dims drift,
+ * free the old cells, allocate fresh ones at the new layout, and
+ * re-bucket every live prim. Tombstoned prims (entity_slot ==
+ * YGRID_INVALID_SLOT) are skipped — they were dropped from the
+ * staging walk already. Called from the render path so the next
+ * staging rebuild sees correctly-bucketed cells. */
+static struct yetty_ycore_void_result resize_grid_dims_if_needed(struct yetty_ygrid_grid *g)
+{
+    uint32_t want_cols;
+    uint32_t want_rows;
+    ygrid_dims_from_rect(g->base.rect, &want_cols, &want_rows);
+    if (want_cols == g->grid_cols && want_rows == g->grid_rows) {
+        return YETTY_OK_VOID();
+    }
+    size_t old_n = (size_t)g->grid_cols * (size_t)g->grid_rows;
+    cells_free(g->cells, old_n);
+    g->cells = NULL;
+    g->grid_cols = want_cols;
+    g->grid_rows = want_rows;
+    struct yetty_ycore_void_result ar = cells_alloc(g);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "ygrid: cells_alloc after dim change");
+    for (uint32_t i = 0; i < g->prim_count; i++) {
+        if (g->prims[i].entity_slot == YGRID_INVALID_SLOT) {
+            continue;
+        }
+        struct yetty_ycore_void_result br = bucket_prim(g, i);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ygrid: re-bucket after resize");
+    }
+    g->staging_dirty = 1;
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *self,
                                                    struct yetty_ydraw_target *target)
 {
     struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
     ydebug("ygrid_render: rect=(%.1f,%.1f)-(%.1f,%.1f) prims=%u staging_dirty=%d", self->rect.min.x,
            self->rect.min.y, self->rect.max.x, self->rect.max.y, g->prim_count, g->staging_dirty);
+
+    struct yetty_ycore_void_result rr = resize_grid_dims_if_needed(g);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ygrid_render: resize_grid_dims_if_needed");
 
     if (g->staging_dirty) {
         struct yetty_ycore_void_result gr = rebuild_grid_staging(g);
@@ -1767,9 +1815,9 @@ static struct yetty_ycore_void_result load_layer_shader(struct yetty_ygrid_grid 
     struct yetty_yconfig_config *config = context->runtime->config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char path[512];
-    snprintf(path, sizeof(path), "%s/ydraw-layer.wgsl", shaders_dir);
+    snprintf(path, sizeof(path), "%s/ygrid.wgsl", shaders_dir);
     struct yetty_ycore_buffer_result file_result = yetty_ycore_read_file(path);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, file_result, "ygrid: read ydraw-layer.wgsl");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, file_result, "ygrid: read ygrid.wgsl");
     grid->layer_shader_code = file_result.value;
     return YETTY_OK_VOID();
 }
@@ -2034,6 +2082,33 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     return YETTY_OK(yetty_ygrid_grid_ptr, g);
 }
 
+/* Target pixel size for one spatial-bucketing cell. The pre-Ycompositor
+ * scene-canvas used the terminal text-cell grid (~12×24 px) so prims
+ * bucketed across thousands of cells and the shader's per-pixel loop
+ * only iterated the prims actually overlapping that pixel's cell. The
+ * 1×1 grid that replaced it piled every prim into one cell, blowing
+ * past the shader's 64-prim per-cell loop cap. ~32 px keeps cells
+ * coarse enough to amortise the bucketing CPU work while still
+ * leaving each cell with only a handful of overlapping prims. */
+#define YGRID_TARGET_CELL_PX 32u
+
+static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *out_cols,
+                                 uint32_t *out_rows)
+{
+    float w = rect.max.x - rect.min.x;
+    float h = rect.max.y - rect.min.y;
+    uint32_t cols = (uint32_t)((w + (float)YGRID_TARGET_CELL_PX - 1.0f) / (float)YGRID_TARGET_CELL_PX);
+    uint32_t rows = (uint32_t)((h + (float)YGRID_TARGET_CELL_PX - 1.0f) / (float)YGRID_TARGET_CELL_PX);
+    if (cols == 0u) {
+        cols = 1u;
+    }
+    if (rows == 0u) {
+        rows = 1u;
+    }
+    *out_cols = cols;
+    *out_rows = rows;
+}
+
 /* Factory used by yetty_yfigure_registry_mint. `user` is a
  * (borrowed) `yetty_ygrid_factory_args *` carrying the default font and
  * (optional) complex-prim factory. NULL `user` is allowed — produces
@@ -2043,10 +2118,10 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_r
                                                             const struct yetty_context *context,
                                                             void *user)
 {
-    /* 1x1 grid — ygreeter widgets are flat prim stores; the spatial-
-     * cell bucketing isn't useful for variable widget rects. */
+    uint32_t grid_cols, grid_rows;
+    ygrid_dims_from_rect(rect, &grid_cols, &grid_rows);
     struct yetty_ygrid_grid_ptr_result gr =
-        yetty_ygrid_create(rect, /*grid_cols=*/1u, /*grid_rows=*/1u, context);
+        yetty_ygrid_create(rect, grid_cols, grid_rows, context);
     if (YETTY_IS_ERR(gr)) {
         return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: create", gr);
     }

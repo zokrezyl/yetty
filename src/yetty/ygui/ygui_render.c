@@ -36,6 +36,8 @@ void yetty_ygui_render_ctx_init(struct yetty_ygui_render_ctx *ctx,
     ctx->deferred_buf = NULL;
     ctx->figure_origin_x = 0.0f;
     ctx->figure_origin_y = 0.0f;
+    ctx->parent_abs_x = 0.0f;
+    ctx->parent_abs_y = 0.0f;
 }
 
 /*=============================================================================

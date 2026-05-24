@@ -16,6 +16,7 @@ set(MODULE_SHADERS
     ${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl
     ${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl
     ${YETTY_ROOT}/src/yetty/yterm/shader-glyph-layer.wgsl
+    ${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl
     ${YETTY_ROOT}/src/yetty/yrender/blend.wgsl
     # Generated SDF dispatcher + sdf_* functions (gen-sdf-code.py output).
     # ydraw-layer attaches it as a child resource set at runtime; merging

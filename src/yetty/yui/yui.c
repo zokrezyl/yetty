@@ -1403,23 +1403,11 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
     if (yui->engine && yetty_ygui_engine_is_dirty(yui->engine)) {
         int full_redraw = yui->engine->needs_full_redraw || !yui->yui_first_frame_done;
         yetty_ydraw_draw_list_clear(yui->engine->buffer);
-        if (full_redraw) {
-            struct yetty_ycore_void_result zr =
-                yetty_ydraw_draw_list_add_admin_clear_all(yui->engine->buffer);
-            if (YETTY_IS_ERR(zr)) {
-                yetty_ycore_error_destroy(zr.error);
-            }
-            yui->engine->pending_delete_count = 0;
-        } else {
-            for (uint32_t i = 0; i < yui->engine->pending_delete_count; i++) {
-                struct yetty_ycore_void_result dr =
-                    yetty_ydraw_draw_list_add_admin_delete_child(
-                        yui->engine->buffer, yui->engine->pending_deletes[i]);
-                if (YETTY_IS_ERR(dr)) {
-                    yetty_ycore_error_destroy(dr.error);
-                }
-            }
-            yui->engine->pending_delete_count = 0;
+        struct yetty_ycore_void_result fd =
+            yetty_ygui_engine_emit_pending_deletes(yui->engine, full_redraw);
+        if (YETTY_IS_ERR(fd)) {
+            ywarn("yui_render: emit_pending_deletes: %s", fd.error.msg);
+            yetty_ycore_error_destroy(fd.error);
         }
         struct yetty_ycore_void_result rr =
             yetty_ygui_engine_rebuild_with_mode(yui->engine, full_redraw);

@@ -195,6 +195,15 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_end_admin_create_child(
 const void *yetty_ydraw_draw_list_data(const struct yetty_ydraw_draw_list *buf);
 size_t yetty_ydraw_draw_list_size(const struct yetty_ydraw_draw_list *buf);
 
+/* Truncate the byte stream back to `size` bytes. Used to discard a
+ * partially-written record (e.g. begin_admin_create_child emitted but
+ * the body's render_fn failed) so the receiver never sees a dangling
+ * begin without its matching end. Capacity is untouched. Errors:
+ * NULL buf, or size > current buffer size (caller bug — would extend
+ * into uninitialized memory). */
+struct yetty_ycore_void_result yetty_ydraw_draw_list_truncate(
+    struct yetty_ydraw_draw_list *buf, size_t size);
+
 /* Serialize the whole buffer (scene_bounds + primitives + text_spans) into
  * a single binary blob, tagged with a magic header. The receiver passes the
  * raw bytes into create_from_bytes() and recognises the magic to restore all
