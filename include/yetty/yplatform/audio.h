@@ -48,52 +48,43 @@ extern "C" {
 
 struct yetty_yplatform_audio_device;
 
-YETTY_YRESULT_DECLARE(yetty_yplatform_audio_device_ptr,
-                      struct yetty_yplatform_audio_device *);
+YETTY_YRESULT_DECLARE(yetty_yplatform_audio_device_ptr, struct yetty_yplatform_audio_device *);
 
 /* Open a playback device for `sample_rate` Hz, `channels` channels of
  * interleaved float32. Typical: 48000, 2. Device is created in the
  * stopped state. */
-struct yetty_yplatform_audio_device_ptr_result
-yetty_yplatform_audio_device_create(uint32_t sample_rate, uint32_t channels);
+struct yetty_yplatform_audio_device_ptr_result yetty_yplatform_audio_device_create(
+    uint32_t sample_rate, uint32_t channels);
 
-void yetty_yplatform_audio_device_destroy(
-    struct yetty_yplatform_audio_device *dev);
+void yetty_yplatform_audio_device_destroy(struct yetty_yplatform_audio_device *dev);
 
 /* Start / stop the backend callback. write_pcm may be called either
  * before start() (the data buffers until then) or after — either order
  * is safe. */
-struct yetty_ycore_void_result
-yetty_yplatform_audio_device_start(struct yetty_yplatform_audio_device *dev);
+struct yetty_ycore_void_result yetty_yplatform_audio_device_start(
+    struct yetty_yplatform_audio_device *dev);
 
-struct yetty_ycore_void_result
-yetty_yplatform_audio_device_stop(struct yetty_yplatform_audio_device *dev);
+struct yetty_ycore_void_result yetty_yplatform_audio_device_stop(
+    struct yetty_yplatform_audio_device *dev);
 
 /* Push interleaved float32 PCM into the device's ring. `frames` is the
  * count of multi-channel frames (NOT samples); the buffer size is
  * frames * channels * sizeof(float). Returns the number of frames
  * actually consumed — may be < frames when the ring is full. */
-struct yetty_ycore_size_result
-yetty_yplatform_audio_device_write_pcm(
-    struct yetty_yplatform_audio_device *dev,
-    const float *pcm,
-    size_t frames);
+struct yetty_ycore_size_result yetty_yplatform_audio_device_write_pcm(
+    struct yetty_yplatform_audio_device *dev, const float *pcm, size_t frames);
 
 /* Current playback clock: seconds of audio the device has drained out
  * since start(). The yvideo A/V sync uses this as the master clock. */
-double yetty_yplatform_audio_device_played_out_sec(
-    const struct yetty_yplatform_audio_device *dev);
+double yetty_yplatform_audio_device_played_out_sec(const struct yetty_yplatform_audio_device *dev);
 
 /* Discard everything currently queued in the device's ring. Used by
  * the seek path so post-seek audio doesn't mix with pre-seek bytes. */
-void yetty_yplatform_audio_device_flush(
-    struct yetty_yplatform_audio_device *dev);
+void yetty_yplatform_audio_device_flush(struct yetty_yplatform_audio_device *dev);
 
-uint32_t yetty_yplatform_audio_device_sample_rate(
-    const struct yetty_yplatform_audio_device *dev);
+uint32_t yetty_yplatform_audio_device_sample_rate(const struct yetty_yplatform_audio_device *dev);
 
-uint32_t yetty_yplatform_audio_device_channels(
-    const struct yetty_yplatform_audio_device *dev);
+uint32_t yetty_yplatform_audio_device_channels(const struct yetty_yplatform_audio_device *dev);
 
 #ifdef __cplusplus
 }

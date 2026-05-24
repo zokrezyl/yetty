@@ -76,9 +76,9 @@ struct yetty_yframework_gpu_context {
  *                 use it instead of digging through runtime each time.
  */
 struct yetty_context {
-    struct yetty_yframework              *runtime;
+    struct yetty_yframework *runtime;
     struct yetty_yplatform_pty_factory *pty_factory;
-    struct yetty_yevent_event_loop     *event_loop;
+    struct yetty_yevent_event_loop *event_loop;
 };
 
 /* Result type */

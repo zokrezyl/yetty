@@ -68,8 +68,7 @@ static void post_event(struct yetty_yplatform_glfw_window_manager *m,
     if (!m->output_pipe) {
         return;
     }
-    struct yetty_ycore_size_result wr =
-        m->output_pipe->ops->write(m->output_pipe, ev, sizeof(*ev));
+    struct yetty_ycore_size_result wr = m->output_pipe->ops->write(m->output_pipe, ev, sizeof(*ev));
     if (!YETTY_IS_OK(wr) || wr.value != sizeof(*ev)) {
         return;
     }
@@ -122,8 +121,7 @@ static void glfw_window_manager_set_cursor(struct yetty_yplatform_window_manager
 {
     struct yetty_yplatform_glfw_window_manager *m =
         container_of(self, struct yetty_yplatform_glfw_window_manager, base);
-    struct yetty_yui_event ev = {.type = YETTY_YCORE_SET_CURSOR,
-                                 .set_cursor = {.shape = shape}};
+    struct yetty_yui_event ev = {.type = YETTY_YCORE_SET_CURSOR, .set_cursor = {.shape = shape}};
     post_event(m, &ev);
 }
 
@@ -140,12 +138,12 @@ static void glfw_window_manager_resize_by(struct yetty_yplatform_window_manager 
     post_event(m, &ev);
 }
 
-static void glfw_window_manager_begin_interactive_move(
-    struct yetty_yplatform_window_manager *self)
+static void glfw_window_manager_begin_interactive_move(struct yetty_yplatform_window_manager *self)
 {
     struct yetty_yplatform_glfw_window_manager *m =
         container_of(self, struct yetty_yplatform_glfw_window_manager, base);
-    ydebug("WMOVETRACE: [render-thread] begin_interactive_move -> posting WINDOW_BEGIN_INTERACTIVE_MOVE");
+    ydebug("WMOVETRACE: [render-thread] begin_interactive_move -> posting "
+           "WINDOW_BEGIN_INTERACTIVE_MOVE");
     struct yetty_yui_event ev = {.type = YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE};
     post_event(m, &ev);
 }
@@ -156,7 +154,8 @@ static void glfw_window_manager_begin_interactive_resize(
     struct yetty_yplatform_glfw_window_manager *m =
         container_of(self, struct yetty_yplatform_glfw_window_manager, base);
     ydebug("WMOVETRACE: [render-thread] begin_interactive_resize(edge=%d) -> "
-           "posting WINDOW_BEGIN_INTERACTIVE_RESIZE", edge);
+           "posting WINDOW_BEGIN_INTERACTIVE_RESIZE",
+           edge);
     struct yetty_yui_event ev = {.type = YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_RESIZE,
                                  .window_begin_resize = {.edge = edge}};
     post_event(m, &ev);
@@ -249,7 +248,8 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         break;
     case YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_RESIZE:
         ydebug("WMOVETRACE: [main-thread] received WINDOW_BEGIN_INTERACTIVE_RESIZE "
-               "edge=%d, platform=%d", event->window_begin_resize.edge, glfwGetPlatform());
+               "edge=%d, platform=%d",
+               event->window_begin_resize.edge, glfwGetPlatform());
         /* Same Wayland-vs-X11 split as the move helper. The wayland.c
          * implementation runtime-checks the platform and no-ops on X11;
          * X11 keeps using per-pixel WINDOW_RESIZE_BY. */
@@ -259,8 +259,7 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         break;
     case YETTY_YCORE_SET_CURSOR: {
         int shape = event->set_cursor.shape;
-        if (shape < 0 ||
-            (size_t)shape >= sizeof(m->cursors) / sizeof(m->cursors[0])) {
+        if (shape < 0 || (size_t)shape >= sizeof(m->cursors) / sizeof(m->cursors[0])) {
             break;
         }
         if (shape == m->applied_shape) {
@@ -272,11 +271,20 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         if (!m->cursors[shape] && shape != YETTY_YCORE_CURSOR_DEFAULT) {
             int glfw_shape = GLFW_ARROW_CURSOR;
             switch (shape) {
-            case YETTY_YCORE_CURSOR_HRESIZE: glfw_shape = GLFW_HRESIZE_CURSOR; break;
-            case YETTY_YCORE_CURSOR_VRESIZE: glfw_shape = GLFW_VRESIZE_CURSOR; break;
-            case YETTY_YCORE_CURSOR_IBEAM:   glfw_shape = GLFW_IBEAM_CURSOR;   break;
-            case YETTY_YCORE_CURSOR_HAND:    glfw_shape = GLFW_HAND_CURSOR;    break;
-            default: break;
+            case YETTY_YCORE_CURSOR_HRESIZE:
+                glfw_shape = GLFW_HRESIZE_CURSOR;
+                break;
+            case YETTY_YCORE_CURSOR_VRESIZE:
+                glfw_shape = GLFW_VRESIZE_CURSOR;
+                break;
+            case YETTY_YCORE_CURSOR_IBEAM:
+                glfw_shape = GLFW_IBEAM_CURSOR;
+                break;
+            case YETTY_YCORE_CURSOR_HAND:
+                glfw_shape = GLFW_HAND_CURSOR;
+                break;
+            default:
+                break;
             }
             m->cursors[shape] = glfwCreateStandardCursor(glfw_shape);
         }
@@ -303,8 +311,12 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         /* Minimum size — anything smaller than a couple of cells makes
          * the terminal grid degenerate and risks divide-by-zero or
          * negative-bound math downstream. Screen-coord minimums. */
-        if (nw < 200) nw = 200;
-        if (nh < 100) nh = 100;
+        if (nw < 200) {
+            nw = 200;
+        }
+        if (nh < 100) {
+            nh = 100;
+        }
         glfwSetWindowSize(m->window, nw, nh);
         yetty_yplatform_os_event_invalidate_click_pairing(m->window);
         break;
@@ -340,8 +352,7 @@ struct yetty_yplatform_window_manager_ptr_result yetty_yplatform_window_manager_
     }
     struct yetty_yplatform_glfw_window_manager *m = calloc(1, sizeof(*m));
     if (!m) {
-        return YETTY_ERR(yetty_yplatform_window_manager_ptr,
-                         "window_manager_create: alloc failed");
+        return YETTY_ERR(yetty_yplatform_window_manager_ptr, "window_manager_create: alloc failed");
     }
     m->base.ops = &glfw_window_manager_ops;
     m->window = os_window;

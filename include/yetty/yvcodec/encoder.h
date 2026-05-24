@@ -56,12 +56,10 @@ void yetty_yvcodec_encoder_destroy(struct yetty_yvcodec_encoder *enc);
  * A rate-control skip surfaces as `out->size == 0` — treat it as "no frame
  * this tick, resubmit a catch-up later".
  */
-struct yetty_ycore_void_result yetty_yvcodec_encoder_encode(struct yetty_yvcodec_encoder *enc,
-                                                            const uint8_t *y_plane,
-                                                            const uint8_t *u_plane,
-                                                            const uint8_t *v_plane,
-                                                            uint32_t y_stride, uint32_t uv_stride,
-                                                            struct yetty_yvcodec_encoded_frame *out);
+struct yetty_ycore_void_result yetty_yvcodec_encoder_encode(
+    struct yetty_yvcodec_encoder *enc, const uint8_t *y_plane, const uint8_t *u_plane,
+    const uint8_t *v_plane, uint32_t y_stride, uint32_t uv_stride,
+    struct yetty_yvcodec_encoded_frame *out);
 
 /* Force the next encoded frame to be an IDR (keyframe). Used on new VNC
  * client connect so the newcomer gets a valid stream from frame 1. */

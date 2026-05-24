@@ -28,8 +28,7 @@
  * i.e. what gets handed to the GPU storage_buffer). */
 static size_t storage_words(const struct yetty_yplot_buffers *buffers)
 {
-    size_t w = 1 /* bytecode_len */ + buffers->bytecode_len
-             + 1 /* data_count   */;
+    size_t w = 1 /* bytecode_len */ + buffers->bytecode_len + 1 /* data_count   */;
     for (size_t i = 0; i < buffers->data_count; i++) {
         w += 1 /* len_i */ + buffers->data[i].count;
     }
@@ -41,8 +40,7 @@ size_t yetty_yplot_uniforms_serialized_size(const struct yetty_yplot_uniforms *u
 {
     (void)uniforms;
     size_t total_words = 2 /* type_id + payload_size */
-                       + YETTY_YPLOT_UNIFORMS_WORDS
-                       + storage_words(buffers);
+                         + YETTY_YPLOT_UNIFORMS_WORDS + storage_words(buffers);
     return total_words * sizeof(uint32_t);
 }
 

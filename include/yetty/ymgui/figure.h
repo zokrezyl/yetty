@@ -54,15 +54,14 @@ YETTY_YRESULT_DECLARE(yetty_ymgui_pipeline_ptr, struct yetty_ymgui_pipeline *);
  * (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE / SC_FOCUS) back to the client process. The
  * compositor passes the OSC code + raw payload bytes; the host wraps
  * them in a yface envelope and writes to the PTY. */
-typedef struct yetty_ycore_void_result (*yetty_ymgui_emit_osc_fn)(
-    int osc_code, const void *data, size_t size, void *user);
+typedef struct yetty_ycore_void_result (*yetty_ymgui_emit_osc_fn)(int osc_code, const void *data,
+                                                                  size_t size, void *user);
 
 /* Callback the compositor fires when a YETTY_OSC_CS_CLIENT_INPUT_SUB
  * envelope arrives. Updates the host's terminal-wide input subscription
  * bitmask. Returns a Result so the host can fail back to the compositor
  * (e.g. emit_yface failed shipping a TERM_RESIZE on rising edge). */
-typedef struct yetty_ycore_void_result (*yetty_ymgui_term_input_sub_fn)(
-    uint32_t flags, void *user);
+typedef struct yetty_ycore_void_result (*yetty_ymgui_term_input_sub_fn)(uint32_t flags, void *user);
 
 /* Shared pipeline lifecycle. The compositor (or any host that owns
  * multiple ymgui figures) builds one lazily on first ymgui OSC and
@@ -73,35 +72,32 @@ typedef struct yetty_ycore_void_result (*yetty_ymgui_term_input_sub_fn)(
 struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(
     const struct yetty_context *context);
 
-struct yetty_ycore_void_result yetty_ymgui_pipeline_destroy(
-    struct yetty_ymgui_pipeline *pipeline);
+struct yetty_ycore_void_result yetty_ymgui_pipeline_destroy(struct yetty_ymgui_pipeline *pipeline);
 
 /* Create at `rect` (absolute target pixel space). The pipeline pointer
  * is borrowed and must outlive the figure. Frame + atlas start empty;
  * the figure renders nothing until both have been set at least once. */
 struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create(
-    struct yetty_ycore_rectangle rect,
-    struct yetty_ymgui_pipeline *pipeline,
+    struct yetty_ycore_rectangle rect, struct yetty_ymgui_pipeline *pipeline,
     const struct yetty_context *context);
 
 /* Upcast. Stable pointer. */
-struct yetty_yfigure_figure *yetty_ymgui_figure_as_figure(
-    struct yetty_ymgui_figure *figure);
+struct yetty_yfigure_figure *yetty_ymgui_figure_as_figure(struct yetty_ymgui_figure *figure);
 
 /* Replace the decoded ImGui frame. Expects the wire shape documented
  * in <yetty/ymgui/wire.h> (frame_header + per-cmd-list mesh). Bytes
  * are copied; the figure marks itself dirty so the compositor repaints
  * the rect next pass. */
-struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(
-    struct yetty_ymgui_figure *figure,
-    const uint8_t *frame_bytes, size_t frame_size);
+struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_ymgui_figure *figure,
+                                                            const uint8_t *frame_bytes,
+                                                            size_t frame_size);
 
 /* Replace the font atlas (R8 today; matches ImGui's Alpha8 atlas).
  * Pixel data is copied to a fresh WGPUTexture on next render. */
-struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(
-    struct yetty_ymgui_figure *figure,
-    const uint8_t *atlas_bytes, size_t atlas_size,
-    uint32_t atlas_w, uint32_t atlas_h);
+struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_ymgui_figure *figure,
+                                                            const uint8_t *atlas_bytes,
+                                                            size_t atlas_size, uint32_t atlas_w,
+                                                            uint32_t atlas_h);
 
 /*===========================================================================
  * Figure-kind factory registration.
@@ -132,9 +128,8 @@ struct yetty_ymgui_factory_args {
 /* Register the YMGUI factory under YETTY_YFIGURE_KIND_YMGUI. `args` is
  * borrowed; the host owns its lifetime and MUST keep it alive while the
  * registry references it. Errors if the kind is already registered. */
-struct yetty_ycore_void_result yetty_ymgui_register_factory(
-    struct yetty_yfigure_registry *registry,
-    struct yetty_ymgui_factory_args *args);
+struct yetty_ycore_void_result yetty_ymgui_register_factory(struct yetty_yfigure_registry *registry,
+                                                            struct yetty_ymgui_factory_args *args);
 
 /* Tear down the lazily-built pipeline (if any). Safe to call when no
  * pipeline was ever built; in that case the args are simply zeroed. */
@@ -144,8 +139,7 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
 /* Downcast helper. Returns the typed pointer when `base` is actually
  * an ymgui figure (identified by its ops vtable), NULL otherwise. Use
  * this to filter the heterogeneous children of a yfigure container. */
-struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(
-    struct yetty_yfigure_figure *base);
+struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base);
 
 #ifdef __cplusplus
 }

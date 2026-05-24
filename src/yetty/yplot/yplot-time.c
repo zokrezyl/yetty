@@ -20,7 +20,7 @@
 #include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/time.h>
-#include <yetty/yplot/yplot.h>  /* YETTY_YPLOT_FLAG_USES_TIME */
+#include <yetty/yplot/yplot.h> /* YETTY_YPLOT_FLAG_USES_TIME */
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -28,7 +28,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define YPLOT_ANIMATION_PERIOD_MS 16  /* ~60 Hz */
+#define YPLOT_ANIMATION_PERIOD_MS 16 /* ~60 Hz */
 
 /* Index of the `time` uniform inside yplot's per-instance RS. Must
  * match the slot populated in yplot-gen.c's populate_rs (currently
@@ -53,12 +53,16 @@ struct yplot_time_instance_state {
 
 static struct yplot_time_factory_state *fs_get_or_init(struct yetty_ydraw_concrete_factory *factory)
 {
-    if (!factory) return NULL;
+    if (!factory) {
+        return NULL;
+    }
     if (factory->hook_data) {
         return (struct yplot_time_factory_state *)factory->hook_data;
     }
     struct yplot_time_factory_state *fs = calloc(1, sizeof(*fs));
-    if (!fs) return NULL;
+    if (!fs) {
+        return NULL;
+    }
     fs->event_loop = factory->event_loop;
     fs->timer_id = -1;
     factory->hook_data = fs;
@@ -105,7 +109,9 @@ static struct yetty_ycore_void_result subscribe(struct yetty_ydraw_concrete_fact
 static void unsubscribe(struct yetty_ydraw_concrete_factory *factory,
                         struct yetty_yevent_event_listener *listener)
 {
-    if (!factory) return;
+    if (!factory) {
+        return;
+    }
     struct yplot_time_factory_state *fs = (struct yplot_time_factory_state *)factory->hook_data;
     if (!fs || !fs->event_loop || fs->timer_id < 0 || fs->subscribers == 0) {
         return;
@@ -139,7 +145,9 @@ static struct yetty_ycore_int_result on_tick(struct yetty_yevent_event_listener 
     }
     struct yplot_time_instance_state *st =
         (struct yplot_time_instance_state *)instance->instance_data;
-    if (!st) return YETTY_OK(yetty_ycore_int, 0);
+    if (!st) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
 
     double now = yetty_yplatform_ytime_monotonic_sec();
     if (st->start_monotonic_sec == 0.0) {
@@ -160,8 +168,7 @@ static struct yetty_ycore_int_result on_tick(struct yetty_yevent_event_listener 
  * Public attach / detach — called from yplot's create / destroy.
  *-------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yetty_yplot_time_attach(
-    struct yetty_ydraw_figure *instance)
+struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_figure *instance)
 {
     if (!instance || !instance->buffer_data || !instance->factory) {
         return YETTY_OK_VOID();
@@ -198,7 +205,9 @@ struct yetty_ycore_void_result yetty_yplot_time_attach(
 
 void yetty_yplot_time_detach(struct yetty_ydraw_figure *instance)
 {
-    if (!instance) return;
+    if (!instance) {
+        return;
+    }
     struct yplot_time_instance_state *st =
         (struct yplot_time_instance_state *)instance->instance_data;
     if (st && st->subscribed && instance->factory) {

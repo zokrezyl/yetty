@@ -61,8 +61,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define YVIDEO_NAL_RING_INIT_CAP   (256u * 1024u)
-#define YVIDEO_AUDIO_RING_INIT_CAP ( 64u * 1024u)
+#define YVIDEO_NAL_RING_INIT_CAP (256u * 1024u)
+#define YVIDEO_AUDIO_RING_INIT_CAP (64u * 1024u)
 #define YVIDEO_PCM_PULL_MAX_FRAMES 1024u
 
 /* Retention caps (#198 item 5). Senders push bytes append-only and the
@@ -73,7 +73,7 @@
  * un-decoded tail). Seeking before lowest_retained_pts_ms is undefined
  * — the sender can replay from an earlier IDR, but the figure can't
  * re-request because the wire is one-way. */
-#define YVIDEO_NAL_RING_MAX_BYTES   (64u * 1024u * 1024u) /* 64 MB */
+#define YVIDEO_NAL_RING_MAX_BYTES (64u * 1024u * 1024u)   /* 64 MB */
 #define YVIDEO_AUDIO_RING_MAX_BYTES (16u * 1024u * 1024u) /* 16 MB */
 
 /* CMD_UPDATE op codes live in the public yvideo.h header — both sender
@@ -86,8 +86,8 @@ struct yvideo_instance_data {
 
     uint32_t video_w;
     uint32_t video_h;
-    uint32_t chroma_w;          /* video_w / 2 for 4:2:0 */
-    uint32_t chroma_h;          /* video_h / 2 for 4:2:0 */
+    uint32_t chroma_w; /* video_w / 2 for 4:2:0 */
+    uint32_t chroma_h; /* video_h / 2 for 4:2:0 */
     float fps;
     uint32_t flags;
 
@@ -96,11 +96,11 @@ struct yvideo_instance_data {
      * we memcpy row-by-row into these stride-tight buffers, then the
      * binder uploads each one as a separate R8 texture. v1's
      * frame_rgba (single W×H×4 buffer + CPU convert) is gone. */
-    uint8_t *y_buf;             /* size = video_w * video_h */
-    uint8_t *u_buf;             /* size = chroma_w * chroma_h */
-    uint8_t *v_buf;             /* size = chroma_w * chroma_h */
-    size_t   y_buf_size;
-    size_t   uv_buf_size;
+    uint8_t *y_buf; /* size = video_w * video_h */
+    uint8_t *u_buf; /* size = chroma_w * chroma_h */
+    uint8_t *v_buf; /* size = chroma_w * chroma_h */
+    size_t y_buf_size;
+    size_t uv_buf_size;
     bool have_frame;
     bool tex_pinned;
     bool size_mismatch_warned;
@@ -116,7 +116,7 @@ struct yvideo_instance_data {
     /* Audio side (NULL when audio_codec=0). */
     struct yetty_yacodec_decoder *audio_decoder;
     struct yetty_yplatform_audio_device *audio_device;
-    uint32_t audio_codec_id;        /* yetty_yacodec_codec value */
+    uint32_t audio_codec_id; /* yetty_yacodec_codec value */
     uint32_t audio_sample_rate;
     uint32_t audio_channels;
 
@@ -150,9 +150,9 @@ struct yvideo_instance_data {
 
     /* Playback control state — driven by the v2 typed CMD_UPDATE ops
      * (#198 item 3). */
-    bool   paused;
-    float  speed;                  /* 1.0 = normal */
-    double seek_offset_sec;        /* PTS at the start of the current
+    bool paused;
+    float speed;            /* 1.0 = normal */
+    double seek_offset_sec; /* PTS at the start of the current
                                     * playback segment — reported for
                                     * display; does not affect decode. */
     /* When using the audio device as master clock, played_out_sec is
@@ -187,12 +187,16 @@ static struct yvideo_instance_data *yvideo_state(struct yetty_ydraw_figure *self
 static struct yvideo_factory_state *yvideo_factory_state_get_or_init(
     struct yetty_ydraw_concrete_factory *factory, int period_ms)
 {
-    if (!factory) return NULL;
+    if (!factory) {
+        return NULL;
+    }
     if (factory->hook_data) {
         return (struct yvideo_factory_state *)factory->hook_data;
     }
     struct yvideo_factory_state *fs = calloc(1, sizeof(*fs));
-    if (!fs) return NULL;
+    if (!fs) {
+        return NULL;
+    }
     fs->event_loop = factory->event_loop;
     fs->timer_id = -1;
     fs->subscribers = 0;
@@ -202,8 +206,8 @@ static struct yvideo_factory_state *yvideo_factory_state_get_or_init(
 }
 
 static struct yetty_ycore_void_result yvideo_animation_subscribe(
-    struct yetty_ydraw_concrete_factory *factory,
-    struct yetty_yevent_event_listener *listener, int period_ms_hint)
+    struct yetty_ydraw_concrete_factory *factory, struct yetty_yevent_event_listener *listener,
+    int period_ms_hint)
 {
     if (!factory || !factory->event_loop) {
         return YETTY_ERR(yetty_ycore_void, "yvideo: no event_loop on factory");
@@ -211,8 +215,7 @@ static struct yetty_ycore_void_result yvideo_animation_subscribe(
     if (!listener || !listener->handler) {
         return YETTY_ERR(yetty_ycore_void, "yvideo: listener has no handler");
     }
-    struct yvideo_factory_state *fs =
-        yvideo_factory_state_get_or_init(factory, period_ms_hint);
+    struct yvideo_factory_state *fs = yvideo_factory_state_get_or_init(factory, period_ms_hint);
     if (!fs) {
         return YETTY_ERR(yetty_ycore_void, "yvideo: factory_state alloc failed");
     }
@@ -222,7 +225,9 @@ static struct yetty_ycore_void_result yvideo_animation_subscribe(
         struct yetty_yevent_timer_id_result tr = loop->ops->create_timer(loop);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "yvideo: create_timer");
         fs->timer_id = tr.value;
-        if (period_ms_hint < 1) period_ms_hint = 33;
+        if (period_ms_hint < 1) {
+            period_ms_hint = 33;
+        }
         fs->period_ms = period_ms_hint;
         loop->ops->config_timer(loop, fs->timer_id, fs->period_ms);
         loop->ops->start_timer(loop, fs->timer_id);
@@ -246,7 +251,9 @@ static struct yetty_ycore_void_result yvideo_animation_subscribe(
 static void yvideo_animation_unsubscribe(struct yetty_ydraw_concrete_factory *factory,
                                          struct yetty_yevent_event_listener *listener)
 {
-    if (!factory) return;
+    if (!factory) {
+        return;
+    }
     struct yvideo_factory_state *fs = (struct yvideo_factory_state *)factory->hook_data;
     if (!fs || !fs->event_loop || fs->timer_id < 0 || fs->subscribers == 0) {
         return;
@@ -272,8 +279,8 @@ static void yvideo_animation_unsubscribe(struct yetty_ydraw_concrete_factory *fa
  * down and adjust the consumed cursor. The caller passes a count that
  * never exceeds *consumed (we only drop bytes the decoder has already
  * eaten). */
-static void yvideo_byte_ring_drop_front(uint8_t *ring, size_t *size,
-                                        size_t *consumed, size_t drop_bytes)
+static void yvideo_byte_ring_drop_front(uint8_t *ring, size_t *size, size_t *consumed,
+                                        size_t drop_bytes)
 {
     if (drop_bytes == 0u || drop_bytes > *consumed) {
         return;
@@ -282,8 +289,8 @@ static void yvideo_byte_ring_drop_front(uint8_t *ring, size_t *size,
     if (remaining > 0u) {
         memmove(ring, ring + drop_bytes, remaining);
     }
-    *size      -= drop_bytes;
-    *consumed  -= drop_bytes;
+    *size -= drop_bytes;
+    *consumed -= drop_bytes;
 }
 
 /* Append with retention. When the post-append size would exceed
@@ -291,9 +298,8 @@ static void yvideo_byte_ring_drop_front(uint8_t *ring, size_t *size,
  * out of the front before appending. The capacity itself still grows
  * (geometric realloc) until we're below max_bytes again; the steady
  * state is roughly max_bytes regardless of stream duration. */
-static int yvideo_byte_ring_append_capped(uint8_t **ring, size_t *size,
-                                          size_t *cap, size_t *consumed,
-                                          size_t init_cap, size_t max_bytes,
+static int yvideo_byte_ring_append_capped(uint8_t **ring, size_t *size, size_t *cap,
+                                          size_t *consumed, size_t init_cap, size_t max_bytes,
                                           const uint8_t *bytes, size_t len)
 {
     if (len == 0) {
@@ -330,22 +336,19 @@ static int yvideo_byte_ring_append_capped(uint8_t **ring, size_t *size,
     return 1;
 }
 
-static int yvideo_nal_ring_append(struct yvideo_instance_data *st,
-                                  const uint8_t *bytes, size_t len)
+static int yvideo_nal_ring_append(struct yvideo_instance_data *st, const uint8_t *bytes, size_t len)
 {
-    return yvideo_byte_ring_append_capped(
-        &st->nal_ring, &st->nal_ring_size, &st->nal_ring_cap,
-        &st->nal_ring_consumed, YVIDEO_NAL_RING_INIT_CAP,
-        YVIDEO_NAL_RING_MAX_BYTES, bytes, len);
+    return yvideo_byte_ring_append_capped(&st->nal_ring, &st->nal_ring_size, &st->nal_ring_cap,
+                                          &st->nal_ring_consumed, YVIDEO_NAL_RING_INIT_CAP,
+                                          YVIDEO_NAL_RING_MAX_BYTES, bytes, len);
 }
 
-static int yvideo_audio_ring_append(struct yvideo_instance_data *st,
-                                    const uint8_t *bytes, size_t len)
+static int yvideo_audio_ring_append(struct yvideo_instance_data *st, const uint8_t *bytes,
+                                    size_t len)
 {
     return yvideo_byte_ring_append_capped(
-        &st->audio_ring, &st->audio_ring_size, &st->audio_ring_cap,
-        &st->audio_ring_consumed, YVIDEO_AUDIO_RING_INIT_CAP,
-        YVIDEO_AUDIO_RING_MAX_BYTES, bytes, len);
+        &st->audio_ring, &st->audio_ring_size, &st->audio_ring_cap, &st->audio_ring_consumed,
+        YVIDEO_AUDIO_RING_INIT_CAP, YVIDEO_AUDIO_RING_MAX_BYTES, bytes, len);
 }
 
 static size_t yvideo_find_start_code(const uint8_t *buf, size_t size, size_t from)
@@ -357,8 +360,7 @@ static size_t yvideo_find_start_code(const uint8_t *buf, size_t size, size_t fro
         if (buf[i] == 0 && buf[i + 1] == 0 && buf[i + 2] == 1) {
             return i;
         }
-        if (i + 4 <= size && buf[i] == 0 && buf[i + 1] == 0 && buf[i + 2] == 0 &&
-            buf[i + 3] == 1) {
+        if (i + 4 <= size && buf[i] == 0 && buf[i + 1] == 0 && buf[i + 2] == 0 && buf[i + 3] == 1) {
             return i;
         }
     }
@@ -379,8 +381,7 @@ static void yvideo_pump_audio(struct yvideo_instance_data *st)
     /* Walk packets while at least the u32 length prefix is present. */
     while (st->audio_ring_consumed + sizeof(uint32_t) <= st->audio_ring_size) {
         uint32_t packet_len;
-        memcpy(&packet_len, st->audio_ring + st->audio_ring_consumed,
-               sizeof(packet_len));
+        memcpy(&packet_len, st->audio_ring + st->audio_ring_consumed, sizeof(packet_len));
         size_t payload_off = st->audio_ring_consumed + sizeof(uint32_t);
         /* Packet bytes are followed by 0..3 pad bytes for u32 alignment;
          * the next packet's length starts at the next u32 boundary. */
@@ -400,8 +401,7 @@ static void yvideo_pump_audio(struct yvideo_instance_data *st)
         for (;;) {
             size_t got = 0u;
             struct yetty_ycore_void_result pr = yetty_yacodec_decoder_pull_pcm(
-                st->audio_decoder, st->pcm_scratch,
-                YVIDEO_PCM_PULL_MAX_FRAMES, &got);
+                st->audio_decoder, st->pcm_scratch, YVIDEO_PCM_PULL_MAX_FRAMES, &got);
             if (YETTY_IS_ERR(pr)) {
                 yetty_ycore_error_destroy(pr.error);
                 break;
@@ -410,8 +410,7 @@ static void yvideo_pump_audio(struct yvideo_instance_data *st)
                 break;
             }
             struct yetty_ycore_size_result wr =
-                yetty_yplatform_audio_device_write_pcm(st->audio_device,
-                                                       st->pcm_scratch, got);
+                yetty_yplatform_audio_device_write_pcm(st->audio_device, st->pcm_scratch, got);
             if (YETTY_IS_ERR(wr)) {
                 yetty_ycore_error_destroy(wr.error);
                 break;
@@ -431,10 +430,10 @@ static void yvideo_pump_audio(struct yvideo_instance_data *st)
  *-------------------------------------------------------------------------*/
 
 enum yvideo_decode_step {
-    YVIDEO_DECODE_STEP_FRAME,     /* produced a frame — caller yields  */
-    YVIDEO_DECODE_STEP_PROGRESS,  /* fed a NAL but no frame yet (SPS/  */
-                                  /* PPS/non-IDR slice header) — loop */
-    YVIDEO_DECODE_STEP_NO_INPUT,  /* no complete NAL available — yield */
+    YVIDEO_DECODE_STEP_FRAME,    /* produced a frame — caller yields  */
+    YVIDEO_DECODE_STEP_PROGRESS, /* fed a NAL but no frame yet (SPS/  */
+                                 /* PPS/non-IDR slice header) — loop */
+    YVIDEO_DECODE_STEP_NO_INPUT, /* no complete NAL available — yield */
 };
 
 /* One decoder step. Either feeds at most one NAL or reports no input.
@@ -444,8 +443,7 @@ static enum yvideo_decode_step yvideo_decode_one_step(struct yvideo_instance_dat
     if (!st->decoder || !st->nal_ring) {
         return YVIDEO_DECODE_STEP_NO_INPUT;
     }
-    size_t curr = yvideo_find_start_code(st->nal_ring, st->nal_ring_size,
-                                         st->nal_ring_consumed);
+    size_t curr = yvideo_find_start_code(st->nal_ring, st->nal_ring_size, st->nal_ring_consumed);
     if (curr == (size_t)-1) {
         return YVIDEO_DECODE_STEP_NO_INPUT;
     }
@@ -463,8 +461,7 @@ static enum yvideo_decode_step yvideo_decode_one_step(struct yvideo_instance_dat
     }
     struct yetty_yvcodec_yuv_frame yuv = {0};
     bool got = false;
-    struct yetty_ycore_void_result gr =
-        yetty_yvcodec_decoder_get_frame(st->decoder, &yuv, &got);
+    struct yetty_ycore_void_result gr = yetty_yvcodec_decoder_get_frame(st->decoder, &yuv, &got);
     if (YETTY_IS_ERR(gr)) {
         yetty_ycore_error_destroy(gr.error);
         return YVIDEO_DECODE_STEP_PROGRESS;
@@ -483,16 +480,13 @@ static enum yvideo_decode_step yvideo_decode_one_step(struct yvideo_instance_dat
     }
     /* Stride-strip copy — see comment block in the previous v2 version. */
     for (uint32_t row = 0u; row < st->video_h; row++) {
-        memcpy(st->y_buf + (size_t)row * st->video_w,
-               yuv.y_plane + (size_t)row * yuv.y_stride,
+        memcpy(st->y_buf + (size_t)row * st->video_w, yuv.y_plane + (size_t)row * yuv.y_stride,
                st->video_w);
     }
     for (uint32_t row = 0u; row < st->chroma_h; row++) {
-        memcpy(st->u_buf + (size_t)row * st->chroma_w,
-               yuv.u_plane + (size_t)row * yuv.u_stride,
+        memcpy(st->u_buf + (size_t)row * st->chroma_w, yuv.u_plane + (size_t)row * yuv.u_stride,
                st->chroma_w);
-        memcpy(st->v_buf + (size_t)row * st->chroma_w,
-               yuv.v_plane + (size_t)row * yuv.v_stride,
+        memcpy(st->v_buf + (size_t)row * st->chroma_w, yuv.v_plane + (size_t)row * yuv.v_stride,
                st->chroma_w);
     }
     st->have_frame = true;
@@ -519,8 +513,7 @@ static void yvideo_decode_coro_entry(void *arg)
         if (!st->paused) {
             yvideo_pump_audio(st);
 
-            while (st->frames_displayed <= st->coro_target_frame &&
-                   !st->coro_should_exit) {
+            while (st->frames_displayed <= st->coro_target_frame && !st->coro_should_exit) {
                 enum yvideo_decode_step step = yvideo_decode_one_step(st);
                 if (step == YVIDEO_DECODE_STEP_NO_INPUT) {
                     break;
@@ -577,8 +570,8 @@ static uint32_t yvideo_target_frame(struct yvideo_instance_data *st)
  * Timer listener — pumps video + audio every tick.
  *-------------------------------------------------------------------------*/
 
-static struct yetty_ycore_int_result yvideo_on_tick(
-    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *event)
+static struct yetty_ycore_int_result yvideo_on_tick(struct yetty_yevent_event_listener *listener,
+                                                    const struct yetty_yui_event *event)
 {
     (void)event;
     struct yetty_ydraw_figure *instance =
@@ -622,14 +615,14 @@ static struct yetty_ycore_int_result yvideo_on_tick(
     if (instance->resource_set && st->y_buf && st->u_buf && st->v_buf) {
         struct yetty_ydraw_gpu_resource_set *rs = instance->resource_set;
         if (!st->tex_pinned) {
-            rs->textures[0].data   = st->y_buf;
-            rs->textures[0].width  = st->video_w;
+            rs->textures[0].data = st->y_buf;
+            rs->textures[0].width = st->video_w;
             rs->textures[0].height = st->video_h;
-            rs->textures[1].data   = st->u_buf;
-            rs->textures[1].width  = st->chroma_w;
+            rs->textures[1].data = st->u_buf;
+            rs->textures[1].width = st->chroma_w;
             rs->textures[1].height = st->chroma_h;
-            rs->textures[2].data   = st->v_buf;
-            rs->textures[2].width  = st->chroma_w;
+            rs->textures[2].data = st->v_buf;
+            rs->textures[2].width = st->chroma_w;
             rs->textures[2].height = st->chroma_h;
             st->tex_pinned = true;
         }
@@ -676,8 +669,7 @@ static void yvideo_state_destroy(struct yvideo_instance_data *st)
     if (st->audio_device) {
         /* Stop before destroy so the backend callback unwinds first —
          * destroy frees the ring the callback drains from. */
-        struct yetty_ycore_void_result spr =
-            yetty_yplatform_audio_device_stop(st->audio_device);
+        struct yetty_ycore_void_result spr = yetty_yplatform_audio_device_stop(st->audio_device);
         if (YETTY_IS_ERR(spr)) {
             yetty_ycore_error_destroy(spr.error);
         }
@@ -708,8 +700,7 @@ static void yvideo_do_seek(struct yvideo_instance_data *st, uint32_t pts_ms)
      * while we flush it. Restart after flush so playback resumes when
      * the sender feeds new bytes. */
     if (st->audio_device) {
-        struct yetty_ycore_void_result sr =
-            yetty_yplatform_audio_device_stop(st->audio_device);
+        struct yetty_ycore_void_result sr = yetty_yplatform_audio_device_stop(st->audio_device);
         if (YETTY_IS_ERR(sr)) {
             yetty_ycore_error_destroy(sr.error);
         }
@@ -717,8 +708,7 @@ static void yvideo_do_seek(struct yvideo_instance_data *st, uint32_t pts_ms)
         /* Capture the device's lifetime played_out so we can subtract
          * it to derive a fresh effective clock. The counter itself is
          * monotonic — we shift, not reset. */
-        st->audio_clock_offset_sec =
-            yetty_yplatform_audio_device_played_out_sec(st->audio_device);
+        st->audio_clock_offset_sec = yetty_yplatform_audio_device_played_out_sec(st->audio_device);
     }
     if (st->decoder) {
         yetty_yvcodec_decoder_reset(st->decoder);
@@ -727,26 +717,25 @@ static void yvideo_do_seek(struct yvideo_instance_data *st, uint32_t pts_ms)
         yetty_yacodec_decoder_reset(st->audio_decoder);
     }
     /* Clear both rings — sender re-feeds from the seek point. */
-    st->nal_ring_size       = 0u;
-    st->nal_ring_consumed   = 0u;
-    st->audio_ring_size     = 0u;
+    st->nal_ring_size = 0u;
+    st->nal_ring_consumed = 0u;
+    st->audio_ring_size = 0u;
     st->audio_ring_consumed = 0u;
     /* Frame counter restarts at 0; first decoded frame after the seek
      * is treated as the new t=0 of the playback segment. */
-    st->frames_displayed  = 0u;
-    st->have_frame        = false;
+    st->frames_displayed = 0u;
+    st->have_frame = false;
     st->start_monotonic_sec = 0.0;
-    st->paused_at_sec       = 0.0;
+    st->paused_at_sec = 0.0;
     /* Stored only for reporting — the playhead math doesn't use it. */
-    st->seek_offset_sec   = (double)pts_ms / 1000.0;
+    st->seek_offset_sec = (double)pts_ms / 1000.0;
 
     if (st->audio_device && !st->paused) {
         /* Lazy device start in the on-tick path waits for the first
          * decoded frame; restart immediately here so the next decoded
          * audio packet can flow into the device without an extra
          * round-trip through the lazy-start condition. */
-        struct yetty_ycore_void_result sr =
-            yetty_yplatform_audio_device_start(st->audio_device);
+        struct yetty_ycore_void_result sr = yetty_yplatform_audio_device_start(st->audio_device);
         if (YETTY_IS_ERR(sr)) {
             yetty_ycore_error_destroy(sr.error);
         }
@@ -783,8 +772,7 @@ static void yvideo_do_set_playing(struct yvideo_instance_data *st, bool playing)
         if (st->audio_device) {
             /* Stopping the device freezes its played_out counter — no
              * extra offset bookkeeping needed for the audio path. */
-            struct yetty_ycore_void_result sr =
-                yetty_yplatform_audio_device_stop(st->audio_device);
+            struct yetty_ycore_void_result sr = yetty_yplatform_audio_device_stop(st->audio_device);
             if (YETTY_IS_ERR(sr)) {
                 yetty_ycore_error_destroy(sr.error);
             }
@@ -820,8 +808,8 @@ static void yvideo_do_set_loop(struct yvideo_instance_data *st, bool loop)
  * Hook implementations.
  *-------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yvideo_hook_instance_create(
-    struct yetty_ydraw_figure *instance, const void *buffer_data, size_t size)
+struct yetty_ycore_void_result yvideo_hook_instance_create(struct yetty_ydraw_figure *instance,
+                                                           const void *buffer_data, size_t size)
 {
     (void)size;
     /* v2 wire layout: 2 header words (type_id, payload_size), 14 uniform
@@ -830,21 +818,21 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(
      * audio_stream). */
     const uint32_t *data = (const uint32_t *)buffer_data;
     const uint32_t *payload = data + 2;
-    uint32_t video_w           = payload[4];
-    uint32_t video_h           = payload[5];
-    uint32_t chroma_w          = payload[6];
-    uint32_t chroma_h          = payload[7];
-    float    fps               = ((const float *)payload)[8];
-    uint32_t flags             = payload[10];
-    uint32_t audio_codec       = payload[11];
+    uint32_t video_w = payload[4];
+    uint32_t video_h = payload[5];
+    uint32_t chroma_w = payload[6];
+    uint32_t chroma_h = payload[7];
+    float fps = ((const float *)payload)[8];
+    uint32_t flags = payload[10];
+    uint32_t audio_codec = payload[11];
     uint32_t audio_sample_rate = payload[12];
-    uint32_t audio_channels    = payload[13];
-    uint32_t nal_words         = payload[14];
-    uint32_t audio_words       = payload[15];
-    const uint8_t *nal_bytes   = (const uint8_t *)(payload + 16);
+    uint32_t audio_channels = payload[13];
+    uint32_t nal_words = payload[14];
+    uint32_t audio_words = payload[15];
+    const uint8_t *nal_bytes = (const uint8_t *)(payload + 16);
     const uint8_t *audio_bytes = nal_bytes + (size_t)nal_words * 4u;
-    size_t   nal_byte_count    = (size_t)nal_words   * 4u;
-    size_t   audio_byte_count  = (size_t)audio_words * 4u;
+    size_t nal_byte_count = (size_t)nal_words * 4u;
+    size_t audio_byte_count = (size_t)audio_words * 4u;
 
     if (video_w == 0 || video_h == 0) {
         return YETTY_ERR(yetty_ycore_void,
@@ -852,15 +840,19 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(
     }
     /* Receiver-side default if the sender left chroma_w/h at 0 — 4:2:0
      * is the only mode openh264 emits, so divide by 2 is safe. */
-    if (chroma_w == 0u) chroma_w = video_w / 2u;
-    if (chroma_h == 0u) chroma_h = video_h / 2u;
+    if (chroma_w == 0u) {
+        chroma_w = video_w / 2u;
+    }
+    if (chroma_h == 0u) {
+        chroma_h = video_h / 2u;
+    }
 
     struct yvideo_instance_data *st = calloc(1, sizeof(*st));
     if (!st) {
         return YETTY_ERR(yetty_ycore_void, "yvideo: state alloc failed");
     }
-    st->video_w  = video_w;
-    st->video_h  = video_h;
+    st->video_w = video_w;
+    st->video_h = video_h;
     st->chroma_w = chroma_w;
     st->chroma_h = chroma_h;
     st->fps = fps;
@@ -870,7 +862,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(
     st->seek_offset_sec = 0.0;
     st->audio_clock_offset_sec = 0.0;
     st->paused_at_sec = 0.0;
-    st->y_buf_size  = (size_t)video_w  * (size_t)video_h;
+    st->y_buf_size = (size_t)video_w * (size_t)video_h;
     st->uv_buf_size = (size_t)chroma_w * (size_t)chroma_h;
     st->y_buf = calloc(1u, st->y_buf_size);
     st->u_buf = calloc(1u, st->uv_buf_size);
@@ -897,21 +889,19 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(
      * silent. The user gets one ywarn and the rest of the figure
      * lifecycle continues normally. */
     if (audio_codec != 0u) {
-        st->audio_codec_id    = audio_codec;
+        st->audio_codec_id = audio_codec;
         st->audio_sample_rate = audio_sample_rate;
-        st->audio_channels    = audio_channels;
+        st->audio_channels = audio_channels;
 
-        struct yetty_yacodec_decoder_ptr_result adr =
-            yetty_yacodec_decoder_create((enum yetty_yacodec_codec)audio_codec,
-                                         audio_sample_rate, audio_channels);
+        struct yetty_yacodec_decoder_ptr_result adr = yetty_yacodec_decoder_create(
+            (enum yetty_yacodec_codec)audio_codec, audio_sample_rate, audio_channels);
         if (YETTY_IS_ERR(adr)) {
             ywarn("yvideo: audio decoder create failed; video will play silent");
             yetty_ycore_error_destroy(adr.error);
         } else {
             st->audio_decoder = adr.value;
             struct yetty_yplatform_audio_device_ptr_result devr =
-                yetty_yplatform_audio_device_create(audio_sample_rate,
-                                                    audio_channels);
+                yetty_yplatform_audio_device_create(audio_sample_rate, audio_channels);
             if (YETTY_IS_ERR(devr)) {
                 ywarn("yvideo: audio device create failed; video will play silent");
                 yetty_ycore_error_destroy(devr.error);
@@ -938,8 +928,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(
      * deblocking. */
     {
         struct yplatform_coro_ptr_result cr = yetty_yplatform_coro_spawn(
-            yvideo_decode_coro_entry, st, /*stack_hint=*/0u,
-            "yvideo-decode");
+            yvideo_decode_coro_entry, st, /*stack_hint=*/0u, "yvideo-decode");
         if (YETTY_IS_OK(cr)) {
             st->decode_coro = cr.value;
         } else {
@@ -955,24 +944,24 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(
      * — atlas pack uses these. data stays NULL until the first decoded
      * frame; the binder skips uploads on NULL data, so the initial
      * finalize doesn't fault. */
-    instance->resource_set->textures[0].data   = NULL;
-    instance->resource_set->textures[0].width  = video_w;
+    instance->resource_set->textures[0].data = NULL;
+    instance->resource_set->textures[0].width = video_w;
     instance->resource_set->textures[0].height = video_h;
-    instance->resource_set->textures[0].dirty  = 0;
-    instance->resource_set->textures[1].data   = NULL;
-    instance->resource_set->textures[1].width  = chroma_w;
+    instance->resource_set->textures[0].dirty = 0;
+    instance->resource_set->textures[1].data = NULL;
+    instance->resource_set->textures[1].width = chroma_w;
     instance->resource_set->textures[1].height = chroma_h;
-    instance->resource_set->textures[1].dirty  = 0;
-    instance->resource_set->textures[2].data   = NULL;
-    instance->resource_set->textures[2].width  = chroma_w;
+    instance->resource_set->textures[1].dirty = 0;
+    instance->resource_set->textures[2].data = NULL;
+    instance->resource_set->textures[2].width = chroma_w;
     instance->resource_set->textures[2].height = chroma_h;
-    instance->resource_set->textures[2].dirty  = 0;
+    instance->resource_set->textures[2].dirty = 0;
 
     if (instance->factory && instance->factory->event_loop) {
         instance->listener.handler = yvideo_on_tick;
         int period_ms = (fps > 0.0f) ? (int)(1000.0f / fps) : 33;
-        struct yetty_ycore_void_result sr = yvideo_animation_subscribe(
-            instance->factory, &instance->listener, period_ms);
+        struct yetty_ycore_void_result sr =
+            yvideo_animation_subscribe(instance->factory, &instance->listener, period_ms);
         if (YETTY_IS_OK(sr)) {
             st->subscribed = true;
         } else {
@@ -981,9 +970,10 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(
         }
     }
 
-    yinfo("yvideo: instance created %ux%u @ %.1f fps (NAL=%zu B, audio_codec=%u %u Hz × %u ch, audio=%zu B, flags=0x%x)",
-          video_w, video_h, (double)fps, nal_byte_count,
-          audio_codec, audio_sample_rate, audio_channels, audio_byte_count, flags);
+    yinfo("yvideo: instance created %ux%u @ %.1f fps (NAL=%zu B, audio_codec=%u %u Hz × %u ch, "
+          "audio=%zu B, flags=0x%x)",
+          video_w, video_h, (double)fps, nal_byte_count, audio_codec, audio_sample_rate,
+          audio_channels, audio_byte_count, flags);
     return YETTY_OK_VOID();
 }
 
@@ -999,8 +989,8 @@ void yvideo_hook_instance_destroy(struct yetty_ydraw_figure *instance)
     instance->listener.handler = NULL;
 }
 
-struct yetty_ycore_void_result yvideo_hook_instance_update(
-    struct yetty_ydraw_figure *instance, const void *payload, size_t size)
+struct yetty_ycore_void_result yvideo_hook_instance_update(struct yetty_ydraw_figure *instance,
+                                                           const void *payload, size_t size)
 {
     if (!instance) {
         return YETTY_ERR(yetty_ycore_void, "yvideo update: null instance");
@@ -1021,8 +1011,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(
      * payloads loudly rather than treating them as v1 raw NAL bytes,
      * which would only ever match by accident. */
     if (size < 4u) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "yvideo update: payload < 4 bytes (no op header)");
+        return YETTY_ERR(yetty_ycore_void, "yvideo update: payload < 4 bytes (no op header)");
     }
     const uint8_t *p = (const uint8_t *)payload;
     uint8_t op = p[0];
@@ -1033,8 +1022,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(
     case YETTY_YVIDEO_UPDATE_OP_APPEND_NAL:
         if (body_size > 0u) {
             if (!yvideo_nal_ring_append(st, body, body_size)) {
-                return YETTY_ERR(yetty_ycore_void,
-                                 "yvideo update: NAL ring grow failed");
+                return YETTY_ERR(yetty_ycore_void, "yvideo update: NAL ring grow failed");
             }
             /* Wake the decode coro immediately — newly-arrived NAL
              * bytes can produce a frame before the next tick fires. */
@@ -1051,8 +1039,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(
         }
         if (body_size > 0u) {
             if (!yvideo_audio_ring_append(st, body, body_size)) {
-                return YETTY_ERR(yetty_ycore_void,
-                                 "yvideo update: audio ring grow failed");
+                return YETTY_ERR(yetty_ycore_void, "yvideo update: audio ring grow failed");
             }
             yvideo_wake_decoder(st);
         }
@@ -1060,8 +1047,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(
 
     case YETTY_YVIDEO_UPDATE_OP_SEEK_PTS_MS: {
         if (body_size < sizeof(uint32_t)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yvideo update: SEEK body < 4 bytes");
+            return YETTY_ERR(yetty_ycore_void, "yvideo update: SEEK body < 4 bytes");
         }
         uint32_t pts_ms;
         memcpy(&pts_ms, body, sizeof(pts_ms));
@@ -1071,8 +1057,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(
 
     case YETTY_YVIDEO_UPDATE_OP_SET_PLAYING: {
         if (body_size < 1u) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yvideo update: SET_PLAYING body < 1 byte");
+            return YETTY_ERR(yetty_ycore_void, "yvideo update: SET_PLAYING body < 1 byte");
         }
         yvideo_do_set_playing(st, body[0] != 0u);
         return YETTY_OK_VOID();
@@ -1080,8 +1065,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(
 
     case YETTY_YVIDEO_UPDATE_OP_SET_SPEED: {
         if (body_size < sizeof(float)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yvideo update: SET_SPEED body < 4 bytes");
+            return YETTY_ERR(yetty_ycore_void, "yvideo update: SET_SPEED body < 4 bytes");
         }
         float speed;
         memcpy(&speed, body, sizeof(speed));
@@ -1091,8 +1075,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(
 
     case YETTY_YVIDEO_UPDATE_OP_SET_LOOP: {
         if (body_size < 1u) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yvideo update: SET_LOOP body < 1 byte");
+            return YETTY_ERR(yetty_ycore_void, "yvideo update: SET_LOOP body < 1 byte");
         }
         yvideo_do_set_loop(st, body[0] != 0u);
         return YETTY_OK_VOID();
@@ -1103,9 +1086,9 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(
     }
 }
 
-struct yetty_ycore_void_result yvideo_hook_instance_render_pre(
-    struct yetty_ydraw_figure *instance, struct yetty_ydraw_target *target, float x,
-    float y)
+struct yetty_ycore_void_result yvideo_hook_instance_render_pre(struct yetty_ydraw_figure *instance,
+                                                               struct yetty_ydraw_target *target,
+                                                               float x, float y)
 {
     (void)instance;
     (void)target;

@@ -57,11 +57,11 @@ static struct yetty_ycore_void_result grow_array(void **arr, size_t *cap, size_t
 struct yetty_ydiagram_node_style yetty_ydiagram_default_node_style(void)
 {
     struct yetty_ydiagram_node_style s = {
-        .fill_color    = 0xFFAA5533u,
-        .stroke_color  = 0xFFFFFFFFu,
-        .stroke_width  = 2.0f,
-        .text_color    = 0xFFFFFFFFu,
-        .font_size     = 14.0f,
+        .fill_color = 0xFFAA5533u,
+        .stroke_color = 0xFFFFFFFFu,
+        .stroke_width = 2.0f,
+        .text_color = 0xFFFFFFFFu,
+        .font_size = 14.0f,
         .corner_radius = 8.0f,
     };
     return s;
@@ -70,12 +70,12 @@ struct yetty_ydiagram_node_style yetty_ydiagram_default_node_style(void)
 struct yetty_ydiagram_edge_style yetty_ydiagram_default_edge_style(void)
 {
     struct yetty_ydiagram_edge_style s = {
-        .stroke_color    = 0xFFFFFFFFu,
-        .stroke_width    = 1.5f,
-        .line_style      = YETTY_YDIAGRAM_LINE_SOLID,
-        .source_arrow    = YETTY_YDIAGRAM_ARROW_NONE,
-        .target_arrow    = YETTY_YDIAGRAM_ARROW_NORMAL,
-        .label_color     = 0xFFCCCCCCu,
+        .stroke_color = 0xFFFFFFFFu,
+        .stroke_width = 1.5f,
+        .line_style = YETTY_YDIAGRAM_LINE_SOLID,
+        .source_arrow = YETTY_YDIAGRAM_ARROW_NONE,
+        .target_arrow = YETTY_YDIAGRAM_ARROW_NORMAL,
+        .label_color = 0xFFCCCCCCu,
         .label_font_size = 12.0f,
     };
     return s;
@@ -91,7 +91,7 @@ struct yetty_ycore_void_result yetty_ydiagram_graph_init(struct yetty_ydiagram_g
         return YETTY_ERR(yetty_ycore_void, "graph_init: NULL graph");
     }
     memset(g, 0, sizeof(*g));
-    g->direction          = YETTY_YDIAGRAM_DIR_TB;
+    g->direction = YETTY_YDIAGRAM_DIR_TB;
     g->default_node_style = yetty_ydiagram_default_node_style();
     g->default_edge_style = yetty_ydiagram_default_edge_style();
     return YETTY_OK_VOID();
@@ -148,45 +148,45 @@ void yetty_ydiagram_graph_destroy(struct yetty_ydiagram_graph *g)
  * Builders
  *===========================================================================*/
 
-struct yetty_ycore_int_result yetty_ydiagram_graph_add_node(
-    struct yetty_ydiagram_graph *g, const char *id, const char *label,
-    enum yetty_ydiagram_node_shape shape)
+struct yetty_ycore_int_result yetty_ydiagram_graph_add_node(struct yetty_ydiagram_graph *g,
+                                                            const char *id, const char *label,
+                                                            enum yetty_ydiagram_node_shape shape)
 {
     if (!g || !id) {
         return YETTY_ERR(yetty_ycore_int, "add_node: NULL graph or id");
     }
-    struct yetty_ycore_void_result gr = grow_array(
-        (void **)&g->nodes, &g->node_capacity, g->node_count + 1, sizeof(*g->nodes));
+    struct yetty_ycore_void_result gr =
+        grow_array((void **)&g->nodes, &g->node_capacity, g->node_count + 1, sizeof(*g->nodes));
     YETTY_RETURN_IF_ERR(yetty_ycore_int, gr, "add_node: grow failed");
 
     struct yetty_ydiagram_node *n = &g->nodes[g->node_count];
     memset(n, 0, sizeof(*n));
-    n->id    = dup_str(id);
+    n->id = dup_str(id);
     n->label = dup_str(label ? label : "");
     if (!n->id || !n->label) {
         free(n->id);
         free(n->label);
         return YETTY_ERR(yetty_ycore_int, "add_node: oom");
     }
-    n->shape    = shape;
-    n->style    = g->default_node_style;
-    n->layer    = -1;
+    n->shape = shape;
+    n->style = g->default_node_style;
+    n->layer = -1;
     n->position = -1;
     n->is_dummy = false;
-    int idx     = (int)g->node_count;
+    int idx = (int)g->node_count;
     g->node_count++;
     return YETTY_OK(yetty_ycore_int, idx);
 }
 
 struct yetty_ycore_int_result yetty_ydiagram_graph_add_edge(
-    struct yetty_ydiagram_graph *g, const char *source_id, const char *target_id,
-    const char *label, const struct yetty_ydiagram_edge_style *style)
+    struct yetty_ydiagram_graph *g, const char *source_id, const char *target_id, const char *label,
+    const struct yetty_ydiagram_edge_style *style)
 {
     if (!g || !source_id || !target_id) {
         return YETTY_ERR(yetty_ycore_int, "add_edge: NULL graph or endpoints");
     }
-    struct yetty_ycore_void_result gr = grow_array(
-        (void **)&g->edges, &g->edge_capacity, g->edge_count + 1, sizeof(*g->edges));
+    struct yetty_ycore_void_result gr =
+        grow_array((void **)&g->edges, &g->edge_capacity, g->edge_count + 1, sizeof(*g->edges));
     YETTY_RETURN_IF_ERR(yetty_ycore_int, gr, "add_edge: grow failed");
 
     struct yetty_ydiagram_edge *e = &g->edges[g->edge_count];
@@ -194,10 +194,10 @@ struct yetty_ycore_int_result yetty_ydiagram_graph_add_edge(
 
     char id_buf[32];
     snprintf(id_buf, sizeof(id_buf), "e%zu", g->edge_count);
-    e->id        = dup_str(id_buf);
+    e->id = dup_str(id_buf);
     e->source_id = dup_str(source_id);
     e->target_id = dup_str(target_id);
-    e->label     = dup_str(label ? label : "");
+    e->label = dup_str(label ? label : "");
     if (!e->id || !e->source_id || !e->target_id || !e->label) {
         free(e->id);
         free(e->source_id);
@@ -206,45 +206,45 @@ struct yetty_ycore_int_result yetty_ydiagram_graph_add_edge(
         return YETTY_ERR(yetty_ycore_int, "add_edge: oom");
     }
     e->style = style ? *style : g->default_edge_style;
-    int idx  = (int)g->edge_count;
+    int idx = (int)g->edge_count;
     g->edge_count++;
     return YETTY_OK(yetty_ycore_int, idx);
 }
 
-struct yetty_ycore_int_result yetty_ydiagram_graph_add_cluster(
-    struct yetty_ydiagram_graph *g, const char *id, const char *label)
+struct yetty_ycore_int_result yetty_ydiagram_graph_add_cluster(struct yetty_ydiagram_graph *g,
+                                                               const char *id, const char *label)
 {
     if (!g || !id) {
         return YETTY_ERR(yetty_ycore_int, "add_cluster: NULL graph or id");
     }
-    struct yetty_ycore_void_result gr = grow_array(
-        (void **)&g->clusters, &g->cluster_capacity, g->cluster_count + 1, sizeof(*g->clusters));
+    struct yetty_ycore_void_result gr = grow_array((void **)&g->clusters, &g->cluster_capacity,
+                                                   g->cluster_count + 1, sizeof(*g->clusters));
     YETTY_RETURN_IF_ERR(yetty_ycore_int, gr, "add_cluster: grow failed");
 
     struct yetty_ydiagram_cluster *c = &g->clusters[g->cluster_count];
     memset(c, 0, sizeof(*c));
-    c->id    = dup_str(id);
+    c->id = dup_str(id);
     c->label = dup_str(label ? label : "");
     if (!c->id || !c->label) {
         free(c->id);
         free(c->label);
         return YETTY_ERR(yetty_ycore_int, "add_cluster: oom");
     }
-    c->fill_color   = 0x40666666u;
+    c->fill_color = 0x40666666u;
     c->stroke_color = 0xFF888888u;
-    int idx         = (int)g->cluster_count;
+    int idx = (int)g->cluster_count;
     g->cluster_count++;
     return YETTY_OK(yetty_ycore_int, idx);
 }
 
-struct yetty_ycore_void_result yetty_ydiagram_cluster_add_node(
-    struct yetty_ydiagram_cluster *c, const char *node_id)
+struct yetty_ycore_void_result yetty_ydiagram_cluster_add_node(struct yetty_ydiagram_cluster *c,
+                                                               const char *node_id)
 {
     if (!c || !node_id) {
         return YETTY_ERR(yetty_ycore_void, "cluster_add_node: NULL");
     }
-    struct yetty_ycore_void_result gr = grow_array(
-        (void **)&c->node_ids, &c->node_capacity, c->node_count + 1, sizeof(*c->node_ids));
+    struct yetty_ycore_void_result gr = grow_array((void **)&c->node_ids, &c->node_capacity,
+                                                   c->node_count + 1, sizeof(*c->node_ids));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "cluster_add_node: grow failed");
     char *copy = dup_str(node_id);
     if (!copy) {
@@ -254,8 +254,8 @@ struct yetty_ycore_void_result yetty_ydiagram_cluster_add_node(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ydiagram_node *yetty_ydiagram_graph_find_node(
-    struct yetty_ydiagram_graph *g, const char *id)
+struct yetty_ydiagram_node *yetty_ydiagram_graph_find_node(struct yetty_ydiagram_graph *g,
+                                                           const char *id)
 {
     if (!g || !id) {
         return NULL;
@@ -268,8 +268,8 @@ struct yetty_ydiagram_node *yetty_ydiagram_graph_find_node(
     return NULL;
 }
 
-struct yetty_ydiagram_cluster *yetty_ydiagram_graph_find_cluster(
-    struct yetty_ydiagram_graph *g, const char *id)
+struct yetty_ydiagram_cluster *yetty_ydiagram_graph_find_cluster(struct yetty_ydiagram_graph *g,
+                                                                 const char *id)
 {
     if (!g || !id) {
         return NULL;
@@ -282,15 +282,15 @@ struct yetty_ydiagram_cluster *yetty_ydiagram_graph_find_cluster(
     return NULL;
 }
 
-struct yetty_ycore_void_result yetty_ydiagram_edge_add_control_point(
-    struct yetty_ydiagram_edge *e, float x, float y)
+struct yetty_ycore_void_result yetty_ydiagram_edge_add_control_point(struct yetty_ydiagram_edge *e,
+                                                                     float x, float y)
 {
     if (!e) {
         return YETTY_ERR(yetty_ycore_void, "edge_add_control_point: NULL");
     }
-    struct yetty_ycore_void_result gr = grow_array(
-        (void **)&e->control_points, &e->control_capacity, e->control_count + 1,
-        sizeof(*e->control_points));
+    struct yetty_ycore_void_result gr =
+        grow_array((void **)&e->control_points, &e->control_capacity, e->control_count + 1,
+                   sizeof(*e->control_points));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "edge_add_control_point: grow failed");
     e->control_points[e->control_count++] = (struct yetty_ydiagram_point){x, y};
     return YETTY_OK_VOID();

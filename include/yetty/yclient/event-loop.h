@@ -41,11 +41,12 @@ struct yetty_yclient_event_loop;
  *===========================================================================*/
 typedef void (*yetty_yclient_mouse_pos_cb)(void *user, uint32_t figure_id, double x, double y,
                                            uint32_t buttons_held);
-typedef void (*yetty_yclient_mouse_button_cb)(void *user, uint32_t figure_id, int button, int pressed,
-                                              double x, double y);
+typedef void (*yetty_yclient_mouse_button_cb)(void *user, uint32_t figure_id, int button,
+                                              int pressed, double x, double y);
 typedef void (*yetty_yclient_mouse_wheel_cb)(void *user, uint32_t figure_id, double dy, double x,
                                              double y);
-typedef void (*yetty_yclient_resize_cb)(void *user, uint32_t figure_id, double width, double height);
+typedef void (*yetty_yclient_resize_cb)(void *user, uint32_t figure_id, double width,
+                                        double height);
 /* Click-focus transition. gained=1 → card focused, gained=0 → card lost
  * focus (use this to drain key-up / mouse-up on the previously-focused
  * card before switching contexts). */

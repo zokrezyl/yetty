@@ -42,8 +42,7 @@ extern "C" {
  * string and *out_size is its length excluding the NUL. Caller owns
  * the buffer and frees it with free(). */
 struct yetty_ycore_void_result yetty_yrender_build_font_dispatcher_wgsl(
-    const char *const *slot_namespaces, size_t slot_count,
-    char **out_wgsl, size_t *out_size);
+    const char *const *slot_namespaces, size_t slot_count, char **out_wgsl, size_t *out_size);
 
 #ifdef __cplusplus
 }

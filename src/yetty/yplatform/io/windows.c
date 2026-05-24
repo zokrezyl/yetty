@@ -13,15 +13,17 @@
 #include <windows.h>
 #include <io.h>
 
-struct yetty_yplatform_io_size_result
-yetty_yplatform_io_read_nonblocking(int fd, void *buf, size_t cap)
+struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd, void *buf,
+                                                                          size_t cap)
 {
-    if (fd < 0 || !buf || cap == 0)
+    if (fd < 0 || !buf || cap == 0) {
         return YETTY_OK(yetty_yplatform_io_size, 0);
+    }
 
     HANDLE h = (HANDLE)_get_osfhandle(fd);
-    if (h == INVALID_HANDLE_VALUE)
+    if (h == INVALID_HANDLE_VALUE) {
         return YETTY_ERR(yetty_yplatform_io_size, "io_read_nonblocking: bad fd");
+    }
 
     DWORD type = GetFileType(h);
     DWORD want = (DWORD)(cap > 0x7FFFFFFFu ? 0x7FFFFFFFu : cap);
@@ -33,17 +35,22 @@ yetty_yplatform_io_read_nonblocking(int fd, void *buf, size_t cap)
             /* Broken pipe surfaces as ERROR_BROKEN_PIPE — treat as EOF
              * (value == 0) so the caller's pump loop terminates cleanly
              * instead of erroring out. */
-            if (err == ERROR_BROKEN_PIPE)
+            if (err == ERROR_BROKEN_PIPE) {
                 return YETTY_OK(yetty_yplatform_io_size, 0);
+            }
             return YETTY_ERR(yetty_yplatform_io_size, "io_read_nonblocking: PeekNamedPipe failed");
         }
-        if (avail == 0)
+        if (avail == 0) {
             return YETTY_OK(yetty_yplatform_io_size, 0);
-        if (avail < want) want = avail;
+        }
+        if (avail < want) {
+            want = avail;
+        }
     } else if (type == FILE_TYPE_CHAR) {
         DWORD events = 0;
-        if (GetNumberOfConsoleInputEvents(h, &events) && events == 0)
+        if (GetNumberOfConsoleInputEvents(h, &events) && events == 0) {
             return YETTY_OK(yetty_yplatform_io_size, 0);
+        }
         /* If GetNumberOfConsoleInputEvents fails (non-console char dev)
          * we fall through and let ReadFile decide. */
     }
@@ -53,8 +60,9 @@ yetty_yplatform_io_read_nonblocking(int fd, void *buf, size_t cap)
     DWORD got = 0;
     if (!ReadFile(h, buf, want, &got, NULL)) {
         DWORD err = GetLastError();
-        if (err == ERROR_BROKEN_PIPE || err == ERROR_HANDLE_EOF)
+        if (err == ERROR_BROKEN_PIPE || err == ERROR_HANDLE_EOF) {
             return YETTY_OK(yetty_yplatform_io_size, 0);
+        }
         return YETTY_ERR(yetty_yplatform_io_size, "io_read_nonblocking: ReadFile failed");
     }
     return YETTY_OK(yetty_yplatform_io_size, (size_t)got);

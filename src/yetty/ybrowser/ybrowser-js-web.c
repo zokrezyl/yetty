@@ -327,11 +327,10 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
                 const char *xdg = getenv("XDG_CACHE_HOME");
                 const char *home = getenv("HOME");
                 if (xdg && *xdg) {
-                    snprintf(altsvc_path, sizeof(altsvc_path),
-                             "%s/yetty/altsvc-cache", xdg);
+                    snprintf(altsvc_path, sizeof(altsvc_path), "%s/yetty/altsvc-cache", xdg);
                 } else if (home && *home) {
-                    snprintf(altsvc_path, sizeof(altsvc_path),
-                             "%s/.cache/yetty/altsvc-cache", home);
+                    snprintf(altsvc_path, sizeof(altsvc_path), "%s/.cache/yetty/altsvc-cache",
+                             home);
                 }
             }
             if (altsvc_path[0]) {
@@ -413,8 +412,8 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
 /* Configure one easy handle inside http_get_many with the same options
  * the sequential path uses. Extracted to avoid copy-paste drift. The
  * caller adds the curl_slist headers; we set everything else. */
-static void multi_configure_easy(CURL *c, const char *url, const char *referer,
-                                 struct fetch_buf *b, struct curl_slist *headers)
+static void multi_configure_easy(CURL *c, const char *url, const char *referer, struct fetch_buf *b,
+                                 struct curl_slist *headers)
 {
     pthread_once(&g_curl_share_once, share_init_once);
     if (g_curl_share) {
@@ -594,7 +593,9 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
                                  int concurrency, char **out_bodies, size_t *out_lens,
                                  long *out_status)
 {
-    (void)urls; (void)referer; (void)concurrency;
+    (void)urls;
+    (void)referer;
+    (void)concurrency;
     for (int i = 0; i < n; i++) {
         out_bodies[i] = NULL;
         out_lens[i] = 0;

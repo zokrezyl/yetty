@@ -7,7 +7,7 @@
  * pipes, OS event loop) lives in yinit.
  */
 
-#include <yetty/yplatform/compat.h>     /* setenv shim on Windows MSVC */
+#include <yetty/yplatform/compat.h> /* setenv shim on Windows MSVC */
 #include <yetty/yinit/yinit.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
@@ -21,8 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static struct yetty_ycore_void_result
-yetty_worker(struct yetty_yinit_runtime *rt, void *user)
+static struct yetty_ycore_void_result yetty_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     (void)user;
 
@@ -58,9 +57,8 @@ yetty_worker(struct yetty_yinit_runtime *rt, void *user)
     /* Initial resize event so the first frame uses the live framebuffer
      * dimensions instead of the config defaults. */
     struct yetty_yui_event ev = {
-        .type   = YETTY_YCORE_RESIZE,
-        .resize = {.width  = (float)rt->surface_width,
-                   .height = (float)rt->surface_height},
+        .type = YETTY_YCORE_RESIZE,
+        .resize = {.width = (float)rt->surface_width, .height = (float)rt->surface_height},
     };
     rt->platform_input_pipe->ops->write(rt->platform_input_pipe, &ev, sizeof(ev));
 

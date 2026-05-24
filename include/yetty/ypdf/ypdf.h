@@ -62,8 +62,7 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
  *===========================================================================*/
 
 typedef struct yetty_ycore_void_result (*yetty_ypdf_page_emit_fn)(
-    void *user_data, int page_index, int page_count,
-    const struct yetty_ydraw_draw_list *envelope);
+    void *user_data, int page_index, int page_count, const struct yetty_ydraw_draw_list *envelope);
 
 struct yetty_ypdf_stream_render_output {
     int page_count;

@@ -326,8 +326,9 @@ static struct yetty_ycore_void_result cell_push(struct ygrid_cell *cell, uint32_
     if (cell->count == cell->cap) {
         uint32_t cap = cell->cap ? cell->cap * 2u : 4u;
         uint32_t *grown = (uint32_t *)realloc(cell->indices, cap * sizeof(uint32_t));
-        if (!grown)
+        if (!grown) {
             return YETTY_ERR(yetty_ycore_void, "ygrid: cell index oom");
+        }
         cell->indices = grown;
         cell->cap = cap;
     }
@@ -337,10 +338,12 @@ static struct yetty_ycore_void_result cell_push(struct ygrid_cell *cell, uint32_
 
 static void cells_free(struct ygrid_cell *cells, size_t n)
 {
-    if (!cells)
+    if (!cells) {
         return;
-    for (size_t i = 0; i < n; ++i)
+    }
+    for (size_t i = 0; i < n; ++i) {
         free(cells[i].indices);
+    }
     free(cells);
 }
 
@@ -349,44 +352,56 @@ static struct yetty_ycore_void_result cells_alloc(struct yetty_ygrid_grid *g)
     size_t n = (size_t)g->grid_cols * (size_t)g->grid_rows;
     cells_free(g->cells, n);
     g->cells = (struct ygrid_cell *)calloc(n, sizeof(struct ygrid_cell));
-    if (!g->cells)
+    if (!g->cells) {
         return YETTY_ERR(yetty_ycore_void, "ygrid: cells alloc oom");
+    }
     return YETTY_OK_VOID();
 }
 
 static void cells_clear(struct yetty_ygrid_grid *g)
 {
     size_t n = (size_t)g->grid_cols * (size_t)g->grid_rows;
-    for (size_t i = 0; i < n; ++i)
+    for (size_t i = 0; i < n; ++i) {
         g->cells[i].count = 0;
+    }
 }
 
 /*===========================================================================
  * Spatial bucketing — insert one prim into every cell it overlaps.
  *=========================================================================*/
 
-static struct yetty_ycore_void_result bucket_prim(
-    struct yetty_ygrid_grid *g, uint32_t prim_index)
+static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, uint32_t prim_index)
 {
     const struct ygrid_prim_meta *p = &g->prims[prim_index];
     float cw = (g->base.rect.max.x - g->base.rect.min.x) / (float)g->grid_cols;
     float ch = (g->base.rect.max.y - g->base.rect.min.y) / (float)g->grid_rows;
-    if (cw <= 0.0f || ch <= 0.0f)
+    if (cw <= 0.0f || ch <= 0.0f) {
         return YETTY_OK_VOID();
+    }
 
     int col_min = (int)(p->min_x / cw);
     int col_max = (int)(p->max_x / cw);
     int row_min = (int)(p->min_y / ch);
     int row_max = (int)(p->max_y / ch);
-    if (col_min < 0) col_min = 0;
-    if (row_min < 0) row_min = 0;
-    if (col_max >= (int)g->grid_cols) col_max = (int)g->grid_cols - 1;
-    if (row_max >= (int)g->grid_rows) row_max = (int)g->grid_rows - 1;
-    ydebug("ygrid: bucket prim_index=%u aabb=(%.1f,%.1f)-(%.1f,%.1f) cw=%.2f ch=%.2f → cells (%d..%d, %d..%d)",
-           prim_index, p->min_x, p->min_y, p->max_x, p->max_y, cw, ch,
-           col_min, col_max, row_min, row_max);
-    if (col_max < col_min || row_max < row_min)
+    if (col_min < 0) {
+        col_min = 0;
+    }
+    if (row_min < 0) {
+        row_min = 0;
+    }
+    if (col_max >= (int)g->grid_cols) {
+        col_max = (int)g->grid_cols - 1;
+    }
+    if (row_max >= (int)g->grid_rows) {
+        row_max = (int)g->grid_rows - 1;
+    }
+    ydebug("ygrid: bucket prim_index=%u aabb=(%.1f,%.1f)-(%.1f,%.1f) cw=%.2f ch=%.2f → cells "
+           "(%d..%d, %d..%d)",
+           prim_index, p->min_x, p->min_y, p->max_x, p->max_y, cw, ch, col_min, col_max, row_min,
+           row_max);
+    if (col_max < col_min || row_max < row_min) {
         return YETTY_OK_VOID();
+    }
 
     for (int r = row_min; r <= row_max; ++r) {
         for (int c = col_min; c <= col_max; ++c) {
@@ -433,10 +448,10 @@ static struct yetty_ycore_void_result bucket_prim(
  * parse_and_index_record to bucket each generated glyph record, and
  * grow_bytes to extend grid->bytes for the new GLYPH records. The
  * normal SDF/GLYPH parse loop and the expansion call into each other. */
-static struct yetty_ycore_void_result parse_and_index_record(
-    struct yetty_ygrid_grid *g, uint32_t record_offset, size_t record_len);
-static struct yetty_ycore_void_result grow_bytes(
-    struct yetty_ygrid_grid *grid, size_t need);
+static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_grid *g,
+                                                             uint32_t record_offset,
+                                                             size_t record_len);
+static struct yetty_ycore_void_result grow_bytes(struct yetty_ygrid_grid *grid, size_t need);
 
 /* Decode one UTF-8 codepoint at *ptr (clamped by `end`). Advances *ptr
  * past the consumed bytes and returns the codepoint, or 0xFFFD on a
@@ -445,8 +460,9 @@ static struct yetty_ycore_void_result grow_bytes(
 static uint32_t decode_utf8(const uint8_t **ptr, const uint8_t *end)
 {
     const uint8_t *cursor = *ptr;
-    if (cursor >= end)
+    if (cursor >= end) {
         return 0;
+    }
     uint8_t lead = *cursor;
     uint32_t codepoint;
     if ((lead & 0x80u) == 0u) {
@@ -455,18 +471,30 @@ static uint32_t decode_utf8(const uint8_t **ptr, const uint8_t *end)
     } else if ((lead & 0xE0u) == 0xC0u) {
         codepoint = (uint32_t)(lead & 0x1Fu) << 6;
         cursor += 1;
-        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+        if (cursor < end) {
+            codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+        }
     } else if ((lead & 0xF0u) == 0xE0u) {
         codepoint = (uint32_t)(lead & 0x0Fu) << 12;
         cursor += 1;
-        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 6;
-        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+        if (cursor < end) {
+            codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 6;
+        }
+        if (cursor < end) {
+            codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+        }
     } else if ((lead & 0xF8u) == 0xF0u) {
         codepoint = (uint32_t)(lead & 0x07u) << 18;
         cursor += 1;
-        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 12;
-        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 6;
-        if (cursor < end) codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+        if (cursor < end) {
+            codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 12;
+        }
+        if (cursor < end) {
+            codepoint |= (uint32_t)(*cursor++ & 0x3Fu) << 6;
+        }
+        if (cursor < end) {
+            codepoint |= (uint32_t)(*cursor++ & 0x3Fu);
+        }
     } else {
         codepoint = 0xFFFDu;
         cursor += 1;
@@ -496,20 +524,17 @@ static struct yetty_ycore_void_result expand_text_span(
      * "no font registered yet" path. */
     uint32_t slot = (span->font_id < 0) ? 0u : (uint32_t)span->font_id;
     if (slot >= grid->font_count || !grid->fonts[slot]) {
-        ydebug("ygrid: TEXT_SPAN font_id=%d -> slot %u has no font; dropped",
-               span->font_id, slot);
+        ydebug("ygrid: TEXT_SPAN font_id=%d -> slot %u has no font; dropped", span->font_id, slot);
         return YETTY_OK_VOID();
     }
     struct yetty_ydraw_font *font = grid->fonts[slot];
 
     struct yetty_yrender_gpu_resource_set_result font_rs_result =
         font->ops->get_gpu_resource_set(font);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, font_rs_result,
-                        "ygrid: text_span font rs");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, font_rs_result, "ygrid: text_span font rs");
     const struct yetty_ydraw_gpu_resource_set *font_rs = font_rs_result.value;
     if (font_rs->buffer_count == 0 || !font_rs->buffers[0].data) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "ygrid: text_span: font has no glyph metadata");
+        return YETTY_ERR(yetty_ycore_void, "ygrid: text_span: font has no glyph metadata");
     }
     /* msdf-font's rs.buffers[0] is an array of 6-float entries:
      *   size_x, size_y, bearing_x, bearing_y, advance, cell_idx
@@ -518,7 +543,7 @@ static struct yetty_ycore_void_result expand_text_span(
      * `font_rs->buffers[0].size` grows DURING this loop. Re-fetch it
      * after every get_glyph_index call (same pattern scene-canvas's
      * expand uses) so the bounds check stays in sync. */
-    (void)font_rs;  /* the per-iteration re-fetch supersedes this snapshot */
+    (void)font_rs; /* the per-iteration re-fetch supersedes this snapshot */
 
     float base_size = font->ops->get_base_size(font);
     float scale = (base_size > 0.0f) ? span->font_size / base_size : 1.0f;
@@ -528,18 +553,19 @@ static struct yetty_ycore_void_result expand_text_span(
     const uint8_t *end = text_run + text_run_len;
     while (cursor < end) {
         uint32_t codepoint = decode_utf8(&cursor, end);
-        if (codepoint == 0)
+        if (codepoint == 0) {
             break;
+        }
 
-        struct uint32_result glyph_idx_result =
-            font->ops->get_glyph_index(font, codepoint);
+        struct uint32_result glyph_idx_result = font->ops->get_glyph_index(font, codepoint);
         if (YETTY_IS_ERR(glyph_idx_result)) {
             /* No glyph for this codepoint — match scene-canvas's
              * fallback: advance by a quarter em + spacing. */
             yetty_ycore_error_destroy(glyph_idx_result.error);
             cursor_x += (span->font_size * 0.25f) + span->char_spacing;
-            if (codepoint == 0x20)
+            if (codepoint == 0x20) {
                 cursor_x += span->word_spacing;
+            }
             continue;
         }
         uint32_t glyph_index = glyph_idx_result.value;
@@ -548,15 +574,14 @@ static struct yetty_ycore_void_result expand_text_span(
          * lazy slot allocation it triggered is visible here. */
         struct yetty_yrender_gpu_resource_set_result fresh_rs_result =
             font->ops->get_gpu_resource_set(font);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fresh_rs_result,
-                            "ygrid: text_span font rs refetch");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fresh_rs_result, "ygrid: text_span font rs refetch");
         const struct yetty_ydraw_gpu_resource_set *fresh_rs = fresh_rs_result.value;
         const float *meta = (const float *)fresh_rs->buffers[0].data;
-        uint32_t meta_count =
-            (uint32_t)(fresh_rs->buffers[0].size / (6u * sizeof(float)));
-        if (glyph_index >= meta_count)
+        uint32_t meta_count = (uint32_t)(fresh_rs->buffers[0].size / (6u * sizeof(float)));
+        if (glyph_index >= meta_count) {
             return YETTY_ERR(yetty_ycore_void,
                              "ygrid: text_span glyph_index out of metadata range");
+        }
 
         const float *glyph_meta = meta + glyph_index * 6u;
         float size_x = glyph_meta[0];
@@ -567,8 +592,9 @@ static struct yetty_ycore_void_result expand_text_span(
 
         if (size_x <= 0.0f || size_y <= 0.0f) {
             cursor_x += advance * scale + span->char_spacing;
-            if (codepoint == 0x20)
+            if (codepoint == 0x20) {
                 cursor_x += span->word_spacing;
+            }
             continue;
         }
 
@@ -582,7 +608,7 @@ static struct yetty_ycore_void_result expand_text_span(
          * the caller passed in a heap-stable text copy. */
         uint32_t glyph_record[7];
         glyph_record[0] = YGRID_GLYPH_TYPE;
-        glyph_record[1] = 0u;                /* z_order */
+        glyph_record[1] = 0u; /* z_order */
         memcpy(&glyph_record[2], &glyph_x, sizeof(float));
         memcpy(&glyph_record[3], &glyph_y, sizeof(float));
         memcpy(&glyph_record[4], &span->font_size, sizeof(float));
@@ -591,35 +617,36 @@ static struct yetty_ycore_void_result expand_text_span(
 
         size_t glyph_bytes = sizeof(glyph_record);
         struct yetty_ycore_void_result grow_result = grow_bytes(grid, glyph_bytes);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, grow_result,
-                            "ygrid: text_span grow_bytes");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, grow_result, "ygrid: text_span grow_bytes");
         uint32_t glyph_offset = (uint32_t)grid->bytes_len;
         memcpy(grid->bytes + grid->bytes_len, glyph_record, glyph_bytes);
         grid->bytes_len += glyph_bytes;
 
         struct yetty_ycore_void_result index_result =
             parse_and_index_record(grid, glyph_offset, glyph_bytes);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, index_result,
-                            "ygrid: text_span index glyph");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, index_result, "ygrid: text_span index glyph");
 
         cursor_x += advance * scale + span->char_spacing;
-        if (codepoint == 0x20)
+        if (codepoint == 0x20) {
             cursor_x += span->word_spacing;
+        }
     }
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result parse_and_index_record(
-    struct yetty_ygrid_grid *g, uint32_t record_offset, size_t record_len)
+static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_grid *g,
+                                                             uint32_t record_offset,
+                                                             size_t record_len)
 {
-    if (record_len < 4u || record_len % 4u != 0)
-        return YETTY_ERR(yetty_ycore_void,
-                         "ygrid: record_len must be a non-zero u32-multiple");
-    if ((size_t)record_offset + record_len > g->bytes_len)
+    if (record_len < 4u || record_len % 4u != 0) {
+        return YETTY_ERR(yetty_ycore_void, "ygrid: record_len must be a non-zero u32-multiple");
+    }
+    if ((size_t)record_offset + record_len > g->bytes_len) {
         return YETTY_ERR(yetty_ycore_void, "ygrid: record overruns byte buffer");
+    }
     const uint32_t *hdr = (const uint32_t *)(g->bytes + record_offset);
     uint32_t type = hdr[0];
-    (void)hdr;  /* hdr[1] is NOT payload_size for SDF prims — see comment. */
+    (void)hdr; /* hdr[1] is NOT payload_size for SDF prims — see comment. */
 
     /* Compute aabb. ygrid currently handles two prim categories:
      *
@@ -646,16 +673,18 @@ static struct yetty_ycore_void_result parse_and_index_record(
      * grid->bytes but produce no prim entry. */
     if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
         struct yetty_ydraw_text_span_drawable_view view;
-        if (yetty_ydraw_text_span_drawable_parse(hdr, &view) != 0)
+        if (yetty_ydraw_text_span_drawable_parse(hdr, &view) != 0) {
             return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_SPAN parse failed");
+        }
         /* `view.text` aliases into g->bytes; grow_bytes inside the
          * expansion may realloc that buffer and dangle the pointer.
          * Take a heap copy so each glyph emission has a stable read. */
         uint8_t *text_copy = NULL;
         if (view.text_len > 0) {
             text_copy = (uint8_t *)malloc(view.text_len);
-            if (!text_copy)
+            if (!text_copy) {
                 return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_SPAN text copy oom");
+            }
             memcpy(text_copy, view.text, view.text_len);
         }
         struct yetty_ycore_void_result expand_result =
@@ -680,15 +709,16 @@ static struct yetty_ycore_void_result parse_and_index_record(
          * rebuild_prim_staging prepends a rolling_row=0 word, so
          * storage_buffer[drawable_offset+3] lands on word 2 (x) — which
          * is what glyph_read_x in the shader expects. */
-        if (record_len < 7u * sizeof(uint32_t))
+        if (record_len < 7u * sizeof(uint32_t)) {
             return YETTY_ERR(yetty_ycore_void, "ygrid: GLYPH record truncated");
+        }
         float gx = *(const float *)&hdr[2];
         float gy = *(const float *)&hdr[3];
         float gs = *(const float *)&hdr[4];
         ar = YETTY_OK(rectangle, ((struct yetty_ycore_rectangle){
-            .min = {.x = gx, .y = gy},
-            .max = {.x = gx + gs, .y = gy + gs},
-        }));
+                                     .min = {.x = gx, .y = gy},
+                                     .max = {.x = gx + gs, .y = gy + gs},
+                                 }));
     } else if (yetty_ydraw_is_figure(type) && g->figure_factory) {
         /* Complex prim (yplot / yimage / yvideo / yzoo / yjungle …).
          * Mint a figure instance via the host-supplied factory and
@@ -700,17 +730,17 @@ static struct yetty_ycore_void_result parse_and_index_record(
             uint32_t cap = g->figure_instance_cap ? g->figure_instance_cap * 2u : 4u;
             struct yetty_ydraw_figure **grown = (struct yetty_ydraw_figure **)realloc(
                 g->figure_instances, cap * sizeof(struct yetty_ydraw_figure *));
-            if (!grown)
+            if (!grown) {
                 return YETTY_ERR(yetty_ycore_void, "ygrid: figure_instances oom");
+            }
             g->figure_instances = grown;
             g->figure_instance_cap = cap;
         }
-        struct yetty_ydraw_figure_ptr_result ir =
-            yetty_ydraw_raw_figure_factory_create_instance(
-                g->figure_factory, hdr, record_len, /*rolling_row=*/0u);
+        struct yetty_ydraw_figure_ptr_result ir = yetty_ydraw_raw_figure_factory_create_instance(
+            g->figure_factory, hdr, record_len, /*rolling_row=*/0u);
         if (YETTY_IS_ERR(ir)) {
-            ydebug("ygrid: figure_factory create_instance failed for type=0x%08x: %s",
-                   type, ir.error.msg);
+            ydebug("ygrid: figure_factory create_instance failed for type=0x%08x: %s", type,
+                   ir.error.msg);
             yetty_ycore_error_destroy(ir.error);
             return YETTY_OK_VOID();
         }
@@ -724,24 +754,25 @@ static struct yetty_ycore_void_result parse_and_index_record(
             /* Not an SDF type and not a glyph — drop the error,
              * leave the wire bytes in place, and report success.
              * v1 renders nothing for unsupported types. */
-            ydebug("ygrid: drop unrenderable type=0x%08x len=%zu (figure_factory=%p)",
-                   type, record_len, (void *)g->figure_factory);
+            ydebug("ygrid: drop unrenderable type=0x%08x len=%zu (figure_factory=%p)", type,
+                   record_len, (void *)g->figure_factory);
             yetty_ycore_error_destroy(ops_r.error);
             return YETTY_OK_VOID();
         }
         const struct yetty_ydraw_drawable_base_ops *ops = ops_r.value;
         ar = ops->aabb(hdr);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "ygrid: SDF prim aabb");
-        ydebug("ygrid: SDF type=0x%08x aabb=(%.1f,%.1f)-(%.1f,%.1f) len=%zu",
-               type, ar.value.min.x, ar.value.min.y, ar.value.max.x, ar.value.max.y, record_len);
+        ydebug("ygrid: SDF type=0x%08x aabb=(%.1f,%.1f)-(%.1f,%.1f) len=%zu", type, ar.value.min.x,
+               ar.value.min.y, ar.value.max.x, ar.value.max.y, record_len);
     }
 
     if (g->prim_count == g->prim_cap) {
         uint32_t cap = g->prim_cap ? g->prim_cap * 2u : 16u;
         struct ygrid_prim_meta *grown =
             (struct ygrid_prim_meta *)realloc(g->prims, cap * sizeof(struct ygrid_prim_meta));
-        if (!grown)
+        if (!grown) {
             return YETTY_ERR(yetty_ycore_void, "ygrid: prims table oom");
+        }
         g->prims = grown;
         g->prim_cap = cap;
     }
@@ -768,17 +799,19 @@ static struct yetty_ycore_void_result parse_and_index_record(
  * Staging — rebuild grid_staging + prim_staging u32 buffers
  *=========================================================================*/
 
-static struct yetty_ycore_void_result ensure_words(
-    uint32_t **buf, size_t *cap, size_t want)
+static struct yetty_ycore_void_result ensure_words(uint32_t **buf, size_t *cap, size_t want)
 {
-    if (*cap >= want)
+    if (*cap >= want) {
         return YETTY_OK_VOID();
+    }
     size_t new_cap = *cap ? *cap : 64u;
-    while (new_cap < want)
+    while (new_cap < want) {
         new_cap *= 2u;
+    }
     uint32_t *grown = (uint32_t *)realloc(*buf, new_cap * sizeof(uint32_t));
-    if (!grown)
+    if (!grown) {
         return YETTY_ERR(yetty_ycore_void, "ygrid: staging buffer oom");
+    }
     *buf = grown;
     *cap = new_cap;
     return YETTY_OK_VOID();
@@ -794,11 +827,11 @@ static struct yetty_ycore_void_result rebuild_grid_staging(struct yetty_ygrid_gr
      * Empty cells share a single sentinel block holding count=0. */
     size_t need = num_cells + 1u; /* sentinel block (one word = count=0) */
     for (size_t i = 0; i < num_cells; ++i) {
-        if (g->cells[i].count > 0)
+        if (g->cells[i].count > 0) {
             need += 1u + g->cells[i].count;
+        }
     }
-    struct yetty_ycore_void_result r =
-        ensure_words(&g->grid_staging, &g->grid_staging_cap, need);
+    struct yetty_ycore_void_result r = ensure_words(&g->grid_staging, &g->grid_staging_cap, need);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ygrid: grid_staging ensure_words");
 
     /* Write the sentinel block right after the offset table. */
@@ -814,8 +847,9 @@ static struct yetty_ycore_void_result rebuild_grid_staging(struct yetty_ygrid_gr
         }
         g->grid_staging[i] = cursor;
         g->grid_staging[cursor++] = cell->count;
-        for (uint32_t k = 0; k < cell->count; ++k)
+        for (uint32_t k = 0; k < cell->count; ++k) {
             g->grid_staging[cursor++] = cell->indices[k];
+        }
     }
     g->grid_staging_words = need;
     return YETTY_OK_VOID();
@@ -839,12 +873,12 @@ static struct yetty_ycore_void_result rebuild_prim_staging(struct yetty_ygrid_gr
      *                      rolling_row constant 0 is the no-scroll
      *                      contract — see feedback_rolling_row_scope. */
     size_t total_record_words = 0;
-    for (uint32_t i = 0; i < g->prim_count; ++i)
+    for (uint32_t i = 0; i < g->prim_count; ++i) {
         total_record_words += 1u /* rolling_row */ + g->prims[i].prim_payload_words;
+    }
 
     size_t need = (size_t)g->prim_count + total_record_words;
-    struct yetty_ycore_void_result r =
-        ensure_words(&g->prim_staging, &g->prim_staging_cap, need);
+    struct yetty_ycore_void_result r = ensure_words(&g->prim_staging, &g->prim_staging_cap, need);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ygrid: prim_staging ensure_words");
 
     uint32_t cursor = (uint32_t)g->prim_count; /* offset table comes first */
@@ -853,10 +887,9 @@ static struct yetty_ycore_void_result rebuild_prim_staging(struct yetty_ygrid_gr
         uint32_t data_offset = cursor - (uint32_t)g->prim_count;
         g->prim_staging[i] = data_offset;
 
-        g->prim_staging[cursor++] = 0u;  /* rolling_row prefix */
+        g->prim_staging[cursor++] = 0u; /* rolling_row prefix */
         /* Copy the WHOLE wire record (starting from the type word). */
-        memcpy(&g->prim_staging[cursor],
-               g->bytes + m->prim_payload_offset,
+        memcpy(&g->prim_staging[cursor], g->bytes + m->prim_payload_offset,
                (size_t)m->prim_payload_words * sizeof(uint32_t));
         cursor += m->prim_payload_words;
     }
@@ -872,18 +905,21 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
 {
     struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
 
-    if (g->binder)
+    if (g->binder) {
         g->binder->ops->destroy(g->binder);
-    if (g->registry)
+    }
+    if (g->registry) {
         yetty_ydraw_flyweight_registry_destroy(g->registry);
+    }
 
     free(g->sdf_lib_code.data);
     free(g->layer_shader_code.data);
     free(g->combined_shader);
     free(g->grid_staging);
     free(g->prim_staging);
-    if (g->cells)
+    if (g->cells) {
         cells_free(g->cells, (size_t)g->grid_cols * (size_t)g->grid_rows);
+    }
     free(g->prims);
     free(g->bytes);
 
@@ -891,8 +927,9 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
      * through it are ours to free. */
     if (g->figure_instances) {
         for (uint32_t i = 0; i < g->figure_instance_count; i++) {
-            if (g->figure_instances[i])
+            if (g->figure_instances[i]) {
                 yetty_ydraw_figure_destroy(g->figure_instances[i]);
+            }
         }
         free(g->figure_instances);
     }
@@ -901,28 +938,26 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     return YETTY_OK_VOID();
 }
 
-void yetty_ygrid_set_figure_factory(
-    struct yetty_ygrid_grid *grid,
-    struct yetty_ydraw_raw_figure_factory *factory)
+void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
+                                    struct yetty_ydraw_raw_figure_factory *factory)
 {
-    if (!grid) return;
+    if (!grid) {
+        return;
+    }
     grid->figure_factory = factory;
 }
 
 /* Defined further down (alongside the other shader-build helpers, after
  * the resource_set / pipeline setup section). Declared here so the
  * render path can pull it in when the font set changes mid-frame. */
-static struct yetty_ycore_void_result rebuild_font_dispatcher(
-    struct yetty_ygrid_grid *grid);
+static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid_grid *grid);
 
-static struct yetty_ycore_void_result ygrid_render(
-    struct yetty_yfigure_figure *self,
-    struct yetty_ydraw_target *target)
+static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *self,
+                                                   struct yetty_ydraw_target *target)
 {
     struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
-    ydebug("ygrid_render: rect=(%.1f,%.1f)-(%.1f,%.1f) prims=%u staging_dirty=%d",
-           self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y,
-           g->prim_count, g->staging_dirty);
+    ydebug("ygrid_render: rect=(%.1f,%.1f)-(%.1f,%.1f) prims=%u staging_dirty=%d", self->rect.min.x,
+           self->rect.min.y, self->rect.max.x, self->rect.max.y, g->prim_count, g->staging_dirty);
 
     if (g->staging_dirty) {
         struct yetty_ycore_void_result gr = rebuild_grid_staging(g);
@@ -936,8 +971,7 @@ static struct yetty_ycore_void_result ygrid_render(
      * rs.children. The shader-code hash change triggers a binder
      * refinalize on the next update(). */
     if (g->font_generation != g->last_emitted_font_generation) {
-        struct yetty_ycore_void_result dispatcher_result =
-            rebuild_font_dispatcher(g);
+        struct yetty_ycore_void_result dispatcher_result = rebuild_font_dispatcher(g);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_result,
                             "ygrid_render: rebuild font dispatcher");
     }
@@ -973,25 +1007,26 @@ static struct yetty_ycore_void_result ygrid_render(
     /* Draw — yplot-style direct wgpu, scissored + viewport-mapped to
      * the figure's rect. */
     WGPUTextureView view = target->ops->get_view(target);
-    if (!view)
+    if (!view) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_render: target view NULL");
+    }
 
     float vx = self->rect.min.x;
     float vy = self->rect.min.y;
-    if (w <= 0.0f || h <= 0.0f)
+    if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
+    }
 
     ydebug("ygrid_render: view=%p target=%p target_vp=(%.1f,%.1f,%.1f,%.1f) "
            "viewport=(%.1f,%.1f,%.1fx%.1f) prim_count=%u",
-           (void *)view, (void *)target,
-           target->viewport.x, target->viewport.y,
-           target->viewport.w, target->viewport.h,
-           vx, vy, w, h, g->prim_count);
+           (void *)view, (void *)target, target->viewport.x, target->viewport.y, target->viewport.w,
+           target->viewport.h, vx, vy, w, h, g->prim_count);
 
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(g->device, &enc_desc);
-    if (!enc)
+    if (!enc) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_render: encoder create");
+    }
 
     WGPURenderPassColorAttachment ca = {0};
     ca.view = view;
@@ -1029,19 +1064,17 @@ static struct yetty_ycore_void_result ygrid_render(
         self->dirty = 0;
         return YETTY_OK_VOID();
     }
-    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)sx0, (uint32_t)sy0,
-                                        (uint32_t)(sx1 - sx0),
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)sx0, (uint32_t)sy0, (uint32_t)(sx1 - sx0),
                                         (uint32_t)(sy1 - sy0));
 
     WGPURenderPipeline pipe = g->binder->ops->get_pipeline(g->binder);
     WGPUBuffer quad_vb = g->binder->ops->get_quad_vertex_buffer(g->binder);
-    ydebug("ygrid_render: pipe=%p quad_vb=%p scissor=(%u,%u,%u,%u)",
-           (void *)pipe, (void *)quad_vb,
-           (uint32_t)sx0, (uint32_t)sy0,
-           (uint32_t)(sx1 - sx0), (uint32_t)(sy1 - sy0));
+    ydebug("ygrid_render: pipe=%p quad_vb=%p scissor=(%u,%u,%u,%u)", (void *)pipe, (void *)quad_vb,
+           (uint32_t)sx0, (uint32_t)sy0, (uint32_t)(sx1 - sx0), (uint32_t)(sy1 - sy0));
     wgpuRenderPassEncoderSetPipeline(pass, pipe);
-    if (quad_vb)
+    if (quad_vb) {
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quad_vb, 0, WGPU_WHOLE_SIZE);
+    }
     struct yetty_ycore_void_result br = g->binder->ops->bind(g->binder, pass, 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ygrid_render: binder bind");
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
@@ -1060,8 +1093,9 @@ static struct yetty_ycore_void_result ygrid_render(
      * so the on-screen position is figure_rect.min + bounds. */
     for (uint32_t i = 0; i < g->figure_instance_count; i++) {
         struct yetty_ydraw_figure *inst = g->figure_instances[i];
-        if (!inst || !inst->render)
+        if (!inst || !inst->render) {
             continue;
+        }
         float sx = self->rect.min.x + inst->bounds.min.x;
         float sy = self->rect.min.y + inst->bounds.min.y;
         struct yetty_ycore_void_result fr = inst->render(inst, target, sx, sy);
@@ -1078,9 +1112,8 @@ static struct yetty_ycore_void_result ygrid_render(
 
 /* Walk a flat SDF / glyph / TEXT_SPAN / FONT record stream and call
  * yetty_ygrid_add_record on each. */
-static struct yetty_ycore_void_result ygrid_process_bytes(
-    struct yetty_yfigure_figure *self,
-    const uint8_t *bytes, size_t bytes_len)
+static struct yetty_ycore_void_result ygrid_process_bytes(struct yetty_yfigure_figure *self,
+                                                          const uint8_t *bytes, size_t bytes_len)
 {
     struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
     uint32_t off = 0;
@@ -1089,9 +1122,9 @@ static struct yetty_ycore_void_result ygrid_process_bytes(
         struct yetty_ycore_size_result pr = yetty_ydraw_drawable_command_parse(
             g->registry, bytes + off, (uint32_t)(bytes_len - off), &cmd);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid_process_bytes: parse");
-        if (pr.value == 0)
-            return YETTY_ERR(yetty_ycore_void,
-                             "ygrid_process_bytes: parser made no progress");
+        if (pr.value == 0) {
+            return YETTY_ERR(yetty_ycore_void, "ygrid_process_bytes: parser made no progress");
+        }
         if (cmd.kind == YETTY_YDRAW_COMMAND_ADD) {
             /* Some flyweight handlers (FONT with variable-length name)
              * return records whose total isn't a multiple of 4. ygrid's
@@ -1102,26 +1135,23 @@ static struct yetty_ycore_void_result ygrid_process_bytes(
             if (padded == rec_size) {
                 struct yetty_ycore_void_result ar =
                     yetty_ygrid_add_record(g, bytes + off, rec_size);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
-                                    "ygrid_process_bytes: add_record");
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "ygrid_process_bytes: add_record");
             } else {
                 uint8_t scratch[64];
                 if (padded <= sizeof(scratch)) {
                     memcpy(scratch, bytes + off, rec_size);
                     memset(scratch + rec_size, 0, padded - rec_size);
-                    struct yetty_ycore_void_result ar =
-                        yetty_ygrid_add_record(g, scratch, padded);
+                    struct yetty_ycore_void_result ar = yetty_ygrid_add_record(g, scratch, padded);
                     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
                                         "ygrid_process_bytes: add_record padded");
                 } else {
                     uint8_t *heap = (uint8_t *)malloc(padded);
-                    if (!heap)
-                        return YETTY_ERR(yetty_ycore_void,
-                                         "ygrid_process_bytes: pad oom");
+                    if (!heap) {
+                        return YETTY_ERR(yetty_ycore_void, "ygrid_process_bytes: pad oom");
+                    }
                     memcpy(heap, bytes + off, rec_size);
                     memset(heap + rec_size, 0, padded - rec_size);
-                    struct yetty_ycore_void_result ar =
-                        yetty_ygrid_add_record(g, heap, padded);
+                    struct yetty_ycore_void_result ar = yetty_ygrid_add_record(g, heap, padded);
                     free(heap);
                     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
                                         "ygrid_process_bytes: add_record padded (heap)");
@@ -1187,8 +1217,8 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
 /* Load the raw ydraw-layer.wgsl bytes into layer_shader_code. The
  * combined shader (font-dispatcher + this file) is assembled lazily by
  * rebuild_font_dispatcher() and updated whenever the font set changes. */
-static struct yetty_ycore_void_result load_layer_shader(
-    struct yetty_ygrid_grid *grid, const struct yetty_context *context)
+static struct yetty_ycore_void_result load_layer_shader(struct yetty_ygrid_grid *grid,
+                                                        const struct yetty_context *context)
 {
     struct yetty_yconfig_config *config = context->runtime->config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
@@ -1218,23 +1248,21 @@ static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid
     const struct yetty_ydraw_gpu_resource_set *font_rs[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
     const char *slot_namespaces[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
     for (uint32_t slot = 0; slot < grid->font_count; slot++) {
-        if (!grid->fonts[slot])
+        if (!grid->fonts[slot]) {
             continue;
+        }
         struct yetty_yrender_gpu_resource_set_result font_rs_result =
             grid->fonts[slot]->ops->get_gpu_resource_set(grid->fonts[slot]);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, font_rs_result,
-                            "ygrid: font get_gpu_resource_set");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, font_rs_result, "ygrid: font get_gpu_resource_set");
         font_rs[slot] = font_rs_result.value;
         slot_namespaces[slot] = font_rs_result.value->namespace;
     }
 
     char *dispatcher_wgsl = NULL;
     size_t dispatcher_size = 0;
-    struct yetty_ycore_void_result dispatcher_result =
-        yetty_yrender_build_font_dispatcher_wgsl(
-            slot_namespaces, grid->font_count, &dispatcher_wgsl, &dispatcher_size);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_result,
-                        "ygrid: build font dispatcher");
+    struct yetty_ycore_void_result dispatcher_result = yetty_yrender_build_font_dispatcher_wgsl(
+        slot_namespaces, grid->font_count, &dispatcher_wgsl, &dispatcher_size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_result, "ygrid: build font dispatcher");
 
     size_t combined_size = dispatcher_size + grid->layer_shader_code.size;
     char *combined_buffer = (char *)malloc(combined_size + 1u);
@@ -1243,16 +1271,15 @@ static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid
         return YETTY_ERR(yetty_ycore_void, "ygrid: combined shader oom");
     }
     memcpy(combined_buffer, dispatcher_wgsl, dispatcher_size);
-    memcpy(combined_buffer + dispatcher_size,
-           grid->layer_shader_code.data, grid->layer_shader_code.size);
+    memcpy(combined_buffer + dispatcher_size, grid->layer_shader_code.data,
+           grid->layer_shader_code.size);
     combined_buffer[combined_size] = '\0';
     free(dispatcher_wgsl);
 
     free(grid->combined_shader);
     grid->combined_shader = combined_buffer;
     grid->combined_shader_size = combined_size;
-    yetty_yrender_shader_code_set(&grid->rs.shader,
-                                  grid->combined_shader,
+    yetty_yrender_shader_code_set(&grid->rs.shader, grid->combined_shader,
                                   grid->combined_shader_size);
 
     /* rs.children[0] = sdf_lib, [1..N] = active font rs in slot order.
@@ -1261,22 +1288,23 @@ static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid
     size_t children_used = 0;
     grid->rs.children[children_used++] = &grid->sdf_lib_rs;
     for (uint32_t slot = 0; slot < grid->font_count; slot++) {
-        if (!font_rs[slot])
+        if (!font_rs[slot]) {
             continue;
-        if (children_used >= YETTY_YRENDER_RS_MAX_CHILDREN)
+        }
+        if (children_used >= YETTY_YRENDER_RS_MAX_CHILDREN) {
             break;
-        grid->rs.children[children_used++] =
-            (struct yetty_ydraw_gpu_resource_set *)font_rs[slot];
+        }
+        grid->rs.children[children_used++] = (struct yetty_ydraw_gpu_resource_set *)font_rs[slot];
     }
     grid->rs.children_count = children_used;
     grid->last_emitted_font_generation = grid->font_generation;
-    ydebug("ygrid: rebuilt dispatcher fonts=%u children=%zu shader=%zuB",
-           grid->font_count, children_used, grid->combined_shader_size);
+    ydebug("ygrid: rebuilt dispatcher fonts=%u children=%zu shader=%zuB", grid->font_count,
+           children_used, grid->combined_shader_size);
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result load_sdf_lib(
-    struct yetty_ygrid_grid *g, const struct yetty_context *context)
+static struct yetty_ycore_void_result load_sdf_lib(struct yetty_ygrid_grid *g,
+                                                   const struct yetty_context *context)
 {
     struct yetty_yconfig_config *config = context->runtime->config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
@@ -1287,8 +1315,7 @@ static struct yetty_ycore_void_result load_sdf_lib(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ygrid: read ysdf.gen.wgsl");
     g->sdf_lib_code = fr.value;
     strncpy(g->sdf_lib_rs.namespace, "ysdf_lib", YETTY_YRENDER_NAME_MAX - 1);
-    yetty_yrender_shader_code_set(&g->sdf_lib_rs.shader,
-                                  (const char *)g->sdf_lib_code.data,
+    yetty_yrender_shader_code_set(&g->sdf_lib_rs.shader, (const char *)g->sdf_lib_code.data,
                                   g->sdf_lib_code.size);
     return YETTY_OK_VOID();
 }
@@ -1317,12 +1344,11 @@ static struct yetty_ycore_void_result build_binder(struct yetty_ygrid_grid *grid
      * + the layer code with stub-default helpers; the shader compiles
      * and renders SDF prims correctly. set_font() rebuilds later. */
     struct yetty_ycore_void_result dispatcher_result = rebuild_font_dispatcher(grid);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_result,
-                        "ygrid: initial dispatcher");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_result, "ygrid: initial dispatcher");
 
     struct yetty_yrender_gpu_resource_binder_result binder_result =
-        yetty_yrender_gpu_resource_binder_create(
-            grid->device, grid->queue, grid->target_format, grid->allocator);
+        yetty_yrender_gpu_resource_binder_create(grid->device, grid->queue, grid->target_format,
+                                                 grid->allocator);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, binder_result, "ygrid: binder create");
     grid->binder = binder_result.value;
 
@@ -1335,14 +1361,17 @@ static struct yetty_ycore_void_result build_binder(struct yetty_ygrid_grid *grid
 
 static struct yetty_ycore_void_result grow_bytes(struct yetty_ygrid_grid *g, size_t need)
 {
-    if (g->bytes_len + need <= g->bytes_cap)
+    if (g->bytes_len + need <= g->bytes_cap) {
         return YETTY_OK_VOID();
+    }
     size_t cap = g->bytes_cap ? g->bytes_cap * 2u : 256u;
-    while (g->bytes_len + need > cap)
+    while (g->bytes_len + need > cap) {
         cap *= 2u;
+    }
     uint8_t *grown = (uint8_t *)realloc(g->bytes, cap);
-    if (!grown)
+    if (!grown) {
         return YETTY_ERR(yetty_ycore_void, "ygrid: byte buffer oom");
+    }
     g->bytes = grown;
     g->bytes_cap = cap;
     return YETTY_OK_VOID();
@@ -1352,19 +1381,22 @@ static struct yetty_ycore_void_result grow_bytes(struct yetty_ygrid_grid *g, siz
  * Public API
  *=========================================================================*/
 
-struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
-    struct yetty_ycore_rectangle rect, uint32_t grid_cols, uint32_t grid_rows,
-    const struct yetty_context *context)
+struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectangle rect,
+                                                      uint32_t grid_cols, uint32_t grid_rows,
+                                                      const struct yetty_context *context)
 {
-    if (!context)
+    if (!context) {
         return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: NULL context");
-    if (grid_cols == 0 || grid_rows == 0)
+    }
+    if (grid_cols == 0 || grid_rows == 0) {
         return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: grid dims must be non-zero");
+    }
 
     struct yetty_ygrid_grid *g =
         (struct yetty_ygrid_grid *)calloc(1, sizeof(struct yetty_ygrid_grid));
-    if (!g)
+    if (!g) {
         return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: oom");
+    }
 
     g->base.ops = ygrid_ops();
     g->base.rect = rect;
@@ -1391,30 +1423,28 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
         g->registry = rr.value;
         yetty_ydraw_flyweight_registry_set_default(g->registry, yetty_ysdf_handler);
         struct yetty_ycore_void_result hr;
-        hr = yetty_ydraw_flyweight_registry_add(
-            g->registry, YETTY_YDRAW_CMD_BASE, YETTY_YDRAW_CMD_END,
-            yetty_ydraw_cmd_handler);
+        hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_CMD_BASE,
+                                                YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(&g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry cmd", hr);
         }
-        hr = yetty_ydraw_flyweight_registry_add(
-            g->registry, YETTY_YDRAW_TYPE_FONT, YETTY_YDRAW_TYPE_FONT,
-            yetty_ydraw_font_drawable_handler);
+        hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_TYPE_FONT,
+                                                YETTY_YDRAW_TYPE_FONT,
+                                                yetty_ydraw_font_drawable_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(&g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry font", hr);
         }
-        hr = yetty_ydraw_flyweight_registry_add(
-            g->registry, YETTY_YDRAW_TYPE_TEXT_SPAN, YETTY_YDRAW_TYPE_TEXT_SPAN,
-            yetty_ydraw_text_span_drawable_handler);
+        hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_TYPE_TEXT_SPAN,
+                                                YETTY_YDRAW_TYPE_TEXT_SPAN,
+                                                yetty_ydraw_text_span_drawable_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(&g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
         }
-        hr = yetty_ydraw_flyweight_registry_add(
-            g->registry, YETTY_YDRAW_COMPLEX_TYPE_BASE, 0xFFFFFFFFu,
-            yetty_ydraw_raw_figure_handler);
+        hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_COMPLEX_TYPE_BASE,
+                                                0xFFFFFFFFu, yetty_ydraw_raw_figure_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(&g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);
@@ -1450,17 +1480,17 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
  * (optional) complex-prim factory. NULL `user` is allowed — produces
  * an ygrid with no font and no complex-prim support, useful for tests
  * and tooling. */
-static struct yetty_yfigure_figure_ptr_result ygrid_factory(
-    struct yetty_ycore_rectangle rect,
-    const struct yetty_context *context,
-    void *user)
+static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_rectangle rect,
+                                                            const struct yetty_context *context,
+                                                            void *user)
 {
     /* 1x1 grid — ygreeter widgets are flat prim stores; the spatial-
      * cell bucketing isn't useful for variable widget rects. */
     struct yetty_ygrid_grid_ptr_result gr =
         yetty_ygrid_create(rect, /*grid_cols=*/1u, /*grid_rows=*/1u, context);
-    if (YETTY_IS_ERR(gr))
+    if (YETTY_IS_ERR(gr)) {
         return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: create", gr);
+    }
     if (user) {
         const struct yetty_ygrid_factory_args *args = user;
         if (args->default_font) {
@@ -1479,38 +1509,38 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(
 }
 
 struct yetty_ycore_void_result yetty_ygrid_register_factory(
-    struct yetty_yfigure_registry *registry,
-    const struct yetty_ygrid_factory_args *args)
+    struct yetty_yfigure_registry *registry, const struct yetty_ygrid_factory_args *args)
 {
-    return yetty_yfigure_registry_register(
-        registry, YETTY_YFIGURE_KIND_YGRID, ygrid_factory, (void *)args);
+    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YGRID, ygrid_factory,
+                                           (void *)args);
 }
 
 struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
-    struct yetty_yfigure_registry *registry,
-    uint32_t kind,
+    struct yetty_yfigure_registry *registry, uint32_t kind,
     const struct yetty_ygrid_factory_args *args)
 {
-    return yetty_yfigure_registry_register(
-        registry, kind, ygrid_factory, (void *)args);
+    return yetty_yfigure_registry_register(registry, kind, ygrid_factory, (void *)args);
 }
 
 struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)
 {
-    if (!grid)
+    if (!grid) {
         return NULL;
+    }
     return &grid->base;
 }
 
-struct yetty_ycore_void_result yetty_ygrid_add_record(
-    struct yetty_ygrid_grid *grid,
-    const uint8_t *record_bytes, size_t record_len)
+struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_ygrid_grid *grid,
+                                                      const uint8_t *record_bytes,
+                                                      size_t record_len)
 {
-    if (!grid || !record_bytes)
+    if (!grid || !record_bytes) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_add_record: NULL arg");
-    if (record_len < 4u || record_len % 4u != 0)
+    }
+    if (record_len < 4u || record_len % 4u != 0) {
         return YETTY_ERR(yetty_ycore_void,
                          "ygrid_add_record: record_len must be a non-zero u32-multiple");
+    }
     struct yetty_ycore_void_result gr = grow_bytes(grid, record_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "ygrid_add_record: grow_bytes");
 
@@ -1518,8 +1548,7 @@ struct yetty_ycore_void_result yetty_ygrid_add_record(
     memcpy(grid->bytes + grid->bytes_len, record_bytes, record_len);
     grid->bytes_len += record_len;
 
-    struct yetty_ycore_void_result pr =
-        parse_and_index_record(grid, record_offset, record_len);
+    struct yetty_ycore_void_result pr = parse_and_index_record(grid, record_offset, record_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid_add_record: parse_and_index");
 
     grid->staging_dirty = 1;
@@ -1529,8 +1558,9 @@ struct yetty_ycore_void_result yetty_ygrid_add_record(
 
 struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_ygrid_grid *grid)
 {
-    if (!grid)
+    if (!grid) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_clear: NULL arg");
+    }
     grid->bytes_len = 0;
     grid->prim_count = 0;
     cells_clear(grid);
@@ -1539,21 +1569,24 @@ struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_ygrid_grid *grid)
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygrid_set_font(
-    struct yetty_ygrid_grid *grid, uint32_t slot, struct yetty_ydraw_font *font)
+struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *grid, uint32_t slot,
+                                                    struct yetty_ydraw_font *font)
 {
-    if (!grid)
+    if (!grid) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_set_font: NULL grid");
+    }
     /* Cap at the rs.children[] capacity minus the SDF lib slot. */
-    if (slot >= YETTY_YRENDER_RS_MAX_CHILDREN - 1u)
+    if (slot >= YETTY_YRENDER_RS_MAX_CHILDREN - 1u) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_set_font: slot out of range");
+    }
 
     grid->fonts[slot] = font;
     /* font_count is the high watermark used by the dispatcher loop —
      * keep it ≥ slot+1 when assigning; clearing a tail slot doesn't
      * shrink it (NULL slots fall through to the default case anyway). */
-    if (font && (slot + 1u) > grid->font_count)
+    if (font && (slot + 1u) > grid->font_count) {
         grid->font_count = slot + 1u;
+    }
     grid->font_generation++;
     grid->base.dirty = 1;
     return YETTY_OK_VOID();

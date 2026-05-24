@@ -47,7 +47,7 @@ typedef uint32_t yetty_yfont_cache_handle;
  * caller still holds at least one ref to `handle`. */
 struct yetty_yfont_cache_ref {
     struct yetty_ydraw_font *font;
-    yetty_yfont_cache_handle  handle;
+    yetty_yfont_cache_handle handle;
 };
 
 YETTY_YRESULT_DECLARE(yetty_yfont_cache_ptr, struct yetty_yfont_cache *);
@@ -82,7 +82,7 @@ void yetty_yfont_cache_release_font(struct yetty_yfont_cache *cache,
 
 /* Read access. Returns NULL if handle is INVALID, out of range, or freed. */
 struct yetty_ydraw_font *yetty_yfont_cache_font_at(const struct yetty_yfont_cache *cache,
-                                                    yetty_yfont_cache_handle handle);
+                                                   yetty_yfont_cache_handle handle);
 
 /* Total slots ever allocated (including freed ones). For binder / debug
  * iteration; combine with font_at() which returns NULL on freed slots. */

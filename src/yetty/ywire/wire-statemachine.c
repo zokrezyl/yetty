@@ -20,19 +20,19 @@
 #include <yetty/yterm/terminal.h>
 #include <yetty/ytrace/ytrace.h>
 
-#define OSC_RING_INITIAL_CAP 4096u    /* must be power of 2 */
+#define OSC_RING_INITIAL_CAP 4096u /* must be power of 2 */
 #define OSC_HANDLERS_INITIAL_CAP 4u
 #define OSC_ARGS_B64_MAX 1024u
 #define OSC_ARGS_RAW_MAX (OSC_ARGS_B64_MAX * 3u / 4u)
 #define OSC_OUT_CARRY_CAP (256u * 1024u) /* fits a 64KB LZ4F block + amplification */
 
 enum scan_state {
-    SCAN_RAW = 0,        /* outside any envelope; default_layer dispatch */
-    SCAN_AFTER_ESC,      /* saw ESC in RAW; next byte decides */
-    SCAN_OSC_CODE,       /* parsing decimal code digits */
-    SCAN_OSC_ARGS,       /* between first `;` and second `;` (b64-args) */
-    SCAN_OSC_BODY,       /* after second `;`; current_layer dispatch */
-    SCAN_OSC_BODY_ESC,   /* saw ESC inside body; next byte decides terminator */
+    SCAN_RAW = 0,      /* outside any envelope; default_layer dispatch */
+    SCAN_AFTER_ESC,    /* saw ESC in RAW; next byte decides */
+    SCAN_OSC_CODE,     /* parsing decimal code digits */
+    SCAN_OSC_ARGS,     /* between first `;` and second `;` (b64-args) */
+    SCAN_OSC_BODY,     /* after second `;`; current_layer dispatch */
+    SCAN_OSC_BODY_ESC, /* saw ESC inside body; next byte decides terminator */
 };
 
 /* OSC string terminators (ECMA-48 / xterm):
@@ -40,8 +40,8 @@ enum scan_state {
  *   ST  — two-byte `ESC \` (the standards-compliant 7-bit form)
  * Used by the OSC scanner to end the code/args/body region. */
 enum osc_term {
-    OSC_BEL     = '\007',
-    OSC_ST_ESC  = '\033',
+    OSC_BEL = '\007',
+    OSC_ST_ESC = '\033',
     OSC_ST_TAIL = '\\',
 };
 
@@ -221,8 +221,8 @@ static void out_carry_reset(struct yetty_ywire_wire_statemachine *statemachine)
     statemachine->out_carry_tail = 0;
 }
 
-static size_t out_carry_drain(struct yetty_ywire_wire_statemachine *statemachine,
-                              uint8_t *dst, size_t n)
+static size_t out_carry_drain(struct yetty_ywire_wire_statemachine *statemachine, uint8_t *dst,
+                              size_t n)
 {
     size_t have = out_carry_avail(statemachine);
     size_t take = have < n ? have : n;
@@ -246,7 +246,8 @@ static struct yetty_ycore_void_result out_carry_append(
         /* Compact: shift live bytes to start. */
         size_t live = out_carry_avail(statemachine);
         if (live > 0) {
-            memmove(statemachine->out_carry, statemachine->out_carry + statemachine->out_carry_head, live);
+            memmove(statemachine->out_carry, statemachine->out_carry + statemachine->out_carry_head,
+                    live);
         }
         statemachine->out_carry_head = 0;
         statemachine->out_carry_tail = live;
@@ -316,10 +317,13 @@ static void decode_args_slot(struct yetty_ywire_wire_statemachine *statemachine)
         statemachine->args_decoded_len += 3;
         pos += 4;
     }
-    if (b64n - pos >= 2 && statemachine->args_decoded_len + 2 <= sizeof(statemachine->args_decoded)) {
+    if (b64n - pos >= 2 &&
+        statemachine->args_decoded_len + 2 <= sizeof(statemachine->args_decoded)) {
         char tail[4] = {
-            statemachine->args_b64[pos], statemachine->args_b64[pos + 1],
-            b64n - pos >= 3 ? statemachine->args_b64[pos + 2] : 'A', 'A',
+            statemachine->args_b64[pos],
+            statemachine->args_b64[pos + 1],
+            b64n - pos >= 3 ? statemachine->args_b64[pos + 2] : 'A',
+            'A',
         };
         uint8_t triple[3];
         if (b64_decode_quartet(tail, triple)) {
@@ -375,16 +379,13 @@ static struct yetty_ycore_void_result lz4_drain_one(
     uint8_t out[8192];
     size_t in_left = 0;
     size_t out_left = sizeof(out);
-    size_t r = LZ4F_decompress(statemachine->lz4_ctx, out, &out_left, NULL,
-                               &in_left, NULL);
+    size_t r = LZ4F_decompress(statemachine->lz4_ctx, out, &out_left, NULL, &in_left, NULL);
     if (LZ4F_isError(r)) {
         return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(r));
     }
     if (out_left > 0) {
-        struct yetty_ycore_void_result rr =
-            out_carry_append(statemachine, out, out_left);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
-                            "osc_statemachine: lz4 drain append");
+        struct yetty_ycore_void_result rr = out_carry_append(statemachine, out, out_left);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "osc_statemachine: lz4 drain append");
     } else {
         statemachine->lz4_drain_done = 1;
     }
@@ -435,16 +436,14 @@ static struct yetty_ycore_void_result push_decoded(
         uint8_t out[OSC_OUT_CARRY_CAP];
         size_t in_left = n - in_pos;
         size_t out_left = sizeof(out);
-        size_t r = LZ4F_decompress(statemachine->lz4_ctx, out, &out_left,
-                                   decoded + in_pos, &in_left, NULL);
+        size_t r = LZ4F_decompress(statemachine->lz4_ctx, out, &out_left, decoded + in_pos,
+                                   &in_left, NULL);
         if (LZ4F_isError(r)) {
             return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(r));
         }
         if (out_left > 0) {
-            struct yetty_ycore_void_result rr =
-                out_carry_append(statemachine, out, out_left);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
-                                "osc_statemachine: out_carry append");
+            struct yetty_ycore_void_result rr = out_carry_append(statemachine, out, out_left);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "osc_statemachine: out_carry append");
         }
         in_pos += in_left;
         if (in_left == 0 && out_left == 0) {
@@ -457,8 +456,8 @@ static struct yetty_ycore_void_result push_decoded(
 /* Pump up to `want` decoded bytes into out_carry from the body. Stops
  * at the envelope terminator (BEL or ESC \\). Advances read_pos past
  * consumed wire bytes. */
-static struct yetty_ycore_void_result body_pump(
-    struct yetty_ywire_wire_statemachine *statemachine, size_t want)
+static struct yetty_ycore_void_result body_pump(struct yetty_ywire_wire_statemachine *statemachine,
+                                                size_t want)
 {
     /* Cap the in-pass target at half the carry. The carry is bounded
      * (OSC_OUT_CARRY_CAP), but a single prim can be many MB (e.g. yimage's
@@ -480,8 +479,7 @@ static struct yetty_ycore_void_result body_pump(
              * carry between iterations. */
             if (statemachine->lz4_mode && !statemachine->lz4_drain_done) {
                 struct yetty_ycore_void_result dr = lz4_drain_one(statemachine);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, dr,
-                                    "osc_statemachine: lz4 drain step");
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "osc_statemachine: lz4 drain step");
                 if (statemachine->lz4_drain_done) {
                     return YETTY_OK_VOID();
                 }
@@ -526,7 +524,7 @@ static struct yetty_ycore_void_result body_pump(
             batch[batch_n++] = c;
             statemachine->read_pos++;
         }
-out:
+    out:
         if (batch_n == 0 && !hit_terminator) {
             return YETTY_OK_VOID();
         }
@@ -583,8 +581,7 @@ out:
                     size_t out_n = statemachine->b64_carry_n >= 3 ? 2 : 1;
                     struct yetty_ycore_void_result fr =
                         push_decoded(statemachine, out_bytes, out_n);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr,
-                                        "osc_statemachine: flush b64 tail");
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "osc_statemachine: flush b64 tail");
                 }
             }
             statemachine->b64_carry_n = 0;
@@ -599,10 +596,11 @@ out:
 
 /* Pump raw (non-decoded) bytes from the ring into out_carry up to `want`
  * decoded bytes available — for SCAN_RAW. Stops at the next ESC. */
-static struct yetty_ycore_void_result raw_pump(
-    struct yetty_ywire_wire_statemachine *statemachine, size_t want)
+static struct yetty_ycore_void_result raw_pump(struct yetty_ywire_wire_statemachine *statemachine,
+                                               size_t want)
 {
-    while (out_carry_avail(statemachine) < want && statemachine->read_pos < statemachine->write_pos) {
+    while (out_carry_avail(statemachine) < want &&
+           statemachine->read_pos < statemachine->write_pos) {
         uint8_t c = ring_at(statemachine, statemachine->read_pos);
         if (c == '\033') {
             return YETTY_OK_VOID(); /* leave ESC for the framer */
@@ -658,11 +656,12 @@ static void layer_coro_entry(void *arg)
 }
 
 /* Find the layer_coro entry for `layer`, or NULL. */
-static struct layer_coro *find_layer_coro(
-    struct yetty_ywire_wire_statemachine *sm,
-    struct yetty_yrender_terminal_layer *layer)
+static struct layer_coro *find_layer_coro(struct yetty_ywire_wire_statemachine *sm,
+                                          struct yetty_yrender_terminal_layer *layer)
 {
-    if (!layer) return NULL;
+    if (!layer) {
+        return NULL;
+    }
     for (size_t i = 0; i < sm->layer_coro_count; i++) {
         if (sm->layer_coros[i]->layer == layer) {
             return sm->layer_coros[i];
@@ -674,29 +673,35 @@ static struct layer_coro *find_layer_coro(
 /* Get-or-create the layer_coro for `layer`. Spawns the coro on first
  * call; subsequent calls return the existing entry. Returns NULL on
  * alloc / spawn failure (caller must surface the error). */
-static struct layer_coro *get_or_spawn_layer_coro(
-    struct yetty_ywire_wire_statemachine *sm,
-    struct yetty_yrender_terminal_layer *layer)
+static struct layer_coro *get_or_spawn_layer_coro(struct yetty_ywire_wire_statemachine *sm,
+                                                  struct yetty_yrender_terminal_layer *layer)
 {
     struct layer_coro *existing = find_layer_coro(sm, layer);
-    if (existing) return existing;
-    if (!layer || !layer->ops || !layer->ops->process_input) return NULL;
+    if (existing) {
+        return existing;
+    }
+    if (!layer || !layer->ops || !layer->ops->process_input) {
+        return NULL;
+    }
 
     if (sm->layer_coro_count == sm->layer_coro_cap) {
         size_t nc = sm->layer_coro_cap ? sm->layer_coro_cap * 2 : 4;
-        struct layer_coro **grown =
-            realloc(sm->layer_coros, nc * sizeof(struct layer_coro *));
-        if (!grown) return NULL;
+        struct layer_coro **grown = realloc(sm->layer_coros, nc * sizeof(struct layer_coro *));
+        if (!grown) {
+            return NULL;
+        }
         sm->layer_coros = grown;
         sm->layer_coro_cap = nc;
     }
     struct layer_coro *lc = calloc(1, sizeof(struct layer_coro));
-    if (!lc) return NULL;
-    lc->layer  = layer;
-    lc->sm     = sm;
+    if (!lc) {
+        return NULL;
+    }
+    lc->layer = layer;
+    lc->sm = sm;
     lc->result = YETTY_OK_VOID();
-    struct yplatform_coro_ptr_result spawn_res = yetty_yplatform_coro_spawn(
-        layer_coro_entry, lc, 1024 * 1024, "wire-layer");
+    struct yplatform_coro_ptr_result spawn_res =
+        yetty_yplatform_coro_spawn(layer_coro_entry, lc, 1024 * 1024, "wire-layer");
     if (YETTY_IS_ERR(spawn_res)) {
         yetty_ycore_error_destroy(spawn_res.error);
         free(lc);
@@ -718,7 +723,9 @@ static struct layer_coro *get_or_spawn_layer_coro(
  * via the no-layer drain path so no body bytes reach the default sink. */
 static int respawn_layer_coro(struct layer_coro *lc)
 {
-    if (!lc) return 0;
+    if (!lc) {
+        return 0;
+    }
     if (YETTY_IS_ERR(lc->result)) {
         yetty_ycore_error_destroy(lc->result.error);
     }
@@ -727,8 +734,8 @@ static int respawn_layer_coro(struct layer_coro *lc)
         yetty_yplatform_coro_destroy(lc->coro);
         lc->coro = NULL;
     }
-    struct yplatform_coro_ptr_result sp = yetty_yplatform_coro_spawn(
-        layer_coro_entry, lc, 1024 * 1024, "wire-layer");
+    struct yplatform_coro_ptr_result sp =
+        yetty_yplatform_coro_spawn(layer_coro_entry, lc, 1024 * 1024, "wire-layer");
     if (YETTY_IS_ERR(sp)) {
         yetty_ycore_error_destroy(sp.error);
         return 0;
@@ -775,8 +782,8 @@ struct yetty_ywire_wire_statemachine_ptr_result yetty_ywire_wire_statemachine_cr
         yetty_yplatform_coro_spawn(sm_coro_entry, statemachine, 1024 * 1024, "wire-sm");
     if (YETTY_IS_ERR(spawn_res)) {
         free(statemachine);
-        return YETTY_ERR(yetty_ywire_wire_statemachine_ptr,
-                         "osc_statemachine: sm_coro spawn", spawn_res);
+        return YETTY_ERR(yetty_ywire_wire_statemachine_ptr, "osc_statemachine: sm_coro spawn",
+                         spawn_res);
     }
     statemachine->sm_coro = spawn_res.value;
 
@@ -795,8 +802,9 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
      * driving each coro to a forced exit, which would require unwind
      * hooks we don't have in C.) */
     for (size_t i = 0; i < statemachine->layer_coro_count; i++) {
-        if (!statemachine->layer_coros[i])
+        if (!statemachine->layer_coros[i]) {
             continue;
+        }
         if (statemachine->layer_coros[i]->coro) {
             yetty_yplatform_coro_destroy(statemachine->layer_coros[i]->coro);
             statemachine->layer_coros[i]->coro = NULL;
@@ -835,7 +843,8 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
         }
     }
     if (statemachine->handler_count == statemachine->handler_cap) {
-        size_t nc = statemachine->handler_cap ? statemachine->handler_cap * 2 : OSC_HANDLERS_INITIAL_CAP;
+        size_t nc =
+            statemachine->handler_cap ? statemachine->handler_cap * 2 : OSC_HANDLERS_INITIAL_CAP;
         struct osc_handler *nh = realloc(statemachine->handlers, nc * sizeof(struct osc_handler));
         if (!nh) {
             return YETTY_ERR(yetty_ycore_void, "osc_statemachine: handler realloc failed");
@@ -850,8 +859,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
      * codes only spawns one coro. */
     if (layer && layer->ops && layer->ops->process_input) {
         if (!get_or_spawn_layer_coro(statemachine, layer)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "wire: layer coro spawn failed in register");
+            return YETTY_ERR(yetty_ycore_void, "wire: layer coro spawn failed in register");
         }
     }
     return YETTY_OK_VOID();
@@ -887,8 +895,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
      * so callers don't need a separate process() call. The sm_coro runs
      * as far as it can, then yields back here when it needs more PTY
      * bytes or the layer coros are all parked. */
-    if (statemachine->sm_coro &&
-        !yetty_yplatform_coro_is_finished(statemachine->sm_coro)) {
+    if (statemachine->sm_coro && !yetty_yplatform_coro_is_finished(statemachine->sm_coro)) {
         yetty_yplatform_coro_resume(statemachine->sm_coro);
         if (yetty_yplatform_coro_is_finished(statemachine->sm_coro)) {
             struct yetty_ycore_void_result r = statemachine->sm_result;
@@ -904,8 +911,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
             statemachine->args_b64_len = 0;
             envelope_reset(statemachine);
             struct yplatform_coro_ptr_result sp =
-                yetty_yplatform_coro_spawn(sm_coro_entry, statemachine,
-                                           1024 * 1024, "wire-sm");
+                yetty_yplatform_coro_spawn(sm_coro_entry, statemachine, 1024 * 1024, "wire-sm");
             if (YETTY_IS_OK(sp)) {
                 statemachine->sm_coro = sp.value;
             }
@@ -916,8 +922,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
 }
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default(
-    struct yetty_ywire_wire_statemachine *statemachine,
-    struct yetty_yrender_terminal_layer *layer)
+    struct yetty_ywire_wire_statemachine *statemachine, struct yetty_yrender_terminal_layer *layer)
 {
     if (!statemachine) {
         return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
@@ -928,8 +933,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default(
      * layer as default AND for an OSC code only spawns one coro. */
     if (layer && layer->ops && layer->ops->process_input) {
         if (!get_or_spawn_layer_coro(statemachine, layer)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "wire: default coro spawn failed");
+            return YETTY_ERR(yetty_ycore_void, "wire: default coro spawn failed");
         }
     }
     return YETTY_OK_VOID();
@@ -1006,8 +1010,7 @@ static void sm_coro_entry(void *arg)
                 /* If an ESC sits at the head of the ring, advance the
                  * scanner ourselves — the default layer must not see
                  * ESC (it's the OSC opener candidate). */
-                if (sm->read_pos < sm->write_pos &&
-                    ring_at(sm, sm->read_pos) == '\033') {
+                if (sm->read_pos < sm->write_pos && ring_at(sm, sm->read_pos) == '\033') {
                     sm->read_pos++;
                     sm->state = SCAN_AFTER_ESC;
                     break;
@@ -1024,9 +1027,9 @@ static void sm_coro_entry(void *arg)
                                   lc->result.error.msg);
                         }
                         if (!respawn_layer_coro(lc)) {
-                            sm->sm_result = YETTY_ERR(
-                                yetty_ycore_void,
-                                "wire: respawn of dead default-layer coro failed");
+                            sm->sm_result =
+                                YETTY_ERR(yetty_ycore_void,
+                                          "wire: respawn of dead default-layer coro failed");
                             return;
                         }
                     }
@@ -1052,15 +1055,16 @@ static void sm_coro_entry(void *arg)
                     break;
                 }
                 /* No default sink — just skip raw bytes until ESC. */
-                while (sm->read_pos < sm->write_pos &&
-                       ring_at(sm, sm->read_pos) != '\033') {
+                while (sm->read_pos < sm->write_pos && ring_at(sm, sm->read_pos) != '\033') {
                     sm->read_pos++;
                 }
                 break;
             }
 
             case SCAN_AFTER_ESC: {
-                if (sm->read_pos >= sm->write_pos) goto wait_more;
+                if (sm->read_pos >= sm->write_pos) {
+                    goto wait_more;
+                }
                 uint8_t c = ring_at(sm, sm->read_pos);
                 if (c == ']') {
                     sm->read_pos++;
@@ -1073,8 +1077,7 @@ static void sm_coro_entry(void *arg)
                     uint8_t emit[2] = {'\033', c};
                     struct yetty_ycore_void_result r = out_carry_append(sm, emit, 2);
                     if (YETTY_IS_ERR(r)) {
-                        sm->sm_result =
-                            YETTY_ERR(yetty_ycore_void, "wire: raw esc-pair", r);
+                        sm->sm_result = YETTY_ERR(yetty_ycore_void, "wire: raw esc-pair", r);
                         return;
                     }
                     sm->read_pos++;
@@ -1084,7 +1087,9 @@ static void sm_coro_entry(void *arg)
             }
 
             case SCAN_OSC_CODE: {
-                if (sm->read_pos >= sm->write_pos) goto wait_more;
+                if (sm->read_pos >= sm->write_pos) {
+                    goto wait_more;
+                }
                 /* OSC terminator (BEL or ST) may end the sequence here for
                  * OSCs with no args/body. Without this, BEL falls through
                  * to the "malformed" path (OK for BEL) but ST's `ESC \`
@@ -1098,7 +1103,9 @@ static void sm_coro_entry(void *arg)
                     break;
                 }
                 if (c == OSC_ST_ESC) {
-                    if (sm->read_pos + 1 >= sm->write_pos) goto wait_more;
+                    if (sm->read_pos + 1 >= sm->write_pos) {
+                        goto wait_more;
+                    }
                     if (ring_at(sm, sm->read_pos + 1) == OSC_ST_TAIL) {
                         sm->read_pos += 2;
                         sm->state = SCAN_RAW;
@@ -1120,7 +1127,9 @@ static void sm_coro_entry(void *arg)
             }
 
             case SCAN_OSC_ARGS: {
-                if (sm->read_pos >= sm->write_pos) goto wait_more;
+                if (sm->read_pos >= sm->write_pos) {
+                    goto wait_more;
+                }
                 /* Same terminator handling as OSC_CODE — OSCs with code+args
                  * but no body terminate here. nvim's OSC 11;?\a (query the
                  * background colour) is the canonical case: without this,
@@ -1136,7 +1145,9 @@ static void sm_coro_entry(void *arg)
                     break;
                 }
                 if (c == OSC_ST_ESC) {
-                    if (sm->read_pos + 1 >= sm->write_pos) goto wait_more;
+                    if (sm->read_pos + 1 >= sm->write_pos) {
+                        goto wait_more;
+                    }
                     if (ring_at(sm, sm->read_pos + 1) == OSC_ST_TAIL) {
                         sm->read_pos += 2;
                         sm->state = SCAN_RAW;
@@ -1155,14 +1166,11 @@ static void sm_coro_entry(void *arg)
                      * the rendered card show every cause-by link. */
                     if (sm->current_code == 99099) {
                         struct yetty_ycore_void_result inner =
-                            YETTY_ERR(yetty_ycore_void,
-                                      "test trigger: inner cause");
+                            YETTY_ERR(yetty_ycore_void, "test trigger: inner cause");
                         struct yetty_ycore_void_result mid =
-                            YETTY_ERR(yetty_ycore_void,
-                                      "test trigger: middle wrap", inner);
-                        sm->sm_result = YETTY_ERR(
-                            yetty_ycore_void,
-                            "test trigger: synthetic OSC 99099 error", mid);
+                            YETTY_ERR(yetty_ycore_void, "test trigger: middle wrap", inner);
+                        sm->sm_result = YETTY_ERR(yetty_ycore_void,
+                                                  "test trigger: synthetic OSC 99099 error", mid);
                         return;
                     }
                     sm->current_layer = find_layer(sm, sm->current_code);
@@ -1209,9 +1217,8 @@ static void sm_coro_entry(void *arg)
                  * arrived, so its coro must already exist. */
                 struct layer_coro *lc = find_layer_coro(sm, sm->current_layer);
                 if (!lc) {
-                    sm->sm_result = YETTY_ERR(
-                        yetty_ycore_void,
-                        "wire: no persistent coro for OSC layer");
+                    sm->sm_result =
+                        YETTY_ERR(yetty_ycore_void, "wire: no persistent coro for OSC layer");
                     return;
                 }
                 /* The wire-SM contract is "process_input loops forever",
@@ -1234,9 +1241,8 @@ static void sm_coro_entry(void *arg)
                               sm->current_code, lc->result.error.msg);
                     }
                     if (!respawn_layer_coro(lc)) {
-                        sm->sm_result = YETTY_ERR(
-                            yetty_ycore_void,
-                            "wire: respawn of dead OSC layer coro failed");
+                        sm->sm_result = YETTY_ERR(yetty_ycore_void,
+                                                  "wire: respawn of dead OSC layer coro failed");
                         return;
                     }
                     sm->current_layer = NULL;
@@ -1343,8 +1349,7 @@ struct yetty_ycore_size_result yetty_ywire_wire_statemachine_read(
         }
 
         /* Try to produce bytes for whichever mode we're in. */
-        if (statemachine->state == SCAN_OSC_BODY ||
-            statemachine->state == SCAN_OSC_BODY_ESC) {
+        if (statemachine->state == SCAN_OSC_BODY || statemachine->state == SCAN_OSC_BODY_ESC) {
             if (!statemachine->terminator_seen) {
                 struct yetty_ycore_void_result r = body_pump(statemachine, n);
                 YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: body_pump");
@@ -1386,8 +1391,7 @@ struct yetty_ywire_wire_statemachine_args yetty_ywire_wire_statemachine_args(
     return view;
 }
 
-int yetty_ywire_wire_statemachine_at_end(
-    const struct yetty_ywire_wire_statemachine *statemachine)
+int yetty_ywire_wire_statemachine_at_end(const struct yetty_ywire_wire_statemachine *statemachine)
 {
     if (!statemachine || !statemachine->dispatching) {
         return 0;
@@ -1395,8 +1399,7 @@ int yetty_ywire_wire_statemachine_at_end(
     return statemachine->terminator_seen;
 }
 
-int yetty_ywire_wire_statemachine_code(
-    const struct yetty_ywire_wire_statemachine *statemachine)
+int yetty_ywire_wire_statemachine_code(const struct yetty_ywire_wire_statemachine *statemachine)
 {
     return statemachine ? statemachine->current_code : 0;
 }

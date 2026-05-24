@@ -85,26 +85,28 @@ static int32_t br_read_se(struct bit_reader *br)
     return -(int32_t)(v >> 1);
 }
 
-static size_t rbsp_strip_emulation(const uint8_t *in, size_t in_len, uint8_t *out,
-                                   size_t out_max)
+static size_t rbsp_strip_emulation(const uint8_t *in, size_t in_len, uint8_t *out, size_t out_max)
 {
     size_t oi = 0;
     for (size_t i = 0; i < in_len; i++) {
         if (i + 2 < in_len && in[i] == 0 && in[i + 1] == 0 && in[i + 2] == 0x03) {
-            if (oi + 2 > out_max) break;
+            if (oi + 2 > out_max) {
+                break;
+            }
             out[oi++] = 0;
             out[oi++] = 0;
             i += 2;
             continue;
         }
-        if (oi >= out_max) break;
+        if (oi >= out_max) {
+            break;
+        }
         out[oi++] = in[i];
     }
     return oi;
 }
 
-static int sps_extract_dims(const uint8_t *buf, size_t size,
-                            uint32_t *out_w, uint32_t *out_h)
+static int sps_extract_dims(const uint8_t *buf, size_t size, uint32_t *out_w, uint32_t *out_h)
 {
     size_t i = 0;
     while (i + 4 < size) {
@@ -115,7 +117,9 @@ static int sps_extract_dims(const uint8_t *buf, size_t size,
             continue;
         }
         size_t hdr = i + (sc4 ? 4u : 3u);
-        if (hdr >= size) return 0;
+        if (hdr >= size) {
+            return 0;
+        }
         uint8_t nal_type = buf[hdr] & 0x1f;
         if (nal_type != 7) {
             i = hdr;
@@ -124,29 +128,33 @@ static int sps_extract_dims(const uint8_t *buf, size_t size,
         size_t nal_end = size;
         for (size_t j = hdr + 1; j + 3 <= size; j++) {
             if (buf[j] == 0 && buf[j + 1] == 0 &&
-                (buf[j + 2] == 1 ||
-                 (j + 4 <= size && buf[j + 2] == 0 && buf[j + 3] == 1))) {
+                (buf[j + 2] == 1 || (j + 4 <= size && buf[j + 2] == 0 && buf[j + 3] == 1))) {
                 nal_end = j;
                 break;
             }
         }
-        if (nal_end <= hdr + 1) return 0;
+        if (nal_end <= hdr + 1) {
+            return 0;
+        }
         uint8_t rbsp[4096];
-        size_t rbsp_len = rbsp_strip_emulation(buf + hdr + 1, nal_end - (hdr + 1),
-                                               rbsp, sizeof rbsp);
-        if (rbsp_len < 4) return 0;
+        size_t rbsp_len =
+            rbsp_strip_emulation(buf + hdr + 1, nal_end - (hdr + 1), rbsp, sizeof rbsp);
+        if (rbsp_len < 4) {
+            return 0;
+        }
 
         struct bit_reader br = {.buf = rbsp, .size = rbsp_len, .byte_pos = 0, .bit_pos = 0};
         uint8_t profile_idc = rbsp[0];
         br.byte_pos = 3;
         (void)br_read_ue(&br);
-        if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 ||
-            profile_idc == 244 || profile_idc == 44 || profile_idc == 83 ||
-            profile_idc == 86 || profile_idc == 118 || profile_idc == 128 ||
-            profile_idc == 138 || profile_idc == 139 || profile_idc == 134 ||
+        if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 ||
+            profile_idc == 44 || profile_idc == 83 || profile_idc == 86 || profile_idc == 118 ||
+            profile_idc == 128 || profile_idc == 138 || profile_idc == 139 || profile_idc == 134 ||
             profile_idc == 135) {
             uint32_t chroma = br_read_ue(&br);
-            if (chroma == 3) br_read_bits(&br, 1);
+            if (chroma == 3) {
+                br_read_bits(&br, 1);
+            }
             (void)br_read_ue(&br);
             (void)br_read_ue(&br);
             br_read_bits(&br, 1);
@@ -177,18 +185,21 @@ static int sps_extract_dims(const uint8_t *buf, size_t size,
             (void)br_read_se(&br);
             (void)br_read_se(&br);
             uint32_t n = br_read_ue(&br);
-            for (uint32_t k = 0; k < n; k++) (void)br_read_se(&br);
+            for (uint32_t k = 0; k < n; k++) {
+                (void)br_read_se(&br);
+            }
         }
         (void)br_read_ue(&br);
         br_read_bits(&br, 1);
         uint32_t pic_width_in_mbs_minus1 = br_read_ue(&br);
         uint32_t pic_height_in_map_units_minus1 = br_read_ue(&br);
         uint32_t frame_mbs_only_flag = br_read_bits(&br, 1);
-        if (!frame_mbs_only_flag) br_read_bits(&br, 1);
+        if (!frame_mbs_only_flag) {
+            br_read_bits(&br, 1);
+        }
         br_read_bits(&br, 1);
         uint32_t width = (pic_width_in_mbs_minus1 + 1u) * 16u;
-        uint32_t height =
-            (2u - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1u) * 16u;
+        uint32_t height = (2u - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1u) * 16u;
         uint32_t frame_cropping_flag = br_read_bits(&br, 1);
         if (frame_cropping_flag) {
             uint32_t left = br_read_ue(&br);
@@ -199,8 +210,12 @@ static int sps_extract_dims(const uint8_t *buf, size_t size,
             uint32_t sx = 2u, sy = 2u;
             uint32_t cx = sx * (left + right);
             uint32_t cy = sy * (top + bottom) * (2u - frame_mbs_only_flag);
-            if (cx < width) width -= cx;
-            if (cy < height) height -= cy;
+            if (cx < width) {
+                width -= cx;
+            }
+            if (cy < height) {
+                height -= cy;
+            }
         }
         *out_w = width;
         *out_h = height;
@@ -228,15 +243,19 @@ static int mp4_read_cb(int64_t offset, void *buffer, size_t size, void *token)
     return 0;
 }
 
-static int annexb_append(uint8_t **out, size_t *out_len, size_t *out_cap,
-                         const uint8_t *nal, size_t nal_len)
+static int annexb_append(uint8_t **out, size_t *out_len, size_t *out_cap, const uint8_t *nal,
+                         size_t nal_len)
 {
     size_t need = *out_len + 4u + nal_len;
     if (need > *out_cap) {
         size_t new_cap = *out_cap ? *out_cap : 4096;
-        while (new_cap < need) new_cap *= 2;
+        while (new_cap < need) {
+            new_cap *= 2;
+        }
         uint8_t *nb = realloc(*out, new_cap);
-        if (!nb) return -1;
+        if (!nb) {
+            return -1;
+        }
         *out = nb;
         *out_cap = new_cap;
     }
@@ -253,8 +272,7 @@ static int annexb_append(uint8_t **out, size_t *out_len, size_t *out_cap,
 /* On success: *out is malloc'd Annex-B byte stream; caller frees.
  * Return codes: 0 ok; -1 file open / read failure; -2 no video track;
  * -3 allocation failure. */
-static int demux_to_annexb(const uint8_t *mp4_data, size_t mp4_size,
-                           uint8_t **out, size_t *out_len)
+static int demux_to_annexb(const uint8_t *mp4_data, size_t mp4_size, uint8_t **out, size_t *out_len)
 {
     *out = NULL;
     *out_len = 0;
@@ -280,7 +298,9 @@ static int demux_to_annexb(const uint8_t *mp4_data, size_t mp4_size,
     for (int n = 0;; n++) {
         int sps_bytes = 0;
         const void *sps = MP4D_read_sps(&mp4, (unsigned)track_idx, n, &sps_bytes);
-        if (!sps) break;
+        if (!sps) {
+            break;
+        }
         if (annexb_append(out, out_len, &out_cap, sps, (size_t)sps_bytes) < 0) {
             free(*out);
             MP4D_close(&mp4);
@@ -290,7 +310,9 @@ static int demux_to_annexb(const uint8_t *mp4_data, size_t mp4_size,
     for (int n = 0;; n++) {
         int pps_bytes = 0;
         const void *pps = MP4D_read_pps(&mp4, (unsigned)track_idx, n, &pps_bytes);
-        if (!pps) break;
+        if (!pps) {
+            break;
+        }
         if (annexb_append(out, out_len, &out_cap, pps, (size_t)pps_bytes) < 0) {
             free(*out);
             MP4D_close(&mp4);
@@ -302,14 +324,18 @@ static int demux_to_annexb(const uint8_t *mp4_data, size_t mp4_size,
         unsigned frame_bytes = 0;
         MP4D_file_offset_t off =
             MP4D_frame_offset(&mp4, (unsigned)track_idx, s, &frame_bytes, NULL, NULL);
-        if (off + frame_bytes > mp4_size || frame_bytes < 4) continue;
+        if (off + frame_bytes > mp4_size || frame_bytes < 4) {
+            continue;
+        }
         const uint8_t *p = mp4_data + off;
         const uint8_t *end = p + frame_bytes;
         while (p + 4 <= end) {
             uint32_t nal_len = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
                                ((uint32_t)p[2] << 8) | (uint32_t)p[3];
             p += 4;
-            if (nal_len == 0 || p + nal_len > end) break;
+            if (nal_len == 0 || p + nal_len > end) {
+                break;
+            }
             if (annexb_append(out, out_len, &out_cap, p, nal_len) < 0) {
                 free(*out);
                 MP4D_close(&mp4);
@@ -327,7 +353,9 @@ static int slurp_file(const char *path, uint8_t **out, size_t *out_len)
     *out = NULL;
     *out_len = 0;
     FILE *f = fopen(path, "rb");
-    if (!f) return -1;
+    if (!f) {
+        return -1;
+    }
     if (fseek(f, 0, SEEK_END) != 0) {
         fclose(f);
         return -1;
@@ -362,12 +390,10 @@ static int slurp_file(const char *path, uint8_t **out, size_t *out_len)
  *-------------------------------------------------------------------------*/
 
 struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
-    const uint8_t *mp4_bytes, size_t mp4_len,
-    const struct yetty_yvideo_render_config *overrides)
+    const uint8_t *mp4_bytes, size_t mp4_len, const struct yetty_yvideo_render_config *overrides)
 {
     if (!mp4_bytes || mp4_len == 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list,
-                         "yvideo_mp4: empty input");
+        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo_mp4: empty input");
     }
     uint8_t *annexb = NULL;
     size_t annexb_len = 0;
@@ -380,8 +406,7 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
     uint32_t video_w = 0, video_h = 0;
     if (!sps_extract_dims(annexb, annexb_len, &video_w, &video_h) || video_w == 0 || video_h == 0) {
         free(annexb);
-        return YETTY_ERR(yetty_ydraw_draw_list,
-                         "yvideo_mp4: SPS dimensions extraction failed");
+        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo_mp4: SPS dimensions extraction failed");
     }
     struct yetty_yvideo_render_config cfg = {0};
     if (overrides) {
@@ -389,19 +414,23 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
     }
     cfg.video_w = video_w; /* SPS is authoritative */
     cfg.video_h = video_h;
-    if (cfg.fps <= 0.0f) cfg.fps = 30.0f;
-    if (cfg.color_matrix == 0u) cfg.color_matrix = 1u; /* BT.709 */
-    if (cfg.flags == 0u) cfg.flags = YETTY_YVIDEO_FLAG_LOOP | YETTY_YVIDEO_FLAG_AUTOPLAY;
+    if (cfg.fps <= 0.0f) {
+        cfg.fps = 30.0f;
+    }
+    if (cfg.color_matrix == 0u) {
+        cfg.color_matrix = 1u; /* BT.709 */
+    }
+    if (cfg.flags == 0u) {
+        cfg.flags = YETTY_YVIDEO_FLAG_LOOP | YETTY_YVIDEO_FLAG_AUTOPLAY;
+    }
 
-    struct yetty_ydraw_draw_list_result r =
-        yetty_yvideo_render(annexb, annexb_len, NULL, 0, &cfg);
+    struct yetty_ydraw_draw_list_result r = yetty_yvideo_render(annexb, annexb_len, NULL, 0, &cfg);
     free(annexb);
     return r;
 }
 
 struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_file(
-    const char *path,
-    const struct yetty_yvideo_render_config *overrides)
+    const char *path, const struct yetty_yvideo_render_config *overrides)
 {
     if (!path) {
         return YETTY_ERR(yetty_ydraw_draw_list, "yvideo_mp4: NULL path");
@@ -411,8 +440,7 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_file(
     if (slurp_file(path, &buf, &len) != 0) {
         return YETTY_ERR(yetty_ydraw_draw_list, "yvideo_mp4: file slurp failed");
     }
-    struct yetty_ydraw_draw_list_result r =
-        yetty_yvideo_render_from_mp4_bytes(buf, len, overrides);
+    struct yetty_ydraw_draw_list_result r = yetty_yvideo_render_from_mp4_bytes(buf, len, overrides);
     free(buf);
     return r;
 }
@@ -426,8 +454,7 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_file(
  *-------------------------------------------------------------------------*/
 
 struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
-    const uint8_t *mp4_bytes, size_t mp4_len,
-    const struct yetty_yvideo_render_config *overrides)
+    const uint8_t *mp4_bytes, size_t mp4_len, const struct yetty_yvideo_render_config *overrides)
 {
     (void)mp4_bytes;
     (void)mp4_len;
@@ -437,8 +464,7 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
 }
 
 struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_file(
-    const char *path,
-    const struct yetty_yvideo_render_config *overrides)
+    const char *path, const struct yetty_yvideo_render_config *overrides)
 {
     (void)path;
     (void)overrides;

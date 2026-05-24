@@ -55,15 +55,23 @@ struct ysvg_paint_state {
 
 static uint32_t resolve_color(const struct yetty_ysvg_paint *p, float opacity, float prop_opacity)
 {
-    if (p->kind == YETTY_YSVG_PAINT_NONE) return 0;
+    if (p->kind == YETTY_YSVG_PAINT_NONE) {
+        return 0;
+    }
     uint32_t rgba = p->color;
     float k = opacity * prop_opacity;
-    if (k < 0.0f) k = 0.0f;
-    if (k > 1.0f) k = 1.0f;
+    if (k < 0.0f) {
+        k = 0.0f;
+    }
+    if (k > 1.0f) {
+        k = 1.0f;
+    }
     if (k < 1.0f) {
         uint32_t a = rgba & 0xFFu;
         uint32_t na = (uint32_t)((float)a * k + 0.5f);
-        if (na > 255) na = 255;
+        if (na > 255) {
+            na = 255;
+        }
         rgba = (rgba & 0xFFFFFF00u) | na;
     }
     return yetty_ysvg_rgba_to_abgr(rgba);
@@ -90,11 +98,12 @@ static float xform_avg_scale(const struct yetty_ysvg_xform *m)
  * Attribute readers
  *===========================================================================*/
 
-static float attr_float(const struct yetty_ysvg_node *n, enum yetty_ysvg_attr_key k,
-                        float fallback)
+static float attr_float(const struct yetty_ysvg_node *n, enum yetty_ysvg_attr_key k, float fallback)
 {
     const struct yetty_ysvg_attr *a = yetty_ysvg_attr_find(n, k);
-    if (!a) return fallback;
+    if (!a) {
+        return fallback;
+    }
     return yetty_ysvg_parse_length(a->value, a->value_len, 100.0f, fallback);
 }
 
@@ -105,7 +114,9 @@ static void compose_node_transform(struct yetty_ysvg_xform *out,
     struct yetty_ysvg_xform local;
     yetty_ysvg_xform_identity(&local);
     const struct yetty_ysvg_attr *a = yetty_ysvg_attr_find(node, YETTY_YSVG_ATTR_TRANSFORM);
-    if (a) yetty_ysvg_parse_transform(a->value, a->value_len, &local);
+    if (a) {
+        yetty_ysvg_parse_transform(a->value, a->value_len, &local);
+    }
     yetty_ysvg_xform_multiply(out, parent, &local);
 }
 
@@ -144,17 +155,27 @@ static struct yetty_ycore_void_result emit_rect(struct ysvg_paint_state *ps,
     float h = attr_float(n, YETTY_YSVG_ATTR_HEIGHT, 0.0f);
     float rx = attr_float(n, YETTY_YSVG_ATTR_RX, 0.0f);
     float ry = attr_float(n, YETTY_YSVG_ATTR_RY, 0.0f);
-    if (w <= 0.0f || h <= 0.0f) return YETTY_OK_VOID();
-    if (rx > 0.0f && ry == 0.0f) ry = rx;
-    if (ry > 0.0f && rx == 0.0f) rx = ry;
-    if (rx > w * 0.5f) rx = w * 0.5f;
-    if (ry > h * 0.5f) ry = h * 0.5f;
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    if (rx > 0.0f && ry == 0.0f) {
+        ry = rx;
+    }
+    if (ry > 0.0f && rx == 0.0f) {
+        rx = ry;
+    }
+    if (rx > w * 0.5f) {
+        rx = w * 0.5f;
+    }
+    if (ry > h * 0.5f) {
+        ry = h * 0.5f;
+    }
 
     uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
     uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
     float scale = xform_avg_scale(&ps->ctm);
-    float sw = (ps->style.stroke.kind == YETTY_YSVG_PAINT_NONE) ? 0.0f
-                                                                : ps->style.stroke_width * scale;
+    float sw =
+        (ps->style.stroke.kind == YETTY_YSVG_PAINT_NONE) ? 0.0f : ps->style.stroke_width * scale;
 
     if (xform_is_axis_aligned(&ps->ctm)) {
         float cx, cy;
@@ -166,15 +187,17 @@ static struct yetty_ycore_void_result emit_rect(struct ysvg_paint_state *ps,
         if (rx > 0.0f || ry > 0.0f) {
             float rs = fabsf(sx);
             struct yetty_ysdf_rounded_box geom = {
-                .center_x = cx, .center_y = cy,
-                .half_width = hw, .half_height = hh,
+                .center_x = cx,
+                .center_y = cy,
+                .half_width = hw,
+                .half_height = hh,
                 .radius_top_right = rx * rs,
                 .radius_bottom_right = rx * rs,
                 .radius_top_left = rx * rs,
                 .radius_bottom_left = rx * rs,
             };
-            struct yetty_ycore_void_result r =
-                yetty_ydraw_draw_list_add_cmd_add_rounded_box(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
+            struct yetty_ycore_void_result r = yetty_ydraw_draw_list_add_cmd_add_rounded_box(
+                ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysvg: rect emit failed");
             return YETTY_OK_VOID();
         }
@@ -193,13 +216,21 @@ static struct yetty_ycore_void_result emit_rect(struct ysvg_paint_state *ps,
     if (stroke != 0 && sw > 0.0f) {
         struct yetty_ycore_void_result r;
         r = emit_segment(ps->ctx, &ps->ctm, x, y, x + w, y, stroke, sw);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         r = emit_segment(ps->ctx, &ps->ctm, x + w, y, x + w, y + h, stroke, sw);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         r = emit_segment(ps->ctx, &ps->ctm, x + w, y + h, x, y + h, stroke, sw);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         r = emit_segment(ps->ctx, &ps->ctm, x, y + h, x, y, stroke, sw);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -210,7 +241,9 @@ static struct yetty_ycore_void_result emit_circle(struct ysvg_paint_state *ps,
     float cx0 = attr_float(n, YETTY_YSVG_ATTR_CX, 0.0f);
     float cy0 = attr_float(n, YETTY_YSVG_ATTR_CY, 0.0f);
     float r = attr_float(n, YETTY_YSVG_ATTR_R, 0.0f);
-    if (r <= 0.0f) return YETTY_OK_VOID();
+    if (r <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
     float cx, cy;
     yetty_ysvg_xform_point(&ps->ctm, cx0, cy0, &cx, &cy);
     float sx = sqrtf(ps->ctm.a * ps->ctm.a + ps->ctm.b * ps->ctm.b);
@@ -219,8 +252,9 @@ static struct yetty_ycore_void_result emit_circle(struct ysvg_paint_state *ps,
     uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
     uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
     float scale_avg = (sx + sy) * 0.5f;
-    float sw = (ps->style.stroke.kind == YETTY_YSVG_PAINT_NONE) ? 0.0f
-                                                                : ps->style.stroke_width * scale_avg;
+    float sw = (ps->style.stroke.kind == YETTY_YSVG_PAINT_NONE)
+                   ? 0.0f
+                   : ps->style.stroke_width * scale_avg;
 
     if (fabsf(sx - sy) < 1e-4f) {
         struct yetty_ysdf_circle geom = {.center_x = cx, .center_y = cy, .radius = r * sx};
@@ -244,7 +278,9 @@ static struct yetty_ycore_void_result emit_ellipse(struct ysvg_paint_state *ps,
     float cy0 = attr_float(n, YETTY_YSVG_ATTR_CY, 0.0f);
     float rx = attr_float(n, YETTY_YSVG_ATTR_RX, 0.0f);
     float ry = attr_float(n, YETTY_YSVG_ATTR_RY, 0.0f);
-    if (rx <= 0.0f || ry <= 0.0f) return YETTY_OK_VOID();
+    if (rx <= 0.0f || ry <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
     float cx, cy;
     yetty_ysvg_xform_point(&ps->ctm, cx0, cy0, &cx, &cy);
     float sx = sqrtf(ps->ctm.a * ps->ctm.a + ps->ctm.b * ps->ctm.b);
@@ -253,8 +289,9 @@ static struct yetty_ycore_void_result emit_ellipse(struct ysvg_paint_state *ps,
     uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
     uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
     float scale_avg = (sx + sy) * 0.5f;
-    float sw = (ps->style.stroke.kind == YETTY_YSVG_PAINT_NONE) ? 0.0f
-                                                                : ps->style.stroke_width * scale_avg;
+    float sw = (ps->style.stroke.kind == YETTY_YSVG_PAINT_NONE)
+                   ? 0.0f
+                   : ps->style.stroke_width * scale_avg;
     struct yetty_ysdf_ellipse geom = {
         .center_x = cx, .center_y = cy, .radius_x = rx * sx, .radius_y = ry * sy};
     struct yetty_ycore_void_result q =
@@ -271,7 +308,9 @@ static struct yetty_ycore_void_result emit_line(struct ysvg_paint_state *ps,
     float x2 = attr_float(n, YETTY_YSVG_ATTR_X2, 0.0f);
     float y2 = attr_float(n, YETTY_YSVG_ATTR_Y2, 0.0f);
     uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
-    if (stroke == 0) return YETTY_OK_VOID();
+    if (stroke == 0) {
+        return YETTY_OK_VOID();
+    }
     float sw = ps->style.stroke_width * xform_avg_scale(&ps->ctm);
     return emit_segment(ps->ctx, &ps->ctm, x1, y1, x2, y2, stroke, sw);
 }
@@ -284,30 +323,33 @@ static struct yetty_ycore_void_result emit_subpath_segments(struct ysvg_paint_st
         struct yetty_ycore_void_result r =
             emit_segment(ps->ctx, &ps->ctm, sp->points[j - 1].x, sp->points[j - 1].y,
                          sp->points[j].x, sp->points[j].y, color, width);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
     }
     if (sp->closed && sp->count >= 2) {
-        struct yetty_ycore_void_result r =
-            emit_segment(ps->ctx, &ps->ctm, sp->points[sp->count - 1].x,
-                         sp->points[sp->count - 1].y, sp->points[0].x, sp->points[0].y, color,
-                         width);
-        if (YETTY_IS_ERR(r)) return r;
+        struct yetty_ycore_void_result r = emit_segment(
+            ps->ctx, &ps->ctm, sp->points[sp->count - 1].x, sp->points[sp->count - 1].y,
+            sp->points[0].x, sp->points[0].y, color, width);
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
     }
     return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result emit_points_shape(struct ysvg_paint_state *ps,
-                                                        const struct yetty_ysvg_node *n,
-                                                        int closed)
+                                                        const struct yetty_ysvg_node *n, int closed)
 {
     const struct yetty_ysvg_attr *a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_POINTS);
-    if (!a) return YETTY_OK_VOID();
+    if (!a) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_ysvg_path path;
     if (!yetty_ysvg_path_from_points(&path, a->value, a->value_len, closed != 0)) {
         return YETTY_ERR(yetty_ycore_void, "ysvg: polyline/polygon parse failed");
     }
-    uint32_t stroke =
-        resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
+    uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
     uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
     float sw_scale = xform_avg_scale(&ps->ctm);
     uint32_t color = 0;
@@ -326,8 +368,7 @@ static struct yetty_ycore_void_result emit_points_shape(struct ysvg_paint_state 
         return YETTY_OK_VOID();
     }
     for (size_t i = 0; i < path.sub_count; i++) {
-        struct yetty_ycore_void_result r =
-            emit_subpath_segments(ps, &path.subs[i], color, sw);
+        struct yetty_ycore_void_result r = emit_subpath_segments(ps, &path.subs[i], color, sw);
         if (YETTY_IS_ERR(r)) {
             yetty_ysvg_path_destroy(&path);
             return r;
@@ -341,15 +382,18 @@ static struct yetty_ycore_void_result emit_path(struct ysvg_paint_state *ps,
                                                 const struct yetty_ysvg_node *n)
 {
     const struct yetty_ysvg_attr *a = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_D);
-    if (!a) return YETTY_OK_VOID();
+    if (!a) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_ysvg_path path;
     float tol = YSVG_PATH_TOLERANCE / xform_avg_scale(&ps->ctm);
-    if (tol < 0.05f) tol = 0.05f;
+    if (tol < 0.05f) {
+        tol = 0.05f;
+    }
     if (!yetty_ysvg_path_flatten(&path, a->value, a->value_len, tol)) {
         return YETTY_ERR(yetty_ycore_void, "ysvg: path parse/flatten failed");
     }
-    uint32_t stroke =
-        resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
+    uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
     uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
     float sw_scale = xform_avg_scale(&ps->ctm);
     uint32_t color = 0;
@@ -366,8 +410,7 @@ static struct yetty_ycore_void_result emit_path(struct ysvg_paint_state *ps,
         return YETTY_OK_VOID();
     }
     for (size_t i = 0; i < path.sub_count; i++) {
-        struct yetty_ycore_void_result r =
-            emit_subpath_segments(ps, &path.subs[i], color, sw);
+        struct yetty_ycore_void_result r = emit_subpath_segments(ps, &path.subs[i], color, sw);
         if (YETTY_IS_ERR(r)) {
             yetty_ysvg_path_destroy(&path);
             return r;
@@ -389,14 +432,18 @@ static struct yetty_ycore_void_result emit_path(struct ysvg_paint_state *ps,
 static int collect_text(const struct yetty_ysvg_node *n, char *buf, size_t cap, size_t *len)
 {
     if (n->text && n->text_len > 0) {
-        if (*len + n->text_len + 1 > cap) return -1;
+        if (*len + n->text_len + 1 > cap) {
+            return -1;
+        }
         memcpy(buf + *len, n->text, n->text_len);
         *len += n->text_len;
         buf[*len] = '\0';
     }
     for (struct yetty_ysvg_node *c = n->first_child; c; c = c->next_sibling) {
         if (c->elem == YETTY_YSVG_ELEM_TSPAN || c->elem == YETTY_YSVG_ELEM_TEXT) {
-            if (collect_text(c, buf, cap, len) < 0) return -1;
+            if (collect_text(c, buf, cap, len) < 0) {
+                return -1;
+            }
         }
     }
     return 0;
@@ -416,7 +463,9 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
     yetty_ysvg_xform_point(&ps->ctm, x, y, &tx, &ty);
 
     uint32_t color = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
-    if (color == 0) color = 0xFF000000u; /* black fallback */
+    if (color == 0) {
+        color = 0xFF000000u; /* black fallback */
+    }
     float scale = xform_avg_scale(&ps->ctm);
     float font_size = ps->style.font_size * scale;
 
@@ -424,8 +473,11 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
      * glyph metrics here — use 0.55 * font_size per char as in ymarkdown). */
     if (ps->style.text_anchor != YETTY_YSVG_ANCHOR_START) {
         float approx_w = (float)blen * font_size * 0.55f;
-        if (ps->style.text_anchor == YETTY_YSVG_ANCHOR_MIDDLE) tx -= approx_w * 0.5f;
-        else tx -= approx_w;
+        if (ps->style.text_anchor == YETTY_YSVG_ANCHOR_MIDDLE) {
+            tx -= approx_w * 0.5f;
+        } else {
+            tx -= approx_w;
+        }
     }
 
     struct yetty_ycore_buffer text = {
@@ -434,9 +486,10 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
         .capacity = blen,
     };
     struct yetty_ycore_void_result tr =
-        yetty_ydraw_draw_list_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1,
-                                          0.0f);
-    if (YETTY_IS_ERR(tr)) return tr;
+        yetty_ydraw_draw_list_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1, 0.0f);
+    if (YETTY_IS_ERR(tr)) {
+        return tr;
+    }
     ps->text_y = y + ps->style.font_size * ps->ctx->line_spacing;
     return YETTY_OK_VOID();
 }
@@ -448,7 +501,9 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
 static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
                                            const struct yetty_ysvg_node *n)
 {
-    if (!n) return YETTY_OK_VOID();
+    if (!n) {
+        return YETTY_OK_VOID();
+    }
 
     struct ysvg_paint_state ps = *parent;
     yetty_ysvg_style_resolve(&ps.style, &parent->style, parent->doc, n);
@@ -462,42 +517,58 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
     switch (n->elem) {
     case YETTY_YSVG_ELEM_RECT: {
         struct yetty_ycore_void_result r = emit_rect(&ps, n);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         break;
     }
     case YETTY_YSVG_ELEM_CIRCLE: {
         struct yetty_ycore_void_result r = emit_circle(&ps, n);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         break;
     }
     case YETTY_YSVG_ELEM_ELLIPSE: {
         struct yetty_ycore_void_result r = emit_ellipse(&ps, n);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         break;
     }
     case YETTY_YSVG_ELEM_LINE: {
         struct yetty_ycore_void_result r = emit_line(&ps, n);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         break;
     }
     case YETTY_YSVG_ELEM_POLYLINE: {
         struct yetty_ycore_void_result r = emit_points_shape(&ps, n, 0);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         break;
     }
     case YETTY_YSVG_ELEM_POLYGON: {
         struct yetty_ycore_void_result r = emit_points_shape(&ps, n, 1);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         break;
     }
     case YETTY_YSVG_ELEM_PATH: {
         struct yetty_ycore_void_result r = emit_path(&ps, n);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         break;
     }
     case YETTY_YSVG_ELEM_TEXT: {
         struct yetty_ycore_void_result r = emit_text(&ps, n);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
         break;
     }
     case YETTY_YSVG_ELEM_DEFS:
@@ -515,7 +586,9 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
 
     for (struct yetty_ysvg_node *c = n->first_child; c; c = c->next_sibling) {
         struct yetty_ycore_void_result r = walk(&ps, c);
-        if (YETTY_IS_ERR(r)) return r;
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
     }
     parent->text_y = ps.text_y;
     return YETTY_OK_VOID();
@@ -524,7 +597,9 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
 struct yetty_ycore_void_result yetty_ysvg_paint(const struct yetty_ysvg_doc *doc,
                                                 struct yetty_ysvg_paint_ctx *ctx)
 {
-    if (!doc || !doc->root) return YETTY_ERR(yetty_ycore_void, "ysvg-paint: empty doc");
+    if (!doc || !doc->root) {
+        return YETTY_ERR(yetty_ycore_void, "ysvg-paint: empty doc");
+    }
     struct ysvg_paint_state root = {0};
     root.ctx = ctx;
     root.doc = doc;

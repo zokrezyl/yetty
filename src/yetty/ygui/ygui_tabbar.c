@@ -56,7 +56,7 @@ void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
  * when there's spare room — the strip is allowed to leave a gap on
  * the right (filled by the optional "+" pill or just empty space). */
 #define TABBAR_PILL_PREF_W 160.0f
-#define TABBAR_PILL_MIN_W  80.0f
+#define TABBAR_PILL_MIN_W 80.0f
 
 /* Per-tab close-button + window hamburger button size. Kept as
  * a public constant via ygui_internal.h's TABBAR_BUTTON_SIZE so the
@@ -82,8 +82,7 @@ float yetty_ygui_tabbar_button_size(void)
 
 static float tabbar_header_h(const struct yetty_ygui_widget *self)
 {
-    float h = self->data.tabbar.header_h > 0 ? self->data.tabbar.header_h
-                                             : TABBAR_DEFAULT_HEADER_H;
+    float h = self->data.tabbar.header_h > 0 ? self->data.tabbar.header_h : TABBAR_DEFAULT_HEADER_H;
     /* Never draw a header that's taller than the widget itself, otherwise
      * the strip overflows downward and the layout pass places panel
      * children (content_y = layout_y + padding_top) outside the tabbar's
@@ -104,8 +103,7 @@ static float tabbar_pill_width(const struct yetty_ygui_widget *self)
     /* Reserve room for the optional "+" pill so the tabs don't share
      * its slot. The pill itself sits in the gap after the last tab,
      * so we subtract its full footprint (button + the gap before it). */
-    float reserved =
-        self->data.tabbar.on_new_tab ? (TABBAR_NEWTAB_W + TABBAR_PILL_GAP) : 0.0f;
+    float reserved = self->data.tabbar.on_new_tab ? (TABBAR_NEWTAB_W + TABBAR_PILL_GAP) : 0.0f;
     /* Browser-style sizing: each tab gets its preferred width up to
      * the available room. Only when n × pref + gaps exceeds the
      * strip width does the algorithm shrink the pills uniformly. The
@@ -125,9 +123,8 @@ static float tabbar_pill_width(const struct yetty_ygui_widget *self)
 /* Hit rect for the "+" pill in tabbar-local coords (relative to the
  * widget's top-left). Returns the pill's (x, y, w, h); caller must
  * check `on_new_tab` non-NULL first. */
-static void tabbar_newtab_rect(const struct yetty_ygui_widget *self,
-                               float pill_w, float *out_x, float *out_y,
-                               float *out_w, float *out_h)
+static void tabbar_newtab_rect(const struct yetty_ygui_widget *self, float pill_w, float *out_x,
+                               float *out_y, float *out_w, float *out_h)
 {
     float hh = tabbar_header_h(self);
     float tabs_end = (float)self->data.tabbar.n_tabs * pill_w +
@@ -176,21 +173,22 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
     }
     const struct yetty_ygui_theme *theme = ctx->theme;
     float hh = tabbar_header_h(self);
-    ydebug("tabbar_render id=%s self=(x=%.1f y=%.1f w=%.1f h=%.1f) layout=(%.1f,%.1f %.1fx%.1f) content=(%.1f,%.1f %.1fx%.1f) pad_top=%.1f hh=%.1f offset=(%.1f,%.1f) n_tabs=%d active=%d",
-           self->id ? self->id : "?",
-           self->x, self->y, self->w, self->h,
-           self->layout_x, self->layout_y, self->layout_w, self->layout_h,
-           self->content_x, self->content_y, self->content_w, self->content_h,
-           self->layout.padding_top, hh, ctx->offset_x, ctx->offset_y,
-           self->data.tabbar.n_tabs, self->data.tabbar.active);
+    ydebug(
+        "tabbar_render id=%s self=(x=%.1f y=%.1f w=%.1f h=%.1f) layout=(%.1f,%.1f %.1fx%.1f) "
+        "content=(%.1f,%.1f %.1fx%.1f) pad_top=%.1f hh=%.1f offset=(%.1f,%.1f) n_tabs=%d active=%d",
+        self->id ? self->id : "?", self->x, self->y, self->w, self->h, self->layout_x,
+        self->layout_y, self->layout_w, self->layout_h, self->content_x, self->content_y,
+        self->content_w, self->content_h, self->layout.padding_top, hh, ctx->offset_x,
+        ctx->offset_y, self->data.tabbar.n_tabs, self->data.tabbar.active);
     for (int pi = 0; pi < self->data.tabbar.n_tabs; pi++) {
         struct yetty_ygui_widget *panel = self->data.tabbar.panels[pi];
         if (panel) {
-            ydebug("tabbar_render: panel[%d] id=%s vis=%d layout=(%.1f,%.1f %.1fx%.1f) rel=(%.1f,%.1f %.1fx%.1f)",
+            ydebug("tabbar_render: panel[%d] id=%s vis=%d layout=(%.1f,%.1f %.1fx%.1f) "
+                   "rel=(%.1f,%.1f %.1fx%.1f)",
                    pi, panel->id ? panel->id : "?",
-                   (panel->flags & YETTY_YGUI_FLAG_VISIBLE) ? 1 : 0,
-                   panel->layout_x, panel->layout_y, panel->layout_w, panel->layout_h,
-                   panel->x, panel->y, panel->w, panel->h);
+                   (panel->flags & YETTY_YGUI_FLAG_VISIBLE) ? 1 : 0, panel->layout_x,
+                   panel->layout_y, panel->layout_w, panel->layout_h, panel->x, panel->y, panel->w,
+                   panel->h);
         }
     }
 
@@ -253,8 +251,7 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
         float ax = x + cx;
         float ay = y + cy;
         uint32_t close_bg = is_active ? theme->bg_surface : theme->bg_hover;
-        yetty_ygui_render_ctx_render_box(ctx, ax, ay, cw, ch, close_bg,
-                                         TABBAR_PILL_RADIUS * 0.5f);
+        yetty_ygui_render_ctx_render_box(ctx, ax, ay, cw, ch, close_bg, TABBAR_PILL_RADIUS * 0.5f);
         float gfs = ch * 0.85f;
         if (gfs < 10.0f) {
             gfs = 10.0f;
@@ -284,9 +281,7 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
         float gx = ax + (nw - fs * 0.5f) * 0.5f;
         float gy = ay + (nh - fs) * 0.5f - 1.0f;
         yetty_ygui_render_ctx_render_text(ctx, "+", gx, gy,
-                                          theme->accent ? theme->accent
-                                                        : theme->text_primary,
-                                          fs);
+                                          theme->accent ? theme->accent : theme->text_primary, fs);
     }
     return YETTY_OK_VOID();
 }
@@ -328,7 +323,8 @@ static int tabbar_on_press(struct yetty_ygui_widget *self, float lx, float ly, y
             float cx, cy, cw, ch;
             tab_close_rect(pw, hh, &cx, &cy, &cw, &ch);
             float gx = x + cx;
-            ydebug("tabbar_on_press pill=%d pill_x=[%.1f..%.1f] close_box=[%.1f..%.1f]x[%.1f..%.1f] hit_close=%d",
+            ydebug("tabbar_on_press pill=%d pill_x=[%.1f..%.1f] "
+                   "close_box=[%.1f..%.1f]x[%.1f..%.1f] hit_close=%d",
                    i, x, x + pw, gx, gx + cw, cy, cy + ch,
                    (lx >= gx && lx < gx + cw && ly >= cy && ly < cy + ch) ? 1 : 0);
             if (lx >= gx && lx < gx + cw && ly >= cy && ly < cy + ch) {
@@ -344,7 +340,7 @@ static int tabbar_on_press(struct yetty_ygui_widget *self, float lx, float ly, y
                  * default so simple uses just work. */
                 if (self->data.tabbar.on_tab_close) {
                     self->data.tabbar.on_tab_close(self, (float)i,
-                                                    self->data.tabbar.on_tab_close_userdata);
+                                                   self->data.tabbar.on_tab_close_userdata);
                 } else {
                     yetty_ygui_widget_tabbar_remove_tab(self, i);
                 }
@@ -461,8 +457,7 @@ struct yetty_ygui_widget *yetty_ygui_widget_tabbar_add_tab(struct yetty_ygui_wid
     snprintf(panel_id, sizeof(panel_id), "%s__tab%d", tabbar->id ? tabbar->id : "tabbar",
              tabbar->data.tabbar.n_tabs);
 
-    struct yetty_ygui_widget *panel =
-        yetty_ygui_engine_vbox(tabbar->engine, panel_id, 0, 0, 0, 0);
+    struct yetty_ygui_widget *panel = yetty_ygui_engine_vbox(tabbar->engine, panel_id, 0, 0, 0, 0);
     if (!panel) {
         return NULL;
     }
@@ -486,7 +481,8 @@ struct yetty_ygui_widget *yetty_ygui_widget_tabbar_add_tab(struct yetty_ygui_wid
     }
 
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1; tabbar->dirty = 1;
+        tabbar->engine->dirty = 1;
+        tabbar->dirty = 1;
     }
     return panel;
 }
@@ -511,8 +507,8 @@ void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int i
      * complete-removal API. */
     struct yetty_ygui_widget *panel = tabbar->data.tabbar.panels[index];
     if (panel) {
-        ydebug("tabbar_remove_tab: remove+free panel id=%s ptr=%p",
-               panel->id ? panel->id : "?", (void *)panel);
+        ydebug("tabbar_remove_tab: remove+free panel id=%s ptr=%p", panel->id ? panel->id : "?",
+               (void *)panel);
         yetty_ygui_widget_remove(panel);
     }
     free(tabbar->data.tabbar.labels[index]);
@@ -553,7 +549,8 @@ void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int i
         tabbar->change_callback(tabbar, (float)new_active, tabbar->change_userdata);
     }
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1; tabbar->dirty = 1;
+        tabbar->engine->dirty = 1;
+        tabbar->dirty = 1;
     }
 }
 
@@ -590,7 +587,8 @@ void yetty_ygui_widget_tabbar_set_active(struct yetty_ygui_widget *tabbar, int i
         tabbar->change_callback(tabbar, (float)index, tabbar->change_userdata);
     }
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1; tabbar->dirty = 1;
+        tabbar->engine->dirty = 1;
+        tabbar->dirty = 1;
     }
 }
 

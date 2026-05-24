@@ -360,7 +360,9 @@ static void on_timer(uv_timer_t *handle)
      * on themselves) without breaking our iteration. */
     struct yetty_yevent_event_listener *snapshot[MAX_LISTENERS_PER_TIMER];
     int n = th->listener_count;
-    if (n > MAX_LISTENERS_PER_TIMER) n = MAX_LISTENERS_PER_TIMER;
+    if (n > MAX_LISTENERS_PER_TIMER) {
+        n = MAX_LISTENERS_PER_TIMER;
+    }
     for (int i = 0; i < n; i++) {
         snapshot[i] = th->listeners[i];
     }
@@ -1123,8 +1125,8 @@ static void on_client_resolved(uv_getaddrinfo_t *req, int status, struct addrinf
     }
 
     client->connect_req.data = client;
-    int r = uv_tcp_connect(&client->connect_req, &client->conn.tcp, res->ai_addr,
-                           on_client_connect);
+    int r =
+        uv_tcp_connect(&client->connect_req, &client->conn.tcp, res->ai_addr, on_client_connect);
     uv_freeaddrinfo(res);
 
     if (r != 0) {
@@ -1175,7 +1177,7 @@ static struct yetty_yevent_tcp_client_id_result libuv_create_tcp_client(
     /* Async DNS resolution — works for hostnames, IPs, and "localhost". */
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family   = AF_UNSPEC;
+    hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
     client->resolve_req.data = client;

@@ -172,7 +172,10 @@ static const char UA_DEFAULT_CSS[] =
  * one to start with). All callbacks return css_error.
  * ===========================================================================*/
 
-static lxb_dom_node_t *as_node(void *node) { return (lxb_dom_node_t *)node; }
+static lxb_dom_node_t *as_node(void *node)
+{
+    return (lxb_dom_node_t *)node;
+}
 static lxb_dom_element_t *as_element(void *node)
 {
     return lxb_dom_interface_element(as_node(node));
@@ -224,11 +227,13 @@ static css_error cb_node_classes(void *pw, void *node, lwc_string ***classes, ui
     uint32_t count = 0, cap = 0;
     size_t i = 0;
     while (i < alen) {
-        while (i < alen && (attr[i] == ' ' || attr[i] == '\t' || attr[i] == '\n' || attr[i] == '\r')) {
+        while (i < alen &&
+               (attr[i] == ' ' || attr[i] == '\t' || attr[i] == '\n' || attr[i] == '\r')) {
             i++;
         }
         size_t s = i;
-        while (i < alen && !(attr[i] == ' ' || attr[i] == '\t' || attr[i] == '\n' || attr[i] == '\r')) {
+        while (i < alen &&
+               !(attr[i] == ' ' || attr[i] == '\t' || attr[i] == '\n' || attr[i] == '\r')) {
             i++;
         }
         if (i == s) {
@@ -359,8 +364,7 @@ static css_error cb_named_parent_node(void *pw, void *node, const css_qname *qna
     return CSS_OK;
 }
 
-static css_error cb_named_sibling_node(void *pw, void *node, const css_qname *qname,
-                                       void **sibling)
+static css_error cb_named_sibling_node(void *pw, void *node, const css_qname *qname, void **sibling)
 {
     (void)pw;
     *sibling = NULL;
@@ -409,11 +413,13 @@ static css_error cb_node_has_class(void *pw, void *node, lwc_string *name, bool 
     const char *qdata = lwc_string_data(name);
     size_t i = 0;
     while (i < alen) {
-        while (i < alen && (attr[i] == ' ' || attr[i] == '\t' || attr[i] == '\n' || attr[i] == '\r')) {
+        while (i < alen &&
+               (attr[i] == ' ' || attr[i] == '\t' || attr[i] == '\n' || attr[i] == '\r')) {
             i++;
         }
         size_t s = i;
-        while (i < alen && !(attr[i] == ' ' || attr[i] == '\t' || attr[i] == '\n' || attr[i] == '\r')) {
+        while (i < alen &&
+               !(attr[i] == ' ' || attr[i] == '\t' || attr[i] == '\n' || attr[i] == '\r')) {
             i++;
         }
         if (i - s == qlen && memcmp(attr + s, qdata, qlen) == 0) {
@@ -554,8 +560,7 @@ static css_error cb_node_has_attribute_suffix(void *pw, void *node, const css_qn
         return CSS_OK;
     }
     size_t vlen = lwc_string_length(value);
-    if (alen >= vlen &&
-        memcmp(av + alen - vlen, lwc_string_data(value), vlen) == 0) {
+    if (alen >= vlen && memcmp(av + alen - vlen, lwc_string_data(value), vlen) == 0) {
         *match = true;
     }
     return CSS_OK;
@@ -640,7 +645,8 @@ static css_error cb_node_is_link(void *pw, void *node, bool *match)
 
 static css_error cb_false(void *pw, void *node, bool *match)
 {
-    (void)pw; (void)node;
+    (void)pw;
+    (void)node;
     *match = false;
     return CSS_OK;
 }
@@ -654,7 +660,7 @@ static css_error cb_node_is_lang(void *pw, void *node, lwc_string *lang, bool *m
          p = p->parent) {
         size_t alen = 0;
         const lxb_char_t *av = lxb_dom_element_get_attribute(lxb_dom_interface_element(p),
-                                                              (const lxb_char_t *)"lang", 4, &alen);
+                                                             (const lxb_char_t *)"lang", 4, &alen);
         if (av && alen > 0) {
             size_t vlen = lwc_string_length(lang);
             const char *vdata = lwc_string_data(lang);
@@ -672,7 +678,8 @@ static css_error cb_node_is_lang(void *pw, void *node, lwc_string *lang, bool *m
 static css_error cb_node_presentational_hint(void *pw, void *node, uint32_t *nhints,
                                              css_hint **hints)
 {
-    (void)pw; (void)node;
+    (void)pw;
+    (void)node;
     *nhints = 0;
     *hints = NULL;
     return CSS_OK;
@@ -716,7 +723,8 @@ static css_error cb_ua_default_for_property(void *pw, uint32_t property, css_hin
 
 static css_error cb_set_libcss_node_data(void *pw, void *node, void *data)
 {
-    (void)pw; (void)node;
+    (void)pw;
+    (void)node;
     /* We don't cache. If libcss handed us non-null data anyway, free
      * the memory it allocated to avoid a leak. The destructor would
      * normally be invoked through css_libcss_node_data_handler. */
@@ -726,7 +734,8 @@ static css_error cb_set_libcss_node_data(void *pw, void *node, void *data)
 
 static css_error cb_get_libcss_node_data(void *pw, void *node, void **data)
 {
-    (void)pw; (void)node;
+    (void)pw;
+    (void)node;
     *data = NULL;
     return CSS_OK;
 }
@@ -778,10 +787,10 @@ static const css_select_handler g_handler = {
  * via libcurl — so the resolver just hands back the relative URL as-is
  * with a fresh ref. Good enough for parsing rules; the abs URL only
  * matters if someone actually consumes it. */
-static css_error url_resolve(void *pw, const char *base, lwc_string *rel,
-                             lwc_string **abs)
+static css_error url_resolve(void *pw, const char *base, lwc_string *rel, lwc_string **abs)
 {
-    (void)pw; (void)base;
+    (void)pw;
+    (void)base;
     *abs = lwc_string_ref(rel);
     return CSS_OK;
 }
@@ -1004,9 +1013,8 @@ css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_do
     }
 
     css_select_results *results = NULL;
-    css_error e =
-        css_select_style(lc->select_ctx, &el->node, &lc->unit_ctx, &lc->media, inline_sheet,
-                         &lc->handler, r, &results);
+    css_error e = css_select_style(lc->select_ctx, &el->node, &lc->unit_ctx, &lc->media,
+                                   inline_sheet, &lc->handler, r, &results);
     if (inline_sheet) {
         css_stylesheet_destroy(inline_sheet);
     }
@@ -1036,8 +1044,7 @@ void yetty_ybrowser_libcss_release(css_computed_style *style)
  * ===========================================================================*/
 
 static float resolve_length_to_px(struct yetty_ylexbor *r, const css_computed_style *style,
-                                  css_fixed length, css_unit unit, float font_size,
-                                  float pct_basis)
+                                  css_fixed length, css_unit unit, float font_size, float pct_basis)
 {
     (void)style;
     if (unit == CSS_UNIT_PX) {
@@ -1095,8 +1102,7 @@ int yetty_ybrowser_libcss_color(const css_computed_style *style, struct yetty_yl
     return 0;
 }
 
-int yetty_ybrowser_libcss_bg_color(const css_computed_style *style,
-                                   struct yetty_ylexbor_color *out)
+int yetty_ybrowser_libcss_bg_color(const css_computed_style *style, struct yetty_ylexbor_color *out)
 {
     if (style == NULL || out == NULL) {
         return 0;
@@ -1148,8 +1154,11 @@ static int len_or_pct_property(uint8_t kind, css_fixed length, css_unit unit, in
 int yetty_ybrowser_libcss_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                 float font_size, float pct_basis, float *out_px)
 {
-    if (!style) return 0;
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_width(style, &l, &u);
     return len_or_pct_property(k, l, u, CSS_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
@@ -1157,8 +1166,11 @@ int yetty_ybrowser_libcss_width(struct yetty_ylexbor *r, const css_computed_styl
 int yetty_ybrowser_libcss_height(struct yetty_ylexbor *r, const css_computed_style *style,
                                  float font_size, float pct_basis, float *out_px)
 {
-    if (!style) return 0;
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_height(style, &l, &u);
     return len_or_pct_property(k, l, u, CSS_HEIGHT_SET, r, style, font_size, pct_basis, out_px);
 }
@@ -1166,8 +1178,11 @@ int yetty_ybrowser_libcss_height(struct yetty_ylexbor *r, const css_computed_sty
 int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                     float font_size, float pct_basis, float *out_px)
 {
-    if (!style) return 0;
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_max_width(style, &l, &u);
     return len_or_pct_property(k, l, u, CSS_MAX_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
@@ -1175,29 +1190,47 @@ int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_
 int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                     float font_size, float pct_basis, float *out_px)
 {
-    if (!style) return 0;
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_min_width(style, &l, &u);
     return len_or_pct_property(k, l, u, CSS_MIN_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
-int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_style *style,
-                                 int side, float font_size, float pct_basis, float *out_px,
-                                 bool *out_auto)
+int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_style *style, int side,
+                                 float font_size, float pct_basis, float *out_px, bool *out_auto)
 {
-    if (!style) return 0;
-    if (out_auto) *out_auto = false;
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    if (!style) {
+        return 0;
+    }
+    if (out_auto) {
+        *out_auto = false;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     uint8_t kind = 0;
     switch (side) {
-    case 0: kind = css_computed_margin_top(style, &l, &u); break;
-    case 1: kind = css_computed_margin_right(style, &l, &u); break;
-    case 2: kind = css_computed_margin_bottom(style, &l, &u); break;
-    case 3: kind = css_computed_margin_left(style, &l, &u); break;
-    default: return 0;
+    case 0:
+        kind = css_computed_margin_top(style, &l, &u);
+        break;
+    case 1:
+        kind = css_computed_margin_right(style, &l, &u);
+        break;
+    case 2:
+        kind = css_computed_margin_bottom(style, &l, &u);
+        break;
+    case 3:
+        kind = css_computed_margin_left(style, &l, &u);
+        break;
+    default:
+        return 0;
     }
     if (kind == CSS_MARGIN_AUTO) {
-        if (out_auto) *out_auto = true;
+        if (out_auto) {
+            *out_auto = true;
+        }
         return 1;
     }
     if (kind == CSS_MARGIN_SET) {
@@ -1210,15 +1243,27 @@ int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_sty
 int yetty_ybrowser_libcss_padding(struct yetty_ylexbor *r, const css_computed_style *style,
                                   int side, float font_size, float pct_basis, float *out_px)
 {
-    if (!style) return 0;
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     uint8_t kind = 0;
     switch (side) {
-    case 0: kind = css_computed_padding_top(style, &l, &u); break;
-    case 1: kind = css_computed_padding_right(style, &l, &u); break;
-    case 2: kind = css_computed_padding_bottom(style, &l, &u); break;
-    case 3: kind = css_computed_padding_left(style, &l, &u); break;
-    default: return 0;
+    case 0:
+        kind = css_computed_padding_top(style, &l, &u);
+        break;
+    case 1:
+        kind = css_computed_padding_right(style, &l, &u);
+        break;
+    case 2:
+        kind = css_computed_padding_bottom(style, &l, &u);
+        break;
+    case 3:
+        kind = css_computed_padding_left(style, &l, &u);
+        break;
+    default:
+        return 0;
     }
     if (kind == CSS_PADDING_SET) {
         *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
@@ -1230,7 +1275,9 @@ int yetty_ybrowser_libcss_padding(struct yetty_ylexbor *r, const css_computed_st
 int yetty_ybrowser_libcss_border_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                        int side, float font_size, float *out_px)
 {
-    if (!style) return 0;
+    if (!style) {
+        return 0;
+    }
     /* border-style is "none" by default — when it is none/hidden, the
      * border is suppressed regardless of border-width. The cascade
      * still reports MEDIUM (the keyword initial) for the width, which
@@ -1238,23 +1285,41 @@ int yetty_ybrowser_libcss_border_width(struct yetty_ylexbor *r, const css_comput
      * element. Gate the width by the style. */
     uint8_t bstyle = 0;
     switch (side) {
-    case 0: bstyle = css_computed_border_top_style(style); break;
-    case 1: bstyle = css_computed_border_right_style(style); break;
-    case 2: bstyle = css_computed_border_bottom_style(style); break;
-    case 3: bstyle = css_computed_border_left_style(style); break;
+    case 0:
+        bstyle = css_computed_border_top_style(style);
+        break;
+    case 1:
+        bstyle = css_computed_border_right_style(style);
+        break;
+    case 2:
+        bstyle = css_computed_border_bottom_style(style);
+        break;
+    case 3:
+        bstyle = css_computed_border_left_style(style);
+        break;
     }
     if (bstyle == CSS_BORDER_STYLE_NONE || bstyle == CSS_BORDER_STYLE_HIDDEN ||
         bstyle == CSS_BORDER_STYLE_INHERIT) {
         return 0;
     }
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     uint8_t kind = 0;
     switch (side) {
-    case 0: kind = css_computed_border_top_width(style, &l, &u); break;
-    case 1: kind = css_computed_border_right_width(style, &l, &u); break;
-    case 2: kind = css_computed_border_bottom_width(style, &l, &u); break;
-    case 3: kind = css_computed_border_left_width(style, &l, &u); break;
-    default: return 0;
+    case 0:
+        kind = css_computed_border_top_width(style, &l, &u);
+        break;
+    case 1:
+        kind = css_computed_border_right_width(style, &l, &u);
+        break;
+    case 2:
+        kind = css_computed_border_bottom_width(style, &l, &u);
+        break;
+    case 3:
+        kind = css_computed_border_left_width(style, &l, &u);
+        break;
+    default:
+        return 0;
     }
     if (kind == CSS_BORDER_WIDTH_WIDTH) {
         *out_px = resolve_length_to_px(r, style, l, u, font_size, 0);
@@ -1279,15 +1344,26 @@ int yetty_ybrowser_libcss_border_color(const css_computed_style *style, int side
                                        const struct yetty_ylexbor_color *current_color,
                                        struct yetty_ylexbor_color *out)
 {
-    if (!style) return 0;
+    if (!style) {
+        return 0;
+    }
     css_color cc = 0;
     uint8_t kind = 0;
     switch (side) {
-    case 0: kind = css_computed_border_top_color(style, &cc); break;
-    case 1: kind = css_computed_border_right_color(style, &cc); break;
-    case 2: kind = css_computed_border_bottom_color(style, &cc); break;
-    case 3: kind = css_computed_border_left_color(style, &cc); break;
-    default: return 0;
+    case 0:
+        kind = css_computed_border_top_color(style, &cc);
+        break;
+    case 1:
+        kind = css_computed_border_right_color(style, &cc);
+        break;
+    case 2:
+        kind = css_computed_border_bottom_color(style, &cc);
+        break;
+    case 3:
+        kind = css_computed_border_left_color(style, &cc);
+        break;
+    default:
+        return 0;
     }
     if (kind == CSS_BORDER_COLOR_COLOR) {
         unpack_color(cc, out);
@@ -1303,8 +1379,11 @@ int yetty_ybrowser_libcss_border_color(const css_computed_style *style, int side
 int yetty_ybrowser_libcss_font_size(struct yetty_ylexbor *r, const css_computed_style *style,
                                     float parent_font_size, float *out_px)
 {
-    if (!style) return 0;
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     css_computed_font_size(style, &l, &u);
     /* libcss usually returns CSS_UNIT_PX for computed font-size — the
      * cascade folds em/rem/etc. up. Still resolve defensively. */
@@ -1317,29 +1396,60 @@ int yetty_ybrowser_libcss_font_size(struct yetty_ylexbor *r, const css_computed_
 
 int yetty_ybrowser_libcss_font_weight(const css_computed_style *style, int *out)
 {
-    if (!style) return 0;
+    if (!style) {
+        return 0;
+    }
     uint8_t v = css_computed_font_weight(style);
     switch (v) {
-    case CSS_FONT_WEIGHT_NORMAL:  *out = 400; return 1;
-    case CSS_FONT_WEIGHT_BOLD:    *out = 700; return 1;
-    case CSS_FONT_WEIGHT_BOLDER:  *out = 700; return 1;
-    case CSS_FONT_WEIGHT_LIGHTER: *out = 300; return 1;
-    case CSS_FONT_WEIGHT_100: *out = 100; return 1;
-    case CSS_FONT_WEIGHT_200: *out = 200; return 1;
-    case CSS_FONT_WEIGHT_300: *out = 300; return 1;
-    case CSS_FONT_WEIGHT_400: *out = 400; return 1;
-    case CSS_FONT_WEIGHT_500: *out = 500; return 1;
-    case CSS_FONT_WEIGHT_600: *out = 600; return 1;
-    case CSS_FONT_WEIGHT_700: *out = 700; return 1;
-    case CSS_FONT_WEIGHT_800: *out = 800; return 1;
-    case CSS_FONT_WEIGHT_900: *out = 900; return 1;
-    default: return 0;
+    case CSS_FONT_WEIGHT_NORMAL:
+        *out = 400;
+        return 1;
+    case CSS_FONT_WEIGHT_BOLD:
+        *out = 700;
+        return 1;
+    case CSS_FONT_WEIGHT_BOLDER:
+        *out = 700;
+        return 1;
+    case CSS_FONT_WEIGHT_LIGHTER:
+        *out = 300;
+        return 1;
+    case CSS_FONT_WEIGHT_100:
+        *out = 100;
+        return 1;
+    case CSS_FONT_WEIGHT_200:
+        *out = 200;
+        return 1;
+    case CSS_FONT_WEIGHT_300:
+        *out = 300;
+        return 1;
+    case CSS_FONT_WEIGHT_400:
+        *out = 400;
+        return 1;
+    case CSS_FONT_WEIGHT_500:
+        *out = 500;
+        return 1;
+    case CSS_FONT_WEIGHT_600:
+        *out = 600;
+        return 1;
+    case CSS_FONT_WEIGHT_700:
+        *out = 700;
+        return 1;
+    case CSS_FONT_WEIGHT_800:
+        *out = 800;
+        return 1;
+    case CSS_FONT_WEIGHT_900:
+        *out = 900;
+        return 1;
+    default:
+        return 0;
     }
 }
 
 int yetty_ybrowser_libcss_font_italic(const css_computed_style *style, bool *out)
 {
-    if (!style) return 0;
+    if (!style) {
+        return 0;
+    }
     uint8_t v = css_computed_font_style(style);
     if (v == CSS_FONT_STYLE_ITALIC || v == CSS_FONT_STYLE_OBLIQUE) {
         *out = true;
@@ -1354,25 +1464,33 @@ int yetty_ybrowser_libcss_font_italic(const css_computed_style *style, bool *out
 
 int yetty_ybrowser_libcss_display(const css_computed_style *style, bool root)
 {
-    if (!style) return CSS_DISPLAY_INLINE;
+    if (!style) {
+        return CSS_DISPLAY_INLINE;
+    }
     return css_computed_display(style, root);
 }
 
 int yetty_ybrowser_libcss_text_align(const css_computed_style *style)
 {
-    if (!style) return CSS_TEXT_ALIGN_LEFT;
+    if (!style) {
+        return CSS_TEXT_ALIGN_LEFT;
+    }
     return css_computed_text_align(style);
 }
 
 int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style)
 {
-    if (!style) return CSS_FLEX_DIRECTION_ROW;
+    if (!style) {
+        return CSS_FLEX_DIRECTION_ROW;
+    }
     return css_computed_flex_direction(style);
 }
 
 int yetty_ybrowser_libcss_flex_grow(const css_computed_style *style, float *out)
 {
-    if (!style || !out) return 0;
+    if (!style || !out) {
+        return 0;
+    }
     css_fixed n = 0;
     uint8_t kind = css_computed_flex_grow(style, &n);
     if (kind == CSS_FLEX_GROW_SET) {
@@ -1386,12 +1504,19 @@ int yetty_ybrowser_libcss_flex_basis(struct yetty_ylexbor *r, const css_computed
                                      float font_size, float pct_basis, float *out_px,
                                      bool *out_auto)
 {
-    if (!style) return 0;
-    if (out_auto) *out_auto = false;
-    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    if (!style) {
+        return 0;
+    }
+    if (out_auto) {
+        *out_auto = false;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
     uint8_t kind = css_computed_flex_basis(style, &l, &u);
     if (kind == CSS_FLEX_BASIS_AUTO || kind == CSS_FLEX_BASIS_CONTENT) {
-        if (out_auto) *out_auto = true;
+        if (out_auto) {
+            *out_auto = true;
+        }
         return 1;
     }
     if (kind == CSS_FLEX_BASIS_SET) {
@@ -1410,43 +1535,57 @@ int yetty_ybrowser_libcss_flex_basis(struct yetty_ylexbor *r, const css_computed
 
 int yetty_ybrowser_libcss_justify_content(const css_computed_style *style)
 {
-    if (!style) return CSS_JUSTIFY_CONTENT_FLEX_START;
+    if (!style) {
+        return CSS_JUSTIFY_CONTENT_FLEX_START;
+    }
     return css_computed_justify_content(style);
 }
 
 int yetty_ybrowser_libcss_align_items(const css_computed_style *style)
 {
-    if (!style) return CSS_ALIGN_ITEMS_STRETCH;
+    if (!style) {
+        return CSS_ALIGN_ITEMS_STRETCH;
+    }
     return css_computed_align_items(style);
 }
 
 int yetty_ybrowser_libcss_float(const css_computed_style *style)
 {
-    if (!style) return CSS_FLOAT_NONE;
+    if (!style) {
+        return CSS_FLOAT_NONE;
+    }
     return css_computed_float(style);
 }
 
 int yetty_ybrowser_libcss_clear(const css_computed_style *style)
 {
-    if (!style) return CSS_CLEAR_NONE;
+    if (!style) {
+        return CSS_CLEAR_NONE;
+    }
     return css_computed_clear(style);
 }
 
 int yetty_ybrowser_libcss_white_space(const css_computed_style *style)
 {
-    if (!style) return CSS_WHITE_SPACE_NORMAL;
+    if (!style) {
+        return CSS_WHITE_SPACE_NORMAL;
+    }
     return css_computed_white_space(style);
 }
 
 int yetty_ybrowser_libcss_text_decoration(const css_computed_style *style)
 {
-    if (!style) return 0;
+    if (!style) {
+        return 0;
+    }
     return css_computed_text_decoration(style);
 }
 
 int yetty_ybrowser_libcss_bg_image_url(const css_computed_style *style, char **out_url)
 {
-    if (!style || !out_url) return 0;
+    if (!style || !out_url) {
+        return 0;
+    }
     *out_url = NULL;
     lwc_string *url = NULL;
     uint8_t kind = css_computed_background_image(style, &url);
@@ -1470,6 +1609,8 @@ int yetty_ybrowser_libcss_bg_image_url(const css_computed_style *style, char **o
 
 int yetty_ybrowser_libcss_list_style_type(const css_computed_style *style)
 {
-    if (!style) return CSS_LIST_STYLE_TYPE_DISC;
+    if (!style) {
+        return CSS_LIST_STYLE_TYPE_DISC;
+    }
     return css_computed_list_style_type(style);
 }

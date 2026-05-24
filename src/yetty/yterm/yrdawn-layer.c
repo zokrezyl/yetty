@@ -23,8 +23,8 @@ struct yrdawn_handle_entry {
 };
 
 struct yrdawn_bulk_entry {
-    uint32_t ref;          /* 0 = free slot */
-    uint32_t next_seq;     /* expected next chunk index */
+    uint32_t ref;      /* 0 = free slot */
+    uint32_t next_seq; /* expected next chunk index */
     struct yetty_ycore_buffer buf;
 };
 
@@ -64,7 +64,7 @@ struct yetty_yterm_yrdawn_layer {
 
     int connected;
     int disconnected;
-    int has_frame;       /* set on first set_frame; until then is_empty=1 */
+    int has_frame; /* set on first set_frame; until then is_empty=1 */
 
     struct yrdawn_handle_entry *handles;
     size_t handle_count;
@@ -80,43 +80,42 @@ struct yetty_yterm_yrdawn_layer {
  * resize and rebinds frame_bind_group when it does. */
 static const char *yrdawn_layer_wgsl(void)
 {
-    static const char src[] =
-        "@group(0) @binding(0) var yrdawn_samp: sampler;\n"
-        "@group(0) @binding(1) var yrdawn_tex: texture_2d<f32>;\n"
-        "\n"
-        "struct VSOut {\n"
-        "    @builtin(position) pos: vec4f,\n"
-        "    @location(0) uv: vec2f,\n"
-        "}\n"
-        "\n"
-        "@vertex\n"
-        "fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {\n"
-        "    var positions = array<vec2f, 6>(\n"
-        "        vec2f(-1.0, -1.0),\n"
-        "        vec2f( 1.0, -1.0),\n"
-        "        vec2f(-1.0,  1.0),\n"
-        "        vec2f(-1.0,  1.0),\n"
-        "        vec2f( 1.0, -1.0),\n"
-        "        vec2f( 1.0,  1.0)\n"
-        "    );\n"
-        "    var uvs = array<vec2f, 6>(\n"
-        "        vec2f(0.0, 1.0),\n"
-        "        vec2f(1.0, 1.0),\n"
-        "        vec2f(0.0, 0.0),\n"
-        "        vec2f(0.0, 0.0),\n"
-        "        vec2f(1.0, 1.0),\n"
-        "        vec2f(1.0, 0.0)\n"
-        "    );\n"
-        "    var out: VSOut;\n"
-        "    out.pos = vec4f(positions[vid], 0.0, 1.0);\n"
-        "    out.uv = uvs[vid];\n"
-        "    return out;\n"
-        "}\n"
-        "\n"
-        "@fragment\n"
-        "fn fs_main(in: VSOut) -> @location(0) vec4f {\n"
-        "    return textureSample(yrdawn_tex, yrdawn_samp, in.uv);\n"
-        "}\n";
+    static const char src[] = "@group(0) @binding(0) var yrdawn_samp: sampler;\n"
+                              "@group(0) @binding(1) var yrdawn_tex: texture_2d<f32>;\n"
+                              "\n"
+                              "struct VSOut {\n"
+                              "    @builtin(position) pos: vec4f,\n"
+                              "    @location(0) uv: vec2f,\n"
+                              "}\n"
+                              "\n"
+                              "@vertex\n"
+                              "fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {\n"
+                              "    var positions = array<vec2f, 6>(\n"
+                              "        vec2f(-1.0, -1.0),\n"
+                              "        vec2f( 1.0, -1.0),\n"
+                              "        vec2f(-1.0,  1.0),\n"
+                              "        vec2f(-1.0,  1.0),\n"
+                              "        vec2f( 1.0, -1.0),\n"
+                              "        vec2f( 1.0,  1.0)\n"
+                              "    );\n"
+                              "    var uvs = array<vec2f, 6>(\n"
+                              "        vec2f(0.0, 1.0),\n"
+                              "        vec2f(1.0, 1.0),\n"
+                              "        vec2f(0.0, 0.0),\n"
+                              "        vec2f(0.0, 0.0),\n"
+                              "        vec2f(1.0, 1.0),\n"
+                              "        vec2f(1.0, 0.0)\n"
+                              "    );\n"
+                              "    var out: VSOut;\n"
+                              "    out.pos = vec4f(positions[vid], 0.0, 1.0);\n"
+                              "    out.uv = uvs[vid];\n"
+                              "    return out;\n"
+                              "}\n"
+                              "\n"
+                              "@fragment\n"
+                              "fn fs_main(in: VSOut) -> @location(0) vec4f {\n"
+                              "    return textureSample(yrdawn_tex, yrdawn_samp, in.uv);\n"
+                              "}\n";
     return src;
 }
 
@@ -126,16 +125,14 @@ static const char *yrdawn_layer_wgsl(void)
 
 static struct yetty_ycore_void_result yrdawn_destroy(struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result yrdawn_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *sm);
-static struct yetty_ycore_void_result yrdawn_resize_grid(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ycore_grid_size gs, struct yetty_ycore_pixel_size cs);
+    struct yetty_yrender_terminal_layer *self, struct yetty_ywire_wire_statemachine *sm);
+static struct yetty_ycore_void_result yrdawn_resize_grid(struct yetty_yrender_terminal_layer *self,
+                                                         struct yetty_ycore_grid_size gs,
+                                                         struct yetty_ycore_pixel_size cs);
 static struct yetty_yrender_gpu_resource_set_result yrdawn_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_int_result yrdawn_render(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ydraw_target *target, int force);
+static struct yetty_ycore_int_result yrdawn_render(struct yetty_yrender_terminal_layer *self,
+                                                   struct yetty_ydraw_target *target, int force);
 static int yrdawn_is_dirty(const struct yetty_yrender_terminal_layer *self);
 static int yrdawn_is_empty(const struct yetty_yrender_terminal_layer *self);
 static int yrdawn_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
@@ -181,52 +178,59 @@ static struct yetty_ycore_void_result emit(struct yetty_yterm_yrdawn_layer *l, i
 static struct yetty_ycore_void_result handle_hello(struct yetty_yterm_yrdawn_layer *l,
                                                    const uint8_t *payload, size_t len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_hello))
+    if (len < sizeof(struct yetty_yrdawn_wire_hello)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: HELLO truncated");
+    }
     const struct yetty_yrdawn_wire_hello *h = (const struct yetty_yrdawn_wire_hello *)payload;
-    if (h->magic != YETTY_YRDAWN_MAGIC_HELLO)
+    if (h->magic != YETTY_YRDAWN_MAGIC_HELLO) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: HELLO bad magic");
+    }
 
     struct yetty_yrdawn_wire_hello_ack ack = {
         .magic = YETTY_YRDAWN_MAGIC_HELLO_ACK,
         .version = YETTY_YRDAWN_WIRE_VERSION,
         .total_size = (uint32_t)sizeof(ack),
-        .status = (h->version == YETTY_YRDAWN_WIRE_VERSION)
-            ? YETTY_YRDAWN_HELLO_OK : YETTY_YRDAWN_HELLO_REJECTED,
+        .status = (h->version == YETTY_YRDAWN_WIRE_VERSION) ? YETTY_YRDAWN_HELLO_OK
+                                                            : YETTY_YRDAWN_HELLO_REJECTED,
     };
 
-    struct yetty_ycore_void_result e =
-        emit(l, YETTY_YRDAWN_OSC_SC_HELLO_ACK, &ack, sizeof(ack));
+    struct yetty_ycore_void_result e = emit(l, YETTY_YRDAWN_OSC_SC_HELLO_ACK, &ack, sizeof(ack));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, e, "yrdawn-layer: HELLO_ACK");
 
-    if (ack.status == YETTY_YRDAWN_HELLO_OK)
+    if (ack.status == YETTY_YRDAWN_HELLO_OK) {
         l->connected = 1;
+    }
     return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result handle_cmd(struct yetty_yterm_yrdawn_layer *l,
                                                  const uint8_t *payload, size_t len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_cmd_hdr))
+    if (len < sizeof(struct yetty_yrdawn_wire_cmd_hdr)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: CMD truncated");
+    }
     const struct yetty_yrdawn_wire_cmd_hdr *hdr = (const struct yetty_yrdawn_wire_cmd_hdr *)payload;
-    if (hdr->magic != YETTY_YRDAWN_MAGIC_CMD)
+    if (hdr->magic != YETTY_YRDAWN_MAGIC_CMD) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: CMD bad magic");
-    if (!l->connected)
+    }
+    if (!l->connected) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: CMD before HELLO_ACK");
+    }
 
     const uint8_t *args_body = payload + sizeof(*hdr);
     size_t args_body_len = len - sizeof(*hdr);
-    ydebug("yrdawn-layer: dispatching method_id=%u req_id=%u body=%zu",
-           hdr->method_id, hdr->req_id, args_body_len);
-    uint32_t status = yrdawn_server_dispatch(l, hdr->method_id, hdr->req_id,
-                                            args_body, args_body_len);
+    ydebug("yrdawn-layer: dispatching method_id=%u req_id=%u body=%zu", hdr->method_id, hdr->req_id,
+           args_body_len);
+    uint32_t status =
+        yrdawn_server_dispatch(l, hdr->method_id, hdr->req_id, args_body, args_body_len);
     ydebug("yrdawn-layer: dispatch status=%u method_id=%u", status, hdr->method_id);
 
-    if (status == YRDAWN_DISPATCH_DEFERRED)
+    if (status == YRDAWN_DISPATCH_DEFERRED) {
         return YETTY_OK_VOID();
-    if (hdr->req_id == 0)
+    }
+    if (hdr->req_id == 0) {
         return YETTY_OK_VOID();
+    }
 
     struct yetty_yrdawn_wire_reply_hdr reply = {
         .magic = YETTY_YRDAWN_MAGIC_REPLY,
@@ -242,11 +246,12 @@ static struct yetty_ycore_void_result handle_cmd(struct yetty_yterm_yrdawn_layer
 }
 
 static struct yrdawn_bulk_entry *bulk_find_or_alloc(struct yetty_yterm_yrdawn_layer *l,
-                                                   uint32_t ref)
+                                                    uint32_t ref)
 {
     for (size_t i = 0; i < l->bulk_count; ++i) {
-        if (l->bulks[i].ref == ref)
+        if (l->bulks[i].ref == ref) {
             return &l->bulks[i];
+        }
     }
     for (size_t i = 0; i < l->bulk_count; ++i) {
         if (l->bulks[i].ref == 0) {
@@ -260,8 +265,9 @@ static struct yrdawn_bulk_entry *bulk_find_or_alloc(struct yetty_yterm_yrdawn_la
         size_t cap = l->bulk_cap ? l->bulk_cap * 2u : 4u;
         struct yrdawn_bulk_entry *grown =
             (struct yrdawn_bulk_entry *)realloc(l->bulks, cap * sizeof(*grown));
-        if (!grown)
+        if (!grown) {
             return NULL;
+        }
         memset(grown + l->bulk_count, 0, (cap - l->bulk_count) * sizeof(*grown));
         l->bulks = grown;
         l->bulk_cap = cap;
@@ -287,20 +293,25 @@ static void bulk_release(struct yetty_yterm_yrdawn_layer *l, uint32_t ref)
 static struct yetty_ycore_void_result handle_bulk(struct yetty_yterm_yrdawn_layer *l,
                                                   const uint8_t *payload, size_t len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_bulk_hdr))
+    if (len < sizeof(struct yetty_yrdawn_wire_bulk_hdr)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: BULK truncated");
+    }
     const struct yetty_yrdawn_wire_bulk_hdr *hdr =
         (const struct yetty_yrdawn_wire_bulk_hdr *)payload;
-    if (hdr->magic != YETTY_YRDAWN_MAGIC_BULK)
+    if (hdr->magic != YETTY_YRDAWN_MAGIC_BULK) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: BULK bad magic");
-    if (hdr->ref == 0)
+    }
+    if (hdr->ref == 0) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: BULK ref=0");
-    if (len < sizeof(*hdr) + hdr->chunk_size)
+    }
+    if (len < sizeof(*hdr) + hdr->chunk_size) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: BULK chunk_size > payload");
+    }
 
     struct yrdawn_bulk_entry *e = bulk_find_or_alloc(l, hdr->ref);
-    if (!e)
+    if (!e) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: BULK table oom");
+    }
     if (hdr->seq != e->next_seq) {
         bulk_release(l, hdr->ref);
         return YETTY_ERR(yetty_ycore_void, "yrdawn-layer: BULK out-of-order seq");
@@ -329,29 +340,34 @@ static struct yetty_ycore_void_result handle_bulk(struct yetty_yterm_yrdawn_laye
 
 void *yrdawn_arena_alloc(struct yrdawn_arena *a, size_t bytes)
 {
-    if (!a || bytes == 0)
+    if (!a || bytes == 0) {
         return NULL;
+    }
     if (a->count == a->cap) {
         size_t cap = a->cap ? a->cap * 2u : 8u;
         void **grown = (void **)realloc(a->chunks, cap * sizeof(*grown));
-        if (!grown)
+        if (!grown) {
             return NULL;
+        }
         a->chunks = grown;
         a->cap = cap;
     }
     void *p = calloc(1u, bytes);
-    if (!p)
+    if (!p) {
         return NULL;
+    }
     a->chunks[a->count++] = p;
     return p;
 }
 
 void yrdawn_arena_free(struct yrdawn_arena *a)
 {
-    if (!a)
+    if (!a) {
         return;
-    for (size_t i = 0; i < a->count; ++i)
+    }
+    for (size_t i = 0; i < a->count; ++i) {
         free(a->chunks[i]);
+    }
     free(a->chunks);
     a->chunks = NULL;
     a->count = 0;
@@ -359,11 +375,12 @@ void yrdawn_arena_free(struct yrdawn_arena *a)
 }
 
 struct yetty_ycore_void_result yrdawn_server_emit_reply(void *ctx, uint32_t req_id,
-                                                       uint32_t method_id, uint32_t status,
-                                                       const void *payload, size_t payload_len)
+                                                        uint32_t method_id, uint32_t status,
+                                                        const void *payload, size_t payload_len)
 {
-    if (!ctx)
+    if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_server_emit_reply: NULL ctx");
+    }
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)ctx;
     struct yetty_yrdawn_wire_reply_hdr reply = {
         .magic = YETTY_YRDAWN_MAGIC_REPLY,
@@ -375,12 +392,14 @@ struct yetty_ycore_void_result yrdawn_server_emit_reply(void *ctx, uint32_t req_
         .status = status,
         .payload_ref = 0,
     };
-    if (payload_len == 0 || !payload)
+    if (payload_len == 0 || !payload) {
         return emit(l, YETTY_YRDAWN_OSC_SC_REPLY, &reply, sizeof(reply));
+    }
     size_t total = sizeof(reply) + payload_len;
     uint8_t *frame = (uint8_t *)malloc(total);
-    if (!frame)
+    if (!frame) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_server_emit_reply: oom");
+    }
     memcpy(frame, &reply, sizeof(reply));
     memcpy(frame + sizeof(reply), payload, payload_len);
     struct yetty_ycore_void_result r = emit(l, YETTY_YRDAWN_OSC_SC_REPLY, frame, total);
@@ -390,8 +409,9 @@ struct yetty_ycore_void_result yrdawn_server_emit_reply(void *ctx, uint32_t req_
 
 int yrdawn_server_bulk_take(void *ctx, uint32_t ref, struct yetty_ycore_buffer *out)
 {
-    if (!ctx || !out)
+    if (!ctx || !out) {
         return 0;
+    }
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)ctx;
     for (size_t i = 0; i < l->bulk_count; ++i) {
         if (l->bulks[i].ref == ref && l->bulks[i].next_seq == UINT32_MAX) {
@@ -437,8 +457,7 @@ static struct yetty_ycore_void_result dispatch(struct yetty_yterm_yrdawn_layer *
  *=========================================================================*/
 
 static struct yetty_ycore_void_result yrdawn_process_input(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ywire_wire_statemachine *sm)
+    struct yetty_yrender_terminal_layer *self, struct yetty_ywire_wire_statemachine *sm)
 {
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)self;
 
@@ -454,10 +473,10 @@ static struct yetty_ycore_void_result yrdawn_process_input(
             struct yetty_ycore_size_result rr =
                 yetty_ywire_wire_statemachine_read(sm, buf, sizeof(buf));
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yrdawn-layer: osc read");
-            if (rr.value == 0)
+            if (rr.value == 0) {
                 break;
-            struct yetty_ycore_void_result wr =
-                yetty_ycore_buffer_write(&l->accum, buf, rr.value);
+            }
+            struct yetty_ycore_void_result wr = yetty_ycore_buffer_write(&l->accum, buf, rr.value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "yrdawn-layer: accum write");
         }
 
@@ -486,9 +505,9 @@ static struct yetty_ycore_void_result yrdawn_process_input(
  * Other ops (skeleton-level)
  *=========================================================================*/
 
-static struct yetty_ycore_void_result yrdawn_resize_grid(
-    struct yetty_yrender_terminal_layer *self,
-    struct yetty_ycore_grid_size gs, struct yetty_ycore_pixel_size cs)
+static struct yetty_ycore_void_result yrdawn_resize_grid(struct yetty_yrender_terminal_layer *self,
+                                                         struct yetty_ycore_grid_size gs,
+                                                         struct yetty_ycore_pixel_size cs)
 {
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)self;
     self->grid_size = gs;
@@ -503,10 +522,10 @@ static struct yetty_ycore_void_result yrdawn_resize_grid(
             .width = (float)gs.cols * cs.width,
             .height = (float)gs.rows * cs.height,
         };
-        struct yetty_ycore_void_result r =
-            emit(l, YETTY_YRDAWN_OSC_SC_RESIZE, &msg, sizeof(msg));
-        if (YETTY_IS_ERR(r))
+        struct yetty_ycore_void_result r = emit(l, YETTY_YRDAWN_OSC_SC_RESIZE, &msg, sizeof(msg));
+        if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -520,26 +539,31 @@ static struct yetty_yrender_gpu_resource_set_result yrdawn_get_gpu_resource_set(
 }
 
 static struct yetty_ycore_int_result yrdawn_render(struct yetty_yrender_terminal_layer *self,
-                                                  struct yetty_ydraw_target *target, int force)
+                                                   struct yetty_ydraw_target *target, int force)
 {
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)self;
-    if (!target || !target->ops || !target->ops->get_view)
+    if (!target || !target->ops || !target->ops->get_view) {
         return YETTY_OK(yetty_ycore_int, 0);
-    if (!l->pipeline_ready || !l->frame_bind_group)
+    }
+    if (!l->pipeline_ready || !l->frame_bind_group) {
         return YETTY_OK(yetty_ycore_int, 0);
-    if (!self->dirty && !force)
+    }
+    if (!self->dirty && !force) {
         return YETTY_OK(yetty_ycore_int, 0);
+    }
 
     WGPUTextureView view = target->ops->get_view(target);
-    if (!view)
+    if (!view) {
         return YETTY_OK(yetty_ycore_int, 0);
-    ydebug("yrdawn_render: drawing vp=(%.0f,%.0f,%.0fx%.0f)",
-           target->viewport.x, target->viewport.y, target->viewport.w, target->viewport.h);
+    }
+    ydebug("yrdawn_render: drawing vp=(%.0f,%.0f,%.0fx%.0f)", target->viewport.x,
+           target->viewport.y, target->viewport.w, target->viewport.h);
 
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(l->device, &enc_desc);
-    if (!enc)
+    if (!enc) {
         return YETTY_ERR(yetty_ycore_int, "yrdawn_render: create encoder");
+    }
 
     WGPURenderPassColorAttachment ca = {0};
     ca.view = view;
@@ -562,8 +586,8 @@ static struct yetty_ycore_int_result yrdawn_render(struct yetty_yrender_terminal
     struct yetty_yrender_viewport vp = target->viewport;
     if (vp.w > 0.0f && vp.h > 0.0f) {
         wgpuRenderPassEncoderSetViewport(pass, vp.x, vp.y, vp.w, vp.h, 0.0f, 1.0f);
-        wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y,
-                                            (uint32_t)vp.w, (uint32_t)vp.h);
+        wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y, (uint32_t)vp.w,
+                                            (uint32_t)vp.h);
     }
 
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
@@ -597,8 +621,9 @@ static int yrdawn_is_empty(const struct yetty_yrender_terminal_layer *self)
 static int yrdawn_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods)
 {
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)self;
-    if (!l->connected)
+    if (!l->connected) {
         return 0;
+    }
     struct yetty_yrdawn_wire_input_key msg = {
         .magic = YETTY_YRDAWN_MAGIC_INPUT_KEY,
         .version = YETTY_YRDAWN_WIRE_VERSION,
@@ -608,18 +633,19 @@ static int yrdawn_on_key(struct yetty_yrender_terminal_layer *self, int key, int
         .mods = mods,
         .codepoint = 0,
     };
-    struct yetty_ycore_void_result r =
-        emit(l, YETTY_YRDAWN_OSC_SC_KEY, &msg, sizeof(msg));
-    if (YETTY_IS_ERR(r))
+    struct yetty_ycore_void_result r = emit(l, YETTY_YRDAWN_OSC_SC_KEY, &msg, sizeof(msg));
+    if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
+    }
     return 1;
 }
 
 static int yrdawn_on_char(struct yetty_yrender_terminal_layer *self, uint32_t cp, int mods)
 {
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)self;
-    if (!l->connected)
+    if (!l->connected) {
         return 0;
+    }
     struct yetty_yrdawn_wire_input_key msg = {
         .magic = YETTY_YRDAWN_MAGIC_INPUT_KEY,
         .version = YETTY_YRDAWN_WIRE_VERSION,
@@ -629,10 +655,10 @@ static int yrdawn_on_char(struct yetty_yrender_terminal_layer *self, uint32_t cp
         .mods = mods,
         .codepoint = cp,
     };
-    struct yetty_ycore_void_result r =
-        emit(l, YETTY_YRDAWN_OSC_SC_KEY, &msg, sizeof(msg));
-    if (YETTY_IS_ERR(r))
+    struct yetty_ycore_void_result r = emit(l, YETTY_YRDAWN_OSC_SC_KEY, &msg, sizeof(msg));
+    if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
+    }
     return 1;
 }
 
@@ -644,8 +670,9 @@ static int yrdawn_on_char(struct yetty_yrender_terminal_layer *self, uint32_t cp
 static struct yrdawn_handle_entry *handle_find(struct yetty_yterm_yrdawn_layer *l, uint64_t handle)
 {
     for (size_t i = 0; i < l->handle_count; ++i) {
-        if (l->handles[i].handle == handle)
+        if (l->handles[i].handle == handle) {
             return &l->handles[i];
+        }
     }
     return NULL;
 }
@@ -669,16 +696,18 @@ void *yrdawn_server_get_shared_queue(void *ctx)
 
 void *yrdawn_server_handle_get(void *ctx, uint64_t handle)
 {
-    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL)
+    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL) {
         return NULL;
+    }
     struct yrdawn_handle_entry *e = handle_find((struct yetty_yterm_yrdawn_layer *)ctx, handle);
     return e ? e->ptr : NULL;
 }
 
 struct yetty_ycore_void_result yrdawn_server_handle_set(void *ctx, uint64_t handle, void *ptr)
 {
-    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL)
+    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_handle_set: bad ctx/handle");
+    }
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)ctx;
     struct yrdawn_handle_entry *e = handle_find(l, handle);
     if (e) {
@@ -689,21 +718,25 @@ struct yetty_ycore_void_result yrdawn_server_handle_set(void *ctx, uint64_t hand
         size_t cap = l->handle_cap ? l->handle_cap * 2u : 16u;
         struct yrdawn_handle_entry *grown =
             (struct yrdawn_handle_entry *)realloc(l->handles, cap * sizeof(*grown));
-        if (!grown)
+        if (!grown) {
             return YETTY_ERR(yetty_ycore_void, "yrdawn_handle_set: handle table oom");
+        }
         l->handles = grown;
         l->handle_cap = cap;
     }
     l->handles[l->handle_count++] = (struct yrdawn_handle_entry){
-        .handle = handle, .ptr = ptr, .kind = 0,
+        .handle = handle,
+        .ptr = ptr,
+        .kind = 0,
     };
     return YETTY_OK_VOID();
 }
 
 void yrdawn_server_handle_release(void *ctx, uint64_t handle)
 {
-    if (!ctx)
+    if (!ctx) {
         return;
+    }
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)ctx;
     for (size_t i = 0; i < l->handle_count; ++i) {
         if (l->handles[i].handle == handle) {
@@ -732,8 +765,9 @@ static int build_pipeline(struct yetty_yterm_yrdawn_layer *l)
     WGPUShaderModuleDescriptor sm_desc = {0};
     sm_desc.nextInChain = &wgsl.chain;
     l->shader_module = wgpuDeviceCreateShaderModule(l->device, &sm_desc);
-    if (!l->shader_module)
+    if (!l->shader_module) {
         return 0;
+    }
 
     WGPUBindGroupLayoutEntry bgl_entries[2] = {0};
     bgl_entries[0].binding = 0;
@@ -748,15 +782,17 @@ static int build_pipeline(struct yetty_yterm_yrdawn_layer *l)
     bgl_desc.entryCount = 2;
     bgl_desc.entries = bgl_entries;
     l->bind_group_layout = wgpuDeviceCreateBindGroupLayout(l->device, &bgl_desc);
-    if (!l->bind_group_layout)
+    if (!l->bind_group_layout) {
         return 0;
+    }
 
     WGPUPipelineLayoutDescriptor pl_desc = {0};
     pl_desc.bindGroupLayoutCount = 1;
     pl_desc.bindGroupLayouts = &l->bind_group_layout;
     l->pipeline_layout = wgpuDeviceCreatePipelineLayout(l->device, &pl_desc);
-    if (!l->pipeline_layout)
+    if (!l->pipeline_layout) {
         return 0;
+    }
 
     WGPUBlendComponent blend_color = {
         .operation = WGPUBlendOperation_Add,
@@ -793,8 +829,9 @@ static int build_pipeline(struct yetty_yterm_yrdawn_layer *l)
     rpd.multisample.mask = 0xFFFFFFFFu;
 
     l->pipeline = wgpuDeviceCreateRenderPipeline(l->device, &rpd);
-    if (!l->pipeline)
+    if (!l->pipeline) {
         return 0;
+    }
 
     WGPUSamplerDescriptor sd = {0};
     sd.addressModeU = WGPUAddressMode_ClampToEdge;
@@ -807,8 +844,9 @@ static int build_pipeline(struct yetty_yterm_yrdawn_layer *l)
     sd.lodMaxClamp = 0.0f;
     sd.maxAnisotropy = 1;
     l->sampler = wgpuDeviceCreateSampler(l->device, &sd);
-    if (!l->sampler)
+    if (!l->sampler) {
         return 0;
+    }
 
     l->pipeline_ready = 1;
     return 1;
@@ -824,13 +862,15 @@ static int build_placeholder_texture(struct yetty_yterm_yrdawn_layer *l)
     td.format = WGPUTextureFormat_RGBA8Unorm;
     td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
     l->frame_texture = wgpuDeviceCreateTexture(l->device, &td);
-    if (!l->frame_texture)
+    if (!l->frame_texture) {
         return 0;
+    }
 
     size_t bytes = (size_t)YRDAWN_PLACEHOLDER_W * YRDAWN_PLACEHOLDER_H * 4u;
     uint8_t *pixels = (uint8_t *)malloc(bytes);
-    if (!pixels)
+    if (!pixels) {
         return 0;
+    }
     /* Brand mint #6BA892 (107, 168, 146, 255) — until a real client frame
      * arrives, the layer paints this so the bridge is visibly present. */
     for (size_t i = 0; i < bytes; i += 4u) {
@@ -859,8 +899,9 @@ static int build_placeholder_texture(struct yetty_yterm_yrdawn_layer *l)
     tvd.arrayLayerCount = 1;
     tvd.aspect = WGPUTextureAspect_All;
     l->frame_view = wgpuTextureCreateView(l->frame_texture, &tvd);
-    if (!l->frame_view)
+    if (!l->frame_view) {
         return 0;
+    }
 
     WGPUBindGroupEntry bge[2] = {0};
     bge[0].binding = 0;
@@ -876,8 +917,8 @@ static int build_placeholder_texture(struct yetty_yterm_yrdawn_layer *l)
     return l->frame_bind_group ? 1 : 0;
 }
 
-static int build_frame_resources(struct yetty_yterm_yrdawn_layer *l,
-                                 uint32_t width, uint32_t height)
+static int build_frame_resources(struct yetty_yterm_yrdawn_layer *l, uint32_t width,
+                                 uint32_t height)
 {
     WGPUTextureDescriptor td = {0};
     td.size = (WGPUExtent3D){width, height, 1};
@@ -887,8 +928,9 @@ static int build_frame_resources(struct yetty_yterm_yrdawn_layer *l,
     td.format = WGPUTextureFormat_RGBA8Unorm;
     td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
     WGPUTexture tex = wgpuDeviceCreateTexture(l->device, &td);
-    if (!tex)
+    if (!tex) {
         return 0;
+    }
 
     WGPUTextureViewDescriptor tvd = {0};
     tvd.format = WGPUTextureFormat_RGBA8Unorm;
@@ -923,8 +965,12 @@ static int build_frame_resources(struct yetty_yterm_yrdawn_layer *l,
         return 0;
     }
 
-    if (l->frame_bind_group) wgpuBindGroupRelease(l->frame_bind_group);
-    if (l->frame_view) wgpuTextureViewRelease(l->frame_view);
+    if (l->frame_bind_group) {
+        wgpuBindGroupRelease(l->frame_bind_group);
+    }
+    if (l->frame_view) {
+        wgpuTextureViewRelease(l->frame_view);
+    }
     if (l->frame_texture) {
         wgpuTextureDestroy(l->frame_texture);
         wgpuTextureRelease(l->frame_texture);
@@ -935,24 +981,26 @@ static int build_frame_resources(struct yetty_yterm_yrdawn_layer *l,
     return 1;
 }
 
-struct yetty_ycore_void_result yrdawn_server_set_frame(
-    void *ctx, uint32_t width, uint32_t height,
-    const uint8_t *pixels, size_t bytes)
+struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width, uint32_t height,
+                                                       const uint8_t *pixels, size_t bytes)
 {
-    if (!ctx || !pixels)
+    if (!ctx || !pixels) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_set_frame: NULL ctx or pixels");
-    if (width == 0 || height == 0)
+    }
+    if (width == 0 || height == 0) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_set_frame: zero dim");
+    }
     size_t want = (size_t)width * (size_t)height * 4u;
-    if (bytes != want)
+    if (bytes != want) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_set_frame: byte count != w*h*4");
+    }
 
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)ctx;
-    if (!l->frame_texture ||
-        wgpuTextureGetWidth(l->frame_texture) != width ||
+    if (!l->frame_texture || wgpuTextureGetWidth(l->frame_texture) != width ||
         wgpuTextureGetHeight(l->frame_texture) != height) {
-        if (!build_frame_resources(l, width, height))
+        if (!build_frame_resources(l, width, height)) {
             return YETTY_ERR(yetty_ycore_void, "yrdawn_set_frame: rebuild texture failed");
+        }
     }
 
     WGPUTexelCopyTextureInfo dst = {0};
@@ -968,24 +1016,39 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(
 
     l->has_frame = 1;
     l->base.dirty = 1;
-    if (l->base.request_render_fn)
+    if (l->base.request_render_fn) {
         (void)l->base.request_render_fn(l->base.request_render_userdata);
+    }
     return YETTY_OK_VOID();
 }
 
 static void release_gpu(struct yetty_yterm_yrdawn_layer *l)
 {
-    if (l->frame_bind_group) wgpuBindGroupRelease(l->frame_bind_group);
-    if (l->frame_view) wgpuTextureViewRelease(l->frame_view);
+    if (l->frame_bind_group) {
+        wgpuBindGroupRelease(l->frame_bind_group);
+    }
+    if (l->frame_view) {
+        wgpuTextureViewRelease(l->frame_view);
+    }
     if (l->frame_texture) {
         wgpuTextureDestroy(l->frame_texture);
         wgpuTextureRelease(l->frame_texture);
     }
-    if (l->sampler) wgpuSamplerRelease(l->sampler);
-    if (l->pipeline) wgpuRenderPipelineRelease(l->pipeline);
-    if (l->pipeline_layout) wgpuPipelineLayoutRelease(l->pipeline_layout);
-    if (l->bind_group_layout) wgpuBindGroupLayoutRelease(l->bind_group_layout);
-    if (l->shader_module) wgpuShaderModuleRelease(l->shader_module);
+    if (l->sampler) {
+        wgpuSamplerRelease(l->sampler);
+    }
+    if (l->pipeline) {
+        wgpuRenderPipelineRelease(l->pipeline);
+    }
+    if (l->pipeline_layout) {
+        wgpuPipelineLayoutRelease(l->pipeline_layout);
+    }
+    if (l->bind_group_layout) {
+        wgpuBindGroupLayoutRelease(l->bind_group_layout);
+    }
+    if (l->shader_module) {
+        wgpuShaderModuleRelease(l->shader_module);
+    }
     l->frame_bind_group = NULL;
     l->frame_view = NULL;
     l->frame_texture = NULL;
@@ -1003,13 +1066,15 @@ static void release_gpu(struct yetty_yterm_yrdawn_layer *l)
 
 static struct yetty_ycore_void_result yrdawn_destroy(struct yetty_yrender_terminal_layer *self)
 {
-    if (!self)
+    if (!self) {
         return YETTY_OK_VOID();
+    }
     struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)self;
     release_gpu(l);
     yetty_ycore_buffer_destroy(&l->accum);
-    for (size_t i = 0; i < l->bulk_count; ++i)
+    for (size_t i = 0; i < l->bulk_count; ++i) {
         yetty_ycore_buffer_destroy(&l->bulks[i].buf);
+    }
     free(l->bulks);
     free(l->handles);
     free(l);
@@ -1020,13 +1085,14 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_yrdawn_layer_create(
     uint32_t cols, uint32_t rows, float cell_width, float cell_height,
     const struct yetty_context *context)
 {
-    if (!context)
+    if (!context) {
         return YETTY_ERR(yetty_yterm_terminal_layer, "yrdawn_layer_create: NULL context");
+    }
 
-    struct yetty_yterm_yrdawn_layer *l =
-        (struct yetty_yterm_yrdawn_layer *)calloc(1, sizeof(*l));
-    if (!l)
+    struct yetty_yterm_yrdawn_layer *l = (struct yetty_yterm_yrdawn_layer *)calloc(1, sizeof(*l));
+    if (!l) {
         return YETTY_ERR(yetty_yterm_terminal_layer, "yrdawn_layer_create: oom");
+    }
 
     l->base.ops = yrdawn_ops();
     l->base.grid_size.cols = cols;

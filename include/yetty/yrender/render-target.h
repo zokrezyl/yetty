@@ -46,8 +46,7 @@ struct yetty_yrender_target_ops {
 
     /* Blend multiple source targets into this target */
     struct yetty_ycore_void_result (*blend)(struct yetty_ydraw_target *self,
-                                            struct yetty_ydraw_target **sources,
-                                            size_t count);
+                                            struct yetty_ydraw_target **sources, size_t count);
 
     /* Present this target's content to final destination (surface/vnc/ymux) */
     struct yetty_ycore_void_result (*present)(struct yetty_ydraw_target *self);
@@ -66,8 +65,8 @@ struct yetty_yrender_target_ops {
 	 * scale = 1.0 disables zoom; scale > 1.0 zooms in.
 	 * offset_{x,y} are in source pixels within the target. Optional op — may
 	 * be NULL for targets that don't composite layers. */
-    struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ydraw_target *self,
-                                                      float scale, float offset_x, float offset_y);
+    struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ydraw_target *self, float scale,
+                                                      float offset_x, float offset_y);
 
     /* Hint that the next present() must produce a full-window repaint even
 	 * if the GPU content is unchanged. Called by the event loop on X11

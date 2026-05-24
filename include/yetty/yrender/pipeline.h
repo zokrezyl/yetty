@@ -45,8 +45,7 @@ YETTY_YRESULT_DECLARE(yetty_yrender_pipeline_ptr, struct yetty_yrender_pipeline 
  * `template_rs` only needs correct STRUCTURE (uniform/buffer/texture counts,
  * shader code, children); buffer/texture data values are ignored. */
 struct yetty_yrender_pipeline_ptr_result yetty_yrender_pipeline_create(
-    WGPUDevice device, WGPUTextureFormat target_format,
-    struct yetty_ydraw_gpu_allocator *allocator,
+    WGPUDevice device, WGPUTextureFormat target_format, struct yetty_ydraw_gpu_allocator *allocator,
     const struct yetty_ydraw_gpu_resource_set *template_rs);
 
 void yetty_yrender_pipeline_destroy(struct yetty_yrender_pipeline *p);

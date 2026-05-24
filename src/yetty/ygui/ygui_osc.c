@@ -83,17 +83,16 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer out = {0};
-    struct yetty_ycore_void_result r =
-        yetty_yface_emit(YETTY_OSC_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta), data,
-                         size, &out);
-    ydebug("write_bin: raw_size=%u envelope_bytes=%zu emit_ok=%d", size, out.size,
-           YETTY_IS_OK(r));
+    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YCOMPOSITOR_BIN, /*compressed=*/1,
+                                                        &meta, sizeof(meta), data, size, &out);
+    ydebug("write_bin: raw_size=%u envelope_bytes=%zu emit_ok=%d", size, out.size, YETTY_IS_OK(r));
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&out);
         return YETTY_ERR(yetty_ycore_void, "ygui_osc: yface_emit (bin) failed", r);
     }
     if (out.size > 0) {
-        struct yetty_ycore_void_result wr = write_pty_all(output_pty, (const char *)out.data, out.size);
+        struct yetty_ycore_void_result wr =
+            write_pty_all(output_pty, (const char *)out.data, out.size);
         if (YETTY_IS_ERR(wr)) {
             yetty_ycore_buffer_destroy(&out);
             return YETTY_ERR(yetty_ycore_void, "ygui_osc: write_bin write failed", wr);
@@ -105,8 +104,7 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
 
 struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, int x, int y, int w,
-                                                          int h, const uint8_t *data,
-                                                          uint32_t size)
+                                                          int h, const uint8_t *data, uint32_t size)
 {
     (void)name;
     (void)x;
@@ -133,9 +131,8 @@ struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pt
     return write_pty_all(output_pty, clear_seq, sizeof(clear_seq) - 1);
 }
 
-
-struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(struct yetty_platform_pty *output_pty,
-                                                               int enable)
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(
+    struct yetty_platform_pty *output_pty, int enable)
 {
     if (enable) {
         return write_pty_all(output_pty, "\033[?1500h", 8);
@@ -257,8 +254,7 @@ struct yetty_ycore_void_result yetty_ygui_osc_scroll_card(struct yetty_platform_
                        "\033]" VENDOR_ID ";scroll --name %s -x %.0f -y %.0f\033\\", name, x, y);
     } else {
         len = snprintf(buf, sizeof(buf),
-                       "\033]" VENDOR_ID ";scroll --name %s --dx %.0f --dy %.0f\033\\", name, x,
-                       y);
+                       "\033]" VENDOR_ID ";scroll --name %s --dx %.0f --dy %.0f\033\\", name, x, y);
     }
     if (len < 0 || (size_t)len >= sizeof(buf)) {
         return YETTY_ERR(yetty_ycore_void, "ygui_osc: scroll_card snprintf overflow");
@@ -266,9 +262,8 @@ struct yetty_ycore_void_result yetty_ygui_osc_scroll_card(struct yetty_platform_
     return write_pty_all(output_pty, buf, (size_t)len);
 }
 
-struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(struct yetty_platform_pty *output_pty,
-                                                                const char *name, float dx,
-                                                                float dy)
+struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(
+    struct yetty_platform_pty *output_pty, const char *name, float dx, float dy)
 {
     return yetty_ygui_osc_scroll_card(output_pty, name, dx, dy, /*absolute=*/0);
 }

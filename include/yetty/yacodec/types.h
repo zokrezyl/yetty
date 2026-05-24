@@ -22,12 +22,12 @@ extern "C" {
  * in the v2 yvideo wire envelope (and is referenced by `audio_codec`
  * elsewhere in the wire format). Values are stable — do NOT renumber. */
 enum yetty_yacodec_codec {
-    YETTY_YACODEC_CODEC_NONE   = 0, /* no audio in this stream */
-    YETTY_YACODEC_CODEC_OPUS   = 1, /* v1 — implemented */
+    YETTY_YACODEC_CODEC_NONE = 0,   /* no audio in this stream */
+    YETTY_YACODEC_CODEC_OPUS = 1,   /* v1 — implemented */
     YETTY_YACODEC_CODEC_VORBIS = 2, /* reserved — stb_vorbis is in miniaudio */
-    YETTY_YACODEC_CODEC_FLAC   = 3, /* reserved — dr_flac is in miniaudio */
-    YETTY_YACODEC_CODEC_MP3    = 4, /* reserved — dr_mp3 is in miniaudio */
-    YETTY_YACODEC_CODEC_WAV    = 5, /* reserved — dr_wav is in miniaudio */
+    YETTY_YACODEC_CODEC_FLAC = 3,   /* reserved — dr_flac is in miniaudio */
+    YETTY_YACODEC_CODEC_MP3 = 4,    /* reserved — dr_mp3 is in miniaudio */
+    YETTY_YACODEC_CODEC_WAV = 5,    /* reserved — dr_wav is in miniaudio */
 };
 
 #ifdef __cplusplus

@@ -359,8 +359,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
         return YETTY_ERR(yetty_yterm_terminal_layer,
                          "ydraw-layer: only KIND_SCROLLING is supported");
     }
-    struct yetty_ydraw_canvas_ptr_result canvas_res =
-        yetty_ydraw_scrolling_canvas_create(context);
+    struct yetty_ydraw_canvas_ptr_result canvas_res = yetty_ydraw_scrolling_canvas_create(context);
     if (YETTY_IS_ERR(canvas_res)) {
         free(layer);
         return YETTY_ERR(yetty_yterm_terminal_layer, "ydraw-layer: canvas create failed",
@@ -549,7 +548,8 @@ static struct yetty_ycore_void_result ydraw_layer_resize_grid(
     float base_h = layer->initial_cell_size.height;
     float cz = (base_h > 0.0f) ? (cell_size.height / base_h) : 1.0f;
     set_cell_zoom(&layer->rs, cz, 0.0f, 0.0f);
-    struct yetty_ydraw_raw_figure_factory *ff = layer->canvas->ops->get_figure_factory(layer->canvas);
+    struct yetty_ydraw_raw_figure_factory *ff =
+        layer->canvas->ops->get_figure_factory(layer->canvas);
     yetty_ydraw_raw_figure_factory_set_cell_zoom(ff, cz, 0.0f, 0.0f);
 
     self->dirty = 1;
@@ -643,21 +643,21 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
     uint32_t font_generation = layer->canvas->ops->font_generation(layer->canvas);
     if (font_generation != layer->last_font_generation) {
         const char *slot_namespaces[YETTY_YRENDER_RS_MAX_CHILDREN];
-        for (uint32_t slot = 0; slot < font_count; slot++)
+        for (uint32_t slot = 0; slot < font_count; slot++) {
             slot_namespaces[slot] = font_rss[slot] ? font_rss[slot]->namespace : NULL;
+        }
 
         char *dispatcher_wgsl = NULL;
         size_t dispatcher_size = 0;
-        struct yetty_ycore_void_result dispatcher_result =
-            yetty_yrender_build_font_dispatcher_wgsl(
-                slot_namespaces, font_count, &dispatcher_wgsl, &dispatcher_size);
+        struct yetty_ycore_void_result dispatcher_result = yetty_yrender_build_font_dispatcher_wgsl(
+            slot_namespaces, font_count, &dispatcher_wgsl, &dispatcher_size);
         if (YETTY_IS_OK(dispatcher_result)) {
             size_t combined_size = dispatcher_size + layer->shader_code.size;
             char *combined_buffer = malloc(combined_size + 1u);
             if (combined_buffer) {
                 memcpy(combined_buffer, dispatcher_wgsl, dispatcher_size);
-                memcpy(combined_buffer + dispatcher_size,
-                       layer->shader_code.data, layer->shader_code.size);
+                memcpy(combined_buffer + dispatcher_size, layer->shader_code.data,
+                       layer->shader_code.size);
                 combined_buffer[combined_size] = '\0';
 
                 free(layer->combined_shader);
@@ -733,8 +733,7 @@ static int ydraw_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
     }
     uint32_t count = layer->canvas->ops->figure_count(layer->canvas);
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure *inst =
-            layer->canvas->ops->get_figure(layer->canvas, i);
+        struct yetty_ydraw_figure *inst = layer->canvas->ops->get_figure(layer->canvas, i);
         if (inst && inst->dirty) {
             return 1;
         }
@@ -921,8 +920,7 @@ static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_ter
     int simple_dirty = self->dirty || layer->canvas->ops->is_dirty(layer->canvas);
     if (simple_dirty || force) {
         struct yetty_ycore_void_result rr = target->ops->render_layer(target, self);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr,
-                            "ydraw_layer_render: render_layer (simple prims)");
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr, "ydraw_layer_render: render_layer (simple prims)");
         /* get_gpu_resource_set inside render_layer already cleared
          * self->dirty when it rebuilt the staging — we just record
          * that we drew. */
@@ -940,8 +938,7 @@ static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_ter
     struct yetty_ycore_pixel_size cell_size = layer->canvas->ops->get_cell_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure *inst =
-            layer->canvas->ops->get_figure(layer->canvas, i);
+        struct yetty_ydraw_figure *inst = layer->canvas->ops->get_figure(layer->canvas, i);
         if (!inst) {
             return YETTY_ERR(yetty_ycore_int,
                              "ydraw_layer_render: get_figure returned NULL within figure_count");
@@ -958,10 +955,8 @@ static struct yetty_ycore_int_result ydraw_layer_render(struct yetty_yrender_ter
         float screen_x = inst->bounds.min.x;
         float screen_y = inst->bounds.min.y + y_offset;
 
-        struct yetty_ycore_void_result rr =
-            inst->render(inst, target, screen_x, screen_y);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr,
-                            "ydraw_layer_render: figure inst->render");
+        struct yetty_ycore_void_result rr = inst->render(inst, target, screen_x, screen_y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr, "ydraw_layer_render: figure inst->render");
         inst->dirty = 0;
         drew = 1;
     }

@@ -75,10 +75,8 @@ struct yetty_ydraw_figure_ops {
      * the rest. NULL on figures that don't accept incremental
      * updates — the scene-canvas drops the wire record silently in
      * that case. */
-    struct yetty_ycore_void_result (*update)(
-        struct yetty_ydraw_figure *self,
-        uint32_t target_field,
-        const void *body, size_t body_size);
+    struct yetty_ycore_void_result (*update)(struct yetty_ydraw_figure *self, uint32_t target_field,
+                                             const void *body, size_t body_size);
 };
 
 //=============================================================================
@@ -132,12 +130,10 @@ struct yetty_ydraw_figure {
 
     // Render to target at x,y (canvas provides x,y for scrolling)
     struct yetty_ycore_void_result (*render)(struct yetty_ydraw_figure *self,
-                                             struct yetty_ydraw_target *target, float x,
-                                             float y);
+                                             struct yetty_ydraw_target *target, float x, float y);
 };
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_figure_ptr,
-                      struct yetty_ydraw_figure *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_figure_ptr, struct yetty_ydraw_figure *);
 
 //=============================================================================
 // Concrete factory interface - one per type (yplot, image, video, etc.)
@@ -163,9 +159,10 @@ struct yetty_ydraw_concrete_factory {
     void *hook_data;
 
     // Compile pipeline (called once during registration)
-    struct yetty_ycore_void_result (*compile_pipeline)(
-        struct yetty_ydraw_concrete_factory *self, WGPUDevice device, WGPUQueue queue,
-        WGPUTextureFormat target_format, struct yetty_ydraw_gpu_allocator *allocator);
+    struct yetty_ycore_void_result (*compile_pipeline)(struct yetty_ydraw_concrete_factory *self,
+                                                       WGPUDevice device, WGPUQueue queue,
+                                                       WGPUTextureFormat target_format,
+                                                       struct yetty_ydraw_gpu_allocator *allocator);
 
     // Get pre-compiled pipeline
     WGPURenderPipeline (*get_pipeline)(struct yetty_ydraw_concrete_factory *self);
@@ -186,10 +183,9 @@ struct yetty_ydraw_concrete_factory {
      * schema (yplot: [buffer_index u32][sample_offset u32][count u32]
      * [samples × f32]). The instance pointer was previously returned by
      * create_instance — the canvas resolves the wire id to it. */
-    struct yetty_ycore_void_result (*update_instance)(
-        struct yetty_ydraw_concrete_factory *self,
-        struct yetty_ydraw_figure *instance,
-        const void *payload, size_t size);
+    struct yetty_ycore_void_result (*update_instance)(struct yetty_ydraw_concrete_factory *self,
+                                                      struct yetty_ydraw_figure *instance,
+                                                      const void *payload, size_t size);
 
     // Get shared RS (for buffer data access)
     struct yetty_ydraw_gpu_resource_set *(*get_shared_rs)(
@@ -198,9 +194,8 @@ struct yetty_ydraw_concrete_factory {
     // Push visual (shader-level) zoom state into this type's shared uniforms.
     // Optional — may be NULL if the type doesn't care about visual zoom.
     // Applies to all instances the factory has produced (they share the RS).
-    struct yetty_ycore_void_result (*set_visual_zoom)(
-        struct yetty_ydraw_concrete_factory *self, float scale, float offset_x,
-        float offset_y);
+    struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ydraw_concrete_factory *self,
+                                                      float scale, float offset_x, float offset_y);
 
     // Push "intrusive" cell-size zoom. Semantically SEPARATE from set_visual_zoom
     // — cell_zoom tracks the cumulative ratio between the current and baseline
@@ -217,50 +212,42 @@ struct yetty_ydraw_concrete_factory {
 
 struct yetty_ydraw_raw_figure_factory;
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_raw_figure_factory_ptr,
-                      struct yetty_ydraw_raw_figure_factory *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_raw_figure_factory_ptr, struct yetty_ydraw_raw_figure_factory *);
 
 // Create (after device/queue available) / destroy. `event_loop` is
 // stashed on the registry and propagated to every concrete factory at
 // register time so instances can subscribe to timers / mouse / etc.
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ydraw_raw_figure_factory_ptr_result
-yetty_ydraw_raw_figure_factory_create(WGPUDevice device, WGPUQueue queue,
-                                              WGPUTextureFormat target_format,
-                                              struct yetty_ydraw_gpu_allocator *allocator,
-                                              struct yetty_yevent_event_loop *event_loop);
+struct yetty_ydraw_raw_figure_factory_ptr_result yetty_ydraw_raw_figure_factory_create(
+    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
+    struct yetty_ydraw_gpu_allocator *allocator, struct yetty_yevent_event_loop *event_loop);
 
 void yetty_ydraw_raw_figure_factory_destroy(
     struct yetty_ydraw_raw_figure_factory *factory YETTY_ANNOT_CALLEE_OWNED);
 
 // Register concrete factory
 struct yetty_ycore_void_result yetty_ydraw_raw_figure_factory_register(
-    struct yetty_ydraw_raw_figure_factory *factory,
-    struct yetty_ydraw_concrete_factory *concrete);
+    struct yetty_ydraw_raw_figure_factory *factory, struct yetty_ydraw_concrete_factory *concrete);
 
 // Create instance (reads type from buffer_data, dispatches to concrete factory)
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ydraw_figure_ptr_result
-yetty_ydraw_raw_figure_factory_create_instance(
-    struct yetty_ydraw_raw_figure_factory *factory,
-    const void *buffer_data YETTY_ANNOT_ARRAY(size), size_t size, uint32_t rolling_row);
+struct yetty_ydraw_figure_ptr_result yetty_ydraw_raw_figure_factory_create_instance(
+    struct yetty_ydraw_raw_figure_factory *factory, const void *buffer_data YETTY_ANNOT_ARRAY(size),
+    size_t size, uint32_t rolling_row);
 
 // Destroy instance (uses instance->factory back-pointer)
-void yetty_ydraw_figure_destroy(
-    struct yetty_ydraw_figure *instance YETTY_ANNOT_CALLEE_OWNED);
+void yetty_ydraw_figure_destroy(struct yetty_ydraw_figure *instance YETTY_ANNOT_CALLEE_OWNED);
 
 // Fan out visual-zoom state to every registered concrete factory (yplot,
 // yimage, ...). Safe to call with no registrations. Concrete factories that
 // don't implement set_visual_zoom are silently skipped.
-void yetty_ydraw_raw_figure_factory_set_visual_zoom(
-    struct yetty_ydraw_raw_figure_factory *factory, float scale, float offset_x,
-    float offset_y);
+void yetty_ydraw_raw_figure_factory_set_visual_zoom(struct yetty_ydraw_raw_figure_factory *factory,
+                                                    float scale, float offset_x, float offset_y);
 
 // Fan out "intrusive" cell-zoom state the same way (separate uniforms,
 // separate semantics — see set_cell_zoom in the concrete factory ops).
-void yetty_ydraw_raw_figure_factory_set_cell_zoom(
-    struct yetty_ydraw_raw_figure_factory *factory, float scale, float offset_x,
-    float offset_y);
+void yetty_ydraw_raw_figure_factory_set_cell_zoom(struct yetty_ydraw_raw_figure_factory *factory,
+                                                  float scale, float offset_x, float offset_y);
 
 #ifdef __cplusplus
 }

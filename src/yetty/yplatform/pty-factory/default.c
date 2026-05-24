@@ -118,13 +118,11 @@ static struct yetty_yplatform_pty_ptr_result unix_pty_factory_create_pty(
             struct yetty_ycore_void_result wr =
                 yetty_yqemu_qemu_wait_ready(TINYEMU_TELNET_PORT, 30000);
             if (YETTY_IS_ERR(wr)) {
-                return YETTY_ERR(yetty_yplatform_pty_ptr,
-                                 "TinyEMU slirp telnet not ready", wr);
+                return YETTY_ERR(yetty_yplatform_pty_ptr, "TinyEMU slirp telnet not ready", wr);
             }
             factory->nat_telnet_ready = 1;
         }
-        return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", TINYEMU_TELNET_PORT,
-                                                   event_loop);
+        return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", TINYEMU_TELNET_PORT, event_loop);
     }
 
 #if defined(YETTY_HAS_SSH)
@@ -153,12 +151,10 @@ static struct yetty_yplatform_pty_ptr_result unix_pty_factory_create_pty(
             if (YETTY_IS_ERR(wr)) {
                 yetty_yqemu_qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;
-                return YETTY_ERR(yetty_yplatform_pty_ptr,
-                                 "QEMU console chardev not ready", wr);
+                return YETTY_ERR(yetty_yplatform_pty_ptr, "QEMU console chardev not ready", wr);
             }
             factory->console_dispensed = 1;
-            return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", QEMU_CONSOLE_PORT,
-                                                       event_loop);
+            return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", QEMU_CONSOLE_PORT, event_loop);
         }
         if (!factory->nat_telnet_ready) {
             struct yetty_ycore_void_result wr =

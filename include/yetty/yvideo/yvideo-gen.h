@@ -26,39 +26,37 @@ struct yetty_yvideo_uniforms {
     float bounds_h;
     uint32_t video_w;
     uint32_t video_h;
-    uint32_t chroma_w;             /* = video_w / 2 for YUV 4:2:0 */
-    uint32_t chroma_h;             /* = video_h / 2 for YUV 4:2:0 */
+    uint32_t chroma_w; /* = video_w / 2 for YUV 4:2:0 */
+    uint32_t chroma_h; /* = video_h / 2 for YUV 4:2:0 */
     float fps;
     uint32_t color_matrix;
     uint32_t flags;
     /* v2: audio. audio_codec=0 → video-only (audio_stream is empty). */
-    uint32_t audio_codec;          /* yetty_yacodec_codec enum value */
-    uint32_t audio_sample_rate;    /* Hz */
-    uint32_t audio_channels;       /* 1 or 2 */
+    uint32_t audio_codec;       /* yetty_yacodec_codec enum value */
+    uint32_t audio_sample_rate; /* Hz */
+    uint32_t audio_channels;    /* 1 or 2 */
 };
 
 // Buffers struct (goes to GPU storage buffer)
 struct yetty_yvideo_buffers {
     const uint32_t *nal_stream;
-    size_t nal_stream_len;        /* count of u32 words */
+    size_t nal_stream_len; /* count of u32 words */
     /* v2: interleaved length-prefixed audio packets — each is
      * (u32 length, length bytes padded to u32 alignment). The factory
      * walks them on decode. */
     const uint32_t *audio_stream;
-    size_t audio_stream_len;      /* count of u32 words */
+    size_t audio_stream_len; /* count of u32 words */
 };
 
 //=============================================================================
 // Serialization API
 //=============================================================================
 
-size_t yetty_yvideo_uniforms_serialized_size(
-    const struct yetty_yvideo_uniforms *uniforms,
-    const struct yetty_yvideo_buffers *buffers);
+size_t yetty_yvideo_uniforms_serialized_size(const struct yetty_yvideo_uniforms *uniforms,
+                                             const struct yetty_yvideo_buffers *buffers);
 
 struct yetty_ycore_size_result yetty_yvideo_uniforms_serialize(
-    const struct yetty_yvideo_uniforms *uniforms,
-    const struct yetty_yvideo_buffers *buffers,
+    const struct yetty_yvideo_uniforms *uniforms, const struct yetty_yvideo_buffers *buffers,
     uint8_t *out, size_t out_capacity);
 
 //=============================================================================
@@ -71,4 +69,3 @@ void yetty_yvideo_factory_destroy(struct yetty_ydraw_concrete_factory *factory);
 #ifdef __cplusplus
 }
 #endif
-

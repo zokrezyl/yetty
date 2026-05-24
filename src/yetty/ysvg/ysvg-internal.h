@@ -333,9 +333,21 @@ struct yetty_ysvg_paint {
     size_t url_id_len;
 };
 
-enum yetty_ysvg_linecap { YETTY_YSVG_LINECAP_BUTT = 0, YETTY_YSVG_LINECAP_ROUND, YETTY_YSVG_LINECAP_SQUARE };
-enum yetty_ysvg_linejoin { YETTY_YSVG_LINEJOIN_MITER = 0, YETTY_YSVG_LINEJOIN_ROUND, YETTY_YSVG_LINEJOIN_BEVEL };
-enum yetty_ysvg_text_anchor { YETTY_YSVG_ANCHOR_START = 0, YETTY_YSVG_ANCHOR_MIDDLE, YETTY_YSVG_ANCHOR_END };
+enum yetty_ysvg_linecap {
+    YETTY_YSVG_LINECAP_BUTT = 0,
+    YETTY_YSVG_LINECAP_ROUND,
+    YETTY_YSVG_LINECAP_SQUARE
+};
+enum yetty_ysvg_linejoin {
+    YETTY_YSVG_LINEJOIN_MITER = 0,
+    YETTY_YSVG_LINEJOIN_ROUND,
+    YETTY_YSVG_LINEJOIN_BEVEL
+};
+enum yetty_ysvg_text_anchor {
+    YETTY_YSVG_ANCHOR_START = 0,
+    YETTY_YSVG_ANCHOR_MIDDLE,
+    YETTY_YSVG_ANCHOR_END
+};
 
 struct yetty_ysvg_style {
     struct yetty_ysvg_paint fill;
@@ -361,8 +373,7 @@ void yetty_ysvg_style_init_root(struct yetty_ysvg_style *s, float default_font_s
  * `doc` is consulted for the author stylesheet; pass NULL to skip CSS. */
 void yetty_ysvg_style_resolve(struct yetty_ysvg_style *out,
                               const struct yetty_ysvg_style *parent_style,
-                              const struct yetty_ysvg_doc *doc,
-                              const struct yetty_ysvg_node *node);
+                              const struct yetty_ysvg_doc *doc, const struct yetty_ysvg_node *node);
 
 /*=============================================================================
  * 2D affine transform (column-major 2×3)

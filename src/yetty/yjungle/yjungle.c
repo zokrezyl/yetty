@@ -43,7 +43,7 @@
 /* Same 22-shape table as yzoo's emit_shape, so the visual feel is
  * consistent across the two tools. */
 #define YJUNGLE_SHAPE_COUNT 22
-#define YJUNGLE_TWO_PI      6.28318530717958647692f
+#define YJUNGLE_TWO_PI 6.28318530717958647692f
 
 /*=============================================================================
  * Segment tree
@@ -51,8 +51,8 @@
 
 struct yjungle_segment {
     uint32_t group_id; /* wire id; monotonic, never reused */
-    float    start_x, start_y;
-    float    end_x, end_y;
+    float start_x, start_y;
+    float end_x, end_y;
     uint32_t depth;
 
     /* If is_group: children[] is the chained sub-segments; primitive
@@ -63,9 +63,9 @@ struct yjungle_segment {
     uint32_t children_count;
 
     /* Primitive parameters (leaf only). */
-    int      shape_choice;
+    int shape_choice;
     uint32_t color;
-    float    stroke_width;
+    float stroke_width;
 };
 
 /*=============================================================================
@@ -91,7 +91,7 @@ struct yetty_yjungle {
     float cursor_x, cursor_y;
 
     /* Event timing. */
-    bool     first_tick_done;
+    bool first_tick_done;
     uint64_t last_event_ms;
     uint32_t next_event_delay_ms;
 };
@@ -149,17 +149,29 @@ static uint32_t random_color(struct yetty_yjungle *j)
 
     float r1, g1, b1;
     if (hue < 60.0f) {
-        r1 = c; g1 = x; b1 = 0.0f;
+        r1 = c;
+        g1 = x;
+        b1 = 0.0f;
     } else if (hue < 120.0f) {
-        r1 = x; g1 = c; b1 = 0.0f;
+        r1 = x;
+        g1 = c;
+        b1 = 0.0f;
     } else if (hue < 180.0f) {
-        r1 = 0.0f; g1 = c; b1 = x;
+        r1 = 0.0f;
+        g1 = c;
+        b1 = x;
     } else if (hue < 240.0f) {
-        r1 = 0.0f; g1 = x; b1 = c;
+        r1 = 0.0f;
+        g1 = x;
+        b1 = c;
     } else if (hue < 300.0f) {
-        r1 = x; g1 = 0.0f; b1 = c;
+        r1 = x;
+        g1 = 0.0f;
+        b1 = c;
     } else {
-        r1 = c; g1 = 0.0f; b1 = x;
+        r1 = c;
+        g1 = 0.0f;
+        b1 = x;
     }
 
     uint8_t r = (uint8_t)((r1 + m) * 255.0f);
@@ -176,15 +188,14 @@ static uint32_t random_color(struct yetty_yjungle *j)
  * made segments tiny; the user wants the chain to span the full area.
  *===========================================================================*/
 
-static void random_next_point(struct yetty_yjungle *j, float sx, float sy,
-                              float *ex, float *ey)
+static void random_next_point(struct yetty_yjungle *j, float sx, float sy, float *ex, float *ey)
 {
     (void)sx;
     (void)sy;
     const struct yetty_yjungle_config *cfg = &j->config;
     float xmin = -cfg->off_canvas_margin;
     float ymin = -cfg->off_canvas_margin;
-    float xmax = cfg->scene_width  + cfg->off_canvas_margin;
+    float xmax = cfg->scene_width + cfg->off_canvas_margin;
     float ymax = cfg->scene_height + cfg->off_canvas_margin;
     *ex = rng_range(j, xmin, xmax);
     *ey = rng_range(j, ymin, ymax);
@@ -271,16 +282,15 @@ static void fill_primitive_leaf(struct yetty_yjungle *j, struct yjungle_segment 
     seg->stroke_width = rng_range(j, 1.0f, 4.0f);
 }
 
-static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segment *seg,
-                                  float sx, float sy, float ex, float ey,
-                                  uint32_t depth)
+static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segment *seg, float sx,
+                                  float sy, float ex, float ey, uint32_t depth)
 {
     seg->group_id = j->next_group_id++;
-    seg->start_x  = sx;
-    seg->start_y  = sy;
-    seg->end_x    = ex;
-    seg->end_y    = ey;
-    seg->depth    = depth;
+    seg->start_x = sx;
+    seg->start_y = sy;
+    seg->end_x = ex;
+    seg->end_y = ey;
+    seg->depth = depth;
     seg->children = NULL;
     seg->children_count = 0;
 
@@ -295,8 +305,12 @@ static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segmen
     /* Group: pick child count in [min, max]. */
     uint32_t lo = j->config.group_children_min;
     uint32_t hi = j->config.group_children_max;
-    if (lo < 2u) lo = 2u;
-    if (hi < lo) hi = lo;
+    if (lo < 2u) {
+        lo = 2u;
+    }
+    if (hi < lo) {
+        hi = lo;
+    }
     uint32_t n_children = lo + rng_uint(j, hi - lo + 1u);
 
     seg->children = calloc(n_children, sizeof(*seg->children));
@@ -318,7 +332,7 @@ static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segmen
     float perp_x = 0.0f, perp_y = 0.0f;
     if (span_len > 1e-3f) {
         perp_x = -dy / span_len;
-        perp_y =  dx / span_len;
+        perp_y = dx / span_len;
     }
     float jitter_amp = span_len * 0.15f;
 
@@ -337,8 +351,7 @@ static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segmen
             child_ex = base_x + perp_x * jitter;
             child_ey = base_y + perp_y * jitter;
         }
-        generate_subtree_into(j, &seg->children[i], prev_x, prev_y,
-                              child_ex, child_ey, depth + 1u);
+        generate_subtree_into(j, &seg->children[i], prev_x, prev_y, child_ex, child_ey, depth + 1u);
         prev_x = child_ex;
         prev_y = child_ey;
     }
@@ -366,10 +379,9 @@ static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segmen
  *===========================================================================*/
 
 static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list *buf,
-                                                    uint32_t z_order, int variant,
-                                                    float ax, float ay, float r,
-                                                    uint32_t color,
-                                                    float scene_w, float scene_h);
+                                                   uint32_t z_order, int variant, float ax,
+                                                   float ay, float r, uint32_t color, float scene_w,
+                                                   float scene_h);
 
 /* yjungle authors prims in the widget's client-area coordinate system —
  * (0,0) to (scene_width, scene_height). random_next_point used to pick
@@ -377,28 +389,42 @@ static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list 
  * out — that's incompatible with "the receiver doesn't clip". Every
  * emit point now checks its full AABB and skips anything that would
  * leave the box. */
-static inline float yj_min2(float a, float b) { return a < b ? a : b; }
-static inline float yj_max2(float a, float b) { return a > b ? a : b; }
-static inline float yj_min3(float a, float b, float c)
-{ return yj_min2(yj_min2(a, b), c); }
-static inline float yj_max3(float a, float b, float c)
-{ return yj_max2(yj_max2(a, b), c); }
-
-static int yjungle_aabb_in_bounds(float x0, float y0, float x1, float y1,
-                                  float scene_w, float scene_h)
+static inline float yj_min2(float a, float b)
 {
-    if (x0 < 0.0f || y0 < 0.0f) return 0;
-    if (x1 > scene_w || y1 > scene_h) return 0;
+    return a < b ? a : b;
+}
+static inline float yj_max2(float a, float b)
+{
+    return a > b ? a : b;
+}
+static inline float yj_min3(float a, float b, float c)
+{
+    return yj_min2(yj_min2(a, b), c);
+}
+static inline float yj_max3(float a, float b, float c)
+{
+    return yj_max2(yj_max2(a, b), c);
+}
+
+static int yjungle_aabb_in_bounds(float x0, float y0, float x1, float y1, float scene_w,
+                                  float scene_h)
+{
+    if (x0 < 0.0f || y0 < 0.0f) {
+        return 0;
+    }
+    if (x1 > scene_w || y1 > scene_h) {
+        return 0;
+    }
     return 1;
 }
 
 static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_list *buf,
-                                                      uint32_t z_order,
-                                                      const struct yjungle_segment *seg,
-                                                      float scene_w, float scene_h)
+                                                     uint32_t z_order,
+                                                     const struct yjungle_segment *seg,
+                                                     float scene_w, float scene_h)
 {
     float sx = seg->start_x, sy = seg->start_y;
-    float ex = seg->end_x,   ey = seg->end_y;
+    float ex = seg->end_x, ey = seg->end_y;
     float dx = ex - sx;
     float dy = ey - sy;
     float length = sqrtf(dx * dx + dy * dy);
@@ -406,17 +432,18 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         /* Degenerate — still emit a tiny circle at the endpoint so the
          * canvas isn't unaccounted-for. */
         struct yetty_ysdf_circle g = {sx, sy, 2.0f};
-        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, seg->color,
-                                                        0u, 0.0f, &g);
+        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, seg->color, 0u, 0.0f, &g);
     }
-    float nx = dx / length;            /* unit along spine */
+    float nx = dx / length; /* unit along spine */
     float ny = dy / length;
-    float px = -ny;                    /* unit perpendicular */
-    float py =  nx;
+    float px = -ny; /* unit perpendicular */
+    float py = nx;
     uint32_t color = seg->color;
     float stroke = seg->stroke_width;
     int choice = seg->shape_choice;
-    if (choice < 0) choice = 0;
+    if (choice < 0) {
+        choice = 0;
+    }
     choice %= YJUNGLE_SHAPE_COUNT;
 
     switch (choice) {
@@ -428,8 +455,8 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         float ax1 = yj_max2(sx, ex) + half;
         float ay1 = yj_max2(sy, ey) + half;
         if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
-            ydebug("yjungle: skip LINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
-                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            ydebug("yjungle: skip LINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f", ax0, ay0,
+                   ax1, ay1, scene_w, scene_h);
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
@@ -438,14 +465,16 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
     case 1: {
         /* Capsule = thick rounded line from start to end. */
         float radius = stroke * 1.5f;
-        if (radius < 2.0f) radius = 2.0f;
+        if (radius < 2.0f) {
+            radius = 2.0f;
+        }
         float ax0 = yj_min2(sx, ex) - radius;
         float ay0 = yj_min2(sy, ey) - radius;
         float ax1 = yj_max2(sx, ex) + radius;
         float ay1 = yj_max2(sy, ey) + radius;
         if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
-            ydebug("yjungle: skip CAPSULE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
-                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            ydebug("yjungle: skip CAPSULE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f", ax0, ay0,
+                   ax1, ay1, scene_w, scene_h);
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_capsule g = {sx, sy, ex, ey, radius};
@@ -462,13 +491,13 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         float ax1 = yj_max2(sx, ex) + half;
         float ay1 = yj_max2(sy, ey) + half;
         if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
-            ydebug("yjungle: skip ROTBOX aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
-                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            ydebug("yjungle: skip ROTBOX aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f", ax0, ay0,
+                   ax1, ay1, scene_w, scene_h);
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
-        return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color,
-                                                          stroke * 3.0f, &g);
+        return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke * 3.0f,
+                                                         &g);
     }
     case 3: {
         /* Triangle: two verts at the chain endpoints, third vertex
@@ -481,8 +510,8 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         float ax1 = yj_max3(sx, ex, tx);
         float ay1 = yj_max3(sy, ey, ty);
         if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
-            ydebug("yjungle: skip TRI aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
-                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            ydebug("yjungle: skip TRI aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f", ax0, ay0, ax1,
+                   ay1, scene_w, scene_h);
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_triangle g = {sx, sy, ex, ey, tx, ty};
@@ -498,8 +527,8 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         float ax1 = yj_max2(sx, ex) + half;
         float ay1 = yj_max2(sy, ey) + half;
         if (!yjungle_aabb_in_bounds(ax0, ay0, ax1, ay1, scene_w, scene_h)) {
-            ydebug("yjungle: skip SPINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f",
-                   ax0, ay0, ax1, ay1, scene_w, scene_h);
+            ydebug("yjungle: skip SPINE aabb=(%.1f,%.1f .. %.1f,%.1f) scene=%.1fx%.1f", ax0, ay0,
+                   ax1, ay1, scene_w, scene_h);
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
@@ -510,10 +539,13 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
          * the next segment's bead at the shared endpoint visibly
          * overlaps — keeps the chain crisp. */
         float bead = stroke * 3.0f;
-        if (bead < 5.0f) bead = 5.0f;
-        if (bead > length * 0.4f) bead = length * 0.4f;
-        return emit_bead_at(buf, z_order + 1u, choice, sx, sy, bead, color,
-                            scene_w, scene_h);
+        if (bead < 5.0f) {
+            bead = 5.0f;
+        }
+        if (bead > length * 0.4f) {
+            bead = length * 0.4f;
+        }
+        return emit_bead_at(buf, z_order + 1u, choice, sx, sy, bead, color, scene_w, scene_h);
     }
     }
 }
@@ -523,18 +555,17 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
  * choice value the segment was generated with, so each segment's bead
  * is stable across re-renders. */
 static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list *buf,
-                                                    uint32_t z_order, int variant,
-                                                    float ax, float ay, float r,
-                                                    uint32_t color,
-                                                    float scene_w, float scene_h)
+                                                   uint32_t z_order, int variant, float ax,
+                                                   float ay, float r, uint32_t color, float scene_w,
+                                                   float scene_h)
 {
     /* All 18 bead variants fit inside a (1.5r × 1.5r) box centred at
      * (ax, ay) — rhombus/ellipse use up to 1.2r on one axis, the rest
      * stay within r. Use 1.5r as a safe over-approximation. */
     float ext = r * 1.5f;
     if (!yjungle_aabb_in_bounds(ax - ext, ay - ext, ax + ext, ay + ext, scene_w, scene_h)) {
-        ydebug("yjungle: skip BEAD variant=%d pos=(%.1f,%.1f) r=%.1f scene=%.1fx%.1f",
-               variant, ax, ay, r, scene_w, scene_h);
+        ydebug("yjungle: skip BEAD variant=%d pos=(%.1f,%.1f) r=%.1f scene=%.1fx%.1f", variant, ax,
+               ay, r, scene_w, scene_h);
         return YETTY_OK_VOID();
     }
     switch (variant % 18) {
@@ -630,21 +661,19 @@ static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list 
  * counter rolls forward forever — uint32_t headroom is plenty.
  *===========================================================================*/
 
-static struct yetty_ycore_void_result emit_segment_subtree(
-    struct yetty_ydraw_draw_list *buf, const struct yjungle_segment *seg,
-    uint32_t *z_order_counter,
-    float scene_w, float scene_h)
+static struct yetty_ycore_void_result emit_segment_subtree(struct yetty_ydraw_draw_list *buf,
+                                                           const struct yjungle_segment *seg,
+                                                           uint32_t *z_order_counter, float scene_w,
+                                                           float scene_h)
 {
-    struct yetty_ydraw_id_result br =
-        yetty_ydraw_draw_list_begin_group(buf, seg->group_id);
+    struct yetty_ydraw_id_result br = yetty_ydraw_draw_list_begin_group(buf, seg->group_id);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yjungle: begin_group");
     uint32_t marker = br.value;
 
     if (seg->is_group) {
         for (uint32_t i = 0; i < seg->children_count; i++) {
             struct yetty_ycore_void_result cr =
-                emit_segment_subtree(buf, &seg->children[i], z_order_counter,
-                                     scene_w, scene_h);
+                emit_segment_subtree(buf, &seg->children[i], z_order_counter, scene_w, scene_h);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "yjungle: child emit");
         }
     } else {
@@ -653,8 +682,7 @@ static struct yetty_ycore_void_result emit_segment_subtree(
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yjungle: primitive emit");
     }
 
-    struct yetty_ycore_void_result er =
-        yetty_ydraw_draw_list_end_group(buf, marker);
+    struct yetty_ycore_void_result er = yetty_ydraw_draw_list_end_group(buf, marker);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yjungle: end_group");
     return YETTY_OK_VOID();
 }
@@ -666,7 +694,7 @@ static struct yetty_ycore_void_result emit_segment_subtree(
 struct yetty_yjungle_config yetty_yjungle_config_default(void)
 {
     struct yetty_yjungle_config cfg = {
-        .scene_width  = 800.0f,
+        .scene_width = 800.0f,
         .scene_height = 600.0f,
 
         .step_min = 40.0f,
@@ -679,8 +707,8 @@ struct yetty_yjungle_config yetty_yjungle_config_default(void)
         .group_children_max = 3u,
 
         .initial_chain_length = 8u,
-        .max_chain_length     = 30u,
-        .extend_probability   = 0.3f,
+        .max_chain_length = 30u,
+        .extend_probability = 0.3f,
 
         .event_interval_ms_min = 500u,
         .event_interval_ms_max = 2500u,
@@ -690,33 +718,68 @@ struct yetty_yjungle_config yetty_yjungle_config_default(void)
 
 static struct yetty_yjungle_config clamp_config(struct yetty_yjungle_config c)
 {
-    if (c.scene_width  < 16.0f) c.scene_width  = 16.0f;
-    if (c.scene_height < 16.0f) c.scene_height = 16.0f;
-    if (c.step_min < 1.0f)      c.step_min = 1.0f;
-    if (c.step_max < c.step_min) c.step_max = c.step_min;
-    if (c.off_canvas_margin < 0.0f) c.off_canvas_margin = 0.0f;
+    if (c.scene_width < 16.0f) {
+        c.scene_width = 16.0f;
+    }
+    if (c.scene_height < 16.0f) {
+        c.scene_height = 16.0f;
+    }
+    if (c.step_min < 1.0f) {
+        c.step_min = 1.0f;
+    }
+    if (c.step_max < c.step_min) {
+        c.step_max = c.step_min;
+    }
+    if (c.off_canvas_margin < 0.0f) {
+        c.off_canvas_margin = 0.0f;
+    }
 
-    if (c.max_depth > 6u)     c.max_depth = 6u;
-    if (c.group_prob_depth0 < 0.0f) c.group_prob_depth0 = 0.0f;
-    if (c.group_prob_depth0 > 1.0f) c.group_prob_depth0 = 1.0f;
-    if (c.group_children_min < 2u) c.group_children_min = 2u;
-    if (c.group_children_max < c.group_children_min) c.group_children_max = c.group_children_min;
-    if (c.group_children_max > 6u) c.group_children_max = 6u;
+    if (c.max_depth > 6u) {
+        c.max_depth = 6u;
+    }
+    if (c.group_prob_depth0 < 0.0f) {
+        c.group_prob_depth0 = 0.0f;
+    }
+    if (c.group_prob_depth0 > 1.0f) {
+        c.group_prob_depth0 = 1.0f;
+    }
+    if (c.group_children_min < 2u) {
+        c.group_children_min = 2u;
+    }
+    if (c.group_children_max < c.group_children_min) {
+        c.group_children_max = c.group_children_min;
+    }
+    if (c.group_children_max > 6u) {
+        c.group_children_max = 6u;
+    }
 
-    if (c.initial_chain_length < 1u) c.initial_chain_length = 1u;
-    if (c.max_chain_length < c.initial_chain_length) c.max_chain_length = c.initial_chain_length;
-    if (c.max_chain_length > 1000u) c.max_chain_length = 1000u;
-    if (c.extend_probability < 0.0f) c.extend_probability = 0.0f;
-    if (c.extend_probability > 1.0f) c.extend_probability = 1.0f;
+    if (c.initial_chain_length < 1u) {
+        c.initial_chain_length = 1u;
+    }
+    if (c.max_chain_length < c.initial_chain_length) {
+        c.max_chain_length = c.initial_chain_length;
+    }
+    if (c.max_chain_length > 1000u) {
+        c.max_chain_length = 1000u;
+    }
+    if (c.extend_probability < 0.0f) {
+        c.extend_probability = 0.0f;
+    }
+    if (c.extend_probability > 1.0f) {
+        c.extend_probability = 1.0f;
+    }
 
-    if (c.event_interval_ms_min < 10u) c.event_interval_ms_min = 10u;
-    if (c.event_interval_ms_max < c.event_interval_ms_min)
+    if (c.event_interval_ms_min < 10u) {
+        c.event_interval_ms_min = 10u;
+    }
+    if (c.event_interval_ms_max < c.event_interval_ms_min) {
         c.event_interval_ms_max = c.event_interval_ms_min;
+    }
     return c;
 }
 
-struct yetty_yjungle_ptr_result yetty_yjungle_create(
-    const struct yetty_yjungle_config *config, uint32_t seed)
+struct yetty_yjungle_ptr_result yetty_yjungle_create(const struct yetty_yjungle_config *config,
+                                                     uint32_t seed)
 {
     struct yetty_yjungle *j = calloc(1, sizeof(*j));
     if (!j) {
@@ -725,7 +788,7 @@ struct yetty_yjungle_ptr_result yetty_yjungle_create(
     j->config = clamp_config(config ? *config : yetty_yjungle_config_default());
     j->rng_state = seed != 0 ? (uint64_t)seed : seed_from_clock();
     j->next_group_id = 1u; /* 0 reserved for receiver root */
-    j->cursor_x = j->config.scene_width  * 0.5f;
+    j->cursor_x = j->config.scene_width * 0.5f;
     j->cursor_y = j->config.scene_height * 0.5f;
     j->first_tick_done = false;
     j->last_event_ms = 0u;
@@ -747,15 +810,19 @@ void yetty_yjungle_destroy(struct yetty_yjungle *j)
     free(j);
 }
 
-struct yetty_ycore_void_result yetty_yjungle_set_scene_size(
-    struct yetty_yjungle *j, float scene_width, float scene_height)
+struct yetty_ycore_void_result yetty_yjungle_set_scene_size(struct yetty_yjungle *j,
+                                                            float scene_width, float scene_height)
 {
     if (!j) {
         return YETTY_ERR(yetty_ycore_void, "yjungle: NULL");
     }
-    if (scene_width  < 16.0f) scene_width  = 16.0f;
-    if (scene_height < 16.0f) scene_height = 16.0f;
-    j->config.scene_width  = scene_width;
+    if (scene_width < 16.0f) {
+        scene_width = 16.0f;
+    }
+    if (scene_height < 16.0f) {
+        scene_height = 16.0f;
+    }
+    j->config.scene_width = scene_width;
     j->config.scene_height = scene_height;
     return YETTY_OK_VOID();
 }
@@ -774,16 +841,15 @@ static void schedule_next_event(struct yetty_yjungle *j, uint64_t now_ms)
 {
     j->last_event_ms = now_ms;
     uint32_t span = j->config.event_interval_ms_max - j->config.event_interval_ms_min;
-    j->next_event_delay_ms =
-        j->config.event_interval_ms_min + (span ? rng_uint(j, span + 1u) : 0u);
+    j->next_event_delay_ms = j->config.event_interval_ms_min + (span ? rng_uint(j, span + 1u) : 0u);
 }
 
 /* Extend the chain by one segment at the tail. Caller has already
  * reserved capacity. Emits the new GROUP into `buf` and updates
  * `*z_order_counter`. */
 static struct yetty_ycore_void_result do_extend(struct yetty_yjungle *j,
-                                                 struct yetty_ydraw_draw_list *buf,
-                                                 uint32_t *z_order_counter)
+                                                struct yetty_ydraw_draw_list *buf,
+                                                uint32_t *z_order_counter)
 {
     float sx = j->cursor_x;
     float sy = j->cursor_y;
@@ -797,16 +863,16 @@ static struct yetty_ycore_void_result do_extend(struct yetty_yjungle *j,
     j->cursor_x = ex;
     j->cursor_y = ey;
 
-    return emit_segment_subtree(buf, seg, z_order_counter,
-                                j->config.scene_width, j->config.scene_height);
+    return emit_segment_subtree(buf, seg, z_order_counter, j->config.scene_width,
+                                j->config.scene_height);
 }
 
 /* Replace a randomly-picked existing segment in place. The new segment
  * keeps the old (start, end); only its tree/primitive content changes.
  * Emits DELETE(old_id) followed by GROUP(new_id). */
 static struct yetty_ycore_void_result do_replace(struct yetty_yjungle *j,
-                                                  struct yetty_ydraw_draw_list *buf,
-                                                  uint32_t *z_order_counter)
+                                                 struct yetty_ydraw_draw_list *buf,
+                                                 uint32_t *z_order_counter)
 {
     uint32_t idx = rng_uint(j, j->chain_len);
     struct yjungle_segment *seg = &j->chain[idx];
@@ -828,13 +894,13 @@ static struct yetty_ycore_void_result do_replace(struct yetty_yjungle *j,
     memset(seg, 0, sizeof(*seg));
     generate_subtree_into(j, seg, sx, sy, ex, ey, 0u);
 
-    return emit_segment_subtree(buf, seg, z_order_counter,
-                                j->config.scene_width, j->config.scene_height);
+    return emit_segment_subtree(buf, seg, z_order_counter, j->config.scene_width,
+                                j->config.scene_height);
 }
 
 struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,
-                                                   struct yetty_ydraw_draw_list *buf,
-                                                   uint64_t now_ms)
+                                                  struct yetty_ydraw_draw_list *buf,
+                                                  uint64_t now_ms)
 {
     if (!j) {
         return YETTY_ERR(yetty_ycore_void, "yjungle_tick: NULL jungle");
@@ -844,9 +910,8 @@ struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,
     }
 
     yetty_ydraw_draw_list_clear(buf);
-    yetty_ydraw_draw_list_set_scene_bounds(buf, 0.0f, 0.0f,
-                                            j->config.scene_width,
-                                            j->config.scene_height);
+    yetty_ydraw_draw_list_set_scene_bounds(buf, 0.0f, 0.0f, j->config.scene_width,
+                                           j->config.scene_height);
 
     /* z_order is local to this envelope. Each new envelope is a delta
      * — its prims layer on top of what's already on the canvas, so the
@@ -861,8 +926,7 @@ struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,
         struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(buf);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yjungle_tick: add_cmd_zero");
 
-        struct yetty_ycore_void_result rr =
-            chain_reserve(j, j->config.initial_chain_length);
+        struct yetty_ycore_void_result rr = chain_reserve(j, j->config.initial_chain_length);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yjungle_tick: initial reserve");
 
         for (uint32_t i = 0; i < j->config.initial_chain_length; i++) {

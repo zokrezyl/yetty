@@ -68,8 +68,9 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
  * signal coming from yetty_event_handler — propagated down to every
  * pane's terminal_render_frame so panes wipe stale pixels left behind
  * by yui chrome that's about to repaint. */
-struct yetty_ycore_void_result yetty_yui_tabbar_render(
-    struct yetty_yui_tabbar *bar, struct yetty_ydraw_target *render_target, int force_redraw);
+struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *bar,
+                                                       struct yetty_ydraw_target *render_target,
+                                                       int force_redraw);
 
 /* `width` × `height` is the workspace region (the strip occupies the top,
  * `height` already excludes any bottom statusbar inset). `total_height`
@@ -109,8 +110,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
     struct yetty_yui_workspace **out_ws);
 
 /* Find a workspace by id. NULL if not present. */
-struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(
-    const struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id);
+struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(const struct yetty_yui_tabbar *bar,
+                                                            yetty_ycore_object_id workspace_id);
 
 /* Kinds the "v" dropdown menu can spawn. Each kind toggles a small set
  * of config keys (ssh/enabled, telnet/enabled, vnc/client) so the
@@ -140,8 +141,7 @@ size_t yetty_yui_tabbar_active_index(const struct yetty_yui_tabbar *bar);
 /* Model mutators usable from outside (ygui tab-widget callbacks). All
  * are no-ops when idx is out of range; switch_to additionally no-ops
  * when idx is already active. */
-struct yetty_ycore_void_result yetty_yui_tabbar_switch_to(struct yetty_yui_tabbar *bar,
-                                                          size_t idx);
+struct yetty_ycore_void_result yetty_yui_tabbar_switch_to(struct yetty_yui_tabbar *bar, size_t idx);
 struct yetty_ycore_void_result yetty_yui_tabbar_close_at(struct yetty_yui_tabbar *bar, size_t idx);
 
 /* Window-control wrappers — yui's ygui titlebar buttons (_, □, ✕)

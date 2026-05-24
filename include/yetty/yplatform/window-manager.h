@@ -29,8 +29,7 @@ struct yetty_yplatform_window_manager;
 struct yetty_ycore_xthread_event_pipe;
 struct yetty_yui_event;
 
-YETTY_YRESULT_DECLARE(yetty_yplatform_window_manager_ptr,
-                     struct yetty_yplatform_window_manager *);
+YETTY_YRESULT_DECLARE(yetty_yplatform_window_manager_ptr, struct yetty_yplatform_window_manager *);
 
 struct yetty_yplatform_window_manager_ops {
     void (*destroy)(struct yetty_yplatform_window_manager *self);
@@ -54,8 +53,7 @@ struct yetty_yplatform_window_manager_ops {
      * yetty_ycore_resize_edge bitmask telling the compositor which edge
      * the user grabbed; on X11 this is a no-op and per-pixel resize_by
      * keeps driving glfwSetWindowSize. */
-    void (*begin_interactive_resize)(struct yetty_yplatform_window_manager *self,
-                                     int edge);
+    void (*begin_interactive_resize)(struct yetty_yplatform_window_manager *self, int edge);
 
     /* Set the OS mouse cursor shape. Shape is an enum
      * yetty_ycore_cursor_shape value. Posted to output_pipe and applied

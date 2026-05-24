@@ -28,11 +28,11 @@ enum yetty_yterm_ydraw_layer_kind {
 };
 
 struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
-    enum yetty_yterm_ydraw_layer_kind kind, uint32_t cols, uint32_t rows,
-    float cell_width, float cell_height,
-    const struct yetty_context *context, yetty_yterm_request_render_fn request_render_fn,
-    void *request_render_userdata, yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata,
-    yetty_yterm_cursor_fn cursor_fn, void *cursor_userdata);
+    enum yetty_yterm_ydraw_layer_kind kind, uint32_t cols, uint32_t rows, float cell_width,
+    float cell_height, const struct yetty_context *context,
+    yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
+    yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
+    void *cursor_userdata);
 
 #ifdef __cplusplus
 }

@@ -39,36 +39,48 @@ struct ysvg_params {
 static int ysvg_params_starts_with(const char *s, size_t s_len, const char *prefix)
 {
     size_t pl = strlen(prefix);
-    if (s_len < pl) return 0;
+    if (s_len < pl) {
+        return 0;
+    }
     return memcmp(s, prefix, pl) == 0;
 }
 
 static int ysvg_params_parse_float(const char *s, size_t len, float *out)
 {
     char buf[64];
-    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    if (len >= sizeof(buf)) {
+        len = sizeof(buf) - 1;
+    }
     memcpy(buf, s, len);
     buf[len] = '\0';
     char *end = NULL;
     float v = strtof(buf, &end);
-    if (end == buf) return 0;
+    if (end == buf) {
+        return 0;
+    }
     *out = v;
     return 1;
 }
 
 static void ysvg_params_parse(const char *args, size_t args_len, struct ysvg_params *p)
 {
-    if (!args || args_len == 0) return;
+    if (!args || args_len == 0) {
+        return;
+    }
     size_t i = 0;
     while (i < args_len) {
-        while (i < args_len && (args[i] == ' ' || args[i] == '\t' || args[i] == '\n' ||
-                                args[i] == '\r'))
+        while (i < args_len &&
+               (args[i] == ' ' || args[i] == '\t' || args[i] == '\n' || args[i] == '\r')) {
             i++;
-        if (i >= args_len) break;
+        }
+        if (i >= args_len) {
+            break;
+        }
         size_t s = i;
         while (i < args_len && args[i] != ' ' && args[i] != '\t' && args[i] != '\n' &&
-               args[i] != '\r')
+               args[i] != '\r') {
             i++;
+        }
         size_t tlen = i - s;
         const char *tok = args + s;
         if (ysvg_params_starts_with(tok, tlen, "--font-size=")) {
@@ -79,7 +91,9 @@ static void ysvg_params_parse(const char *args, size_t args_len, struct ysvg_par
             }
         } else if (ysvg_params_starts_with(tok, tlen, "--line-spacing=")) {
             float v;
-            if (ysvg_params_parse_float(tok + 15, tlen - 15, &v)) p->line_spacing = v;
+            if (ysvg_params_parse_float(tok + 15, tlen - 15, &v)) {
+                p->line_spacing = v;
+            }
         } else if (ysvg_params_starts_with(tok, tlen, "--bg=")) {
             uint32_t c;
             if (yetty_ysvg_parse_color(tok + 5, tlen - 5, &c)) {
@@ -105,7 +119,9 @@ static void resolve_user_space(const struct yetty_ysvg_doc *doc, float *vx, floa
     *vw = 0.0f;
     *vh = 0.0f;
     const struct yetty_ysvg_node *root = doc->root;
-    if (!root) return;
+    if (!root) {
+        return;
+    }
 
     const struct yetty_ysvg_attr *vb = yetty_ysvg_attr_find(root, YETTY_YSVG_ATTR_VIEWBOX);
     if (vb) {
@@ -124,8 +140,12 @@ static void resolve_user_space(const struct yetty_ysvg_doc *doc, float *vx, floa
     }
     const struct yetty_ysvg_attr *wa = yetty_ysvg_attr_find(root, YETTY_YSVG_ATTR_WIDTH);
     const struct yetty_ysvg_attr *ha = yetty_ysvg_attr_find(root, YETTY_YSVG_ATTR_HEIGHT);
-    if (wa) *vw = yetty_ysvg_parse_length(wa->value, wa->value_len, 100.0f, 0.0f);
-    if (ha) *vh = yetty_ysvg_parse_length(ha->value, ha->value_len, 100.0f, 0.0f);
+    if (wa) {
+        *vw = yetty_ysvg_parse_length(wa->value, wa->value_len, 100.0f, 0.0f);
+    }
+    if (ha) {
+        *vh = yetty_ysvg_parse_length(ha->value, ha->value_len, 100.0f, 0.0f);
+    }
 }
 
 /* Compute the display-pixel target size for an SVG of user-space size
@@ -193,12 +213,9 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
     resolve_target_size(config, vw, vh, &scene_w, &scene_h);
     float scale = (vw > 0.0f) ? scene_w / vw : 1.0f;
 
-    struct yetty_ydraw_draw_list_config bcfg = {.scene_min_x = 0.0f,
-                                                   .scene_min_y = 0.0f,
-                                                   .scene_max_x = scene_w,
-                                                   .scene_max_y = scene_h};
-    struct yetty_ydraw_draw_list_result br =
-        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_config bcfg = {
+        .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = scene_w, .scene_max_y = scene_h};
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         yetty_ysvg_doc_destroy(doc);
         return YETTY_ERR(yetty_ysvg_render, "ysvg: buffer create failed", br);
@@ -213,7 +230,8 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
                                     .half_width = scene_w * 0.5f,
                                     .half_height = scene_h * 0.5f,
                                     .corner_radius = 0.0f};
-        struct yetty_ycore_void_result r = yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, 0, abgr, 0, 0.0f, &bg);
+        struct yetty_ycore_void_result r =
+            yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, 0, abgr, 0, 0.0f, &bg);
         if (YETTY_IS_ERR(r)) {
             yetty_ydraw_draw_list_destroy(buf);
             yetty_ysvg_doc_destroy(doc);

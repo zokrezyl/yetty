@@ -63,8 +63,7 @@ static struct yetty_yrender_gpu_resource_set_result bg_get_gpu_resource_set(
 }
 
 static struct yetty_ycore_int_result bg_render(struct yetty_yrender_terminal_layer *self,
-                                               struct yetty_ydraw_target *target,
-                                               int force)
+                                               struct yetty_ydraw_target *target, int force)
 {
     if (!target || !target->ops || !target->ops->render_layer) {
         return YETTY_ERR(yetty_ycore_int, "background_layer: target has no render_layer");

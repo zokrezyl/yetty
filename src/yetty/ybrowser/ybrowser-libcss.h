@@ -89,9 +89,8 @@ int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_
                                     float font_size, float pct_basis, float *out_px);
 int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                     float font_size, float pct_basis, float *out_px);
-int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_style *style,
-                                 int side, float font_size, float pct_basis, float *out_px,
-                                 bool *out_auto);
+int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_style *style, int side,
+                                 float font_size, float pct_basis, float *out_px, bool *out_auto);
 int yetty_ybrowser_libcss_padding(struct yetty_ylexbor *r, const css_computed_style *style,
                                   int side, float font_size, float pct_basis, float *out_px);
 int yetty_ybrowser_libcss_border_width(struct yetty_ylexbor *r, const css_computed_style *style,

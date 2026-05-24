@@ -337,8 +337,8 @@ static int extract_with_prefix(struct yetty_incbin_assets *assets, const char *p
             struct stat st;
             if (stat(path, &st) == 0 && S_ISREG(st.st_mode)) {
                 if (entry->compressed || (size_t)st.st_size == entry->size) {
-                    ydebug("Skipped (already present): %s (%lld bytes on disk)",
-                           entry->name, (long long)st.st_size);
+                    ydebug("Skipped (already present): %s (%lld bytes on disk)", entry->name,
+                           (long long)st.st_size);
                     continue;
                 }
             }

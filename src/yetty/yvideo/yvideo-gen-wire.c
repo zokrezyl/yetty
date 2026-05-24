@@ -18,36 +18,37 @@
 #include <stdint.h>
 #include <string.h>
 
-#define YETTY_YVIDEO_UNIFORM_WORDS  14u
+#define YETTY_YVIDEO_UNIFORM_WORDS 14u
 #define YETTY_YVIDEO_BUFFER_LEN_FIELDS 2u
 
-size_t yetty_yvideo_uniforms_serialized_size(
-    const struct yetty_yvideo_uniforms *uniforms,
-    const struct yetty_yvideo_buffers *buffers)
+size_t yetty_yvideo_uniforms_serialized_size(const struct yetty_yvideo_uniforms *uniforms,
+                                             const struct yetty_yvideo_buffers *buffers)
 {
     (void)uniforms;
     // Wire format: [type_id][payload_size][uniforms...][buffer_lens...][buffer_data...]
     size_t total_buf_words = buffers->nal_stream_len + buffers->audio_stream_len;
-    return (2u + YETTY_YVIDEO_UNIFORM_WORDS + YETTY_YVIDEO_BUFFER_LEN_FIELDS +
-            total_buf_words) * sizeof(uint32_t);
+    return (2u + YETTY_YVIDEO_UNIFORM_WORDS + YETTY_YVIDEO_BUFFER_LEN_FIELDS + total_buf_words) *
+           sizeof(uint32_t);
 }
 
 struct yetty_ycore_size_result yetty_yvideo_uniforms_serialize(
-    const struct yetty_yvideo_uniforms *uniforms,
-    const struct yetty_yvideo_buffers *buffers,
+    const struct yetty_yvideo_uniforms *uniforms, const struct yetty_yvideo_buffers *buffers,
     uint8_t *out, size_t out_capacity)
 {
-    if (!uniforms || !buffers)
+    if (!uniforms || !buffers) {
         return YETTY_ERR(yetty_ycore_size, "null argument");
-    if (!out)
+    }
+    if (!out) {
         return YETTY_ERR(yetty_ycore_size, "out is NULL");
+    }
 
     size_t total_buf_words = buffers->nal_stream_len + buffers->audio_stream_len;
-    size_t required = (2u + YETTY_YVIDEO_UNIFORM_WORDS +
-                       YETTY_YVIDEO_BUFFER_LEN_FIELDS + total_buf_words) *
-                      sizeof(uint32_t);
-    if (out_capacity < required)
+    size_t required =
+        (2u + YETTY_YVIDEO_UNIFORM_WORDS + YETTY_YVIDEO_BUFFER_LEN_FIELDS + total_buf_words) *
+        sizeof(uint32_t);
+    if (out_capacity < required) {
         return YETTY_ERR(yetty_ycore_size, "buffer too small");
+    }
 
     uint32_t *p = (uint32_t *)out;
     *p++ = YETTY_YVIDEO_TYPE_ID;
@@ -64,14 +65,12 @@ struct yetty_ycore_size_result yetty_yvideo_uniforms_serialize(
 
     // Copy buffer data in the same declaration order.
     if (buffers->nal_stream && buffers->nal_stream_len > 0u) {
-        memcpy(p, buffers->nal_stream,
-               buffers->nal_stream_len * sizeof(uint32_t));
+        memcpy(p, buffers->nal_stream, buffers->nal_stream_len * sizeof(uint32_t));
     }
     p += buffers->nal_stream_len;
 
     if (buffers->audio_stream && buffers->audio_stream_len > 0u) {
-        memcpy(p, buffers->audio_stream,
-               buffers->audio_stream_len * sizeof(uint32_t));
+        memcpy(p, buffers->audio_stream, buffers->audio_stream_len * sizeof(uint32_t));
     }
     p += buffers->audio_stream_len;
 

@@ -150,13 +150,11 @@ static struct yetty_ycore_void_result unix_pipe_set_nonblocking_write(
     struct yetty_yplatform_unix_platform_input_pipe *pipe_impl =
         container_of(self, struct yetty_yplatform_unix_platform_input_pipe, base);
     if (pipe_impl->write_fd < 0) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "unix_pipe_set_nonblocking_write: write fd not open");
+        return YETTY_ERR(yetty_ycore_void, "unix_pipe_set_nonblocking_write: write fd not open");
     }
     int flags = fcntl(pipe_impl->write_fd, F_GETFL, 0);
     if (flags < 0) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "unix_pipe_set_nonblocking_write: F_GETFL failed");
+        return YETTY_ERR(yetty_ycore_void, "unix_pipe_set_nonblocking_write: F_GETFL failed");
     }
     if (fcntl(pipe_impl->write_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
         return YETTY_ERR(yetty_ycore_void,

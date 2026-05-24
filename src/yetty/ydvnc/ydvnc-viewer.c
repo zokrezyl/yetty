@@ -409,9 +409,9 @@ struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
         return YETTY_ERR(yetty_ydvnc_viewer_ptr, "ydvnc: strdup failed");
     }
 
-    struct yetty_ydvnc_rfb_client_ptr_result cres =
-        yetty_ydvnc_rfb_client_create(yetty_ctx->runtime->gpu.device, yetty_ctx->runtime->gpu.queue,
-                                      yetty_ctx->runtime->gpu.surface_format, yetty_ctx->event_loop);
+    struct yetty_ydvnc_rfb_client_ptr_result cres = yetty_ydvnc_rfb_client_create(
+        yetty_ctx->runtime->gpu.device, yetty_ctx->runtime->gpu.queue,
+        yetty_ctx->runtime->gpu.surface_format, yetty_ctx->event_loop);
     if (YETTY_IS_ERR(cres)) {
         free(v->host);
         free(v);

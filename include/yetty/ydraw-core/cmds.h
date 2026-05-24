@@ -66,11 +66,11 @@ extern "C" {
  * renumber them; for now use the kind-bit constants below for any        *
  * record introduced by the new group/coord-frame work.                   *
  *------------------------------------------------------------------------*/
-#define YETTY_YDRAW_KIND_MASK         0xC0000000u
-#define YETTY_YDRAW_KIND_ANON_CONTENT 0x00000000u  /* 00 — payload follows */
-#define YETTY_YDRAW_KIND_DECL         0x40000000u  /* 01 — id + payload */
-#define YETTY_YDRAW_KIND_REF          0x80000000u  /* 10 — id only */
-#define YETTY_YDRAW_KIND_RESERVED     0xC0000000u  /* 11 — invalid */
+#define YETTY_YDRAW_KIND_MASK 0xC0000000u
+#define YETTY_YDRAW_KIND_ANON_CONTENT 0x00000000u /* 00 — payload follows */
+#define YETTY_YDRAW_KIND_DECL 0x40000000u         /* 01 — id + payload */
+#define YETTY_YDRAW_KIND_REF 0x80000000u          /* 10 — id only */
+#define YETTY_YDRAW_KIND_RESERVED 0xC0000000u     /* 11 — invalid */
 
 /* CMD_GROUP_REF: include an already-declared group (by id) as a child of
  * the current parent group. Used when the same sub-group can be reached

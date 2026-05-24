@@ -53,9 +53,7 @@ static int yzoo_ensure_attached(struct yetty_ygui_widget *self, float w, float h
     if (w <= 0.0f || h <= 0.0f) {
         return 0;
     }
-    if (self->data.yzoo.producer &&
-        self->data.yzoo.last_w == w &&
-        self->data.yzoo.last_h == h) {
+    if (self->data.yzoo.producer && self->data.yzoo.last_w == w && self->data.yzoo.last_h == h) {
         return 1;
     }
     if (self->data.yzoo.producer) {
@@ -80,8 +78,10 @@ static int yzoo_ensure_attached(struct yetty_ygui_widget *self, float w, float h
     }
 
     struct yetty_ydraw_draw_list_config bcfg = {
-        .scene_min_x = 0.0f, .scene_min_y = 0.0f,
-        .scene_max_x = w,    .scene_max_y = h,
+        .scene_min_x = 0.0f,
+        .scene_min_y = 0.0f,
+        .scene_max_x = w,
+        .scene_max_y = h,
     };
     if (self->data.yzoo.raw) {
         yetty_ydraw_draw_list_destroy(self->data.yzoo.raw);
@@ -91,16 +91,14 @@ static int yzoo_ensure_attached(struct yetty_ygui_widget *self, float w, float h
         yetty_ydraw_draw_list_destroy(self->data.yzoo.flat);
         self->data.yzoo.flat = NULL;
     }
-    struct yetty_ydraw_draw_list_result rr =
-        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_result rr = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(rr)) {
         yetty_ycore_error_destroy(rr.error);
         return 0;
     }
     self->data.yzoo.raw = rr.value;
 
-    struct yetty_ydraw_draw_list_result fr =
-        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_result fr = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(fr)) {
         yetty_ycore_error_destroy(fr.error);
         return 0;
@@ -118,16 +116,13 @@ static int yzoo_run_one_frame(struct yetty_ygui_widget *self)
         return 0;
     }
     struct yetty_ycore_void_result rr =
-        yetty_yzoo_render(self->data.yzoo.producer, self->data.yzoo.raw,
-                          self->data.yzoo.t_seconds);
+        yetty_yzoo_render(self->data.yzoo.producer, self->data.yzoo.raw, self->data.yzoo.t_seconds);
     if (YETTY_IS_ERR(rr)) {
         yetty_ycore_error_destroy(rr.error);
         return 0;
     }
     yetty_ydraw_draw_list_clear(self->data.yzoo.flat);
-    yetty_ydraw_draw_list_set_scene_bounds(self->data.yzoo.flat,
-                                           0.0f, 0.0f,
-                                           self->data.yzoo.last_w,
+    yetty_ydraw_draw_list_set_scene_bounds(self->data.yzoo.flat, 0.0f, 0.0f, self->data.yzoo.last_w,
                                            self->data.yzoo.last_h);
     struct yetty_ycore_void_result fl =
         yetty_ygui_flatten_draw_list(self->data.yzoo.flat, self->data.yzoo.raw);
@@ -150,8 +145,7 @@ static struct yetty_ycore_void_result yzoo_render(struct yetty_ygui_widget *self
     if (!yzoo_ensure_attached(self, w, h)) {
         return YETTY_OK_VOID();
     }
-    if (!self->data.yzoo.flat ||
-        yetty_ydraw_draw_list_size(self->data.yzoo.flat) == 0u) {
+    if (!self->data.yzoo.flat || yetty_ydraw_draw_list_size(self->data.yzoo.flat) == 0u) {
         /* No frame has been rendered yet — paint an initial frame so
          * the tab isn't blank until the first tick fires. */
         yzoo_run_one_frame(self);
@@ -160,8 +154,7 @@ static struct yetty_ycore_void_result yzoo_render(struct yetty_ygui_widget *self
         return YETTY_OK_VOID();
     }
     /* Figure-local: see ygui_yplot.c for rationale. */
-    return yetty_ygui_internal_emit_buffer_translated(
-        ctx, self->data.yzoo.flat, 0.0f, 0.0f);
+    return yetty_ygui_internal_emit_buffer_translated(ctx, self->data.yzoo.flat, 0.0f, 0.0f);
 }
 
 static void yzoo_destroy(struct yetty_ygui_widget *self)
@@ -169,15 +162,15 @@ static void yzoo_destroy(struct yetty_ygui_widget *self)
     yzoo_drop_producer(self);
 }
 
-static struct yetty_ycore_void_result yzoo_render_all(
-    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result yzoo_render_all(struct yetty_ygui_widget *self,
+                                                      struct yetty_ygui_render_ctx *ctx)
 {
     if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
         return YETTY_OK_VOID();
     }
     self->was_rendered = 1;
-    uint32_t marker = yetty_ygui_widget_open_group_as_kind(
-        self, ctx, YETTY_YFIGURE_KIND_YZOO, yzoo_render);
+    uint32_t marker =
+        yetty_ygui_widget_open_group_as_kind(self, ctx, YETTY_YFIGURE_KIND_YZOO, yzoo_render);
     yetty_ygui_widget_close_group(self, ctx, marker);
     return YETTY_OK_VOID();
 }
@@ -196,10 +189,10 @@ static const struct yetty_ygui_widget_vtable *yzoo_vtable_ptr(void)
  * Construction + public API
  *===========================================================================*/
 
-struct yetty_ygui_widget *yetty_ygui_engine_yzoo(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const struct yetty_yzoo_config *config, uint32_t seed)
+struct yetty_ygui_widget *yetty_ygui_engine_yzoo(struct yetty_ygui_engine *engine, const char *id,
+                                                 float x, float y, float w, float h,
+                                                 const struct yetty_yzoo_config *config,
+                                                 uint32_t seed)
 {
     struct yetty_ygui_widget *widget =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_YZOO, id);
@@ -230,8 +223,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_yzoo(
     return widget;
 }
 
-struct yetty_ycore_void_result yetty_ygui_widget_yzoo_tick(
-    struct yetty_ygui_widget *widget, float dt_seconds)
+struct yetty_ycore_void_result yetty_ygui_widget_yzoo_tick(struct yetty_ygui_widget *widget,
+                                                           float dt_seconds)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_YZOO) {
         return YETTY_ERR(yetty_ycore_void, "yzoo_tick: not a yzoo widget");
@@ -242,7 +235,9 @@ struct yetty_ycore_void_result yetty_ygui_widget_yzoo_tick(
         /* No usable layout yet — skip; the first render will retry. */
         return YETTY_OK_VOID();
     }
-    if (dt_seconds < 0.0f) dt_seconds = 0.0f;
+    if (dt_seconds < 0.0f) {
+        dt_seconds = 0.0f;
+    }
     widget->data.yzoo.t_seconds += dt_seconds;
     if (!yzoo_run_one_frame(widget)) {
         return YETTY_ERR(yetty_ycore_void, "yzoo_tick: yzoo_render failed");

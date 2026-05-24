@@ -60,9 +60,8 @@ int yrdawn_server_bulk_take(void *ctx, uint32_t ref, struct yetty_ycore_buffer *
  * If (width, height) differ from the current texture's size the layer
  * rebuilds the texture + view + bind group; otherwise it just uploads
  * via wgpuQueueWriteTexture. bytes must equal width*height*4. */
-struct yetty_ycore_void_result yrdawn_server_set_frame(
-    void *ctx, uint32_t width, uint32_t height,
-    const uint8_t *pixels, size_t bytes);
+struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width, uint32_t height,
+                                                       const uint8_t *pixels, size_t bytes);
 
 /* Sentinel: dispatcher arranged for an async REPLY to be emitted later
  * from a trampoline; the caller (handle_cmd) must NOT emit its own
@@ -93,15 +92,15 @@ void yrdawn_arena_free(struct yrdawn_arena *a);
  * will fire later from a callback trampoline. req_id is the originating
  * CMD's req_id — async dispatchers stash it in the closure so the
  * trampoline can address its REPLY. */
-uint32_t yrdawn_server_dispatch(void *ctx, uint32_t method_id, uint32_t req_id,
-                               const void *body, size_t body_len);
+uint32_t yrdawn_server_dispatch(void *ctx, uint32_t method_id, uint32_t req_id, const void *body,
+                                size_t body_len);
 
 /* Build and emit a REPLY frame, optionally carrying inline payload
  * bytes (the encoded return value of a sync-with-value method). Pass
  * payload=NULL, payload_len=0 for void replies. */
 struct yetty_ycore_void_result yrdawn_server_emit_reply(void *ctx, uint32_t req_id,
-                                                       uint32_t method_id, uint32_t status,
-                                                       const void *payload, size_t payload_len);
+                                                        uint32_t method_id, uint32_t status,
+                                                        const void *payload, size_t payload_len);
 
 #ifdef __cplusplus
 }

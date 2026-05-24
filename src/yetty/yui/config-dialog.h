@@ -31,9 +31,8 @@ YETTY_YRESULT_DECLARE(yetty_yui_config_dialog_ptr, struct yetty_yui_config_dialo
  * tree from `config`. The dialog starts hidden. `config` is borrowed
  * (yetty owns it; yui outlives this dialog but is outlived by yetty).
  * Returns the new handle, or an error if widget allocation failed. */
-struct yetty_yui_config_dialog_ptr_result
-yetty_yui_config_dialog_create(struct yetty_ygui_engine *engine,
-                               const struct yetty_yconfig_config *config);
+struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
+    struct yetty_ygui_engine *engine, const struct yetty_yconfig_config *config);
 
 /* Free the heap-owned callback bundles. The widget tree is destroyed
  * by engine_destroy — do not touch widgets here. NULL-safe. */
@@ -46,7 +45,7 @@ void yetty_yui_config_dialog_hide(struct yetty_yui_config_dialog *dlg);
 
 /* True iff the dialog window is currently visible. Used by yui's
  * is_active to capture pointer events while the dialog is open. */
-int  yetty_yui_config_dialog_is_visible(const struct yetty_yui_config_dialog *dlg);
+int yetty_yui_config_dialog_is_visible(const struct yetty_yui_config_dialog *dlg);
 
 #ifdef __cplusplus
 }

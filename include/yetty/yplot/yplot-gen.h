@@ -36,7 +36,7 @@ struct yetty_yplot_uniforms {
  * [len][samples...] per entry, prefixed by a single [data_count]. */
 struct yetty_yplot_data_buffer {
     const float *samples;
-    size_t count;        /* in f32 samples */
+    size_t count; /* in f32 samples */
 };
 
 /* Buffers struct — packs everything that goes into the storage payload:
@@ -90,11 +90,10 @@ void yetty_yplot_factory_destroy(struct yetty_ydraw_concrete_factory *factory);
 // merged storage region and queues one wgpuQueueWriteBuffer.
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_yplot_update_data_chunk(
-    struct yetty_ydraw_figure *instance,
-    uint32_t buffer_index,
-    uint32_t sample_offset,
-    const float *data, size_t count);
+struct yetty_ycore_void_result yetty_yplot_update_data_chunk(struct yetty_ydraw_figure *instance,
+                                                             uint32_t buffer_index,
+                                                             uint32_t sample_offset,
+                                                             const float *data, size_t count);
 
 //=============================================================================
 // YAML parser registration

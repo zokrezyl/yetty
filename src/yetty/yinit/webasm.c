@@ -586,14 +586,14 @@ int main(int argc, char **argv)
      * drives the loop from JS) so we assemble the struct manually here.
      * No output_pipe / clipboard / window_manager on web. */
     memset(&yinit_rt, 0, sizeof(yinit_rt));
-    yinit_rt.argc                = argc;
-    yinit_rt.argv                = argv;
-    yinit_rt.config              = config;
-    yinit_rt.instance            = instance;
-    yinit_rt.surface             = surface;
-    yinit_rt.surface_width       = (uint32_t)canvas_width;
-    yinit_rt.surface_height      = (uint32_t)canvas_height;
-    yinit_rt.content_scale       = 1.0f;
+    yinit_rt.argc = argc;
+    yinit_rt.argv = argv;
+    yinit_rt.config = config;
+    yinit_rt.instance = instance;
+    yinit_rt.surface = surface;
+    yinit_rt.surface_width = (uint32_t)canvas_width;
+    yinit_rt.surface_height = (uint32_t)canvas_height;
+    yinit_rt.content_scale = 1.0f;
     yinit_rt.platform_input_pipe = pipe;
 
     struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(&yinit_rt);

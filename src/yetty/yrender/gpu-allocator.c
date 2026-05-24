@@ -30,14 +30,12 @@ struct yetty_yrender_gpu_allocator_impl {
 static void gpu_allocator_destroy(struct yetty_ydraw_gpu_allocator *self);
 static WGPUBuffer gpu_allocator_create_buffer(struct yetty_ydraw_gpu_allocator *self,
                                               const WGPUBufferDescriptor *desc);
-static void gpu_allocator_release_buffer(struct yetty_ydraw_gpu_allocator *self,
-                                         WGPUBuffer buffer);
+static void gpu_allocator_release_buffer(struct yetty_ydraw_gpu_allocator *self, WGPUBuffer buffer);
 static WGPUTexture gpu_allocator_create_texture(struct yetty_ydraw_gpu_allocator *self,
                                                 const WGPUTextureDescriptor *desc);
 static void gpu_allocator_release_texture(struct yetty_ydraw_gpu_allocator *self,
                                           WGPUTexture texture);
-static uint64_t gpu_allocator_total_allocated_bytes(
-    const struct yetty_ydraw_gpu_allocator *self);
+static uint64_t gpu_allocator_total_allocated_bytes(const struct yetty_ydraw_gpu_allocator *self);
 static void gpu_allocator_get_stats(const struct yetty_ydraw_gpu_allocator *self,
                                     struct yetty_yrender_gpu_allocator_stats *out);
 
@@ -124,8 +122,7 @@ static WGPUBuffer gpu_allocator_create_buffer(struct yetty_ydraw_gpu_allocator *
     return buffer;
 }
 
-static void gpu_allocator_release_buffer(struct yetty_ydraw_gpu_allocator *self,
-                                         WGPUBuffer buffer)
+static void gpu_allocator_release_buffer(struct yetty_ydraw_gpu_allocator *self, WGPUBuffer buffer)
 {
     struct yetty_yrender_gpu_allocator_impl *impl = (struct yetty_yrender_gpu_allocator_impl *)self;
 
@@ -213,8 +210,7 @@ static void gpu_allocator_release_texture(struct yetty_ydraw_gpu_allocator *self
     wgpuTextureRelease(texture);
 }
 
-static uint64_t gpu_allocator_total_allocated_bytes(
-    const struct yetty_ydraw_gpu_allocator *self)
+static uint64_t gpu_allocator_total_allocated_bytes(const struct yetty_ydraw_gpu_allocator *self)
 {
     const struct yetty_yrender_gpu_allocator_impl *impl =
         (const struct yetty_yrender_gpu_allocator_impl *)self;

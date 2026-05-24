@@ -50,27 +50,27 @@ struct yetty_yframework_factory_state;
 struct yetty_yframework {
     /* Borrowed from yinit_runtime; not owned. yframework_destroy leaves
      * these alone — yinit's teardown frees them. */
-    struct yetty_yconfig_config             *config;
-    struct yetty_ycore_xthread_event_pipe   *platform_input_pipe;
-    struct yetty_ycore_xthread_event_pipe   *output_pipe;
+    struct yetty_yconfig_config *config;
+    struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
+    struct yetty_ycore_xthread_event_pipe *output_pipe;
     struct yetty_platform_clipboard_manager *clipboard_manager;
-    struct yetty_yplatform_window_manager   *window_manager;
+    struct yetty_yplatform_window_manager *window_manager;
 
     /* Adapter + device + queue + surface_format + allocator + msdf_generator,
      * plus the embedded yinit_gpu_context with instance/surface/dims/x11. */
-    struct yetty_yframework_gpu_context        gpu;
+    struct yetty_yframework_gpu_context gpu;
 
     /* Selected from surface capabilities + `rendering/present-mode`
      * config key. Re-used on RESIZE so wgpuSurfaceConfigure stays
      * consistent. */
-    WGPUPresentMode                          present_mode;
+    WGPUPresentMode present_mode;
 
     /* Owned. Destroyed in reverse-creation order by yframework_destroy. */
-    struct yetty_yevent_event_loop  *event_loop;
-    struct yetty_yplatform_wgpu     *wgpu;          /* coroutine-aware wgpu await */
-    struct yetty_yvnc_server        *vnc_server;    /* NULL when vnc config off */
-    struct yetty_yrpc_server        *rpc_server;    /* NULL when rpc/port unset */
-    struct yetty_ydraw_target       *render_target;
+    struct yetty_yevent_event_loop *event_loop;
+    struct yetty_yplatform_wgpu *wgpu;    /* coroutine-aware wgpu await */
+    struct yetty_yvnc_server *vnc_server; /* NULL when vnc config off */
+    struct yetty_yrpc_server *rpc_server; /* NULL when rpc/port unset */
+    struct yetty_ydraw_target *render_target;
 
     /* Per-kind factory args bundles (e.g. ymgui's lazy-pipeline cache).
      * The struct is private to yframework.c; consumers only see this
@@ -103,8 +103,9 @@ void yetty_yframework_log_gpu_info(WGPUAdapter adapter);
 /* Reconfigure surface after a window resize. Called from the app's RESIZE
  * handler — yframework keeps the present_mode the initial capability scan
  * chose, so the swapchain doesn't silently flip back to Fifo. */
-struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(
-    struct yetty_yframework *rt, uint32_t width, uint32_t height);
+struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(struct yetty_yframework *rt,
+                                                                    uint32_t width,
+                                                                    uint32_t height);
 
 /* Register every figure kind the framework ships (ymgui today; yrdawn /
  * ygui / ygrid sub-kinds as they migrate) onto the given registry.
@@ -119,8 +120,7 @@ struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(
  * at mint time. Borrowed; the caller must keep it alive at least until
  * every figure minted via this registry is destroyed. */
 struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
-    struct yetty_yframework *framework,
-    struct yetty_yfigure_registry *registry,
+    struct yetty_yframework *framework, struct yetty_yfigure_registry *registry,
     const struct yetty_context *context);
 
 #ifdef __cplusplus

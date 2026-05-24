@@ -42,8 +42,8 @@ bool yetty_ydiagram_mermaid_can_parse(const char *input, size_t len);
 /* Parse `input` (UTF-8, length `len`) into `out_graph`. `out_graph` must
  * already be initialized via yetty_ydiagram_graph_init; the parser appends
  * nodes/edges/clusters. */
-struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(
-    const char *input, size_t len, struct yetty_ydiagram_graph *out_graph);
+struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(const char *input, size_t len,
+                                                            struct yetty_ydiagram_graph *out_graph);
 
 #ifdef __cplusplus
 }

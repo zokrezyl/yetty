@@ -84,8 +84,9 @@ IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_PlatformShutdown(void);
  * right edge of the pane" — the figure auto-resizes with the terminal.
  *===========================================================================*/
 
-IMGUI_IMPL_API uint32_t yetty_ymgui_ImGui_ImplYetty_CreateFigure(uint32_t figure_id, int col, int row,
-                                                                 uint32_t w_cells, uint32_t h_cells);
+IMGUI_IMPL_API uint32_t yetty_ymgui_ImGui_ImplYetty_CreateFigure(uint32_t figure_id, int col,
+                                                                 int row, uint32_t w_cells,
+                                                                 uint32_t h_cells);
 
 IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_MoveFigure(uint32_t figure_id, int col, int row,
                                                            uint32_t w_cells, uint32_t h_cells);
@@ -155,10 +156,11 @@ IMGUI_IMPL_API bool yetty_ymgui_ImGui_ImplYetty_WaitInput(int timeout_ms);
  * Push input (option 3) — feed ImGuiIO of the named figure directly
  *===========================================================================*/
 
-IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnFigureMousePos(uint32_t figure_id, double x, double y,
-                                                                 uint32_t buttons_held);
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnFigureMousePos(uint32_t figure_id, double x,
+                                                                 double y, uint32_t buttons_held);
 IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnFigureMouseButton(uint32_t figure_id, int button,
-                                                                    int pressed, double x, double y);
+                                                                    int pressed, double x,
+                                                                    double y);
 IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnFigureMouseWheel(uint32_t figure_id, double dy,
                                                                    double x, double y);
 IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_OnFigureResize(uint32_t figure_id, double width,

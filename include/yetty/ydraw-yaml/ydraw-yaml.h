@@ -35,9 +35,9 @@ struct yetty_ycore_void_result yetty_ydraw_yaml_parser_register(
     struct yetty_ydraw_yaml_parser *parser, const char *primitive_type_name,
     yetty_ydraw_yaml_factory_fn factory);
 
-struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(
-    struct yetty_ydraw_yaml_parser *parser, struct yetty_ydraw_draw_list *buffer,
-    const char *yaml, size_t len);
+struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(struct yetty_ydraw_yaml_parser *parser,
+                                                             struct yetty_ydraw_draw_list *buffer,
+                                                             const char *yaml, size_t len);
 
 #ifdef __cplusplus
 }

@@ -310,8 +310,7 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *name,
 #ifndef _WIN32
     {
         struct winsize ws;
-        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0
-            && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
             engine->display_pixel_w = (float)ws.ws_xpixel;
             engine->display_pixel_h = (float)ws.ws_ypixel;
             engine->have_pixel_size = 1;
@@ -373,8 +372,8 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
  * library and implements the public engine_create on top of this +
  * bootstrap_runtime). ygui_core stays libuv-free; the public entry
  * lives in the libuv-coupled layer. */
-struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(
-    const char *name, struct yetty_ygui_theme *theme)
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(const char *name,
+                                                               struct yetty_ygui_theme *theme)
 {
     return engine_alloc_init(name, theme);
 }
@@ -432,11 +431,10 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
             const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(engine->buffer);
             uint32_t size = (uint32_t)yetty_ydraw_draw_list_size(engine->buffer);
             if (size > 0 && data) {
-                struct yetty_ycore_void_result wr = yetty_ygui_osc_update_card(
-                    engine->output_pty, engine->card_name, data, size);
+                struct yetty_ycore_void_result wr =
+                    yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size);
                 if (YETTY_IS_ERR(wr)) {
-                    yerror("ygui_engine_destroy: CLEAR_ALL emit: %s",
-                           wr.error.msg);
+                    yerror("ygui_engine_destroy: CLEAR_ALL emit: %s", wr.error.msg);
                     yetty_ycore_error_destroy(wr.error);
                 }
             }
@@ -541,8 +539,7 @@ void yetty_ygui_engine_set_size(struct yetty_ygui_engine *engine, float width, f
     engine->needs_full_redraw = 1;
 }
 
-struct pixel_size_result yetty_ygui_engine_get_size(
-    const struct yetty_ygui_engine *engine)
+struct pixel_size_result yetty_ygui_engine_get_size(const struct yetty_ygui_engine *engine)
 {
     if (!engine) {
         return YETTY_ERR(pixel_size, "engine_get_size: NULL engine");
@@ -595,14 +592,12 @@ int yetty_ygui_engine_has_pressed_widget(const struct yetty_ygui_engine *engine)
     return engine && engine->pressed ? 1 : 0;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_hovered_widget(
-    const struct yetty_ygui_engine *engine)
+struct yetty_ygui_widget *yetty_ygui_engine_hovered_widget(const struct yetty_ygui_engine *engine)
 {
     return engine ? engine->hovered : NULL;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_pressed_widget(
-    const struct yetty_ygui_engine *engine)
+struct yetty_ygui_widget *yetty_ygui_engine_pressed_widget(const struct yetty_ygui_engine *engine)
 {
     return engine ? engine->pressed : NULL;
 }
@@ -640,7 +635,7 @@ static void reset_was_rendered_recursive(struct yetty_ygui_widget *w)
 }
 
 static struct yetty_ycore_void_result engine_rebuild_with_mode(struct yetty_ygui_engine *engine,
-                                                                int full_redraw)
+                                                               int full_redraw)
 {
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (!engine || !engine->buffer) {
@@ -781,9 +776,8 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     } else {
         /* Flush all queued DELETEs for destroyed / unparented widgets. */
         for (uint32_t i = 0; i < engine->pending_delete_count; i++) {
-            struct yetty_ycore_void_result dr =
-                yetty_ydraw_draw_list_add_admin_delete_child(
-                    engine->buffer, engine->pending_deletes[i]);
+            struct yetty_ycore_void_result dr = yetty_ydraw_draw_list_add_admin_delete_child(
+                engine->buffer, engine->pending_deletes[i]);
             if (YETTY_IS_ERR(dr)) {
                 yetty_ycore_error_destroy(dr.error);
             }
@@ -843,9 +837,9 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
 
     /* 5. Send OSC */
     if (!engine->card_shown) {
-        struct yetty_ycore_void_result r = yetty_ygui_osc_create_card(
-            engine->output_pty, engine->card_name, engine->card_x, engine->card_y, engine->card_w,
-            engine->card_h, data, size);
+        struct yetty_ycore_void_result r =
+            yetty_ygui_osc_create_card(engine->output_pty, engine->card_name, engine->card_x,
+                                       engine->card_y, engine->card_w, engine->card_h, data, size);
         engine->card_shown = 1;
         return r;
     }
@@ -864,9 +858,8 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
         return YETTY_ERR(yetty_ycore_void, "engine_emit_handshake: NULL engine");
     }
     if (!engine->output_pty) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "engine_emit_handshake: output_pty not installed — "
-                         "bootstrap must run before any OSC emission");
+        return YETTY_ERR(yetty_ycore_void, "engine_emit_handshake: output_pty not installed — "
+                                           "bootstrap must run before any OSC emission");
     }
 
     /* Cell size query — host replies via OSC and runtime stores it. */
@@ -885,10 +878,9 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
      * the cursor against our rect and emits YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE with
      * card-local coordinates. Triggers the host's YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE
      * reply carrying the actual pixel size. */
-    struct yetty_ycore_void_result place_r =
-        yetty_ygui_osc_card_place(engine->output_pty, engine->figure_id, engine->card_x,
-                                  engine->card_y, (uint32_t)engine->card_w,
-                                  (uint32_t)engine->card_h);
+    struct yetty_ycore_void_result place_r = yetty_ygui_osc_card_place(
+        engine->output_pty, engine->figure_id, engine->card_x, engine->card_y,
+        (uint32_t)engine->card_w, (uint32_t)engine->card_h);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, place_r, "engine_emit_handshake: card_place failed");
 
     /* Send a minimal placeholder envelope so the host has a card to
@@ -902,9 +894,9 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
     yetty_ydraw_draw_list_clear(engine->buffer);
     const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(engine->buffer);
     uint32_t size = (uint32_t)yetty_ydraw_draw_list_size(engine->buffer);
-    struct yetty_ycore_void_result cr = yetty_ygui_osc_create_card(
-        engine->output_pty, engine->card_name, engine->card_x, engine->card_y,
-        engine->card_w, engine->card_h, data, size);
+    struct yetty_ycore_void_result cr =
+        yetty_ygui_osc_create_card(engine->output_pty, engine->card_name, engine->card_x,
+                                   engine->card_y, engine->card_w, engine->card_h, data, size);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
                         "engine_emit_handshake: create_card placeholder failed");
     engine->card_shown = 1;
@@ -982,12 +974,14 @@ static int point_in_subtree(struct yetty_ygui_widget *w, float x, float y)
     if (!w || !(w->flags & YETTY_YGUI_FLAG_VISIBLE)) {
         return 0;
     }
-    if (x >= w->layout_x && x < w->layout_x + w->layout_w &&
-        y >= w->layout_y && y < w->layout_y + w->layout_h) {
+    if (x >= w->layout_x && x < w->layout_x + w->layout_w && y >= w->layout_y &&
+        y < w->layout_y + w->layout_h) {
         return 1;
     }
     for (struct yetty_ygui_widget *c = w->first_child; c; c = c->next_sibling) {
-        if (point_in_subtree(c, x, y)) return 1;
+        if (point_in_subtree(c, x, y)) {
+            return 1;
+        }
     }
     return 0;
 }
@@ -999,12 +993,16 @@ static void close_open_overlays_outside(struct yetty_ygui_engine *engine, float 
             continue;
         }
         if (w->type == YETTY_YGUI_WIDGET_POPUP) {
-            if (w->data.popup.modal) continue;
+            if (w->data.popup.modal) {
+                continue;
+            }
             if (!point_in_subtree(w, x, y)) {
                 yetty_ygui_widget_popup_set_open(w, 0);
             }
         } else if (w->type == YETTY_YGUI_WIDGET_POPUP_MENU) {
-            if (w->data.popup_menu.modal) continue;
+            if (w->data.popup_menu.modal) {
+                continue;
+            }
             if (!point_in_subtree(w, x, y)) {
                 yetty_ygui_widget_popup_menu_close(w);
             }
@@ -1043,9 +1041,8 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
         }
     }
     YGUI_LOG("  grid_query returned: %s (ptr=%p)", hit ? hit->id : "NULL", (void *)hit);
-    ydebug("mouse_down: hit=%s ptr=%p has_on_press=%d",
-           hit ? (hit->id ? hit->id : "?") : "NULL", (void *)hit,
-           (hit && hit->vtable && hit->vtable->on_press) ? 1 : 0);
+    ydebug("mouse_down: hit=%s ptr=%p has_on_press=%d", hit ? (hit->id ? hit->id : "?") : "NULL",
+           (void *)hit, (hit && hit->vtable && hit->vtable->on_press) ? 1 : 0);
 
     if (hit) {
         hit->flags |= YETTY_YGUI_FLAG_PRESSED;
@@ -1072,8 +1069,8 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
             float ly = y - hit->effective_y;
             ygui_event_t event = {0};
             int handled = hit->vtable->on_press(hit, lx, ly, &event);
-            ydebug("mouse_down: on_press(%s, lx=%.1f, ly=%.1f) -> %d",
-                   hit->id ? hit->id : "?", lx, ly, handled);
+            ydebug("mouse_down: on_press(%s, lx=%.1f, ly=%.1f) -> %d", hit->id ? hit->id : "?", lx,
+                   ly, handled);
             if (handled) {
                 emit_event(engine, &event);
             } else if (!hit->vtable->on_drag) {
@@ -1209,7 +1206,7 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
      * ygui_widgets.c so we don't re-implement byte/cursor splicing
      * here too. */
     if (engine->focused->type == YETTY_YGUI_WIDGET_TEXTAREA) {
-        extern void yetty_ygui_internal_textarea_insert(struct yetty_ygui_widget *w,
+        extern void yetty_ygui_internal_textarea_insert(struct yetty_ygui_widget * w,
                                                         const char *text);
         yetty_ygui_internal_textarea_insert(engine->focused, text);
         return;
@@ -1225,8 +1222,12 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
         size_t old_len = old_text ? strlen(old_text) : 0;
         size_t add_len = strlen(text);
         int cursor = engine->focused->data.textinput.cursor_pos;
-        if (cursor < 0) cursor = 0;
-        if ((size_t)cursor > old_len) cursor = (int)old_len;
+        if (cursor < 0) {
+            cursor = 0;
+        }
+        if ((size_t)cursor > old_len) {
+            cursor = (int)old_len;
+        }
 
         char *new_text = (char *)malloc(old_len + add_len + 1);
         if (new_text) {
@@ -1235,8 +1236,7 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
             }
             memcpy(new_text + cursor, text, add_len);
             if ((size_t)cursor < old_len && old_text) {
-                memcpy(new_text + cursor + add_len, old_text + cursor,
-                       old_len - (size_t)cursor);
+                memcpy(new_text + cursor + add_len, old_text + cursor, old_len - (size_t)cursor);
             }
             new_text[old_len + add_len] = '\0';
             free(old_text);
@@ -1956,8 +1956,8 @@ void yetty_ygui_internal_process_input(struct yetty_ygui_engine *engine, const c
  * keystrokes) are forwarded through on_raw to the existing parser.
  *===========================================================================*/
 
-void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
-                         const uint8_t *payload, size_t payload_len)
+void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *args,
+                                      size_t args_len, const uint8_t *payload, size_t payload_len)
 {
     (void)args;
     (void)args_len;
@@ -1972,8 +1972,7 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
         if (payload_len < sizeof(struct yetty_client_input_mouse)) {
             return;
         }
-        const struct yetty_client_input_mouse *m =
-            (const struct yetty_client_input_mouse *)payload;
+        const struct yetty_client_input_mouse *m = (const struct yetty_client_input_mouse *)payload;
         if (m->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             return;
         }
@@ -1983,8 +1982,9 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
             return; /* not ours */
         }
 
-        ydebug("ygui_yface_on_osc: SC_MOUSE kind=%d figure_id=%u x=%.1f y=%.1f button=%d pressed=%d",
-               (int)m->kind, m->figure_id, m->x, m->y, (int)m->button, (int)m->pressed);
+        ydebug(
+            "ygui_yface_on_osc: SC_MOUSE kind=%d figure_id=%u x=%.1f y=%.1f button=%d pressed=%d",
+            (int)m->kind, m->figure_id, m->x, m->y, (int)m->button, (int)m->pressed);
         switch (m->kind) {
         case YETTY_YMGUI_INPUT_MOUSE_POS:
             yetty_ygui_engine_mouse_move(engine, m->x, m->y);
@@ -2038,8 +2038,7 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
         if (payload_len < sizeof(struct yetty_client_input_focus)) {
             return;
         }
-        const struct yetty_client_input_focus *f =
-            (const struct yetty_client_input_focus *)payload;
+        const struct yetty_client_input_focus *f = (const struct yetty_client_input_focus *)payload;
         if (f->magic != YETTY_CLIENT_INPUT_FOCUS_MAGIC) {
             return;
         }
@@ -2053,8 +2052,7 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
         if (payload_len < sizeof(struct yetty_client_input_key)) {
             return;
         }
-        const struct yetty_client_input_key *k =
-            (const struct yetty_client_input_key *)payload;
+        const struct yetty_client_input_key *k = (const struct yetty_client_input_key *)payload;
         if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
             return;
         }

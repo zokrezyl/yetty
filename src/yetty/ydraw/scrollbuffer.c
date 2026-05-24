@@ -168,8 +168,8 @@ static struct yetty_ycore_void_result sb_seal_tail(struct yetty_ydraw_scrollbuff
     if (!compressed) {
         return YETTY_ERR(yetty_ycore_void, "scrollbuffer: chunk alloc failed");
     }
-    int comp_size = LZ4_compress_default((const char *)sb->tail_data, (char *)compressed,
-                                         src_size, max_dst);
+    int comp_size =
+        LZ4_compress_default((const char *)sb->tail_data, (char *)compressed, src_size, max_dst);
     if (comp_size <= 0) {
         free(compressed);
         return YETTY_ERR(yetty_ycore_void, "scrollbuffer: LZ4_compress_default failed");
@@ -192,10 +192,10 @@ static struct yetty_ycore_void_result sb_seal_tail(struct yetty_ydraw_scrollbuff
         sb->chunks_capacity = nc;
     }
     struct yetty_ydraw_scrollbuffer_chunk *ch = &sb->chunks[sb->chunks_count++];
-    ch->logical_start    = (uint32_t)sb->logical_committed;
-    ch->logical_size     = (uint32_t)sb->tail_size;
-    ch->compressed_size  = (uint32_t)comp_size;
-    ch->compressed_data  = compressed;
+    ch->logical_start = (uint32_t)sb->logical_committed;
+    ch->logical_size = (uint32_t)sb->tail_size;
+    ch->compressed_size = (uint32_t)comp_size;
+    ch->compressed_data = compressed;
 
     sb->logical_committed += sb->tail_size;
     sb->tail_size = 0;
@@ -251,9 +251,8 @@ static const uint8_t *sb_load_chunk(struct yetty_ydraw_scrollbuffer *sb, int32_t
         sb->decode_scratch = p;
         sb->decode_scratch_capacity = new_cap;
     }
-    int decoded = LZ4_decompress_safe((const char *)ch->compressed_data,
-                                      (char *)sb->decode_scratch, (int)ch->compressed_size,
-                                      (int)sb->decode_scratch_capacity);
+    int decoded = LZ4_decompress_safe((const char *)ch->compressed_data, (char *)sb->decode_scratch,
+                                      (int)ch->compressed_size, (int)sb->decode_scratch_capacity);
     if (decoded < 0 || (uint32_t)decoded != ch->logical_size) {
         sb->decode_scratch_chunk = -1;
         return NULL;
@@ -284,8 +283,7 @@ struct sb_style_tally {
 #define SB_STYLE_BUCKETS 4
 
 static bool sb_glyph_style(const struct yetty_ydraw_scrollbuffer_prim *p,
-                           struct sb_style_key *out_key,
-                           uint32_t *out_z_order)
+                           struct sb_style_key *out_key, uint32_t *out_z_order)
 {
     if (p->word_count != SB_GLYPH_WORD_COUNT) {
         return false;
@@ -294,18 +292,17 @@ static bool sb_glyph_style(const struct yetty_ydraw_scrollbuffer_prim *p,
         return false;
     }
     *out_z_order = p->payload[1];
-    out_key->y_f32     = p->payload[3];
+    out_key->y_f32 = p->payload[3];
     out_key->font_size = p->payload[4];
     /* font_id sits in the high 16 of payload[5]; the low 16 is
      * per-glyph (glyph_idx) and must not be in the style key. */
-    out_key->font_id   = p->payload[5] & 0xFFFF0000u;
-    out_key->color     = p->payload[6];
+    out_key->font_id = p->payload[5] & 0xFFFF0000u;
+    out_key->color = p->payload[6];
     return true;
 }
 
 static bool sb_pick_predominant_style(const struct yetty_ydraw_scrollbuffer_prim *prims,
-                                      uint32_t n_prims,
-                                      struct sb_style_key *out_key,
+                                      uint32_t n_prims, struct sb_style_key *out_key,
                                       uint32_t *out_z_base)
 {
     struct sb_style_tally tally[SB_STYLE_BUCKETS] = {0};
@@ -372,13 +369,9 @@ static bool sb_pick_predominant_style(const struct yetty_ydraw_scrollbuffer_prim
  * ========================================================================= */
 
 struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_encode_line(
-    struct yetty_ydraw_scrollbuffer *sb,
-    uint32_t line_rolling_row,
-    uint32_t grid_cols,
-    const struct yetty_ydraw_scrollbuffer_cell *cells,
-    uint32_t n_cells,
-    const struct yetty_ydraw_scrollbuffer_prim *prims,
-    uint32_t n_prims)
+    struct yetty_ydraw_scrollbuffer *sb, uint32_t line_rolling_row, uint32_t grid_cols,
+    const struct yetty_ydraw_scrollbuffer_cell *cells, uint32_t n_cells,
+    const struct yetty_ydraw_scrollbuffer_prim *prims, uint32_t n_prims)
 {
     /* Logical offset where this record begins. */
     size_t record_logical_start = sb->logical_committed + sb->tail_size;
@@ -455,9 +448,9 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_encode_li
         }
         sb_tail_write_u32(sb, z_base);
         sb_tail_write_u32(sb, have_default ? default_style.font_size : 0u);
-        sb_tail_write_u32(sb, have_default ? default_style.font_id   : 0u);
-        sb_tail_write_u32(sb, have_default ? default_style.y_f32     : 0u);
-        sb_tail_write_u32(sb, have_default ? default_style.color     : 0u);
+        sb_tail_write_u32(sb, have_default ? default_style.font_id : 0u);
+        sb_tail_write_u32(sb, have_default ? default_style.y_f32 : 0u);
+        sb_tail_write_u32(sb, have_default ? default_style.color : 0u);
     }
 
     /* Prim stream. */
@@ -467,13 +460,10 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_encode_li
         uint32_t z;
         bool is_glyph = sb_glyph_style(p, &key, &z);
 
-        bool emit_default = have_default && is_glyph &&
-                            key.font_size == default_style.font_size &&
-                            key.font_id   == default_style.font_id   &&
-                            key.y_f32     == default_style.y_f32     &&
-                            key.color     == default_style.color     &&
-                            z == z_base + i &&
-                            p->rolling_row == line_rolling_row;
+        bool emit_default = have_default && is_glyph && key.font_size == default_style.font_size &&
+                            key.font_id == default_style.font_id &&
+                            key.y_f32 == default_style.y_f32 && key.color == default_style.color &&
+                            z == z_base + i && p->rolling_row == line_rolling_row;
 
         if (emit_default) {
             struct yetty_ycore_void_result rr = sb_tail_reserve(sb, 8);
@@ -506,8 +496,7 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_encode_li
     if (sb->tail_size >= SB_SEAL_THRESHOLD) {
         struct yetty_ycore_void_result sr = sb_seal_tail(sb);
         if (YETTY_IS_ERR(sr)) {
-            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                             "scrollbuffer: seal_tail failed", sr);
+            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "scrollbuffer: seal_tail failed", sr);
         }
     }
 
@@ -526,10 +515,8 @@ static inline uint32_t sb_read_u32(const uint8_t *p)
 }
 
 struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_line(
-    const struct yetty_ydraw_scrollbuffer *sb_const,
-    size_t logical_offset,
-    yetty_ydraw_scrollbuffer_word_count_fn word_count_fn,
-    void *word_count_ctx,
+    const struct yetty_ydraw_scrollbuffer *sb_const, size_t logical_offset,
+    yetty_ydraw_scrollbuffer_word_count_fn word_count_fn, void *word_count_ctx,
     const struct yetty_ydraw_scrollbuffer_decode_sinks *sinks)
 {
     /* We need to maybe mutate the decode_scratch cache; cast away
@@ -544,8 +531,7 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
     size_t total_logical = yetty_ydraw_scrollbuffer_logical_size(sb);
 
     if (logical_offset >= total_logical) {
-        return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                         "decode: logical offset past buffer end");
+        return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: logical offset past buffer end");
     }
 
     if (logical_offset >= sb->logical_committed) {
@@ -556,13 +542,11 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
     } else {
         int32_t chunk_idx = sb_find_chunk(sb, logical_offset);
         if (chunk_idx < 0) {
-            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                             "decode: chunk not found for offset");
+            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: chunk not found for offset");
         }
         const uint8_t *scratch = sb_load_chunk(sb, chunk_idx);
         if (!scratch) {
-            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                             "decode: chunk decompress failed");
+            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: chunk decompress failed");
         }
         base = scratch;
         base_size = sb->chunks[chunk_idx].logical_size;
@@ -570,13 +554,12 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
     }
 
     if (offset_in_base + 12 > base_size) {
-        return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                         "decode: header beyond block end");
+        return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: header beyond block end");
     }
     const uint8_t *p = base + offset_in_base;
     uint32_t line_rolling_row = sb_read_u32(p + 0);
-    uint32_t byte_count       = sb_read_u32(p + 4);
-    uint32_t drawable_count       = sb_read_u32(p + 8);
+    uint32_t byte_count = sb_read_u32(p + 4);
+    uint32_t drawable_count = sb_read_u32(p + 8);
 
     if (sinks && sinks->on_header) {
         struct yetty_ycore_void_result r =
@@ -588,8 +571,9 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
 
     size_t pos = offset_in_base + 12u;
     if (byte_count == 0) {
-        return YETTY_OK(yetty_ydraw_scrollbuffer_offset, sb->logical_committed +
-                        (base == sb->tail_data ? pos : 0) /* unused for empty lines */);
+        return YETTY_OK(yetty_ydraw_scrollbuffer_offset,
+                        sb->logical_committed +
+                            (base == sb->tail_data ? pos : 0) /* unused for empty lines */);
     }
 
     if (offset_in_base + 12u + byte_count > base_size) {
@@ -606,15 +590,13 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
             break;
         }
         if (pos + 4 > body_end) {
-            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                             "decode: cell ref_count truncated");
+            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: cell ref_count truncated");
         }
         uint32_t ref_count = sb_read_u32(base + pos);
         pos += 4;
         size_t need = (size_t)ref_count * 4u;
         if (pos + need > body_end) {
-            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                             "decode: cell refs truncated");
+            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: cell refs truncated");
         }
         if (sinks && sinks->on_cell) {
             const struct yetty_ydraw_scrollbuffer_ref *refs =
@@ -632,19 +614,18 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
     if (pos + 20 > body_end) {
         return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: preamble truncated");
     }
-    uint32_t z_base    = sb_read_u32(base + pos + 0);
+    uint32_t z_base = sb_read_u32(base + pos + 0);
     uint32_t font_size = sb_read_u32(base + pos + 4);
-    uint32_t font_id   = sb_read_u32(base + pos + 8);
-    uint32_t y_f32     = sb_read_u32(base + pos + 12);
-    uint32_t color     = sb_read_u32(base + pos + 16);
+    uint32_t font_id = sb_read_u32(base + pos + 8);
+    uint32_t y_f32 = sb_read_u32(base + pos + 12);
+    uint32_t color = sb_read_u32(base + pos + 16);
     pos += 20;
 
     /* PRIM STREAM. */
     uint32_t payload_buf[64];
     for (uint32_t i = 0; i < drawable_count; i++) {
         if (pos + 4 > body_end) {
-            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                             "decode: prim word0 truncated");
+            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: prim word0 truncated");
         }
         uint32_t word0 = sb_read_u32(base + pos);
         pos += 4;
@@ -667,11 +648,10 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
             payload_buf[6] = color;
 
             if (sinks && sinks->on_prim) {
-                struct yetty_ycore_void_result r = sinks->on_prim(
-                    sinks->ctx, line_rolling_row, payload_buf, SB_GLYPH_WORD_COUNT);
+                struct yetty_ycore_void_result r =
+                    sinks->on_prim(sinks->ctx, line_rolling_row, payload_buf, SB_GLYPH_WORD_COUNT);
                 if (YETTY_IS_ERR(r)) {
-                    return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: on_prim default",
-                                     r);
+                    return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: on_prim default", r);
                 }
             }
             continue;
@@ -684,8 +664,7 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
         uint32_t drawable_rolling_row = sb_read_u32(base + pos);
         pos += 4;
         if (pos + 4 > body_end) {
-            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                             "decode: non-default type truncated");
+            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: non-default type truncated");
         }
         uint32_t type_word = sb_read_u32(base + pos);
         uint32_t word_count = word_count_fn(type_word, word_count_ctx);
@@ -707,15 +686,13 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
             struct yetty_ycore_void_result r =
                 sinks->on_prim(sinks->ctx, drawable_rolling_row, payload_buf, word_count);
             if (YETTY_IS_ERR(r)) {
-                return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: on_prim non-default",
-                                 r);
+                return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: on_prim non-default", r);
             }
         }
     }
 
     if (pos != body_end) {
-        return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
-                         "decode: body trailing bytes");
+        return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: body trailing bytes");
     }
     /* Return the logical offset one past the end of the record. */
     size_t end_logical;

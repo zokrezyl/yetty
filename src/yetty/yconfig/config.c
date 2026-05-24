@@ -278,8 +278,9 @@ static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *
 static void import_config_file(struct config_node *node, const char *filename, const char *dir)
 {
     char path[1024];
-    if (!filename || !filename[0])
+    if (!filename || !filename[0]) {
         return;
+    }
     if (filename[0] == '/') {
         snprintf(path, sizeof(path), "%s", filename);
     } else {
@@ -289,10 +290,11 @@ static void import_config_file(struct config_node *node, const char *filename, c
     strncpy(import_dir, path, sizeof(import_dir) - 1);
     import_dir[sizeof(import_dir) - 1] = '\0';
     char *slash = strrchr(import_dir, '/');
-    if (slash)
+    if (slash) {
         *slash = '\0';
-    else
+    } else {
         snprintf(import_dir, sizeof(import_dir), ".");
+    }
     load_yaml_file_with_dir(node, path, import_dir);
 }
 
@@ -301,8 +303,9 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
 {
     yaml_event_t event;
 
-    if (!yaml_parser_parse(parser, &event))
+    if (!yaml_parser_parse(parser, &event)) {
         return;
+    }
 
     if (strcmp(key, "import") == 0) {
         if (event.type == YAML_SCALAR_EVENT) {
@@ -315,8 +318,9 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
                     yaml_event_delete(&event);
                     break;
                 }
-                if (event.type == YAML_SCALAR_EVENT)
+                if (event.type == YAML_SCALAR_EVENT) {
                     import_config_file(parent, (const char *)event.data.scalar.value, dir);
+                }
                 yaml_event_delete(&event);
             }
         } else {
@@ -331,8 +335,9 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
     } else if (event.type == YAML_MAPPING_START_EVENT) {
         yaml_event_delete(&event);
         struct config_node *child = node_get_or_create_child(parent, key);
-        if (child)
+        if (child) {
             load_yaml_mapping(parser, child, dir);
+        }
     } else if (event.type == YAML_SEQUENCE_START_EVENT) {
         /* Store the sequence as a child node with each item as a child
          * keyed by index "0", "1", … . Nested sequences/mappings inside
@@ -361,8 +366,7 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
             }
             /* Nested seq/map: skip the whole sub-tree. */
             int depth = 1;
-            if (event.type == YAML_SEQUENCE_START_EVENT ||
-                event.type == YAML_MAPPING_START_EVENT) {
+            if (event.type == YAML_SEQUENCE_START_EVENT || event.type == YAML_MAPPING_START_EVENT) {
                 yaml_event_delete(&event);
                 while (depth > 0 && yaml_parser_parse(parser, &event)) {
                     if (event.type == YAML_SEQUENCE_START_EVENT ||
@@ -408,8 +412,9 @@ static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *
 static int load_yaml_file_with_dir(struct config_node *root, const char *path, const char *dir)
 {
     FILE *file = fopen(path, "r");
-    if (!file)
+    if (!file) {
         return 0;
+    }
 
     struct yaml_parser_s parser;
     if (!yaml_parser_initialize(&parser)) {
@@ -427,8 +432,9 @@ static int load_yaml_file_with_dir(struct config_node *root, const char *path, c
             break;
         }
         yaml_event_delete(&event);
-        if (event.type == YAML_STREAM_END_EVENT)
+        if (event.type == YAML_STREAM_END_EVENT) {
             break;
+        }
     }
 
     yaml_parser_delete(&parser);
@@ -442,10 +448,11 @@ static int load_yaml_file(struct config_node *root, const char *path)
     strncpy(dir, path, sizeof(dir) - 1);
     dir[sizeof(dir) - 1] = '\0';
     char *slash = strrchr(dir, '/');
-    if (slash)
+    if (slash) {
         *slash = '\0';
-    else
+    } else {
         snprintf(dir, sizeof(dir), ".");
+    }
     return load_yaml_file_with_dir(root, path, dir);
 }
 
@@ -660,12 +667,11 @@ static struct yetty_ycore_void_result subnode_set_string(struct yetty_yconfig_co
 static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_config *self,
                                                      const char *path);
 static int subnode_get_array_count(const struct yetty_yconfig_config *self, const char *path);
-static const char *subnode_get_array_item(const struct yetty_yconfig_config *self,
-                                          const char *path, int index,
-                                          const char *default_value);
+static const char *subnode_get_array_item(const struct yetty_yconfig_config *self, const char *path,
+                                          int index, const char *default_value);
 static int subnode_get_child_count(const struct yetty_yconfig_config *self, const char *path);
-static const char *subnode_get_child_key(const struct yetty_yconfig_config *self,
-                                         const char *path, int index);
+static const char *subnode_get_child_key(const struct yetty_yconfig_config *self, const char *path,
+                                         int index);
 
 static const struct yetty_yconfig_config_ops subnode_ops = {
     .destroy = subnode_destroy,
@@ -760,8 +766,7 @@ static int node_array_count(struct config_node *node)
     return node->child_count;
 }
 
-static const char *node_array_item(struct config_node *node, int index,
-                                   const char *default_value)
+static const char *node_array_item(struct config_node *node, int index, const char *default_value)
 {
     if (!node) {
         return default_value;
@@ -827,9 +832,8 @@ static int subnode_get_array_count(const struct yetty_yconfig_config *self, cons
     return node_array_count(node_find_child(parent, key));
 }
 
-static const char *subnode_get_array_item(const struct yetty_yconfig_config *self,
-                                          const char *path, int index,
-                                          const char *default_value)
+static const char *subnode_get_array_item(const struct yetty_yconfig_config *self, const char *path,
+                                          int index, const char *default_value)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     char key[MAX_KEY_LEN] = {0};
@@ -847,8 +851,8 @@ static int subnode_get_child_count(const struct yetty_yconfig_config *self, cons
     return node ? node->child_count : 0;
 }
 
-static const char *subnode_get_child_key(const struct yetty_yconfig_config *self,
-                                         const char *path, int index)
+static const char *subnode_get_child_key(const struct yetty_yconfig_config *self, const char *path,
+                                         int index)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     struct config_node *node = resolve_node(sub->node, path);
@@ -860,8 +864,7 @@ static const char *subnode_get_child_key(const struct yetty_yconfig_config *self
 
 /* Store platform paths */
 
-static void store_platform_paths(struct config_impl *impl,
-                                 const struct yetty_yconfig_paths *paths)
+static void store_platform_paths(struct config_impl *impl, const struct yetty_yconfig_paths *paths)
 {
     if (!paths) {
         return;
@@ -1224,8 +1227,7 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(out, "  -e, --execute=CMD                  Execute CMD in terminal\n");
     fprintf(out,
             "      --yvnc-server                  Run yvnc server (mirror mode - window + yvnc)\n");
-    fprintf(out,
-            "      --yvnc-headless                Run yvnc server (headless - no window)\n");
+    fprintf(out, "      --yvnc-headless                Run yvnc server (headless - no window)\n");
     fprintf(out, "      --yvnc-port=PORT               yvnc server port (default: 5900)\n");
     fprintf(out, "      --yvnc-client=HOST[:PORT]      Connect as yvnc client to HOST\n");
     fprintf(out, "      --yvnc-raw                     Disable JPEG, send raw BGRA tiles\n");
@@ -1253,8 +1255,7 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(out, "      --rpc-host=HOST                RPC server host\n");
     fprintf(out, "  -r, --rpc-port=PORT                RPC server port\n");
     fprintf(out, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
-    fprintf(out,
-            "      --qemu                         Run external QEMU RISC-V VM (via telnet)\n");
+    fprintf(out, "      --qemu                         Run external QEMU RISC-V VM (via telnet)\n");
     fprintf(out, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
     fprintf(out, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host "
                  "127.0.0.1)\n");

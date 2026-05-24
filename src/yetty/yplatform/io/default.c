@@ -7,33 +7,40 @@
 #include <poll.h>
 #include <unistd.h>
 
-struct yetty_yplatform_io_size_result
-yetty_yplatform_io_read_nonblocking(int fd, void *buf, size_t cap)
+struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd, void *buf,
+                                                                          size_t cap)
 {
-    if (fd < 0 || !buf || cap == 0)
+    if (fd < 0 || !buf || cap == 0) {
         return YETTY_OK(yetty_yplatform_io_size, 0);
+    }
 
-    struct pollfd pfd = { .fd = fd, .events = POLLIN };
+    struct pollfd pfd = {.fd = fd, .events = POLLIN};
     int pr;
     do {
         pr = poll(&pfd, 1, 0);
     } while (pr < 0 && errno == EINTR);
-    if (pr < 0)
+    if (pr < 0) {
         return YETTY_ERR(yetty_yplatform_io_size, "io_read_nonblocking: poll failed");
-    if (pr == 0)
+    }
+    if (pr == 0) {
         return YETTY_OK(yetty_yplatform_io_size, 0);
-    if (!(pfd.revents & (POLLIN | POLLHUP)))
+    }
+    if (!(pfd.revents & (POLLIN | POLLHUP))) {
         return YETTY_OK(yetty_yplatform_io_size, 0);
+    }
 
     ssize_t n;
     do {
         n = read(fd, buf, cap);
     } while (n < 0 && errno == EINTR);
-    if (n > 0)
+    if (n > 0) {
         return YETTY_OK(yetty_yplatform_io_size, (size_t)n);
-    if (n == 0)
-        return YETTY_OK(yetty_yplatform_io_size, 0);  /* EOF — caller decides */
-    if (errno == EAGAIN || errno == EWOULDBLOCK)
+    }
+    if (n == 0) {
+        return YETTY_OK(yetty_yplatform_io_size, 0); /* EOF — caller decides */
+    }
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
         return YETTY_OK(yetty_yplatform_io_size, 0);
+    }
     return YETTY_ERR(yetty_yplatform_io_size, "io_read_nonblocking: read failed");
 }

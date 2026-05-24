@@ -54,11 +54,11 @@ extern "C" {
 /*=============================================================================
  * Magic numbers
  *===========================================================================*/
-#define YETTY_CLIENT_INPUT_SUB_MAGIC 0x53504954u   /* "TIPS" */
-#define YETTY_CLIENT_INPUT_MOUSE_MAGIC 0x4D49534Du /* "MSIM" reversed: "MISM" */
+#define YETTY_CLIENT_INPUT_SUB_MAGIC 0x53504954u    /* "TIPS" */
+#define YETTY_CLIENT_INPUT_MOUSE_MAGIC 0x4D49534Du  /* "MSIM" reversed: "MISM" */
 #define YETTY_CLIENT_INPUT_RESIZE_MAGIC 0x4D52534Du /* "MSRM" reversed: "MRSM" */
-#define YETTY_CLIENT_INPUT_FOCUS_MAGIC 0x4D434F46u /* "FOCM" */
-#define YETTY_CLIENT_INPUT_KEY_MAGIC 0x4D59454Bu   /* "KEYM" */
+#define YETTY_CLIENT_INPUT_FOCUS_MAGIC 0x4D434F46u  /* "FOCM" */
+#define YETTY_CLIENT_INPUT_KEY_MAGIC 0x4D59454Bu    /* "KEYM" */
 
 /*=============================================================================
  * Pane-wide subscription bitmask (YETTY_OSC_CS_CLIENT_INPUT_SUB).
@@ -105,7 +105,7 @@ struct yetty_client_input_mouse {
     uint32_t buttons_held; /* POS during drag: bitmask (1<<button) */
     float x;
     float y;
-    float wheel_dy;        /* WHEEL */
+    float wheel_dy; /* WHEEL */
     uint32_t _pad0;
 };
 
@@ -134,7 +134,7 @@ struct yetty_client_input_focus {
     uint32_t magic;   /* YETTY_CLIENT_INPUT_FOCUS_MAGIC */
     uint32_t version; /* YMGUI_WIRE_VERSION */
     uint32_t figure_id;
-    int32_t gained;   /* 1 = gained focus, 0 = lost */
+    int32_t gained; /* 1 = gained focus, 0 = lost */
 };
 
 /* yetty_client_input_key.kind */

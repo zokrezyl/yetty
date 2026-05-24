@@ -70,7 +70,7 @@ enum yetty_ycat_type yetty_ycat_type_from_mime(const char *mime)
      * MIME hint. (We don't currently demux .mp4 in ycat — that needs a
      * minimp4 reader on the sender side first.) */
     if (strcmp(mime, "video/h264") == 0 || strcmp(mime, "video/H264") == 0 ||
-        strcmp(mime, "video/avc") == 0  || strcmp(mime, "video/x-h264") == 0) {
+        strcmp(mime, "video/avc") == 0 || strcmp(mime, "video/x-h264") == 0) {
         return YETTY_YCAT_TYPE_VIDEO;
     }
     if (strncmp(mime, "text/", 5) == 0) {
@@ -122,7 +122,7 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     /* Raw H.264 Annex-B common extensions. (.mp4 / .mov / .m4v need a
      * demuxer we don't ship here yet — leave them unmapped for now.) */
     if (strcasecmp(noleading, "h264") == 0 || strcasecmp(noleading, "264") == 0 ||
-        strcasecmp(noleading, "avc")  == 0 || strcasecmp(noleading, "x264") == 0) {
+        strcasecmp(noleading, "avc") == 0 || strcasecmp(noleading, "x264") == 0) {
         return YETTY_YCAT_TYPE_VIDEO;
     }
     if (strcasecmp(noleading, "txt") == 0) {
@@ -266,8 +266,7 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
      * the first non-comment, non-blank line starts with `graph ` or
      * `flowchart `. yetty_ydiagram_mermaid_can_parse implements that
      * sniff and is cheap enough to run on every text/plain blob. */
-    if (bytes && len > 0 &&
-        yetty_ydiagram_mermaid_can_parse((const char *)bytes, len)) {
+    if (bytes && len > 0 && yetty_ydiagram_mermaid_can_parse((const char *)bytes, len)) {
         return YETTY_YCAT_TYPE_MERMAID;
     }
 #endif

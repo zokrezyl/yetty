@@ -24,7 +24,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/ymgui/figure.h>  /* YRESULT_DECLARE + create/destroy decl */
+#include <yetty/ymgui/figure.h> /* YRESULT_DECLARE + create/destroy decl */
 
 struct yetty_ymgui_pipeline {
     /* Borrowed from yetty_context. */

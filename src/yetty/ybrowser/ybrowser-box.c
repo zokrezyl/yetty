@@ -175,7 +175,7 @@ struct yl_style_state {
     float font_size;
     int font_weight;
     bool font_italic;
-    bool underline;  /* true inside <a> (and any other inline element
+    bool underline;    /* true inside <a> (and any other inline element
 	                  * whose default_for() flags underline=1) */
     bool line_through; /* `text-decoration: line-through` from CSS */
     bool overline;     /* `text-decoration: overline` from CSS */
@@ -647,8 +647,8 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
         int libcss_disp = -1;
         if (r->libcss) {
             size_t pre_istylen = 0;
-            const lxb_char_t *pre_istyle = lxb_dom_element_get_attribute(
-                el, (const lxb_char_t *)"style", 5, &pre_istylen);
+            const lxb_char_t *pre_istyle =
+                lxb_dom_element_get_attribute(el, (const lxb_char_t *)"style", 5, &pre_istylen);
             css_computed_style *pre_cs = yetty_ybrowser_libcss_select(
                 r, el, (const char *)pre_istyle, pre_istyle ? pre_istylen : 0);
             if (pre_cs) {
@@ -770,8 +770,8 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
              * and var() (resolved during sheet ingest in
              * yetty_ybrowser_libcss_add_sheet). */
             if (r->libcss) {
-                css_computed_style *cs = yetty_ybrowser_libcss_select(
-                    r, el, (const char *)istyle, istyle ? istylen : 0);
+                css_computed_style *cs =
+                    yetty_ybrowser_libcss_select(r, el, (const char *)istyle, istyle ? istylen : 0);
                 /* Re-fetch box pointer — yetty_ybrowser_libcss_select runs
                  * arbitrary callbacks; even though they don't touch our
                  * vector today, the compiler can otherwise lift the
@@ -821,12 +821,12 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                         b->css_min_width = px;
                     }
 
-                    float *margin_dst[4] = {&b->margin_top, &b->margin_right,
-                                            &b->margin_bottom, &b->margin_left};
-                    float *padding_dst[4] = {&b->padding_top, &b->padding_right,
-                                             &b->padding_bottom, &b->padding_left};
-                    float *border_dst[4] = {&b->border_top, &b->border_right,
-                                            &b->border_bottom, &b->border_left};
+                    float *margin_dst[4] = {&b->margin_top, &b->margin_right, &b->margin_bottom,
+                                            &b->margin_left};
+                    float *padding_dst[4] = {&b->padding_top, &b->padding_right, &b->padding_bottom,
+                                             &b->padding_left};
+                    float *border_dst[4] = {&b->border_top, &b->border_right, &b->border_bottom,
+                                            &b->border_left};
                     for (int side = 0; side < 4; side++) {
                         ma = false;
                         if (yetty_ybrowser_libcss_margin(r, cs, side, s.font_size, pct_basis, &px,
@@ -897,8 +897,7 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                                              : YL_LAYOUT_FLEX_ROW;
                         b->justify_content = yetty_ybrowser_libcss_justify_content(cs);
                         b->align_items = yetty_ybrowser_libcss_align_items(cs);
-                    } else if (disp == CSS_DISPLAY_TABLE ||
-                               disp == CSS_DISPLAY_INLINE_TABLE) {
+                    } else if (disp == CSS_DISPLAY_TABLE || disp == CSS_DISPLAY_INLINE_TABLE) {
                         b->layout_mode = YL_LAYOUT_TABLE;
                     } else if (disp == CSS_DISPLAY_BLOCK || disp == CSS_DISPLAY_INLINE_BLOCK ||
                                disp == CSS_DISPLAY_LIST_ITEM) {
@@ -1011,8 +1010,8 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
 			 * whitespace byte so source line breaks survive into
 			 * the line-wrap pass. */
             struct yl_inline_buf ib = {0};
-            int preserve_ws = (child->local_name == LXB_TAG_PRE ||
-                               child->local_name == LXB_TAG_TEXTAREA);
+            int preserve_ws =
+                (child->local_name == LXB_TAG_PRE || child->local_name == LXB_TAG_TEXTAREA);
             if (css_white_space == CSS_WHITE_SPACE_PRE ||
                 css_white_space == CSS_WHITE_SPACE_PRE_WRAP ||
                 css_white_space == CSS_WHITE_SPACE_PRE_LINE) {
@@ -1062,7 +1061,7 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
 				 * parent ul/ol) to a per-parent-tag default. */
                 if (t == CSS_LIST_STYLE_TYPE_INHERIT) {
                     t = (ptag == LXB_TAG_OL) ? CSS_LIST_STYLE_TYPE_DECIMAL
-                                              : CSS_LIST_STYLE_TYPE_DISC;
+                                             : CSS_LIST_STYLE_TYPE_DISC;
                 }
                 /* Even when libcss reports DISC, an <ol> parent
 				 * should overrule that — DISC is the universal CSS
@@ -1096,7 +1095,9 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                     case CSS_LIST_STYLE_TYPE_DECIMAL:
                     case CSS_LIST_STYLE_TYPE_DECIMAL_LEADING_ZERO: {
                         int w = snprintf(mbuf, sizeof(mbuf), "%d.", n);
-                        if (w > 0) mlen = (size_t)w;
+                        if (w > 0) {
+                            mlen = (size_t)w;
+                        }
                         break;
                     }
                     case CSS_LIST_STYLE_TYPE_LOWER_ALPHA:
@@ -1119,7 +1120,9 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                         /* Roman, greek, hebrew, CJK etc — fall back
 						 * to decimal so the list at least reads. */
                         int w = snprintf(mbuf, sizeof(mbuf), "%d.", n);
-                        if (w > 0) mlen = (size_t)w;
+                        if (w > 0) {
+                            mlen = (size_t)w;
+                        }
                         break;
                     }
                     }

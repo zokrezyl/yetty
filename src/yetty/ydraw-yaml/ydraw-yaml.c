@@ -117,8 +117,7 @@ struct yetty_ydraw_yaml_parser_ptr_result yetty_ydraw_yaml_parser_create(void)
 {
     struct yetty_ydraw_yaml_parser *parser = calloc(1, sizeof(*parser));
     if (!parser) {
-        return YETTY_ERR(yetty_ydraw_yaml_parser_ptr,
-                         "ydraw_yaml: parser calloc failed");
+        return YETTY_ERR(yetty_ydraw_yaml_parser_ptr, "ydraw_yaml: parser calloc failed");
     }
     return YETTY_OK(yetty_ydraw_yaml_parser_ptr, parser);
 }
@@ -151,7 +150,7 @@ struct yetty_ycore_void_result yetty_ydraw_yaml_parser_register(
 }
 
 static yetty_ydraw_yaml_factory_fn find_factory(struct yetty_ydraw_yaml_parser *parser,
-                                                 const char *primitive_type_name)
+                                                const char *primitive_type_name)
 {
     for (size_t i = 0; i < parser->count; i++) {
         if (strcmp(parser->entries[i].primitive_type_name, primitive_type_name) == 0) {
@@ -161,9 +160,9 @@ static yetty_ydraw_yaml_factory_fn find_factory(struct yetty_ydraw_yaml_parser *
     return NULL;
 }
 
-struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(
-    struct yetty_ydraw_yaml_parser *parser, struct yetty_ydraw_draw_list *buffer,
-    const char *yaml, size_t len)
+struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(struct yetty_ydraw_yaml_parser *parser,
+                                                             struct yetty_ydraw_draw_list *buffer,
+                                                             const char *yaml, size_t len)
 {
     if (!parser || !buffer || !yaml) {
         return YETTY_ERR(yetty_ycore_void, "null argument");
@@ -247,8 +246,7 @@ struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(
                     if (YETTY_IS_ERR(res)) {
                         yaml_event_delete(&event);
                         yaml_parser_delete(&yaml_parser);
-                        return YETTY_ERR(yetty_ycore_void,
-                                         "ydraw_yaml: primitive factory failed",
+                        return YETTY_ERR(yetty_ycore_void, "ydraw_yaml: primitive factory failed",
                                          res);
                     }
                     ydebug("ydraw_yaml: factory for '%s' succeeded", primitive_type_name);
@@ -421,18 +419,15 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ydraw_draw_list 
             uint8_t *ttf = read_file_bytes(path, &ttf_len);
             if (!ttf) {
                 free(path);
-                return YETTY_ERR(yetty_ycore_void,
-                                 "ydraw_yaml: failed to read font file");
+                return YETTY_ERR(yetty_ycore_void, "ydraw_yaml: failed to read font file");
             }
-            struct yetty_ycore_buffer ttf_buf = {
-                .data = ttf, .size = ttf_len, .capacity = ttf_len};
+            struct yetty_ycore_buffer ttf_buf = {.data = ttf, .size = ttf_len, .capacity = ttf_len};
             struct yetty_ycore_int_result fr =
                 yetty_ydraw_draw_list_add_font(buffer, &ttf_buf, font_name);
             free(ttf);
             if (YETTY_IS_ERR(fr)) {
                 free(path);
-                return YETTY_ERR(yetty_ycore_void,
-                                 "ydraw_yaml: add_font failed", fr);
+                return YETTY_ERR(yetty_ycore_void, "ydraw_yaml: add_font failed", fr);
             }
             font_id = fr.value;
             ydebug("ydraw_yaml: font '%s' -> %s (font_id=%d)", font_name, path, font_id);
@@ -466,8 +461,7 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_yaml_parse(const char *yaml, siz
         return YETTY_ERR(yetty_ydraw_draw_list, "null or empty yaml");
     }
 
-    struct yetty_ydraw_draw_list_result buf_res =
-        yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_draw_list_result buf_res = yetty_ydraw_draw_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(buf_res)) {
         return buf_res;
     }
@@ -477,8 +471,7 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_yaml_parse(const char *yaml, siz
     struct yetty_ydraw_yaml_parser_ptr_result parser_res = yetty_ydraw_yaml_parser_create();
     if (YETTY_IS_ERR(parser_res)) {
         yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list,
-                         "ydraw_yaml: parser create failed", parser_res);
+        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: parser create failed", parser_res);
     }
     struct yetty_ydraw_yaml_parser *parser = parser_res.value;
 
@@ -486,8 +479,7 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_yaml_parse(const char *yaml, siz
     if (YETTY_IS_ERR(reg_res)) {
         yetty_ydraw_yaml_parser_destroy(parser);
         yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list,
-                         "ydraw_yaml: ysdf factories registration", reg_res);
+        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: ysdf factories registration", reg_res);
     }
     ydebug("ydraw_yaml: ysdf factories registered, count=%zu", parser->count);
 
@@ -495,16 +487,16 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_yaml_parse(const char *yaml, siz
     if (YETTY_IS_ERR(text_reg_res)) {
         yetty_ydraw_yaml_parser_destroy(parser);
         yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list,
-                         "ydraw_yaml: text factory registration", text_reg_res);
+        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: text factory registration",
+                         text_reg_res);
     }
 
     struct yetty_ycore_void_result yplot_reg_res = yetty_yplot_register_yaml_factory(parser);
     if (YETTY_IS_ERR(yplot_reg_res)) {
         yetty_ydraw_yaml_parser_destroy(parser);
         yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list,
-                         "ydraw_yaml: yplot factory registration", yplot_reg_res);
+        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: yplot factory registration",
+                         yplot_reg_res);
     }
     ydebug("ydraw_yaml: text+yplot factories registered, total count=%zu", parser->count);
 
@@ -515,8 +507,7 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_yaml_parse(const char *yaml, siz
 
     if (YETTY_IS_ERR(parse_res)) {
         yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list,
-                         "ydraw_yaml: parse failed", parse_res);
+        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: parse failed", parse_res);
     }
 
     return YETTY_OK(yetty_ydraw_draw_list, buffer);

@@ -70,8 +70,7 @@ static struct yetty_yplatform_pty_ptr_result factory_create_pty(
     (void)event_loop;
 
     if (!f->console_dispensed) {
-        struct yetty_yplatform_pty_ptr_result cr =
-            yetty_yplatform_iframe_pty_create(f->config);
+        struct yetty_yplatform_pty_ptr_result cr = yetty_yplatform_iframe_pty_create(f->config);
         if (!YETTY_IS_OK(cr)) {
             return cr;
         }

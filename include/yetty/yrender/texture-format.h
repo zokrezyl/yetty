@@ -27,13 +27,13 @@ extern "C" {
 #endif
 
 enum yetty_yrender_texture_format {
-    YETTY_YRENDER_TEXTURE_FORMAT_R8_UNORM    = 0x01u,  /* WGPUTextureFormat_R8Unorm */
-    YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM = 0x12u,  /* WGPUTextureFormat_RGBA8Unorm */
+    YETTY_YRENDER_TEXTURE_FORMAT_R8_UNORM = 0x01u,    /* WGPUTextureFormat_R8Unorm */
+    YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM = 0x12u, /* WGPUTextureFormat_RGBA8Unorm */
 };
 
 enum yetty_yrender_filter_mode {
-    YETTY_YRENDER_FILTER_NEAREST = 0u,  /* WGPUFilterMode_Nearest */
-    YETTY_YRENDER_FILTER_LINEAR  = 1u,  /* WGPUFilterMode_Linear */
+    YETTY_YRENDER_FILTER_NEAREST = 0u, /* WGPUFilterMode_Nearest */
+    YETTY_YRENDER_FILTER_LINEAR = 1u,  /* WGPUFilterMode_Linear */
 };
 
 #ifdef __cplusplus

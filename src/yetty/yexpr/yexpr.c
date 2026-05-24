@@ -942,8 +942,8 @@ struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, 
 
                 /* `name = buffer` — buffer-input declaration. The bare
                  * identifier "buffer" is the discriminator. */
-                if (parser_check(&p, YETTY_YEXPR_TOK_IDENTIFIER) &&
-                    p.current.len == 6 && memcmp(p.current.start, "buffer", 6) == 0) {
+                if (parser_check(&p, YETTY_YEXPR_TOK_IDENTIFIER) && p.current.len == 6 &&
+                    memcmp(p.current.start, "buffer", 6) == 0) {
                     parser_advance(&p);
                     if (!plot_buffer_find_or_create(&p, &res.plot, name_buf)) {
                         break;

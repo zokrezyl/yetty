@@ -122,8 +122,8 @@ struct yetty_yexpr_plot_attr {
  * The compiler treats f(x) as a sampler-load against this buffer's slot. */
 struct yetty_yexpr_plot_buffer {
     char name[YETTY_YEXPR_MAX_NAME_LEN];
-    uint32_t size;                   /* explicit @f.size — 0 ⇒ unset */
-    uint8_t has_size;                /* size came from @f.size, not values */
+    uint32_t size;    /* explicit @f.size — 0 ⇒ unset */
+    uint8_t has_size; /* size came from @f.size, not values */
 
     /* @f.values=… — three variants distinguished by these flags:
      *   inline_count > 0           : inline_values[0..inline_count] are the data

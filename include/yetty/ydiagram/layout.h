@@ -28,15 +28,15 @@ extern "C" {
 
 /* Measure a UTF-8 string at the given font size, in pixels. The supplied
  * data is NOT NUL-terminated. */
-typedef float (*yetty_ydiagram_measure_text_fn)(const char *text, size_t text_len,
-                                                float font_size, void *userdata);
+typedef float (*yetty_ydiagram_measure_text_fn)(const char *text, size_t text_len, float font_size,
+                                                void *userdata);
 
 struct yetty_ydiagram_layout_params {
-    float    node_spacing_x;
-    float    node_spacing_y;
-    float    node_padding_x;
-    float    node_padding_y;
-    float    edge_spacing;
+    float node_spacing_x;
+    float node_spacing_y;
+    float node_padding_x;
+    float node_padding_y;
+    float edge_spacing;
     uint32_t max_iterations;
 };
 

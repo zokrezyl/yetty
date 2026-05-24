@@ -67,10 +67,9 @@ static struct yetty_ymarkdown_render_config default_config(float pane_w, float p
     return cfg;
 }
 
-static struct yetty_ygui_widget *attach_to_rich(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    struct yetty_ymarkdown_render_result r)
+static struct yetty_ygui_widget *attach_to_rich(struct yetty_ygui_engine *engine, const char *id,
+                                                float x, float y, float w, float h,
+                                                struct yetty_ymarkdown_render_result r)
 {
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
@@ -85,9 +84,9 @@ static struct yetty_ygui_widget *attach_to_rich(
     return widget;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_from_file(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h, const char *path)
+struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_from_file(struct yetty_ygui_engine *engine,
+                                                                const char *id, float x, float y,
+                                                                float w, float h, const char *path)
 {
     if (!path) {
         return NULL;
@@ -98,16 +97,15 @@ struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_from_file(
         return NULL;
     }
     struct yetty_ymarkdown_render_config cfg = default_config(w, h);
-    struct yetty_ymarkdown_render_result r =
-        yetty_ymarkdown_render(bytes, len, NULL, 0, &cfg);
+    struct yetty_ymarkdown_render_result r = yetty_ymarkdown_render(bytes, len, NULL, 0, &cfg);
     free(bytes);
     return attach_to_rich(engine, id, x, y, w, h, r);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_from_buffer(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const uint8_t *data, size_t len)
+struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_from_buffer(struct yetty_ygui_engine *engine,
+                                                                  const char *id, float x, float y,
+                                                                  float w, float h,
+                                                                  const uint8_t *data, size_t len)
 {
     struct yetty_ymarkdown_render_config cfg = default_config(w, h);
     struct yetty_ymarkdown_render_result r =
@@ -121,8 +119,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_from_buffer(
 
 static const uint8_t *g_ymarkdown_default_data = NULL;
 static size_t g_ymarkdown_default_size = 0;
-static void ymarkdown_capture_default(const char *name, const uint8_t *data,
-                                       size_t size, int compressed)
+static void ymarkdown_capture_default(const char *name, const uint8_t *data, size_t size,
+                                      int compressed)
 {
     (void)name;
     (void)compressed;
@@ -130,14 +128,13 @@ static void ymarkdown_capture_default(const char *name, const uint8_t *data,
     g_ymarkdown_default_size = size;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_default(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h)
+struct yetty_ygui_widget *yetty_ygui_engine_ymarkdown_default(struct yetty_ygui_engine *engine,
+                                                              const char *id, float x, float y,
+                                                              float w, float h)
 {
     if (!g_ymarkdown_default_data) {
         register_ymarkdown_default_assets_c(ymarkdown_capture_default);
     }
-    return yetty_ygui_engine_ymarkdown_from_buffer(
-        engine, id, x, y, w, h,
-        g_ymarkdown_default_data, g_ymarkdown_default_size);
+    return yetty_ygui_engine_ymarkdown_from_buffer(engine, id, x, y, w, h, g_ymarkdown_default_data,
+                                                   g_ymarkdown_default_size);
 }

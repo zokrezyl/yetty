@@ -149,8 +149,7 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
         if (len < sizeof(struct yetty_client_input_mouse)) {
             return;
         }
-        const struct yetty_client_input_mouse *m =
-            (const struct yetty_client_input_mouse *)payload;
+        const struct yetty_client_input_mouse *m = (const struct yetty_client_input_mouse *)payload;
         if (m->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             return;
         }
@@ -193,8 +192,7 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
         if (len < sizeof(struct yetty_client_input_focus)) {
             return;
         }
-        const struct yetty_client_input_focus *f =
-            (const struct yetty_client_input_focus *)payload;
+        const struct yetty_client_input_focus *f = (const struct yetty_client_input_focus *)payload;
         if (f->magic != YETTY_CLIENT_INPUT_FOCUS_MAGIC) {
             return;
         }
@@ -208,8 +206,7 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
         if (len < sizeof(struct yetty_client_input_key)) {
             return;
         }
-        const struct yetty_client_input_key *k =
-            (const struct yetty_client_input_key *)payload;
+        const struct yetty_client_input_key *k = (const struct yetty_client_input_key *)payload;
         if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
             return;
         }

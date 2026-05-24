@@ -51,8 +51,8 @@ struct yrdawn_handle_entry {
 };
 
 struct yrdawn_bulk_entry {
-    uint32_t ref;        /* 0 = free slot */
-    uint32_t next_seq;   /* expected next chunk index */
+    uint32_t ref;      /* 0 = free slot */
+    uint32_t next_seq; /* expected next chunk index */
     struct yetty_ycore_buffer buf;
 };
 
@@ -89,7 +89,7 @@ struct yetty_yrdawn_figure {
     /* OSC session state. */
     int connected;
     int disconnected;
-    int has_frame;       /* set on first set_frame */
+    int has_frame; /* set on first set_frame */
 
     /* Outbound emit callback wired by the host. */
     yetty_yrdawn_emit_osc_fn emit_osc_fn;
@@ -117,43 +117,42 @@ struct yetty_yrdawn_figure {
 
 static const char *yrdawn_figure_wgsl(void)
 {
-    static const char src[] =
-        "@group(0) @binding(0) var yrdawn_samp: sampler;\n"
-        "@group(0) @binding(1) var yrdawn_tex: texture_2d<f32>;\n"
-        "\n"
-        "struct VSOut {\n"
-        "    @builtin(position) pos: vec4f,\n"
-        "    @location(0) uv: vec2f,\n"
-        "}\n"
-        "\n"
-        "@vertex\n"
-        "fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {\n"
-        "    var positions = array<vec2f, 6>(\n"
-        "        vec2f(-1.0, -1.0),\n"
-        "        vec2f( 1.0, -1.0),\n"
-        "        vec2f(-1.0,  1.0),\n"
-        "        vec2f(-1.0,  1.0),\n"
-        "        vec2f( 1.0, -1.0),\n"
-        "        vec2f( 1.0,  1.0)\n"
-        "    );\n"
-        "    var uvs = array<vec2f, 6>(\n"
-        "        vec2f(0.0, 1.0),\n"
-        "        vec2f(1.0, 1.0),\n"
-        "        vec2f(0.0, 0.0),\n"
-        "        vec2f(0.0, 0.0),\n"
-        "        vec2f(1.0, 1.0),\n"
-        "        vec2f(1.0, 0.0)\n"
-        "    );\n"
-        "    var out: VSOut;\n"
-        "    out.pos = vec4f(positions[vid], 0.0, 1.0);\n"
-        "    out.uv = uvs[vid];\n"
-        "    return out;\n"
-        "}\n"
-        "\n"
-        "@fragment\n"
-        "fn fs_main(in: VSOut) -> @location(0) vec4f {\n"
-        "    return textureSample(yrdawn_tex, yrdawn_samp, in.uv);\n"
-        "}\n";
+    static const char src[] = "@group(0) @binding(0) var yrdawn_samp: sampler;\n"
+                              "@group(0) @binding(1) var yrdawn_tex: texture_2d<f32>;\n"
+                              "\n"
+                              "struct VSOut {\n"
+                              "    @builtin(position) pos: vec4f,\n"
+                              "    @location(0) uv: vec2f,\n"
+                              "}\n"
+                              "\n"
+                              "@vertex\n"
+                              "fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {\n"
+                              "    var positions = array<vec2f, 6>(\n"
+                              "        vec2f(-1.0, -1.0),\n"
+                              "        vec2f( 1.0, -1.0),\n"
+                              "        vec2f(-1.0,  1.0),\n"
+                              "        vec2f(-1.0,  1.0),\n"
+                              "        vec2f( 1.0, -1.0),\n"
+                              "        vec2f( 1.0,  1.0)\n"
+                              "    );\n"
+                              "    var uvs = array<vec2f, 6>(\n"
+                              "        vec2f(0.0, 1.0),\n"
+                              "        vec2f(1.0, 1.0),\n"
+                              "        vec2f(0.0, 0.0),\n"
+                              "        vec2f(0.0, 0.0),\n"
+                              "        vec2f(1.0, 1.0),\n"
+                              "        vec2f(1.0, 0.0)\n"
+                              "    );\n"
+                              "    var out: VSOut;\n"
+                              "    out.pos = vec4f(positions[vid], 0.0, 1.0);\n"
+                              "    out.uv = uvs[vid];\n"
+                              "    return out;\n"
+                              "}\n"
+                              "\n"
+                              "@fragment\n"
+                              "fn fs_main(in: VSOut) -> @location(0) vec4f {\n"
+                              "    return textureSample(yrdawn_tex, yrdawn_samp, in.uv);\n"
+                              "}\n";
     return src;
 }
 
@@ -173,8 +172,9 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
     WGPUShaderModuleDescriptor sm_desc = {0};
     sm_desc.nextInChain = &wgsl.chain;
     f->shader_module = wgpuDeviceCreateShaderModule(f->device, &sm_desc);
-    if (!f->shader_module)
+    if (!f->shader_module) {
         return 0;
+    }
 
     WGPUBindGroupLayoutEntry bgl_entries[2] = {0};
     bgl_entries[0].binding = 0;
@@ -189,15 +189,17 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
     bgl_desc.entryCount = 2;
     bgl_desc.entries = bgl_entries;
     f->bind_group_layout = wgpuDeviceCreateBindGroupLayout(f->device, &bgl_desc);
-    if (!f->bind_group_layout)
+    if (!f->bind_group_layout) {
         return 0;
+    }
 
     WGPUPipelineLayoutDescriptor pl_desc = {0};
     pl_desc.bindGroupLayoutCount = 1;
     pl_desc.bindGroupLayouts = &f->bind_group_layout;
     f->pipeline_layout = wgpuDeviceCreatePipelineLayout(f->device, &pl_desc);
-    if (!f->pipeline_layout)
+    if (!f->pipeline_layout) {
         return 0;
+    }
 
     WGPUBlendComponent blend_color = {
         .operation = WGPUBlendOperation_Add,
@@ -234,8 +236,9 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
     rpd.multisample.mask = 0xFFFFFFFFu;
 
     f->pipeline = wgpuDeviceCreateRenderPipeline(f->device, &rpd);
-    if (!f->pipeline)
+    if (!f->pipeline) {
         return 0;
+    }
 
     WGPUSamplerDescriptor sd = {0};
     sd.addressModeU = WGPUAddressMode_ClampToEdge;
@@ -248,15 +251,15 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
     sd.lodMaxClamp = 0.0f;
     sd.maxAnisotropy = 1;
     f->sampler = wgpuDeviceCreateSampler(f->device, &sd);
-    if (!f->sampler)
+    if (!f->sampler) {
         return 0;
+    }
 
     f->pipeline_ready = 1;
     return 1;
 }
 
-static int build_frame_resources(struct yetty_yrdawn_figure *f,
-                                 uint32_t width, uint32_t height)
+static int build_frame_resources(struct yetty_yrdawn_figure *f, uint32_t width, uint32_t height)
 {
     WGPUTextureDescriptor td = {0};
     td.size = (WGPUExtent3D){width, height, 1};
@@ -266,8 +269,9 @@ static int build_frame_resources(struct yetty_yrdawn_figure *f,
     td.format = WGPUTextureFormat_RGBA8Unorm;
     td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
     WGPUTexture tex = wgpuDeviceCreateTexture(f->device, &td);
-    if (!tex)
+    if (!tex) {
         return 0;
+    }
 
     WGPUTextureViewDescriptor tvd = {0};
     tvd.format = WGPUTextureFormat_RGBA8Unorm;
@@ -302,8 +306,12 @@ static int build_frame_resources(struct yetty_yrdawn_figure *f,
         return 0;
     }
 
-    if (f->frame_bind_group) wgpuBindGroupRelease(f->frame_bind_group);
-    if (f->frame_view) wgpuTextureViewRelease(f->frame_view);
+    if (f->frame_bind_group) {
+        wgpuBindGroupRelease(f->frame_bind_group);
+    }
+    if (f->frame_view) {
+        wgpuTextureViewRelease(f->frame_view);
+    }
     if (f->frame_texture) {
         wgpuTextureDestroy(f->frame_texture);
         wgpuTextureRelease(f->frame_texture);
@@ -316,17 +324,31 @@ static int build_frame_resources(struct yetty_yrdawn_figure *f,
 
 static void release_gpu(struct yetty_yrdawn_figure *f)
 {
-    if (f->frame_bind_group) wgpuBindGroupRelease(f->frame_bind_group);
-    if (f->frame_view) wgpuTextureViewRelease(f->frame_view);
+    if (f->frame_bind_group) {
+        wgpuBindGroupRelease(f->frame_bind_group);
+    }
+    if (f->frame_view) {
+        wgpuTextureViewRelease(f->frame_view);
+    }
     if (f->frame_texture) {
         wgpuTextureDestroy(f->frame_texture);
         wgpuTextureRelease(f->frame_texture);
     }
-    if (f->sampler) wgpuSamplerRelease(f->sampler);
-    if (f->pipeline) wgpuRenderPipelineRelease(f->pipeline);
-    if (f->pipeline_layout) wgpuPipelineLayoutRelease(f->pipeline_layout);
-    if (f->bind_group_layout) wgpuBindGroupLayoutRelease(f->bind_group_layout);
-    if (f->shader_module) wgpuShaderModuleRelease(f->shader_module);
+    if (f->sampler) {
+        wgpuSamplerRelease(f->sampler);
+    }
+    if (f->pipeline) {
+        wgpuRenderPipelineRelease(f->pipeline);
+    }
+    if (f->pipeline_layout) {
+        wgpuPipelineLayoutRelease(f->pipeline_layout);
+    }
+    if (f->bind_group_layout) {
+        wgpuBindGroupLayoutRelease(f->bind_group_layout);
+    }
+    if (f->shader_module) {
+        wgpuShaderModuleRelease(f->shader_module);
+    }
     f->frame_bind_group = NULL;
     f->frame_view = NULL;
     f->frame_texture = NULL;
@@ -349,8 +371,7 @@ static struct yetty_ycore_void_result emit(struct yetty_yrdawn_figure *f, int os
         ywarn("yrdawn-figure: no emit_osc_fn wired, dropping OSC %d", osc_code);
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r =
-        f->emit_osc_fn(osc_code, payload, len, f->emit_osc_user);
+    struct yetty_ycore_void_result r = f->emit_osc_fn(osc_code, payload, len, f->emit_osc_user);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yrdawn-figure: emit_osc_fn");
     return YETTY_OK_VOID();
 }
@@ -362,54 +383,59 @@ static struct yetty_ycore_void_result emit(struct yetty_yrdawn_figure *f, int os
 static struct yetty_ycore_void_result handle_hello(struct yetty_yrdawn_figure *f,
                                                    const uint8_t *payload, size_t len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_hello))
+    if (len < sizeof(struct yetty_yrdawn_wire_hello)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: HELLO truncated");
-    const struct yetty_yrdawn_wire_hello *h =
-        (const struct yetty_yrdawn_wire_hello *)payload;
-    if (h->magic != YETTY_YRDAWN_MAGIC_HELLO)
+    }
+    const struct yetty_yrdawn_wire_hello *h = (const struct yetty_yrdawn_wire_hello *)payload;
+    if (h->magic != YETTY_YRDAWN_MAGIC_HELLO) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: HELLO bad magic");
+    }
 
     struct yetty_yrdawn_wire_hello_ack ack = {
         .magic = YETTY_YRDAWN_MAGIC_HELLO_ACK,
         .version = YETTY_YRDAWN_WIRE_VERSION,
         .total_size = (uint32_t)sizeof(ack),
-        .status = (h->version == YETTY_YRDAWN_WIRE_VERSION)
-            ? YETTY_YRDAWN_HELLO_OK : YETTY_YRDAWN_HELLO_REJECTED,
+        .status = (h->version == YETTY_YRDAWN_WIRE_VERSION) ? YETTY_YRDAWN_HELLO_OK
+                                                            : YETTY_YRDAWN_HELLO_REJECTED,
     };
 
-    struct yetty_ycore_void_result e =
-        emit(f, YETTY_YRDAWN_OSC_SC_HELLO_ACK, &ack, sizeof(ack));
+    struct yetty_ycore_void_result e = emit(f, YETTY_YRDAWN_OSC_SC_HELLO_ACK, &ack, sizeof(ack));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, e, "yrdawn-figure: HELLO_ACK");
 
-    if (ack.status == YETTY_YRDAWN_HELLO_OK)
+    if (ack.status == YETTY_YRDAWN_HELLO_OK) {
         f->connected = 1;
+    }
     return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result handle_cmd(struct yetty_yrdawn_figure *f,
                                                  const uint8_t *payload, size_t len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_cmd_hdr))
+    if (len < sizeof(struct yetty_yrdawn_wire_cmd_hdr)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: CMD truncated");
-    const struct yetty_yrdawn_wire_cmd_hdr *hdr =
-        (const struct yetty_yrdawn_wire_cmd_hdr *)payload;
-    if (hdr->magic != YETTY_YRDAWN_MAGIC_CMD)
+    }
+    const struct yetty_yrdawn_wire_cmd_hdr *hdr = (const struct yetty_yrdawn_wire_cmd_hdr *)payload;
+    if (hdr->magic != YETTY_YRDAWN_MAGIC_CMD) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: CMD bad magic");
-    if (!f->connected)
+    }
+    if (!f->connected) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: CMD before HELLO_ACK");
+    }
 
     const uint8_t *args_body = payload + sizeof(*hdr);
     size_t args_body_len = len - sizeof(*hdr);
-    ydebug("yrdawn-figure: dispatching method_id=%u req_id=%u body=%zu",
-           hdr->method_id, hdr->req_id, args_body_len);
-    uint32_t status = yrdawn_server_dispatch(f, hdr->method_id, hdr->req_id,
-                                            args_body, args_body_len);
+    ydebug("yrdawn-figure: dispatching method_id=%u req_id=%u body=%zu", hdr->method_id,
+           hdr->req_id, args_body_len);
+    uint32_t status =
+        yrdawn_server_dispatch(f, hdr->method_id, hdr->req_id, args_body, args_body_len);
     ydebug("yrdawn-figure: dispatch status=%u method_id=%u", status, hdr->method_id);
 
-    if (status == YRDAWN_DISPATCH_DEFERRED)
+    if (status == YRDAWN_DISPATCH_DEFERRED) {
         return YETTY_OK_VOID();
-    if (hdr->req_id == 0)
+    }
+    if (hdr->req_id == 0) {
         return YETTY_OK_VOID();
+    }
 
     struct yetty_yrdawn_wire_reply_hdr reply = {
         .magic = YETTY_YRDAWN_MAGIC_REPLY,
@@ -424,12 +450,12 @@ static struct yetty_ycore_void_result handle_cmd(struct yetty_yrdawn_figure *f,
     return emit(f, YETTY_YRDAWN_OSC_SC_REPLY, &reply, sizeof(reply));
 }
 
-static struct yrdawn_bulk_entry *bulk_find_or_alloc(struct yetty_yrdawn_figure *f,
-                                                    uint32_t ref)
+static struct yrdawn_bulk_entry *bulk_find_or_alloc(struct yetty_yrdawn_figure *f, uint32_t ref)
 {
     for (size_t i = 0; i < f->bulk_count; ++i) {
-        if (f->bulks[i].ref == ref)
+        if (f->bulks[i].ref == ref) {
             return &f->bulks[i];
+        }
     }
     for (size_t i = 0; i < f->bulk_count; ++i) {
         if (f->bulks[i].ref == 0) {
@@ -443,8 +469,9 @@ static struct yrdawn_bulk_entry *bulk_find_or_alloc(struct yetty_yrdawn_figure *
         size_t cap = f->bulk_cap ? f->bulk_cap * 2u : 4u;
         struct yrdawn_bulk_entry *grown =
             (struct yrdawn_bulk_entry *)realloc(f->bulks, cap * sizeof(*grown));
-        if (!grown)
+        if (!grown) {
             return NULL;
+        }
         memset(grown + f->bulk_count, 0, (cap - f->bulk_count) * sizeof(*grown));
         f->bulks = grown;
         f->bulk_cap = cap;
@@ -470,20 +497,25 @@ static void bulk_release(struct yetty_yrdawn_figure *f, uint32_t ref)
 static struct yetty_ycore_void_result handle_bulk(struct yetty_yrdawn_figure *f,
                                                   const uint8_t *payload, size_t len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_bulk_hdr))
+    if (len < sizeof(struct yetty_yrdawn_wire_bulk_hdr)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK truncated");
+    }
     const struct yetty_yrdawn_wire_bulk_hdr *hdr =
         (const struct yetty_yrdawn_wire_bulk_hdr *)payload;
-    if (hdr->magic != YETTY_YRDAWN_MAGIC_BULK)
+    if (hdr->magic != YETTY_YRDAWN_MAGIC_BULK) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK bad magic");
-    if (hdr->ref == 0)
+    }
+    if (hdr->ref == 0) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK ref=0");
-    if (len < sizeof(*hdr) + hdr->chunk_size)
+    }
+    if (len < sizeof(*hdr) + hdr->chunk_size) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK chunk_size > payload");
+    }
 
     struct yrdawn_bulk_entry *e = bulk_find_or_alloc(f, hdr->ref);
-    if (!e)
+    if (!e) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK table oom");
+    }
     if (hdr->seq != e->next_seq) {
         bulk_release(f, hdr->ref);
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK out-of-order seq");
@@ -520,29 +552,34 @@ static struct yetty_ycore_void_result handle_bye(struct yetty_yrdawn_figure *f,
 
 void *yrdawn_arena_alloc(struct yrdawn_arena *a, size_t bytes)
 {
-    if (!a || bytes == 0)
+    if (!a || bytes == 0) {
         return NULL;
+    }
     if (a->count == a->cap) {
         size_t cap = a->cap ? a->cap * 2u : 8u;
         void **grown = (void **)realloc(a->chunks, cap * sizeof(*grown));
-        if (!grown)
+        if (!grown) {
             return NULL;
+        }
         a->chunks = grown;
         a->cap = cap;
     }
     void *p = calloc(1u, bytes);
-    if (!p)
+    if (!p) {
         return NULL;
+    }
     a->chunks[a->count++] = p;
     return p;
 }
 
 void yrdawn_arena_free(struct yrdawn_arena *a)
 {
-    if (!a)
+    if (!a) {
         return;
-    for (size_t i = 0; i < a->count; ++i)
+    }
+    for (size_t i = 0; i < a->count; ++i) {
         free(a->chunks[i]);
+    }
     free(a->chunks);
     a->chunks = NULL;
     a->count = 0;
@@ -570,29 +607,30 @@ void *yrdawn_server_get_shared_queue(void *ctx)
     return ((struct yetty_yrdawn_figure *)ctx)->queue;
 }
 
-static struct yrdawn_handle_entry *handle_find(struct yetty_yrdawn_figure *f,
-                                               uint64_t handle)
+static struct yrdawn_handle_entry *handle_find(struct yetty_yrdawn_figure *f, uint64_t handle)
 {
     for (size_t i = 0; i < f->handle_count; ++i) {
-        if (f->handles[i].handle == handle)
+        if (f->handles[i].handle == handle) {
             return &f->handles[i];
+        }
     }
     return NULL;
 }
 
 void *yrdawn_server_handle_get(void *ctx, uint64_t handle)
 {
-    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL)
+    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL) {
         return NULL;
-    struct yrdawn_handle_entry *e =
-        handle_find((struct yetty_yrdawn_figure *)ctx, handle);
+    }
+    struct yrdawn_handle_entry *e = handle_find((struct yetty_yrdawn_figure *)ctx, handle);
     return e ? e->ptr : NULL;
 }
 
 struct yetty_ycore_void_result yrdawn_server_handle_set(void *ctx, uint64_t handle, void *ptr)
 {
-    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL)
+    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_handle_set: bad ctx/handle");
+    }
     struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)ctx;
     struct yrdawn_handle_entry *e = handle_find(f, handle);
     if (e) {
@@ -603,21 +641,25 @@ struct yetty_ycore_void_result yrdawn_server_handle_set(void *ctx, uint64_t hand
         size_t cap = f->handle_cap ? f->handle_cap * 2u : 16u;
         struct yrdawn_handle_entry *grown =
             (struct yrdawn_handle_entry *)realloc(f->handles, cap * sizeof(*grown));
-        if (!grown)
+        if (!grown) {
             return YETTY_ERR(yetty_ycore_void, "yrdawn_handle_set: handle table oom");
+        }
         f->handles = grown;
         f->handle_cap = cap;
     }
     f->handles[f->handle_count++] = (struct yrdawn_handle_entry){
-        .handle = handle, .ptr = ptr, .kind = 0,
+        .handle = handle,
+        .ptr = ptr,
+        .kind = 0,
     };
     return YETTY_OK_VOID();
 }
 
 void yrdawn_server_handle_release(void *ctx, uint64_t handle)
 {
-    if (!ctx)
+    if (!ctx) {
         return;
+    }
     struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)ctx;
     for (size_t i = 0; i < f->handle_count; ++i) {
         if (f->handles[i].handle == handle) {
@@ -629,8 +671,9 @@ void yrdawn_server_handle_release(void *ctx, uint64_t handle)
 
 int yrdawn_server_bulk_take(void *ctx, uint32_t ref, struct yetty_ycore_buffer *out)
 {
-    if (!ctx || !out)
+    if (!ctx || !out) {
         return 0;
+    }
     struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)ctx;
     for (size_t i = 0; i < f->bulk_count; ++i) {
         if (f->bulks[i].ref == ref && f->bulks[i].next_seq == UINT32_MAX) {
@@ -642,12 +685,13 @@ int yrdawn_server_bulk_take(void *ctx, uint32_t ref, struct yetty_ycore_buffer *
     return 0;
 }
 
-struct yetty_ycore_void_result yrdawn_server_emit_reply(
-    void *ctx, uint32_t req_id, uint32_t method_id, uint32_t status,
-    const void *payload, size_t payload_len)
+struct yetty_ycore_void_result yrdawn_server_emit_reply(void *ctx, uint32_t req_id,
+                                                        uint32_t method_id, uint32_t status,
+                                                        const void *payload, size_t payload_len)
 {
-    if (!ctx)
+    if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_server_emit_reply: NULL ctx");
+    }
     struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)ctx;
     struct yetty_yrdawn_wire_reply_hdr reply = {
         .magic = YETTY_YRDAWN_MAGIC_REPLY,
@@ -659,38 +703,41 @@ struct yetty_ycore_void_result yrdawn_server_emit_reply(
         .status = status,
         .payload_ref = 0,
     };
-    if (payload_len == 0 || !payload)
+    if (payload_len == 0 || !payload) {
         return emit(f, YETTY_YRDAWN_OSC_SC_REPLY, &reply, sizeof(reply));
+    }
     size_t total = sizeof(reply) + payload_len;
     uint8_t *frame = (uint8_t *)malloc(total);
-    if (!frame)
+    if (!frame) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_server_emit_reply: oom");
+    }
     memcpy(frame, &reply, sizeof(reply));
     memcpy(frame + sizeof(reply), payload, payload_len);
-    struct yetty_ycore_void_result r =
-        emit(f, YETTY_YRDAWN_OSC_SC_REPLY, frame, total);
+    struct yetty_ycore_void_result r = emit(f, YETTY_YRDAWN_OSC_SC_REPLY, frame, total);
     free(frame);
     return r;
 }
 
-struct yetty_ycore_void_result yrdawn_server_set_frame(
-    void *ctx, uint32_t width, uint32_t height,
-    const uint8_t *pixels, size_t bytes)
+struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width, uint32_t height,
+                                                       const uint8_t *pixels, size_t bytes)
 {
-    if (!ctx || !pixels)
+    if (!ctx || !pixels) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_set_frame: NULL ctx or pixels");
-    if (width == 0 || height == 0)
+    }
+    if (width == 0 || height == 0) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_set_frame: zero dim");
+    }
     size_t want = (size_t)width * (size_t)height * 4u;
-    if (bytes != want)
+    if (bytes != want) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_set_frame: byte count != w*h*4");
+    }
 
     struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)ctx;
-    if (!f->frame_texture ||
-        wgpuTextureGetWidth(f->frame_texture) != width ||
+    if (!f->frame_texture || wgpuTextureGetWidth(f->frame_texture) != width ||
         wgpuTextureGetHeight(f->frame_texture) != height) {
-        if (!build_frame_resources(f, width, height))
+        if (!build_frame_resources(f, width, height)) {
             return YETTY_ERR(yetty_ycore_void, "yrdawn_set_frame: rebuild texture failed");
+        }
     }
 
     WGPUTexelCopyTextureInfo dst = {0};
@@ -702,16 +749,15 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(
     WGPUExtent3D extent = {width, height, 1};
     wgpuQueueWriteTexture(f->queue, &dst, pixels, bytes, &layout, &extent);
 
-    ydebug("yrdawn-figure: set_frame %ux%u %zu bytes -> texture updated",
-           width, height, bytes);
+    ydebug("yrdawn-figure: set_frame %ux%u %zu bytes -> texture updated", width, height, bytes);
 
     f->has_frame = 1;
     f->base.dirty = 1;
     if (f->request_render_fn) {
-        struct yetty_ycore_void_result rr =
-            f->request_render_fn(f->request_render_user);
-        if (YETTY_IS_ERR(rr))
+        struct yetty_ycore_void_result rr = f->request_render_fn(f->request_render_user);
+        if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_destroy(rr.error);
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -720,45 +766,50 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(
  * Figure ops — destroy + render
  *=========================================================================*/
 
-static struct yetty_ycore_void_result yrdawn_figure_destroy(
-    struct yetty_yfigure_figure *self)
+static struct yetty_ycore_void_result yrdawn_figure_destroy(struct yetty_yfigure_figure *self)
 {
-    if (!self)
+    if (!self) {
         return YETTY_OK_VOID();
+    }
     struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
     release_gpu(f);
-    for (size_t i = 0; i < f->bulk_count; ++i)
+    for (size_t i = 0; i < f->bulk_count; ++i) {
         yetty_ycore_buffer_destroy(&f->bulks[i].buf);
+    }
     free(f->bulks);
     free(f->handles);
     free(f);
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yrdawn_figure_render(
-    struct yetty_yfigure_figure *self, struct yetty_ydraw_target *target)
+static struct yetty_ycore_void_result yrdawn_figure_render(struct yetty_yfigure_figure *self,
+                                                           struct yetty_ydraw_target *target)
 {
     struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
-    if (!f->pipeline_ready || !f->frame_bind_group || !f->has_frame)
+    if (!f->pipeline_ready || !f->frame_bind_group || !f->has_frame) {
         return YETTY_OK_VOID();
+    }
 
     WGPUTextureView view = target->ops->get_view(target);
-    if (!view)
+    if (!view) {
         return YETTY_OK_VOID();
+    }
 
     float x = self->rect.min.x;
     float y = self->rect.min.y;
     float w = self->rect.max.x - self->rect.min.x;
     float h = self->rect.max.y - self->rect.min.y;
-    if (w <= 0.0f || h <= 0.0f)
+    if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
+    }
 
     ydebug("yrdawn-figure: render rect=(%.0f,%.0f,%.0fx%.0f)", x, y, w, h);
 
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(f->device, &enc_desc);
-    if (!enc)
+    if (!enc) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: create encoder");
+    }
 
     WGPURenderPassColorAttachment ca = {0};
     ca.view = view;
@@ -779,8 +830,7 @@ static struct yetty_ycore_void_result yrdawn_figure_render(
      * host's surface" lives — set_figure_rect on the compositor moves
      * us; nothing else about render changes. */
     wgpuRenderPassEncoderSetViewport(pass, x, y, w, h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)x, (uint32_t)y,
-                                        (uint32_t)w, (uint32_t)h);
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h);
 
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     wgpuRenderPassEncoderEnd(pass);
@@ -799,17 +849,16 @@ static struct yetty_ycore_void_result yrdawn_figure_render(
  *=========================================================================*/
 
 struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_create(
-    struct yetty_ycore_rectangle rect,
-    const struct yetty_context *context)
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context)
 {
-    if (!context)
-        return YETTY_ERR(yetty_yrdawn_figure_ptr,
-                         "yrdawn_figure_create: NULL context");
+    if (!context) {
+        return YETTY_ERR(yetty_yrdawn_figure_ptr, "yrdawn_figure_create: NULL context");
+    }
 
-    struct yetty_yrdawn_figure *f =
-        (struct yetty_yrdawn_figure *)calloc(1, sizeof(*f));
-    if (!f)
+    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)calloc(1, sizeof(*f));
+    if (!f) {
         return YETTY_ERR(yetty_yrdawn_figure_ptr, "yrdawn_figure_create: oom");
+    }
 
     static const struct yetty_yfigure_figure_ops ops = {
         .destroy = yrdawn_figure_destroy,
@@ -828,44 +877,45 @@ struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_create(
     if (!build_pipeline(f)) {
         release_gpu(f);
         free(f);
-        return YETTY_ERR(yetty_yrdawn_figure_ptr,
-                         "yrdawn_figure_create: pipeline build failed");
+        return YETTY_ERR(yetty_yrdawn_figure_ptr, "yrdawn_figure_create: pipeline build failed");
     }
     /* No placeholder texture: the figure renders nothing until the
      * first set_frame call builds frame resources at the real size. */
     return YETTY_OK(yetty_yrdawn_figure_ptr, f);
 }
 
-struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(
-    struct yetty_yrdawn_figure *f)
+struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_figure *f)
 {
     return &f->base;
 }
 
-void yetty_yrdawn_figure_set_emit_osc(
-    struct yetty_yrdawn_figure *f,
-    yetty_yrdawn_emit_osc_fn fn, void *user)
+void yetty_yrdawn_figure_set_emit_osc(struct yetty_yrdawn_figure *f, yetty_yrdawn_emit_osc_fn fn,
+                                      void *user)
 {
-    if (!f) return;
+    if (!f) {
+        return;
+    }
     f->emit_osc_fn = fn;
     f->emit_osc_user = user;
 }
 
-void yetty_yrdawn_figure_set_request_render(
-    struct yetty_yrdawn_figure *f,
-    yetty_yrdawn_request_render_fn fn, void *user)
+void yetty_yrdawn_figure_set_request_render(struct yetty_yrdawn_figure *f,
+                                            yetty_yrdawn_request_render_fn fn, void *user)
 {
-    if (!f) return;
+    if (!f) {
+        return;
+    }
     f->request_render_fn = fn;
     f->request_render_user = user;
 }
 
-struct yetty_ycore_void_result yetty_yrdawn_figure_handle_osc(
-    struct yetty_yrdawn_figure *f,
-    int osc_code, const uint8_t *payload, size_t payload_len)
+struct yetty_ycore_void_result yetty_yrdawn_figure_handle_osc(struct yetty_yrdawn_figure *f,
+                                                              int osc_code, const uint8_t *payload,
+                                                              size_t payload_len)
 {
-    if (!f)
+    if (!f) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_figure_handle_osc: NULL figure");
+    }
     switch (osc_code) {
     case YETTY_YRDAWN_OSC_CS_HELLO:
         return handle_hello(f, payload, payload_len);

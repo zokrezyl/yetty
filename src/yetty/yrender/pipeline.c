@@ -388,7 +388,8 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
             fwrite(merged, 1, total - 1, df);
             fclose(df);
             ydebug("yrender_pipeline: dumped merged shader (%zu bytes) to "
-                   "tmp/yrender_pipeline_merged.wgsl", total - 1);
+                   "tmp/yrender_pipeline_merged.wgsl",
+                   total - 1);
         }
     }
 
@@ -478,8 +479,7 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
  *===========================================================================*/
 
 struct yetty_yrender_pipeline_ptr_result yetty_yrender_pipeline_create(
-    WGPUDevice device, WGPUTextureFormat target_format,
-    struct yetty_ydraw_gpu_allocator *allocator,
+    WGPUDevice device, WGPUTextureFormat target_format, struct yetty_ydraw_gpu_allocator *allocator,
     const struct yetty_ydraw_gpu_resource_set *template_rs)
 {
     if (!device || !allocator || !template_rs) {

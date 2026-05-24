@@ -155,8 +155,7 @@ struct yetty_yevent_event_loop_ops {
      * running so the user can read it.
      *
      * MOVES ownership of the error: caller must NOT destroy it. */
-    void (*post_fatal_error)(struct yetty_yevent_event_loop *self,
-                             struct yetty_ycore_error error);
+    void (*post_fatal_error)(struct yetty_yevent_event_loop *self, struct yetty_ycore_error error);
 };
 
 /* Event loop base */

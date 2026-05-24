@@ -49,7 +49,7 @@ enum yetty_yui_view_kind {
     YETTY_YUI_VIEW_SSH,
     YETTY_YUI_VIEW_TELNET,
     YETTY_YUI_VIEW_YVNC,
-    YETTY_YUI_VIEW_EXEC,     /* Dialog with one field: path of executable
+    YETTY_YUI_VIEW_EXEC, /* Dialog with one field: path of executable
                               * to run instead of the default shell. */
 };
 
@@ -67,16 +67,15 @@ typedef void (*yetty_yui_connect_cb)(void *userdata, enum yetty_yui_view_kind ki
  * orientation and creates the kind-specific view in the new sibling.
  * horizontal == 1 means the new sibling sits to the right; 0 means
  * below. */
-typedef void (*yetty_yui_split_cb)(void *userdata, enum yetty_yui_view_kind kind,
-                                   int horizontal);
+typedef void (*yetty_yui_split_cb)(void *userdata, enum yetty_yui_view_kind kind, int horizontal);
 
 /* Read the current value of a dialog's textinput. `kind` selects the
  * dialog; `field_idx` indexes into s_views[kind].fields[] (0-based).
  * Returns NULL when the dialog wasn't built, the slot is empty, or the
  * indices are out of range. The returned pointer is owned by the
  * textinput widget — copy if it needs to outlive the next mutation. */
-const char *yetty_yui_get_field_text(const struct yetty_yui *yui,
-                                     enum yetty_yui_view_kind kind, int field_idx);
+const char *yetty_yui_get_field_text(const struct yetty_yui *yui, enum yetty_yui_view_kind kind,
+                                     int field_idx);
 
 /* Sugar for the EXEC dialog's one field. Identical to
  * yetty_yui_get_field_text(yui, YETTY_YUI_VIEW_EXEC, 0). */
@@ -108,8 +107,8 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
  * defaults follow the terminal text-layer's font metrics.
  */
 struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context,
-                                             uint32_t surface_w, uint32_t surface_h,
-                                             float cell_w, float cell_h);
+                                             uint32_t surface_w, uint32_t surface_h, float cell_w,
+                                             float cell_h);
 
 struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui);
 
@@ -168,7 +167,7 @@ struct yetty_ygui_engine *yetty_yui_engine(struct yetty_yui *yui);
  * Returns 1 if the event was consumed by a widget / overlay; 0 if it
  * passed through and the caller should try its own handler. */
 struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
-                                                  const struct yetty_yui_event *event);
+                                                 const struct yetty_yui_event *event);
 void yetty_yui_set_status_left(struct yetty_yui *yui, const char *text);
 void yetty_yui_set_status_right(struct yetty_yui *yui, const char *text);
 
@@ -194,8 +193,7 @@ void yetty_yui_set_split_callback(struct yetty_yui *yui, yetty_yui_split_cb cb, 
  * stashes the pointer for the engine-construction path. */
 void yetty_yui_set_tabbar_model(struct yetty_yui *yui, struct yetty_yui_tabbar *tabbar);
 
-void yetty_yui_set_connect_callback(struct yetty_yui *yui, yetty_yui_connect_cb cb,
-                                    void *userdata);
+void yetty_yui_set_connect_callback(struct yetty_yui *yui, yetty_yui_connect_cb cb, void *userdata);
 
 /* For posting a toast notification from anywhere in the codebase use
  * the standalone `ynotify(...)` primitive in <yetty/ynotify/ynotify.h>.

@@ -41,16 +41,15 @@ struct yetty_ywire_wire_statemachine;
 struct yetty_platform_pty;
 struct yetty_yrender_terminal_layer;
 
-YETTY_YRESULT_DECLARE(yetty_ywire_wire_statemachine_ptr,
-                     struct yetty_ywire_wire_statemachine *);
+YETTY_YRESULT_DECLARE(yetty_ywire_wire_statemachine_ptr, struct yetty_ywire_wire_statemachine *);
 
 /*
  * Construct the SM. Stores `pty` as a non-owning pointer; the SM uses
  * it as its only byte source via pty->ops->read. Lazy init for the ring
  * and decode stack. Called once at terminal startup.
  */
-struct yetty_ywire_wire_statemachine_ptr_result
-yetty_ywire_wire_statemachine_create(struct yetty_platform_pty *pty);
+struct yetty_ywire_wire_statemachine_ptr_result yetty_ywire_wire_statemachine_create(
+    struct yetty_platform_pty *pty);
 
 /*
  * Destroy. Frees the ring, decode-stack state (b64 carry, LZ4F context,
@@ -92,8 +91,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default(
  * NOT a layer-facing API.
  */
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
-    struct yetty_ywire_wire_statemachine *osc_statemachine,
-    const char *bytes, size_t n);
+    struct yetty_ywire_wire_statemachine *osc_statemachine, const char *bytes, size_t n);
 
 /*
  * Drive the SM. Reads PTY bytes into the ring (via pty->ops->read for

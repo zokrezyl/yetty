@@ -29,25 +29,25 @@ extern "C" {
 struct yetty_ygui_engine;
 struct yetty_ygui_widget;
 
-struct yetty_ygui_widget *yetty_ygui_engine_yimage_from_file(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h, const char *path);
+struct yetty_ygui_widget *yetty_ygui_engine_yimage_from_file(struct yetty_ygui_engine *engine,
+                                                             const char *id, float x, float y,
+                                                             float w, float h, const char *path);
 
-struct yetty_ygui_widget *yetty_ygui_engine_yimage_from_buffer(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const uint8_t *data, size_t len);
+struct yetty_ygui_widget *yetty_ygui_engine_yimage_from_buffer(struct yetty_ygui_engine *engine,
+                                                               const char *id, float x, float y,
+                                                               float w, float h,
+                                                               const uint8_t *data, size_t len);
 
 /* Replace the widget's image content from a file path. The widget's
  * id is preserved so the receiving canvas treats this as an in-place
  * swap. ERR when the widget is NULL, the file is missing, or the
  * decoder rejects the source. */
-struct yetty_ycore_void_result yetty_ygui_widget_yimage_set_file(
-    struct yetty_ygui_widget *widget, const char *path);
+struct yetty_ycore_void_result yetty_ygui_widget_yimage_set_file(struct yetty_ygui_widget *widget,
+                                                                 const char *path);
 
 /* Same, but from an in-memory image (PNG/JPEG/...). */
-struct yetty_ycore_void_result yetty_ygui_widget_yimage_set_buffer(
-    struct yetty_ygui_widget *widget, const uint8_t *data, size_t len);
+struct yetty_ycore_void_result yetty_ygui_widget_yimage_set_buffer(struct yetty_ygui_widget *widget,
+                                                                   const uint8_t *data, size_t len);
 
 #ifdef __cplusplus
 }

@@ -30,8 +30,7 @@
  * bytecode references LOAD_T. Forward-declared here instead of a
  * header since the only call sites are below in this same TU. */
 struct yetty_ydraw_figure;
-struct yetty_ycore_void_result yetty_yplot_time_attach(
-    struct yetty_ydraw_figure *instance);
+struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_figure *instance);
 void yetty_yplot_time_detach(struct yetty_ydraw_figure *instance);
 
 extern const unsigned char gyplot_shaderData[];
@@ -105,8 +104,7 @@ static void yplot_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
     rs->children[0] = (struct yetty_ydraw_gpu_resource_set *)&yplot_lib_rs;
     rs->children_count = 1;
     // Library: yfsvm
-    const struct yetty_ydraw_gpu_resource_set *yfsvm_rs =
-        yetty_yfsvm_get_shader_resource_set();
+    const struct yetty_ydraw_gpu_resource_set *yfsvm_rs = yetty_yfsvm_get_shader_resource_set();
     if (yfsvm_rs) {
         rs->children[1] = (struct yetty_ydraw_gpu_resource_set *)yfsvm_rs;
         rs->children_count = 2;
@@ -213,9 +211,9 @@ static void yplot_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
 // supplies only the shared pipeline + zoom state.
 //=============================================================================
 
-static struct yetty_ycore_void_result yplot_instance_render(
-    struct yetty_ydraw_figure *self, struct yetty_ydraw_target *target,
-    float x, float y)
+static struct yetty_ycore_void_result yplot_instance_render(struct yetty_ydraw_figure *self,
+                                                            struct yetty_ydraw_target *target,
+                                                            float x, float y)
 {
     if (!self || !self->buffer_data || !self->factory) {
         return YETTY_ERR(yetty_ycore_void, "invalid instance");
@@ -335,8 +333,7 @@ static struct yetty_ycore_void_result yplot_instance_render(
     wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
                                      target->viewport.w, target->viewport.h, 0.0f, 1.0f);
     wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)target->viewport.x,
-                                        (uint32_t)target->viewport.y,
-                                        (uint32_t)target->viewport.w,
+                                        (uint32_t)target->viewport.y, (uint32_t)target->viewport.w,
                                         (uint32_t)target->viewport.h);
 
     float w = self->bounds.max.x - self->bounds.min.x;
@@ -416,12 +413,10 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
 
     struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     if (!factory->pipeline) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr,
-                         "yplot factory pipeline not compiled");
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "yplot factory pipeline not compiled");
     }
 
-    struct yetty_ydraw_figure *instance =
-        calloc(1, sizeof(struct yetty_ydraw_figure));
+    struct yetty_ydraw_figure *instance = calloc(1, sizeof(struct yetty_ydraw_figure));
     if (!instance) {
         return YETTY_ERR(yetty_ydraw_figure_ptr, "allocation failed");
     }
@@ -464,8 +459,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
         const uint32_t *payload = data + 2;
         uint32_t payload_bytes = data[1];
         const uint32_t *storage = payload + YETTY_YPLOT_UNIFORMS_WORDS;
-        size_t storage_size =
-            (size_t)payload_bytes - YETTY_YPLOT_UNIFORMS_WORDS * sizeof(uint32_t);
+        size_t storage_size = (size_t)payload_bytes - YETTY_YPLOT_UNIFORMS_WORDS * sizeof(uint32_t);
         instance->resource_set->buffers[0].data = (uint8_t *)(uintptr_t)storage;
         instance->resource_set->buffers[0].size = storage_size;
         instance->resource_set->buffers[0].dirty = 1;
@@ -480,8 +474,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr,
-                         "instance binder create failed", br);
+        return YETTY_ERR(yetty_ydraw_figure_ptr, "instance binder create failed", br);
     }
     instance->binder = br.value;
 
@@ -539,10 +532,9 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
  *   body[4..7]          = u32 count
  *   body[8..]           = f32 samples[count]
  */
-static struct yetty_ycore_void_result yplot_instance_update(
-    struct yetty_ydraw_figure *instance,
-    uint32_t target_field,
-    const void *body, size_t body_size)
+static struct yetty_ycore_void_result yplot_instance_update(struct yetty_ydraw_figure *instance,
+                                                            uint32_t target_field, const void *body,
+                                                            size_t body_size)
 {
     if (!instance) {
         return YETTY_ERR(yetty_ycore_void, "yplot update: instance NULL");
@@ -558,8 +550,8 @@ static struct yetty_ycore_void_result yplot_instance_update(
         return YETTY_ERR(yetty_ycore_void, "yplot update: body samples truncated");
     }
     const float *samples = (const float *)((const uint8_t *)body + 8u);
-    return yetty_yplot_update_data_chunk(instance, /*buffer_index=*/target_field,
-                                         sample_offset, samples, count);
+    return yetty_yplot_update_data_chunk(instance, /*buffer_index=*/target_field, sample_offset,
+                                         samples, count);
 }
 
 static void yplot_instance_destroy(struct yetty_ydraw_figure *instance)
@@ -582,7 +574,7 @@ static void yplot_instance_destroy(struct yetty_ydraw_figure *instance)
 /* Vtable installed on every yplot figure_instance at create time. */
 static const struct yetty_ydraw_figure_ops yplot_figure_ops = {
     .destroy = yplot_instance_destroy,
-    .update  = yplot_instance_update,
+    .update = yplot_instance_update,
 };
 
 /* Legacy factory adapters — kept so the abstract factory's
@@ -600,8 +592,7 @@ static struct yetty_ycore_void_result yplot_update_instance(
         return YETTY_ERR(yetty_ycore_void, "yplot update_instance: payload header truncated");
     }
     uint32_t target_field = ((const uint32_t *)payload)[0];
-    return yplot_instance_update(instance, target_field,
-                                 (const uint8_t *)payload + 4u, size - 4u);
+    return yplot_instance_update(instance, target_field, (const uint8_t *)payload + 4u, size - 4u);
 }
 
 static void yplot_destroy_instance(struct yetty_ydraw_concrete_factory *self,
@@ -629,8 +620,8 @@ static struct yetty_ycore_void_result yplot_set_visual_zoom(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yplot_set_cell_zoom(
-    struct yetty_ydraw_concrete_factory *self, float scale, float off_x, float off_y)
+static struct yetty_ycore_void_result yplot_set_cell_zoom(struct yetty_ydraw_concrete_factory *self,
+                                                          float scale, float off_x, float off_y)
 {
     struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     factory->cell_zoom_scale = (scale > 0.0f) ? scale : 1.0f;
@@ -684,10 +675,10 @@ void yetty_yplot_factory_destroy(struct yetty_ydraw_concrete_factory *self)
 // the binder's write_buffer_chunk op (so no whole-buffer re-upload occurs).
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_yplot_update_data_chunk(
-    struct yetty_ydraw_figure *instance,
-    uint32_t buffer_index, uint32_t sample_offset,
-    const float *data, size_t count)
+struct yetty_ycore_void_result yetty_yplot_update_data_chunk(struct yetty_ydraw_figure *instance,
+                                                             uint32_t buffer_index,
+                                                             uint32_t sample_offset,
+                                                             const float *data, size_t count)
 {
     if (!instance || !instance->buffer_data || !instance->binder) {
         return YETTY_ERR(yetty_ycore_void, "update_data_chunk: invalid instance");
@@ -717,8 +708,7 @@ struct yetty_ycore_void_result yetty_yplot_update_data_chunk(
     }
     uint32_t this_len = *p; /* len_buffer_index */
     if ((size_t)sample_offset + count > (size_t)this_len) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "update_data_chunk: chunk would overflow buffer length");
+        return YETTY_ERR(yetty_ycore_void, "update_data_chunk: chunk would overflow buffer length");
     }
 
     /* Destination word in the merged storage region (in u32 units, then × 4

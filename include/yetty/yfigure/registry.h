@@ -37,9 +37,7 @@ YETTY_YRESULT_DECLARE(yetty_yfigure_registry_ptr, struct yetty_yfigure_registry 
  * figure; ownership passes to the caller (typically a container that
  * will add it via add_child). */
 typedef struct yetty_yfigure_figure_ptr_result (*yetty_yfigure_factory_fn)(
-    struct yetty_ycore_rectangle rect,
-    const struct yetty_context *context,
-    void *user);
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user);
 
 struct yetty_yfigure_registry_ptr_result yetty_yfigure_registry_create(void);
 
@@ -50,14 +48,14 @@ struct yetty_ycore_void_result yetty_yfigure_registry_destroy(
  * is an opaque cookie handed back to the factory on every mint — used
  * by figure-kinds (e.g. ymgui) to share state across instances. */
 struct yetty_ycore_void_result yetty_yfigure_registry_register(
-    struct yetty_yfigure_registry *registry, uint32_t kind,
-    yetty_yfigure_factory_fn factory, void *user);
+    struct yetty_yfigure_registry *registry, uint32_t kind, yetty_yfigure_factory_fn factory,
+    void *user);
 
 /* Mint a figure of `kind` at `rect`. Returns YETTY_ERR with a clear
  * cause when `kind` isn't registered. */
 struct yetty_yfigure_figure_ptr_result yetty_yfigure_registry_mint(
-    struct yetty_yfigure_registry *registry, uint32_t kind,
-    struct yetty_ycore_rectangle rect, const struct yetty_context *context);
+    struct yetty_yfigure_registry *registry, uint32_t kind, struct yetty_ycore_rectangle rect,
+    const struct yetty_context *context);
 
 #ifdef __cplusplus
 }

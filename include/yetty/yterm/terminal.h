@@ -28,8 +28,8 @@ YETTY_YRESULT_DECLARE(yetty_yterm_terminal, struct yetty_yterm_terminal *);
 YETTY_YRESULT_DECLARE(yetty_yterm_terminal_layer, struct yetty_yrender_terminal_layer *);
 
 /* PTY write callback - called when layer needs to send data to PTY */
-typedef struct yetty_ycore_void_result (*yetty_yterm_pty_write_fn)(
-    const char *data, size_t len, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_pty_write_fn)(const char *data, size_t len,
+                                                                   void *userdata);
 
 /* Request render callback - called when layer needs a render frame */
 typedef struct yetty_ycore_void_result (*yetty_yterm_request_render_fn)(void *userdata);
@@ -42,44 +42,43 @@ typedef struct yetty_ycore_void_result (*yetty_yterm_scroll_fn)(
 /* Cursor callback - called when layer moves cursor, passes source layer and
  * position */
 typedef struct yetty_ycore_void_result (*yetty_yterm_cursor_fn)(
-    struct yetty_yrender_terminal_layer *source,
-    struct yetty_ycore_grid_cursor_pos cursor_pos, void *userdata);
+    struct yetty_yrender_terminal_layer *source, struct yetty_ycore_grid_cursor_pos cursor_pos,
+    void *userdata);
 
 /* Mouse-subscription callback - fired when libvterm flips DEC mode 1500
  * (card click, click_enabled) or 1501 (card move, move_enabled). The two
  * args carry the *current* subscription state for both modes; the layer
  * fires this whenever either changes. */
-typedef struct yetty_ycore_void_result (*yetty_yterm_mouse_sub_fn)(
-    int click_enabled, int move_enabled, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_mouse_sub_fn)(int click_enabled,
+                                                                   int move_enabled,
+                                                                   void *userdata);
 
 /* Terminal-wide input subscription callback — fired when a layer
  * receives YETTY_OSC_CS_CLIENT_INPUT_SUB from the inferior. `flags` is the
  * new (post-update) bitmask of YETTY_YMGUI_TERM_SUB_* bits. flags == 0
  * means full unsubscribe. */
-typedef struct yetty_ycore_void_result (*yetty_yterm_term_input_sub_fn)(
-    uint32_t flags, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_term_input_sub_fn)(uint32_t flags,
+                                                                        void *userdata);
 
 /* OSC emit callback - fires when a layer needs to send an OSC envelope
  * back to the client app (PTY child). Used by ymgui-layer to deliver
  * focus events, by future bidirectional layers, etc. The terminal
  * implements this via terminal_yface_emit. */
-typedef struct yetty_ycore_void_result (*yetty_yterm_emit_osc_fn)(
-    int osc_code, const void *payload, size_t len, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_emit_osc_fn)(int osc_code, const void *payload,
+                                                                  size_t len, void *userdata);
 
 /* Alt-screen-toggle callback - fired by the text-layer when libvterm
  * switches in/out of alternate-screen mode (DEC ?1047/?1049/?47). The
  * terminal forwards the new state to every layer via its set_alt_screen
  * op so each layer can save/restore its content. */
-typedef struct yetty_ycore_void_result (*yetty_yterm_alt_screen_fn)(
-    int active, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_alt_screen_fn)(int active, void *userdata);
 
 /* Clear-screen callback - fired by the text-layer when libvterm processes
  * a full-screen erase (CSI 2J / 3J) on the currently active screen. The
  * terminal forwards via each layer's clear_screen op; the layer is expected
  * to wipe the active half of its content (primary or alternate — the layer
  * already tracks which is current via set_alt_screen). */
-typedef struct yetty_ycore_void_result (*yetty_yterm_clear_screen_fn)(
-    void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_clear_screen_fn)(void *userdata);
 
 /* Layer ops */
 struct yetty_yterm_terminal_layer_ops {
@@ -215,9 +214,10 @@ struct yetty_yterm_terminal_layer_ops {
      * Both ops are optional — NULL means "this layer doesn't participate
      * in selection". active=0 clears any prior selection on the layer.
      */
-    struct yetty_ycore_void_result (*set_selection)(
-        struct yetty_yrender_terminal_layer *self, int active,
-        uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row, uint32_t head_col);
+    struct yetty_ycore_void_result (*set_selection)(struct yetty_yrender_terminal_layer *self,
+                                                    int active, uint32_t anchor_row,
+                                                    uint32_t anchor_col, uint32_t head_row,
+                                                    uint32_t head_col);
     /* Append this layer's contribution to the current selection to out
      * as UTF-8. Called once per copy; the layer drives both row iteration
      * and intra-row column handling internally. */

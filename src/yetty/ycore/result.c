@@ -35,8 +35,7 @@ void yetty_ycore_error_destroy(struct yetty_ycore_error err)
     }
 }
 
-void yetty_ycore_error_print(FILE *out, const char *headline,
-                             struct yetty_ycore_error err)
+void yetty_ycore_error_print(FILE *out, const char *headline, struct yetty_ycore_error err)
 {
     if (!out) {
         return;
@@ -46,30 +45,23 @@ void yetty_ycore_error_print(FILE *out, const char *headline,
     } else {
         fprintf(out, "%s\n", err.msg ? err.msg : "<no message>");
     }
-    fprintf(out, "    at %s:%d (%s)\n",
-            err.file ? err.file : "<unknown>",
-            err.line,
+    fprintf(out, "    at %s:%d (%s)\n", err.file ? err.file : "<unknown>", err.line,
             err.func ? err.func : "<unknown>");
     for (const struct yetty_ycore_error *c = err.cause; c; c = c->cause) {
         fprintf(out, "  caused by: %s\n", c->msg ? c->msg : "<no message>");
-        fprintf(out, "    at %s:%d (%s)\n",
-                c->file ? c->file : "<unknown>",
-                c->line,
+        fprintf(out, "    at %s:%d (%s)\n", c->file ? c->file : "<unknown>", c->line,
                 c->func ? c->func : "<unknown>");
     }
 }
 
-size_t yetty_ycore_error_snprint(char *buf, size_t bufsize,
-                                 struct yetty_ycore_error err)
+size_t yetty_ycore_error_snprint(char *buf, size_t bufsize, struct yetty_ycore_error err)
 {
     if (!buf || bufsize == 0) {
         return 0;
     }
-    int n = snprintf(buf, bufsize, "%s\n    at %s:%d (%s)",
-                     err.msg ? err.msg : "<no message>",
-                     err.file ? err.file : "<unknown>",
-                     err.line,
-                     err.func ? err.func : "<unknown>");
+    int n =
+        snprintf(buf, bufsize, "%s\n    at %s:%d (%s)", err.msg ? err.msg : "<no message>",
+                 err.file ? err.file : "<unknown>", err.line, err.func ? err.func : "<unknown>");
     if (n < 0) {
         buf[0] = '\0';
         return 0;
@@ -79,11 +71,8 @@ size_t yetty_ycore_error_snprint(char *buf, size_t bufsize,
         if (off >= bufsize - 1) {
             break;
         }
-        int m = snprintf(buf + off, bufsize - off,
-                         "\n  caused by: %s\n    at %s:%d (%s)",
-                         c->msg ? c->msg : "<no message>",
-                         c->file ? c->file : "<unknown>",
-                         c->line,
+        int m = snprintf(buf + off, bufsize - off, "\n  caused by: %s\n    at %s:%d (%s)",
+                         c->msg ? c->msg : "<no message>", c->file ? c->file : "<unknown>", c->line,
                          c->func ? c->func : "<unknown>");
         if (m < 0) {
             break;

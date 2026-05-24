@@ -34,49 +34,42 @@ struct yetty_yacodec_decoder {
      * channels — we round up to a power-of-two-frame buffer and rotate
      * read/write indices. Single producer (feed via decode), single
      * consumer (pull_pcm). */
-    float   *pcm_ring;
-    size_t   pcm_ring_cap_frames;
-    size_t   pcm_ring_read_frame;
-    size_t   pcm_ring_write_frame;
+    float *pcm_ring;
+    size_t pcm_ring_cap_frames;
+    size_t pcm_ring_read_frame;
+    size_t pcm_ring_write_frame;
 };
 
-static struct yetty_ycore_void_result
-yacodec_opus_init(struct yetty_yacodec_decoder *dec)
+static struct yetty_ycore_void_result yacodec_opus_init(struct yetty_yacodec_decoder *dec)
 {
     int err = 0;
-    dec->opus = opus_decoder_create((opus_int32)dec->sample_rate,
-                                    (int)dec->channels, &err);
+    dec->opus = opus_decoder_create((opus_int32)dec->sample_rate, (int)dec->channels, &err);
     if (!dec->opus || err != OPUS_OK) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "yacodec: opus_decoder_create failed");
+        return YETTY_ERR(yetty_ycore_void, "yacodec: opus_decoder_create failed");
     }
     /* Buffer 1.0 s of PCM — plenty for the worst-case 120 ms Opus
      * frame to land before the consumer drains it. */
     dec->pcm_ring_cap_frames = dec->sample_rate;
-    dec->pcm_ring = calloc(dec->pcm_ring_cap_frames * dec->channels,
-                           sizeof(float));
+    dec->pcm_ring = calloc(dec->pcm_ring_cap_frames * dec->channels, sizeof(float));
     if (!dec->pcm_ring) {
         opus_decoder_destroy(dec->opus);
         dec->opus = NULL;
-        return YETTY_ERR(yetty_ycore_void,
-                         "yacodec: pcm_ring alloc failed");
+        return YETTY_ERR(yetty_ycore_void, "yacodec: pcm_ring alloc failed");
     }
     return YETTY_OK_VOID();
 }
 
-struct yetty_yacodec_decoder_ptr_result
-yetty_yacodec_decoder_create(enum yetty_yacodec_codec codec,
-                             uint32_t sample_rate, uint32_t channels)
+struct yetty_yacodec_decoder_ptr_result yetty_yacodec_decoder_create(enum yetty_yacodec_codec codec,
+                                                                     uint32_t sample_rate,
+                                                                     uint32_t channels)
 {
     if (channels == 0u || channels > 2u) {
         /* libopus supports up to 255 channels via multistream API, but
          * the v1 wire envelope only carries mono/stereo; reject early. */
-        return YETTY_ERR(yetty_yacodec_decoder_ptr,
-                         "yacodec: channels must be 1 or 2");
+        return YETTY_ERR(yetty_yacodec_decoder_ptr, "yacodec: channels must be 1 or 2");
     }
-    if (sample_rate != 8000u && sample_rate != 12000u &&
-        sample_rate != 16000u && sample_rate != 24000u &&
-        sample_rate != 48000u) {
+    if (sample_rate != 8000u && sample_rate != 12000u && sample_rate != 16000u &&
+        sample_rate != 24000u && sample_rate != 48000u) {
         return YETTY_ERR(yetty_yacodec_decoder_ptr,
                          "yacodec: opus sample_rate must be 8/12/16/24/48 kHz");
     }
@@ -84,24 +77,22 @@ yetty_yacodec_decoder_create(enum yetty_yacodec_codec codec,
     if (!dec) {
         return YETTY_ERR(yetty_yacodec_decoder_ptr, "yacodec: alloc failed");
     }
-    dec->codec       = codec;
+    dec->codec = codec;
     dec->sample_rate = sample_rate;
-    dec->channels    = channels;
+    dec->channels = channels;
 
     switch (codec) {
     case YETTY_YACODEC_CODEC_OPUS: {
         struct yetty_ycore_void_result ir = yacodec_opus_init(dec);
         if (YETTY_IS_ERR(ir)) {
             free(dec);
-            return YETTY_ERR(yetty_yacodec_decoder_ptr,
-                             "yacodec: opus init failed", ir);
+            return YETTY_ERR(yetty_yacodec_decoder_ptr, "yacodec: opus init failed", ir);
         }
         break;
     }
     case YETTY_YACODEC_CODEC_NONE:
         free(dec);
-        return YETTY_ERR(yetty_yacodec_decoder_ptr,
-                         "yacodec: codec=none — nothing to decode");
+        return YETTY_ERR(yetty_yacodec_decoder_ptr, "yacodec: codec=none — nothing to decode");
     case YETTY_YACODEC_CODEC_VORBIS:
     case YETTY_YACODEC_CODEC_FLAC:
     case YETTY_YACODEC_CODEC_MP3:
@@ -110,8 +101,7 @@ yetty_yacodec_decoder_create(enum yetty_yacodec_codec codec,
         return YETTY_ERR(yetty_yacodec_decoder_ptr,
                          "yacodec: codec reserved but not implemented in v1");
     }
-    yinfo("yacodec: decoder created codec=%d %u Hz × %u ch",
-          (int)codec, sample_rate, channels);
+    yinfo("yacodec: decoder created codec=%d %u Hz × %u ch", (int)codec, sample_rate, channels);
     return YETTY_OK(yetty_yacodec_decoder_ptr, dec);
 }
 
@@ -136,8 +126,7 @@ static size_t pcm_ring_free_frames(const struct yetty_yacodec_decoder *dec)
     if (dec->pcm_ring_write_frame >= dec->pcm_ring_read_frame) {
         used = dec->pcm_ring_write_frame - dec->pcm_ring_read_frame;
     } else {
-        used = dec->pcm_ring_cap_frames -
-               (dec->pcm_ring_read_frame - dec->pcm_ring_write_frame);
+        used = dec->pcm_ring_cap_frames - (dec->pcm_ring_read_frame - dec->pcm_ring_write_frame);
     }
     if (used >= dec->pcm_ring_cap_frames - 1u) {
         return 0u;
@@ -145,34 +134,29 @@ static size_t pcm_ring_free_frames(const struct yetty_yacodec_decoder *dec)
     return dec->pcm_ring_cap_frames - 1u - used;
 }
 
-static void pcm_ring_push(struct yetty_yacodec_decoder *dec,
-                          const float *src, size_t frames)
+static void pcm_ring_push(struct yetty_yacodec_decoder *dec, const float *src, size_t frames)
 {
     /* Two-segment copy across the ring wrap. */
     size_t first = dec->pcm_ring_cap_frames - dec->pcm_ring_write_frame;
     if (first > frames) {
         first = frames;
     }
-    memcpy(dec->pcm_ring + dec->pcm_ring_write_frame * dec->channels,
-           src, first * dec->channels * sizeof(float));
+    memcpy(dec->pcm_ring + dec->pcm_ring_write_frame * dec->channels, src,
+           first * dec->channels * sizeof(float));
     size_t rest = frames - first;
     if (rest > 0u) {
-        memcpy(dec->pcm_ring, src + first * dec->channels,
-               rest * dec->channels * sizeof(float));
+        memcpy(dec->pcm_ring, src + first * dec->channels, rest * dec->channels * sizeof(float));
     }
-    dec->pcm_ring_write_frame =
-        (dec->pcm_ring_write_frame + frames) % dec->pcm_ring_cap_frames;
+    dec->pcm_ring_write_frame = (dec->pcm_ring_write_frame + frames) % dec->pcm_ring_cap_frames;
 }
 
-static size_t pcm_ring_pop(struct yetty_yacodec_decoder *dec,
-                           float *dst, size_t max_frames)
+static size_t pcm_ring_pop(struct yetty_yacodec_decoder *dec, float *dst, size_t max_frames)
 {
     size_t used;
     if (dec->pcm_ring_write_frame >= dec->pcm_ring_read_frame) {
         used = dec->pcm_ring_write_frame - dec->pcm_ring_read_frame;
     } else {
-        used = dec->pcm_ring_cap_frames -
-               (dec->pcm_ring_read_frame - dec->pcm_ring_write_frame);
+        used = dec->pcm_ring_cap_frames - (dec->pcm_ring_read_frame - dec->pcm_ring_write_frame);
     }
     size_t take = (used < max_frames) ? used : max_frames;
     size_t first = dec->pcm_ring_cap_frames - dec->pcm_ring_read_frame;
@@ -183,17 +167,14 @@ static size_t pcm_ring_pop(struct yetty_yacodec_decoder *dec,
            first * dec->channels * sizeof(float));
     size_t rest = take - first;
     if (rest > 0u) {
-        memcpy(dst + first * dec->channels, dec->pcm_ring,
-               rest * dec->channels * sizeof(float));
+        memcpy(dst + first * dec->channels, dec->pcm_ring, rest * dec->channels * sizeof(float));
     }
-    dec->pcm_ring_read_frame =
-        (dec->pcm_ring_read_frame + take) % dec->pcm_ring_cap_frames;
+    dec->pcm_ring_read_frame = (dec->pcm_ring_read_frame + take) % dec->pcm_ring_cap_frames;
     return take;
 }
 
-struct yetty_ycore_void_result
-yetty_yacodec_decoder_feed(struct yetty_yacodec_decoder *dec,
-                           const uint8_t *data, size_t size)
+struct yetty_ycore_void_result yetty_yacodec_decoder_feed(struct yetty_yacodec_decoder *dec,
+                                                          const uint8_t *data, size_t size)
 {
     if (!dec || !dec->opus) {
         return YETTY_ERR(yetty_ycore_void, "yacodec: decoder not initialised");
@@ -209,9 +190,9 @@ yetty_yacodec_decoder_feed(struct yetty_yacodec_decoder *dec,
      * frame; copying into the ring afterwards keeps the producer/
      * consumer indices the only inter-thread state. */
     float scratch[YACODEC_OPUS_MAX_FRAME_SIZE * 2 /* worst case channels */];
-    int frames = opus_decode_float(dec->opus, data, (opus_int32)size,
-                                   scratch, YACODEC_OPUS_MAX_FRAME_SIZE,
-                                   /*decode_fec=*/0);
+    int frames =
+        opus_decode_float(dec->opus, data, (opus_int32)size, scratch, YACODEC_OPUS_MAX_FRAME_SIZE,
+                          /*decode_fec=*/0);
     if (frames < 0) {
         return YETTY_ERR(yetty_ycore_void, "yacodec: opus_decode_float failed");
     }
@@ -229,10 +210,9 @@ yetty_yacodec_decoder_feed(struct yetty_yacodec_decoder *dec,
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result
-yetty_yacodec_decoder_pull_pcm(struct yetty_yacodec_decoder *dec,
-                               float *out, size_t max_frames,
-                               size_t *out_frames_written)
+struct yetty_ycore_void_result yetty_yacodec_decoder_pull_pcm(struct yetty_yacodec_decoder *dec,
+                                                              float *out, size_t max_frames,
+                                                              size_t *out_frames_written)
 {
     if (!dec || !out || !out_frames_written) {
         return YETTY_ERR(yetty_ycore_void, "yacodec: pull_pcm null arg");
@@ -249,7 +229,7 @@ void yetty_yacodec_decoder_reset(struct yetty_yacodec_decoder *dec)
     if (dec->opus) {
         opus_decoder_ctl(dec->opus, OPUS_RESET_STATE);
     }
-    dec->pcm_ring_read_frame  = 0u;
+    dec->pcm_ring_read_frame = 0u;
     dec->pcm_ring_write_frame = 0u;
 }
 

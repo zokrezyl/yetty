@@ -27,8 +27,7 @@
 #define U_VZ_OFF 4
 #define U_COUNT 5
 
-static inline void set_grid_size(struct yetty_ydraw_gpu_resource_set *rs, float cols,
-                                 float rows)
+static inline void set_grid_size(struct yetty_ydraw_gpu_resource_set *rs, float cols, float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
@@ -180,8 +179,7 @@ static int glyph_allowed(struct yetty_yconfig_config *config, const char *filena
     }
     int n = config->ops->get_array_count(config, "shaders/preload/glyphs");
     for (int i = 0; i < n; i++) {
-        const char *want =
-            config->ops->get_array_item(config, "shaders/preload/glyphs", i, NULL);
+        const char *want = config->ops->get_array_item(config, "shaders/preload/glyphs", i, NULL);
         if (want && glyph_name_matches(filename, want)) {
             return 1;
         }
@@ -197,8 +195,8 @@ static int glyph_allowed(struct yetty_yconfig_config *config, const char *filena
  * are concatenated FIRST, in name-sorted order, so glyph functions can call
  * their helpers. Files starting with '0x' are glyphs, sorted by local-id —
  * filtered through shaders/preload/glyphs in the user's yetty config. */
-static struct yetty_ycore_buffer_result assemble_glyph_shaders(
-    const char *glyph_dir, struct yetty_yconfig_config *config)
+static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph_dir,
+                                                               struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_dir *d = yetty_yplatform_dir_open(glyph_dir);
     if (!d) {
@@ -739,8 +737,7 @@ static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resourc
 
     ydebug("shader-glyph: get_gpu_resource_set: cols=%u rows=%u live_cells=%zu "
            "instances=%u cells_size=%zu instances_size=%zu",
-           cols, rows, live_cells, n, cells_size,
-           (size_t)n * sizeof(struct shader_glyph_instance));
+           cols, rows, live_cells, n, cells_size, (size_t)n * sizeof(struct shader_glyph_instance));
     if (n > 0 && n <= 4) {
         for (uint32_t k = 0; k < n; k++) {
             ydebug("shader-glyph: inst[%u] cell_index=%u local_id=%u", k,
@@ -748,8 +745,8 @@ static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resourc
         }
     } else if (n > 4) {
         ydebug("shader-glyph: inst[0]=(cell=%u,local=%u) inst[%u]=(cell=%u,local=%u)",
-               layer->instances[0].cell_index, layer->instances[0].local_id,
-               n - 1, layer->instances[n - 1].cell_index, layer->instances[n - 1].local_id);
+               layer->instances[0].cell_index, layer->instances[0].local_id, n - 1,
+               layer->instances[n - 1].cell_index, layer->instances[n - 1].local_id);
     }
 
     /* Update animation clock. */
@@ -798,8 +795,7 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
     if (layer->base.request_render_fn) {
         struct yetty_ycore_void_result r =
             layer->base.request_render_fn(layer->base.request_render_userdata);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, r,
-                            "on_anim_tick: request_render_fn failed");
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "on_anim_tick: request_render_fn failed");
     }
     return YETTY_OK(yetty_ycore_int, 0);
 }

@@ -69,8 +69,7 @@ struct yetty_ygrid_factory_args {
  * `args` is borrowed and must outlive every ygrid the factory will ever
  * mint. The host should keep it as part of its own state. */
 struct yetty_ycore_void_result yetty_ygrid_register_factory(
-    struct yetty_yfigure_registry *registry,
-    const struct yetty_ygrid_factory_args *args);
+    struct yetty_yfigure_registry *registry, const struct yetty_ygrid_factory_args *args);
 
 /* Register the ygrid factory under an arbitrary kind code. Used by
  * ygui's complex producer widgets (yplot/yimage/yvideo/yzoo/yjungle)
@@ -78,17 +77,15 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory(
  * underlying renderer but a distinct kind tag that proxies and
  * analyzers can route on. Args has the same lifetime contract. */
 struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
-    struct yetty_yfigure_registry *registry,
-    uint32_t kind,
+    struct yetty_yfigure_registry *registry, uint32_t kind,
     const struct yetty_ygrid_factory_args *args);
 
 /* Attach a complex-prim figure factory. Borrowed; lifetime must
  * outlive the ygrid. Complex prims (yplot / yimage / etc.) arriving
  * via process_bytes after this call mint a figure instance through
  * the factory and are rendered alongside the SDF / glyph pass. */
-void yetty_ygrid_set_figure_factory(
-    struct yetty_ygrid_grid *grid,
-    struct yetty_ydraw_raw_figure_factory *factory);
+void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
+                                    struct yetty_ydraw_raw_figure_factory *factory);
 
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 
@@ -97,9 +94,9 @@ YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
  * pipeline will eventually bucket prims for batch dispatch. The
  * context supplies the GPU device / queue / surface_format used to
  * build the pipeline and per-instance bind group. */
-struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(
-    struct yetty_ycore_rectangle rect, uint32_t grid_cols, uint32_t grid_rows,
-    const struct yetty_context *context);
+struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectangle rect,
+                                                      uint32_t grid_cols, uint32_t grid_rows,
+                                                      const struct yetty_context *context);
 
 /* Upcast helper — a ygrid is a figure. */
 struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid);
@@ -112,9 +109,9 @@ struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid
  * Storage is opaque at this layer: the bytes are copied verbatim and
  * parsed lazily by the render path via the ydraw-core flyweight
  * registry. */
-struct yetty_ycore_void_result yetty_ygrid_add_record(
-    struct yetty_ygrid_grid *grid,
-    const uint8_t *record_bytes, size_t record_len);
+struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_ygrid_grid *grid,
+                                                      const uint8_t *record_bytes,
+                                                      size_t record_len);
 
 /* Drop every record. The figure stays alive at its current rect with
  * an empty payload (renders nothing). Marks the figure dirty so the
@@ -134,8 +131,8 @@ struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_ygrid_grid *grid);
  *
  * Caller retains ownership of the font — ygrid borrows the pointer and
  * does NOT destroy it on ygrid_destroy. */
-struct yetty_ycore_void_result yetty_ygrid_set_font(
-    struct yetty_ygrid_grid *grid, uint32_t slot, struct yetty_ydraw_font *font);
+struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *grid, uint32_t slot,
+                                                    struct yetty_ydraw_font *font);
 
 #ifdef __cplusplus
 }

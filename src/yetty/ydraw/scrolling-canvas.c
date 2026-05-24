@@ -293,13 +293,13 @@ static struct yetty_ycore_void_result ensure_grid_staging(struct scrolling_canva
 }
 
 static struct yetty_ycore_void_result ensure_drawable_staging(struct scrolling_canvas *c,
-                                                          uint32_t min_size)
+                                                              uint32_t min_size)
 {
     if (min_size <= c->drawable_staging_capacity) {
         return YETTY_OK_VOID();
     }
-    uint32_t new_cap =
-        c->drawable_staging_capacity == 0 ? YDRAW_STAGING_INITIAL_CAPACITY : c->drawable_staging_capacity;
+    uint32_t new_cap = c->drawable_staging_capacity == 0 ? YDRAW_STAGING_INITIAL_CAPACITY
+                                                         : c->drawable_staging_capacity;
     while (new_cap < min_size) {
         new_cap *= 2;
     }
@@ -508,10 +508,11 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     c->flyweight_registry = flyweight_res.value;
 
     /* figure factory + built-in registrations. */
-    struct yetty_ydraw_raw_figure_factory_ptr_result factory_res = yetty_ydraw_raw_figure_factory_create(
-        context->runtime->gpu.device, context->runtime->gpu.queue,
-        context->runtime->gpu.surface_format, context->runtime->gpu.allocator,
-        context->event_loop);
+    struct yetty_ydraw_raw_figure_factory_ptr_result factory_res =
+        yetty_ydraw_raw_figure_factory_create(context->runtime->gpu.device,
+                                              context->runtime->gpu.queue,
+                                              context->runtime->gpu.surface_format,
+                                              context->runtime->gpu.allocator, context->event_loop);
     if (YETTY_IS_ERR(factory_res)) {
         scrolling_canvas_destroy_internals(c);
         free(c);
@@ -914,8 +915,8 @@ static struct uint32_result add_drawable_internal(
     if (yetty_ydraw_is_figure(drawable_type)) {
         struct yetty_ydraw_figure_ptr_result inst_res =
             yetty_ydraw_raw_figure_factory_create_instance(c->figure_factory, flyweight->data,
-                                                       word_count * sizeof(uint32_t),
-                                                       drawable_rolling_row);
+                                                           word_count * sizeof(uint32_t),
+                                                           drawable_rolling_row);
         YETTY_RETURN_IF_ERR(uint32, inst_res, "add_drawable: create_instance");
         /* Mark fresh — the FIRST render must paint this figure even
          * though no listener has fired yet. ydraw_layer_render's
@@ -1456,7 +1457,8 @@ static struct yetty_ydraw_drawable_staging_result scrolling_build_drawable_stagi
     struct scrolling_canvas *c = as_scrolling(base);
     /* Pre-grow to initial capacity; grid will realloc up if needed. */
     struct yetty_ycore_void_result e = ensure_drawable_staging(c, YDRAW_STAGING_INITIAL_CAPACITY);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_staging, e, "build_drawable_staging: ensure_drawable_staging");
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_staging, e,
+                        "build_drawable_staging: ensure_drawable_staging");
 
     uint32_t count = 0;
     uint32_t drawable_count = 0;
@@ -1492,7 +1494,8 @@ static uint32_t scrolling_drawable_gpu_size(const struct yetty_ydraw_canvas *bas
 
 static uint32_t scrolling_drawable_count(const struct yetty_ydraw_canvas *base)
 {
-    return base ? yetty_ydraw_scrolling_grid_total_drawable_count(as_scrolling_const(base)->grid) : 0;
+    return base ? yetty_ydraw_scrolling_grid_total_drawable_count(as_scrolling_const(base)->grid)
+                : 0;
 }
 
 /*===========================================================================
@@ -1559,8 +1562,8 @@ static uint32_t scrolling_figure_count(const struct yetty_ydraw_canvas *base)
     return yetty_ydraw_scrolling_grid_figure_count_in_window(c->grid, top, end);
 }
 
-static struct yetty_ydraw_figure *scrolling_get_figure(
-    const struct yetty_ydraw_canvas *base, uint32_t index)
+static struct yetty_ydraw_figure *scrolling_get_figure(const struct yetty_ydraw_canvas *base,
+                                                       uint32_t index)
 {
     if (!base) {
         return NULL;

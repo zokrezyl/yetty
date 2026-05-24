@@ -27,7 +27,7 @@ struct yetty_ycore_error {
     const char *msg;
     const char *file;
     const char *func;
-    int         line;
+    int line;
     struct yetty_ycore_error *cause; /* heap-allocated; NULL = end of chain */
 };
 
@@ -64,15 +64,13 @@ void yetty_ycore_error_destroy(struct yetty_ycore_error err);
  * The first frame is labelled with `headline` (e.g. "fatal error" /
  * "warning") followed by `: `. Pass NULL for `headline` to omit the
  * label — the caller's own framing prefix is used as-is. */
-void yetty_ycore_error_print(FILE *out, const char *headline,
-                             struct yetty_ycore_error err);
+void yetty_ycore_error_print(FILE *out, const char *headline, struct yetty_ycore_error err);
 
 /* Format the error and its cause chain into `buf`. Same content as
  * yetty_ycore_error_print but written into a caller-supplied buffer, and
  * with no trailing newline. Truncates safely if the chain would overflow.
  * Returns the number of bytes written (excluding the terminating NUL). */
-size_t yetty_ycore_error_snprint(char *buf, size_t bufsize,
-                                 struct yetty_ycore_error err);
+size_t yetty_ycore_error_snprint(char *buf, size_t bufsize, struct yetty_ycore_error err);
 
 /* Create success result (void) */
 #define YETTY_OK_VOID() ((struct yetty_ycore_void_result){.ok = 1, .value = 0})
@@ -97,17 +95,20 @@ size_t yetty_ycore_error_snprint(char *buf, size_t bufsize,
 #define YETTY_ERR_DISPATCH(_1, _2, _3, NAME, ...) NAME
 
 #define YETTY_ERR_2(type, err_msg)                                                                 \
-    ((struct type##_result){                                                                       \
-        .ok = 0,                                                                                   \
-        .error = {.msg = (err_msg), .file = __FILE__, .func = __func__,                            \
-                  .line = __LINE__, .cause = NULL}})
+    ((struct type##_result){.ok = 0,                                                               \
+                            .error = {.msg = (err_msg),                                            \
+                                      .file = __FILE__,                                            \
+                                      .func = __func__,                                            \
+                                      .line = __LINE__,                                            \
+                                      .cause = NULL}})
 
 #define YETTY_ERR_3(type, err_msg, prev_res)                                                       \
-    ((struct type##_result){                                                                       \
-        .ok = 0,                                                                                   \
-        .error = {.msg = (err_msg), .file = __FILE__, .func = __func__,                            \
-                  .line = __LINE__,                                                                \
-                  .cause = yetty_ycore_error_chain((prev_res).error)}})
+    ((struct type##_result){.ok = 0,                                                               \
+                            .error = {.msg = (err_msg),                                            \
+                                      .file = __FILE__,                                            \
+                                      .func = __func__,                                            \
+                                      .line = __LINE__,                                            \
+                                      .cause = yetty_ycore_error_chain((prev_res).error)}})
 
 /* Check result */
 #define YETTY_IS_OK(res) ((res).ok)
@@ -156,11 +157,9 @@ size_t yetty_ycore_error_snprint(char *buf, size_t bufsize,
 /* C++ helper — compound literals are a C-only feature.
  * Callers should use yetty_ycore_err(msg) — the macro fills file/line/func
  * from the call site. */
-#define yetty_ycore_err(msg)                                                                       \
-    yetty_ycore_err_at((msg), __FILE__, __func__, __LINE__)
+#define yetty_ycore_err(msg) yetty_ycore_err_at((msg), __FILE__, __func__, __LINE__)
 
-inline struct yetty_ycore_void_result yetty_ycore_err_at(const char *msg,
-                                                         const char *file,
+inline struct yetty_ycore_void_result yetty_ycore_err_at(const char *msg, const char *file,
                                                          const char *func, int line)
 {
     struct yetty_ycore_void_result r = {};

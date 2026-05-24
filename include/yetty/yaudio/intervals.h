@@ -29,31 +29,31 @@ extern "C" {
 struct yetty_yaudio_interval {
     double start_sec;
     double end_sec;
-    float  peak_dbfs;     /* loudest frame RMS inside the interval */
-    float  rms_dbfs;      /* mean square energy across the interval */
+    float peak_dbfs; /* loudest frame RMS inside the interval */
+    float rms_dbfs;  /* mean square energy across the interval */
 };
 
 struct yetty_yaudio_intervals_config {
-    uint32_t frame_samples;        /* analysis window size (default 1024) */
-    uint32_t hop_samples;          /* stride between frames (default = frame_samples) */
-    float    noise_percentile;     /* 0..1, default 0.15 */
-    float    open_db_above_floor;  /* default +10 dB */
-    float    close_db_above_floor; /* default +6  dB */
-    double   min_active_sec;       /* drop intervals shorter than this; default 0.050 */
-    double   min_gap_sec;          /* merge if gap to previous is shorter; default 0.150 */
+    uint32_t frame_samples;     /* analysis window size (default 1024) */
+    uint32_t hop_samples;       /* stride between frames (default = frame_samples) */
+    float noise_percentile;     /* 0..1, default 0.15 */
+    float open_db_above_floor;  /* default +10 dB */
+    float close_db_above_floor; /* default +6  dB */
+    double min_active_sec;      /* drop intervals shorter than this; default 0.050 */
+    double min_gap_sec;         /* merge if gap to previous is shorter; default 0.150 */
 };
 
 struct yetty_yaudio_intervals {
     struct yetty_yaudio_interval *items;
-    size_t                        n;
+    size_t n;
 
     /* analysis metadata — useful for the caller to log/inspect */
-    float    noise_floor_dbfs;
-    float    open_threshold_dbfs;
-    float    close_threshold_dbfs;
+    float noise_floor_dbfs;
+    float open_threshold_dbfs;
+    float close_threshold_dbfs;
     uint32_t frame_samples;
     uint32_t hop_samples;
-    size_t   total_frames;        /* frames analysed */
+    size_t total_frames; /* frames analysed */
 };
 
 YETTY_YRESULT_DECLARE(yetty_yaudio_intervals_ptr, struct yetty_yaudio_intervals *);
@@ -63,10 +63,9 @@ void yetty_yaudio_intervals_config_defaults(struct yetty_yaudio_intervals_config
 
 /* Analyse one channel of `w`. Heap-allocates the result; destroy with
  * yetty_yaudio_intervals_destroy(). */
-struct yetty_yaudio_intervals_ptr_result
-yetty_yaudio_intervals_find(const struct yetty_yaudio_wav *w,
-                            uint32_t channel,
-                            const struct yetty_yaudio_intervals_config *cfg);
+struct yetty_yaudio_intervals_ptr_result yetty_yaudio_intervals_find(
+    const struct yetty_yaudio_wav *w, uint32_t channel,
+    const struct yetty_yaudio_intervals_config *cfg);
 
 void yetty_yaudio_intervals_destroy(struct yetty_yaudio_intervals *iv);
 

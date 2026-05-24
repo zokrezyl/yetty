@@ -41,7 +41,8 @@ static struct yetty_ycore_size_result win_conpty_read(struct yetty_platform_pty 
 static struct yetty_ycore_size_result win_conpty_write(struct yetty_platform_pty *self,
                                                        const char *data, size_t len);
 static struct yetty_ycore_void_result win_conpty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h);
+                                                        uint32_t cols, uint32_t rows,
+                                                        uint32_t pixel_w, uint32_t pixel_h);
 static struct yetty_ycore_void_result win_conpty_stop(struct yetty_platform_pty *self);
 static struct yetty_platform_pty_pipe_source *win_conpty_pipe_source(
     struct yetty_platform_pty *self);
@@ -137,7 +138,8 @@ static struct yetty_ycore_size_result win_conpty_write(struct yetty_platform_pty
 }
 
 static struct yetty_ycore_void_result win_conpty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h)
+                                                        uint32_t cols, uint32_t rows,
+                                                        uint32_t pixel_w, uint32_t pixel_h)
 {
     struct yetty_yplatform_win_conpty *pty =
         container_of(self, struct yetty_yplatform_win_conpty, base);
@@ -403,8 +405,7 @@ static struct yetty_yplatform_pty_ptr_result win_conpty_create(struct yetty_ycon
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty_ptr,
-                         "failed to convert shell command to wide-char");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to convert shell command to wide-char");
     }
     ydebug("win_conpty_create: spawning shell '%s'", shell_cmd);
 

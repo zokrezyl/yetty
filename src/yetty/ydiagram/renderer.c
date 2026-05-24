@@ -403,8 +403,7 @@ static void emit_text(struct render_state *s, float x, float y, const char *text
         .capacity = n,
         .size = n,
     };
-    (void)yetty_ydraw_draw_list_add_text(s->buf, x, y, &view, font_size, color, s->z++, -1,
-                                              0.0f);
+    (void)yetty_ydraw_draw_list_add_text(s->buf, x, y, &view, font_size, color, s->z++, -1, 0.0f);
 }
 
 static void emit_node_label(struct render_state *s, const struct yetty_ydiagram_node *n)

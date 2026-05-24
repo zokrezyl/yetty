@@ -103,8 +103,8 @@ static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_draw_list *bu
         .capacity = s->text_len,
     };
     return yetty_ydraw_draw_list_add_text(buf, text_x, text_y, &text, s->text_style.font_size,
-                                             s->text_style.color, layer + 1, s->text_style.font_id,
-                                             0.0f);
+                                          s->text_style.color, layer + 1, s->text_style.font_id,
+                                          0.0f);
 }
 
 static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e,
@@ -130,8 +130,8 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .half_height = s->bounds.h * 0.5f,
             .corner_radius = s->corner_radius,
         };
-        struct yetty_ycore_void_result idr =
-            yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
+        struct yetty_ycore_void_result idr = yetty_ydraw_draw_list_add_cmd_add_box(
+            buf, 0, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: rect add failed");
         if (s->kind == YETTY_YRICH_SHAPE_TEXTBOX) {
             struct yetty_ycore_void_result tr = emit_text(buf, s, layer);
@@ -159,8 +159,8 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .end_x = s->bounds.x + s->bounds.w,
             .end_y = s->bounds.y + s->bounds.h,
         };
-        struct yetty_ycore_void_result idr =
-            yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, layer, 0, s->stroke_color, s->stroke_width, &seg);
+        struct yetty_ycore_void_result idr = yetty_ydraw_draw_list_add_cmd_add_segment(
+            buf, 0, layer, 0, s->stroke_color, s->stroke_width, &seg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: segment add failed");
         break;
     }
@@ -352,7 +352,7 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yrich_document 
 
     yetty_ydraw_draw_list_clear(doc->buffer);
     yetty_ydraw_draw_list_set_scene_bounds(doc->buffer, 0.0f, 0.0f, s->slide_width,
-                                              s->slide_height);
+                                           s->slide_height);
 
     struct yetty_yrich_slide *slide = yetty_yrich_slides_slide_at(s, s->current_slide);
     if (!slide) {

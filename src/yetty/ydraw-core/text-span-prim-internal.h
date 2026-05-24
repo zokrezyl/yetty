@@ -18,16 +18,15 @@ extern "C" {
 size_t yetty_ydraw_text_span_drawable_size_for(uint32_t text_len);
 
 void yetty_ydraw_text_span_drawable_write(uint8_t *out, float x, float y, float font_size,
-                                            float rotation, uint32_t color, uint32_t layer,
-                                            int32_t font_id, const char *text, uint32_t text_len);
+                                          float rotation, uint32_t color, uint32_t layer,
+                                          int32_t font_id, const char *text, uint32_t text_len);
 
 /* Like _write, plus PDF Tc/Tw spacing. Tc adds per-codepoint, Tw per
  * U+0020 only. Both in display pixels at the current font_size. */
 void yetty_ydraw_text_span_drawable_write_full(uint8_t *out, float x, float y, float font_size,
-                                                 float rotation, uint32_t color, uint32_t layer,
-                                                 int32_t font_id, const char *text,
-                                                 uint32_t text_len, float char_spacing,
-                                                 float word_spacing);
+                                               float rotation, uint32_t color, uint32_t layer,
+                                               int32_t font_id, const char *text, uint32_t text_len,
+                                               float char_spacing, float word_spacing);
 
 #ifdef __cplusplus
 }

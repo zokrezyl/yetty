@@ -312,12 +312,12 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
      * inline — so the struct gets stamped by hand. No argv/output_pipe/
      * clipboard/window_manager on Android. */
     memset(&yinit_rt, 0, sizeof(yinit_rt));
-    yinit_rt.config              = state->config;
-    yinit_rt.instance            = state->instance;
-    yinit_rt.surface             = state->surface;
-    yinit_rt.surface_width       = (uint32_t)width;
-    yinit_rt.surface_height      = (uint32_t)height;
-    yinit_rt.content_scale       = 1.0f;
+    yinit_rt.config = state->config;
+    yinit_rt.instance = state->instance;
+    yinit_rt.surface = state->surface;
+    yinit_rt.surface_width = (uint32_t)width;
+    yinit_rt.surface_height = (uint32_t)height;
+    yinit_rt.content_scale = 1.0f;
     yinit_rt.platform_input_pipe = state->pipe;
 
     struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(&yinit_rt);
@@ -395,8 +395,11 @@ static struct yetty_ycore_void_result term_yetty(struct yetty_yplatform_app_stat
     if (state->yframework) {
         struct yetty_ycore_void_result r = yetty_yframework_destroy(state->yframework);
         if (YETTY_IS_ERR(r)) {
-            if (YETTY_IS_OK(first_err)) first_err = r;
-            else yetty_ycore_error_destroy(r.error);
+            if (YETTY_IS_OK(first_err)) {
+                first_err = r;
+            } else {
+                yetty_ycore_error_destroy(r.error);
+            }
         }
         state->yframework = NULL;
         /* yframework_destroy already unconfigured + released the surface +

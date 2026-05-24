@@ -249,20 +249,28 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     snprintf(memory_arg, sizeof(memory_arg), "%u", settings.memory_mb);
     snprintf(smp_arg, sizeof(smp_arg), "%u", settings.smp);
 
-    yinfo("Starting QEMU (telnet hostfwd 127.0.0.1:%u -> guest:23, mem=%uMB smp=%u)",
-          host_port, settings.memory_mb, settings.smp);
+    yinfo("Starting QEMU (telnet hostfwd 127.0.0.1:%u -> guest:23, mem=%uMB smp=%u)", host_port,
+          settings.memory_mb, settings.smp);
 
     const char *argv[40];
     int argc = 0;
     argv[argc++] = qemu_bin;
-    argv[argc++] = "-machine";       argv[argc++] = "virt";
-    argv[argc++] = "-smp";           argv[argc++] = smp_arg;
-    argv[argc++] = "-m";             argv[argc++] = memory_arg;
-    argv[argc++] = "-bios";          argv[argc++] = bios_path;
-    argv[argc++] = "-kernel";        argv[argc++] = kernel_path;
-    argv[argc++] = "-append";        argv[argc++] = append_arg;
-    argv[argc++] = "-drive";         argv[argc++] = drive_arg;
-    argv[argc++] = "-device";        argv[argc++] = "virtio-blk-device,drive=hd0";
+    argv[argc++] = "-machine";
+    argv[argc++] = "virt";
+    argv[argc++] = "-smp";
+    argv[argc++] = smp_arg;
+    argv[argc++] = "-m";
+    argv[argc++] = memory_arg;
+    argv[argc++] = "-bios";
+    argv[argc++] = bios_path;
+    argv[argc++] = "-kernel";
+    argv[argc++] = kernel_path;
+    argv[argc++] = "-append";
+    argv[argc++] = append_arg;
+    argv[argc++] = "-drive";
+    argv[argc++] = drive_arg;
+    argv[argc++] = "-device";
+    argv[argc++] = "virtio-blk-device,drive=hd0";
 #ifndef _WIN32
     /* virtfs/9p is disabled on the Windows minimal qemu build
      * (--without-default-features in build-tools/3rdparty/qemu/_build.sh —
@@ -270,21 +278,30 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
      * Windows). Passing -fsdev there makes qemu exit immediately with
      * "fsdev support is disabled". Skip the host-share mount on Windows;
      * the guest still gets virtio-blk + virtio-net + virtio-console. */
-    argv[argc++] = "-fsdev";   argv[argc++] = fsdev_arg;
-    argv[argc++] = "-device";  argv[argc++] = "virtio-9p-device,fsdev=fsdev0,mount_tag=hostshare";
+    argv[argc++] = "-fsdev";
+    argv[argc++] = fsdev_arg;
+    argv[argc++] = "-device";
+    argv[argc++] = "virtio-9p-device,fsdev=fsdev0,mount_tag=hostshare";
 #endif
-    argv[argc++] = "-netdev";  argv[argc++] = netdev_arg;
-    argv[argc++] = "-device";  argv[argc++] = "virtio-net-device,netdev=net0";
+    argv[argc++] = "-netdev";
+    argv[argc++] = netdev_arg;
+    argv[argc++] = "-device";
+    argv[argc++] = "virtio-net-device,netdev=net0";
     /* virtio-console wired to a TCP socket chardev on 127.0.0.1:2424
      * for *debugging only*. yetty does NOT connect here (the broken
      * libuv-tcp ↔ socket-chardev interaction silently kills QEMU on
      * the MSYS2 build). It's a side channel for `telnet 127.0.0.1
      * 2424` so kernel boot log / panic output remains observable. */
-    argv[argc++] = "-device";  argv[argc++] = "virtio-serial-device";
-    argv[argc++] = "-device";  argv[argc++] = "virtconsole,chardev=char0";
-    argv[argc++] = "-chardev"; argv[argc++] = chardev_arg;
-    argv[argc++] = "-serial";  argv[argc++] = "none";
-    argv[argc++] = "-display"; argv[argc++] = "none";
+    argv[argc++] = "-device";
+    argv[argc++] = "virtio-serial-device";
+    argv[argc++] = "-device";
+    argv[argc++] = "virtconsole,chardev=char0";
+    argv[argc++] = "-chardev";
+    argv[argc++] = chardev_arg;
+    argv[argc++] = "-serial";
+    argv[argc++] = "none";
+    argv[argc++] = "-display";
+    argv[argc++] = "none";
     /* -no-reboot + -no-shutdown so a guest kernel panic doesn't take
      * the qemu process down silently — keep the chardev open so yetty
      * sees the panic message instead of a blank disconnect. */

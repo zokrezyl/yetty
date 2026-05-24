@@ -35,8 +35,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_rich_from_yaml(struct yetty_ygui_engine *engine,
-                                                           const char *id, float x, float y, float w,
-                                                           float h, const char *yaml,
+                                                           const char *id, float x, float y,
+                                                           float w, float h, const char *yaml,
                                                            size_t yaml_len)
 {
     struct yetty_ygui_widget *r = yetty_ygui_engine_rich(engine, id, x, y, w, h);

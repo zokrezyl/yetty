@@ -153,7 +153,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
         /* Metrics-only: advance only, no rasterization. */
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
-    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
+        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         return YETTY_OK(uint32, slot);
     }
 
@@ -161,7 +161,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
         FT_Load_Glyph(f->ft_face, gid, FT_LOAD_RENDER) != 0) {
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
-    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
+        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }
@@ -177,7 +177,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
     if (bmp->width == 0 || bmp->rows == 0) {
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
-    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
+        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }
@@ -187,7 +187,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
               bmp->rows, f->cell_size);
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
-    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
+        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }

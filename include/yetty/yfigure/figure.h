@@ -52,9 +52,8 @@ struct yetty_yfigure_figure_ops {
      * pane via `target->viewport`. The figure owns its own pipeline
      * + binder (yplot-pattern); the concrete kind of target sitting
      * behind the handle doesn't matter to it. */
-    struct yetty_ycore_void_result (*render)(
-        struct yetty_yfigure_figure *self,
-        struct yetty_ydraw_target *target);
+    struct yetty_ycore_void_result (*render)(struct yetty_yfigure_figure *self,
+                                             struct yetty_ydraw_target *target);
 
     /* Consume input directly from the wire-statemachine. A coroutine —
      * yields when the SM has no bytes ready and resumes when the next
@@ -72,17 +71,15 @@ struct yetty_yfigure_figure_ops {
      * the SM directly and decodes as it goes.
      *
      * NULL = figure is purely visual and rejects wire updates. */
-    struct yetty_ycore_void_result (*process_input)(
-        struct yetty_yfigure_figure *self,
-        struct yetty_ywire_wire_statemachine *sm);
+    struct yetty_ycore_void_result (*process_input)(struct yetty_yfigure_figure *self,
+                                                    struct yetty_ywire_wire_statemachine *sm);
 
     /* Apply a wire update from an in-memory byte buffer. TEMPORARY —
      * the migration target is `process_input` above. Kept while ygrid
      * and the container's admin records still go through the buffered
      * path; will be deleted once every figure kind speaks `process_input`. */
-    struct yetty_ycore_void_result (*process_bytes)(
-        struct yetty_yfigure_figure *self,
-        const uint8_t *bytes, size_t bytes_len);
+    struct yetty_ycore_void_result (*process_bytes)(struct yetty_yfigure_figure *self,
+                                                    const uint8_t *bytes, size_t bytes_len);
 };
 
 struct yetty_yfigure_figure {
@@ -133,8 +130,7 @@ struct yetty_yfigure_registry;
  * any CREATE_CHILD record to fail with a "no registry" error, useful
  * for containers that should never accept new children. */
 struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create(
-    struct yetty_ycore_rectangle rect,
-    const struct yetty_context *context,
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context,
     struct yetty_yfigure_registry *registry);
 
 /* Consume one full OSC envelope's body off the SM as a record stream
@@ -146,24 +142,21 @@ struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create(
  * After this returns, the container's child set reflects every CREATE/
  * DELETE/UPDATE in the envelope. */
 struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
-    struct yetty_yfigure_container *container,
-    struct yetty_ywire_wire_statemachine *sm);
+    struct yetty_yfigure_container *container, struct yetty_ywire_wire_statemachine *sm);
 
 /* Shift every child rect arriving via admin CREATE_CHILD / SET_CHILD_RECT
  * records by (offset_x, offset_y). Producers emit coords in pane-local
  * space; this offset converts them to target pixel space. Default (0, 0).
  * Doesn't retroactively shift already-bound children. */
-void yetty_yfigure_container_set_viewport_offset(
-    struct yetty_yfigure_container *container,
-    float offset_x, float offset_y);
+void yetty_yfigure_container_set_viewport_offset(struct yetty_yfigure_container *container,
+                                                 float offset_x, float offset_y);
 
 /* Direct byte-stream entry — same record decoding as consume_envelope
  * but reads from a contiguous byte array instead of pumping the SM.
  * Used by in-process producers (e.g. yui's embedded ygui_engine) that
  * already hold the serialized record stream. */
 struct yetty_ycore_void_result yetty_yfigure_container_process_records(
-    struct yetty_yfigure_container *container,
-    const uint8_t *bytes, size_t bytes_len);
+    struct yetty_yfigure_container *container, const uint8_t *bytes, size_t bytes_len);
 
 /* Upcast: a group is a figure. */
 struct yetty_yfigure_figure *yetty_yfigure_container_as_figure(
@@ -178,8 +171,7 @@ struct yetty_yfigure_figure *yetty_yfigure_container_as_figure(
  * The group takes ownership: child->ops->destroy runs when the group
  * is destroyed or the child is removed by id. */
 struct yetty_ycore_void_result yetty_yfigure_container_add_child(
-    struct yetty_yfigure_container *group, struct yetty_yfigure_figure *child,
-    uint32_t id);
+    struct yetty_yfigure_container *group, struct yetty_yfigure_figure *child, uint32_t id);
 
 /* Look up a child by its parent-scoped id. Returns NULL when the id
  * isn't bound. Lookup is O(1) — the group indexes children by id via
@@ -204,12 +196,11 @@ struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(
  * the same value is returned from for_each — callers use that as the
  * "found" / hit short-circuit. Returns 0 when the visitor ran to
  * completion. */
-typedef int (*yetty_yfigure_container_visitor_fn)(
-    uint32_t id, struct yetty_yfigure_figure *child, void *user);
+typedef int (*yetty_yfigure_container_visitor_fn)(uint32_t id, struct yetty_yfigure_figure *child,
+                                                  void *user);
 
-int yetty_yfigure_container_for_each(
-    struct yetty_yfigure_container *group,
-    yetty_yfigure_container_visitor_fn fn, void *user);
+int yetty_yfigure_container_for_each(struct yetty_yfigure_container *group,
+                                     yetty_yfigure_container_visitor_fn fn, void *user);
 
 /*===========================================================================
  * Hit-test against a container's children.
@@ -231,8 +222,8 @@ struct yetty_yfigure_hit {
     float local_y;
 };
 
-struct yetty_yfigure_hit yetty_yfigure_container_hit_test(
-    struct yetty_yfigure_container *container, float x, float y);
+struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_container *container,
+                                                          float x, float y);
 
 #ifdef __cplusplus
 }

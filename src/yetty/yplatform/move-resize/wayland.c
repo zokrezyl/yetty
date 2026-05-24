@@ -80,8 +80,7 @@ void yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
     if (!toplevel) {
         ydebug("wayland-move: no xdg_toplevel reachable "
                "(wl.xdg.toplevel=%p, wl.libdecor.frame=%p) — bailing",
-               (void *)window->wl.xdg.toplevel,
-               (void *)window->wl.libdecor.frame);
+               (void *)window->wl.xdg.toplevel, (void *)window->wl.libdecor.frame);
         return;
     }
 
@@ -92,13 +91,12 @@ void yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
      * decided "this is a titlebar drag" and posted us back through the
      * output_pipe, the value is still the one from THIS press (no other
      * button events have happened — the user is holding the mouse). */
-    ydebug("wayland-move: xdg_toplevel_move(toplevel=%p, seat=%p, serial=%u)",
-           (void *)toplevel, (void *)_glfw.wl.seat, (unsigned)_glfw.wl.serial);
+    ydebug("wayland-move: xdg_toplevel_move(toplevel=%p, seat=%p, serial=%u)", (void *)toplevel,
+           (void *)_glfw.wl.seat, (unsigned)_glfw.wl.serial);
     xdg_toplevel_move(toplevel, _glfw.wl.seat, _glfw.wl.serial);
 }
 
-void yetty_yplatform_wayland_begin_interactive_resize(GLFWwindow *handle,
-                                                       unsigned int edge)
+void yetty_yplatform_wayland_begin_interactive_resize(GLFWwindow *handle, unsigned int edge)
 {
     if (!handle || edge == 0) {
         return;

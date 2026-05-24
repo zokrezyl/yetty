@@ -29,8 +29,7 @@ struct yetty_platform_pty_ops {
      * before the first grid is laid out); yetty pushes a real value as
      * soon as the layer cell size is known. */
     struct yetty_ycore_void_result (*resize)(struct yetty_platform_pty *self, uint32_t cols,
-                                             uint32_t rows, uint32_t pixel_w,
-                                             uint32_t pixel_h);
+                                             uint32_t rows, uint32_t pixel_w, uint32_t pixel_h);
     struct yetty_ycore_void_result (*stop)(struct yetty_platform_pty *self);
     struct yetty_platform_pty_pipe_source *(*pipe_source)(struct yetty_platform_pty *self);
 };
@@ -64,8 +63,7 @@ struct yetty_yplatform_memory_pty_pair {
     struct yetty_platform_pty *a;
     struct yetty_platform_pty *b;
 };
-YETTY_YRESULT_DECLARE(yetty_yplatform_memory_pty_pair,
-                      struct yetty_yplatform_memory_pty_pair);
+YETTY_YRESULT_DECLARE(yetty_yplatform_memory_pty_pair, struct yetty_yplatform_memory_pty_pair);
 struct yetty_yplatform_memory_pty_pair_result yetty_yplatform_memory_pty_pair_create(
     size_t buf_size);
 
@@ -77,8 +75,7 @@ struct yetty_yplatform_memory_pty_pair_result yetty_yplatform_memory_pty_pair_cr
  * not own `userdata`. */
 typedef void (*yetty_yplatform_memory_pty_wake_fn)(void *userdata);
 void yetty_yplatform_memory_pty_set_wake(struct yetty_platform_pty *endpoint,
-                                         yetty_yplatform_memory_pty_wake_fn wake,
-                                         void *userdata);
+                                         yetty_yplatform_memory_pty_wake_fn wake, void *userdata);
 
 /* Host-side TCP port that the TinyEMU slirp hostfwd maps to the in-guest
  * telnetd (tcp/23). Keep in sync with assets/yemu/temu/yetty-temu-extended.cfg's

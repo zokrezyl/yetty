@@ -33,7 +33,7 @@ extern "C" {
  */
 struct yetty_yinit_runtime {
     /* CLI passthrough (NULL on platforms without argv, e.g. android). */
-    int    argc;
+    int argc;
     char **argv;
 
     /* Loaded yconfig (always present — yinit reads it before calling
@@ -44,15 +44,15 @@ struct yetty_yinit_runtime {
     /* WebGPU instance + surface. `surface` is NULL in headless mode
      * (config key vnc/headless=true) — the worker may still run, just
      * without a presentable surface. */
-    void    *instance;             /* WGPUInstance */
-    void    *surface;              /* WGPUSurface, NULL if headless */
+    void *instance; /* WGPUInstance */
+    void *surface;  /* WGPUSurface, NULL if headless */
     uint32_t surface_width;
     uint32_t surface_height;
-    float    content_scale;
+    float content_scale;
 
     /* X11-tile renderer co-handles (Linux/X11 only; NULL/0 elsewhere). */
-    void          *x11_display;
-    unsigned long  x11_window;
+    void *x11_display;
+    unsigned long x11_window;
 
     /* Opaque native window handle (see comment above struct). */
     void *window;
@@ -61,10 +61,10 @@ struct yetty_yinit_runtime {
      *   platform_input_pipe — main thread (OS events) → worker thread
      *   output_pipe         — worker thread → main thread (clipboard,
      *                         window manager); NULL if not requested */
-    struct yetty_ycore_xthread_event_pipe   *platform_input_pipe;
-    struct yetty_ycore_xthread_event_pipe   *output_pipe;
+    struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
+    struct yetty_ycore_xthread_event_pipe *output_pipe;
     struct yetty_platform_clipboard_manager *clipboard_manager;
-    struct yetty_yplatform_window_manager   *window_manager;
+    struct yetty_yplatform_window_manager *window_manager;
 };
 
 /* Worker function — runs on a dedicated thread (or on the main thread
@@ -72,8 +72,8 @@ struct yetty_yinit_runtime {
  * is owned by yinit and stays valid until the worker returns.
  *
  * A non-OK result is printed to stderr by yinit before teardown. */
-typedef struct yetty_ycore_void_result
-(*yetty_yinit_worker_fn)(struct yetty_yinit_runtime *rt, void *user);
+typedef struct yetty_ycore_void_result (*yetty_yinit_worker_fn)(struct yetty_yinit_runtime *rt,
+                                                                void *user);
 
 /* Per-app bootstrap knobs.
  *
@@ -95,8 +95,7 @@ struct yetty_yinit_app_config {
  * `app_cfg` may be NULL — defaults are: extract_yetty_assets=false.
  *
  * Returns the process exit code. */
-int yetty_yinit_run(int argc, char **argv,
-                    const struct yetty_yinit_app_config *app_cfg,
+int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *app_cfg,
                     yetty_yinit_worker_fn worker, void *user);
 
 #ifdef __cplusplus

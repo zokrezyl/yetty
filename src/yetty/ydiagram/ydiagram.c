@@ -53,15 +53,14 @@ struct yetty_ydiagram_buffer_result yetty_ydiagram_render_mermaid_full(
         .scene_max_x = graph.max_x,
         .scene_max_y = graph.max_y,
     };
-    struct yetty_ydraw_draw_list_result br =
-        yetty_ydraw_draw_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
         yetty_ydiagram_graph_destroy(&graph);
         return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: buffer create failed", br);
     }
 
-    struct yetty_ycore_void_result rr = yetty_ydiagram_render(
-        &graph, br.value, render_options, measure, measure_userdata);
+    struct yetty_ycore_void_result rr =
+        yetty_ydiagram_render(&graph, br.value, render_options, measure, measure_userdata);
     if (YETTY_IS_ERR(rr)) {
         yetty_ydraw_draw_list_destroy(br.value);
         yetty_ydiagram_graph_destroy(&graph);

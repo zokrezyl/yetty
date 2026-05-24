@@ -171,8 +171,7 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
         (size_t)button < sizeof(st->last_press_sec) / sizeof(st->last_press_sec[0])) {
         double now_sec = yetty_yplatform_ytime_monotonic_sec();
         int is_double = st->last_press_sec[button] > 0.0 &&
-                        (now_sec - st->last_press_sec[button]) <
-                            YETTY_OS_DBL_CLICK_THRESHOLD_SEC;
+                        (now_sec - st->last_press_sec[button]) < YETTY_OS_DBL_CLICK_THRESHOLD_SEC;
         if (is_double) {
             struct yetty_yui_event dbl = {0};
             dbl.type = YETTY_YCORE_MOUSE_DOUBLE_CLICK;

@@ -908,8 +908,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 			 * confirm it's not the source of the user-reported
 			 * scattered glyphs we keep it dormant. */
             (void)yetty_ydraw_draw_list_add_text(buf, b->x, baseline_y, &txt, b->font_size,
-                                                      pack_rgba(b->fg), z++, /*font_id=*/-1,
-                                                      /*rotation=*/0.0f);
+                                                 pack_rgba(b->fg), z++, /*font_id=*/-1,
+                                                 /*rotation=*/0.0f);
             if (b->underline && b->w > 0) {
                 float thickness = b->font_size * 0.06f;
                 if (thickness < 1.0f) {

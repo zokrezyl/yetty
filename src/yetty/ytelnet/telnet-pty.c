@@ -105,9 +105,9 @@ struct yetty_ytelnet_telnet_pty {
      * had a chance to drain. The ring grows on demand, so the producer
      * never blocks regardless of payload size. */
     uint8_t *tx_overflow;
-    size_t   tx_overflow_cap;
-    size_t   tx_overflow_head; /* read cursor (drain from here) */
-    size_t   tx_overflow_tail; /* write cursor (append here) */
+    size_t tx_overflow_cap;
+    size_t tx_overflow_head; /* read cursor (drain from here) */
+    size_t tx_overflow_tail; /* write cursor (append here) */
 };
 
 /* Forward declarations */
@@ -117,7 +117,8 @@ static struct yetty_ycore_size_result telnet_pty_read(struct yetty_platform_pty 
 static struct yetty_ycore_size_result telnet_pty_write(struct yetty_platform_pty *self,
                                                        const char *data, size_t len);
 static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h);
+                                                        uint32_t cols, uint32_t rows,
+                                                        uint32_t pixel_w, uint32_t pixel_h);
 static struct yetty_ycore_void_result telnet_pty_stop(struct yetty_platform_pty *self);
 static struct yetty_platform_pty_pipe_source *telnet_pty_pipe_source(
     struct yetty_platform_pty *self);
@@ -277,8 +278,8 @@ static size_t telnet_drain_overflow_once(struct yetty_ytelnet_telnet_pty *pty)
 
 /* Append `len` bytes to the overflow ring. Grows on demand — the
  * producer never blocks. */
-static void telnet_overflow_append(struct yetty_ytelnet_telnet_pty *pty,
-                                   const uint8_t *src, size_t len)
+static void telnet_overflow_append(struct yetty_ytelnet_telnet_pty *pty, const uint8_t *src,
+                                   size_t len)
 {
     /* Compact first if there's stale head padding eating capacity. */
     if (pty->tx_overflow_head > 0) {
@@ -295,8 +296,7 @@ static void telnet_overflow_append(struct yetty_ytelnet_telnet_pty *pty,
         }
         uint8_t *grown = realloc(pty->tx_overflow, newcap);
         if (!grown) {
-            ywarn("telnet: overflow realloc to %zu bytes failed; dropping %zu bytes",
-                  newcap, len);
+            ywarn("telnet: overflow realloc to %zu bytes failed; dropping %zu bytes", newcap, len);
             return;
         }
         pty->tx_overflow = grown;
@@ -506,7 +506,8 @@ static struct yetty_ycore_size_result telnet_pty_write(struct yetty_platform_pty
 }
 
 static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h)
+                                                        uint32_t cols, uint32_t rows,
+                                                        uint32_t pixel_w, uint32_t pixel_h)
 {
     struct yetty_ytelnet_telnet_pty *pty = (struct yetty_ytelnet_telnet_pty *)self;
 
@@ -622,7 +623,8 @@ struct yetty_yplatform_pty_ptr_result yetty_ytelnet_telnet_pty_create(
             pty->output_pipe->ops->set_nonblocking_write(pty->output_pipe);
         if (YETTY_IS_ERR(nbr)) {
             ywarn("telnet_pty_create: set_nonblocking_write failed: %s — large "
-                  "payloads may deadlock", nbr.error.msg);
+                  "payloads may deadlock",
+                  nbr.error.msg);
             yetty_ycore_error_destroy(nbr.error);
         }
     }

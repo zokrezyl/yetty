@@ -54,8 +54,9 @@ static struct yetty_ycore_void_result render_target_vnc_render_layer(
     return rt->inner->ops->render_layer(rt->inner, layer);
 }
 
-static struct yetty_ycore_void_result render_target_vnc_blend(
-    struct yetty_ydraw_target *self, struct yetty_ydraw_target **sources, size_t count)
+static struct yetty_ycore_void_result render_target_vnc_blend(struct yetty_ydraw_target *self,
+                                                              struct yetty_ydraw_target **sources,
+                                                              size_t count)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     return rt->inner->ops->blend(rt->inner, sources, count);
@@ -87,8 +88,7 @@ static struct yetty_ycore_void_result render_target_vnc_resize(
  * Present - send to VNC and optionally to surface
  *===========================================================================*/
 
-static struct yetty_ycore_void_result render_target_vnc_present(
-    struct yetty_ydraw_target *self)
+static struct yetty_ycore_void_result render_target_vnc_present(struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     struct yetty_ycore_void_result res;

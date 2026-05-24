@@ -51,8 +51,8 @@
  *===========================================================================*/
 
 struct yetty_ypdf_font_info {
-    char tag[64];                       /* e.g. "/F1" or "F1" */
-    int buffer_font_id;                 /* yetty_ydraw_draw_list font index.
+    char tag[64];                      /* e.g. "/F1" or "F1" */
+    int buffer_font_id;                /* yetty_ydraw_draw_list font index.
                                          * Legacy single-buffer mode: assigned
                                          * once at first add, stable across
                                          * pages. Streaming mode: envelope-
@@ -1104,8 +1104,8 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
  * Per-font failures are absorbed (logged + continue), matching the legacy
  * extract_page_fonts. */
 static struct yetty_ycore_void_result extract_and_emit_page_fonts_streaming(
-    pdfio_obj_t *page_obj, struct yetty_ydraw_draw_list *buffer,
-    struct yetty_ypdf_font_info *fonts, size_t *font_count)
+    pdfio_obj_t *page_obj, struct yetty_ydraw_draw_list *buffer, struct yetty_ypdf_font_info *fonts,
+    size_t *font_count)
 {
     pdfio_dict_t *page_dict = pdfioObjGetDict(page_obj);
     if (!page_dict) {
@@ -1493,7 +1493,8 @@ static void rect_paint_cb(void *ud, float x, float y, float w, float h,
             {rx, ry + h, rx, ry},
         };
         for (int i = 0; i < 4; i++) {
-            yetty_ydraw_draw_list_add_cmd_add_segment(c->buffer, 0, 0, 0, sc, line_width, &sides[i]);
+            yetty_ydraw_draw_list_add_cmd_add_segment(c->buffer, 0, 0, 0, sc, line_width,
+                                                      &sides[i]);
         }
     }
 }
@@ -1726,8 +1727,7 @@ struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
             .scene_max_x = pw,
             .scene_max_y = ph + PAGE_MARGIN,
         };
-        struct yetty_ydraw_draw_list_result br =
-            yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+        struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
         if (YETTY_IS_ERR(br)) {
             emit_err = YETTY_ERR(yetty_ycore_void, "draw_list create failed", br);
             break;

@@ -98,11 +98,11 @@ extern "C" {
 /*=============================================================================
  * Magic numbers + versioning
  *===========================================================================*/
-#define YMGUI_WIRE_MAGIC_FRAME 0x4D47494Fu          /* 'OIGM' → "YMGI" */
-#define YMGUI_WIRE_MAGIC_TEX 0x4D58544Fu            /* 'OTXM' → "YMTX" */
-#define YMGUI_WIRE_MAGIC_CLEAR 0x4D4C4359u          /* "YCLM" */
-#define YMGUI_WIRE_MAGIC_CARD_PLACE 0x4D504443u     /* "CDPM" */
-#define YMGUI_WIRE_MAGIC_CARD_REMOVE 0x4D524443u    /* "CDRM" */
+#define YMGUI_WIRE_MAGIC_FRAME 0x4D47494Fu       /* 'OIGM' → "YMGI" */
+#define YMGUI_WIRE_MAGIC_TEX 0x4D58544Fu         /* 'OTXM' → "YMTX" */
+#define YMGUI_WIRE_MAGIC_CLEAR 0x4D4C4359u       /* "YCLM" */
+#define YMGUI_WIRE_MAGIC_CARD_PLACE 0x4D504443u  /* "CDPM" */
+#define YMGUI_WIRE_MAGIC_CARD_REMOVE 0x4D524443u /* "CDRM" */
 
 #define YMGUI_WIRE_VERSION 4u
 
@@ -256,7 +256,7 @@ struct yetty_ymgui_wire_frame {
     uint32_t version;    /* YMGUI_WIRE_VERSION */
     uint32_t flags;      /* YMGUI_FRAME_FLAG_* */
     uint32_t total_size; /* bytes in the whole frame payload */
-    uint32_t figure_id;    /* card this frame belongs to (must be live) */
+    uint32_t figure_id;  /* card this frame belongs to (must be live) */
     uint32_t cmd_list_count;
     float display_pos_x; /* ImDrawData::DisplayPos (typically 0) */
     float display_pos_y;
@@ -274,11 +274,11 @@ struct yetty_ymgui_wire_frame {
  * Textures are owned per-card: tex_id is namespaced to figure_id.
  *-------------------------------------------------------------------------*/
 struct yetty_ymgui_wire_tex {
-    uint32_t magic;   /* YMGUI_WIRE_MAGIC_TEX */
-    uint32_t version; /* YMGUI_WIRE_VERSION */
+    uint32_t magic;     /* YMGUI_WIRE_MAGIC_TEX */
+    uint32_t version;   /* YMGUI_WIRE_VERSION */
     uint32_t figure_id; /* card this texture belongs to (must be live) */
-    uint32_t tex_id;  /* per-card; 1 = font atlas */
-    uint32_t format;  /* YMGUI_TEX_FMT_* */
+    uint32_t tex_id;    /* per-card; 1 = font atlas */
+    uint32_t format;    /* YMGUI_TEX_FMT_* */
     uint32_t width;
     uint32_t height;
     uint32_t total_size; /* bytes in the whole tex payload */
@@ -303,10 +303,10 @@ struct yetty_ymgui_wire_tex {
 #define YMGUI_CLEAR_FLAG_KEEP_VISIBLE (1u << 0)
 
 struct yetty_ymgui_wire_clear {
-    uint32_t magic;   /* YMGUI_WIRE_MAGIC_CLEAR */
-    uint32_t version; /* YMGUI_WIRE_VERSION */
+    uint32_t magic;     /* YMGUI_WIRE_MAGIC_CLEAR */
+    uint32_t version;   /* YMGUI_WIRE_VERSION */
     uint32_t figure_id; /* YMGUI_FIGURE_ID_NONE = all cards */
-    uint32_t flags;   /* YMGUI_CLEAR_FLAG_* */
+    uint32_t flags;     /* YMGUI_CLEAR_FLAG_* */
 };
 
 /*---------------------------------------------------------------------------
@@ -331,14 +331,14 @@ struct yetty_ymgui_wire_clear {
  *   re-resolved against the current visible window.
  *-------------------------------------------------------------------------*/
 struct yetty_ymgui_wire_card_place {
-    uint32_t magic;   /* YMGUI_WIRE_MAGIC_CARD_PLACE */
-    uint32_t version; /* YMGUI_WIRE_VERSION */
+    uint32_t magic;     /* YMGUI_WIRE_MAGIC_CARD_PLACE */
+    uint32_t version;   /* YMGUI_WIRE_VERSION */
     uint32_t figure_id; /* must be != YMGUI_FIGURE_ID_NONE */
-    uint32_t flags;   /* reserved, send 0 */
-    int32_t col;      /* grid column (0-based) */
-    int32_t row;      /* grid row (0-based, relative to visible top) */
-    uint32_t w_cells; /* width  in cells; 0 = "track right edge"  */
-    uint32_t h_cells; /* height in cells; 0 = "track bottom edge"
+    uint32_t flags;     /* reserved, send 0 */
+    int32_t col;        /* grid column (0-based) */
+    int32_t row;        /* grid row (0-based, relative to visible top) */
+    uint32_t w_cells;   /* width  in cells; 0 = "track right edge"  */
+    uint32_t h_cells;   /* height in cells; 0 = "track bottom edge"
                                * (both dimensions follow grid resizes
                                * dynamically while the value stays 0)  */
 };

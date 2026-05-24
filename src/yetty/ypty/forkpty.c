@@ -219,8 +219,7 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_fork_pty_create(
      * runtime path on these platforms always selects --telnet or --temu so
      * this function should never be reached. Fail loudly if it is. */
     (void)config;
-    return YETTY_ERR(yetty_yplatform_pty_ptr,
-                     "forkpty not available in Apple mobile sandbox");
+    return YETTY_ERR(yetty_yplatform_pty_ptr, "forkpty not available in Apple mobile sandbox");
 #else
     struct yetty_yplatform_fork_pty *pty;
     struct yetty_yconfig_shell_argv shellv;

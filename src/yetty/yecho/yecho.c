@@ -723,9 +723,8 @@ static struct yetty_ycore_void_result render_text_run(struct render_state *rs, c
                     .size = llen,
                     .capacity = llen,
                 };
-                struct yetty_ycore_void_result tr =
-                    yetty_ydraw_draw_list_add_text(rs->buf, rs->cursor_x, rs->cursor_y,
-                                                        &text, rs->font_size, color, 0, -1, 0.0f);
+                struct yetty_ycore_void_result tr = yetty_ydraw_draw_list_add_text(
+                    rs->buf, rs->cursor_x, rs->cursor_y, &text, rs->font_size, color, 0, -1, 0.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "buffer_add_text failed");
                 size_t cp_count = utf8_codepoint_count(s + line_start, llen);
                 rs->cursor_x += (float)cp_count * rs->font_size * YECHO_GLYPH_ADVANCE;
@@ -1093,14 +1092,17 @@ static struct yetty_ycore_void_result render_yvideo_block(struct render_state *r
         } else if (strcmp(k, "fps") == 0 && v) {
             fps = strtof(v, NULL);
         } else if (strcmp(k, "loop") == 0 && v) {
-            if (strtol(v, NULL, 10) == 0) flags &= ~YETTY_YVIDEO_FLAG_LOOP;
+            if (strtol(v, NULL, 10) == 0) {
+                flags &= ~YETTY_YVIDEO_FLAG_LOOP;
+            }
         } else if (strcmp(k, "autoplay") == 0 && v) {
-            if (strtol(v, NULL, 10) == 0) flags &= ~YETTY_YVIDEO_FLAG_AUTOPLAY;
+            if (strtol(v, NULL, 10) == 0) {
+                flags &= ~YETTY_YVIDEO_FLAG_AUTOPLAY;
+            }
         }
     }
     if (!src || !*src) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "video block: missing required src= attr");
+        return YETTY_ERR(yetty_ycore_void, "video block: missing required src= attr");
     }
     if (video_w == 0u || video_h == 0u) {
         video_w = 640u;
@@ -1173,15 +1175,13 @@ static struct yetty_ycore_void_result render_yvideo_block(struct render_state *r
         free(nal_buf);
         return YETTY_ERR(yetty_ycore_void, "video block: prim alloc failed");
     }
-    struct yetty_ycore_size_result sr =
-        yetty_yvideo_uniforms_serialize(&u, &bufs, prim, required);
+    struct yetty_ycore_size_result sr = yetty_yvideo_uniforms_serialize(&u, &bufs, prim, required);
     free(nal_buf);
     if (YETTY_IS_ERR(sr)) {
         free(prim);
         return YETTY_ERR(yetty_ycore_void, "video block: serialize failed", sr);
     }
-    struct yetty_ydraw_id_result idr =
-        yetty_ydraw_draw_list_add_prim(rs->buf, prim, required);
+    struct yetty_ydraw_id_result idr = yetty_ydraw_draw_list_add_prim(rs->buf, prim, required);
     free(prim);
     if (YETTY_IS_ERR(idr)) {
         return YETTY_ERR(yetty_ycore_void, "video block: add_prim failed", idr);
@@ -1315,8 +1315,7 @@ struct yetty_ydraw_draw_list_result yetty_yecho_render(
         .scene_max_x = (float)(width_cells * cell_w),
         .scene_max_y = (float)cell_h * 2.0f, /* updated as content grows */
     };
-    struct yetty_ydraw_draw_list_result br =
-        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ydraw_draw_list, "ydraw buffer create failed", br);
     }
@@ -1378,8 +1377,7 @@ struct yetty_ydraw_draw_list_result yetty_yecho_render(
                 sb_free(&fb);
                 if (YETTY_IS_ERR(tr)) {
                     yetty_ydraw_draw_list_destroy(rs.buf);
-                    return YETTY_ERR(yetty_ydraw_draw_list, "glyph fallback emission failed",
-                                     tr);
+                    return YETTY_ERR(yetty_ydraw_draw_list, "glyph fallback emission failed", tr);
                 }
             } else {
                 struct strbuf u = {0};
@@ -1411,7 +1409,7 @@ struct yetty_ydraw_draw_list_result yetty_yecho_render(
 
     /* Update the scene bounds to what we actually painted. */
     yetty_ydraw_draw_list_set_scene_bounds(rs.buf, 0.0f, 0.0f, rs.scene_max_x,
-                                                rs.cursor_y + rs.font_size);
+                                           rs.cursor_y + rs.font_size);
 
     return YETTY_OK(yetty_ydraw_draw_list, rs.buf);
 }
@@ -1437,15 +1435,14 @@ struct yetty_ydraw_draw_list_result yetty_yecho_render_string(
 #include <yetty/yface/yface.h>
 #include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_BIN */
 
-struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
-    const struct yetty_ydraw_draw_list *buffer, FILE *out)
+struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+                                                        FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
-    size_t raw_size =
-        yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)buffer, &raw);
+    size_t raw_size = yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: empty serialize");
     }

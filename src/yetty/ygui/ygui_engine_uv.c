@@ -66,19 +66,19 @@
 
 struct ygui_uv_write_req {
     uv_write_t req;
-    char      *data;
-    size_t     len;
+    char *data;
+    size_t len;
     struct ygui_uv_write_req *next;
-    struct ygui_uv_pty       *owner;
+    struct ygui_uv_pty *owner;
 };
 
 struct ygui_uv_pty {
     struct yetty_platform_pty base;
     uv_pipe_t pipe;
-    int       pipe_open;
+    int pipe_open;
     struct ygui_uv_write_req *head;
     struct ygui_uv_write_req *tail;
-    int       in_flight;
+    int in_flight;
 };
 
 static void ygui_uv_pty_kick(struct ygui_uv_pty *p);
@@ -174,7 +174,8 @@ static struct yetty_ycore_size_result ygui_uv_pty_op_read(struct yetty_platform_
 }
 
 static struct yetty_ycore_void_result ygui_uv_pty_op_resize(struct yetty_platform_pty *self,
-                                                            uint32_t cols, uint32_t rows, uint32_t pixel_w, uint32_t pixel_h)
+                                                            uint32_t cols, uint32_t rows,
+                                                            uint32_t pixel_w, uint32_t pixel_h)
 {
     (void)self;
     (void)cols;
@@ -228,8 +229,7 @@ static struct yetty_ycore_void_result ygui_uv_pty_op_destroy(struct yetty_platfo
             }
             if (p->head || p->in_flight) {
                 yerror("ygui_uv_pty: flush gave up with %s%s pending",
-                       p->in_flight ? "in-flight " : "",
-                       p->head ? "queued" : "");
+                       p->in_flight ? "in-flight " : "", p->head ? "queued" : "");
             }
         }
     }
@@ -251,11 +251,11 @@ static struct yetty_ycore_void_result ygui_uv_pty_op_destroy(struct yetty_platfo
 }
 
 static const struct yetty_platform_pty_ops ygui_uv_pty_ops = {
-    .destroy     = ygui_uv_pty_op_destroy,
-    .read        = ygui_uv_pty_op_read,
-    .write       = ygui_uv_pty_op_write,
-    .resize      = ygui_uv_pty_op_resize,
-    .stop        = ygui_uv_pty_op_stop,
+    .destroy = ygui_uv_pty_op_destroy,
+    .read = ygui_uv_pty_op_read,
+    .write = ygui_uv_pty_op_write,
+    .resize = ygui_uv_pty_op_resize,
+    .stop = ygui_uv_pty_op_stop,
     .pipe_source = ygui_uv_pty_op_pipe_source,
 };
 
@@ -287,9 +287,9 @@ static struct yetty_platform_pty *ygui_uv_pty_wrap_fd(uv_loop_t *loop, int fd)
  *===========================================================================*/
 
 struct ygui_uv_state {
-    uv_loop_t   *loop;
-    int          owns_loop;
-    uv_poll_t    stdin_poll;
+    uv_loop_t *loop;
+    int owns_loop;
+    uv_poll_t stdin_poll;
     uv_prepare_t prepare_handle;
     /* SIGWINCH wakeup. libuv installs its own sigprocmask which
      * silently masks the raw signal() handler that engine.c installs;
@@ -297,7 +297,7 @@ struct ygui_uv_state {
      * signal from inside a libuv loop. Fires sigwinch_cb which simply
      * sets the resize-pending flag — prepare_cb does the actual ioctl
      * re-read. */
-    uv_signal_t  sigwinch_handle;
+    uv_signal_t sigwinch_handle;
 };
 
 static struct ygui_uv_state *uv_state_of(struct yetty_ygui_engine *engine)
@@ -409,9 +409,9 @@ static void prepare_cb(uv_prepare_t *handle)
                     yetty_ycore_error_destroy(pr.error);
                 }
             }
-            if (ws.ws_xpixel > 0 && ws.ws_ypixel > 0
-                && ((float)ws.ws_xpixel != engine->display_pixel_w
-                    || (float)ws.ws_ypixel != engine->display_pixel_h)) {
+            if (ws.ws_xpixel > 0 && ws.ws_ypixel > 0 &&
+                ((float)ws.ws_xpixel != engine->display_pixel_w ||
+                 (float)ws.ws_ypixel != engine->display_pixel_h)) {
                 /* Path the figure-tree wire used to drive via
                  * SC_CLIENT_INPUT_FIGURE_RESIZE: set the pixel-size
                  * fields + needs_resize, the next render runs
@@ -522,8 +522,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_bootstrap_runtime(
     }
     s->prepare_handle.data = engine;
     if (uv_prepare_start(&s->prepare_handle, prepare_cb) != 0) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "bootstrap_runtime: prepare uv_prepare_start failed");
+        return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: prepare uv_prepare_start failed");
     }
 
     /* SIGWINCH wakeup via uv_signal_t. The signal() handler in
@@ -592,15 +591,14 @@ void yetty_ygui_engine_run(struct yetty_ygui_engine *engine)
 
 struct ygui_engine_ptr_result yetty_ygui_engine_create(struct yetty_ygui_engine_args args)
 {
-    struct ygui_engine_ptr_result alloc_r =
-        yetty_ygui_engine_internal_alloc(args.name, args.theme);
+    struct ygui_engine_ptr_result alloc_r = yetty_ygui_engine_internal_alloc(args.name, args.theme);
     if (YETTY_IS_ERR(alloc_r)) {
         return alloc_r;
     }
     struct yetty_ygui_engine *engine = alloc_r.value;
     struct yetty_ycore_void_result br =
         yetty_ygui_engine_internal_bootstrap_runtime(engine, /*borrowed_pty=*/NULL,
-                                                      /*borrowed_loop=*/NULL);
+                                                     /*borrowed_loop=*/NULL);
     if (YETTY_IS_ERR(br)) {
         /* engine_destroy tears down whatever the partial bootstrap did
          * manage to wire up. */
@@ -608,8 +606,7 @@ struct ygui_engine_ptr_result yetty_ygui_engine_create(struct yetty_ygui_engine_
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
-        return YETTY_ERR(ygui_engine_ptr,
-                         "yetty_ygui_engine_create: runtime bootstrap failed", br);
+        return YETTY_ERR(ygui_engine_ptr, "yetty_ygui_engine_create: runtime bootstrap failed", br);
     }
     return YETTY_OK(ygui_engine_ptr, engine);
 }

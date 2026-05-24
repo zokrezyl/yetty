@@ -32,29 +32,25 @@
 struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(
     const struct yetty_context *context)
 {
-    if (!context)
-        return YETTY_ERR(yetty_ymgui_pipeline_ptr,
-                         "ymgui_pipeline_create: NULL context");
-    if (!context->runtime || !context->runtime->gpu.device ||
-        !context->runtime->gpu.queue)
-        return YETTY_ERR(yetty_ymgui_pipeline_ptr,
-                         "ymgui_pipeline_create: gpu context incomplete");
+    if (!context) {
+        return YETTY_ERR(yetty_ymgui_pipeline_ptr, "ymgui_pipeline_create: NULL context");
+    }
+    if (!context->runtime || !context->runtime->gpu.device || !context->runtime->gpu.queue) {
+        return YETTY_ERR(yetty_ymgui_pipeline_ptr, "ymgui_pipeline_create: gpu context incomplete");
+    }
 
     struct yetty_yconfig_config *cfg = context->runtime->config;
     const char *shaders_dir = cfg->ops->get_string(cfg, "paths/shaders", "");
     char shader_path[512];
-    snprintf(shader_path, sizeof(shader_path), "%s/ymgui-layer.wgsl",
-             shaders_dir);
-    struct yetty_ycore_buffer_result shader_res =
-        yetty_ycore_read_file(shader_path);
+    snprintf(shader_path, sizeof(shader_path), "%s/ymgui-layer.wgsl", shaders_dir);
+    struct yetty_ycore_buffer_result shader_res = yetty_ycore_read_file(shader_path);
     YETTY_RETURN_IF_ERR(yetty_ymgui_pipeline_ptr, shader_res,
                         "ymgui_pipeline_create: read_file(ymgui-layer.wgsl)");
 
     struct yetty_ymgui_pipeline *p = calloc(1, sizeof(*p));
     if (!p) {
         free(shader_res.value.data);
-        return YETTY_ERR(yetty_ymgui_pipeline_ptr,
-                         "ymgui_pipeline_create: oom");
+        return YETTY_ERR(yetty_ymgui_pipeline_ptr, "ymgui_pipeline_create: oom");
     }
     p->device = context->runtime->gpu.device;
     p->queue = context->runtime->gpu.queue;
@@ -62,23 +58,23 @@ struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(
 
     WGPUShaderSourceWGSL wgsl = {0};
     wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
-    wgsl.code = (WGPUStringView){(const char *)shader_res.value.data,
-                                 shader_res.value.size};
+    wgsl.code = (WGPUStringView){(const char *)shader_res.value.data, shader_res.value.size};
     WGPUShaderModuleDescriptor sm_desc = {0};
     sm_desc.nextInChain = &wgsl.chain;
     p->shader_module = wgpuDeviceCreateShaderModule(p->device, &sm_desc);
     free(shader_res.value.data);
     if (!p->shader_module) {
         struct yetty_ycore_void_result d = yetty_ymgui_pipeline_destroy(p);
-        if (YETTY_IS_ERR(d)) yetty_ycore_error_destroy(d.error);
+        if (YETTY_IS_ERR(d)) {
+            yetty_ycore_error_destroy(d.error);
+        }
         return YETTY_ERR(yetty_ymgui_pipeline_ptr,
                          "ymgui_pipeline_create: shader module creation failed");
     }
 
     WGPUBindGroupLayoutEntry bgl_entries[3] = {0};
     bgl_entries[0].binding = 0;
-    bgl_entries[0].visibility =
-        WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+    bgl_entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
     bgl_entries[0].buffer.type = WGPUBufferBindingType_Uniform;
     bgl_entries[0].buffer.minBindingSize = 32;
     bgl_entries[1].binding = 1;
@@ -95,7 +91,9 @@ struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(
     p->bind_group_layout = wgpuDeviceCreateBindGroupLayout(p->device, &bgl_desc);
     if (!p->bind_group_layout) {
         struct yetty_ycore_void_result d = yetty_ymgui_pipeline_destroy(p);
-        if (YETTY_IS_ERR(d)) yetty_ycore_error_destroy(d.error);
+        if (YETTY_IS_ERR(d)) {
+            yetty_ycore_error_destroy(d.error);
+        }
         return YETTY_ERR(yetty_ymgui_pipeline_ptr,
                          "ymgui_pipeline_create: bind group layout failed");
     }
@@ -106,9 +104,10 @@ struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(
     p->pipeline_layout = wgpuDeviceCreatePipelineLayout(p->device, &pl_desc);
     if (!p->pipeline_layout) {
         struct yetty_ycore_void_result d = yetty_ymgui_pipeline_destroy(p);
-        if (YETTY_IS_ERR(d)) yetty_ycore_error_destroy(d.error);
-        return YETTY_ERR(yetty_ymgui_pipeline_ptr,
-                         "ymgui_pipeline_create: pipeline layout failed");
+        if (YETTY_IS_ERR(d)) {
+            yetty_ycore_error_destroy(d.error);
+        }
+        return YETTY_ERR(yetty_ymgui_pipeline_ptr, "ymgui_pipeline_create: pipeline layout failed");
     }
 
     WGPUVertexAttribute vattrs[3] = {0};
@@ -165,9 +164,10 @@ struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(
     p->pipeline = wgpuDeviceCreateRenderPipeline(p->device, &rpd);
     if (!p->pipeline) {
         struct yetty_ycore_void_result d = yetty_ymgui_pipeline_destroy(p);
-        if (YETTY_IS_ERR(d)) yetty_ycore_error_destroy(d.error);
-        return YETTY_ERR(yetty_ymgui_pipeline_ptr,
-                         "ymgui_pipeline_create: render pipeline failed");
+        if (YETTY_IS_ERR(d)) {
+            yetty_ycore_error_destroy(d.error);
+        }
+        return YETTY_ERR(yetty_ymgui_pipeline_ptr, "ymgui_pipeline_create: render pipeline failed");
     }
 
     WGPUSamplerDescriptor sd = {0};
@@ -181,24 +181,36 @@ struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(
     p->sampler = wgpuDeviceCreateSampler(p->device, &sd);
     if (!p->sampler) {
         struct yetty_ycore_void_result d = yetty_ymgui_pipeline_destroy(p);
-        if (YETTY_IS_ERR(d)) yetty_ycore_error_destroy(d.error);
-        return YETTY_ERR(yetty_ymgui_pipeline_ptr,
-                         "ymgui_pipeline_create: sampler create failed");
+        if (YETTY_IS_ERR(d)) {
+            yetty_ycore_error_destroy(d.error);
+        }
+        return YETTY_ERR(yetty_ymgui_pipeline_ptr, "ymgui_pipeline_create: sampler create failed");
     }
 
     ydebug("ymgui_pipeline_create: compiled");
     return YETTY_OK(yetty_ymgui_pipeline_ptr, p);
 }
 
-struct yetty_ycore_void_result yetty_ymgui_pipeline_destroy(
-    struct yetty_ymgui_pipeline *p)
+struct yetty_ycore_void_result yetty_ymgui_pipeline_destroy(struct yetty_ymgui_pipeline *p)
 {
-    if (!p) return YETTY_OK_VOID();
-    if (p->sampler) wgpuSamplerRelease(p->sampler);
-    if (p->pipeline) wgpuRenderPipelineRelease(p->pipeline);
-    if (p->pipeline_layout) wgpuPipelineLayoutRelease(p->pipeline_layout);
-    if (p->bind_group_layout) wgpuBindGroupLayoutRelease(p->bind_group_layout);
-    if (p->shader_module) wgpuShaderModuleRelease(p->shader_module);
+    if (!p) {
+        return YETTY_OK_VOID();
+    }
+    if (p->sampler) {
+        wgpuSamplerRelease(p->sampler);
+    }
+    if (p->pipeline) {
+        wgpuRenderPipelineRelease(p->pipeline);
+    }
+    if (p->pipeline_layout) {
+        wgpuPipelineLayoutRelease(p->pipeline_layout);
+    }
+    if (p->bind_group_layout) {
+        wgpuBindGroupLayoutRelease(p->bind_group_layout);
+    }
+    if (p->shader_module) {
+        wgpuShaderModuleRelease(p->shader_module);
+    }
     free(p);
     return YETTY_OK_VOID();
 }

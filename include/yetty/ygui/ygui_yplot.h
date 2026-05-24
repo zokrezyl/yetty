@@ -44,10 +44,8 @@ struct yetty_ygui_widget;
  * convention). `config` may be NULL to use yplot's defaults. NULL is
  * returned on parse / serialize failure or OOM. */
 struct yetty_ygui_widget *yetty_ygui_engine_yplot_from_source(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const char *source, size_t source_len,
-    const struct yetty_yplot_render_config *config);
+    struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *source, size_t source_len, const struct yetty_yplot_render_config *config);
 
 /* Same as above with N attached data buffers. Pass `source=NULL`/
  * `source_len=0` for buffer-only (pure data plot, no expressions);
@@ -56,25 +54,21 @@ struct yetty_ygui_widget *yetty_ygui_engine_yplot_from_source(
  * samples into the prim, so the arrays may be freed / reused after
  * this call returns. */
 struct yetty_ygui_widget *yetty_ygui_engine_yplot_from_buffers(
-    struct yetty_ygui_engine *engine, const char *id,
-    float x, float y, float w, float h,
-    const char *source, size_t source_len,
-    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
-    const struct yetty_yplot_render_config *config);
+    struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *source, size_t source_len, const struct yetty_yplot_buffer_input *buffers,
+    size_t buffer_count, const struct yetty_yplot_render_config *config);
 
 /* Replace the widget's content with a fresh prim built from `source`.
  * The widget id is preserved so the receiving canvas applies the
  * change as an in-place update. */
 struct yetty_ycore_void_result yetty_ygui_widget_yplot_set_source(
-    struct yetty_ygui_widget *widget,
-    const char *source, size_t source_len,
+    struct yetty_ygui_widget *widget, const char *source, size_t source_len,
     const struct yetty_yplot_render_config *config);
 
 /* set_source plus N data buffers — primary entry point for live
  * updates (call once per frame with the freshest samples). */
 struct yetty_ycore_void_result yetty_ygui_widget_yplot_set_buffers(
-    struct yetty_ygui_widget *widget,
-    const char *source, size_t source_len,
+    struct yetty_ygui_widget *widget, const char *source, size_t source_len,
     const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
     const struct yetty_yplot_render_config *config);
 

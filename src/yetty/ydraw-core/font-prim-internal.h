@@ -22,7 +22,7 @@ size_t yetty_ydraw_font_drawable_size_for(uint32_t name_len, uint32_t ttf_len);
 /* Pack a FONT prim into out. out must have at least
  * yetty_ydraw_font_drawable_size_for(name_len, ttf_len) bytes. */
 void yetty_ydraw_font_drawable_write(uint8_t *out, int32_t font_id, const char *name,
-                                       uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len);
+                                     uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len);
 
 #ifdef __cplusplus
 }

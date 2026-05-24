@@ -83,10 +83,10 @@ struct yetty_yui_tabbar {
     int resize_dir_y;
     float resize_last_x;
     float resize_last_y;
-    float resize_anchor_x;  /* MOUSE_DOWN position — used for slop check  */
-    float resize_anchor_y;  /* before handing the gesture to the compositor */
-    int resize_edge;        /* yetty_ycore_resize_edge bitmask (xdg-shell) */
-    int resize_grab_sent;   /* begin_interactive_resize fired once per gesture */
+    float resize_anchor_x; /* MOUSE_DOWN position — used for slop check  */
+    float resize_anchor_y; /* before handing the gesture to the compositor */
+    int resize_edge;       /* yetty_ycore_resize_edge bitmask (xdg-shell) */
+    int resize_grab_sent;  /* begin_interactive_resize fired once per gesture */
 
     /* Full window height including the bottom statusbar inset. `height`
      * above is the workspace region only (window_height - statusbar_h),
@@ -423,11 +423,9 @@ struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
         YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "tabbar_attach_empty_ws: grow failed");
     }
 
-    struct yetty_yui_workspace_ptr_result wr =
-        yetty_yui_workspace_create_with_id(workspace_id);
+    struct yetty_yui_workspace_ptr_result wr = yetty_yui_workspace_create_with_id(workspace_id);
     if (YETTY_IS_ERR(wr)) {
-        return YETTY_ERR(yetty_ycore_void, "tabbar_attach_empty_ws: workspace_create failed",
-                         wr);
+        return YETTY_ERR(yetty_ycore_void, "tabbar_attach_empty_ws: workspace_create failed", wr);
     }
     struct yetty_yui_workspace *ws = wr.value;
 
@@ -445,8 +443,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
             yetty_yui_workspace_resize(ws, bar->width, bar->height - strip);
         if (YETTY_IS_ERR(rr)) {
             yetty_yui_workspace_destroy(ws);
-            return YETTY_ERR(yetty_ycore_void, "tabbar_attach_empty_ws: initial resize failed",
-                             rr);
+            return YETTY_ERR(yetty_ycore_void, "tabbar_attach_empty_ws: initial resize failed", rr);
         }
     }
 
@@ -463,15 +460,14 @@ struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
     return YETTY_OK_VOID();
 }
 
-struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(
-    const struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id)
+struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(const struct yetty_yui_tabbar *bar,
+                                                            yetty_ycore_object_id workspace_id)
 {
     if (!bar) {
         return NULL;
     }
     for (size_t i = 0; i < bar->count; i++) {
-        if (bar->workspaces[i] &&
-            yetty_yui_workspace_id(bar->workspaces[i]) == workspace_id) {
+        if (bar->workspaces[i] && yetty_yui_workspace_id(bar->workspaces[i]) == workspace_id) {
             return bar->workspaces[i];
         }
     }
@@ -751,8 +747,8 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
      * position check in os-event-loop/default.c) so all we do is act on
      * it. Cancel any drag the preceding MOUSE_DOWN started so we don't
      * leak a dangling drag state. */
-    if (in_strip && event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK &&
-        event->mouse.button == 0 && bar->count > 0) {
+    if (in_strip && event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK && event->mouse.button == 0 &&
+        bar->count > 0) {
         struct yetty_yplatform_window_manager *wm =
             bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
         if (wm && wm->ops && wm->ops->toggle_maximize) {
@@ -792,8 +788,8 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
             }
             ydebug("DRAGTRACE: [render-thread] tabbar MOVE during drag: "
                    "mouse=(%.1f,%.1f) anchor=(%.1f,%.1f) dx=%d dy=%d wm=%p",
-                   event->mouse.x, event->mouse.y, bar->drag_anchor_x, bar->drag_anchor_y,
-                   dx, dy, (void *)wm);
+                   event->mouse.x, event->mouse.y, bar->drag_anchor_x, bar->drag_anchor_y, dx, dy,
+                   (void *)wm);
             if (wm && (dx != 0 || dy != 0)) {
                 wm->ops->drag_by(wm, dx, dy);
                 /* Don't update the anchor: glfwSetWindowPos absolutely
@@ -874,9 +870,8 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                  * corners are bitwise OR. We only ever wire bottom +
                  * right + bottom-right (top/left would collide with the
                  * strip and with workspace interaction respectively). */
-                bar->resize_edge =
-                    (right ? YETTY_YCORE_RESIZE_EDGE_RIGHT : 0) |
-                    (bottom ? YETTY_YCORE_RESIZE_EDGE_BOTTOM : 0);
+                bar->resize_edge = (right ? YETTY_YCORE_RESIZE_EDGE_RIGHT : 0) |
+                                   (bottom ? YETTY_YCORE_RESIZE_EDGE_BOTTOM : 0);
                 ydebug("tabbar: resize start dirs=(%d,%d) edge=%d at (%.1f, %.1f)",
                        bar->resize_dir_x, bar->resize_dir_y, bar->resize_edge, mx, my);
                 return YETTY_OK(yetty_ycore_int, 1);

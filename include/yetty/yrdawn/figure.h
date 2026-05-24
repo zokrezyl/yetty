@@ -43,8 +43,9 @@ YETTY_YRESULT_DECLARE(yetty_yrdawn_figure_ptr, struct yetty_yrdawn_figure *);
 /* Outbound OSC emit. Called when the figure needs to send a frame back
  * to the client (HELLO_ACK, REPLY, EVENT, SC_KEY, SC_RESIZE). The host
  * is responsible for the OSC framing (yface) and PTY write. */
-typedef struct yetty_ycore_void_result (*yetty_yrdawn_emit_osc_fn)(
-    int osc_code, const void *payload, size_t len, void *user);
+typedef struct yetty_ycore_void_result (*yetty_yrdawn_emit_osc_fn)(int osc_code,
+                                                                   const void *payload, size_t len,
+                                                                   void *user);
 
 /* Optional repaint nudge. Called from set_frame so the host kicks a
  * compositor render pass without waiting for the next polling tick.
@@ -57,27 +58,23 @@ typedef struct yetty_ycore_void_result (*yetty_yrdawn_request_render_fn)(void *u
  * Builds the WGPU pipeline + sampler on the shared Dawn device pulled
  * from context. */
 struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_create(
-    struct yetty_ycore_rectangle rect,
-    const struct yetty_context *context);
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context);
 
 /* Upcast — stable pointer; pass to yetty_yfigure_container_add_child. */
-struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(
-    struct yetty_yrdawn_figure *figure);
+struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_figure *figure);
 
-void yetty_yrdawn_figure_set_emit_osc(
-    struct yetty_yrdawn_figure *figure,
-    yetty_yrdawn_emit_osc_fn fn, void *user);
+void yetty_yrdawn_figure_set_emit_osc(struct yetty_yrdawn_figure *figure,
+                                      yetty_yrdawn_emit_osc_fn fn, void *user);
 
-void yetty_yrdawn_figure_set_request_render(
-    struct yetty_yrdawn_figure *figure,
-    yetty_yrdawn_request_render_fn fn, void *user);
+void yetty_yrdawn_figure_set_request_render(struct yetty_yrdawn_figure *figure,
+                                            yetty_yrdawn_request_render_fn fn, void *user);
 
 /* Decode one yrdawn OSC envelope. `osc_code` is one of
  * YETTY_YRDAWN_OSC_CS_HELLO / _CMD / _BULK / _BYE; `payload` is the
  * deflated body the wire SM already assembled. */
-struct yetty_ycore_void_result yetty_yrdawn_figure_handle_osc(
-    struct yetty_yrdawn_figure *figure,
-    int osc_code, const uint8_t *payload, size_t payload_len);
+struct yetty_ycore_void_result yetty_yrdawn_figure_handle_osc(struct yetty_yrdawn_figure *figure,
+                                                              int osc_code, const uint8_t *payload,
+                                                              size_t payload_len);
 
 #ifdef __cplusplus
 }

@@ -123,7 +123,9 @@ static void write_primary_selection(const char *text, size_t len)
         if (devnull >= 0) {
             dup2(devnull, 1);
             dup2(devnull, 2);
-            if (devnull > 2) close(devnull);
+            if (devnull > 2) {
+                close(devnull);
+            }
         }
         close(pipefd[0]);
         close(pipefd[1]);
@@ -138,7 +140,9 @@ static void write_primary_selection(const char *text, size_t len)
     while ((size_t)off < len) {
         ssize_t w = write(pipefd[1], text + off, len - (size_t)off);
         if (w < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR) {
+                continue;
+            }
             break;
         }
         off += w;
@@ -188,17 +192,14 @@ static struct yetty_ycore_void_result glfw_clipboard_set_text(
     struct yetty_yui_event ev = {.type = YETTY_YCORE_COPY, .payload = copy};
     /* Ownership of `copy` transfers to the main thread on a successful
      * write. On a write error the bytes never leave; free locally. */
-    struct yetty_ycore_size_result wr =
-        m->output_pipe->ops->write(m->output_pipe, &ev, sizeof(ev));
+    struct yetty_ycore_size_result wr = m->output_pipe->ops->write(m->output_pipe, &ev, sizeof(ev));
     if (YETTY_IS_ERR(wr)) {
         free(copy);
-        return YETTY_ERR(yetty_ycore_void,
-                         "glfw_clipboard_set_text: output_pipe write failed", wr);
+        return YETTY_ERR(yetty_ycore_void, "glfw_clipboard_set_text: output_pipe write failed", wr);
     }
     if (wr.value != sizeof(ev)) {
         free(copy);
-        return YETTY_ERR(yetty_ycore_void,
-                         "glfw_clipboard_set_text: short write on output_pipe");
+        return YETTY_ERR(yetty_ycore_void, "glfw_clipboard_set_text: short write on output_pipe");
     }
     glfwPostEmptyEvent();
     return YETTY_OK_VOID();
@@ -211,11 +212,10 @@ static struct yetty_ycore_void_result glfw_clipboard_request_paste(
         container_of(self, struct yetty_yplatform_glfw_clipboard_manager, base);
 
     struct yetty_yui_event ev = {.type = YETTY_YCORE_PASTE, .payload = NULL};
-    struct yetty_ycore_size_result wr =
-        m->output_pipe->ops->write(m->output_pipe, &ev, sizeof(ev));
+    struct yetty_ycore_size_result wr = m->output_pipe->ops->write(m->output_pipe, &ev, sizeof(ev));
     if (YETTY_IS_ERR(wr)) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "glfw_clipboard_request_paste: output_pipe write failed", wr);
+        return YETTY_ERR(yetty_ycore_void, "glfw_clipboard_request_paste: output_pipe write failed",
+                         wr);
     }
     if (wr.value != sizeof(ev)) {
         return YETTY_ERR(yetty_ycore_void,
@@ -241,8 +241,7 @@ static struct yetty_ycore_void_result glfw_clipboard_drain(
         struct yetty_ycore_size_result rr =
             m->output_pipe->ops->read(m->output_pipe, &ev, sizeof(ev));
         if (YETTY_IS_ERR(rr)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "glfw_clipboard_drain: output_pipe read failed", rr);
+            return YETTY_ERR(yetty_ycore_void, "glfw_clipboard_drain: output_pipe read failed", rr);
         }
         if (rr.value == 0) {
             break;
@@ -276,8 +275,7 @@ static struct yetty_ycore_void_result glfw_clipboard_drain(
              * post the result back to the render thread as a PASTE event
              * with the text in payload. */
             const char *got = glfwGetClipboardString(NULL);
-            yinfo("clipboard: get_clipboard_string -> %zu bytes",
-                  got ? strlen(got) : 0);
+            yinfo("clipboard: get_clipboard_string -> %zu bytes", got ? strlen(got) : 0);
             char *copy = NULL;
             if (got) {
                 size_t glen = strlen(got);
@@ -294,7 +292,8 @@ static struct yetty_ycore_void_result glfw_clipboard_drain(
             if (YETTY_IS_ERR(wr)) {
                 free(copy);
                 return YETTY_ERR(yetty_ycore_void,
-                                 "glfw_clipboard_drain: input_pipe write of paste result failed", wr);
+                                 "glfw_clipboard_drain: input_pipe write of paste result failed",
+                                 wr);
             }
             if (wr.value != sizeof(out)) {
                 free(copy);
