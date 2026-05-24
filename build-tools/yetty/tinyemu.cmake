@@ -186,15 +186,12 @@ if(WIN32)
     endforeach()
     target_include_directories(tinyemu BEFORE PRIVATE ${_TE_WIN32_STUBS})
 
-    # riscv_cpu.c uses <stdatomic.h>. Same MSVC gating as yetty.exe needs.
     # /Zi gives CodeView debug info so stack traces from temu-test show
     # tinyemu function names; /Od disables optimization so line numbers
-    # line up with source.
+    # line up with source. (C11 + atomics flags come from the global MSVC
+    # block in build-tools/yetty/platform/windows/cmake.cmake.)
     if(MSVC)
-        target_compile_options(tinyemu PRIVATE
-            $<$<COMPILE_LANGUAGE:C>:/std:clatest>
-            $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>
-            /Zi /Od)
+        target_compile_options(tinyemu PRIVATE /Zi /Od)
     endif()
 endif()
 
@@ -265,8 +262,6 @@ elseif(WIN32)
     if(MSVC)
         target_compile_options(temu-test PRIVATE
             /FI${TINYEMU_DIR}/win32-compat.h
-            $<$<COMPILE_LANGUAGE:C>:/std:clatest>
-            $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>
             /Zi      # CodeView debug info regardless of build type
             /Od)     # disable opt so the stack trace lines up with source
         target_link_options(temu-test PRIVATE /DEBUG)

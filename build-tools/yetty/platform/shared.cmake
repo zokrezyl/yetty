@@ -416,6 +416,12 @@ if(YETTY_ENABLE_LIB_THORVG)
     list(APPEND YETTY_DEFINITIONS YETTY_HAS_THORVG=1)
 endif()
 
+# YETTY_HAS_YMGUI gates yframework's ymgui figure-kind registration. Off on
+# webasm (imgui prebuilt unavailable) — see webasm/variables.cmake.
+if(YETTY_ENABLE_FEATURE_YMGUI)
+    list(APPEND YETTY_DEFINITIONS YETTY_HAS_YMGUI=1)
+endif()
+
 # Common libraries to link (only include what's enabled)
 set(YETTY_LIBS "")
 

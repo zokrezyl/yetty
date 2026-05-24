@@ -55,9 +55,16 @@ target_link_libraries(yetty_yterm
     yetty_yrdawn
     yetty_yfigure
     yetty_ygrid
-    yetty_ymgui
     lz4_static
 )
+
+# yterm's sources reference only header-only constants from
+# <yetty/ymgui/wire.h> (YMGUI_WIRE_VERSION) — no compiled symbols. Pull
+# yetty_ymgui in transitively only when the feature is built, so webasm
+# (FEATURE_YMGUI=OFF) doesn't request -lyetty_ymgui at link time.
+if(YETTY_ENABLE_FEATURE_YMGUI)
+    target_link_libraries(yetty_yterm yetty_ymgui)
+endif()
 
 # Embed shaders via incbin (or stubs on Emscripten)
 incbin_add_resources(yetty_yterm

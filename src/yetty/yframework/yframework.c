@@ -33,7 +33,9 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yfigure/registry.h>
+#ifdef YETTY_HAS_YMGUI
 #include <yetty/ymgui/figure.h>
+#endif
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -57,8 +59,11 @@
  *=========================================================================*/
 
 struct yetty_yframework_factory_state {
+#ifdef YETTY_HAS_YMGUI
     struct yetty_ymgui_factory_args ymgui_args;
+#endif
     /* Future kinds: yrdawn_args, ygui_args, ygrid_args ... */
+    int _unused; /* keep the struct non-empty when no kinds compile in */
 };
 
 void yetty_yframework_log_gpu_info(WGPUAdapter adapter)
@@ -470,6 +475,7 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
      * — ymgui_factory_args holds an owned pipeline (textures, shader
      * module) whose destroy issues wgpu calls. */
     if (rt->factory_state) {
+#ifdef YETTY_HAS_YMGUI
         struct yetty_ycore_void_result r =
             yetty_ymgui_factory_args_release(&rt->factory_state->ymgui_args);
         if (YETTY_IS_ERR(r)) {
@@ -479,6 +485,7 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
                 yetty_ycore_error_destroy(r.error);
             }
         }
+#endif
         free(rt->factory_state);
         rt->factory_state = NULL;
     }
@@ -571,6 +578,7 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
                          "yframework_register_figure_factories: factory_state missing");
     }
 
+#ifdef YETTY_HAS_YMGUI
     /* ymgui — the args bundle's context is the host's context for this
      * registration. A single yframework can register the same bundle on
      * multiple hosts' registries; the last context wins, which is fine
@@ -581,6 +589,10 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
         yetty_ymgui_register_factory(registry, &framework->factory_state->ymgui_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, mr,
                         "yframework_register_figure_factories: ymgui register");
+#else
+    (void)registry;
+    (void)context;
+#endif
 
     return YETTY_OK_VOID();
 }

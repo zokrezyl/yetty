@@ -20,6 +20,12 @@ target_include_directories(yetty_ywire PUBLIC
 target_link_libraries(yetty_ywire PUBLIC
     yetty_ycore
     yetty_yetty
-    yetty_yco
     lz4_static
 )
+
+# yetty_yco wraps libco. The webasm coroutine impl above uses setjmp/longjmp
+# directly and never pulls libco in, so the wrapper target isn't built on
+# emscripten (see src/yetty/CMakeLists.txt). Link it only where it exists.
+if(NOT EMSCRIPTEN)
+    target_link_libraries(yetty_ywire PUBLIC yetty_yco)
+endif()
