@@ -116,8 +116,12 @@ int main(int argc, char **argv)
 
     DEMO_TRACE("demo: start\n");
 
+    uint32_t session_id = (uint32_t)getpid();
+    if (session_id == 0) {
+        session_id = 1;
+    }
     struct yetty_yrdawn_client_ptr_result cr =
-        yetty_yrdawn_client_create(STDIN_FILENO, STDOUT_FILENO);
+        yetty_yrdawn_client_create(STDIN_FILENO, STDOUT_FILENO, session_id);
     if (cr.ok != 1) {
         DEMO_TRACE("demo: client_create failed: %s\n", cr.error.msg);
         return 1;
@@ -125,21 +129,24 @@ int main(int argc, char **argv)
     struct yetty_yrdawn_client *c = cr.value;
     DEMO_TRACE("demo: client created\n");
 
-    struct yetty_ycore_void_result hr = yetty_yrdawn_client_send_hello(c);
-    if (hr.ok != 1) {
-        DEMO_TRACE("demo: send_hello failed: %s\n", hr.error.msg);
+    struct yetty_yrdawn_canvas_ptr_result kr =
+        yetty_yrdawn_canvas_create(c, /*figure_id=*/1, 0.0f, 0.0f, 1024.0f, 1024.0f);
+    if (kr.ok != 1) {
+        DEMO_TRACE("demo: canvas_create failed: %s\n", kr.error.msg);
         return 1;
     }
-    DEMO_TRACE("demo: HELLO sent\n");
+    struct yetty_yrdawn_canvas *canvas = kr.value;
+    DEMO_TRACE("demo: canvas created\n");
 
     /* Pump up to ~2s waiting for HELLO_ACK. */
     for (int i = 0; i < 200; ++i) {
         (void)yetty_yrdawn_client_pump(c);
-        if (yetty_yrdawn_client_connected(c))
+        if (yetty_yrdawn_canvas_connected(canvas)) {
             break;
+        }
         sleep_ms(10);
     }
-    DEMO_TRACE("demo: connected=%d after pump\n", yetty_yrdawn_client_connected(c));
+    DEMO_TRACE("demo: connected=%d after pump\n", yetty_yrdawn_canvas_connected(canvas));
 
     uint8_t *pixels = (uint8_t *)malloc((size_t)W * H * 4u);
     if (!pixels) {
@@ -150,7 +157,7 @@ int main(int argc, char **argv)
     DEMO_TRACE("demo: gradient built; presenting %ux%u\n", W, H);
 
     struct yetty_ycore_void_result pr =
-        yetty_yrdawn_client_present_frame(c, W, H, pixels, (size_t)W * H * 4u);
+        yetty_yrdawn_canvas_present_frame(canvas, W, H, pixels, (size_t)W * H * 4u);
     free(pixels);
     if (pr.ok != 1) {
         DEMO_TRACE("demo: present_frame failed: %s\n", pr.error.msg);
@@ -189,7 +196,7 @@ int main(int argc, char **argv)
     }
     DEMO_TRACE("demo: linger done\n");
 
-    (void)yetty_yrdawn_client_send_bye(c);
+    (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
     DEMO_TRACE("demo: clean exit\n");
     if (trace) fclose(trace);

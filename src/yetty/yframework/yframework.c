@@ -36,6 +36,10 @@
 #ifdef YETTY_HAS_YMGUI
 #include <yetty/ymgui/figure.h>
 #endif
+#ifndef __EMSCRIPTEN__
+#include <yetty/yrdawn/figure.h>
+#define YETTY_HAS_YRDAWN_SERVER 1
+#endif
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -62,7 +66,15 @@ struct yetty_yframework_factory_state {
 #ifdef YETTY_HAS_YMGUI
     struct yetty_ymgui_factory_args ymgui_args;
 #endif
-    /* Future kinds: yrdawn_args, ygui_args, ygrid_args ... */
+#ifdef YETTY_HAS_YRDAWN_SERVER
+    /* yrdawn — per-host outbound callbacks (emit_osc / request_render)
+     * are NOT set by yframework itself: the host (terminal, yui, the
+     * compositor tool) installs them via
+     * yetty_yframework_factory_args_yrdawn() before calling
+     * register_figure_factories. */
+    struct yetty_yrdawn_factory_args yrdawn_args;
+#endif
+    /* Future kinds: ygui_args, ygrid_args ... */
     int _unused; /* keep the struct non-empty when no kinds compile in */
 };
 
@@ -486,6 +498,17 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
             }
         }
 #endif
+#ifdef YETTY_HAS_YRDAWN_SERVER
+        struct yetty_ycore_void_result yr =
+            yetty_yrdawn_factory_args_release(&rt->factory_state->yrdawn_args);
+        if (YETTY_IS_ERR(yr)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = yr;
+            } else {
+                yetty_ycore_error_destroy(yr.error);
+            }
+        }
+#endif
         free(rt->factory_state);
         rt->factory_state = NULL;
     }
@@ -589,13 +612,34 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
         yetty_ymgui_register_factory(registry, &framework->factory_state->ymgui_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, mr,
                         "yframework_register_figure_factories: ymgui register");
-#else
+#endif
+
+#ifdef YETTY_HAS_YRDAWN_SERVER
+    framework->factory_state->yrdawn_args.context = context;
+    struct yetty_ycore_void_result rr =
+        yetty_yrdawn_register_factory(registry, &framework->factory_state->yrdawn_args);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                        "yframework_register_figure_factories: yrdawn register");
+#endif
+
+#if !defined(YETTY_HAS_YMGUI) && !defined(YETTY_HAS_YRDAWN_SERVER)
     (void)registry;
     (void)context;
 #endif
 
     return YETTY_OK_VOID();
 }
+
+#ifdef YETTY_HAS_YRDAWN_SERVER
+struct yetty_yrdawn_factory_args *yetty_yframework_factory_args_yrdawn(
+    struct yetty_yframework *framework)
+{
+    if (!framework || !framework->factory_state) {
+        return NULL;
+    }
+    return &framework->factory_state->yrdawn_args;
+}
+#endif
 
 struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(struct yetty_yframework *rt,
                                                                     uint32_t width, uint32_t height)

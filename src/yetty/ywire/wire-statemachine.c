@@ -472,8 +472,7 @@ static struct yetty_ycore_void_result push_decoded(struct yetty_ywire_wire_state
         uint8_t out[OSC_OUT_CARRY_CAP];
         size_t in_left = n - in_pos;
         size_t out_left = sizeof(out);
-        size_t r =
-            LZ4F_decompress(sm->lz4_ctx, out, &out_left, decoded + in_pos, &in_left, NULL);
+        size_t r = LZ4F_decompress(sm->lz4_ctx, out, &out_left, decoded + in_pos, &in_left, NULL);
         if (LZ4F_isError(r)) {
             return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(r));
         }
@@ -657,8 +656,8 @@ static struct handler_coro *find_handler_coro(struct yetty_ywire_wire_statemachi
 }
 
 static struct handler_coro *get_or_spawn_handler_coro(struct yetty_ywire_wire_statemachine *sm,
-                                                     yetty_ywire_process_input_fn fn,
-                                                     void *userdata)
+                                                      yetty_ywire_process_input_fn fn,
+                                                      void *userdata)
 {
     struct handler_coro *existing = find_handler_coro(sm, userdata);
     if (existing) {
@@ -858,8 +857,8 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
         sm->handlers = nh;
         sm->handler_cap = nc;
     }
-    sm->handlers[sm->handler_count++] = (struct wire_handler){
-        .kind = kind, .code = code, .fn = fn, .userdata = userdata};
+    sm->handlers[sm->handler_count++] =
+        (struct wire_handler){.kind = kind, .code = code, .fn = fn, .userdata = userdata};
     if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: handler coro spawn failed in register");
     }
@@ -928,7 +927,8 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default(
         return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
     }
     if (!fn || !userdata) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: set_default: fn and userdata must be non-NULL");
+        return YETTY_ERR(yetty_ycore_void,
+                         "wire_sm: set_default: fn and userdata must be non-NULL");
     }
     sm->default_fn = fn;
     sm->default_userdata = userdata;
@@ -959,8 +959,7 @@ static struct yetty_ycore_size_result pull_from_pty(struct yetty_ywire_wire_stat
     if (max_n == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
     }
-    struct yetty_ycore_size_result rr =
-        sm->pty->ops->read(sm->pty, (char *)sm->ring + off, max_n);
+    struct yetty_ycore_size_result rr = sm->pty->ops->read(sm->pty, (char *)sm->ring + off, max_n);
     if (YETTY_IS_ERR(rr)) {
         return YETTY_ERR(yetty_ycore_size, "wire_sm: pty read", rr);
     }
@@ -1007,16 +1006,15 @@ static void sm_coro_entry(void *arg)
                                   hc->result.error.msg);
                         }
                         if (!respawn_handler_coro(hc)) {
-                            sm->sm_result = YETTY_ERR(
-                                yetty_ycore_void, "wire: respawn of dead default coro failed");
+                            sm->sm_result = YETTY_ERR(yetty_ycore_void,
+                                                      "wire: respawn of dead default coro failed");
                             return;
                         }
                     }
                     yetty_yplatform_coro_resume(hc->coro);
                     if (yetty_yplatform_coro_is_finished(hc->coro)) {
                         if (YETTY_IS_ERR(hc->result)) {
-                            ywarn("wire: default coro exited mid-stream: %s",
-                                  hc->result.error.msg);
+                            ywarn("wire: default coro exited mid-stream: %s", hc->result.error.msg);
                         } else {
                             ywarn("wire: default coro returned cleanly "
                                   "(was supposed to loop forever)");
@@ -1088,8 +1086,8 @@ static void sm_coro_entry(void *arg)
                 } else if (c == ';') {
                     sm->state = SCAN_OSC_ARGS;
                 } else {
-                    ywarn("wire: malformed envelope code byte=0x%02x kind=0x%02x",
-                          (unsigned)c, (unsigned)sm->current_kind);
+                    ywarn("wire: malformed envelope code byte=0x%02x kind=0x%02x", (unsigned)c,
+                          (unsigned)sm->current_kind);
                     sm->state = SCAN_RAW;
                     sm->current_kind = WIRE_KIND_NONE;
                 }
@@ -1128,15 +1126,13 @@ static void sm_coro_entry(void *arg)
                     /* Test hook: OSC 99099 synthesises a multi-frame error
                      * chain so the post_fatal_error → ynotify path can be
                      * exercised end-to-end from a child process. */
-                    if (sm->current_kind == YETTY_YWIRE_ENVELOPE_OSC &&
-                        sm->current_code == 99099) {
+                    if (sm->current_kind == YETTY_YWIRE_ENVELOPE_OSC && sm->current_code == 99099) {
                         struct yetty_ycore_void_result inner =
                             YETTY_ERR(yetty_ycore_void, "test trigger: inner cause");
                         struct yetty_ycore_void_result mid =
                             YETTY_ERR(yetty_ycore_void, "test trigger: middle wrap", inner);
                         sm->sm_result = YETTY_ERR(yetty_ycore_void,
-                                                  "test trigger: synthetic OSC 99099 error",
-                                                  mid);
+                                                  "test trigger: synthetic OSC 99099 error", mid);
                         return;
                     }
                     sm->current_handler = find_handler(sm, sm->current_kind, sm->current_code);
@@ -1146,8 +1142,7 @@ static void sm_coro_entry(void *arg)
                         sm->envelope_default_handler_slot.kind = sm->current_kind;
                         sm->envelope_default_handler_slot.code = sm->current_code;
                         sm->envelope_default_handler_slot.fn = sm->envelope_default_fn;
-                        sm->envelope_default_handler_slot.userdata =
-                            sm->envelope_default_userdata;
+                        sm->envelope_default_handler_slot.userdata = sm->envelope_default_userdata;
                         sm->current_handler = &sm->envelope_default_handler_slot;
                     }
                     sm->state = SCAN_OSC_BODY;
@@ -1198,8 +1193,7 @@ static void sm_coro_entry(void *arg)
                     if (YETTY_IS_ERR(hc->result)) {
                         ywarn("wire: handler coro for kind=0x%02x code=%d had exited (%s); "
                               "respawning and dropping current envelope body",
-                              (unsigned)sm->current_kind, sm->current_code,
-                              hc->result.error.msg);
+                              (unsigned)sm->current_kind, sm->current_code, hc->result.error.msg);
                     }
                     if (!respawn_handler_coro(hc)) {
                         sm->sm_result = YETTY_ERR(yetty_ycore_void,
@@ -1215,8 +1209,7 @@ static void sm_coro_entry(void *arg)
                 if (yetty_yplatform_coro_is_finished(hc->coro)) {
                     if (YETTY_IS_ERR(hc->result)) {
                         ywarn("wire: handler coro for kind=0x%02x code=%d exited mid-envelope: %s",
-                              (unsigned)sm->current_kind, sm->current_code,
-                              hc->result.error.msg);
+                              (unsigned)sm->current_kind, sm->current_code, hc->result.error.msg);
                     } else {
                         ywarn("wire: handler coro for kind=0x%02x code=%d returned cleanly "
                               "(process_input was supposed to loop forever)",
@@ -1420,8 +1413,7 @@ static struct yetty_ycore_void_result b64_encode_flush(struct yetty_ywire_wire_s
         chars[2] = '=';
         chars[3] = '=';
     } else { /* 2 */
-        uint32_t v = ((uint32_t)sm->enc_b64_carry[0] << 16) |
-                     ((uint32_t)sm->enc_b64_carry[1] << 8);
+        uint32_t v = ((uint32_t)sm->enc_b64_carry[0] << 16) | ((uint32_t)sm->enc_b64_carry[1] << 8);
         chars[0] = b64_alpha[(v >> 18) & 0x3F];
         chars[1] = b64_alpha[(v >> 12) & 0x3F];
         chars[2] = b64_alpha[(v >> 6) & 0x3F];
@@ -1480,8 +1472,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
         return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: bad code");
     }
     {
-        struct yetty_ycore_void_result r =
-            yetty_ycore_buffer_write(out_buf, hdr, (size_t)n);
+        struct yetty_ycore_void_result r = yetty_ycore_buffer_write(out_buf, hdr, (size_t)n);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: hdr");
     }
     if (args && args_len > 0) {
@@ -1630,8 +1621,7 @@ struct yetty_ycore_void_result yetty_ywire_emit(enum yetty_ywire_envelope_kind k
     if (!out_buf) {
         return YETTY_ERR(yetty_ycore_void, "ywire_emit: out_buf is NULL");
     }
-    struct yetty_ywire_wire_statemachine_ptr_result sr =
-        yetty_ywire_wire_statemachine_create(NULL);
+    struct yetty_ywire_wire_statemachine_ptr_result sr = yetty_ywire_wire_statemachine_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ywire_emit: SM create");
     struct yetty_ywire_wire_statemachine *sm = sr.value;
 
@@ -1772,8 +1762,8 @@ struct yetty_ycore_void_result yetty_ywire_decode(const char *b64, size_t n, int
     }
     /* Tail of 2 or 3 valid chars decodes to 1 or 2 bytes. */
     if (valid_n - in_pos >= 2) {
-        char tail[4] = {b64[in_pos], b64[in_pos + 1],
-                        valid_n - in_pos >= 3 ? b64[in_pos + 2] : 'A', 'A'};
+        char tail[4] = {b64[in_pos], b64[in_pos + 1], valid_n - in_pos >= 3 ? b64[in_pos + 2] : 'A',
+                        'A'};
         uint8_t v[4];
         int ok = 1;
         for (int i = 0; i < 4; i++) {
@@ -1784,8 +1774,7 @@ struct yetty_ycore_void_result yetty_ywire_decode(const char *b64, size_t n, int
         }
         if (ok) {
             uint8_t t[3] = {(uint8_t)((v[0] << 2) | (v[1] >> 4)),
-                            (uint8_t)((v[1] << 4) | (v[2] >> 2)),
-                            (uint8_t)((v[2] << 6) | v[3])};
+                            (uint8_t)((v[1] << 4) | (v[2] >> 2)), (uint8_t)((v[2] << 6) | v[3])};
             size_t out_n = (valid_n - in_pos >= 3) ? 2 : 1;
             if (compressed) {
                 uint8_t lz4_scratch[8192];
@@ -1793,8 +1782,8 @@ struct yetty_ycore_void_result yetty_ywire_decode(const char *b64, size_t n, int
                 while (pos < out_n) {
                     size_t in_left = out_n - pos;
                     size_t out_left = sizeof(lz4_scratch);
-                    size_t lr = LZ4F_decompress(lz4_ctx, lz4_scratch, &out_left, t + pos,
-                                                &in_left, NULL);
+                    size_t lr =
+                        LZ4F_decompress(lz4_ctx, lz4_scratch, &out_left, t + pos, &in_left, NULL);
                     if (LZ4F_isError(lr)) {
                         r = YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(lr));
                         goto out;

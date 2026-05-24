@@ -103,8 +103,7 @@ static struct yetty_ycore_void_result ensure_sm(struct yetty_yface *y)
     if (y->sm) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ywire_wire_statemachine_ptr_result sr =
-        yetty_ywire_wire_statemachine_create(NULL);
+    struct yetty_ywire_wire_statemachine_ptr_result sr = yetty_ywire_wire_statemachine_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yface: SM create");
     y->sm = sr.value;
     return YETTY_OK_VOID();
@@ -208,9 +207,8 @@ struct yetty_ycore_void_result yetty_yface_finish_read(struct yetty_yface *y)
     if (!y->dec_active) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r =
-        yetty_ywire_decode((const char *)y->dec_b64_accum.data, y->dec_b64_accum.size,
-                           y->dec_compressed, &y->in_buf);
+    struct yetty_ycore_void_result r = yetty_ywire_decode(
+        (const char *)y->dec_b64_accum.data, y->dec_b64_accum.size, y->dec_compressed, &y->in_buf);
     yetty_ycore_buffer_clear(&y->dec_b64_accum);
     y->dec_active = 0;
     return r;
@@ -224,9 +222,11 @@ struct yetty_ycore_void_result yetty_yface_finish_read(struct yetty_yface *y)
  * on_raw.
  *-------------------------------------------------------------------------*/
 
-static struct yetty_ycore_void_result yface_on_envelope(
-    void *userdata, enum yetty_ywire_envelope_kind kind, int code, const uint8_t *args,
-    size_t args_len, const uint8_t *payload, size_t payload_len)
+static struct yetty_ycore_void_result yface_on_envelope(void *userdata,
+                                                        enum yetty_ywire_envelope_kind kind,
+                                                        int code, const uint8_t *args,
+                                                        size_t args_len, const uint8_t *payload,
+                                                        size_t payload_len)
 {
     (void)kind;
     struct yetty_yface *y = userdata;

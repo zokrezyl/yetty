@@ -1,27 +1,25 @@
 /*
  * figure.c — yrdawn rendered as a yfigure_figure subclass.
  *
- * Pipeline + frame-texture lifecycle + OSC HELLO/CMD/BULK/BYE handling
- * + handle table are all the same shape as the old yrdawn terminal
- * layer (src/yetty/yterm/yrdawn-layer.c). The only structural change is
- * what surrounds them:
+ * One figure == one remote canvas the wasm client opened. The figure
+ * holds only per-canvas state (figure_id, pipeline, frame texture);
+ * everything shared between canvases owned by the same client (WGPU
+ * handle table, BULK reassembly slots, the borrowed Dawn handles)
+ * lives on the session — see session.{h,c}.
  *
- *   - base struct embed: yfigure_figure (not yrender_terminal_layer)
- *   - ops vtable: {destroy, render} only — no is_dirty/is_empty/
- *     resize_grid/get_gpu_resource_set/on_key/on_char
- *   - render placement: self->rect (absolute target pixel space)
- *     instead of target->viewport. This is what lets the figure occupy
- *     either the whole host surface OR an arbitrary sub-rect.
- *   - OSC dispatch is one-shot per envelope (handle_osc), not a long-
- *     lived coroutine. The host (ycompositor::process_input) drives
- *     envelope assembly; the figure decodes the assembled payload.
+ * Wire entry:
+ *   - CREATE_CHILD's init_payload arrives at process_bytes carrying
+ *     a u32 SUB_HELLO + struct yetty_yrdawn_wire_hello. We bind the
+ *     figure to its session (lazy-creating sessions as needed) and
+ *     dispatch HELLO_ACK.
+ *   - Subsequent records hit process_input, which reads u32 SUB_OP +
+ *     wire struct and dispatches CMD / BULK / BYE.
  *
- * The server-side callbacks the codegen dispatcher needs
- * (yrdawn_server_handle_get/set/release, yrdawn_server_get_shared_*,
- * yrdawn_server_emit_reply, yrdawn_server_bulk_take, yrdawn_server_set_frame,
- * plus yrdawn_arena_alloc/free) are exposed here unchanged in signature.
- * Linking this translation unit against the same binary as
- * yrdawn-layer.c will give multiple-definition errors — pick one.
+ * Server-side callbacks (yrdawn_server_handle_*, get_shared_*,
+ * bulk_take, emit_reply, set_frame, arena_alloc/free) receive
+ * ctx = figure*. Each one navigates figure->session for shared
+ * state and uses figure->frame_texture for set_frame. The codegen
+ * dispatcher needs no changes — its ctx is opaque.
  */
 #include <yetty/yrdawn/figure.h>
 
@@ -34,27 +32,15 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/wire.h>
+#include <yetty/yframework/yframework.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yrdawn/server.h>
+#include <yetty/yrdawn/session.h>
 #include <yetty/yrdawn/wire.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yframework/yframework.h>
 #include <yetty/ytrace/ytrace.h>
-
-/*===========================================================================
- * Per-handle / per-bulk slot
- *=========================================================================*/
-
-struct yrdawn_handle_entry {
-    uint64_t handle;
-    void *ptr;     /* WGPU* object — filled in by codegen dispatch */
-    uint32_t kind; /* codegen-assigned WGPUObjectKind */
-};
-
-struct yrdawn_bulk_entry {
-    uint32_t ref;      /* 0 = free slot */
-    uint32_t next_seq; /* expected next chunk index */
-    struct yetty_ycore_buffer buf;
-};
+#include <yetty/ywire/wire-statemachine.h>
 
 /*===========================================================================
  * Figure struct
@@ -63,56 +49,94 @@ struct yrdawn_bulk_entry {
 struct yetty_yrdawn_figure {
     struct yetty_yfigure_figure base;
 
-    /* Shared Dawn handles borrowed from context. The bridge shares
-     * yetty's Dawn instance/adapter/device/queue — a second in-process
-     * Dawn instance deadlocks Vulkan during pipeline creation. */
-    WGPUInstance instance;
-    WGPUAdapter adapter;
-    WGPUDevice device;
-    WGPUQueue queue;
-    WGPUTextureFormat target_format;
+    /* Set by SUB_HELLO. Until then the figure rejects CMD/BULK/BYE. */
+    uint32_t figure_id;
+    int connected;
+    int disconnected;
+
+    /* Borrowed. Bound by SUB_HELLO via the factory_args session table. */
+    struct yetty_yrdawn_session *session;
+
+    /* Borrowed. Source of outbound emit + per-host repaint nudge. */
+    struct yetty_yrdawn_factory_args *args;
 
     /* Pipeline + per-frame texture. Pipeline samples a single texture
      * across a fullscreen quad fabricated in the vertex shader from
      * gl_VertexIndex — no vertex buffer, no uniforms. */
     int pipeline_ready;
+    int has_frame; /* set on first set_frame */
+    WGPUTextureFormat target_format;
     WGPUShaderModule shader_module;
     WGPUBindGroupLayout bind_group_layout;
     WGPUPipelineLayout pipeline_layout;
     WGPURenderPipeline pipeline;
     WGPUSampler sampler;
-
     WGPUTexture frame_texture;
     WGPUTextureView frame_view;
     WGPUBindGroup frame_bind_group;
-
-    /* OSC session state. */
-    int connected;
-    int disconnected;
-    int has_frame; /* set on first set_frame */
-
-    /* Outbound emit callback wired by the host. */
-    yetty_yrdawn_emit_osc_fn emit_osc_fn;
-    void *emit_osc_user;
-
-    /* Optional repaint nudge. */
-    yetty_yrdawn_request_render_fn request_render_fn;
-    void *request_render_user;
-
-    /* Handle table — backs the yrdawn_server_handle_* callbacks the
-     * codegen dispatcher calls. Linear scan, first cut. */
-    struct yrdawn_handle_entry *handles;
-    size_t handle_count;
-    size_t handle_cap;
-
-    /* BULK reassembly. */
-    struct yrdawn_bulk_entry *bulks;
-    size_t bulk_count;
-    size_t bulk_cap;
 };
 
 /*===========================================================================
- * Inline WGSL — fullscreen textured quad, no vertex buffer, no uniforms.
+ * Factory state — opaque from the header
+ *=========================================================================*/
+
+struct session_entry {
+    uint32_t session_id;
+    struct yetty_yrdawn_session *session;
+};
+
+struct yetty_yrdawn_factory_state {
+    struct session_entry *sessions;
+    size_t count;
+    size_t cap;
+};
+
+static struct yetty_yrdawn_session *state_find_session(struct yetty_yrdawn_factory_state *st,
+                                                       uint32_t session_id)
+{
+    if (!st) {
+        return NULL;
+    }
+    for (size_t i = 0; i < st->count; ++i) {
+        if (st->sessions[i].session_id == session_id) {
+            return st->sessions[i].session;
+        }
+    }
+    return NULL;
+}
+
+static struct yetty_ycore_void_result state_insert_session(struct yetty_yrdawn_factory_state *st,
+                                                           uint32_t session_id,
+                                                           struct yetty_yrdawn_session *s)
+{
+    if (st->count == st->cap) {
+        size_t cap = st->cap ? st->cap * 2u : 4u;
+        struct session_entry *grown = realloc(st->sessions, cap * sizeof(*grown));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void, "yrdawn factory: session table oom");
+        }
+        st->sessions = grown;
+        st->cap = cap;
+    }
+    st->sessions[st->count++] = (struct session_entry){.session_id = session_id, .session = s};
+    return YETTY_OK_VOID();
+}
+
+static void state_remove_session(struct yetty_yrdawn_factory_state *st, uint32_t session_id)
+{
+    if (!st) {
+        return;
+    }
+    for (size_t i = 0; i < st->count; ++i) {
+        if (st->sessions[i].session_id == session_id) {
+            st->sessions[i] = st->sessions[--st->count];
+            return;
+        }
+    }
+}
+
+/*===========================================================================
+ * Inline WGSL — fullscreen textured quad, no vertex buffer.
  *=========================================================================*/
 
 static const char *yrdawn_figure_wgsl(void)
@@ -156,12 +180,12 @@ static const char *yrdawn_figure_wgsl(void)
     return src;
 }
 
-/*===========================================================================
- * GPU pipeline build / teardown — identical to the layer's.
- *=========================================================================*/
-
 static int build_pipeline(struct yetty_yrdawn_figure *f)
 {
+    WGPUDevice device = yetty_yrdawn_session_shared_device(f->session);
+    if (!device) {
+        return 0;
+    }
     const char *wgsl_src = yrdawn_figure_wgsl();
     size_t wgsl_len = strlen(wgsl_src);
 
@@ -171,7 +195,7 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
 
     WGPUShaderModuleDescriptor sm_desc = {0};
     sm_desc.nextInChain = &wgsl.chain;
-    f->shader_module = wgpuDeviceCreateShaderModule(f->device, &sm_desc);
+    f->shader_module = wgpuDeviceCreateShaderModule(device, &sm_desc);
     if (!f->shader_module) {
         return 0;
     }
@@ -188,7 +212,7 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
     WGPUBindGroupLayoutDescriptor bgl_desc = {0};
     bgl_desc.entryCount = 2;
     bgl_desc.entries = bgl_entries;
-    f->bind_group_layout = wgpuDeviceCreateBindGroupLayout(f->device, &bgl_desc);
+    f->bind_group_layout = wgpuDeviceCreateBindGroupLayout(device, &bgl_desc);
     if (!f->bind_group_layout) {
         return 0;
     }
@@ -196,7 +220,7 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
     WGPUPipelineLayoutDescriptor pl_desc = {0};
     pl_desc.bindGroupLayoutCount = 1;
     pl_desc.bindGroupLayouts = &f->bind_group_layout;
-    f->pipeline_layout = wgpuDeviceCreatePipelineLayout(f->device, &pl_desc);
+    f->pipeline_layout = wgpuDeviceCreatePipelineLayout(device, &pl_desc);
     if (!f->pipeline_layout) {
         return 0;
     }
@@ -235,7 +259,7 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
     rpd.multisample.count = 1;
     rpd.multisample.mask = 0xFFFFFFFFu;
 
-    f->pipeline = wgpuDeviceCreateRenderPipeline(f->device, &rpd);
+    f->pipeline = wgpuDeviceCreateRenderPipeline(device, &rpd);
     if (!f->pipeline) {
         return 0;
     }
@@ -250,7 +274,7 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
     sd.lodMinClamp = 0.0f;
     sd.lodMaxClamp = 0.0f;
     sd.maxAnisotropy = 1;
-    f->sampler = wgpuDeviceCreateSampler(f->device, &sd);
+    f->sampler = wgpuDeviceCreateSampler(device, &sd);
     if (!f->sampler) {
         return 0;
     }
@@ -261,6 +285,10 @@ static int build_pipeline(struct yetty_yrdawn_figure *f)
 
 static int build_frame_resources(struct yetty_yrdawn_figure *f, uint32_t width, uint32_t height)
 {
+    WGPUDevice device = yetty_yrdawn_session_shared_device(f->session);
+    if (!device) {
+        return 0;
+    }
     WGPUTextureDescriptor td = {0};
     td.size = (WGPUExtent3D){width, height, 1};
     td.mipLevelCount = 1;
@@ -268,7 +296,7 @@ static int build_frame_resources(struct yetty_yrdawn_figure *f, uint32_t width, 
     td.dimension = WGPUTextureDimension_2D;
     td.format = WGPUTextureFormat_RGBA8Unorm;
     td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
-    WGPUTexture tex = wgpuDeviceCreateTexture(f->device, &td);
+    WGPUTexture tex = wgpuDeviceCreateTexture(device, &td);
     if (!tex) {
         return 0;
     }
@@ -298,7 +326,7 @@ static int build_frame_resources(struct yetty_yrdawn_figure *f, uint32_t width, 
     bgd.layout = f->bind_group_layout;
     bgd.entryCount = 2;
     bgd.entries = bge;
-    WGPUBindGroup bg = wgpuDeviceCreateBindGroup(f->device, &bgd);
+    WGPUBindGroup bg = wgpuDeviceCreateBindGroup(device, &bgd);
     if (!bg) {
         wgpuTextureViewRelease(view);
         wgpuTextureDestroy(tex);
@@ -367,28 +395,63 @@ static void release_gpu(struct yetty_yrdawn_figure *f)
 static struct yetty_ycore_void_result emit(struct yetty_yrdawn_figure *f, int osc_code,
                                            const void *payload, size_t len)
 {
-    if (!f->emit_osc_fn) {
-        ywarn("yrdawn-figure: no emit_osc_fn wired, dropping OSC %d", osc_code);
+    if (!f->args || !f->args->emit_osc_fn) {
+        ywarn("yrdawn-figure id=%u: no emit_osc_fn wired, dropping OSC %d", f->figure_id, osc_code);
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r = f->emit_osc_fn(osc_code, payload, len, f->emit_osc_user);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yrdawn-figure: emit_osc_fn");
-    return YETTY_OK_VOID();
+    return f->args->emit_osc_fn(osc_code, payload, len, f->args->emit_osc_user);
 }
 
 /*===========================================================================
- * Inbound handlers — same shape as the layer's.
+ * SUB_HELLO — runs during process_bytes (CREATE_CHILD init payload).
+ *
+ * Reads the session_id, looks up / creates the session, binds the
+ * figure to it, builds the pipeline against the session's shared
+ * device, and ships HELLO_ACK.
  *=========================================================================*/
 
 static struct yetty_ycore_void_result handle_hello(struct yetty_yrdawn_figure *f,
-                                                   const uint8_t *payload, size_t len)
+                                                   const uint8_t *body, size_t body_len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_hello)) {
+    if (body_len < sizeof(struct yetty_yrdawn_wire_hello)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: HELLO truncated");
     }
-    const struct yetty_yrdawn_wire_hello *h = (const struct yetty_yrdawn_wire_hello *)payload;
+    const struct yetty_yrdawn_wire_hello *h = (const struct yetty_yrdawn_wire_hello *)body;
     if (h->magic != YETTY_YRDAWN_MAGIC_HELLO) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: HELLO bad magic");
+    }
+    if (h->session_id == 0) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: HELLO session_id=0");
+    }
+    if (h->figure_id == 0) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: HELLO figure_id=0");
+    }
+    f->figure_id = h->figure_id;
+
+    /* Build / find session, bind figure to it. */
+    struct yetty_yrdawn_factory_state *st = f->args->state;
+    struct yetty_yrdawn_session *s = state_find_session(st, h->session_id);
+    if (!s) {
+        struct yetty_yrdawn_session_ptr_result sr =
+            yetty_yrdawn_session_create(h->session_id, f->args->context);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yrdawn-figure: session_create");
+        s = sr.value;
+        struct yetty_ycore_void_result ir = state_insert_session(st, h->session_id, s);
+        if (YETTY_IS_ERR(ir)) {
+            struct yetty_ycore_void_result dr = yetty_yrdawn_session_destroy(s);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
+            return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: insert_session", ir);
+        }
+    }
+    f->session = s;
+    yetty_yrdawn_session_attach_figure(s, f);
+
+    /* Build pipeline now that we have a device. */
+    if (!build_pipeline(f)) {
+        release_gpu(f);
+        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: pipeline build failed");
     }
 
     struct yetty_yrdawn_wire_hello_ack ack = {
@@ -397,10 +460,11 @@ static struct yetty_ycore_void_result handle_hello(struct yetty_yrdawn_figure *f
         .total_size = (uint32_t)sizeof(ack),
         .status = (h->version == YETTY_YRDAWN_WIRE_VERSION) ? YETTY_YRDAWN_HELLO_OK
                                                             : YETTY_YRDAWN_HELLO_REJECTED,
+        .session_id = h->session_id,
+        .figure_id = f->figure_id,
     };
-
     struct yetty_ycore_void_result e = emit(f, YETTY_YRDAWN_OSC_SC_HELLO_ACK, &ack, sizeof(ack));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, e, "yrdawn-figure: HELLO_ACK");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, e, "yrdawn-figure: HELLO_ACK emit");
 
     if (ack.status == YETTY_YRDAWN_HELLO_OK) {
         f->connected = 1;
@@ -408,13 +472,17 @@ static struct yetty_ycore_void_result handle_hello(struct yetty_yrdawn_figure *f
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result handle_cmd(struct yetty_yrdawn_figure *f,
-                                                 const uint8_t *payload, size_t len)
+/*===========================================================================
+ * SUB_CMD — codegen dispatcher
+ *=========================================================================*/
+
+static struct yetty_ycore_void_result handle_cmd(struct yetty_yrdawn_figure *f, const uint8_t *body,
+                                                 size_t body_len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_cmd_hdr)) {
+    if (body_len < sizeof(struct yetty_yrdawn_wire_cmd_hdr)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: CMD truncated");
     }
-    const struct yetty_yrdawn_wire_cmd_hdr *hdr = (const struct yetty_yrdawn_wire_cmd_hdr *)payload;
+    const struct yetty_yrdawn_wire_cmd_hdr *hdr = (const struct yetty_yrdawn_wire_cmd_hdr *)body;
     if (hdr->magic != YETTY_YRDAWN_MAGIC_CMD) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: CMD bad magic");
     }
@@ -422,13 +490,14 @@ static struct yetty_ycore_void_result handle_cmd(struct yetty_yrdawn_figure *f,
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: CMD before HELLO_ACK");
     }
 
-    const uint8_t *args_body = payload + sizeof(*hdr);
-    size_t args_body_len = len - sizeof(*hdr);
-    ydebug("yrdawn-figure: dispatching method_id=%u req_id=%u body=%zu", hdr->method_id,
-           hdr->req_id, args_body_len);
+    const uint8_t *args_body = body + sizeof(*hdr);
+    size_t args_body_len = body_len - sizeof(*hdr);
+    ydebug("yrdawn-figure id=%u: dispatching method_id=%u req_id=%u body=%zu", f->figure_id,
+           hdr->method_id, hdr->req_id, args_body_len);
     uint32_t status =
         yrdawn_server_dispatch(f, hdr->method_id, hdr->req_id, args_body, args_body_len);
-    ydebug("yrdawn-figure: dispatch status=%u method_id=%u", status, hdr->method_id);
+    ydebug("yrdawn-figure id=%u: dispatch status=%u method_id=%u", f->figure_id, status,
+           hdr->method_id);
 
     if (status == YRDAWN_DISPATCH_DEFERRED) {
         return YETTY_OK_VOID();
@@ -446,243 +515,367 @@ static struct yetty_ycore_void_result handle_cmd(struct yetty_yrdawn_figure *f,
         .kind = YETTY_YRDAWN_REPLY_ASYNC,
         .status = status,
         .payload_ref = 0,
+        .figure_id = f->figure_id,
     };
     return emit(f, YETTY_YRDAWN_OSC_SC_REPLY, &reply, sizeof(reply));
 }
 
-static struct yrdawn_bulk_entry *bulk_find_or_alloc(struct yetty_yrdawn_figure *f, uint32_t ref)
-{
-    for (size_t i = 0; i < f->bulk_count; ++i) {
-        if (f->bulks[i].ref == ref) {
-            return &f->bulks[i];
-        }
-    }
-    for (size_t i = 0; i < f->bulk_count; ++i) {
-        if (f->bulks[i].ref == 0) {
-            f->bulks[i].ref = ref;
-            f->bulks[i].next_seq = 0;
-            yetty_ycore_buffer_clear(&f->bulks[i].buf);
-            return &f->bulks[i];
-        }
-    }
-    if (f->bulk_count == f->bulk_cap) {
-        size_t cap = f->bulk_cap ? f->bulk_cap * 2u : 4u;
-        struct yrdawn_bulk_entry *grown =
-            (struct yrdawn_bulk_entry *)realloc(f->bulks, cap * sizeof(*grown));
-        if (!grown) {
-            return NULL;
-        }
-        memset(grown + f->bulk_count, 0, (cap - f->bulk_count) * sizeof(*grown));
-        f->bulks = grown;
-        f->bulk_cap = cap;
-    }
-    struct yrdawn_bulk_entry *e = &f->bulks[f->bulk_count++];
-    e->ref = ref;
-    e->next_seq = 0;
-    e->buf = (struct yetty_ycore_buffer){0};
-    return e;
-}
-
-static void bulk_release(struct yetty_yrdawn_figure *f, uint32_t ref)
-{
-    for (size_t i = 0; i < f->bulk_count; ++i) {
-        if (f->bulks[i].ref == ref) {
-            yetty_ycore_buffer_destroy(&f->bulks[i].buf);
-            f->bulks[i] = (struct yrdawn_bulk_entry){0};
-            return;
-        }
-    }
-}
+/*===========================================================================
+ * SUB_BULK — push chunk into session reassembler
+ *=========================================================================*/
 
 static struct yetty_ycore_void_result handle_bulk(struct yetty_yrdawn_figure *f,
-                                                  const uint8_t *payload, size_t len)
+                                                  const uint8_t *body, size_t body_len)
 {
-    if (len < sizeof(struct yetty_yrdawn_wire_bulk_hdr)) {
+    if (body_len < sizeof(struct yetty_yrdawn_wire_bulk_hdr)) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK truncated");
     }
-    const struct yetty_yrdawn_wire_bulk_hdr *hdr =
-        (const struct yetty_yrdawn_wire_bulk_hdr *)payload;
+    const struct yetty_yrdawn_wire_bulk_hdr *hdr = (const struct yetty_yrdawn_wire_bulk_hdr *)body;
     if (hdr->magic != YETTY_YRDAWN_MAGIC_BULK) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK bad magic");
     }
-    if (hdr->ref == 0) {
-        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK ref=0");
+    if (!f->connected) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK before HELLO_ACK");
     }
-    if (len < sizeof(*hdr) + hdr->chunk_size) {
-        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK chunk_size > payload");
+    if (body_len < sizeof(*hdr) + hdr->chunk_size) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK chunk_size > body");
     }
-
-    struct yrdawn_bulk_entry *e = bulk_find_or_alloc(f, hdr->ref);
-    if (!e) {
-        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK table oom");
-    }
-    if (hdr->seq != e->next_seq) {
-        bulk_release(f, hdr->ref);
-        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: BULK out-of-order seq");
-    }
-
-    if (hdr->chunk_size) {
-        struct yetty_ycore_void_result w =
-            yetty_ycore_buffer_write(&e->buf, payload + sizeof(*hdr), hdr->chunk_size);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, w, "yrdawn-figure: BULK accum");
-    }
-    e->next_seq++;
-
-    if (hdr->flags & YETTY_YRDAWN_BULK_FLAG_LAST) {
-        /* Park next_seq at UINT32_MAX so the dispatcher can find this
-         * ref via bulk_take and further chunks are rejected. */
-        e->next_seq = UINT32_MAX;
-    }
-    return YETTY_OK_VOID();
+    int last = (hdr->flags & YETTY_YRDAWN_BULK_FLAG_LAST) ? 1 : 0;
+    return yetty_yrdawn_session_bulk_append(f->session, hdr->ref, hdr->seq, body + sizeof(*hdr),
+                                            hdr->chunk_size, last);
 }
 
-static struct yetty_ycore_void_result handle_bye(struct yetty_yrdawn_figure *f,
-                                                 const uint8_t *payload, size_t len)
+static struct yetty_ycore_void_result handle_bye(struct yetty_yrdawn_figure *f, const uint8_t *body,
+                                                 size_t body_len)
 {
-    (void)payload;
-    (void)len;
+    (void)body;
+    (void)body_len;
     f->disconnected = 1;
     f->connected = 0;
     return YETTY_OK_VOID();
 }
 
 /*===========================================================================
- * Per-dispatch arena used by codegen-emitted descriptor decoders.
+ * Sub-op dispatch — shared between process_bytes and process_input
  *=========================================================================*/
 
-void *yrdawn_arena_alloc(struct yrdawn_arena *a, size_t bytes)
+static struct yetty_ycore_void_result dispatch_sub(struct yetty_yrdawn_figure *f, uint32_t sub_op,
+                                                   const uint8_t *body, size_t body_len)
 {
-    if (!a || bytes == 0) {
-        return NULL;
+    switch (sub_op) {
+    case YETTY_YRDAWN_FIGURE_SUB_HELLO:
+        return handle_hello(f, body, body_len);
+    case YETTY_YRDAWN_FIGURE_SUB_CMD:
+        return handle_cmd(f, body, body_len);
+    case YETTY_YRDAWN_FIGURE_SUB_BULK:
+        return handle_bulk(f, body, body_len);
+    case YETTY_YRDAWN_FIGURE_SUB_BYE:
+        return handle_bye(f, body, body_len);
+    default:
+        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: unknown sub_op");
     }
-    if (a->count == a->cap) {
-        size_t cap = a->cap ? a->cap * 2u : 8u;
-        void **grown = (void **)realloc(a->chunks, cap * sizeof(*grown));
-        if (!grown) {
-            return NULL;
-        }
-        a->chunks = grown;
-        a->cap = cap;
-    }
-    void *p = calloc(1u, bytes);
-    if (!p) {
-        return NULL;
-    }
-    a->chunks[a->count++] = p;
-    return p;
-}
-
-void yrdawn_arena_free(struct yrdawn_arena *a)
-{
-    if (!a) {
-        return;
-    }
-    for (size_t i = 0; i < a->count; ++i) {
-        free(a->chunks[i]);
-    }
-    free(a->chunks);
-    a->chunks = NULL;
-    a->count = 0;
-    a->cap = 0;
 }
 
 /*===========================================================================
- * Server callbacks called by server-dispatch.gen.c. `ctx` is the figure.
+ * process_bytes — CREATE_CHILD init payload and any in-memory body
+ *=========================================================================*/
+
+static struct yetty_ycore_void_result yrdawn_figure_process_bytes(struct yetty_yfigure_figure *self,
+                                                                  const uint8_t *bytes,
+                                                                  size_t bytes_len)
+{
+    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
+    if (bytes_len < 4) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn process_bytes: too small for sub_op");
+    }
+    uint32_t sub_op;
+    memcpy(&sub_op, bytes, 4);
+    return dispatch_sub(f, sub_op, bytes + 4, bytes_len - 4);
+}
+
+/*===========================================================================
+ * process_input — streaming sub-op decode off the wire SM.
+ *
+ * The container has already consumed `{u32 length, u32 id}` and bound
+ * us to this record. We own `length` bytes — sub_op first, then the
+ * wire struct body. Buffer the whole record into a small malloc because
+ * the existing per-sub handlers expect contiguous bytes.
+ *=========================================================================*/
+
+static struct yetty_ycore_void_result yrdawn_figure_process_input(
+    struct yetty_yfigure_figure *self, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
+
+    /* The container handed us one record's body bytes via the SM. We
+     * drain everything available right now into a buffer, then dispatch.
+     * The container framing (length, id) is already consumed; what's
+     * left for us is `length` bytes of body that the wire SM will
+     * deliver until at_end. */
+    struct yetty_ycore_buffer accum = {0};
+    uint8_t scratch[4096];
+    for (;;) {
+        struct yetty_ycore_size_result rr =
+            yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_buffer_destroy(&accum);
+            return YETTY_ERR(yetty_ycore_void, "yrdawn process_input: sm read", rr);
+        }
+        if (rr.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                break;
+            }
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        struct yetty_ycore_void_result wr = yetty_ycore_buffer_write(&accum, scratch, rr.value);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_buffer_destroy(&accum);
+            return YETTY_ERR(yetty_ycore_void, "yrdawn process_input: accum write", wr);
+        }
+    }
+
+    if (accum.size < 4) {
+        yetty_ycore_buffer_destroy(&accum);
+        return YETTY_ERR(yetty_ycore_void, "yrdawn process_input: record too small for sub_op");
+    }
+    uint32_t sub_op;
+    memcpy(&sub_op, accum.data, 4);
+    struct yetty_ycore_void_result dr = dispatch_sub(f, sub_op, accum.data + 4, accum.size - 4);
+    yetty_ycore_buffer_destroy(&accum);
+    return dr;
+}
+
+/*===========================================================================
+ * Render
+ *=========================================================================*/
+
+static struct yetty_ycore_void_result yrdawn_figure_render(struct yetty_yfigure_figure *self,
+                                                           struct yetty_ydraw_target *target)
+{
+    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
+    if (!f->pipeline_ready || !f->frame_bind_group || !f->has_frame) {
+        return YETTY_OK_VOID();
+    }
+
+    WGPUTextureView view = target->ops->get_view(target);
+    if (!view) {
+        return YETTY_OK_VOID();
+    }
+
+    float x = self->rect.min.x;
+    float y = self->rect.min.y;
+    float w = self->rect.max.x - self->rect.min.x;
+    float h = self->rect.max.y - self->rect.min.y;
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+
+    ydebug("yrdawn-figure id=%u: render rect=(%.0f,%.0f,%.0fx%.0f)", f->figure_id, x, y, w, h);
+
+    WGPUDevice device = yetty_yrdawn_session_shared_device(f->session);
+    WGPUQueue queue = yetty_yrdawn_session_shared_queue(f->session);
+
+    WGPUCommandEncoderDescriptor enc_desc = {0};
+    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device, &enc_desc);
+    if (!enc) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: create encoder");
+    }
+
+    WGPURenderPassColorAttachment ca = {0};
+    ca.view = view;
+    ca.loadOp = WGPULoadOp_Load;
+    ca.storeOp = WGPUStoreOp_Store;
+    ca.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+
+    WGPURenderPassDescriptor pass_desc = {0};
+    pass_desc.colorAttachmentCount = 1;
+    pass_desc.colorAttachments = &ca;
+
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(enc, &pass_desc);
+    wgpuRenderPassEncoderSetPipeline(pass, f->pipeline);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, f->frame_bind_group, 0, NULL);
+    wgpuRenderPassEncoderSetViewport(pass, x, y, w, h, 0.0f, 1.0f);
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h);
+    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
+
+    WGPUCommandBufferDescriptor cb_desc = {0};
+    WGPUCommandBuffer cb = wgpuCommandEncoderFinish(enc, &cb_desc);
+    wgpuQueueSubmit(queue, 1, &cb);
+    wgpuCommandBufferRelease(cb);
+    wgpuCommandEncoderRelease(enc);
+    return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Destroy
+ *=========================================================================*/
+
+static struct yetty_ycore_void_result yrdawn_figure_destroy(struct yetty_yfigure_figure *self)
+{
+    if (!self) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
+    release_gpu(f);
+
+    if (f->session) {
+        yetty_yrdawn_session_detach_figure(f->session, f);
+        if (yetty_yrdawn_session_figure_count(f->session) == 0) {
+            uint32_t sid = yetty_yrdawn_session_id(f->session);
+            if (f->args) {
+                state_remove_session(f->args->state, sid);
+            }
+            struct yetty_ycore_void_result sr = yetty_yrdawn_session_destroy(f->session);
+            if (YETTY_IS_ERR(sr)) {
+                yetty_ycore_error_destroy(sr.error);
+            }
+        }
+        f->session = NULL;
+    }
+    free(f);
+    return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Ops + factory
+ *=========================================================================*/
+
+static const struct yetty_yfigure_figure_ops *yrdawn_figure_ops(void)
+{
+    static const struct yetty_yfigure_figure_ops ops = {
+        .destroy = yrdawn_figure_destroy,
+        .render = yrdawn_figure_render,
+        .process_input = yrdawn_figure_process_input,
+        .process_bytes = yrdawn_figure_process_bytes,
+    };
+    return &ops;
+}
+
+struct yetty_yrdawn_figure *yetty_yrdawn_figure_from_base(struct yetty_yfigure_figure *base)
+{
+    if (!base || base->ops != yrdawn_figure_ops()) {
+        return NULL;
+    }
+    return (struct yetty_yrdawn_figure *)base;
+}
+
+struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_figure *f)
+{
+    return &f->base;
+}
+
+static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_rectangle rect,
+                                                             const struct yetty_context *context,
+                                                             void *user)
+{
+    struct yetty_yrdawn_factory_args *args = (struct yetty_yrdawn_factory_args *)user;
+    if (!args) {
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: NULL args");
+    }
+    if (!context && !args->context) {
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: no context");
+    }
+    if (!args->state) {
+        args->state = calloc(1, sizeof(*args->state));
+        if (!args->state) {
+            return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: state oom");
+        }
+    }
+    /* args->context may have been registered without a context (tooling).
+     * Prefer the registry-provided context at mint time. */
+    if (!args->context) {
+        args->context = context;
+    }
+
+    struct yetty_yrdawn_figure *f = calloc(1, sizeof(*f));
+    if (!f) {
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: figure oom");
+    }
+    f->base.ops = yrdawn_figure_ops();
+    f->base.rect = rect;
+    f->base.dirty = 1;
+    f->args = args;
+    f->target_format = args->context->runtime->gpu.surface_format;
+    /* figure_id, session, pipeline assigned when SUB_HELLO arrives. */
+    return YETTY_OK(yetty_yfigure_figure_ptr, &f->base);
+}
+
+struct yetty_ycore_void_result yetty_yrdawn_register_factory(
+    struct yetty_yfigure_registry *registry, struct yetty_yrdawn_factory_args *args)
+{
+    if (!registry || !args) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrdawn_register_factory: NULL arg");
+    }
+    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YRDAWN, yrdawn_factory,
+                                           args);
+}
+
+struct yetty_ycore_void_result yetty_yrdawn_factory_args_release(
+    struct yetty_yrdawn_factory_args *args)
+{
+    if (!args || !args->state) {
+        return YETTY_OK_VOID();
+    }
+    /* Each figure's destroy already detached itself and freed its
+     * session on the last detach. Any sessions left here mean figures
+     * outlived the args — a programmer error, but free what's left so
+     * we don't leak. */
+    for (size_t i = 0; i < args->state->count; ++i) {
+        struct yetty_ycore_void_result r =
+            yetty_yrdawn_session_destroy(args->state->sessions[i].session);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+    }
+    free(args->state->sessions);
+    free(args->state);
+    args->state = NULL;
+    return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Server-dispatch callbacks — ctx = figure, navigate to session
  *=========================================================================*/
 
 void *yrdawn_server_get_shared_instance(void *ctx)
 {
-    return ((struct yetty_yrdawn_figure *)ctx)->instance;
+    return yetty_yrdawn_session_shared_instance(((struct yetty_yrdawn_figure *)ctx)->session);
 }
 void *yrdawn_server_get_shared_adapter(void *ctx)
 {
-    return ((struct yetty_yrdawn_figure *)ctx)->adapter;
+    return yetty_yrdawn_session_shared_adapter(((struct yetty_yrdawn_figure *)ctx)->session);
 }
 void *yrdawn_server_get_shared_device(void *ctx)
 {
-    return ((struct yetty_yrdawn_figure *)ctx)->device;
+    return yetty_yrdawn_session_shared_device(((struct yetty_yrdawn_figure *)ctx)->session);
 }
 void *yrdawn_server_get_shared_queue(void *ctx)
 {
-    return ((struct yetty_yrdawn_figure *)ctx)->queue;
-}
-
-static struct yrdawn_handle_entry *handle_find(struct yetty_yrdawn_figure *f, uint64_t handle)
-{
-    for (size_t i = 0; i < f->handle_count; ++i) {
-        if (f->handles[i].handle == handle) {
-            return &f->handles[i];
-        }
-    }
-    return NULL;
+    return yetty_yrdawn_session_shared_queue(((struct yetty_yrdawn_figure *)ctx)->session);
 }
 
 void *yrdawn_server_handle_get(void *ctx, uint64_t handle)
 {
-    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL) {
-        return NULL;
-    }
-    struct yrdawn_handle_entry *e = handle_find((struct yetty_yrdawn_figure *)ctx, handle);
-    return e ? e->ptr : NULL;
+    return yetty_yrdawn_session_handle_get(((struct yetty_yrdawn_figure *)ctx)->session, handle);
 }
 
 struct yetty_ycore_void_result yrdawn_server_handle_set(void *ctx, uint64_t handle, void *ptr)
 {
-    if (!ctx || handle == YETTY_YRDAWN_HANDLE_NULL) {
-        return YETTY_ERR(yetty_ycore_void, "yrdawn_handle_set: bad ctx/handle");
-    }
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)ctx;
-    struct yrdawn_handle_entry *e = handle_find(f, handle);
-    if (e) {
-        e->ptr = ptr;
-        return YETTY_OK_VOID();
-    }
-    if (f->handle_count == f->handle_cap) {
-        size_t cap = f->handle_cap ? f->handle_cap * 2u : 16u;
-        struct yrdawn_handle_entry *grown =
-            (struct yrdawn_handle_entry *)realloc(f->handles, cap * sizeof(*grown));
-        if (!grown) {
-            return YETTY_ERR(yetty_ycore_void, "yrdawn_handle_set: handle table oom");
-        }
-        f->handles = grown;
-        f->handle_cap = cap;
-    }
-    f->handles[f->handle_count++] = (struct yrdawn_handle_entry){
-        .handle = handle,
-        .ptr = ptr,
-        .kind = 0,
-    };
-    return YETTY_OK_VOID();
+    return yetty_yrdawn_session_handle_set(((struct yetty_yrdawn_figure *)ctx)->session, handle,
+                                           ptr);
 }
 
 void yrdawn_server_handle_release(void *ctx, uint64_t handle)
 {
-    if (!ctx) {
-        return;
-    }
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)ctx;
-    for (size_t i = 0; i < f->handle_count; ++i) {
-        if (f->handles[i].handle == handle) {
-            f->handles[i] = f->handles[--f->handle_count];
-            return;
-        }
-    }
+    yetty_yrdawn_session_handle_release(((struct yetty_yrdawn_figure *)ctx)->session, handle);
 }
 
 int yrdawn_server_bulk_take(void *ctx, uint32_t ref, struct yetty_ycore_buffer *out)
 {
-    if (!ctx || !out) {
-        return 0;
-    }
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)ctx;
-    for (size_t i = 0; i < f->bulk_count; ++i) {
-        if (f->bulks[i].ref == ref && f->bulks[i].next_seq == UINT32_MAX) {
-            *out = f->bulks[i].buf;
-            f->bulks[i] = (struct yrdawn_bulk_entry){0};
-            return 1;
-        }
-    }
-    return 0;
+    return yetty_yrdawn_session_bulk_take(((struct yetty_yrdawn_figure *)ctx)->session, ref, out);
 }
 
 struct yetty_ycore_void_result yrdawn_server_emit_reply(void *ctx, uint32_t req_id,
@@ -702,12 +895,13 @@ struct yetty_ycore_void_result yrdawn_server_emit_reply(void *ctx, uint32_t req_
         .kind = YETTY_YRDAWN_REPLY_ASYNC,
         .status = status,
         .payload_ref = 0,
+        .figure_id = f->figure_id,
     };
     if (payload_len == 0 || !payload) {
         return emit(f, YETTY_YRDAWN_OSC_SC_REPLY, &reply, sizeof(reply));
     }
     size_t total = sizeof(reply) + payload_len;
-    uint8_t *frame = (uint8_t *)malloc(total);
+    uint8_t *frame = malloc(total);
     if (!frame) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_server_emit_reply: oom");
     }
@@ -740,6 +934,7 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width
         }
     }
 
+    WGPUQueue queue = yetty_yrdawn_session_shared_queue(f->session);
     WGPUTexelCopyTextureInfo dst = {0};
     dst.texture = f->frame_texture;
     dst.aspect = WGPUTextureAspect_All;
@@ -747,14 +942,16 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width
     layout.bytesPerRow = width * 4u;
     layout.rowsPerImage = height;
     WGPUExtent3D extent = {width, height, 1};
-    wgpuQueueWriteTexture(f->queue, &dst, pixels, bytes, &layout, &extent);
+    wgpuQueueWriteTexture(queue, &dst, pixels, bytes, &layout, &extent);
 
-    ydebug("yrdawn-figure: set_frame %ux%u %zu bytes -> texture updated", width, height, bytes);
+    ydebug("yrdawn-figure id=%u: set_frame %ux%u %zu bytes -> texture updated", f->figure_id, width,
+           height, bytes);
 
     f->has_frame = 1;
     f->base.dirty = 1;
-    if (f->request_render_fn) {
-        struct yetty_ycore_void_result rr = f->request_render_fn(f->request_render_user);
+    if (f->args && f->args->request_render_fn) {
+        struct yetty_ycore_void_result rr =
+            f->args->request_render_fn(f->args->request_render_user);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_destroy(rr.error);
         }
@@ -763,170 +960,41 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width
 }
 
 /*===========================================================================
- * Figure ops — destroy + render
+ * Per-dispatch arena used by codegen-emitted descriptor decoders.
  *=========================================================================*/
 
-static struct yetty_ycore_void_result yrdawn_figure_destroy(struct yetty_yfigure_figure *self)
+void *yrdawn_arena_alloc(struct yrdawn_arena *a, size_t bytes)
 {
-    if (!self) {
-        return YETTY_OK_VOID();
+    if (!a || bytes == 0) {
+        return NULL;
     }
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
-    release_gpu(f);
-    for (size_t i = 0; i < f->bulk_count; ++i) {
-        yetty_ycore_buffer_destroy(&f->bulks[i].buf);
+    if (a->count == a->cap) {
+        size_t cap = a->cap ? a->cap * 2u : 8u;
+        void **grown = realloc(a->chunks, cap * sizeof(*grown));
+        if (!grown) {
+            return NULL;
+        }
+        a->chunks = grown;
+        a->cap = cap;
     }
-    free(f->bulks);
-    free(f->handles);
-    free(f);
-    return YETTY_OK_VOID();
+    void *p = calloc(1u, bytes);
+    if (!p) {
+        return NULL;
+    }
+    a->chunks[a->count++] = p;
+    return p;
 }
 
-static struct yetty_ycore_void_result yrdawn_figure_render(struct yetty_yfigure_figure *self,
-                                                           struct yetty_ydraw_target *target)
+void yrdawn_arena_free(struct yrdawn_arena *a)
 {
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
-    if (!f->pipeline_ready || !f->frame_bind_group || !f->has_frame) {
-        return YETTY_OK_VOID();
-    }
-
-    WGPUTextureView view = target->ops->get_view(target);
-    if (!view) {
-        return YETTY_OK_VOID();
-    }
-
-    float x = self->rect.min.x;
-    float y = self->rect.min.y;
-    float w = self->rect.max.x - self->rect.min.x;
-    float h = self->rect.max.y - self->rect.min.y;
-    if (w <= 0.0f || h <= 0.0f) {
-        return YETTY_OK_VOID();
-    }
-
-    ydebug("yrdawn-figure: render rect=(%.0f,%.0f,%.0fx%.0f)", x, y, w, h);
-
-    WGPUCommandEncoderDescriptor enc_desc = {0};
-    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(f->device, &enc_desc);
-    if (!enc) {
-        return YETTY_ERR(yetty_ycore_void, "yrdawn-figure: create encoder");
-    }
-
-    WGPURenderPassColorAttachment ca = {0};
-    ca.view = view;
-    ca.loadOp = WGPULoadOp_Load;
-    ca.storeOp = WGPUStoreOp_Store;
-    ca.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-    WGPURenderPassDescriptor pass_desc = {0};
-    pass_desc.colorAttachmentCount = 1;
-    pass_desc.colorAttachments = &ca;
-
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(enc, &pass_desc);
-    wgpuRenderPassEncoderSetPipeline(pass, f->pipeline);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, f->frame_bind_group, 0, NULL);
-
-    /* Placement: the figure's own rect (absolute target pixel space).
-     * This is where "figure can be full screen or a viewport in the
-     * host's surface" lives — set_figure_rect on the compositor moves
-     * us; nothing else about render changes. */
-    wgpuRenderPassEncoderSetViewport(pass, x, y, w, h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h);
-
-    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-    wgpuRenderPassEncoderEnd(pass);
-    wgpuRenderPassEncoderRelease(pass);
-
-    WGPUCommandBufferDescriptor cb_desc = {0};
-    WGPUCommandBuffer cb = wgpuCommandEncoderFinish(enc, &cb_desc);
-    wgpuQueueSubmit(f->queue, 1, &cb);
-    wgpuCommandBufferRelease(cb);
-    wgpuCommandEncoderRelease(enc);
-    return YETTY_OK_VOID();
-}
-
-/*===========================================================================
- * Public API
- *=========================================================================*/
-
-struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_create(
-    struct yetty_ycore_rectangle rect, const struct yetty_context *context)
-{
-    if (!context) {
-        return YETTY_ERR(yetty_yrdawn_figure_ptr, "yrdawn_figure_create: NULL context");
-    }
-
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)calloc(1, sizeof(*f));
-    if (!f) {
-        return YETTY_ERR(yetty_yrdawn_figure_ptr, "yrdawn_figure_create: oom");
-    }
-
-    static const struct yetty_yfigure_figure_ops ops = {
-        .destroy = yrdawn_figure_destroy,
-        .render = yrdawn_figure_render,
-    };
-    f->base.ops = &ops;
-    f->base.rect = rect;
-    f->base.dirty = 1;
-
-    f->instance = context->runtime->gpu.app_gpu_context.instance;
-    f->adapter = context->runtime->gpu.adapter;
-    f->device = context->runtime->gpu.device;
-    f->queue = context->runtime->gpu.queue;
-    f->target_format = context->runtime->gpu.surface_format;
-
-    if (!build_pipeline(f)) {
-        release_gpu(f);
-        free(f);
-        return YETTY_ERR(yetty_yrdawn_figure_ptr, "yrdawn_figure_create: pipeline build failed");
-    }
-    /* No placeholder texture: the figure renders nothing until the
-     * first set_frame call builds frame resources at the real size. */
-    return YETTY_OK(yetty_yrdawn_figure_ptr, f);
-}
-
-struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_figure *f)
-{
-    return &f->base;
-}
-
-void yetty_yrdawn_figure_set_emit_osc(struct yetty_yrdawn_figure *f, yetty_yrdawn_emit_osc_fn fn,
-                                      void *user)
-{
-    if (!f) {
+    if (!a) {
         return;
     }
-    f->emit_osc_fn = fn;
-    f->emit_osc_user = user;
-}
-
-void yetty_yrdawn_figure_set_request_render(struct yetty_yrdawn_figure *f,
-                                            yetty_yrdawn_request_render_fn fn, void *user)
-{
-    if (!f) {
-        return;
+    for (size_t i = 0; i < a->count; ++i) {
+        free(a->chunks[i]);
     }
-    f->request_render_fn = fn;
-    f->request_render_user = user;
-}
-
-struct yetty_ycore_void_result yetty_yrdawn_figure_handle_osc(struct yetty_yrdawn_figure *f,
-                                                              int osc_code, const uint8_t *payload,
-                                                              size_t payload_len)
-{
-    if (!f) {
-        return YETTY_ERR(yetty_ycore_void, "yrdawn_figure_handle_osc: NULL figure");
-    }
-    switch (osc_code) {
-    case YETTY_YRDAWN_OSC_CS_HELLO:
-        return handle_hello(f, payload, payload_len);
-    case YETTY_YRDAWN_OSC_CS_CMD:
-        return handle_cmd(f, payload, payload_len);
-    case YETTY_YRDAWN_OSC_CS_BULK:
-        return handle_bulk(f, payload, payload_len);
-    case YETTY_YRDAWN_OSC_CS_BYE:
-        return handle_bye(f, payload, payload_len);
-    default:
-        ywarn("yrdawn-figure: unknown OSC code %d", osc_code);
-        return YETTY_OK_VOID();
-    }
+    free(a->chunks);
+    a->chunks = NULL;
+    a->count = 0;
+    a->cap = 0;
 }

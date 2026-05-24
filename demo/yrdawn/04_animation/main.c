@@ -61,21 +61,13 @@ int main(void)
     FILE *trace = demo_trace_open("04-animation");
 #define LOG(...) do { if (trace) fprintf(trace, __VA_ARGS__); } while (0)
 
-    struct yetty_yrdawn_client_ptr_result cr =
-        yetty_yrdawn_client_create(STDIN_FILENO, STDOUT_FILENO);
-    if (cr.ok != 1) {
-        LOG("04_animation: client_create failed: %s\n", cr.error.msg);
+    struct yetty_yrdawn_client *c = NULL;
+    struct yetty_yrdawn_canvas *canvas = demo_bringup_single_canvas(/*figure_id=*/1, trace, &c);
+    if (!canvas) {
+        LOG("04_animation: bringup failed\n");
         return 1;
     }
-    struct yetty_yrdawn_client *c = cr.value;
-    demo_install_quit_on_q(c);
-
-    (void)yetty_yrdawn_client_send_hello(c);
-    for (int i = 0; i < 200 && !yetty_yrdawn_client_connected(c); ++i) {
-        (void)yetty_yrdawn_client_pump(c);
-        demo_sleep_ms(10);
-    }
-    LOG("04_animation: connected=%d\n", yetty_yrdawn_client_connected(c));
+    LOG("04_animation: connected=%d\n", yetty_yrdawn_canvas_connected(canvas));
 
     uint8_t *pixels = (uint8_t *)malloc((size_t)W * H * 4u);
     if (!pixels) {
@@ -89,7 +81,7 @@ int main(void)
         float phase = (float)i / (float)FRAMES;
         make_frame(pixels, phase);
         struct yetty_ycore_void_result pr =
-            yetty_yrdawn_client_present_frame(c, W, H, pixels, (size_t)W * H * 4u);
+            yetty_yrdawn_canvas_present_frame(canvas, W, H, pixels, (size_t)W * H * 4u);
         if (pr.ok != 1) {
             LOG("04_animation: frame %d present_frame failed: %s\n", i, pr.error.msg);
             ++failures;
@@ -103,7 +95,7 @@ int main(void)
     free(pixels);
     LOG("04_animation: %d frames done (failures=%d)\n", FRAMES, failures);
 
-    (void)yetty_yrdawn_client_send_bye(c);
+    (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
     if (trace) fclose(trace);
     return 0;
