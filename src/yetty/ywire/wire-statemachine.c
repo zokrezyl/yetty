@@ -31,6 +31,12 @@ typedef long long ssize_t;
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ytrace/ytrace.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <time.h>
+#endif
+
 #define OSC_RING_INITIAL_CAP 4096u /* must be power of 2 */
 #define OSC_HANDLERS_INITIAL_CAP 4u
 #define OSC_ARGS_B64_MAX 1024u
@@ -185,6 +191,29 @@ struct yetty_ywire_wire_statemachine {
      * read(). Set inside read(), checked by process() after dispatch. */
     int terminator_seen;
 
+    /* === Rolling envelope traffic stats ===
+     *
+     * Per-envelope accumulator: bytes_pushed counts every byte that
+     * crosses out of the decoder into out_carry while state is one of
+     * the OSC_BODY* values. Reset (and committed when terminator_seen
+     * was set) in envelope_reset — the single chokepoint hit on every
+     * envelope-end transition (successful or aborted alike).
+     *
+     * stats_buckets is a 60-second ring indexed by epoch_second % 60.
+     * Each bucket stamps its own epoch_second so the snapshot can
+     * skip stale slots without an extra "is this fresh" flag.
+     *
+     * stats_last_logged_second is the heartbeat watermark — every time
+     * a commit lands in a strictly newer second than this, we emit one
+     * ydebug line with the snapshot, then update the watermark. */
+    uint64_t stats_current_envelope_bytes;
+    struct {
+        int64_t epoch_second; /* 0 = unused */
+        uint64_t count;
+        uint64_t bytes;
+    } stats_buckets[60];
+    int64_t stats_last_logged_second;
+
     /* Persistent SM coroutine — the scanner runs here. Spawned at SM
      * create, destroyed at SM destroy. The PTY-byte-arrival path
      * (`wire_statemachine_feed`) resumes this coro after appending to
@@ -315,7 +344,102 @@ static struct yetty_ycore_void_result out_carry_append(struct yetty_ywire_wire_s
     }
     memcpy(sm->out_carry + sm->out_carry_tail, src, n);
     sm->out_carry_tail += n;
+    /* Stats hook — every byte that crosses into out_carry during an
+     * envelope dispatch is a decoded body byte the handler will read.
+     * Raw-passthrough paths (SCAN_RAW, ESC-pair fallback in
+     * SCAN_AFTER_ESC) also land here, but they're filtered out by the
+     * state check — they're not envelope traffic. */
+    if (sm->state == SCAN_OSC_BODY || sm->state == SCAN_OSC_BODY_ESC) {
+        sm->stats_current_envelope_bytes += n;
+    }
     return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Rolling envelope traffic stats — bucket maintenance + heartbeat
+ *=========================================================================*/
+
+static int64_t stats_now_seconds(void)
+{
+    /* Direct monotonic-clock call so ywire stays free of any yplatform
+     * link dep (small tools — yecho, yvideo, ycat — pull ywire in
+     * standalone). 1-second resolution is enough for the bucket grid. */
+#ifdef _WIN32
+    return (int64_t)(GetTickCount64() / 1000ULL);
+#else
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0;
+    }
+    return (int64_t)ts.tv_sec;
+#endif
+}
+
+/* Forward — defined below; stats_commit_envelope uses it for the
+ * per-second ydebug heartbeat. */
+static struct yetty_ywire_stats_snapshot stats_snapshot_inline(
+    const struct yetty_ywire_wire_statemachine *sm);
+
+static void stats_commit_envelope(struct yetty_ywire_wire_statemachine *sm)
+{
+    int64_t now_s = stats_now_seconds();
+    size_t idx = (size_t)((now_s % 60 + 60) % 60); /* defensive on negative */
+    if (sm->stats_buckets[idx].epoch_second != now_s) {
+        sm->stats_buckets[idx].epoch_second = now_s;
+        sm->stats_buckets[idx].count = 0;
+        sm->stats_buckets[idx].bytes = 0;
+    }
+    sm->stats_buckets[idx].count += 1;
+    sm->stats_buckets[idx].bytes += sm->stats_current_envelope_bytes;
+
+    if (now_s > sm->stats_last_logged_second) {
+        struct yetty_ywire_stats_snapshot s = stats_snapshot_inline(sm);
+        uint64_t avg_1 = s.count_1s ? s.bytes_1s / s.count_1s : 0;
+        uint64_t avg_10 = s.count_10s ? s.bytes_10s / s.count_10s : 0;
+        uint64_t avg_60 = s.count_60s ? s.bytes_60s / s.count_60s : 0;
+        ydebug("ywire stats sm=%p | 1s: %llu env / %llu B (avg %llu) | "
+               "10s: %llu env / %llu B (avg %llu) | "
+               "60s: %llu env / %llu B (avg %llu)",
+               (void *)sm, (unsigned long long)s.count_1s, (unsigned long long)s.bytes_1s,
+               (unsigned long long)avg_1, (unsigned long long)s.count_10s,
+               (unsigned long long)s.bytes_10s, (unsigned long long)avg_10,
+               (unsigned long long)s.count_60s, (unsigned long long)s.bytes_60s,
+               (unsigned long long)avg_60);
+        sm->stats_last_logged_second = now_s;
+    }
+}
+
+static struct yetty_ywire_stats_snapshot stats_snapshot_inline(
+    const struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_ywire_stats_snapshot snap = {0};
+    if (!sm) {
+        return snap;
+    }
+    int64_t now_s = stats_now_seconds();
+    for (int i = 0; i < 60; i++) {
+        int64_t age = now_s - sm->stats_buckets[i].epoch_second;
+        if (sm->stats_buckets[i].epoch_second == 0 || age < 0 || age >= 60) {
+            continue;
+        }
+        if (age < 1) {
+            snap.count_1s += sm->stats_buckets[i].count;
+            snap.bytes_1s += sm->stats_buckets[i].bytes;
+        }
+        if (age < 10) {
+            snap.count_10s += sm->stats_buckets[i].count;
+            snap.bytes_10s += sm->stats_buckets[i].bytes;
+        }
+        snap.count_60s += sm->stats_buckets[i].count;
+        snap.bytes_60s += sm->stats_buckets[i].bytes;
+    }
+    return snap;
+}
+
+struct yetty_ywire_stats_snapshot yetty_ywire_wire_statemachine_stats_snapshot(
+    const struct yetty_ywire_wire_statemachine *sm)
+{
+    return stats_snapshot_inline(sm);
 }
 
 /*===========================================================================
@@ -722,6 +846,14 @@ static int respawn_handler_coro(struct handler_coro *hc)
 
 static void envelope_reset(struct yetty_ywire_wire_statemachine *sm)
 {
+    /* Stats commit point — only successful envelopes (terminator seen)
+     * land in the bucket. Aborted ones (mid-envelope errors,
+     * resync-on-ESC) drop their accumulated byte count silently. */
+    if (sm->terminator_seen) {
+        stats_commit_envelope(sm);
+    }
+    sm->stats_current_envelope_bytes = 0;
+
     sm->args_b64_len = 0;
     sm->args_decoded_len = 0;
     sm->b64_carry_n = 0;

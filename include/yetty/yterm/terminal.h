@@ -263,6 +263,19 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
 /* Get terminal as yui view (for pushing into pane) */
 struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal);
 
+/* Reverse of _as_view: returns the owning terminal pointer if `view` is
+ * a yterm view, NULL for any other view kind (VNC viewer, ydvnc, …) or
+ * NULL input. Implemented by comparing view->ops against the static
+ * terminal_view_ops table in terminal.c, so it's safe to call on any
+ * yetty_yui_view without prior knowledge of its type. */
+struct yetty_yterm_terminal *yetty_yterm_terminal_from_view(struct yetty_yui_view *view);
+
+/* Borrowed accessor for the terminal's wire statemachine (one per
+ * terminal — same lifetime). NULL when terminal is NULL. Used by the
+ * yui debug window to pull rolling envelope traffic stats. */
+struct yetty_ywire_wire_statemachine *yetty_yterm_terminal_wire_sm(
+    struct yetty_yterm_terminal *terminal);
+
 struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
     struct yetty_yterm_terminal *terminal, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);

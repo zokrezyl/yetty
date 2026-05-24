@@ -1727,6 +1727,24 @@ struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal 
     return terminal ? &terminal->view : NULL;
 }
 
+struct yetty_yterm_terminal *yetty_yterm_terminal_from_view(struct yetty_yui_view *view)
+{
+    /* terminal_view_ops is a file-local static const; identity-compare
+     * the view's ops pointer against it to decide whether this view is
+     * one of ours. Other view kinds (VNC, ydvnc) use different ops
+     * tables and the compare fails — caller treats as "no terminal". */
+    if (!view || view->ops != &terminal_view_ops) {
+        return NULL;
+    }
+    return container_of(view, struct yetty_yterm_terminal, view);
+}
+
+struct yetty_ywire_wire_statemachine *yetty_yterm_terminal_wire_sm(
+    struct yetty_yterm_terminal *terminal)
+{
+    return terminal ? terminal->sm : NULL;
+}
+
 static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);

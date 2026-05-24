@@ -190,6 +190,40 @@ enum yetty_ywire_envelope_kind yetty_ywire_wire_statemachine_kind(
     const struct yetty_ywire_wire_statemachine *sm);
 
 /*===========================================================================
+ * Rolling envelope traffic stats — count + decoded body bytes
+ *
+ * The SM keeps a 60-bucket ring (one bucket per epoch-second) and
+ * updates it whenever an OSC/DCS envelope completes (terminator seen).
+ * Each bucket records (count, decoded_body_bytes); the snapshot
+ * accessor recomputes 1s / 10s / 60s windows from the ring on demand.
+ *
+ * "Decoded body bytes" = bytes that crossed out into out_carry for the
+ * handler to read (post b64, post LZ4F decompression). Wire framing,
+ * envelope kind/code, args slot, and the terminator are NOT counted.
+ *
+ * Idle terminals: stale buckets age out naturally — once a bucket's
+ * epoch_second is older than the snapshot's window, it's skipped.
+ *
+ * The framer also emits one ydebug line per second of traffic — the
+ * same snapshot, on a ~1Hz heartbeat. Silent when no envelopes flow.
+ *=========================================================================*/
+
+struct yetty_ywire_stats_snapshot {
+    uint64_t count_1s;
+    uint64_t count_10s;
+    uint64_t count_60s;
+    /* Decoded body bytes seen in the same windows. Average bytes per
+     * envelope = bytes_Ns / max(1, count_Ns) — caller computes; we
+     * don't divide here to keep the snapshot lossless. */
+    uint64_t bytes_1s;
+    uint64_t bytes_10s;
+    uint64_t bytes_60s;
+};
+
+struct yetty_ywire_stats_snapshot yetty_ywire_wire_statemachine_stats_snapshot(
+    const struct yetty_ywire_wire_statemachine *sm);
+
+/*===========================================================================
  * Catch-all envelope handler
  *
  * Fires for any (kind, code) pair NOT covered by a specific register().

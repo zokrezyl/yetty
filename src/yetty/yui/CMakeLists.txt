@@ -3,6 +3,7 @@ add_library(yetty_yui STATIC
     workspace.c
     tabbar.c
     config-dialog.c
+    debug-window.c
     yui.c
 )
 
