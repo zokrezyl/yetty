@@ -1,6 +1,6 @@
 #include <yetty/yframework/yframework.h>
 #include <yetty/yterm/text-layer.h>
-#include <yetty/yterm/shader-glyph-layer.h>
+#include <yetty/yterm/shader-glyph-figure.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-raster-font.h>

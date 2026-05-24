@@ -40,7 +40,7 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/yterm/shader-glyph-layer.h>
+#include <yetty/yterm/shader-glyph-figure.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
 
@@ -127,6 +127,14 @@ struct yetty_yterm_terminal {
      * comp_sm_shim below. Owned directly. */
     struct yetty_yfigure_container *root_container;
     struct yetty_yfigure_registry *figure_registry;
+
+    /* Shader-glyph figure — animated procedurals at PUA-B cells. Created
+     * by terminal_create after the root container and attached to it
+     * under a reserved high id. Borrowed pointer; the root container
+     * cascades destroy on it. Held here so terminal_resize_grid and
+     * the ZOOM_VISUAL_APPLY broadcast can reach it (the figure isn't
+     * in layers[]). */
+    struct yetty_yterm_shader_glyph_figure *shader_glyph_figure;
 
     /* Default MSDF font attached to every ygrid the root container
      * mints (registered as user-data on KIND_YGRID factory). Borrowed
@@ -998,8 +1006,10 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
      * scissor, so a Clear would have wiped every other pane. */
     ytime_start(layers);
     /* Layers stack bottom→top (background → text → ydraw-scrolling →
-     * ydraw-scene → shader-glyph → ymgui) and all paint into the same
-     * big_target with LoadOp_Load — pixels persist frame to frame.
+     * ydraw-scene) and all paint into the same big_target with
+     * LoadOp_Load — pixels persist frame to frame. Shader-glyph and
+     * ymgui have moved to figures in the root container, rendered after
+     * this loop.
      *
      * Two passes:
      *
@@ -1225,7 +1235,8 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         terminal->new_osc_path_active = (env && env[0] == '1') ? 1 : 0;
         if (terminal->new_osc_path_active) {
             ydebug("terminal_create: YGRID_USE_NEW_OSC=1 active — legacy "
-                   "ydraw/ymgui/yrdawn/shader-glyph layers will be SKIPPED during render");
+                   "ydraw layer will be SKIPPED during render (shader-glyph "
+                   "now runs through the root container)");
         }
     }
     struct yetty_ycore_void_result add_r =
@@ -1287,20 +1298,12 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_OVERLAY failed");
     ydebug("terminal_create: ydraw layer registered for OSC CLEAR/BIN/OVERLAY");
 
-    /* Shader-glyph layer — animated procedurals at cells whose glyph_index
-     * is in the shader-glyph range (top half of u32). Sits above text-layer
-     * in compose order so animations overlay text. Reads text-layer's cell
-     * buffer directly (text_layer must outlive). */
-    struct yetty_yterm_terminal_layer_result sg_res = yetty_yterm_shader_glyph_layer_create(
-        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height, text_layer,
-        yetty_context, terminal_request_render_callback, terminal, terminal_scroll_callback,
-        terminal, terminal_cursor_callback, terminal);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, sg_res,
-                        "terminal_create: shader_glyph layer create failed");
-    add_r = yetty_yterm_terminal_layer_add(terminal, sg_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
-                        "terminal_create: terminal_layer_add(shader_glyph) failed");
-    ydebug("terminal_create: shader_glyph layer created and added");
+    /* Shader-glyph used to be a layer; it's now a yfigure_figure added
+     * as a child of the root container after the container is built
+     * (see further down). Skipped from layers[] entirely so the legacy
+     * layer broadcasts (scroll / cursor / resize_grid / set_visual_zoom)
+     * no longer reach it — the equivalent figure_* helpers are called
+     * from the same call sites. */
 
     /* ymgui has moved out of the layer stack. ImGui frames now flow as
      * yetty_ymgui_figure children of the root container (figure-tree
@@ -1449,6 +1452,36 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register compositor for YCOMPOSITOR_BIN");
     ydebug("terminal_create: ycompositor registered for OSC %d", YETTY_OSC_YCOMPOSITOR_BIN);
+
+    /* Shader-glyph figure — replaces the legacy shader-glyph layer. Added
+     * as a child of the root container under a reserved high id (just
+     * below UINT32_MAX) so it can't collide with producer-assigned ids,
+     * which start at 1 and count up. The container cascades destroy. */
+    {
+        struct yetty_yterm_shader_glyph_figure_ptr_result sgf_res =
+            yetty_yterm_shader_glyph_figure_create(root_rect, cols, rows,
+                                                   text_layer->cell_size.width,
+                                                   text_layer->cell_size.height, text_layer,
+                                                   yetty_context, terminal_request_render_callback,
+                                                   terminal);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, sgf_res,
+                            "terminal_create: shader_glyph figure create failed");
+        terminal->shader_glyph_figure = sgf_res.value;
+        struct yetty_yfigure_figure *sgf_base =
+            yetty_yterm_shader_glyph_figure_as_figure(terminal->shader_glyph_figure);
+        struct yetty_ycore_void_result ar = yetty_yfigure_container_add_child(
+            terminal->root_container, sgf_base, 0xFFFFFFFEu);
+        if (YETTY_IS_ERR(ar)) {
+            struct yetty_ycore_void_result dr = sgf_base->ops->destroy(sgf_base);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
+            terminal->shader_glyph_figure = NULL;
+            return YETTY_ERR(yetty_yterm_terminal,
+                             "terminal_create: shader_glyph figure add_child failed", ar);
+        }
+        ydebug("terminal_create: shader_glyph figure created and attached to root container");
+    }
 
     /* Create render targets for each layer */
     const struct yetty_yinit_gpu_context *app_gpu = &yetty_context->runtime->gpu.app_gpu_context;
@@ -1646,6 +1679,15 @@ struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
             yetty_yfigure_container_as_figure(terminal->root_container);
         rf->rect = new_rect;
         rf->dirty = 1;
+    }
+    /* Shader-glyph figure lives in the root container and doesn't get
+     * resize via the layers[] broadcast. Push the new grid + cell size
+     * explicitly so its uniforms + per-instance quad placement track. */
+    if (terminal->shader_glyph_figure) {
+        struct yetty_ycore_void_result sgr = yetty_yterm_shader_glyph_figure_resize(
+            terminal->shader_glyph_figure, grid_size, cell_size);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sgr,
+                            "yetty_yterm_terminal_resize_grid: shader_glyph figure resize failed");
     }
     return YETTY_OK_VOID();
 }
@@ -2058,6 +2100,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, vr,
                                     "terminal_view_on_event: layer set_visual_zoom failed");
             }
+        }
+        /* Shader-glyph figure is outside layers[]; broadcast directly. */
+        if (terminal->shader_glyph_figure) {
+            struct yetty_ycore_void_result vr = yetty_yterm_shader_glyph_figure_set_visual_zoom(
+                terminal->shader_glyph_figure, scale, ox, oy);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, vr,
+                                "terminal_view_on_event: shader_glyph figure set_visual_zoom");
         }
         ydebug("terminal: ZOOM_VISUAL_APPLY scale=%.2f off=(%.1f,%.1f)", scale, ox, oy);
         return YETTY_OK(yetty_ycore_int, 1);
