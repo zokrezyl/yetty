@@ -211,6 +211,29 @@ int yetty_yfigure_container_for_each(
     struct yetty_yfigure_container *group,
     yetty_yfigure_container_visitor_fn fn, void *user);
 
+/*===========================================================================
+ * Hit-test against a container's children.
+ *
+ * The result identifies the child whose rect contains the cursor and
+ * the cursor's coordinates inside that child's own pixel space
+ * (origin = child rect's top-left). figure_id == 0 means "no hit".
+ *
+ * Iteration is insertion order = back-to-front; the first match is
+ * returned, so for overlapping children this picks the BACK-most.
+ * Callers that want top-most-wins should walk children in reverse via
+ * for_each + their own state, or this helper can be replaced later
+ * once the wire grows an explicit z-order hint.
+ *=========================================================================*/
+
+struct yetty_yfigure_hit {
+    uint32_t figure_id;
+    float local_x;
+    float local_y;
+};
+
+struct yetty_yfigure_hit yetty_yfigure_container_hit_test(
+    struct yetty_yfigure_container *container, float x, float y);
+
 #ifdef __cplusplus
 }
 #endif

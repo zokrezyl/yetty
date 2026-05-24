@@ -32,6 +32,8 @@
 #include <yetty/yrpc/rpc-server.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/ymgui/figure.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -42,6 +44,22 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 #endif
+
+/*===========================================================================
+ * Figure-kind factory args
+ *
+ * Each figure kind exports its own `register_factory(registry, &args)`
+ * call. The args bundle (e.g. ymgui's lazy pipeline cache) must outlive
+ * every figure minted from any registry it was registered on. yframework
+ * is the natural owner — it sits below every host (yterm, yui, …) and
+ * outlives them all. The bundle is kept opaque to yframework.h so the
+ * header doesn't acquire kind-specific dependencies.
+ *=========================================================================*/
+
+struct yetty_yframework_factory_state {
+    struct yetty_ymgui_factory_args ymgui_args;
+    /* Future kinds: yrdawn_args, ygui_args, ygrid_args ... */
+};
 
 void yetty_yframework_log_gpu_info(WGPUAdapter adapter)
 {
@@ -345,6 +363,13 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
         return YETTY_ERR(yetty_yframework_ptr, "yframework_create: alloc failed");
     }
 
+    rt->factory_state = calloc(1, sizeof(struct yetty_yframework_factory_state));
+    if (!rt->factory_state) {
+        free(rt);
+        return YETTY_ERR(yetty_yframework_ptr,
+                         "yframework_create: factory_state alloc failed");
+    }
+
     /* Wire the borrowed fields and the platform GPU slice. */
     rt->config              = yinit_rt->config;
     rt->platform_input_pipe = yinit_rt->platform_input_pipe;
@@ -434,6 +459,20 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
         rt->rpc_server = NULL;
     }
 
+    /* Tear down the per-kind factory bundles BEFORE the GPU goes away
+     * — ymgui_factory_args holds an owned pipeline (textures, shader
+     * module) whose destroy issues wgpu calls. */
+    if (rt->factory_state) {
+        struct yetty_ycore_void_result r =
+            yetty_ymgui_factory_args_release(&rt->factory_state->ymgui_args);
+        if (YETTY_IS_ERR(r)) {
+            if (YETTY_IS_OK(first_err)) first_err = r;
+            else yetty_ycore_error_destroy(r.error);
+        }
+        free(rt->factory_state);
+        rt->factory_state = NULL;
+    }
+
     /* render_target before wgpu/event_loop: buffer-map callbacks the
      * release path fires with status=Aborted dereference wgpu->loop. */
     if (rt->render_target && rt->render_target->ops && rt->render_target->ops->destroy) {
@@ -494,6 +533,32 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
     if (YETTY_IS_ERR(first_err)) {
         return YETTY_ERR(yetty_ycore_void, "yframework_destroy: subsystem teardown failed", first_err);
     }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
+    struct yetty_yframework *framework,
+    struct yetty_yfigure_registry *registry,
+    const struct yetty_context *context)
+{
+    if (!framework || !registry || !context)
+        return YETTY_ERR(yetty_ycore_void,
+                         "yframework_register_figure_factories: NULL arg");
+    if (!framework->factory_state)
+        return YETTY_ERR(yetty_ycore_void,
+                         "yframework_register_figure_factories: factory_state missing");
+
+    /* ymgui — the args bundle's context is the host's context for this
+     * registration. A single yframework can register the same bundle on
+     * multiple hosts' registries; the last context wins, which is fine
+     * because every host shares the same yframework so the GPU /
+     * runtime members the factory actually reads are identical. */
+    framework->factory_state->ymgui_args.context = context;
+    struct yetty_ycore_void_result mr =
+        yetty_ymgui_register_factory(registry, &framework->factory_state->ymgui_args);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr,
+                        "yframework_register_figure_factories: ymgui register");
+
     return YETTY_OK_VOID();
 }
 

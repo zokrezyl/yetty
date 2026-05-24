@@ -15,7 +15,11 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ymgui/figure.h>
+/* <yetty/ymgui/wire.h> is still pulled in below for YMGUI_WIRE_VERSION
+ * and the YETTY_YMGUI_INPUT_* enum constants used when emitting input
+ * envelopes back to the focused figure. The ymgui *figure* header is
+ * no longer needed — the factory is registered via yframework and the
+ * hit-test lives in yfigure now. */
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterm/client-input.h>
 #include <yetty/yrdawn/wire.h>
@@ -157,11 +161,6 @@ struct yetty_yterm_terminal {
      * and the host has to outlive every ygrid the registry might still
      * mint. */
     struct yetty_ygrid_factory_args figure_args;
-
-    /* Same idea for the YMGUI factory — the args carry the lazily-built
-     * shared ymgui pipeline. Lives on the terminal so it outlives every
-     * ymgui figure the registry might mint. */
-    struct yetty_ymgui_factory_args ymgui_figure_args;
 
     /* Wire-SM shim. The SM only knows how to dispatch process_input
      * via terminal_layer.ops — this static-base instance forwards its
@@ -500,11 +499,11 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
  * (drag in progress), the captured figure always wins and coords are
  * reported as-if-projected into its local space. Otherwise the topmost
  * visible ymgui figure under the cursor wins. */
-static struct yetty_ymgui_hit terminal_resolve_figure_hit(struct yetty_yterm_terminal *terminal,
+static struct yetty_yfigure_hit terminal_resolve_figure_hit(struct yetty_yterm_terminal *terminal,
                                                           float lx, float ly,
                                                           uint32_t captured_figure_id)
 {
-    struct yetty_ymgui_hit hit = {0, 0, 0};
+    struct yetty_yfigure_hit hit = {0, 0, 0};
     if (!terminal->root_container) {
         return hit;
     }
@@ -515,15 +514,15 @@ static struct yetty_ymgui_hit terminal_resolve_figure_hit(struct yetty_yterm_ter
          * Hit-test first — if cursor is still inside the captured figure,
          * use the natural local coords; otherwise fall back to the raw
          * pane coords tagged with the captured id. */
-        hit = yetty_ymgui_figure_hit_test_container(terminal->root_container, lx, ly);
+        hit = yetty_yfigure_container_hit_test(terminal->root_container, lx, ly);
         if (hit.figure_id == captured_figure_id) {
             return hit;
         }
-        struct yetty_ymgui_hit captured = {captured_figure_id, lx, ly};
+        struct yetty_yfigure_hit captured = {captured_figure_id, lx, ly};
         return captured;
     }
 
-    return yetty_ymgui_figure_hit_test_container(terminal->root_container, lx, ly);
+    return yetty_yfigure_container_hit_test(terminal->root_container, lx, ly);
 }
 
 /* Emit a keyboard event for the focused figure. Returns 1 if delivered
@@ -1485,15 +1484,15 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                                 "terminal_create: ygrid register_factory_for_kind");
         }
 
-        /* YMGUI — Dear-ImGui frames as figure-tree siblings. The factory
-         * args carry the lazily-built shared pipeline; pre-stash the
-         * context so the first mint can build it. */
-        terminal->ymgui_figure_args.context = yetty_context;
-        terminal->ymgui_figure_args.pipeline = NULL;
-        struct yetty_ycore_void_result mr = yetty_ymgui_register_factory(
-            terminal->figure_registry, &terminal->ymgui_figure_args);
-        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, mr,
-                            "terminal_create: ymgui register_factory");
+        /* Framework-owned figure kinds (ymgui today; yrdawn/ygui as
+         * they migrate). The framework holds the per-kind args bundles
+         * so terminal stays kind-agnostic — same call would serve any
+         * other host that builds its own registry. */
+        struct yetty_ycore_void_result fr =
+            yetty_yframework_register_figure_factories(
+                yetty_context->runtime, terminal->figure_registry, yetty_context);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, fr,
+                            "terminal_create: framework register_figure_factories");
     }
 
     struct yetty_ycore_rectangle root_rect = {
@@ -1606,14 +1605,6 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
             yetty_yfigure_registry_destroy(terminal->figure_registry);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         terminal->figure_registry = NULL;
-    }
-    /* ymgui pipeline (if lazily built) outlived every ymgui figure that
-     * borrowed it — the container cascade above already destroyed those.
-     * Safe to tear it down now. */
-    {
-        struct yetty_ycore_void_result r =
-            yetty_ymgui_factory_args_release(&terminal->ymgui_figure_args);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
     }
     /* The complex-prim factory outlives the registry — every ygrid the
      * registry minted borrowed our factory pointer, and they must be
@@ -2307,7 +2298,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * chrome height. */
         if (terminal->mouse_click_subscribed) {
             uint32_t focused = terminal->focused_figure_id;
-            struct yetty_ymgui_hit hit;
+            struct yetty_yfigure_hit hit;
             if (press) {
                 hit = terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, 0);
                 if (hit.figure_id != focused) {
@@ -2379,7 +2370,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * above — figure rects carry viewport_offset already. */
         uint32_t captured =
             terminal->mouse_buttons_held ? terminal->focused_figure_id : 0u;
-        struct yetty_ymgui_hit hit =
+        struct yetty_yfigure_hit hit =
             terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, captured);
         if (hit.figure_id != 0) {
             struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
@@ -2408,7 +2399,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * scrollback. */
         if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
             /* Window coords, same reason as MOUSE_DOWN. */
-            struct yetty_ymgui_hit hit = terminal_resolve_figure_hit(
+            struct yetty_yfigure_hit hit = terminal_resolve_figure_hit(
                 terminal, event->mouse_scroll.x, event->mouse_scroll.y, 0);
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(

@@ -694,3 +694,38 @@ struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(
     HASH_ADD_INT(group->children, id, e);
     return YETTY_OK_VOID();
 }
+
+/*===========================================================================
+ * Hit-test
+ *
+ * Walks every child in insertion order (= back-to-front in z) and
+ * returns the first one whose rect contains the point. Cursor coords
+ * are absolute target pixels, the same space child rects live in.
+ *=========================================================================*/
+
+struct hit_visitor_state {
+    float x;
+    float y;
+    struct yetty_yfigure_hit hit;
+};
+
+static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user)
+{
+    struct hit_visitor_state *st = user;
+    if (st->hit.figure_id != 0) return 0; /* already found */
+    if (st->x < child->rect.min.x || st->x >= child->rect.max.x ||
+        st->y < child->rect.min.y || st->y >= child->rect.max.y)
+        return 0;
+    st->hit.figure_id = id;
+    st->hit.local_x = st->x - child->rect.min.x;
+    st->hit.local_y = st->y - child->rect.min.y;
+    return 0;
+}
+
+struct yetty_yfigure_hit yetty_yfigure_container_hit_test(
+    struct yetty_yfigure_container *container, float x, float y)
+{
+    struct hit_visitor_state st = {.x = x, .y = y, .hit = {0, 0, 0}};
+    yetty_yfigure_container_for_each(container, hit_visit, &st);
+    return st.hit;
+}

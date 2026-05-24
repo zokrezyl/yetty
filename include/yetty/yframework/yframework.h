@@ -19,8 +19,8 @@
  * Teardown:     app -> yframework -> yinit.
  */
 
-#ifndef YETTY_YRUNTIME_YRUNTIME_H
-#define YETTY_YRUNTIME_YRUNTIME_H
+#ifndef YETTY_YFRAMEWORK_YFRAMEWORK_H
+#define YETTY_YFRAMEWORK_YFRAMEWORK_H
 
 #include <yetty/ycore/result.h>
 #include <yetty/yetty/yetty.h>
@@ -40,6 +40,12 @@ struct yetty_yplatform_wgpu;
 struct yetty_yvnc_server;
 struct yetty_yrpc_server;
 struct yetty_ydraw_target;
+struct yetty_yfigure_registry;
+struct yetty_context;
+/* Opaque holder for per-kind factory args bundles (ymgui pipeline cache,
+ * future: yrdawn/ygui/ygrid bundles). Defined in yframework.c so the
+ * header doesn't pull in any kind-specific types. */
+struct yetty_yframework_factory_state;
 
 struct yetty_yframework {
     /* Borrowed from yinit_runtime; not owned. yframework_destroy leaves
@@ -65,6 +71,11 @@ struct yetty_yframework {
     struct yetty_yvnc_server        *vnc_server;    /* NULL when vnc config off */
     struct yetty_yrpc_server        *rpc_server;    /* NULL when rpc/port unset */
     struct yetty_ydraw_target       *render_target;
+
+    /* Per-kind factory args bundles (e.g. ymgui's lazy-pipeline cache).
+     * The struct is private to yframework.c; consumers only see this
+     * pointer + the register_figure_factories entry point. */
+    struct yetty_yframework_factory_state *factory_state;
 };
 
 YETTY_YRESULT_DECLARE(yetty_yframework_ptr, struct yetty_yframework *);
@@ -95,8 +106,25 @@ void yetty_yframework_log_gpu_info(WGPUAdapter adapter);
 struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(
     struct yetty_yframework *rt, uint32_t width, uint32_t height);
 
+/* Register every figure kind the framework ships (ymgui today; yrdawn /
+ * ygui / ygrid sub-kinds as they migrate) onto the given registry.
+ *
+ * Hosts (yterm, yui, …) own their own root containers but share the
+ * framework's set of factories — they each create a registry, hand it
+ * here, and from that point on the registry resolves any kind the
+ * framework knows about. The args bundles live on `framework->factory_state`,
+ * so a single yframework can populate any number of registries.
+ *
+ * `context` is the yetty_context the framework propagates to factories
+ * at mint time. Borrowed; the caller must keep it alive at least until
+ * every figure minted via this registry is destroyed. */
+struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
+    struct yetty_yframework *framework,
+    struct yetty_yfigure_registry *registry,
+    const struct yetty_context *context);
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YRUNTIME_YRUNTIME_H */
+#endif /* YETTY_YFRAMEWORK_YFRAMEWORK_H */

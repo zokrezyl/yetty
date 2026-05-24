@@ -50,12 +50,6 @@ YETTY_YRESULT_DECLARE(yetty_ymgui_pipeline_ptr, struct yetty_ymgui_pipeline *);
  * figure_id == 0 means no figure was under the queried point. When
  * figure_id != 0, local_x/local_y are the cursor's coordinates in the
  * figure's own pixel space (origin = figure's top-left). */
-struct yetty_ymgui_hit {
-    uint32_t figure_id;
-    float local_x;
-    float local_y;
-};
-
 /* Callback the compositor uses to ship server-to-client ymgui OSCs
  * (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE / SC_FOCUS) back to the client process. The
  * compositor passes the OSC code + raw payload bytes; the host wraps
@@ -152,20 +146,6 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
  * this to filter the heterogeneous children of a yfigure container. */
 struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(
     struct yetty_yfigure_figure *base);
-
-/* Walk a yfigure container looking for the topmost ymgui figure whose
- * rect contains the pane-local point (x, y). On hit, `figure_id` is
- * the parent-scoped id and (local_x, local_y) are the cursor's
- * coordinates inside the figure's own pixel space (origin at the
- * figure's top-left). When no ymgui figure is under the cursor, returns
- * `{0, 0, 0}`.
- *
- * Walks in reverse z-order so the topmost figure wins. The cursor's
- * coords are in absolute target pixel space (same coords the figures'
- * rects live in). */
-struct yetty_yfigure_container;
-struct yetty_ymgui_hit yetty_ymgui_figure_hit_test_container(
-    struct yetty_yfigure_container *container, float x, float y);
 
 #ifdef __cplusplus
 }
