@@ -589,12 +589,18 @@ static bool upload_figure_atlas(ymgui_figure_state *c)
                                  /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return false;
     }
-    if (!yetty_yface_write(g_state.yface_out, &outer, sizeof(outer)).ok) return false;
-    if (!yetty_yface_write(g_state.yface_out, &sub_op, sizeof(sub_op)).ok) return false;
-    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) return false;
-    if (!yetty_yface_write(g_state.yface_out, pixels, pixel_bytes).ok) return false;
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) return false;
-    if (flush_yface_to_fd() < 0) return false;
+    if (!yetty_yface_write(g_state.yface_out, &outer, sizeof(outer)).ok) { return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, &sub_op, sizeof(sub_op)).ok) { return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) { return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, pixels, pixel_bytes).ok) { return false;
+}
+    if (!yetty_yface_finish_write(g_state.yface_out).ok) { return false;
+}
+    if (flush_yface_to_fd() < 0) { return false;
+}
 
     io.Fonts->SetTexID((ImTextureID)(intptr_t)YMGUI_TEX_ID_FONT_ATLAS);
     c->atlas_uploaded = true;
@@ -894,8 +900,10 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
                                  /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return;
     }
-    if (!yetty_yface_write(g_state.yface_out, &outer, sizeof(outer)).ok) return;
-    if (!yetty_yface_write(g_state.yface_out, &sub_op, sizeof(sub_op)).ok) return;
+    if (!yetty_yface_write(g_state.yface_out, &outer, sizeof(outer)).ok) { return;
+}
+    if (!yetty_yface_write(g_state.yface_out, &sub_op, sizeof(sub_op)).ok) { return;
+}
     if (!yetty_yface_write(g_state.yface_out, &fh, sizeof(fh)).ok) {
         return;
     }
