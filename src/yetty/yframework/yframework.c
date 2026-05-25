@@ -634,16 +634,19 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
     return YETTY_OK_VOID();
 }
 
-#ifdef YETTY_HAS_YRDAWN_SERVER
 struct yetty_yrdawn_factory_args *yetty_yframework_factory_args_yrdawn(
     struct yetty_yframework *framework)
 {
+#ifdef YETTY_HAS_YRDAWN_SERVER
     if (!framework || !framework->factory_state) {
         return NULL;
     }
     return &framework->factory_state->yrdawn_args;
-}
+#else
+    (void)framework;
+    return NULL;
 #endif
+}
 
 struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(struct yetty_yframework *rt,
                                                                     uint32_t width, uint32_t height)
