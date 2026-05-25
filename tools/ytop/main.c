@@ -11,7 +11,7 @@
  *   Press 'q' to quit.
  */
 
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 
 #include <dirent.h>
 #include <pwd.h>
@@ -249,11 +249,11 @@ static int proc_cmp_cpu_desc(const void *a, const void *b)
 #define MAX_TABLE_ROWS  32
 
 struct app_state {
-    struct yetty_ygui_engine *engine;
-    struct yetty_ygui_widget *header;
-    struct yetty_ygui_widget *cpu_bars[MAX_CORES + 1];
-    struct yetty_ygui_widget *cpu_labels[MAX_CORES + 1];
-    struct yetty_ygui_widget *table;
+    struct yetty_ygui_old_engine *engine;
+    struct yetty_ygui_old_widget *header;
+    struct yetty_ygui_old_widget *cpu_bars[MAX_CORES + 1];
+    struct yetty_ygui_old_widget *cpu_labels[MAX_CORES + 1];
+    struct yetty_ygui_old_widget *table;
 
     struct cpu_state cpu_st;
     struct proc_entry procs[MAX_PROCS];
@@ -294,7 +294,7 @@ static uint32_t core_accent(int core)
 static void build_ui(struct app_state *s, int n_cores)
 {
     /* Header label across the top. */
-    s->header = yetty_ygui_engine_label(s->engine, "ytop_title", MARGIN, MARGIN,
+    s->header = yetty_ygui_old_engine_label(s->engine, "ytop_title", MARGIN, MARGIN,
                                          "ytop — q to quit");
 
     /* Per-core rows: "cpuN" label + progress bar + "%" label, wrapped two
@@ -317,13 +317,13 @@ static void build_ui(struct app_state *s, int n_cores)
         snprintf(id_val, sizeof(id_val), "cpu_val_%d", i);
         snprintf(lbl_text, sizeof(lbl_text), "cpu%d", i - 1);
 
-        yetty_ygui_engine_label(s->engine, id_lbl, x, y + 4.0f, lbl_text);
-        s->cpu_bars[i] = yetty_ygui_engine_progress(s->engine, id_bar,
+        yetty_ygui_old_engine_label(s->engine, id_lbl, x, y + 4.0f, lbl_text);
+        s->cpu_bars[i] = yetty_ygui_old_engine_progress(s->engine, id_bar,
                                                      x + 50.0f, y, BAR_W, ROW_H, 0.0f);
         if (s->cpu_bars[i]) {
-            yetty_ygui_widget_set_accent_color(s->cpu_bars[i], core_accent(i - 1));
+            yetty_ygui_old_widget_set_accent_color(s->cpu_bars[i], core_accent(i - 1));
         }
-        s->cpu_labels[i] = yetty_ygui_engine_label(s->engine, id_val,
+        s->cpu_labels[i] = yetty_ygui_old_engine_label(s->engine, id_val,
                                                     x + 50.0f + BAR_W + 8.0f, y + 4.0f,
                                                     "  0%");
     }
@@ -337,11 +337,11 @@ static void build_ui(struct app_state *s, int n_cores)
     }
     float table_h = ROW_H + (MAX_TABLE_ROWS + 1) * ROW_H;
 
-    s->table = yetty_ygui_engine_table(s->engine, "procs", MARGIN, table_y,
+    s->table = yetty_ygui_old_engine_table(s->engine, "procs", MARGIN, table_y,
                                         table_w, table_h);
     const char *names[]  = { "PID", "USER",   "STATE", "%CPU",  "RSS",   "COMMAND" };
     const float widths[] = { 70.0f, 90.0f,    60.0f,    70.0f,   100.0f,  0.0f     };
-    yetty_ygui_widget_table_set_columns(s->table, names, widths,
+    yetty_ygui_old_widget_table_set_columns(s->table, names, widths,
                                          (int)(sizeof(names) / sizeof(names[0])));
 }
 
@@ -369,12 +369,12 @@ static void refresh(struct app_state *s)
             s->cpu_st.pct[i] = p;
             if (i >= 1 && i <= MAX_CORES) {
                 if (s->cpu_bars[i]) {
-                    yetty_ygui_widget_progress_set_value(s->cpu_bars[i], p / 100.0f);
+                    yetty_ygui_old_widget_progress_set_value(s->cpu_bars[i], p / 100.0f);
                 }
                 if (s->cpu_labels[i]) {
                     char buf[16];
                     snprintf(buf, sizeof(buf), "%5.1f%%", p);
-                    yetty_ygui_widget_label_set_text(s->cpu_labels[i], buf);
+                    yetty_ygui_old_widget_label_set_text(s->cpu_labels[i], buf);
                 }
             }
         }
@@ -388,7 +388,7 @@ static void refresh(struct app_state *s)
     float ticks_per_s = (float)s->clock_ticks;
     qsort(s->procs, (size_t)s->n_procs, sizeof(s->procs[0]), proc_cmp_cpu_desc);
 
-    yetty_ygui_widget_table_clear_rows(s->table);
+    yetty_ygui_old_widget_table_clear_rows(s->table);
     int rows_to_show = s->n_procs < MAX_TABLE_ROWS ? s->n_procs : MAX_TABLE_ROWS;
     for (int i = 0; i < rows_to_show; i++) {
         const struct proc_entry *e = &s->procs[i];
@@ -410,7 +410,7 @@ static void refresh(struct app_state *s)
             rss_s,
             e->comm,
         };
-        yetty_ygui_widget_table_add_row(s->table, cells, 6);
+        yetty_ygui_old_widget_table_add_row(s->table, cells, 6);
     }
 
     /* Snapshot for the next delta. */
@@ -432,12 +432,12 @@ static void on_refresh_timer(uv_timer_t *t)
     refresh(s);
 }
 
-static void on_key(struct yetty_ygui_engine *engine, uint32_t key, int mods, void *user)
+static void on_key(struct yetty_ygui_old_engine *engine, uint32_t key, int mods, void *user)
 {
     (void)mods;
     (void)user;
     if (key == 'q' || key == 'Q') {
-        yetty_ygui_engine_stop(engine);
+        yetty_ygui_old_engine_stop(engine);
     }
 }
 
@@ -446,14 +446,14 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    if (yetty_ygui_init() != 0) {
+    if (yetty_ygui_old_init() != 0) {
         fprintf(stderr, "ytop: ygui_init failed (run inside a real terminal)\n");
         return 1;
     }
 
     struct app_state *s = calloc(1, sizeof(*s));
     if (!s) {
-        yetty_ygui_shutdown();
+        yetty_ygui_old_shutdown();
         return 1;
     }
     s->clock_ticks = sysconf(_SC_CLK_TCK);
@@ -466,39 +466,39 @@ int main(int argc, char **argv)
     if (read_proc_stat(&s->cpu_st) < 0) {
         fprintf(stderr, "ytop: cannot read /proc/stat (Linux only)\n");
         free(s);
-        yetty_ygui_shutdown();
+        yetty_ygui_old_shutdown();
         return 1;
     }
     memcpy(s->cpu_st.prev, s->cpu_st.curr, sizeof(s->cpu_st.curr));
 
-    struct yetty_ygui_engine_args args = { .name = "ytop" };
-    struct ygui_engine_ptr_result eng_r = yetty_ygui_engine_create(args);
+    struct yetty_ygui_old_engine_args args = { .name = "ytop" };
+    struct ygui_engine_ptr_result eng_r = yetty_ygui_old_engine_create(args);
     if (!eng_r.ok) {
         yetty_ycore_error_destroy(eng_r.error);
         free(s);
-        yetty_ygui_shutdown();
+        yetty_ygui_old_shutdown();
         return 1;
     }
     s->engine = eng_r.value;
     build_ui(s, s->cpu_st.n_cores);
-    yetty_ygui_engine_on_key(s->engine, on_key, NULL);
+    yetty_ygui_old_engine_on_key(s->engine, on_key, NULL);
 
     /* Per-tick CPU/memory sampler timer attached to the engine's loop
      * (the engine owns the loop now). */
-    uv_loop_t *loop = yetty_ygui_engine_get_loop(s->engine);
+    uv_loop_t *loop = yetty_ygui_old_engine_get_loop(s->engine);
     uv_timer_t refresh_timer;
     uv_timer_init(loop, &refresh_timer);
     refresh_timer.data = s;
     uv_timer_start(&refresh_timer, on_refresh_timer, /*timeout_ms=*/0,
                    /*repeat_ms=*/REFRESH_MS);
 
-    yetty_ygui_engine_run(s->engine);
+    yetty_ygui_old_engine_run(s->engine);
 
     uv_timer_stop(&refresh_timer);
     uv_close((uv_handle_t *)&refresh_timer, NULL);
 
-    yetty_ygui_engine_destroy(s->engine);
+    yetty_ygui_old_engine_destroy(s->engine);
     free(s);
-    yetty_ygui_shutdown();
+    yetty_ygui_old_shutdown();
     return 0;
 }

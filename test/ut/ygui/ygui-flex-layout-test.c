@@ -5,7 +5,7 @@
  *   - create engine
  *   - inject a known canvas size via the testing API
  *   - build a flex container with children using grow / justify / align
- *   - call yetty_ygui_engine_layout()
+ *   - call yetty_ygui_old_engine_layout()
  *   - assert resolved layout boxes
  *
  * Returns 0 on success, non-zero on first failed assertion.
@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 
 static int g_failures = 0;
 
@@ -37,29 +37,29 @@ static int g_failures = 0;
 
 static int g_devnull_fd = -1;
 
-static struct yetty_ygui_engine *make_engine(float canvas_w, float canvas_h)
+static struct yetty_ygui_old_engine *make_engine(float canvas_w, float canvas_h)
 {
-    struct yetty_ygui_engine_args args = { .name = "flex-test" };
-    struct ygui_engine_ptr_result r = yetty_ygui_engine_create(args);
+    struct yetty_ygui_old_engine_args args = { .name = "flex-test" };
+    struct ygui_engine_ptr_result r = yetty_ygui_old_engine_create(args);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "engine_create failed\n");
         exit(2);
     }
-    struct yetty_ygui_engine *engine = r.value;
-    yetty_ygui_engine_set_size(engine, canvas_w, canvas_h);
+    struct yetty_ygui_old_engine *engine = r.value;
+    yetty_ygui_old_engine_set_size(engine, canvas_w, canvas_h);
     /* Silence destroy-time OSC writes so the test output is clean. */
     if (g_devnull_fd < 0) {
         g_devnull_fd = open("/dev/null", O_WRONLY);
     }
     if (g_devnull_fd >= 0) {
-        yetty_ygui_engine_set_output_fd(engine, g_devnull_fd);
+        yetty_ygui_old_engine_set_output_fd(engine, g_devnull_fd);
     }
     return engine;
 }
 
-static void run_layout(struct yetty_ygui_engine *engine)
+static void run_layout(struct yetty_ygui_old_engine *engine)
 {
-    struct yetty_ycore_void_result lr = yetty_ygui_engine_layout(engine);
+    struct yetty_ycore_void_result lr = yetty_ygui_old_engine_layout(engine);
     if (YETTY_IS_ERR(lr)) {
         fprintf(stderr, "engine_layout failed\n");
         yetty_ycore_error_destroy(lr.error);
@@ -71,9 +71,9 @@ static void run_layout(struct yetty_ygui_engine *engine)
  * pointers are non-NULL, so a Result error here is a test-infrastructure
  * failure. Abort loudly instead of polluting every assertion with the
  * check. */
-static struct yetty_ycore_rectangle layout_box(const struct yetty_ygui_widget *w)
+static struct yetty_ycore_rectangle layout_box(const struct yetty_ygui_old_widget *w)
 {
-    struct rectangle_result r = yetty_ygui_widget_get_layout_box(w);
+    struct rectangle_result r = yetty_ygui_old_widget_get_layout_box(w);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "layout_box: NULL widget\n");
         yetty_ycore_error_destroy(r.error);
@@ -91,19 +91,19 @@ static struct yetty_ycore_rectangle layout_box(const struct yetty_ygui_widget *w
 static void test_row_grow(void)
 {
     fprintf(stderr, "\n[test_row_grow]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 100);
+    struct yetty_ygui_old_engine *e = make_engine(400, 100);
 
-    struct yetty_ygui_widget *box = yetty_ygui_engine_hbox(e, "row", 0, 0, 400, 100);
-    yetty_ygui_widget_set_padding(box, 0, 0, 0, 0);
-    yetty_ygui_widget_set_gap(box, 10);
+    struct yetty_ygui_old_widget *box = yetty_ygui_old_engine_hbox(e, "row", 0, 0, 400, 100);
+    yetty_ygui_old_widget_set_padding(box, 0, 0, 0, 0);
+    yetty_ygui_old_widget_set_gap(box, 10);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(e, "a", 0, 0, 50, 30, "A");
-    struct yetty_ygui_widget *b = yetty_ygui_engine_button(e, "b", 0, 0, 50, 30, "B");
-    struct yetty_ygui_widget *c = yetty_ygui_engine_button(e, "c", 0, 0, 50, 30, "C");
-    yetty_ygui_widget_add_child(box, a);
-    yetty_ygui_widget_add_child(box, b);
-    yetty_ygui_widget_add_child(box, c);
-    yetty_ygui_widget_set_flex(b, 1.0f, 0.0f, 0.0f);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(e, "a", 0, 0, 50, 30, "A");
+    struct yetty_ygui_old_widget *b = yetty_ygui_old_engine_button(e, "b", 0, 0, 50, 30, "B");
+    struct yetty_ygui_old_widget *c = yetty_ygui_old_engine_button(e, "c", 0, 0, 50, 30, "C");
+    yetty_ygui_old_widget_add_child(box, a);
+    yetty_ygui_old_widget_add_child(box, b);
+    yetty_ygui_old_widget_add_child(box, c);
+    yetty_ygui_old_widget_set_flex(b, 1.0f, 0.0f, 0.0f);
 
     run_layout(e);
 
@@ -119,7 +119,7 @@ static void test_row_grow(void)
     ASSERT_NEAR("C.x", cb.min.x, 350.0f);
     ASSERT_NEAR("C.w", cb.max.x - cb.min.x, 50.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 2: column with align_items = STRETCH, child cross-axis fills container.
@@ -129,15 +129,15 @@ static void test_row_grow(void)
 static void test_column_stretch(void)
 {
     fprintf(stderr, "\n[test_column_stretch]\n");
-    struct yetty_ygui_engine *e = make_engine(500, 500);
+    struct yetty_ygui_old_engine *e = make_engine(500, 500);
 
-    struct yetty_ygui_widget *box = yetty_ygui_engine_vbox(e, "col", 10, 20, 200, 300);
-    yetty_ygui_widget_set_padding(box, 0, 0, 0, 0);
-    yetty_ygui_widget_set_gap(box, 0);
-    yetty_ygui_widget_set_align_items(box, YETTY_YGUI_ALIGN_STRETCH);
+    struct yetty_ygui_old_widget *box = yetty_ygui_old_engine_vbox(e, "col", 10, 20, 200, 300);
+    yetty_ygui_old_widget_set_padding(box, 0, 0, 0, 0);
+    yetty_ygui_old_widget_set_gap(box, 0);
+    yetty_ygui_old_widget_set_align_items(box, YETTY_YGUI_OLD_ALIGN_STRETCH);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(e, "a", 0, 0, 80, 40, "A");
-    yetty_ygui_widget_add_child(box, a);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(e, "a", 0, 0, 80, 40, "A");
+    yetty_ygui_old_widget_add_child(box, a);
 
     run_layout(e);
 
@@ -147,7 +147,7 @@ static void test_column_stretch(void)
     ASSERT_NEAR("A.w (stretched)", ab.max.x - ab.min.x, 200.0f);
     ASSERT_NEAR("A.h (authored)", ab.max.y - ab.min.y, 40.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 3: justify_content = SPACE_BETWEEN distributes free space between children.
@@ -158,19 +158,19 @@ static void test_column_stretch(void)
 static void test_justify_space_between(void)
 {
     fprintf(stderr, "\n[test_justify_space_between]\n");
-    struct yetty_ygui_engine *e = make_engine(600, 100);
+    struct yetty_ygui_old_engine *e = make_engine(600, 100);
 
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(e, "row", 0, 0, 600, 100);
-    yetty_ygui_widget_set_padding(row, 0, 0, 0, 0);
-    yetty_ygui_widget_set_gap(row, 0);
-    yetty_ygui_widget_set_justify_content(row, YETTY_YGUI_JUSTIFY_SPACE_BETWEEN);
+    struct yetty_ygui_old_widget *row = yetty_ygui_old_engine_hbox(e, "row", 0, 0, 600, 100);
+    yetty_ygui_old_widget_set_padding(row, 0, 0, 0, 0);
+    yetty_ygui_old_widget_set_gap(row, 0);
+    yetty_ygui_old_widget_set_justify_content(row, YETTY_YGUI_OLD_JUSTIFY_SPACE_BETWEEN);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(e, "a", 0, 0, 100, 30, "A");
-    struct yetty_ygui_widget *b = yetty_ygui_engine_button(e, "b", 0, 0, 100, 30, "B");
-    struct yetty_ygui_widget *c = yetty_ygui_engine_button(e, "c", 0, 0, 100, 30, "C");
-    yetty_ygui_widget_add_child(row, a);
-    yetty_ygui_widget_add_child(row, b);
-    yetty_ygui_widget_add_child(row, c);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(e, "a", 0, 0, 100, 30, "A");
+    struct yetty_ygui_old_widget *b = yetty_ygui_old_engine_button(e, "b", 0, 0, 100, 30, "B");
+    struct yetty_ygui_old_widget *c = yetty_ygui_old_engine_button(e, "c", 0, 0, 100, 30, "C");
+    yetty_ygui_old_widget_add_child(row, a);
+    yetty_ygui_old_widget_add_child(row, b);
+    yetty_ygui_old_widget_add_child(row, c);
 
     run_layout(e);
 
@@ -182,7 +182,7 @@ static void test_justify_space_between(void)
     ASSERT_NEAR("B.x", bb.min.x, 250.0f);
     ASSERT_NEAR("C.x", cb.min.x, 500.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 4: padding on container shifts children.
@@ -192,14 +192,14 @@ static void test_justify_space_between(void)
 static void test_padding(void)
 {
     fprintf(stderr, "\n[test_padding]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 400);
+    struct yetty_ygui_old_engine *e = make_engine(400, 400);
 
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(e, "row", 0, 0, 400, 200);
-    yetty_ygui_widget_set_padding(row, 5, 10, 15, 20);
-    yetty_ygui_widget_set_gap(row, 0);
+    struct yetty_ygui_old_widget *row = yetty_ygui_old_engine_hbox(e, "row", 0, 0, 400, 200);
+    yetty_ygui_old_widget_set_padding(row, 5, 10, 15, 20);
+    yetty_ygui_old_widget_set_gap(row, 0);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(e, "a", 0, 0, 50, 50, "A");
-    yetty_ygui_widget_add_child(row, a);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(e, "a", 0, 0, 50, 50, "A");
+    yetty_ygui_old_widget_add_child(row, a);
 
     run_layout(e);
 
@@ -207,7 +207,7 @@ static void test_padding(void)
     ASSERT_NEAR("A.x (padded)", ab.min.x, 20.0f);
     ASSERT_NEAR("A.y (padded)", ab.min.y, 5.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 5: manual mode keeps authored x/y untouched.
@@ -217,9 +217,9 @@ static void test_padding(void)
 static void test_manual_no_drift(void)
 {
     fprintf(stderr, "\n[test_manual_no_drift]\n");
-    struct yetty_ygui_engine *e = make_engine(300, 300);
+    struct yetty_ygui_old_engine *e = make_engine(300, 300);
 
-    struct yetty_ygui_widget *btn = yetty_ygui_engine_button(e, "btn", 37, 91, 60, 22, "btn");
+    struct yetty_ygui_old_widget *btn = yetty_ygui_old_engine_button(e, "btn", 37, 91, 60, 22, "btn");
 
     run_layout(e);
     struct yetty_ycore_rectangle b1 = layout_box(btn);
@@ -235,7 +235,7 @@ static void test_manual_no_drift(void)
     ASSERT_NEAR("btn.w second", b2.max.x - b2.min.x, 60.0f);
     ASSERT_NEAR("btn.h second", b2.max.y - b2.min.y, 22.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 6: absolute positioning skips flex flow.
@@ -245,19 +245,19 @@ static void test_manual_no_drift(void)
 static void test_position_absolute(void)
 {
     fprintf(stderr, "\n[test_position_absolute]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 200);
+    struct yetty_ygui_old_engine *e = make_engine(400, 200);
 
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(e, "row", 0, 0, 400, 200);
-    yetty_ygui_widget_set_padding(row, 0, 0, 0, 0);
-    yetty_ygui_widget_set_gap(row, 0);
+    struct yetty_ygui_old_widget *row = yetty_ygui_old_engine_hbox(e, "row", 0, 0, 400, 200);
+    yetty_ygui_old_widget_set_padding(row, 0, 0, 0, 0);
+    yetty_ygui_old_widget_set_gap(row, 0);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(e, "a", 0, 0, 100, 50, "A");
-    struct yetty_ygui_widget *b = yetty_ygui_engine_button(e, "b", 0, 0, 100, 50, "B");
-    struct yetty_ygui_widget *abs_btn = yetty_ygui_engine_button(e, "abs", 200, 80, 60, 30, "abs");
-    yetty_ygui_widget_add_child(row, a);
-    yetty_ygui_widget_add_child(row, b);
-    yetty_ygui_widget_add_child(row, abs_btn);
-    yetty_ygui_widget_set_position_mode(abs_btn, YETTY_YGUI_POSITION_ABSOLUTE);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(e, "a", 0, 0, 100, 50, "A");
+    struct yetty_ygui_old_widget *b = yetty_ygui_old_engine_button(e, "b", 0, 0, 100, 50, "B");
+    struct yetty_ygui_old_widget *abs_btn = yetty_ygui_old_engine_button(e, "abs", 200, 80, 60, 30, "abs");
+    yetty_ygui_old_widget_add_child(row, a);
+    yetty_ygui_old_widget_add_child(row, b);
+    yetty_ygui_old_widget_add_child(row, abs_btn);
+    yetty_ygui_old_widget_set_position_mode(abs_btn, YETTY_YGUI_OLD_POSITION_ABSOLUTE);
 
     run_layout(e);
 
@@ -272,28 +272,28 @@ static void test_position_absolute(void)
     ASSERT_NEAR("abs.x", abs_b.min.x, 200.0f);
     ASSERT_NEAR("abs.y", abs_b.min.y, 80.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 7: flex_basis_percent. Single child basis = 25% of 400 = 100. */
 static void test_basis_percent(void)
 {
     fprintf(stderr, "\n[test_basis_percent]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 200);
+    struct yetty_ygui_old_engine *e = make_engine(400, 200);
 
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(e, "row", 0, 0, 400, 200);
-    yetty_ygui_widget_set_padding(row, 0, 0, 0, 0);
-    yetty_ygui_widget_set_gap(row, 0);
+    struct yetty_ygui_old_widget *row = yetty_ygui_old_engine_hbox(e, "row", 0, 0, 400, 200);
+    yetty_ygui_old_widget_set_padding(row, 0, 0, 0, 0);
+    yetty_ygui_old_widget_set_gap(row, 0);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(e, "a", 0, 0, 50, 30, "A");
-    yetty_ygui_widget_add_child(row, a);
-    yetty_ygui_widget_set_flex_basis_percent(a, 25.0f);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(e, "a", 0, 0, 50, 30, "A");
+    yetty_ygui_old_widget_add_child(row, a);
+    yetty_ygui_old_widget_set_flex_basis_percent(a, 25.0f);
 
     run_layout(e);
     struct yetty_ycore_rectangle ab = layout_box(a);
     ASSERT_NEAR("A.w (25% of 400)", ab.max.x - ab.min.x, 100.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 8: flex-wrap puts overflowing children on a new line.
@@ -304,19 +304,19 @@ static void test_basis_percent(void)
 static void test_flex_wrap(void)
 {
     fprintf(stderr, "\n[test_flex_wrap]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 400);
+    struct yetty_ygui_old_engine *e = make_engine(400, 400);
 
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(e, "row", 0, 0, 200, 200);
-    yetty_ygui_widget_set_padding(row, 0, 0, 0, 0);
-    yetty_ygui_widget_set_gap(row, 0);
-    yetty_ygui_widget_set_flex_wrap(row, YETTY_YGUI_FLEX_WRAP);
+    struct yetty_ygui_old_widget *row = yetty_ygui_old_engine_hbox(e, "row", 0, 0, 200, 200);
+    yetty_ygui_old_widget_set_padding(row, 0, 0, 0, 0);
+    yetty_ygui_old_widget_set_gap(row, 0);
+    yetty_ygui_old_widget_set_flex_wrap(row, YETTY_YGUI_OLD_FLEX_WRAP);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(e, "a", 0, 0, 90, 30, "A");
-    struct yetty_ygui_widget *b = yetty_ygui_engine_button(e, "b", 0, 0, 90, 30, "B");
-    struct yetty_ygui_widget *c = yetty_ygui_engine_button(e, "c", 0, 0, 90, 30, "C");
-    yetty_ygui_widget_add_child(row, a);
-    yetty_ygui_widget_add_child(row, b);
-    yetty_ygui_widget_add_child(row, c);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(e, "a", 0, 0, 90, 30, "A");
+    struct yetty_ygui_old_widget *b = yetty_ygui_old_engine_button(e, "b", 0, 0, 90, 30, "B");
+    struct yetty_ygui_old_widget *c = yetty_ygui_old_engine_button(e, "c", 0, 0, 90, 30, "C");
+    yetty_ygui_old_widget_add_child(row, a);
+    yetty_ygui_old_widget_add_child(row, b);
+    yetty_ygui_old_widget_add_child(row, c);
 
     run_layout(e);
     struct yetty_ycore_rectangle ab = layout_box(a);
@@ -331,19 +331,19 @@ static void test_flex_wrap(void)
     /* C is back at the start of the main axis */
     ASSERT_NEAR("C.x", cb.min.x, 0.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 9: CSS parser sets flex direction + gap + padding from a string. */
 static void test_css_apply(void)
 {
     fprintf(stderr, "\n[test_css_apply]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 400);
+    struct yetty_ygui_old_engine *e = make_engine(400, 400);
 
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(e, "row", 0, 0, 400, 200);
+    struct yetty_ygui_old_widget *row = yetty_ygui_old_engine_hbox(e, "row", 0, 0, 400, 200);
     /* Override the hbox defaults via CSS: zero padding, custom gap,
      * justify-content center. Then add a flex-grow on a child. */
-    struct yetty_ycore_void_result cr = yetty_ygui_widget_apply_css(
+    struct yetty_ycore_void_result cr = yetty_ygui_old_widget_apply_css(
         row, "padding: 0; gap: 10px; justify-content: center;");
     if (YETTY_IS_ERR(cr)) {
         fprintf(stderr, "FAIL apply_css returned error: %s\n",
@@ -354,11 +354,11 @@ static void test_css_apply(void)
         fprintf(stderr, "ok   apply_css ok\n");
     }
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(e, "a", 0, 0, 50, 30, "A");
-    struct yetty_ygui_widget *b = yetty_ygui_engine_button(e, "b", 0, 0, 50, 30, "B");
-    yetty_ygui_widget_add_child(row, a);
-    yetty_ygui_widget_add_child(row, b);
-    yetty_ygui_widget_apply_css(a, "flex: 0 0 80px;"); /* 80px basis, no grow */
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(e, "a", 0, 0, 50, 30, "A");
+    struct yetty_ygui_old_widget *b = yetty_ygui_old_engine_button(e, "b", 0, 0, 50, 30, "B");
+    yetty_ygui_old_widget_add_child(row, a);
+    yetty_ygui_old_widget_add_child(row, b);
+    yetty_ygui_old_widget_apply_css(a, "flex: 0 0 80px;"); /* 80px basis, no grow */
 
     run_layout(e);
     struct yetty_ycore_rectangle ab = layout_box(a);
@@ -369,7 +369,7 @@ static void test_css_apply(void)
     ASSERT_NEAR("A.w (basis 80px)", ab.max.x - ab.min.x, 80.0f);
     ASSERT_NEAR("B.x", bb.min.x, 130.0f + 80.0f + 10.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 10: width-percent in manual mode.
@@ -377,20 +377,20 @@ static void test_css_apply(void)
 static void test_width_percent_manual(void)
 {
     fprintf(stderr, "\n[test_width_percent_manual]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 400);
+    struct yetty_ygui_old_engine *e = make_engine(400, 400);
 
-    struct yetty_ygui_widget *p = yetty_ygui_engine_panel(e, "p", 10, 10, 200, 100);
-    struct yetty_ygui_widget *c = yetty_ygui_engine_button(e, "c", 5, 5, 30, 20, "C");
-    yetty_ygui_widget_add_child(p, c);
+    struct yetty_ygui_old_widget *p = yetty_ygui_old_engine_panel(e, "p", 10, 10, 200, 100);
+    struct yetty_ygui_old_widget *c = yetty_ygui_old_engine_button(e, "c", 5, 5, 30, 20, "C");
+    yetty_ygui_old_widget_add_child(p, c);
     /* Panel is MANUAL by default. width: 50% of panel content. */
-    yetty_ygui_widget_set_size_percent(c, 50.0f, 0.0f);
+    yetty_ygui_old_widget_set_size_percent(c, 50.0f, 0.0f);
 
     run_layout(e);
     struct yetty_ycore_rectangle cb = layout_box(c);
     /* Panel content_w == 200 (no padding). 50% = 100. */
     ASSERT_NEAR("C.w (50% of 200)", cb.max.x - cb.min.x, 100.0f);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 11: tree_node toggle hides/shows children list. After expanding,
@@ -399,19 +399,19 @@ static void test_width_percent_manual(void)
 static void test_tree_node_basic(void)
 {
     fprintf(stderr, "\n[test_tree_node_basic]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 400);
+    struct yetty_ygui_old_engine *e = make_engine(400, 400);
 
-    struct yetty_ygui_widget *root = yetty_ygui_engine_list(e, "root", 0, 0, 300, 400);
-    struct yetty_ygui_widget *node = yetty_ygui_engine_tree_node(e, "node", "Folder");
-    yetty_ygui_widget_add_child(root, node);
+    struct yetty_ygui_old_widget *root = yetty_ygui_old_engine_list(e, "root", 0, 0, 300, 400);
+    struct yetty_ygui_old_widget *node = yetty_ygui_old_engine_tree_node(e, "node", "Folder");
+    yetty_ygui_old_widget_add_child(root, node);
 
-    struct yetty_ygui_widget *leaf = yetty_ygui_engine_label(e, "leaf", 0, 0, "child");
-    yetty_ygui_widget_add_child(yetty_ygui_widget_tree_node_children(node), leaf);
+    struct yetty_ygui_old_widget *leaf = yetty_ygui_old_engine_label(e, "leaf", 0, 0, "child");
+    yetty_ygui_old_widget_add_child(yetty_ygui_old_widget_tree_node_children(node), leaf);
 
     /* Collapsed by default. children_list invisible → no contribution to
      * the tree_node height. */
     run_layout(e);
-    int kids_visible = yetty_ygui_widget_is_visible(yetty_ygui_widget_tree_node_children(node));
+    int kids_visible = yetty_ygui_old_widget_is_visible(yetty_ygui_old_widget_tree_node_children(node));
     if (kids_visible) {
         fprintf(stderr, "FAIL children visible while collapsed\n");
         g_failures++;
@@ -420,9 +420,9 @@ static void test_tree_node_basic(void)
     }
 
     /* Expand and re-layout. */
-    yetty_ygui_widget_tree_node_set_expanded(node, 1);
+    yetty_ygui_old_widget_tree_node_set_expanded(node, 1);
     run_layout(e);
-    kids_visible = yetty_ygui_widget_is_visible(yetty_ygui_widget_tree_node_children(node));
+    kids_visible = yetty_ygui_old_widget_is_visible(yetty_ygui_old_widget_tree_node_children(node));
     if (!kids_visible) {
         fprintf(stderr, "FAIL children invisible after expand\n");
         g_failures++;
@@ -450,7 +450,7 @@ static void test_tree_node_basic(void)
         fprintf(stderr, "ok   header dy = %.2f\n", dy);
     }
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Test 12: list selection state — clicking a row updates list.selected.
@@ -458,16 +458,16 @@ static void test_tree_node_basic(void)
 static void test_list_selection(void)
 {
     fprintf(stderr, "\n[test_list_selection]\n");
-    struct yetty_ygui_engine *e = make_engine(400, 400);
+    struct yetty_ygui_old_engine *e = make_engine(400, 400);
 
-    struct yetty_ygui_widget *list = yetty_ygui_engine_list(e, "list", 0, 0, 300, 400);
-    struct yetty_ygui_widget *a = yetty_ygui_engine_label(e, "a", 0, 0, "Alpha");
-    struct yetty_ygui_widget *b = yetty_ygui_engine_label(e, "b", 0, 0, "Beta");
-    yetty_ygui_widget_add_child(list, a);
-    yetty_ygui_widget_add_child(list, b);
+    struct yetty_ygui_old_widget *list = yetty_ygui_old_engine_list(e, "list", 0, 0, 300, 400);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_label(e, "a", 0, 0, "Alpha");
+    struct yetty_ygui_old_widget *b = yetty_ygui_old_engine_label(e, "b", 0, 0, "Beta");
+    yetty_ygui_old_widget_add_child(list, a);
+    yetty_ygui_old_widget_add_child(list, b);
 
     /* No selection initially. */
-    if (yetty_ygui_widget_list_get_selected(list) != NULL) {
+    if (yetty_ygui_old_widget_list_get_selected(list) != NULL) {
         fprintf(stderr, "FAIL list.selected != NULL initially\n");
         g_failures++;
     } else {
@@ -475,20 +475,20 @@ static void test_list_selection(void)
     }
 
     /* Programmatic selection. */
-    yetty_ygui_widget_list_set_selected(list, b);
-    if (yetty_ygui_widget_list_get_selected(list) != b) {
+    yetty_ygui_old_widget_list_set_selected(list, b);
+    if (yetty_ygui_old_widget_list_get_selected(list) != b) {
         fprintf(stderr, "FAIL list.selected != b after set_selected\n");
         g_failures++;
     } else {
         fprintf(stderr, "ok   list.selected == b\n");
     }
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 int main(void)
 {
-    /* Skip yetty_ygui_init() — it puts the controlling TTY into raw mode,
+    /* Skip yetty_ygui_old_init() — it puts the controlling TTY into raw mode,
      * which both fails and is unnecessary under ctest. The layout pass is
      * pure arithmetic.
      *

@@ -17,7 +17,7 @@ demo-ygui-24-ymarkdown demo/ygui/24_ymarkdown/sample.md
 
 ## Why it works
 
-The widget calls `yetty_ygui_engine_ymarkdown_from_file`, which slurps
+The widget calls `yetty_ygui_old_engine_ymarkdown_from_file`, which slurps
 the file and forwards to `ymarkdown`. The returned `ydraw-core` buffer
 is handed to the RICH widget, which translates each primitive by the
 widget's resolved layout origin.

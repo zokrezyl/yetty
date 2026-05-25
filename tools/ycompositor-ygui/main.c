@@ -42,11 +42,11 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 /* ygui_internal.h exposes the headless allocator (used by yui) and the
  * full engine struct so we can read engine->buffer post-rebuild. Same
  * pattern src/yetty/yui/yui.c uses. */
-#include "yetty/ygui/ygui_internal.h"
+#include "yetty/ygui-old/ygui_internal.h"
 #include <yetty/ymgui/figure.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yterm/osc-codes.h>
@@ -82,11 +82,11 @@ struct ycomp_ygui_app {
     struct yetty_ydraw_target *target;
     struct yetty_yfigure_container *root;
     struct yetty_yfigure_registry *registry;
-    struct yetty_ygui_engine  *ygui;
+    struct yetty_ygui_old_engine  *ygui;
     /* Borrowed pointer to the outer window so we can resize it to the
      * canvas dims on every push (ygui doesn't auto-fill via CSS in
      * the absence of a parent context — see ygreeter's on_resize). */
-    struct yetty_ygui_widget  *win;
+    struct yetty_ygui_old_widget  *win;
     /* Default font handed to the compositor; every per-group ygrid the
      * compositor creates borrows this at slot 0 so TEXT_SPAN records
      * (button labels, etc.) expand into renderable glyphs. */
@@ -136,90 +136,90 @@ static void build_scene(struct ycomp_ygui_app *app)
     /* Outer window — placeholder size; push_ygui_scene resizes it to
      * the live surface dims on every push (same pattern ygreeter's
      * on_resize uses). */
-    struct yetty_ygui_widget *win = yetty_ygui_engine_window(
+    struct yetty_ygui_old_widget *win = yetty_ygui_old_engine_window(
         app->ygui, "win", 0.0f, 0.0f, 100.0f, 100.0f, "ycompositor-ygui demo");
     if (!win)
         return;
     app->win = win;
-    struct yetty_ygui_widget *body = yetty_ygui_widget_window_body(win);
+    struct yetty_ygui_old_widget *body = yetty_ygui_old_widget_window_body(win);
 
     /* Menubar with one menu so the chrome looks real. */
-    struct yetty_ygui_widget *mb =
-        yetty_ygui_engine_menubar(app->ygui, "mb", 0.0f, 0.0f, 100.0f, 26.0f);
-    struct yetty_ygui_widget *mf =
-        yetty_ygui_engine_popup_menu(app->ygui, "mf", 0.0f, 0.0f, 180.0f);
-    yetty_ygui_widget_popup_menu_add_item(mf, "New tab", NULL, NULL);
-    yetty_ygui_widget_popup_menu_add_item(mf, "Reload", NULL, NULL);
-    yetty_ygui_widget_popup_menu_add_separator(mf);
-    yetty_ygui_widget_popup_menu_add_item(mf, "Quit", NULL, NULL);
-    yetty_ygui_widget_menubar_add(mb, "File", mf);
-    yetty_ygui_widget_window_set_menubar(win, mb);
+    struct yetty_ygui_old_widget *mb =
+        yetty_ygui_old_engine_menubar(app->ygui, "mb", 0.0f, 0.0f, 100.0f, 26.0f);
+    struct yetty_ygui_old_widget *mf =
+        yetty_ygui_old_engine_popup_menu(app->ygui, "mf", 0.0f, 0.0f, 180.0f);
+    yetty_ygui_old_widget_popup_menu_add_item(mf, "New tab", NULL, NULL);
+    yetty_ygui_old_widget_popup_menu_add_item(mf, "Reload", NULL, NULL);
+    yetty_ygui_old_widget_popup_menu_add_separator(mf);
+    yetty_ygui_old_widget_popup_menu_add_item(mf, "Quit", NULL, NULL);
+    yetty_ygui_old_widget_menubar_add(mb, "File", mf);
+    yetty_ygui_old_widget_window_set_menubar(win, mb);
 
     /* Statusbar at the bottom. */
-    struct yetty_ygui_widget *sb = yetty_ygui_engine_statusbar(
+    struct yetty_ygui_old_widget *sb = yetty_ygui_old_engine_statusbar(
         app->ygui, "sb", 0.0f, 0.0f, 100.0f, 22.0f,
         "ycompositor-ygui — ygui via process_records");
-    yetty_ygui_widget_statusbar_set_right(sb, "v0.1");
-    yetty_ygui_widget_window_set_statusbar(win, sb);
+    yetty_ygui_old_widget_statusbar_set_right(sb, "v0.1");
+    yetty_ygui_old_widget_window_set_statusbar(win, sb);
 
     /* Body: vertical flex. Header label, action row, panel, list. */
-    yetty_ygui_widget_apply_css(body,
+    yetty_ygui_old_widget_apply_css(body,
         "display: flex; flex-direction: column; padding: 16px; gap: 12px;");
 
-    struct yetty_ygui_widget *hdr = yetty_ygui_engine_label(
+    struct yetty_ygui_old_widget *hdr = yetty_ygui_old_engine_label(
         app->ygui, "hdr", 0.0f, 0.0f,
         "ygui scene rendered through ycompositor");
-    yetty_ygui_widget_add_child(body, hdr);
+    yetty_ygui_old_widget_add_child(body, hdr);
 
     /* Action row — horizontal flex with several buttons. */
-    struct yetty_ygui_widget *actions =
-        yetty_ygui_engine_vbox(app->ygui, "actions", 0.0f, 0.0f, 100.0f, 48.0f);
-    yetty_ygui_widget_apply_css(actions,
+    struct yetty_ygui_old_widget *actions =
+        yetty_ygui_old_engine_vbox(app->ygui, "actions", 0.0f, 0.0f, 100.0f, 48.0f);
+    yetty_ygui_old_widget_apply_css(actions,
         "display: flex; flex-direction: row; gap: 8px; height: 48px;");
-    struct yetty_ygui_widget *a1 = yetty_ygui_engine_button(
+    struct yetty_ygui_old_widget *a1 = yetty_ygui_old_engine_button(
         app->ygui, "act_new", 0.0f, 0.0f, 120.0f, 36.0f, "New");
-    struct yetty_ygui_widget *a2 = yetty_ygui_engine_button(
+    struct yetty_ygui_old_widget *a2 = yetty_ygui_old_engine_button(
         app->ygui, "act_open", 0.0f, 0.0f, 120.0f, 36.0f, "Open");
-    struct yetty_ygui_widget *a3 = yetty_ygui_engine_button(
+    struct yetty_ygui_old_widget *a3 = yetty_ygui_old_engine_button(
         app->ygui, "act_save", 0.0f, 0.0f, 120.0f, 36.0f, "Save");
-    struct yetty_ygui_widget *a4 = yetty_ygui_engine_button(
+    struct yetty_ygui_old_widget *a4 = yetty_ygui_old_engine_button(
         app->ygui, "act_del", 0.0f, 0.0f, 140.0f, 36.0f, "Delete");
-    yetty_ygui_widget_add_child(actions, a1);
-    yetty_ygui_widget_add_child(actions, a2);
-    yetty_ygui_widget_add_child(actions, a3);
-    yetty_ygui_widget_add_child(actions, a4);
-    yetty_ygui_widget_add_child(body, actions);
+    yetty_ygui_old_widget_add_child(actions, a1);
+    yetty_ygui_old_widget_add_child(actions, a2);
+    yetty_ygui_old_widget_add_child(actions, a3);
+    yetty_ygui_old_widget_add_child(actions, a4);
+    yetty_ygui_old_widget_add_child(body, actions);
 
     /* Settings panel with several checkboxes + a slider. */
-    struct yetty_ygui_widget *panel =
-        yetty_ygui_engine_panel(app->ygui, "panel", 0.0f, 0.0f, 100.0f, 220.0f);
-    yetty_ygui_widget_apply_css(panel,
+    struct yetty_ygui_old_widget *panel =
+        yetty_ygui_old_engine_panel(app->ygui, "panel", 0.0f, 0.0f, 100.0f, 220.0f);
+    yetty_ygui_old_widget_apply_css(panel,
         "display: flex; flex-direction: column; padding: 12px; gap: 8px;");
-    struct yetty_ygui_widget *plabel =
-        yetty_ygui_engine_label(app->ygui, "plabel", 0.0f, 0.0f, "Settings");
-    struct yetty_ygui_widget *cb1 = yetty_ygui_engine_checkbox(
+    struct yetty_ygui_old_widget *plabel =
+        yetty_ygui_old_engine_label(app->ygui, "plabel", 0.0f, 0.0f, "Settings");
+    struct yetty_ygui_old_widget *cb1 = yetty_ygui_old_engine_checkbox(
         app->ygui, "cb1", 0.0f, 0.0f, 220.0f, 26.0f, "Enable animations", 1);
-    struct yetty_ygui_widget *cb2 = yetty_ygui_engine_checkbox(
+    struct yetty_ygui_old_widget *cb2 = yetty_ygui_old_engine_checkbox(
         app->ygui, "cb2", 0.0f, 0.0f, 220.0f, 26.0f, "Reduce motion", 0);
-    struct yetty_ygui_widget *cb3 = yetty_ygui_engine_checkbox(
+    struct yetty_ygui_old_widget *cb3 = yetty_ygui_old_engine_checkbox(
         app->ygui, "cb3", 0.0f, 0.0f, 220.0f, 26.0f, "Show debug overlay", 0);
-    struct yetty_ygui_widget *slabel =
-        yetty_ygui_engine_label(app->ygui, "slabel", 0.0f, 0.0f, "Brightness");
-    struct yetty_ygui_widget *slider = yetty_ygui_engine_slider(
+    struct yetty_ygui_old_widget *slabel =
+        yetty_ygui_old_engine_label(app->ygui, "slabel", 0.0f, 0.0f, "Brightness");
+    struct yetty_ygui_old_widget *slider = yetty_ygui_old_engine_slider(
         app->ygui, "sl", 0.0f, 0.0f, 320.0f, 24.0f, 0.0f, 100.0f, 65.0f);
-    yetty_ygui_widget_add_child(panel, plabel);
-    yetty_ygui_widget_add_child(panel, cb1);
-    yetty_ygui_widget_add_child(panel, cb2);
-    yetty_ygui_widget_add_child(panel, cb3);
-    yetty_ygui_widget_add_child(panel, slabel);
-    yetty_ygui_widget_add_child(panel, slider);
-    yetty_ygui_widget_add_child(body, panel);
+    yetty_ygui_old_widget_add_child(panel, plabel);
+    yetty_ygui_old_widget_add_child(panel, cb1);
+    yetty_ygui_old_widget_add_child(panel, cb2);
+    yetty_ygui_old_widget_add_child(panel, cb3);
+    yetty_ygui_old_widget_add_child(panel, slabel);
+    yetty_ygui_old_widget_add_child(panel, slider);
+    yetty_ygui_old_widget_add_child(body, panel);
 
     /* Trailing button row to confirm flex layout stops where it
      * should and the panel takes its share. */
-    struct yetty_ygui_widget *footer = yetty_ygui_engine_button(
+    struct yetty_ygui_old_widget *footer = yetty_ygui_old_engine_button(
         app->ygui, "footer_btn", 0.0f, 0.0f, 160.0f, 38.0f, "Apply");
-    yetty_ygui_widget_add_child(body, footer);
+    yetty_ygui_old_widget_add_child(body, footer);
 }
 
 /* Push the current ygui scene through the compositor. Called from
@@ -234,19 +234,19 @@ static struct yetty_ycore_void_result push_ygui_scene(struct ycomp_ygui_app *app
 {
     if (!app->ygui)
         return YETTY_OK_VOID();
-    yetty_ygui_engine_set_display_pixel_size(
+    yetty_ygui_old_engine_set_display_pixel_size(
         app->ygui, (float)app->surface_w, (float)app->surface_h);
     /* Resize the outer window to fill the surface — ygui doesn't
      * auto-stretch the root widget to the canvas. */
     if (app->win) {
-        yetty_ygui_widget_set_size(
+        yetty_ygui_old_widget_set_size(
             app->win, (float)app->surface_w, (float)app->surface_h);
     }
     yetty_ydraw_draw_list_clear(app->ygui->buffer);
     struct yetty_ycore_void_result zr =
         yetty_ydraw_draw_list_add_admin_clear_all(app->ygui->buffer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "push_ygui_scene: add CLEAR_ALL");
-    struct yetty_ycore_void_result rr = yetty_ygui_engine_rebuild(app->ygui);
+    struct yetty_ycore_void_result rr = yetty_ygui_old_engine_rebuild(app->ygui);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "push_ygui_scene: engine_rebuild");
     const uint8_t *bytes =
         (const uint8_t *)yetty_ydraw_draw_list_data(app->ygui->buffer);
@@ -533,7 +533,7 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
         return;
     case YETTY_YCORE_MOUSE_DOWN:
         if (app->ygui) {
-            yetty_ygui_engine_mouse_down(app->ygui, ev->mouse.x, ev->mouse.y,
+            yetty_ygui_old_engine_mouse_down(app->ygui, ev->mouse.x, ev->mouse.y,
                                          ev->mouse.button);
             /* Mouse input may have set HOVER/PRESSED flags or fired a
              * widget callback that mutated state; re-emit the scene so
@@ -548,7 +548,7 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
         return;
     case YETTY_YCORE_MOUSE_UP:
         if (app->ygui) {
-            yetty_ygui_engine_mouse_up(app->ygui, ev->mouse.x, ev->mouse.y,
+            yetty_ygui_old_engine_mouse_up(app->ygui, ev->mouse.x, ev->mouse.y,
                                        ev->mouse.button);
             struct yetty_ycore_void_result pr = push_ygui_scene(app);
             if (YETTY_IS_ERR(pr)) {
@@ -560,7 +560,7 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
         if (app->ygui) {
-            yetty_ygui_engine_mouse_move(app->ygui, ev->mouse.x, ev->mouse.y);
+            yetty_ygui_old_engine_mouse_move(app->ygui, ev->mouse.x, ev->mouse.y);
             /* Re-emit only if ygui flagged a hover-state change; for now
              * always re-emit since dirty tracking inside the engine
              * already gates per-widget. */
@@ -679,7 +679,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
          * PTY handshake). Built once at startup; the widget tree stays
          * across resizes, only the canvas size changes. */
         struct ygui_engine_ptr_result eng_r =
-            yetty_ygui_engine_internal_alloc_for_yui("ycompositor-ygui", /*theme=*/NULL);
+            yetty_ygui_old_engine_internal_alloc_for_yui("ycompositor-ygui", /*theme=*/NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, eng_r, "ygui engine alloc failed");
         app->ygui = eng_r.value;
         build_scene(app);
@@ -784,7 +784,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     app->target = NULL;
 
     if (app->ygui) {
-        struct yetty_ycore_void_result er = yetty_ygui_engine_destroy(app->ygui);
+        struct yetty_ycore_void_result er = yetty_ygui_old_engine_destroy(app->ygui);
         if (YETTY_IS_ERR(er)) {
             yerror("ycompositor-ygui: ygui engine destroy failed: %s", er.error.msg);
             yetty_ycore_error_destroy(er.error);

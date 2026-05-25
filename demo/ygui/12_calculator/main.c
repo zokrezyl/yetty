@@ -6,10 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 
-static struct yetty_ygui_engine* g_engine = NULL;
-static struct yetty_ygui_widget* g_display = NULL;
+static struct yetty_ygui_old_engine* g_engine = NULL;
+static struct yetty_ygui_old_widget* g_display = NULL;
 
 static char  g_current[64]  = "0";
 static char  g_previous[64] = "";
@@ -18,7 +18,7 @@ static char  g_operator     = 0;   /* 0 = none, otherwise '+' '-' 'x' '/' */
 static int   g_new_number   = 1;
 
 static void update_display(void) {
-    yetty_ygui_widget_label_set_text(g_display, g_current);
+    yetty_ygui_old_widget_label_set_text(g_display, g_current);
 }
 
 static void format_result(double v) {
@@ -46,9 +46,9 @@ static void calculate(void) {
     g_operator = 0;
 }
 
-static void on_button(struct yetty_ygui_widget* w, void* u) {
+static void on_button(struct yetty_ygui_old_widget* w, void* u) {
     (void)u;
-    const char* key = yetty_ygui_widget_button_get_label(w);
+    const char* key = yetty_ygui_old_widget_button_get_label(w);
     if (!key || !key[0]) return;
 
     char c = key[0];
@@ -106,19 +106,19 @@ static void on_button(struct yetty_ygui_widget* w, void* u) {
     update_display();
 }
 
-static void on_key(struct yetty_ygui_engine* e, uint32_t key, int mods, void* u) {
+static void on_key(struct yetty_ygui_old_engine* e, uint32_t key, int mods, void* u) {
     (void)mods; (void)u;
-    if (key == 'q' || key == 'Q') yetty_ygui_engine_stop(e);
+    if (key == 'q' || key == 'Q') yetty_ygui_old_engine_stop(e);
 }
 
 int main(void) {
-    if (yetty_ygui_init() != 0) return 1;
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "calculator"});
+    if (yetty_ygui_old_init() != 0) return 1;
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_old_engine_create((struct yetty_ygui_old_engine_args){.name = "calculator"});
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
-    if (!g_engine) { yetty_ygui_shutdown(); return 1; }
+    if (!g_engine) { yetty_ygui_old_shutdown(); return 1; }
 
-    g_display = yetty_ygui_engine_label(g_engine, "display", 20, 20, "0");
+    g_display = yetty_ygui_old_engine_label(g_engine, "display", 20, 20, "0");
 
     static const char* layout[5][4] = {
         {"C",   "+/-", "%",  "/"},
@@ -143,15 +143,15 @@ int main(void) {
 
             char id[32];
             snprintf(id, sizeof(id), "btn_%d_%d", row, col);
-            struct yetty_ygui_widget* btn = yetty_ygui_engine_button(g_engine, id, x, y, w, btn_h, lbl);
-            yetty_ygui_widget_button_on_click(btn, on_button, NULL);
+            struct yetty_ygui_old_widget* btn = yetty_ygui_old_engine_button(g_engine, id, x, y, w, btn_h, lbl);
+            yetty_ygui_old_widget_button_on_click(btn, on_button, NULL);
         }
     }
 
-    yetty_ygui_engine_on_key(g_engine, on_key, NULL);
-    yetty_ygui_engine_run(g_engine);
+    yetty_ygui_old_engine_on_key(g_engine, on_key, NULL);
+    yetty_ygui_old_engine_run(g_engine);
 
-    yetty_ygui_engine_destroy(g_engine);
-    yetty_ygui_shutdown();
+    yetty_ygui_old_engine_destroy(g_engine);
+    yetty_ygui_old_shutdown();
     return 0;
 }

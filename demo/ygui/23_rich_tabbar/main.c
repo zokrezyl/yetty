@@ -15,14 +15,14 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 
-static void on_key(struct yetty_ygui_engine *e, uint32_t key, int mods, void *u)
+static void on_key(struct yetty_ygui_old_engine *e, uint32_t key, int mods, void *u)
 {
     (void)mods;
     (void)u;
     if (key == 'q' || key == 'Q') {
-        yetty_ygui_engine_stop(e);
+        yetty_ygui_old_engine_stop(e);
     }
 }
 
@@ -37,16 +37,16 @@ static void query_terminal_cells(int *cols, int *rows)
     }
 }
 
-static struct yetty_ygui_widget *g_outer = NULL;
+static struct yetty_ygui_old_widget *g_outer = NULL;
 
-static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float pw, float ph,
+static void on_resize(struct yetty_ygui_old_engine *e, float new_w, float new_h, float pw, float ph,
                       void *u)
 {
     (void)e;
     (void)pw;
     (void)ph;
     (void)u;
-    yetty_ygui_widget_set_size(g_outer, new_w, new_h);
+    yetty_ygui_old_widget_set_size(g_outer, new_w, new_h);
 }
 
 /* Tab YAML payloads — authored in widget-local pixel coordinates. The
@@ -124,7 +124,7 @@ static const char *YAML_SHAPES =
 
 int main(void)
 {
-    if (yetty_ygui_init() != 0) {
+    if (yetty_ygui_old_init() != 0) {
         return 1;
     }
 
@@ -132,58 +132,58 @@ int main(void)
     query_terminal_cells(&cols, &rows);
 
     struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "rich-tabbar"});
+        yetty_ygui_old_engine_create((struct yetty_ygui_old_engine_args){.name = "rich-tabbar"});
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
-        yetty_ygui_shutdown();
+        yetty_ygui_old_shutdown();
         return 1;
     }
-    struct yetty_ygui_engine *engine = eng_r.value;
-    struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
-    yetty_ygui_theme_set_font_size(theme, 16.0f);
-    yetty_ygui_engine_set_theme(engine, theme);
+    struct yetty_ygui_old_engine *engine = eng_r.value;
+    struct yetty_ygui_old_theme *theme = yetty_ygui_old_theme_create_default();
+    yetty_ygui_old_theme_set_font_size(theme, 16.0f);
+    yetty_ygui_old_engine_set_theme(engine, theme);
 
-    g_outer = yetty_ygui_engine_vbox(engine, "outer", 0, 0, 100, 100);
-    yetty_ygui_widget_apply_css(g_outer,
+    g_outer = yetty_ygui_old_engine_vbox(engine, "outer", 0, 0, 100, 100);
+    yetty_ygui_old_widget_apply_css(g_outer,
                                 "padding: 0; gap: 0; align-items: stretch;");
 
-    struct yetty_ygui_widget *tabbar =
-        yetty_ygui_engine_tabbar(engine, "tabs", 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(tabbar, "flex: 1 0 0; align-items: stretch;");
-    yetty_ygui_widget_add_child(g_outer, tabbar);
+    struct yetty_ygui_old_widget *tabbar =
+        yetty_ygui_old_engine_tabbar(engine, "tabs", 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(tabbar, "flex: 1 0 0; align-items: stretch;");
+    yetty_ygui_old_widget_add_child(g_outer, tabbar);
 
-    struct yetty_ygui_widget *text_tab = yetty_ygui_widget_tabbar_add_tab(tabbar, "Text");
-    struct yetty_ygui_widget *plot_tab = yetty_ygui_widget_tabbar_add_tab(tabbar, "Plot");
-    struct yetty_ygui_widget *shape_tab = yetty_ygui_widget_tabbar_add_tab(tabbar, "Shapes");
+    struct yetty_ygui_old_widget *text_tab = yetty_ygui_old_widget_tabbar_add_tab(tabbar, "Text");
+    struct yetty_ygui_old_widget *plot_tab = yetty_ygui_old_widget_tabbar_add_tab(tabbar, "Plot");
+    struct yetty_ygui_old_widget *shape_tab = yetty_ygui_old_widget_tabbar_add_tab(tabbar, "Shapes");
 
-    struct yetty_ygui_widget *r_text = yetty_ygui_engine_rich_from_yaml(
+    struct yetty_ygui_old_widget *r_text = yetty_ygui_old_engine_rich_from_yaml(
         engine, "r_text", 0, 0, 0, 0, YAML_TEXT, strlen(YAML_TEXT));
-    yetty_ygui_widget_apply_css(r_text, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(text_tab, r_text);
+    yetty_ygui_old_widget_apply_css(r_text, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_old_widget_add_child(text_tab, r_text);
 
-    struct yetty_ygui_widget *r_plot = yetty_ygui_engine_rich_from_yaml(
+    struct yetty_ygui_old_widget *r_plot = yetty_ygui_old_engine_rich_from_yaml(
         engine, "r_plot", 0, 0, 0, 0, YAML_PLOT, strlen(YAML_PLOT));
-    yetty_ygui_widget_apply_css(r_plot, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(plot_tab, r_plot);
+    yetty_ygui_old_widget_apply_css(r_plot, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_old_widget_add_child(plot_tab, r_plot);
 
-    struct yetty_ygui_widget *r_shape = yetty_ygui_engine_rich_from_yaml(
+    struct yetty_ygui_old_widget *r_shape = yetty_ygui_old_engine_rich_from_yaml(
         engine, "r_shape", 0, 0, 0, 0, YAML_SHAPES, strlen(YAML_SHAPES));
-    yetty_ygui_widget_apply_css(r_shape, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(shape_tab, r_shape);
+    yetty_ygui_old_widget_apply_css(r_shape, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_old_widget_add_child(shape_tab, r_shape);
 
-    yetty_ygui_engine_on_resize(engine, on_resize, NULL);
-    yetty_ygui_engine_on_key(engine, on_key, NULL);
+    yetty_ygui_old_engine_on_resize(engine, on_resize, NULL);
+    yetty_ygui_old_engine_on_key(engine, on_key, NULL);
     {
-        struct pixel_size_result sr = yetty_ygui_engine_get_size(engine);
+        struct pixel_size_result sr = yetty_ygui_old_engine_get_size(engine);
         if (YETTY_IS_OK(sr) && sr.value.width > 0 && sr.value.height > 0) {
-            yetty_ygui_widget_set_size(g_outer, sr.value.width, sr.value.height);
+            yetty_ygui_old_widget_set_size(g_outer, sr.value.width, sr.value.height);
         } else if (YETTY_IS_ERR(sr)) {
             yetty_ycore_error_destroy(sr.error);
         }
     }
-    yetty_ygui_engine_run(engine);
+    yetty_ygui_old_engine_run(engine);
 
-    yetty_ygui_engine_destroy(engine);
-    yetty_ygui_shutdown();
+    yetty_ygui_old_engine_destroy(engine);
+    yetty_ygui_old_shutdown();
     return 0;
 }

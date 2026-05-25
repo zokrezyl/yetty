@@ -30,7 +30,7 @@
 #include <string.h>
 
 #include <yetty/yconfig/config.h>
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 
 #define YUI_CFG_DLG_MAX_DEPTH 8
 #define YUI_CFG_DLG_PATH_MAX 256
@@ -41,10 +41,10 @@ struct path_bundle {
 };
 
 struct yetty_yui_config_dialog {
-    struct yetty_ygui_engine *engine;          /* borrowed */
+    struct yetty_ygui_old_engine *engine;          /* borrowed */
     const struct yetty_yconfig_config *config; /* borrowed */
-    struct yetty_ygui_widget *window;
-    struct yetty_ygui_widget *textarea;
+    struct yetty_ygui_old_widget *window;
+    struct yetty_ygui_old_widget *textarea;
     struct path_bundle *bundles; /* owned, sized at build */
     size_t bundles_count;
     size_t bundles_cap;
@@ -133,10 +133,10 @@ static void show_path(struct yetty_yui_config_dialog *dlg, const char *path)
     if (leaves == 0 && off + 1 < sizeof(buf)) {
         snprintf(buf + off, sizeof(buf) - off, "(no direct settings in this section)\n");
     }
-    yetty_ygui_widget_textarea_set_text(dlg->textarea, buf);
+    yetty_ygui_old_widget_textarea_set_text(dlg->textarea, buf);
 }
 
-static void on_tree_toggle(struct yetty_ygui_widget *node, int expanded, void *userdata)
+static void on_tree_toggle(struct yetty_ygui_old_widget *node, int expanded, void *userdata)
 {
     (void)node;
     (void)expanded;
@@ -147,7 +147,7 @@ static void on_tree_toggle(struct yetty_ygui_widget *node, int expanded, void *u
     show_path(pb->dlg, pb->path);
 }
 
-static void on_close(struct yetty_ygui_widget *button, void *userdata)
+static void on_close(struct yetty_ygui_old_widget *button, void *userdata)
 {
     (void)button;
     yetty_yui_config_dialog_hide(userdata);
@@ -155,7 +155,7 @@ static void on_close(struct yetty_ygui_widget *button, void *userdata)
 
 /* Recursively materialise tree_nodes for every branch under
  * `parent_path`. Bundle array has been pre-sized; we just append. */
-static void build_tree(struct yetty_yui_config_dialog *dlg, struct yetty_ygui_widget *container,
+static void build_tree(struct yetty_yui_config_dialog *dlg, struct yetty_ygui_old_widget *container,
                        const char *parent_path, int depth)
 {
     if (!dlg || !container || depth > YUI_CFG_DLG_MAX_DEPTH) {
@@ -186,14 +186,14 @@ static void build_tree(struct yetty_yui_config_dialog *dlg, struct yetty_ygui_wi
          * already use them (e.g. "yui_dlg_gpu_info/text"). */
         char node_id[YUI_CFG_DLG_PATH_MAX + 32];
         snprintf(node_id, sizeof(node_id), "yui_dlg_settings/tree/%s", child_path);
-        struct yetty_ygui_widget *node = yetty_ygui_engine_tree_node(dlg->engine, node_id, key);
+        struct yetty_ygui_old_widget *node = yetty_ygui_old_engine_tree_node(dlg->engine, node_id, key);
         if (!node) {
             continue;
         }
-        yetty_ygui_widget_add_child(container, node);
-        yetty_ygui_widget_tree_node_on_toggle(node, on_tree_toggle, pb);
+        yetty_ygui_old_widget_add_child(container, node);
+        yetty_ygui_old_widget_tree_node_on_toggle(node, on_tree_toggle, pb);
 
-        struct yetty_ygui_widget *children = yetty_ygui_widget_tree_node_children(node);
+        struct yetty_ygui_old_widget *children = yetty_ygui_old_widget_tree_node_children(node);
         if (children) {
             build_tree(dlg, children, child_path, depth + 1);
         }
@@ -201,7 +201,7 @@ static void build_tree(struct yetty_yui_config_dialog *dlg, struct yetty_ygui_wi
 }
 
 struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
-    struct yetty_ygui_engine *engine, const struct yetty_yconfig_config *config)
+    struct yetty_ygui_old_engine *engine, const struct yetty_yconfig_config *config)
 {
     if (!engine) {
         return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: NULL engine");
@@ -237,8 +237,8 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
         dlg->bundles_cap = (size_t)branches;
     }
 
-    struct yetty_ygui_widget *win =
-        yetty_ygui_engine_window(engine, "yui_dlg_settings", /*x=*/140.0f, /*y=*/90.0f,
+    struct yetty_ygui_old_widget *win =
+        yetty_ygui_old_engine_window(engine, "yui_dlg_settings", /*x=*/140.0f, /*y=*/90.0f,
                                  /*w=*/720.0f, /*h=*/460.0f, "Settings");
     if (!win) {
         free(dlg->bundles);
@@ -246,44 +246,44 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
         return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: window alloc");
     }
     dlg->window = win;
-    yetty_ygui_widget_set_visible(win, 0);
+    yetty_ygui_old_widget_set_visible(win, 0);
 
-    struct yetty_ygui_widget *body = yetty_ygui_widget_window_body(win);
+    struct yetty_ygui_old_widget *body = yetty_ygui_old_widget_window_body(win);
     if (!body) {
         return YETTY_OK(yetty_yui_config_dialog_ptr, dlg);
     }
-    yetty_ygui_widget_apply_css(body,
+    yetty_ygui_old_widget_apply_css(body,
                                 "display:flex;flex-direction:column;gap:10;padding:14 14 14 14;");
 
-    struct yetty_ygui_widget *split =
-        yetty_ygui_engine_hbox(engine, "yui_dlg_settings/split", 0, 0, 0, 0);
+    struct yetty_ygui_old_widget *split =
+        yetty_ygui_old_engine_hbox(engine, "yui_dlg_settings/split", 0, 0, 0, 0);
     if (split) {
-        yetty_ygui_widget_apply_css(
+        yetty_ygui_old_widget_apply_css(
             split, "display:flex;flex-direction:row;gap:12;flex:1 1 0;align-items:stretch;");
-        yetty_ygui_widget_add_child(body, split);
+        yetty_ygui_old_widget_add_child(body, split);
 
-        struct yetty_ygui_widget *left_scroll =
-            yetty_ygui_engine_scrollarea(engine, "yui_dlg_settings/tree_scroll", 0, 0, 0, 0);
+        struct yetty_ygui_old_widget *left_scroll =
+            yetty_ygui_old_engine_scrollarea(engine, "yui_dlg_settings/tree_scroll", 0, 0, 0, 0);
         if (left_scroll) {
-            yetty_ygui_widget_apply_css(left_scroll, "flex:0 0 220;align-self:stretch;");
-            yetty_ygui_widget_add_child(split, left_scroll);
+            yetty_ygui_old_widget_apply_css(left_scroll, "flex:0 0 220;align-self:stretch;");
+            yetty_ygui_old_widget_add_child(split, left_scroll);
 
-            struct yetty_ygui_widget *tree_box =
-                yetty_ygui_engine_vbox(engine, "yui_dlg_settings/tree", 0, 0, 0, 0);
+            struct yetty_ygui_old_widget *tree_box =
+                yetty_ygui_old_engine_vbox(engine, "yui_dlg_settings/tree", 0, 0, 0, 0);
             if (tree_box) {
-                yetty_ygui_widget_apply_css(
+                yetty_ygui_old_widget_apply_css(
                     tree_box, "display:flex;flex-direction:column;gap:2;align-items:stretch;");
-                yetty_ygui_widget_add_child(left_scroll, tree_box);
+                yetty_ygui_old_widget_add_child(left_scroll, tree_box);
                 build_tree(dlg, tree_box, NULL, 0);
             }
         }
 
-        struct yetty_ygui_widget *right = yetty_ygui_engine_textarea_wrapped(
+        struct yetty_ygui_old_widget *right = yetty_ygui_old_engine_textarea_wrapped(
             engine, "yui_dlg_settings/props", 0, 0, 0, 0,
             "Select a category on the left to view its settings.");
         if (right) {
-            yetty_ygui_widget_apply_css(right, "flex:1 1 0;align-self:stretch;");
-            yetty_ygui_widget_add_child(split, right);
+            yetty_ygui_old_widget_apply_css(right, "flex:1 1 0;align-self:stretch;");
+            yetty_ygui_old_widget_add_child(split, right);
             dlg->textarea = right;
         }
     }
@@ -294,18 +294,18 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
      * basis of 0, the textarea above (flex:1) consumes the entire
      * body and the min-height re-grows the actions row past the
      * bottom edge. 36 reserves the row space up front. */
-    struct yetty_ygui_widget *actions =
-        yetty_ygui_engine_hbox(engine, "yui_dlg_settings/actions", 0, 0, 0, 36);
+    struct yetty_ygui_old_widget *actions =
+        yetty_ygui_old_engine_hbox(engine, "yui_dlg_settings/actions", 0, 0, 0, 36);
     if (actions) {
-        yetty_ygui_widget_apply_css(actions,
+        yetty_ygui_old_widget_apply_css(actions,
                                     "display:flex;flex-direction:row;justify-content:end;gap:8;"
                                     "flex:0 0 auto;align-items:center;");
-        yetty_ygui_widget_add_child(body, actions);
-        struct yetty_ygui_widget *close =
-            yetty_ygui_engine_button(engine, "yui_dlg_settings/close", 0, 0, 80, 28, "Close");
+        yetty_ygui_old_widget_add_child(body, actions);
+        struct yetty_ygui_old_widget *close =
+            yetty_ygui_old_engine_button(engine, "yui_dlg_settings/close", 0, 0, 80, 28, "Close");
         if (close) {
-            yetty_ygui_widget_button_on_click(close, on_close, dlg);
-            yetty_ygui_widget_add_child(actions, close);
+            yetty_ygui_old_widget_button_on_click(close, on_close, dlg);
+            yetty_ygui_old_widget_add_child(actions, close);
         }
     }
 
@@ -326,9 +326,9 @@ void yetty_yui_config_dialog_show(struct yetty_yui_config_dialog *dlg)
     if (!dlg || !dlg->window) {
         return;
     }
-    yetty_ygui_widget_set_visible(dlg->window, 1);
+    yetty_ygui_old_widget_set_visible(dlg->window, 1);
     if (dlg->engine) {
-        yetty_ygui_engine_mark_dirty(dlg->engine);
+        yetty_ygui_old_engine_mark_dirty(dlg->engine);
     }
 }
 
@@ -337,9 +337,9 @@ void yetty_yui_config_dialog_hide(struct yetty_yui_config_dialog *dlg)
     if (!dlg || !dlg->window) {
         return;
     }
-    yetty_ygui_widget_set_visible(dlg->window, 0);
+    yetty_ygui_old_widget_set_visible(dlg->window, 0);
     if (dlg->engine) {
-        yetty_ygui_engine_mark_dirty(dlg->engine);
+        yetty_ygui_old_engine_mark_dirty(dlg->engine);
     }
 }
 
@@ -348,5 +348,5 @@ int yetty_yui_config_dialog_is_visible(const struct yetty_yui_config_dialog *dlg
     if (!dlg || !dlg->window) {
         return 0;
     }
-    return yetty_ygui_widget_is_visible(dlg->window);
+    return yetty_ygui_old_widget_is_visible(dlg->window);
 }

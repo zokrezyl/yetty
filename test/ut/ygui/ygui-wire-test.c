@@ -3,10 +3,10 @@
  *
  * For each test we:
  *   1. Build a ygui tree (engine + widgets).
- *   2. Run yetty_ygui_engine_render_headless — runs the same layout +
+ *   2. Run yetty_ygui_old_engine_render_headless — runs the same layout +
  *      rebuild pipeline as engine_render but stops before OSC shipping,
  *      leaving the raw record stream in the engine's internal buffer.
- *   3. Read the bytes via yetty_ygui_engine_buffer_data() / _size().
+ *   3. Read the bytes via yetty_ygui_old_engine_buffer_data() / _size().
  *   4. Feed them to a yetty_yfigure_container's process_records.
  *   5. Dump the container via yetty_yfigure_dump.
  *   6. Assert key substrings (the dump's overall shape) appear.
@@ -31,13 +31,13 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 
 /* Internal entry — bypasses the libuv runtime bootstrap that the public
  * engine_create wires up. The headless tests don't need an event loop /
  * pty / OSC envelope codec; they only need the engine struct + buffer +
  * widget tree. */
-#include "yetty/ygui/ygui_internal.h"
+#include "yetty/ygui-old/ygui_internal.h"
 
 static int g_failures = 0;
 static int g_tests = 0;
@@ -66,24 +66,24 @@ static int g_devnull_fd = -1;
         }                                                                                           \
     } while (0)
 
-static struct yetty_ygui_engine *make_engine(float w, float h)
+static struct yetty_ygui_old_engine *make_engine(float w, float h)
 {
     /* Use the internal allocator to avoid libuv bootstrap. The engine
      * struct + buffer + grid + measure_font are all initialised; OSC
      * shipping and event-loop integration are not. That's what we want
      * for a pure-wire-output test. */
-    struct ygui_engine_ptr_result r = yetty_ygui_engine_internal_alloc("wire-test", NULL);
+    struct ygui_engine_ptr_result r = yetty_ygui_old_engine_internal_alloc("wire-test", NULL);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "engine_internal_alloc failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);
         exit(2);
     }
-    yetty_ygui_engine_set_size(r.value, w, h);
+    yetty_ygui_old_engine_set_size(r.value, w, h);
     if (g_devnull_fd < 0) {
         g_devnull_fd = open("/dev/null", O_WRONLY);
     }
     if (g_devnull_fd >= 0) {
-        yetty_ygui_engine_set_output_fd(r.value, g_devnull_fd);
+        yetty_ygui_old_engine_set_output_fd(r.value, g_devnull_fd);
     }
     return r.value;
 }
@@ -144,16 +144,16 @@ static void receiver_destroy(struct test_receiver *r)
 
 /* Run the engine through one headless render, feed the emitted bytes
  * into the receiver, and return the resulting dump (caller frees). */
-static char *render_and_dump(struct yetty_ygui_engine *engine, struct test_receiver *recv)
+static char *render_and_dump(struct yetty_ygui_old_engine *engine, struct test_receiver *recv)
 {
-    struct yetty_ycore_void_result r = yetty_ygui_engine_render_headless(engine);
+    struct yetty_ycore_void_result r = yetty_ygui_old_engine_render_headless(engine);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "engine_render_headless failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);
         exit(3);
     }
-    const uint8_t *bytes = (const uint8_t *)yetty_ygui_engine_buffer_data(engine);
-    size_t len = yetty_ygui_engine_buffer_size(engine);
+    const uint8_t *bytes = (const uint8_t *)yetty_ygui_old_engine_buffer_data(engine);
+    size_t len = yetty_ygui_old_engine_buffer_size(engine);
     if (len > 0 && bytes != NULL) {
         struct yetty_ycore_void_result pr =
             yetty_yfigure_container_process_records(recv->root, bytes, len);
@@ -178,10 +178,10 @@ static void test_single_button(void)
 {
     fprintf(stderr, "\n[test_single_button]\n");
     g_tests++;
-    struct yetty_ygui_engine *engine = make_engine(400, 100);
+    struct yetty_ygui_old_engine *engine = make_engine(400, 100);
     struct test_receiver recv = receiver_create(400, 100);
 
-    yetty_ygui_engine_button(engine, "btn", 10, 10, 80, 30, "Hello");
+    yetty_ygui_old_engine_button(engine, "btn", 10, 10, 80, 30, "Hello");
 
     char *dump = render_and_dump(engine, &recv);
     fprintf(stderr, "--- dump ---\n%s--- end dump ---\n", dump);
@@ -196,7 +196,7 @@ static void test_single_button(void)
     free(dump);
 
     receiver_destroy(&recv);
-    yetty_ygui_engine_destroy(engine);
+    yetty_ygui_old_engine_destroy(engine);
 }
 
 /*===========================================================================
@@ -208,17 +208,17 @@ static void test_hbox_two_buttons(void)
 {
     fprintf(stderr, "\n[test_hbox_two_buttons]\n");
     g_tests++;
-    struct yetty_ygui_engine *engine = make_engine(400, 100);
+    struct yetty_ygui_old_engine *engine = make_engine(400, 100);
     struct test_receiver recv = receiver_create(400, 100);
 
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(engine, "row", 0, 0, 400, 100);
-    yetty_ygui_widget_set_padding(row, 0, 0, 0, 0);
-    yetty_ygui_widget_set_gap(row, 8);
+    struct yetty_ygui_old_widget *row = yetty_ygui_old_engine_hbox(engine, "row", 0, 0, 400, 100);
+    yetty_ygui_old_widget_set_padding(row, 0, 0, 0, 0);
+    yetty_ygui_old_widget_set_gap(row, 8);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(engine, "a", 0, 0, 100, 30, "A");
-    struct yetty_ygui_widget *b = yetty_ygui_engine_button(engine, "b", 0, 0, 100, 30, "B");
-    yetty_ygui_widget_add_child(row, a);
-    yetty_ygui_widget_add_child(row, b);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(engine, "a", 0, 0, 100, 30, "A");
+    struct yetty_ygui_old_widget *b = yetty_ygui_old_engine_button(engine, "b", 0, 0, 100, 30, "B");
+    yetty_ygui_old_widget_add_child(row, a);
+    yetty_ygui_old_widget_add_child(row, b);
 
     char *dump = render_and_dump(engine, &recv);
     fprintf(stderr, "--- dump ---\n%s--- end dump ---\n", dump);
@@ -232,7 +232,7 @@ static void test_hbox_two_buttons(void)
     free(dump);
 
     receiver_destroy(&recv);
-    yetty_ygui_engine_destroy(engine);
+    yetty_ygui_old_engine_destroy(engine);
 }
 
 /*===========================================================================
@@ -244,9 +244,9 @@ static void test_two_renders_no_state_change(void)
 {
     fprintf(stderr, "\n[test_two_renders_no_state_change]\n");
     g_tests++;
-    struct yetty_ygui_engine *engine = make_engine(200, 100);
+    struct yetty_ygui_old_engine *engine = make_engine(200, 100);
     struct test_receiver recv = receiver_create(200, 100);
-    yetty_ygui_engine_button(engine, "btn", 0, 0, 80, 30, "Once");
+    yetty_ygui_old_engine_button(engine, "btn", 0, 0, 80, 30, "Once");
 
     char *dump1 = render_and_dump(engine, &recv);
     char *dump2 = render_and_dump(engine, &recv);
@@ -257,7 +257,7 @@ static void test_two_renders_no_state_change(void)
     free(dump2);
 
     receiver_destroy(&recv);
-    yetty_ygui_engine_destroy(engine);
+    yetty_ygui_old_engine_destroy(engine);
 }
 
 /*===========================================================================
@@ -282,17 +282,17 @@ static void test_open_collapsing_header_emits_children(void)
 {
     fprintf(stderr, "\n[test_open_collapsing_header_emits_children]\n");
     g_tests++;
-    struct yetty_ygui_engine *engine = make_engine(400, 300);
+    struct yetty_ygui_old_engine *engine = make_engine(400, 300);
     struct test_receiver recv = receiver_create(400, 300);
 
-    struct yetty_ygui_widget *sec =
-        yetty_ygui_engine_collapsing_header(engine, "el_inputs", 0, 0, 400, 28, "Inputs");
-    yetty_ygui_widget_collapsing_header_set_open(sec, 1);
+    struct yetty_ygui_old_widget *sec =
+        yetty_ygui_old_engine_collapsing_header(engine, "el_inputs", 0, 0, 400, 28, "Inputs");
+    yetty_ygui_old_widget_collapsing_header_set_open(sec, 1);
 
-    struct yetty_ygui_widget *a = yetty_ygui_engine_button(engine, "btn_a", 0, 0, 100, 28, "A");
-    struct yetty_ygui_widget *b = yetty_ygui_engine_button(engine, "btn_b", 0, 0, 100, 28, "B");
-    yetty_ygui_widget_add_child(sec, a);
-    yetty_ygui_widget_add_child(sec, b);
+    struct yetty_ygui_old_widget *a = yetty_ygui_old_engine_button(engine, "btn_a", 0, 0, 100, 28, "A");
+    struct yetty_ygui_old_widget *b = yetty_ygui_old_engine_button(engine, "btn_b", 0, 0, 100, 28, "B");
+    yetty_ygui_old_widget_add_child(sec, a);
+    yetty_ygui_old_widget_add_child(sec, b);
 
     char *dump = render_and_dump(engine, &recv);
     fprintf(stderr, "--- dump ---\n%s--- end dump ---\n", dump);
@@ -342,7 +342,7 @@ static void test_open_collapsing_header_emits_children(void)
     free(dump);
 
     receiver_destroy(&recv);
-    yetty_ygui_engine_destroy(engine);
+    yetty_ygui_old_engine_destroy(engine);
 }
 
 int main(void)

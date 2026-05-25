@@ -15,8 +15,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <yetty/ygui/ygui.h>
-#include <yetty/ygui/ygui_yplot.h>
+#include <yetty/ygui-old/ygui.h>
+#include <yetty/ygui-old/ygui_yplot.h>
 
 static int g_failures = 0;
 static int g_devnull_fd = -1;
@@ -31,21 +31,21 @@ static int g_devnull_fd = -1;
         }                                                                                           \
     } while (0)
 
-static struct yetty_ygui_engine *make_engine(void)
+static struct yetty_ygui_old_engine *make_engine(void)
 {
-    struct yetty_ygui_engine_args args = {.name = "yplot-test"};
-    struct ygui_engine_ptr_result r = yetty_ygui_engine_create(args);
+    struct yetty_ygui_old_engine_args args = {.name = "yplot-test"};
+    struct ygui_engine_ptr_result r = yetty_ygui_old_engine_create(args);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "engine_create failed\n");
         exit(2);
     }
-    struct yetty_ygui_engine *engine = r.value;
-    yetty_ygui_engine_set_size(engine, 800.0f, 600.0f);
+    struct yetty_ygui_old_engine *engine = r.value;
+    yetty_ygui_old_engine_set_size(engine, 800.0f, 600.0f);
     if (g_devnull_fd < 0) {
         g_devnull_fd = open("/dev/null", O_WRONLY);
     }
     if (g_devnull_fd >= 0) {
-        yetty_ygui_engine_set_output_fd(engine, g_devnull_fd);
+        yetty_ygui_old_engine_set_output_fd(engine, g_devnull_fd);
     }
     return engine;
 }
@@ -54,7 +54,7 @@ static struct yetty_ygui_engine *make_engine(void)
 static void test_from_source(void)
 {
     fprintf(stderr, "\n[test_from_source]\n");
-    struct yetty_ygui_engine *e = make_engine();
+    struct yetty_ygui_old_engine *e = make_engine();
 
     struct yetty_yplot_render_config cfg = {
         .x_min = -6.2832f,
@@ -64,7 +64,7 @@ static void test_from_source(void)
         .flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS,
     };
     const char *src = "f=sin(x); g=cos(x); @f.color=#ff6b6b; @g.color=#4ecdc4";
-    struct yetty_ygui_widget *w = yetty_ygui_engine_yplot_from_source(
+    struct yetty_ygui_old_widget *w = yetty_ygui_old_engine_yplot_from_source(
         e, "plot1", 0.0f, 0.0f, 400.0f, 200.0f, src, 0, &cfg);
     ASSERT(w != NULL, "from_source: widget created");
 
@@ -72,18 +72,18 @@ static void test_from_source(void)
      * path that lets callers animate / swap expressions live. */
     const char *src2 = "h=sin(2*x); k=cos(2*x)";
     struct yetty_ycore_void_result sr =
-        yetty_ygui_widget_yplot_set_source(w, src2, 0, &cfg);
+        yetty_ygui_old_widget_yplot_set_source(w, src2, 0, &cfg);
     ASSERT(YETTY_IS_OK(sr), "set_source: ok");
     if (YETTY_IS_ERR(sr)) yetty_ycore_error_destroy(sr.error);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* Source + data-buffer combo — what a live audio scope would use. */
 static void test_from_buffers(void)
 {
     fprintf(stderr, "\n[test_from_buffers]\n");
-    struct yetty_ygui_engine *e = make_engine();
+    struct yetty_ygui_old_engine *e = make_engine();
 
     float samples[128];
     for (int i = 0; i < 128; i++) {
@@ -96,7 +96,7 @@ static void test_from_buffers(void)
         .x_min = -1.0f, .x_max = 1.0f, .y_min = -1.0f, .y_max = 1.0f,
         .flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES,
     };
-    struct yetty_ygui_widget *w = yetty_ygui_engine_yplot_from_buffers(
+    struct yetty_ygui_old_widget *w = yetty_ygui_old_engine_yplot_from_buffers(
         e, "plot2", 0.0f, 0.0f, 500.0f, 250.0f,
         "f=sin(x)", 0, bufs, 1, &cfg);
     ASSERT(w != NULL, "from_buffers: widget created with 1 data buffer");
@@ -108,11 +108,11 @@ static void test_from_buffers(void)
         samples[i] = (float)i / 64.0f - 1.0f;
     }
     struct yetty_ycore_void_result sr =
-        yetty_ygui_widget_yplot_set_buffers(w, "f=sin(x)", 0, bufs, 1, &cfg);
+        yetty_ygui_old_widget_yplot_set_buffers(w, "f=sin(x)", 0, bufs, 1, &cfg);
     ASSERT(YETTY_IS_OK(sr), "set_buffers: ok");
     if (YETTY_IS_ERR(sr)) yetty_ycore_error_destroy(sr.error);
 
-    yetty_ygui_engine_destroy(e);
+    yetty_ygui_old_engine_destroy(e);
 }
 
 /* NULL widget protection — the public API documents that set_*
@@ -121,7 +121,7 @@ static void test_null_widget(void)
 {
     fprintf(stderr, "\n[test_null_widget]\n");
     struct yetty_ycore_void_result sr =
-        yetty_ygui_widget_yplot_set_source(NULL, "f=sin(x)", 0, NULL);
+        yetty_ygui_old_widget_yplot_set_source(NULL, "f=sin(x)", 0, NULL);
     ASSERT(YETTY_IS_ERR(sr), "set_source(NULL): err");
     if (YETTY_IS_ERR(sr)) yetty_ycore_error_destroy(sr.error);
 }

@@ -15,16 +15,16 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 
-static struct yetty_ygui_engine *g_engine = NULL;
-static struct yetty_ygui_widget *g_outer = NULL;
-static struct yetty_ygui_widget *g_tree = NULL;
-static struct yetty_ygui_widget *g_detail_name = NULL;
-static struct yetty_ygui_widget *g_detail_kind = NULL;
-static struct yetty_ygui_widget *g_detail_path = NULL;
-static struct yetty_ygui_widget *g_detail_size = NULL;
-static struct yetty_ygui_widget *g_detail_mtime = NULL;
+static struct yetty_ygui_old_engine *g_engine = NULL;
+static struct yetty_ygui_old_widget *g_outer = NULL;
+static struct yetty_ygui_old_widget *g_tree = NULL;
+static struct yetty_ygui_old_widget *g_detail_name = NULL;
+static struct yetty_ygui_old_widget *g_detail_kind = NULL;
+static struct yetty_ygui_old_widget *g_detail_path = NULL;
+static struct yetty_ygui_old_widget *g_detail_size = NULL;
+static struct yetty_ygui_old_widget *g_detail_mtime = NULL;
 static unsigned long g_id_counter = 0;
 static char g_root_path[4096];
 
@@ -33,7 +33,7 @@ static char g_root_path[4096];
  * (which don't carry path on themselves like folders do via on_toggle
  * userdata). Process-lifetime allocations; freed implicitly at exit. */
 struct path_entry {
-    struct yetty_ygui_widget *widget;
+    struct yetty_ygui_old_widget *widget;
     char *abs_path;
     int   is_dir;
 };
@@ -42,7 +42,7 @@ static struct path_entry *g_paths = NULL;
 static int g_paths_count = 0;
 static int g_paths_cap = 0;
 
-static void register_path(struct yetty_ygui_widget *w, const char *abs_path, int is_dir)
+static void register_path(struct yetty_ygui_old_widget *w, const char *abs_path, int is_dir)
 {
     if (g_paths_count >= g_paths_cap) {
         g_paths_cap = g_paths_cap ? g_paths_cap * 2 : 64;
@@ -54,7 +54,7 @@ static void register_path(struct yetty_ygui_widget *w, const char *abs_path, int
     g_paths_count++;
 }
 
-static const struct path_entry *lookup_path(const struct yetty_ygui_widget *w)
+static const struct path_entry *lookup_path(const struct yetty_ygui_old_widget *w)
 {
     for (int i = 0; i < g_paths_count; i++) {
         if (g_paths[i].widget == w) return &g_paths[i];
@@ -160,19 +160,19 @@ static void format_size(off_t bytes, char *buf, size_t buflen)
     }
 }
 
-static void update_detail_for(const struct yetty_ygui_widget *w)
+static void update_detail_for(const struct yetty_ygui_old_widget *w)
 {
     const struct path_entry *pe = lookup_path(w);
     if (!pe) {
-        yetty_ygui_widget_label_set_text(g_detail_name, "(not in tree)");
+        yetty_ygui_old_widget_label_set_text(g_detail_name, "(not in tree)");
         return;
     }
     /* Name = basename. */
     const char *name = strrchr(pe->abs_path, '/');
     name = name ? name + 1 : pe->abs_path;
-    yetty_ygui_widget_label_set_text(g_detail_name, name);
-    yetty_ygui_widget_label_set_text(g_detail_kind, pe->is_dir ? "folder" : "file");
-    yetty_ygui_widget_label_set_text(g_detail_path, pe->abs_path);
+    yetty_ygui_old_widget_label_set_text(g_detail_name, name);
+    yetty_ygui_old_widget_label_set_text(g_detail_kind, pe->is_dir ? "folder" : "file");
+    yetty_ygui_old_widget_label_set_text(g_detail_path, pe->abs_path);
 
     struct stat st;
     if (lstat(pe->abs_path, &st) == 0) {
@@ -182,35 +182,35 @@ static void update_detail_for(const struct yetty_ygui_widget *w)
         } else {
             format_size(st.st_size, sz, sizeof(sz));
         }
-        yetty_ygui_widget_label_set_text(g_detail_size, sz);
+        yetty_ygui_old_widget_label_set_text(g_detail_size, sz);
 
         char tbuf[64];
         struct tm tm_buf;
         localtime_r(&st.st_mtime, &tm_buf);
         strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M", &tm_buf);
-        yetty_ygui_widget_label_set_text(g_detail_mtime, tbuf);
+        yetty_ygui_old_widget_label_set_text(g_detail_mtime, tbuf);
     } else {
-        yetty_ygui_widget_label_set_text(g_detail_size, "(stat failed)");
-        yetty_ygui_widget_label_set_text(g_detail_mtime, "—");
+        yetty_ygui_old_widget_label_set_text(g_detail_size, "(stat failed)");
+        yetty_ygui_old_widget_label_set_text(g_detail_mtime, "—");
     }
 }
 
-static void on_select(struct yetty_ygui_widget *row, void *userdata)
+static void on_select(struct yetty_ygui_old_widget *row, void *userdata)
 {
     (void)userdata;
     update_detail_for(row);
 }
 
-static void on_folder_toggle(struct yetty_ygui_widget *node, int expanded, void *userdata);
+static void on_folder_toggle(struct yetty_ygui_old_widget *node, int expanded, void *userdata);
 
-static void populate_node(struct yetty_ygui_widget *node, struct dir_entry *entry)
+static void populate_node(struct yetty_ygui_old_widget *node, struct dir_entry *entry)
 {
     if (!entry || entry->loaded) return;
     entry->loaded = 1;
 
     int n = 0;
     struct fs_entry *items = scan_dir(entry->abs_path, &n);
-    struct yetty_ygui_widget *kids = yetty_ygui_widget_tree_node_children(node);
+    struct yetty_ygui_old_widget *kids = yetty_ygui_old_widget_tree_node_children(node);
     if (!kids) {
         free_fs_entries(items, n);
         return;
@@ -218,42 +218,42 @@ static void populate_node(struct yetty_ygui_widget *node, struct dir_entry *entr
 
     /* Forward selection events from the inner list to the same handler.
      * Each tree_node's children list defaults to no select callback. */
-    yetty_ygui_widget_list_on_select(kids, on_select, NULL);
+    yetty_ygui_old_widget_list_on_select(kids, on_select, NULL);
 
     for (int i = 0; i < n; i++) {
         if (items[i].is_dir) {
             char *id = make_id("d");
-            struct yetty_ygui_widget *sub =
-                yetty_ygui_engine_tree_node(g_engine, id, items[i].name);
+            struct yetty_ygui_old_widget *sub =
+                yetty_ygui_old_engine_tree_node(g_engine, id, items[i].name);
             free(id);
             struct dir_entry *sub_entry = make_dir_entry(items[i].full);
-            yetty_ygui_widget_tree_node_on_toggle(sub, on_folder_toggle, sub_entry);
+            yetty_ygui_old_widget_tree_node_on_toggle(sub, on_folder_toggle, sub_entry);
             register_path(sub, items[i].full, 1);
-            yetty_ygui_widget_add_child(kids, sub);
+            yetty_ygui_old_widget_add_child(kids, sub);
         } else {
             char *id = make_id("f");
-            struct yetty_ygui_widget *leaf =
-                yetty_ygui_engine_label(g_engine, id, 0, 0, items[i].name);
+            struct yetty_ygui_old_widget *leaf =
+                yetty_ygui_old_engine_label(g_engine, id, 0, 0, items[i].name);
             free(id);
             register_path(leaf, items[i].full, 0);
-            yetty_ygui_widget_add_child(kids, leaf);
+            yetty_ygui_old_widget_add_child(kids, leaf);
         }
     }
     free_fs_entries(items, n);
 }
 
-static void on_folder_toggle(struct yetty_ygui_widget *node, int expanded, void *userdata)
+static void on_folder_toggle(struct yetty_ygui_old_widget *node, int expanded, void *userdata)
 {
     if (!expanded) return;
     populate_node(node, (struct dir_entry *)userdata);
 }
 
-static void on_key(struct yetty_ygui_engine *e, uint32_t key, int mods, void *u)
+static void on_key(struct yetty_ygui_old_engine *e, uint32_t key, int mods, void *u)
 {
     (void)mods;
     (void)u;
     if (key == 'q' || key == 'Q') {
-        yetty_ygui_engine_stop(e);
+        yetty_ygui_old_engine_stop(e);
     }
 }
 
@@ -268,35 +268,35 @@ static void query_terminal_cells(int *cols, int *rows)
     }
 }
 
-static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float prev_w,
+static void on_resize(struct yetty_ygui_old_engine *e, float new_w, float new_h, float prev_w,
                       float prev_h, void *u)
 {
     (void)e;
     (void)prev_w;
     (void)prev_h;
     (void)u;
-    yetty_ygui_widget_set_size(g_outer, new_w, new_h);
+    yetty_ygui_old_widget_set_size(g_outer, new_w, new_h);
 }
 
-static struct yetty_ygui_widget *make_field(const char *id, const char *label_text,
-                                             struct yetty_ygui_widget **value_out)
+static struct yetty_ygui_old_widget *make_field(const char *id, const char *label_text,
+                                             struct yetty_ygui_old_widget **value_out)
 {
     char hbox_id[128], lbl_id[128], val_id[128];
     snprintf(hbox_id, sizeof(hbox_id), "fld_%s", id);
     snprintf(lbl_id, sizeof(lbl_id), "lbl_%s", id);
     snprintf(val_id, sizeof(val_id), "val_%s", id);
 
-    struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(g_engine, hbox_id, 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(row, "padding: 0; gap: 12px; align-items: start;");
-    yetty_ygui_widget_add_child(row, yetty_ygui_engine_label(g_engine, lbl_id, 0, 0, label_text));
-    *value_out = yetty_ygui_engine_label(g_engine, val_id, 0, 0, "—");
-    yetty_ygui_widget_add_child(row, *value_out);
+    struct yetty_ygui_old_widget *row = yetty_ygui_old_engine_hbox(g_engine, hbox_id, 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(row, "padding: 0; gap: 12px; align-items: start;");
+    yetty_ygui_old_widget_add_child(row, yetty_ygui_old_engine_label(g_engine, lbl_id, 0, 0, label_text));
+    *value_out = yetty_ygui_old_engine_label(g_engine, val_id, 0, 0, "—");
+    yetty_ygui_old_widget_add_child(row, *value_out);
     return row;
 }
 
 int main(void)
 {
-    if (yetty_ygui_init() != 0) {
+    if (yetty_ygui_old_init() != 0) {
         return 1;
     }
 
@@ -308,52 +308,52 @@ int main(void)
     query_terminal_cells(&cols, &rows);
 
     struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "file-panes"});
+        yetty_ygui_old_engine_create((struct yetty_ygui_old_engine_args){.name = "file-panes"});
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
-        yetty_ygui_shutdown();
+        yetty_ygui_old_shutdown();
         return 1;
     }
     g_engine = eng_r.value;
     /* Larger theme so rows / chevrons are readable. */
-    struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
-    yetty_ygui_theme_set_font_size(theme, 28.0f);
-    yetty_ygui_theme_set_row_height(theme, 44.0f);
-    yetty_ygui_theme_set_padding(theme, 4.0f, 8.0f, 16.0f);
-    yetty_ygui_engine_set_theme(g_engine, theme);
+    struct yetty_ygui_old_theme *theme = yetty_ygui_old_theme_create_default();
+    yetty_ygui_old_theme_set_font_size(theme, 28.0f);
+    yetty_ygui_old_theme_set_row_height(theme, 44.0f);
+    yetty_ygui_old_theme_set_padding(theme, 4.0f, 8.0f, 16.0f);
+    yetty_ygui_old_engine_set_theme(g_engine, theme);
 
-    g_outer = yetty_ygui_engine_vbox(g_engine, "outer", 0, 0, 100, 100);
-    yetty_ygui_widget_apply_css(g_outer,
+    g_outer = yetty_ygui_old_engine_vbox(g_engine, "outer", 0, 0, 100, 100);
+    yetty_ygui_old_widget_apply_css(g_outer,
                                  "padding: 12px; gap: 12px; align-items: stretch;");
 
     char title_buf[4200];
     snprintf(title_buf, sizeof(title_buf), "%s   (q to quit)", g_root_path);
-    yetty_ygui_widget_add_child(g_outer,
-                                 yetty_ygui_engine_label(g_engine, "title", 0, 0, title_buf));
+    yetty_ygui_old_widget_add_child(g_outer,
+                                 yetty_ygui_old_engine_label(g_engine, "title", 0, 0, title_buf));
 
-    struct yetty_ygui_widget *body = yetty_ygui_engine_hbox(g_engine, "body", 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(body, "padding: 0; gap: 12px; flex: 1 0 0; align-items: stretch;");
-    yetty_ygui_widget_add_child(g_outer, body);
+    struct yetty_ygui_old_widget *body = yetty_ygui_old_engine_hbox(g_engine, "body", 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(body, "padding: 0; gap: 12px; flex: 1 0 0; align-items: stretch;");
+    yetty_ygui_old_widget_add_child(g_outer, body);
 
     /* Left pane: tree, fixed-basis 320px. */
-    g_tree = yetty_ygui_engine_list(g_engine, "tree", 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(g_tree, "padding: 6px; gap: 2px; flex: 0 0 320px;");
-    yetty_ygui_widget_list_on_select(g_tree, on_select, NULL);
-    yetty_ygui_widget_add_child(body, g_tree);
+    g_tree = yetty_ygui_old_engine_list(g_engine, "tree", 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(g_tree, "padding: 6px; gap: 2px; flex: 0 0 320px;");
+    yetty_ygui_old_widget_list_on_select(g_tree, on_select, NULL);
+    yetty_ygui_old_widget_add_child(body, g_tree);
 
     /* Right pane: details. */
-    struct yetty_ygui_widget *detail = yetty_ygui_engine_vbox(g_engine, "detail", 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(detail,
+    struct yetty_ygui_old_widget *detail = yetty_ygui_old_engine_vbox(g_engine, "detail", 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(detail,
                                  "padding: 16px; gap: 8px; flex: 1 0 0; align-items: start;");
-    yetty_ygui_widget_add_child(body, detail);
+    yetty_ygui_old_widget_add_child(body, detail);
 
-    yetty_ygui_widget_add_child(detail,
-                                 yetty_ygui_engine_label(g_engine, "h1", 0, 0, "Details"));
-    yetty_ygui_widget_add_child(detail, make_field("name",  "Name:",  &g_detail_name));
-    yetty_ygui_widget_add_child(detail, make_field("kind",  "Kind:",  &g_detail_kind));
-    yetty_ygui_widget_add_child(detail, make_field("path",  "Path:",  &g_detail_path));
-    yetty_ygui_widget_add_child(detail, make_field("size",  "Size:",  &g_detail_size));
-    yetty_ygui_widget_add_child(detail, make_field("mtime", "Mtime:", &g_detail_mtime));
+    yetty_ygui_old_widget_add_child(detail,
+                                 yetty_ygui_old_engine_label(g_engine, "h1", 0, 0, "Details"));
+    yetty_ygui_old_widget_add_child(detail, make_field("name",  "Name:",  &g_detail_name));
+    yetty_ygui_old_widget_add_child(detail, make_field("kind",  "Kind:",  &g_detail_kind));
+    yetty_ygui_old_widget_add_child(detail, make_field("path",  "Path:",  &g_detail_path));
+    yetty_ygui_old_widget_add_child(detail, make_field("size",  "Size:",  &g_detail_size));
+    yetty_ygui_old_widget_add_child(detail, make_field("mtime", "Mtime:", &g_detail_mtime));
 
     /* Seed the root list. */
     int n = 0;
@@ -361,37 +361,37 @@ int main(void)
     for (int i = 0; i < n; i++) {
         if (items[i].is_dir) {
             char *id = make_id("d");
-            struct yetty_ygui_widget *sub =
-                yetty_ygui_engine_tree_node(g_engine, id, items[i].name);
+            struct yetty_ygui_old_widget *sub =
+                yetty_ygui_old_engine_tree_node(g_engine, id, items[i].name);
             free(id);
             struct dir_entry *entry = make_dir_entry(items[i].full);
-            yetty_ygui_widget_tree_node_on_toggle(sub, on_folder_toggle, entry);
+            yetty_ygui_old_widget_tree_node_on_toggle(sub, on_folder_toggle, entry);
             register_path(sub, items[i].full, 1);
-            yetty_ygui_widget_add_child(g_tree, sub);
+            yetty_ygui_old_widget_add_child(g_tree, sub);
         } else {
             char *id = make_id("f");
-            struct yetty_ygui_widget *leaf =
-                yetty_ygui_engine_label(g_engine, id, 0, 0, items[i].name);
+            struct yetty_ygui_old_widget *leaf =
+                yetty_ygui_old_engine_label(g_engine, id, 0, 0, items[i].name);
             free(id);
             register_path(leaf, items[i].full, 0);
-            yetty_ygui_widget_add_child(g_tree, leaf);
+            yetty_ygui_old_widget_add_child(g_tree, leaf);
         }
     }
     free_fs_entries(items, n);
 
-    yetty_ygui_engine_on_resize(g_engine, on_resize, NULL);
-    yetty_ygui_engine_on_key(g_engine, on_key, NULL);
+    yetty_ygui_old_engine_on_resize(g_engine, on_resize, NULL);
+    yetty_ygui_old_engine_on_key(g_engine, on_key, NULL);
     {
-        struct pixel_size_result sr = yetty_ygui_engine_get_size(g_engine);
+        struct pixel_size_result sr = yetty_ygui_old_engine_get_size(g_engine);
         if (YETTY_IS_OK(sr) && sr.value.width > 0 && sr.value.height > 0) {
-            yetty_ygui_widget_set_size(g_outer, sr.value.width, sr.value.height);
+            yetty_ygui_old_widget_set_size(g_outer, sr.value.width, sr.value.height);
         } else if (YETTY_IS_ERR(sr)) {
             yetty_ycore_error_destroy(sr.error);
         }
     }
-    yetty_ygui_engine_run(g_engine);
+    yetty_ygui_old_engine_run(g_engine);
 
-    yetty_ygui_engine_destroy(g_engine);
-    yetty_ygui_shutdown();
+    yetty_ygui_old_engine_destroy(g_engine);
+    yetty_ygui_old_shutdown();
     return 0;
 }

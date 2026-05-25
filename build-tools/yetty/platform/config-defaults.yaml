@@ -340,7 +340,7 @@ workspace:
 #
 # The defaults below are the yetty brand palette (see logo). Every entry
 # is optional — missing keys fall back to the C-side default. Client ygui
-# apps pick up these values by calling yetty_ygui_theme_apply_config()
+# apps pick up these values by calling yetty_ygui_old_theme_apply_config()
 # after creating their engine; yetty's own chrome reads them at startup.
 # ─────────────────────────────────────────────────────────────────────────────
 style:

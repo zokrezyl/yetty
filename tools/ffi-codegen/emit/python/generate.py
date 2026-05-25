@@ -250,7 +250,7 @@ def _check_loaded() -> ctypes.CDLL:
                     lines.append(f"    {v['name']} = {v['value']}")
                 lines.append("")
                 # Also export each enum constant at module level so users can
-                # write `ygui.YETTY_YGUI_WIDGET_BUTTON` directly without
+                # write `ygui.YETTY_YGUI_OLD_WIDGET_BUTTON` directly without
                 # going through the class.
                 for v in d["values"]:
                     lines.append(f"{v['name']} = {cls}.{v['name']}")

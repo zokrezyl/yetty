@@ -40,24 +40,24 @@
 #include <yetty/yplatform/term.h>  /* term_get_size */
 #include <yetty/yplatform/tty.h>   /* stderr-rerouting probe */
 #include "embedded-assets.h"       /* incbin-extracted assets at <data_dir>/ */
-#include <yetty/ygui/ygui.h>
-#include <yetty/ygui/ygui_yimage.h>
-#include <yetty/ygui/ygui_yplot.h>
+#include <yetty/ygui-old/ygui.h>
+#include <yetty/ygui-old/ygui_yimage.h>
+#include <yetty/ygui-old/ygui_yplot.h>
 #ifdef YGREETER_HAS_YBROWSER
-#include <yetty/ygui/ygui_ybrowser.h>
+#include <yetty/ygui-old/ygui_ybrowser.h>
 #endif
 #ifdef YGREETER_HAS_YMARKDOWN
-#include <yetty/ygui/ygui_ymarkdown.h>
+#include <yetty/ygui-old/ygui_ymarkdown.h>
 #endif
 #ifdef YGREETER_HAS_YPDF
-#include <yetty/ygui/ygui_ypdf.h>
+#include <yetty/ygui-old/ygui_ypdf.h>
 #endif
 #ifdef YGREETER_HAS_YZOO
-#include <yetty/ygui/ygui_yzoo.h>
+#include <yetty/ygui-old/ygui_yzoo.h>
 #include <yetty/yzoo/yzoo.h>
 #endif
 #ifdef YGREETER_HAS_YJUNGLE
-#include <yetty/ygui/ygui_yjungle.h>
+#include <yetty/ygui-old/ygui_yjungle.h>
 #include <yetty/yjungle/yjungle.h>
 #endif
 #include <yetty/ytrace/ytrace.h>
@@ -207,7 +207,7 @@ static const struct nav_entry WELCOME_NAV[] = {
  * Plots tab content.
  *
  * Drives the Plots tab through the ygui_yplot widget — one rich surface
- * per tab, content swapped via yetty_ygui_widget_yplot_set_source on
+ * per tab, content swapped via yetty_ygui_old_widget_yplot_set_source on
  * each nav click. The data tables below carry the yexpr-plot source
  * string + range / flags per entry; load_entry dispatches to the
  * widget when the tab kind is TAB_KIND_PLOTS.
@@ -543,7 +543,7 @@ static void free_image_nav(void)
  * token-class colors — so the demo runs anywhere ygui runs (including
  * the RISCV browser build, which doesn't link tree-sitter). When the
  * RISCV path gets ycat support, swap these literals for
- * yetty_ycat_ts_render() output + yetty_ygui_widget_rich_set_buffer().
+ * yetty_ycat_ts_render() output + yetty_ygui_old_widget_rich_set_buffer().
  * ========================================================================= */
 
 #define CODE_HELLO                                                                                 \
@@ -711,13 +711,13 @@ static const struct nav_entry CODE_NAV[] = {
  * ========================================================================= */
 /* How load_entry interprets an entry click for this tab.
  *
- *   TAB_KIND_YAML    — entries[i].yaml drives yetty_ygui_widget_rich_set_yaml.
+ *   TAB_KIND_YAML    — entries[i].yaml drives yetty_ygui_old_widget_rich_set_yaml.
  *                      Default for Welcome / Code / future YAML-driven tabs.
  *   TAB_KIND_PLOTS   — entries[i] supplies the label only; the plot source
  *                      string + render_config come from plot_entries() at the
- *                      same index, fed to yetty_ygui_widget_yplot_set_source.
+ *                      same index, fed to yetty_ygui_old_widget_yplot_set_source.
  *   TAB_KIND_IMAGES  — the path comes from g_image_paths[i], fed to
- *                      yetty_ygui_widget_yimage_set_file. The widget owns
+ *                      yetty_ygui_old_widget_yimage_set_file. The widget owns
  *                      the same rich surface, so the same widget pointer
  *                      handles every entry. */
 enum tab_kind {
@@ -727,8 +727,8 @@ enum tab_kind {
 };
 
 struct tab_state {
-    struct yetty_ygui_widget *nav_list;
-    struct yetty_ygui_widget *rich;
+    struct yetty_ygui_old_widget *nav_list;
+    struct yetty_ygui_old_widget *rich;
     const struct nav_entry *entries;
     int n_entries;
     enum tab_kind kind;
@@ -776,7 +776,7 @@ static int g_yjungle_tab_index = -1;
  * which isn't on ygreeter's public include path — forward-declare
  * locally. */
 struct yetty_ydraw_draw_list;
-struct yetty_ycore_void_result yetty_ygui_flatten_draw_list(
+struct yetty_ycore_void_result yetty_ygui_old_flatten_draw_list(
     struct yetty_ydraw_draw_list *dst, const struct yetty_ydraw_draw_list *src);
 
 static uint64_t ygreeter_mono_ms(void)
@@ -790,9 +790,9 @@ static uint64_t ygreeter_mono_ms(void)
  * the scene-size mechanics. This shim just owns the libuv timer and a
  * pointer to the widget; ticks forward to the widget. */
 struct yzoo_anim {
-    struct yetty_ygui_engine *engine;
-    struct yetty_ygui_widget *widget;
-    struct yetty_ygui_widget *tab;
+    struct yetty_ygui_old_engine *engine;
+    struct yetty_ygui_old_widget *widget;
+    struct yetty_ygui_old_widget *tab;
     uv_timer_t                timer;
     bool                      timer_inited;
     bool                      running;
@@ -805,9 +805,9 @@ struct yzoo_anim {
 /* Same shape — the dedicated ygui_yjungle widget owns everything
  * substantial. The shim owns the timer + a widget pointer. */
 struct yjungle_anim {
-    struct yetty_ygui_engine *engine;
-    struct yetty_ygui_widget *widget;
-    struct yetty_ygui_widget *tab;
+    struct yetty_ygui_old_engine *engine;
+    struct yetty_ygui_old_widget *widget;
+    struct yetty_ygui_old_widget *tab;
     uv_timer_t                timer;
     bool                      timer_inited;
     bool                      running;
@@ -828,17 +828,17 @@ static void yj_anim_on_tab_closed(struct yjungle_anim *a);
 #endif
 
 struct app {
-    struct yetty_ygui_engine *engine;
-    struct yetty_ygui_widget *outer;
-    struct yetty_ygui_widget *tabbar;
+    struct yetty_ygui_old_engine *engine;
+    struct yetty_ygui_old_widget *outer;
+    struct yetty_ygui_old_widget *tabbar;
     struct tab_state tabs[YGREETER_TAB_MAX];
     /* About dialog. Three top-level widgets hidden until the menu's
      * About entry opens them. They're re-centred on engine resize. The
      * popup carries the modal overlay + drop shadow; the rich widget
      * holds the body content; the button closes the dialog. */
-    struct yetty_ygui_widget *about_popup;
-    struct yetty_ygui_widget *about_rich;
-    struct yetty_ygui_widget *about_close;
+    struct yetty_ygui_old_widget *about_popup;
+    struct yetty_ygui_old_widget *about_rich;
+    struct yetty_ygui_old_widget *about_close;
     /* Animated yzoo / yjungle tabs. Each anim owns its producer,
      * the (raw) producer buffer, the (flat) rich-widget buffer, a
      * uv_timer driving ticks, and any live-state bookkeeping the
@@ -922,7 +922,7 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
      * loaded during build_tab_body (before engine_run) renders at the
      * 400×200 fallback and stays that size forever. */
     if (t->kind == TAB_KIND_PLOTS || t->kind == TAB_KIND_IMAGES) {
-        struct yetty_ycore_void_result lr = yetty_ygui_engine_layout(app->engine);
+        struct yetty_ycore_void_result lr = yetty_ygui_old_engine_layout(app->engine);
         if (YETTY_IS_ERR(lr)) {
             yetty_ycore_error_destroy(lr.error);
         }
@@ -942,7 +942,7 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
             .flags = pe->flags,
         };
         struct yetty_ycore_void_result r =
-            yetty_ygui_widget_yplot_set_source(t->rich, pe->source, 0, &cfg);
+            yetty_ygui_old_widget_yplot_set_source(t->rich, pe->source, 0, &cfg);
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
@@ -959,14 +959,14 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
         if (entry_index < g_image_path_count && g_image_paths &&
             g_image_paths[entry_index]) {
             struct yetty_ycore_void_result r =
-                yetty_ygui_widget_yimage_set_file(t->rich, g_image_paths[entry_index]);
+                yetty_ygui_old_widget_yimage_set_file(t->rich, g_image_paths[entry_index]);
             if (YETTY_IS_OK(r)) {
                 return;
             }
             yetty_ycore_error_destroy(r.error);
         }
         struct yetty_ycore_void_result cr =
-            yetty_ygui_widget_yimage_set_file(t->rich, NULL);
+            yetty_ygui_old_widget_yimage_set_file(t->rich, NULL);
         if (YETTY_IS_ERR(cr)) {
             yetty_ycore_error_destroy(cr.error);
         }
@@ -982,7 +982,7 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
     if (!yaml) {
         return;
     }
-    struct yetty_ycore_void_result r = yetty_ygui_widget_rich_set_yaml(t->rich, yaml, strlen(yaml));
+    struct yetty_ycore_void_result r = yetty_ygui_old_widget_rich_set_yaml(t->rich, yaml, strlen(yaml));
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
     }
@@ -995,15 +995,15 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
  * row_link->app is set to NULL by on_tab_close when the row's tab gets
  * removed — the button is already freed by then, so the callback
  * should never fire, but the guard makes the path explicit. */
-static void on_row_clicked(struct yetty_ygui_widget *button, void *userdata)
+static void on_row_clicked(struct yetty_ygui_old_widget *button, void *userdata)
 {
     (void)button;
     const struct row_link *rl = (const struct row_link *)userdata;
     if (!rl || !rl->app) {
         return;
     }
-    if (yetty_ygui_widget_tabbar_get_active(rl->app->tabbar) != rl->tab_index) {
-        yetty_ygui_widget_tabbar_set_active(rl->app->tabbar, rl->tab_index);
+    if (yetty_ygui_old_widget_tabbar_get_active(rl->app->tabbar) != rl->tab_index) {
+        yetty_ygui_old_widget_tabbar_set_active(rl->app->tabbar, rl->tab_index);
     }
     load_entry(rl->app, rl->tab_index, rl->entry_index);
 }
@@ -1016,11 +1016,11 @@ static void on_row_clicked(struct yetty_ygui_widget *button, void *userdata)
  * the change_callback fires for the new active tab while ygreeter is
  * still pointing at the closed tab's freed widgets (= dangling
  * pointer -> heap corruption -> "app freezes"). */
-static void on_tab_close(struct yetty_ygui_widget *tabbar, float value, void *userdata)
+static void on_tab_close(struct yetty_ygui_old_widget *tabbar, float value, void *userdata)
 {
     struct app *app = (struct app *)userdata;
     int idx = (int)value;
-    int n = yetty_ygui_widget_tabbar_count(tabbar);
+    int n = yetty_ygui_old_widget_tabbar_count(tabbar);
     if (!app || idx < 0 || idx >= n) {
         return;
     }
@@ -1091,10 +1091,10 @@ static void on_tab_close(struct yetty_ygui_widget *tabbar, float value, void *us
     /* Now safe to actually drop the tab — widgets get freed but
      * nothing left in app->tabs[] / g_row_links[] still references
      * them. */
-    yetty_ygui_widget_tabbar_remove_tab(tabbar, idx);
+    yetty_ygui_old_widget_tabbar_remove_tab(tabbar, idx);
 }
 
-static void on_tab_change(struct yetty_ygui_widget *tabbar, float value, void *userdata)
+static void on_tab_change(struct yetty_ygui_old_widget *tabbar, float value, void *userdata)
 {
     (void)tabbar;
     struct app *app = (struct app *)userdata;
@@ -1120,12 +1120,12 @@ static void on_tab_change(struct yetty_ygui_widget *tabbar, float value, void *u
 #endif
 }
 
-static void on_key(struct yetty_ygui_engine *e, uint32_t key, int mods, void *u)
+static void on_key(struct yetty_ygui_old_engine *e, uint32_t key, int mods, void *u)
 {
     (void)mods;
     (void)u;
     if (key == 'q' || key == 'Q') {
-        yetty_ygui_engine_stop(e);
+        yetty_ygui_old_engine_stop(e);
     }
 }
 
@@ -1182,7 +1182,7 @@ static void reposition_about_dialog(struct app *app)
     if (!app || !app->about_popup) {
         return;
     }
-    struct pixel_size_result sr = yetty_ygui_engine_get_size(app->engine);
+    struct pixel_size_result sr = yetty_ygui_old_engine_get_size(app->engine);
     if (YETTY_IS_ERR(sr)) {
         yetty_ycore_error_destroy(sr.error);
         return;
@@ -1201,15 +1201,15 @@ static void reposition_about_dialog(struct app *app)
         y = 0;
     }
 
-    yetty_ygui_widget_set_position(app->about_popup, x, y);
-    yetty_ygui_widget_popup_set_scene_size(app->about_popup, ew, eh);
+    yetty_ygui_old_widget_set_position(app->about_popup, x, y);
+    yetty_ygui_old_widget_popup_set_scene_size(app->about_popup, ew, eh);
 
     if (app->about_rich) {
-        yetty_ygui_widget_set_position(app->about_rich, x + ABOUT_BODY_PAD_X,
+        yetty_ygui_old_widget_set_position(app->about_rich, x + ABOUT_BODY_PAD_X,
                                        y + ABOUT_BODY_PAD_TOP);
     }
     if (app->about_close) {
-        yetty_ygui_widget_set_position(app->about_close,
+        yetty_ygui_old_widget_set_position(app->about_close,
                                        x + ABOUT_W - ABOUT_BUTTON_W - ABOUT_BUTTON_PAD,
                                        y + ABOUT_H - ABOUT_BUTTON_H - ABOUT_BUTTON_PAD);
     }
@@ -1223,20 +1223,20 @@ static void about_dialog_set_open(struct app *app, int open)
     if (open) {
         reposition_about_dialog(app);
     }
-    yetty_ygui_widget_popup_set_open(app->about_popup, open);
+    yetty_ygui_old_widget_popup_set_open(app->about_popup, open);
     /* The rich + close button live as top-level siblings (not popup
      * children of the rendering machinery — see popup_render_all
      * comment). Toggle their visibility in lockstep with the popup's
      * OPEN flag. */
     if (app->about_rich) {
-        yetty_ygui_widget_set_visible(app->about_rich, open);
+        yetty_ygui_old_widget_set_visible(app->about_rich, open);
     }
     if (app->about_close) {
-        yetty_ygui_widget_set_visible(app->about_close, open);
+        yetty_ygui_old_widget_set_visible(app->about_close, open);
     }
 }
 
-static void on_about_close_click(struct yetty_ygui_widget *button, void *userdata)
+static void on_about_close_click(struct yetty_ygui_old_widget *button, void *userdata)
 {
     (void)button;
     about_dialog_set_open((struct app *)userdata, 0);
@@ -1246,16 +1246,16 @@ static void on_about_close_click(struct yetty_ygui_widget *button, void *userdat
  * widget arg is the menu itself (the engine fires the callback as if
  * the menu had been clicked). We route via the `app` pointer stashed
  * in userdata. */
-static void on_menu_close(struct yetty_ygui_widget *widget, void *userdata)
+static void on_menu_close(struct yetty_ygui_old_widget *widget, void *userdata)
 {
     (void)widget;
     struct app *app = (struct app *)userdata;
     if (app && app->engine) {
-        yetty_ygui_engine_close_preserve(app->engine);
+        yetty_ygui_old_engine_close_preserve(app->engine);
     }
 }
 
-static void on_menu_about(struct yetty_ygui_widget *widget, void *userdata)
+static void on_menu_about(struct yetty_ygui_old_widget *widget, void *userdata)
 {
     (void)widget;
     about_dialog_set_open((struct app *)userdata, 1);
@@ -1268,20 +1268,20 @@ static void build_about_dialog(struct app *app)
      * top-level siblings (a popup's children render at absolute
      * coordinates anyway — see reposition_about_dialog comment). */
     app->about_popup =
-        yetty_ygui_engine_popup(app->engine, "about_popup", 0, 0, ABOUT_W, ABOUT_H, "About");
-    yetty_ygui_widget_popup_set_modal(app->about_popup, 1);
-    yetty_ygui_widget_popup_set_open(app->about_popup, 0);
+        yetty_ygui_old_engine_popup(app->engine, "about_popup", 0, 0, ABOUT_W, ABOUT_H, "About");
+    yetty_ygui_old_widget_popup_set_modal(app->about_popup, 1);
+    yetty_ygui_old_widget_popup_set_open(app->about_popup, 0);
 
-    app->about_rich = yetty_ygui_engine_rich_from_yaml(
+    app->about_rich = yetty_ygui_old_engine_rich_from_yaml(
         app->engine, "about_rich", 0, 0, ABOUT_W - 2 * ABOUT_BODY_PAD_X,
         ABOUT_H - ABOUT_BODY_PAD_TOP - ABOUT_BUTTON_H - 2 * ABOUT_BUTTON_PAD, ABOUT_BODY_YAML,
         strlen(ABOUT_BODY_YAML));
-    yetty_ygui_widget_set_visible(app->about_rich, 0);
+    yetty_ygui_old_widget_set_visible(app->about_rich, 0);
 
-    app->about_close = yetty_ygui_engine_button(app->engine, "about_close", 0, 0, ABOUT_BUTTON_W,
+    app->about_close = yetty_ygui_old_engine_button(app->engine, "about_close", 0, 0, ABOUT_BUTTON_W,
                                                 ABOUT_BUTTON_H, "Close");
-    yetty_ygui_widget_button_on_click(app->about_close, on_about_close_click, app);
-    yetty_ygui_widget_set_visible(app->about_close, 0);
+    yetty_ygui_old_widget_button_on_click(app->about_close, on_about_close_click, app);
+    yetty_ygui_old_widget_set_visible(app->about_close, 0);
 }
 
 /* =========================================================================
@@ -1307,7 +1307,7 @@ static void yzoo_anim_tick(struct yzoo_anim *a)
     uint64_t now = ygreeter_mono_ms();
     float dt = a->last_tick_ms ? (float)((double)(now - a->last_tick_ms) / 1000.0) : 0.033f;
     a->last_tick_ms = now;
-    struct yetty_ycore_void_result rr = yetty_ygui_widget_yzoo_tick(a->widget, dt);
+    struct yetty_ycore_void_result rr = yetty_ygui_old_widget_yzoo_tick(a->widget, dt);
     if (YETTY_IS_ERR(rr)) {
         yetty_ycore_error_destroy(rr.error);
     }
@@ -1316,8 +1316,8 @@ static void yzoo_anim_tick(struct yzoo_anim *a)
 YETTY_EXTERNAL_CALLBACK
 static void on_yzoo_timer(uv_timer_t *t) { yzoo_anim_tick((struct yzoo_anim *)t->data); }
 
-static void yzoo_anim_init(struct yzoo_anim *a, struct yetty_ygui_engine *engine,
-                           struct yetty_ygui_widget *tab, uint32_t seed)
+static void yzoo_anim_init(struct yzoo_anim *a, struct yetty_ygui_old_engine *engine,
+                           struct yetty_ygui_old_widget *tab, uint32_t seed)
 {
     /* Defer widget creation — the tab's resolved size isn't known
      * until the first layout pass. ensure_attached fills it in. */
@@ -1334,15 +1334,15 @@ static void yzoo_anim_ensure_attached(struct yzoo_anim *a)
     /* The widget itself handles resize via set_scene_size; we just
      * need it to exist inside the tab so flex layout sizes it to
      * the tab's content area. */
-    a->widget = yetty_ygui_engine_yzoo(a->engine, "yzoo_view",
+    a->widget = yetty_ygui_old_engine_yzoo(a->engine, "yzoo_view",
                                        0, 0, 0, 0, /*config=*/NULL, a->seed);
     if (!a->widget) {
         return;
     }
-    yetty_ygui_widget_apply_css(a->widget, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(a->tab, a->widget);
+    yetty_ygui_old_widget_apply_css(a->widget, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_old_widget_add_child(a->tab, a->widget);
     if (!a->timer_inited) {
-        uv_loop_t *loop = yetty_ygui_engine_get_loop(a->engine);
+        uv_loop_t *loop = yetty_ygui_old_engine_get_loop(a->engine);
         uv_timer_init(loop, &a->timer);
         a->timer.data = a;
         a->timer_inited = true;
@@ -1401,7 +1401,7 @@ static void yj_anim_tick(struct yjungle_anim *a)
         return;
     }
     uint64_t now = ygreeter_mono_ms() - a->start_ms;
-    struct yetty_ycore_void_result rr = yetty_ygui_widget_yjungle_tick(a->widget, now);
+    struct yetty_ycore_void_result rr = yetty_ygui_old_widget_yjungle_tick(a->widget, now);
     if (YETTY_IS_ERR(rr)) {
         yetty_ycore_error_destroy(rr.error);
     }
@@ -1410,8 +1410,8 @@ static void yj_anim_tick(struct yjungle_anim *a)
 YETTY_EXTERNAL_CALLBACK
 static void on_yj_timer(uv_timer_t *t) { yj_anim_tick((struct yjungle_anim *)t->data); }
 
-static void yj_anim_init(struct yjungle_anim *a, struct yetty_ygui_engine *engine,
-                         struct yetty_ygui_widget *tab, uint32_t seed)
+static void yj_anim_init(struct yjungle_anim *a, struct yetty_ygui_old_engine *engine,
+                         struct yetty_ygui_old_widget *tab, uint32_t seed)
 {
     a->engine = engine;
     a->tab = tab;
@@ -1429,15 +1429,15 @@ static void yj_anim_ensure_attached(struct yjungle_anim *a)
     cfg.initial_chain_length = 20;
     cfg.max_depth = 2;
     cfg.group_prob_depth0 = 0.4f;
-    a->widget = yetty_ygui_engine_yjungle(a->engine, "yjungle_view",
+    a->widget = yetty_ygui_old_engine_yjungle(a->engine, "yjungle_view",
                                           0, 0, 0, 0, &cfg, a->seed);
     if (!a->widget) {
         return;
     }
-    yetty_ygui_widget_apply_css(a->widget, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(a->tab, a->widget);
+    yetty_ygui_old_widget_apply_css(a->widget, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_old_widget_add_child(a->tab, a->widget);
     if (!a->timer_inited) {
-        uv_loop_t *loop = yetty_ygui_engine_get_loop(a->engine);
+        uv_loop_t *loop = yetty_ygui_old_engine_get_loop(a->engine);
         uv_timer_init(loop, &a->timer);
         a->timer.data = a;
         a->timer_inited = true;
@@ -1487,7 +1487,7 @@ static void yj_anim_shutdown(struct yjungle_anim *a)
 }
 #endif /* YGREETER_HAS_YJUNGLE */
 
-static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float pw, float ph,
+static void on_resize(struct yetty_ygui_old_engine *e, float new_w, float new_h, float pw, float ph,
                       void *u)
 {
     (void)e;
@@ -1495,7 +1495,7 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
     (void)ph;
     struct app *app = (struct app *)u;
     if (app->outer) {
-        yetty_ygui_widget_set_size(app->outer, new_w, new_h);
+        yetty_ygui_old_widget_set_size(app->outer, new_w, new_h);
     }
     /* Keep the About dialog centred when the user resizes the
      * terminal / card. Cheap — only updates positions, not contents. */
@@ -1519,7 +1519,7 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
      * first so the content box query inside load_entry returns the
      * new dimensions. */
     {
-        struct yetty_ycore_void_result lr = yetty_ygui_engine_layout(e);
+        struct yetty_ycore_void_result lr = yetty_ygui_old_engine_layout(e);
         if (YETTY_IS_ERR(lr)) {
             yetty_ycore_error_destroy(lr.error);
         }
@@ -1550,17 +1550,17 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
  * proper media-query-style switch comes later.
  * ========================================================================= */
 
-static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
-                                                struct yetty_ygui_widget *tab_panel,
+static struct yetty_ygui_old_widget *build_tab_body(struct app *app, int tab_index,
+                                                struct yetty_ygui_old_widget *tab_panel,
                                                 const struct nav_entry *entries, int n_entries,
                                                 const char *id_prefix, enum tab_kind kind)
 {
     char id_buf[128];
     snprintf(id_buf, sizeof(id_buf), "%s_body", id_prefix);
-    struct yetty_ygui_widget *body = yetty_ygui_engine_hbox(app->engine, id_buf, 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(body,
+    struct yetty_ygui_old_widget *body = yetty_ygui_old_engine_hbox(app->engine, id_buf, 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(body,
                                 "padding: 8px; gap: 12px; flex: 1 0 0; align-items: stretch;");
-    yetty_ygui_widget_add_child(tab_panel, body);
+    yetty_ygui_old_widget_add_child(tab_panel, body);
 
     /* Nav: a flex-column vbox of button rows. We tried using a `list`
      * with label children first — but ygui's grid_query routes clicks
@@ -1568,19 +1568,19 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
      * on_select never fired. Buttons have on_press AND the engine
      * fires their click_callback on mouse-up out of the box. */
     snprintf(id_buf, sizeof(id_buf), "%s_nav", id_prefix);
-    struct yetty_ygui_widget *nav = yetty_ygui_engine_vbox(app->engine, id_buf, 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(nav, "padding: 8px; gap: 4px; flex: 0 0 220px;");
-    yetty_ygui_widget_add_child(body, nav);
+    struct yetty_ygui_old_widget *nav = yetty_ygui_old_engine_vbox(app->engine, id_buf, 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(nav, "padding: 8px; gap: 4px; flex: 0 0 220px;");
+    yetty_ygui_old_widget_add_child(body, nav);
 
     for (int i = 0; i < n_entries; i++) {
         snprintf(id_buf, sizeof(id_buf), "%s_row_%d", id_prefix, i);
-        struct yetty_ygui_widget *row =
-            yetty_ygui_engine_button(app->engine, id_buf, 0, 0, 200, 28, entries[i].label);
-        yetty_ygui_widget_apply_css(row, "align-self: stretch;");
-        yetty_ygui_widget_add_child(nav, row);
+        struct yetty_ygui_old_widget *row =
+            yetty_ygui_old_engine_button(app->engine, id_buf, 0, 0, 200, 28, entries[i].label);
+        yetty_ygui_old_widget_apply_css(row, "align-self: stretch;");
+        yetty_ygui_old_widget_add_child(nav, row);
         struct row_link *rl = new_row_link(app, tab_index, i);
         if (rl) {
-            yetty_ygui_widget_button_on_click(row, on_row_clicked, rl);
+            yetty_ygui_old_widget_button_on_click(row, on_row_clicked, rl);
         }
     }
 
@@ -1589,24 +1589,24 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
      * land on the right widget. YAML tabs use a rich widget; plots /
      * images get dedicated producer widgets. */
     snprintf(id_buf, sizeof(id_buf), "%s_rich", id_prefix);
-    struct yetty_ygui_widget *rich = NULL;
+    struct yetty_ygui_old_widget *rich = NULL;
     switch (kind) {
     case TAB_KIND_PLOTS:
-        rich = yetty_ygui_engine_yplot_from_source(
+        rich = yetty_ygui_old_engine_yplot_from_source(
             app->engine, id_buf, 0, 0, 0, 0,
             /*source=*/NULL, 0, /*config=*/NULL);
         break;
     case TAB_KIND_IMAGES:
-        rich = yetty_ygui_engine_yimage_from_file(
+        rich = yetty_ygui_old_engine_yimage_from_file(
             app->engine, id_buf, 0, 0, 0, 0, /*path=*/NULL);
         break;
     case TAB_KIND_YAML:
     default:
-        rich = yetty_ygui_engine_rich(app->engine, id_buf, 0, 0, 0, 0);
+        rich = yetty_ygui_old_engine_rich(app->engine, id_buf, 0, 0, 0, 0);
         break;
     }
-    yetty_ygui_widget_apply_css(rich, "flex: 1 0 0; align-self: stretch;");
-    yetty_ygui_widget_add_child(body, rich);
+    yetty_ygui_old_widget_apply_css(rich, "flex: 1 0 0; align-self: stretch;");
+    yetty_ygui_old_widget_add_child(body, rich);
 
     /* Wire tab_state. */
     app->tabs[tab_index].nav_list = nav;
@@ -1633,7 +1633,7 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
 /* No-op click handler — the showcase widgets exist for visual demo, not
  * to drive app state. The presence of the callback keeps the cursor in
  * "interactive" mode so hover / press states still render. */
-static void on_demo_click(struct yetty_ygui_widget *w, void *u)
+static void on_demo_click(struct yetty_ygui_old_widget *w, void *u)
 {
     (void)w;
     (void)u;
@@ -1641,214 +1641,214 @@ static void on_demo_click(struct yetty_ygui_widget *w, void *u)
 
 /* Trigger handlers for the Overlays section — open a popup-like widget
  * (dialog / popup / popup_menu) whose pointer is passed in userdata. */
-static void on_demo_open_popup_like(struct yetty_ygui_widget *btn, void *u)
+static void on_demo_open_popup_like(struct yetty_ygui_old_widget *btn, void *u)
 {
     (void)btn;
-    struct yetty_ygui_widget *target = (struct yetty_ygui_widget *)u;
+    struct yetty_ygui_old_widget *target = (struct yetty_ygui_old_widget *)u;
     if (target) {
-        yetty_ygui_widget_popup_set_open(target, 1);
+        yetty_ygui_old_widget_popup_set_open(target, 1);
     }
 }
 
-static void on_demo_open_menu(struct yetty_ygui_widget *btn, void *u)
+static void on_demo_open_menu(struct yetty_ygui_old_widget *btn, void *u)
 {
-    struct yetty_ygui_widget *menu = (struct yetty_ygui_widget *)u;
+    struct yetty_ygui_old_widget *menu = (struct yetty_ygui_old_widget *)u;
     if (!btn || !menu) {
         return;
     }
     /* Anchor under the trigger button so the menu is visible next to
      * the click point. */
-    struct rectangle_result br = yetty_ygui_widget_get_layout_box(btn);
+    struct rectangle_result br = yetty_ygui_old_widget_get_layout_box(btn);
     if (YETTY_IS_ERR(br)) {
         yetty_ycore_error_destroy(br.error);
         return;
     }
-    yetty_ygui_widget_popup_menu_open_at(menu, br.value.min.x, br.value.max.y + 4);
+    yetty_ygui_old_widget_popup_menu_open_at(menu, br.value.min.x, br.value.max.y + 4);
 }
 
 /* Build one collapsing_header section + add it as a child of `parent`.
  * Returns the header widget so the caller can keep adding children
  * (each child becomes one row inside the section, stacked vertically
  * by collapsing_header_render_all). */
-static struct yetty_ygui_widget *make_section(struct app *app, struct yetty_ygui_widget *parent,
+static struct yetty_ygui_old_widget *make_section(struct app *app, struct yetty_ygui_old_widget *parent,
                                               const char *id, const char *label, int initially_open)
 {
     /* Width 0 here is a placeholder — the parent vbox's flex stretch
      * resolves the real width at layout time. Height 28 is what 16_new
      * uses for the header bar. */
-    struct yetty_ygui_widget *sec =
-        yetty_ygui_engine_collapsing_header(app->engine, id, 0, 0, 600, 28, label);
+    struct yetty_ygui_old_widget *sec =
+        yetty_ygui_old_engine_collapsing_header(app->engine, id, 0, 0, 600, 28, label);
     if (!sec) {
         return NULL;
     }
-    yetty_ygui_widget_collapsing_header_set_open(sec, initially_open);
-    yetty_ygui_widget_apply_css(sec, "align-self: stretch;");
-    yetty_ygui_widget_add_child(parent, sec);
+    yetty_ygui_old_widget_collapsing_header_set_open(sec, initially_open);
+    yetty_ygui_old_widget_apply_css(sec, "align-self: stretch;");
+    yetty_ygui_old_widget_add_child(parent, sec);
     return sec;
 }
 
-static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_panel)
+static void build_elements_tab(struct app *app, struct yetty_ygui_old_widget *tab_panel)
 {
     /* Menubar at the top — a hbox of menu buttons each opening a
      * popup_menu beneath. */
-    struct yetty_ygui_widget *mb = yetty_ygui_engine_menubar(app->engine, "el_mb", 0, 0, 600, 28);
-    yetty_ygui_widget_apply_css(mb, "align-self: stretch;");
-    struct yetty_ygui_widget *m_file =
-        yetty_ygui_engine_popup_menu(app->engine, "el_m_file", 0, 0, 160);
-    yetty_ygui_widget_popup_menu_add_item(m_file, "New", on_demo_click, NULL);
-    yetty_ygui_widget_popup_menu_add_item(m_file, "Open…", on_demo_click, NULL);
-    yetty_ygui_widget_popup_menu_add_item(m_file, "Save", on_demo_click, NULL);
-    yetty_ygui_widget_popup_menu_add_separator(m_file);
-    yetty_ygui_widget_popup_menu_add_item(m_file, "Quit", on_demo_click, NULL);
-    struct yetty_ygui_widget *m_edit =
-        yetty_ygui_engine_popup_menu(app->engine, "el_m_edit", 0, 0, 160);
-    yetty_ygui_widget_popup_menu_add_item(m_edit, "Undo", on_demo_click, NULL);
-    yetty_ygui_widget_popup_menu_add_item(m_edit, "Redo", on_demo_click, NULL);
-    yetty_ygui_widget_popup_menu_add_item(m_edit, "Cut", on_demo_click, NULL);
-    yetty_ygui_widget_popup_menu_add_item(m_edit, "Copy", on_demo_click, NULL);
-    yetty_ygui_widget_popup_menu_add_item(m_edit, "Paste", on_demo_click, NULL);
-    struct yetty_ygui_widget *m_view =
-        yetty_ygui_engine_popup_menu(app->engine, "el_m_view", 0, 0, 160);
-    yetty_ygui_widget_popup_menu_add_item(m_view, "Zoom In", on_demo_click, NULL);
-    yetty_ygui_widget_popup_menu_add_item(m_view, "Zoom Out", on_demo_click, NULL);
-    yetty_ygui_widget_menubar_add(mb, "File", m_file);
-    yetty_ygui_widget_menubar_add(mb, "Edit", m_edit);
-    yetty_ygui_widget_menubar_add(mb, "View", m_view);
-    yetty_ygui_widget_add_child(tab_panel, mb);
+    struct yetty_ygui_old_widget *mb = yetty_ygui_old_engine_menubar(app->engine, "el_mb", 0, 0, 600, 28);
+    yetty_ygui_old_widget_apply_css(mb, "align-self: stretch;");
+    struct yetty_ygui_old_widget *m_file =
+        yetty_ygui_old_engine_popup_menu(app->engine, "el_m_file", 0, 0, 160);
+    yetty_ygui_old_widget_popup_menu_add_item(m_file, "New", on_demo_click, NULL);
+    yetty_ygui_old_widget_popup_menu_add_item(m_file, "Open…", on_demo_click, NULL);
+    yetty_ygui_old_widget_popup_menu_add_item(m_file, "Save", on_demo_click, NULL);
+    yetty_ygui_old_widget_popup_menu_add_separator(m_file);
+    yetty_ygui_old_widget_popup_menu_add_item(m_file, "Quit", on_demo_click, NULL);
+    struct yetty_ygui_old_widget *m_edit =
+        yetty_ygui_old_engine_popup_menu(app->engine, "el_m_edit", 0, 0, 160);
+    yetty_ygui_old_widget_popup_menu_add_item(m_edit, "Undo", on_demo_click, NULL);
+    yetty_ygui_old_widget_popup_menu_add_item(m_edit, "Redo", on_demo_click, NULL);
+    yetty_ygui_old_widget_popup_menu_add_item(m_edit, "Cut", on_demo_click, NULL);
+    yetty_ygui_old_widget_popup_menu_add_item(m_edit, "Copy", on_demo_click, NULL);
+    yetty_ygui_old_widget_popup_menu_add_item(m_edit, "Paste", on_demo_click, NULL);
+    struct yetty_ygui_old_widget *m_view =
+        yetty_ygui_old_engine_popup_menu(app->engine, "el_m_view", 0, 0, 160);
+    yetty_ygui_old_widget_popup_menu_add_item(m_view, "Zoom In", on_demo_click, NULL);
+    yetty_ygui_old_widget_popup_menu_add_item(m_view, "Zoom Out", on_demo_click, NULL);
+    yetty_ygui_old_widget_menubar_add(mb, "File", m_file);
+    yetty_ygui_old_widget_menubar_add(mb, "Edit", m_edit);
+    yetty_ygui_old_widget_menubar_add(mb, "View", m_view);
+    yetty_ygui_old_widget_add_child(tab_panel, mb);
 
     /* Scrollable container — flex-column scrollarea that takes care
      * of layout, hit-test, and wheel scrolling so the user can reach
      * every section even with all of them open. */
-    struct yetty_ygui_widget *root =
-        yetty_ygui_engine_scrollarea(app->engine, "el_root", 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(root, "padding: 12px; gap: 4px; flex: 1 0 0; "
+    struct yetty_ygui_old_widget *root =
+        yetty_ygui_old_engine_scrollarea(app->engine, "el_root", 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(root, "padding: 12px; gap: 4px; flex: 1 0 0; "
                                       "align-self: stretch; align-items: stretch;");
-    yetty_ygui_widget_add_child(tab_panel, root);
+    yetty_ygui_old_widget_add_child(tab_panel, root);
 
     /* ---- Inputs ---- */
     {
-        struct yetty_ygui_widget *sec = make_section(app, root, "el_inputs", "Inputs", 0);
+        struct yetty_ygui_old_widget *sec = make_section(app, root, "el_inputs", "Inputs", 0);
         if (!sec) {
             return;
         }
-        struct yetty_ygui_widget *btn =
-            yetty_ygui_engine_button(app->engine, "el_btn", 24, 0, 160, 32, "Button");
-        yetty_ygui_widget_button_on_click(btn, on_demo_click, NULL);
-        yetty_ygui_widget_add_child(sec, btn);
-        yetty_ygui_widget_add_child(sec, yetty_ygui_engine_textinput(app->engine, "el_input", 24, 0,
+        struct yetty_ygui_old_widget *btn =
+            yetty_ygui_old_engine_button(app->engine, "el_btn", 24, 0, 160, 32, "Button");
+        yetty_ygui_old_widget_button_on_click(btn, on_demo_click, NULL);
+        yetty_ygui_old_widget_add_child(sec, btn);
+        yetty_ygui_old_widget_add_child(sec, yetty_ygui_old_engine_textinput(app->engine, "el_input", 24, 0,
                                                                      320, 28, "type here…"));
-        yetty_ygui_widget_add_child(sec, yetty_ygui_engine_slider(app->engine, "el_slider", 24, 0,
+        yetty_ygui_old_widget_add_child(sec, yetty_ygui_old_engine_slider(app->engine, "el_slider", 24, 0,
                                                                   320, 28, 0.0f, 1.0f, 0.4f));
         /* Integer + float spinner side-by-side. */
-        yetty_ygui_widget_add_child(sec,
-                                    yetty_ygui_engine_spinner(app->engine, "el_spin_i", 24, 0, 160,
+        yetty_ygui_old_widget_add_child(sec,
+                                    yetty_ygui_old_engine_spinner(app->engine, "el_spin_i", 24, 0, 160,
                                                               30, 1.0f, 100.0f, 1.0f, 42.0f));
-        struct yetty_ygui_widget *spin_f = yetty_ygui_engine_spinner(
+        struct yetty_ygui_old_widget *spin_f = yetty_ygui_old_engine_spinner(
             app->engine, "el_spin_f", 24, 0, 160, 30, 0.0f, 10.0f, 0.25f, 2.5f);
-        yetty_ygui_widget_spinner_set_precision(spin_f, 2);
-        yetty_ygui_widget_add_child(sec, spin_f);
-        yetty_ygui_widget_add_child(
-            sec, yetty_ygui_engine_checkbox(app->engine, "el_check", 24, 0, 220, 24, "Enabled", 1));
+        yetty_ygui_old_widget_spinner_set_precision(spin_f, 2);
+        yetty_ygui_old_widget_add_child(sec, spin_f);
+        yetty_ygui_old_widget_add_child(
+            sec, yetty_ygui_old_engine_checkbox(app->engine, "el_check", 24, 0, 220, 24, "Enabled", 1));
         /* Toggle switch — pill-shaped on/off. */
-        yetty_ygui_widget_add_child(sec, yetty_ygui_engine_toggle(app->engine, "el_toggle", 24, 0,
+        yetty_ygui_old_widget_add_child(sec, yetty_ygui_old_engine_toggle(app->engine, "el_toggle", 24, 0,
                                                                   240, 26, "Notifications", 1));
-        yetty_ygui_widget_add_child(
-            sec, yetty_ygui_engine_progress(app->engine, "el_prog", 24, 0, 320, 16, 0.65f));
+        yetty_ygui_old_widget_add_child(
+            sec, yetty_ygui_old_engine_progress(app->engine, "el_prog", 24, 0, 320, 16, 0.65f));
         /* Indeterminate progress — sliding slug, no value. */
-        struct yetty_ygui_widget *prog_indet =
-            yetty_ygui_engine_progress(app->engine, "el_prog_indet", 24, 0, 320, 16, 0.0f);
-        yetty_ygui_widget_progress_set_indeterminate(prog_indet, 1);
-        yetty_ygui_widget_add_child(sec, prog_indet);
+        struct yetty_ygui_old_widget *prog_indet =
+            yetty_ygui_old_engine_progress(app->engine, "el_prog_indet", 24, 0, 320, 16, 0.0f);
+        yetty_ygui_old_widget_progress_set_indeterminate(prog_indet, 1);
+        yetty_ygui_old_widget_add_child(sec, prog_indet);
         /* Multi-line text area — initial text + line-aware nav. */
-        yetty_ygui_widget_add_child(
-            sec, yetty_ygui_engine_textarea(app->engine, "el_ta", 24, 0, 420, 120,
+        yetty_ygui_old_widget_add_child(
+            sec, yetty_ygui_old_engine_textarea(app->engine, "el_ta", 24, 0, 420, 120,
                                             "Multi-line text area.\nClick to focus, then type.\n"));
     }
 
     /* ---- Selectors ---- */
     {
-        struct yetty_ygui_widget *sec = make_section(app, root, "el_select", "Selectors", 0);
+        struct yetty_ygui_old_widget *sec = make_section(app, root, "el_select", "Selectors", 0);
         if (!sec) {
             return;
         }
         /* Radio group — single-select, vertical by default. */
-        struct yetty_ygui_widget *rg =
-            yetty_ygui_engine_radio_group(app->engine, "el_radio", 24, 0, 220, 0);
-        yetty_ygui_widget_radio_group_add(rg, "el_r_apple", "Apple");
-        yetty_ygui_widget_radio_group_add(rg, "el_r_banana", "Banana");
-        yetty_ygui_widget_radio_group_add(rg, "el_r_cherry", "Cherry");
-        yetty_ygui_widget_radio_group_set_selected_index(rg, 0);
-        yetty_ygui_widget_add_child(sec, rg);
+        struct yetty_ygui_old_widget *rg =
+            yetty_ygui_old_engine_radio_group(app->engine, "el_radio", 24, 0, 220, 0);
+        yetty_ygui_old_widget_radio_group_add(rg, "el_r_apple", "Apple");
+        yetty_ygui_old_widget_radio_group_add(rg, "el_r_banana", "Banana");
+        yetty_ygui_old_widget_radio_group_add(rg, "el_r_cherry", "Cherry");
+        yetty_ygui_old_widget_radio_group_set_selected_index(rg, 0);
+        yetty_ygui_old_widget_add_child(sec, rg);
         static const char *dd_items[] = {"Option A", "Option B", "Option C"};
-        yetty_ygui_widget_add_child(
-            sec, yetty_ygui_engine_dropdown(app->engine, "el_dd", 24, 0, 220, 28, dd_items, 3));
+        yetty_ygui_old_widget_add_child(
+            sec, yetty_ygui_old_engine_dropdown(app->engine, "el_dd", 24, 0, 220, 28, dd_items, 3));
         /* Combo box — editable textinput with a dropdown of suggestions. */
         static const char *combo_items[] = {"red", "green", "blue", "magenta"};
-        yetty_ygui_widget_add_child(sec, yetty_ygui_engine_combo(app->engine, "el_combo", 24, 0,
+        yetty_ygui_old_widget_add_child(sec, yetty_ygui_old_engine_combo(app->engine, "el_combo", 24, 0,
                                                                  220, 28, "red", combo_items, 4));
         static const char *ch_items[] = {"Small", "Medium", "Large", "Huge"};
         /* Choicebox row count × theme row_height (28) — must match the
          * actual rendered height, otherwise the widget paints below its
          * authored box and overlaps siblings inside the section. */
-        struct yetty_ygui_widget *ch =
-            yetty_ygui_engine_choicebox(app->engine, "el_choice", 24, 0, 220, 28 * 4, ch_items, 4);
-        yetty_ygui_widget_choicebox_set_selected(ch, 1);
-        yetty_ygui_widget_add_child(sec, ch);
+        struct yetty_ygui_old_widget *ch =
+            yetty_ygui_old_engine_choicebox(app->engine, "el_choice", 24, 0, 220, 28 * 4, ch_items, 4);
+        yetty_ygui_old_widget_choicebox_set_selected(ch, 1);
+        yetty_ygui_old_widget_add_child(sec, ch);
         /* colorpicker takes only geometry — no initial-color arg. */
-        yetty_ygui_widget_add_child(
-            sec, yetty_ygui_engine_colorpicker(app->engine, "el_color", 24, 0, 240, 160));
+        yetty_ygui_old_widget_add_child(
+            sec, yetty_ygui_old_engine_colorpicker(app->engine, "el_color", 24, 0, 240, 160));
     }
 
     /* ---- Display / static ---- */
     {
-        struct yetty_ygui_widget *sec = make_section(app, root, "el_display", "Display", 0);
+        struct yetty_ygui_old_widget *sec = make_section(app, root, "el_display", "Display", 0);
         if (!sec) {
             return;
         }
-        yetty_ygui_widget_add_child(
-            sec, yetty_ygui_engine_label(app->engine, "el_lbl", 24, 0, "Plain label"));
-        yetty_ygui_widget_add_child(
-            sec, yetty_ygui_engine_separator(app->engine, "el_sep", 24, 0, 400, 8));
-        yetty_ygui_widget_add_child(
-            sec, yetty_ygui_engine_progress(app->engine, "el_prog2", 24, 0, 400, 14, 0.25f));
+        yetty_ygui_old_widget_add_child(
+            sec, yetty_ygui_old_engine_label(app->engine, "el_lbl", 24, 0, "Plain label"));
+        yetty_ygui_old_widget_add_child(
+            sec, yetty_ygui_old_engine_separator(app->engine, "el_sep", 24, 0, 400, 8));
+        yetty_ygui_old_widget_add_child(
+            sec, yetty_ygui_old_engine_progress(app->engine, "el_prog2", 24, 0, 400, 14, 0.25f));
         /* Table — 4 columns × 3 rows. Last column stretches. */
-        struct yetty_ygui_widget *tbl =
-            yetty_ygui_engine_table(app->engine, "el_table", 24, 0, 600, 120);
+        struct yetty_ygui_old_widget *tbl =
+            yetty_ygui_old_engine_table(app->engine, "el_table", 24, 0, 600, 120);
         static const char *col_names[] = {"PID", "USER", "%CPU", "COMMAND"};
         static const float col_widths[] = {60.0f, 100.0f, 60.0f, 0.0f /* stretch */};
-        yetty_ygui_widget_table_set_columns(tbl, col_names, col_widths, 4);
+        yetty_ygui_old_widget_table_set_columns(tbl, col_names, col_widths, 4);
         static const char *row1[] = {"1", "root", "0.0", "/sbin/init"};
         static const char *row2[] = {"42", "misi", "1.3", "/usr/bin/yetty"};
         static const char *row3[] = {"1337", "misi", "0.2", "/usr/bin/ygreeter"};
-        yetty_ygui_widget_table_add_row(tbl, row1, 4);
-        yetty_ygui_widget_table_add_row(tbl, row2, 4);
-        yetty_ygui_widget_table_add_row(tbl, row3, 4);
+        yetty_ygui_old_widget_table_add_row(tbl, row1, 4);
+        yetty_ygui_old_widget_table_add_row(tbl, row2, 4);
+        yetty_ygui_old_widget_table_add_row(tbl, row3, 4);
         /* Sortable + resizable headers — click a header to sort, drag
          * its right edge (~6 px grip) to resize. */
-        yetty_ygui_widget_table_set_sortable(tbl, 1);
-        yetty_ygui_widget_add_child(sec, tbl);
+        yetty_ygui_old_widget_table_set_sortable(tbl, 1);
+        yetty_ygui_old_widget_add_child(sec, tbl);
         /* Breadcrumbs — last segment is the "current" location and
          * paints in fg color, others in muted. */
         static const char *crumbs[] = {"Home", "Projects", "yetty", "ygui"};
-        yetty_ygui_widget_add_child(sec, yetty_ygui_engine_breadcrumbs(app->engine, "el_crumbs", 24,
+        yetty_ygui_old_widget_add_child(sec, yetty_ygui_old_engine_breadcrumbs(app->engine, "el_crumbs", 24,
                                                                        0, 400, 24, crumbs, 4));
         /* Chip / tag row — closable. */
-        struct yetty_ygui_widget *chip_row =
-            yetty_ygui_engine_hbox(app->engine, "el_chip_row", 24, 0, 480, 28);
-        yetty_ygui_widget_apply_css(chip_row, "padding: 0; gap: 6; align-items: stretch;");
-        yetty_ygui_widget_add_child(
-            chip_row, yetty_ygui_engine_chip(app->engine, "el_chip_a", 0, 0, 80, 24, "linux", 1));
-        yetty_ygui_widget_add_child(
-            chip_row, yetty_ygui_engine_chip(app->engine, "el_chip_b", 0, 0, 70, 24, "gpu", 1));
-        yetty_ygui_widget_add_child(chip_row, yetty_ygui_engine_chip(app->engine, "el_chip_c", 0, 0,
+        struct yetty_ygui_old_widget *chip_row =
+            yetty_ygui_old_engine_hbox(app->engine, "el_chip_row", 24, 0, 480, 28);
+        yetty_ygui_old_widget_apply_css(chip_row, "padding: 0; gap: 6; align-items: stretch;");
+        yetty_ygui_old_widget_add_child(
+            chip_row, yetty_ygui_old_engine_chip(app->engine, "el_chip_a", 0, 0, 80, 24, "linux", 1));
+        yetty_ygui_old_widget_add_child(
+            chip_row, yetty_ygui_old_engine_chip(app->engine, "el_chip_b", 0, 0, 70, 24, "gpu", 1));
+        yetty_ygui_old_widget_add_child(chip_row, yetty_ygui_old_engine_chip(app->engine, "el_chip_c", 0, 0,
                                                                      90, 24, "rust-free", 0));
-        yetty_ygui_widget_add_child(sec, chip_row);
+        yetty_ygui_old_widget_add_child(sec, chip_row);
         /* Stepper — three named steps with the middle one active. */
         static const char *steps[] = {"Setup", "Install", "Done"};
-        struct yetty_ygui_widget *step =
-            yetty_ygui_engine_stepper(app->engine, "el_steps", 24, 0, 360, 56, steps, 3);
-        yetty_ygui_widget_stepper_set_current(step, 1);
-        yetty_ygui_widget_add_child(sec, step);
+        struct yetty_ygui_old_widget *step =
+            yetty_ygui_old_engine_stepper(app->engine, "el_steps", 24, 0, 360, 56, steps, 3);
+        yetty_ygui_old_widget_stepper_set_current(step, 1);
+        yetty_ygui_old_widget_add_child(sec, step);
     }
 
     /* ---- Plot ----
@@ -1858,7 +1858,7 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
      * rich surface; what you see here is exactly what the Plots tab
      * renders after its nav-click dispatch. */
     {
-        struct yetty_ygui_widget *sec = make_section(app, root, "el_plot", "Plot", 0);
+        struct yetty_ygui_old_widget *sec = make_section(app, root, "el_plot", "Plot", 0);
         if (!sec) {
             return;
         }
@@ -1868,12 +1868,12 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
             .y_min = -1.5f,    .y_max = 1.5f,
             .flags = PLOT_FLAGS_AXES,
         };
-        struct yetty_ygui_widget *plot = yetty_ygui_engine_yplot_from_source(
+        struct yetty_ygui_old_widget *plot = yetty_ygui_old_engine_yplot_from_source(
             app->engine, "el_yplot", 24, 0, 460, 200,
             "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4",
             0, &cfg);
         if (plot) {
-            yetty_ygui_widget_add_child(sec, plot);
+            yetty_ygui_old_widget_add_child(sec, plot);
         }
     }
 
@@ -1882,66 +1882,66 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
      * One yimage sample (first discovered logo). Bundled logos are 1:1,
      * so the widget is sized square to keep the aspect intact. */
     {
-        struct yetty_ygui_widget *sec = make_section(app, root, "el_image", "Image", 0);
+        struct yetty_ygui_old_widget *sec = make_section(app, root, "el_image", "Image", 0);
         if (!sec) {
             return;
         }
         if (g_image_path_count > 0 && g_image_paths && g_image_paths[0]) {
-            struct yetty_ygui_widget *img = yetty_ygui_engine_yimage_from_file(
+            struct yetty_ygui_old_widget *img = yetty_ygui_old_engine_yimage_from_file(
                 app->engine, "el_yimage", 24, 0, 320, 320, g_image_paths[0]);
             if (img) {
-                yetty_ygui_widget_add_child(sec, img);
+                yetty_ygui_old_widget_add_child(sec, img);
             }
         }
     }
 
     /* ---- Lists & trees ---- */
     {
-        struct yetty_ygui_widget *sec = make_section(app, root, "el_lists", "Lists & Trees", 0);
+        struct yetty_ygui_old_widget *sec = make_section(app, root, "el_lists", "Lists & Trees", 0);
         if (!sec) {
             return;
         }
         /* list is a generic row container — items are arbitrary widgets
          * added with widget_add_child. */
-        struct yetty_ygui_widget *lst =
-            yetty_ygui_engine_list(app->engine, "el_list", 24, 0, 220, 24 * 4);
+        struct yetty_ygui_old_widget *lst =
+            yetty_ygui_old_engine_list(app->engine, "el_list", 24, 0, 220, 24 * 4);
         static const char *fruits[] = {"Apple", "Banana", "Cherry", "Date"};
         for (int i = 0; i < 4; i++) {
             char id[32];
             snprintf(id, sizeof(id), "el_list_row_%d", i);
-            yetty_ygui_widget_add_child(
-                lst, yetty_ygui_engine_selectable(app->engine, id, 0, 0, 200, 24, fruits[i]));
+            yetty_ygui_old_widget_add_child(
+                lst, yetty_ygui_old_engine_selectable(app->engine, id, 0, 0, 200, 24, fruits[i]));
         }
-        yetty_ygui_widget_add_child(sec, lst);
+        yetty_ygui_old_widget_add_child(sec, lst);
         /* tree_node has the (engine, id, label) ctor; geometry comes
          * from layout. Children go into the auto-allocated children
          * container accessed via tree_node_children(). */
-        struct yetty_ygui_widget *tn =
-            yetty_ygui_engine_tree_node(app->engine, "el_tree", "Tree root");
-        yetty_ygui_widget_tree_node_set_expanded(tn, 1);
-        struct yetty_ygui_widget *tn_kids = yetty_ygui_widget_tree_node_children(tn);
+        struct yetty_ygui_old_widget *tn =
+            yetty_ygui_old_engine_tree_node(app->engine, "el_tree", "Tree root");
+        yetty_ygui_old_widget_tree_node_set_expanded(tn, 1);
+        struct yetty_ygui_old_widget *tn_kids = yetty_ygui_old_widget_tree_node_children(tn);
         if (tn_kids) {
-            yetty_ygui_widget_add_child(
-                tn_kids, yetty_ygui_engine_label(app->engine, "el_tn1", 0, 0, "  child 1"));
-            yetty_ygui_widget_add_child(
-                tn_kids, yetty_ygui_engine_label(app->engine, "el_tn2", 0, 0, "  child 2"));
+            yetty_ygui_old_widget_add_child(
+                tn_kids, yetty_ygui_old_engine_label(app->engine, "el_tn1", 0, 0, "  child 1"));
+            yetty_ygui_old_widget_add_child(
+                tn_kids, yetty_ygui_old_engine_label(app->engine, "el_tn2", 0, 0, "  child 2"));
         }
-        yetty_ygui_widget_add_child(sec, tn);
+        yetty_ygui_old_widget_add_child(sec, tn);
         /* Date picker — compact month calendar. */
-        struct yetty_ygui_widget *dp =
-            yetty_ygui_engine_datepicker(app->engine, "el_date", 24, 0, 240, 220);
-        yetty_ygui_widget_datepicker_set_date(dp, 2025, 4, 15); /* May 15, 2025 */
-        yetty_ygui_widget_add_child(sec, dp);
+        struct yetty_ygui_old_widget *dp =
+            yetty_ygui_old_engine_datepicker(app->engine, "el_date", 24, 0, 240, 220);
+        yetty_ygui_old_widget_datepicker_set_date(dp, 2025, 4, 15); /* May 15, 2025 */
+        yetty_ygui_old_widget_add_child(sec, dp);
         /* File picker — starts in user's home or "/" if none. */
         const char *home = getenv("HOME");
-        struct yetty_ygui_widget *fp = yetty_ygui_engine_filepicker(
+        struct yetty_ygui_old_widget *fp = yetty_ygui_old_engine_filepicker(
             app->engine, "el_fp", 24, 0, 480, 240, home && *home ? home : "/");
-        yetty_ygui_widget_add_child(sec, fp);
+        yetty_ygui_old_widget_add_child(sec, fp);
     }
 
     /* ---- Layout & Containers ---- */
     {
-        struct yetty_ygui_widget *sec =
+        struct yetty_ygui_old_widget *sec =
             make_section(app, root, "el_layout", "Layout & Containers", 0);
         if (!sec) {
             return;
@@ -1951,47 +1951,47 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
          * panels. Drag the splitter to resize. The siblings carry
          * authored widths (no flex:1 0 0) so the splitter can move
          * them. */
-        struct yetty_ygui_widget *split_row =
-            yetty_ygui_engine_hbox(app->engine, "el_split_row", 24, 0, 600, 80);
-        yetty_ygui_widget_apply_css(split_row, "padding: 0; gap: 0; align-items: stretch;");
-        struct yetty_ygui_widget *l =
-            yetty_ygui_engine_panel(app->engine, "el_split_left", 0, 0, 220, 80);
-        yetty_ygui_widget_set_bg_color(l, 0xFF1E262C);
-        yetty_ygui_widget_apply_css(l, "align-self: stretch;");
-        yetty_ygui_widget_add_child(split_row, l);
-        struct yetty_ygui_widget *div =
-            yetty_ygui_engine_splitter(app->engine, "el_split", 0, 0, 6, 80);
-        yetty_ygui_widget_apply_css(div, "align-self: stretch;");
-        yetty_ygui_widget_add_child(split_row, div);
-        struct yetty_ygui_widget *r =
-            yetty_ygui_engine_panel(app->engine, "el_split_right", 0, 0, 374, 80);
-        yetty_ygui_widget_set_bg_color(r, 0xFF141A1F);
-        yetty_ygui_widget_apply_css(r, "align-self: stretch;");
-        yetty_ygui_widget_add_child(split_row, r);
-        yetty_ygui_widget_add_child(sec, split_row);
+        struct yetty_ygui_old_widget *split_row =
+            yetty_ygui_old_engine_hbox(app->engine, "el_split_row", 24, 0, 600, 80);
+        yetty_ygui_old_widget_apply_css(split_row, "padding: 0; gap: 0; align-items: stretch;");
+        struct yetty_ygui_old_widget *l =
+            yetty_ygui_old_engine_panel(app->engine, "el_split_left", 0, 0, 220, 80);
+        yetty_ygui_old_widget_set_bg_color(l, 0xFF1E262C);
+        yetty_ygui_old_widget_apply_css(l, "align-self: stretch;");
+        yetty_ygui_old_widget_add_child(split_row, l);
+        struct yetty_ygui_old_widget *div =
+            yetty_ygui_old_engine_splitter(app->engine, "el_split", 0, 0, 6, 80);
+        yetty_ygui_old_widget_apply_css(div, "align-self: stretch;");
+        yetty_ygui_old_widget_add_child(split_row, div);
+        struct yetty_ygui_old_widget *r =
+            yetty_ygui_old_engine_panel(app->engine, "el_split_right", 0, 0, 374, 80);
+        yetty_ygui_old_widget_set_bg_color(r, 0xFF141A1F);
+        yetty_ygui_old_widget_apply_css(r, "align-self: stretch;");
+        yetty_ygui_old_widget_add_child(split_row, r);
+        yetty_ygui_old_widget_add_child(sec, split_row);
         /* Standalone scrollbars deliberately omitted — out of context
          * they look like an unattached pill. The scrollbar widget is
          * exercised in the PDF tab where it's bound to the ypdf
-         * widget via yetty_ygui_widget_scrollbar_bind. */
+         * widget via yetty_ygui_old_widget_scrollbar_bind. */
     }
 
     /* ---- Overlays ---- */
     {
-        struct yetty_ygui_widget *sec = make_section(app, root, "el_over", "Overlays", 0);
+        struct yetty_ygui_old_widget *sec = make_section(app, root, "el_over", "Overlays", 0);
         if (!sec) {
             return;
         }
-        yetty_ygui_widget_add_child(sec, yetty_ygui_engine_tooltip(app->engine, "el_tip", 24, 0,
+        yetty_ygui_old_widget_add_child(sec, yetty_ygui_old_engine_tooltip(app->engine, "el_tip", 24, 0,
                                                                    240, 28, "Tooltip example"));
-        struct yetty_ygui_widget *sel = yetty_ygui_engine_selectable(app->engine, "el_selable", 24,
+        struct yetty_ygui_old_widget *sel = yetty_ygui_old_engine_selectable(app->engine, "el_selable", 24,
                                                                      0, 240, 26, "Selectable row");
-        yetty_ygui_widget_add_child(sec, sel);
+        yetty_ygui_old_widget_add_child(sec, sel);
 
         /* Modal dialog — assembled once; the button toggles its OPEN
          * flag. The dialog widget lives at the top of the engine's
          * widget list so the popup overlay renders above sections. */
         const char *btns[] = {"Cancel", "OK"};
-        struct yetty_ygui_dialog_args dargs = {
+        struct yetty_ygui_old_dialog_args dargs = {
             .id = "el_dlg",
             .title = "Dialog",
             .message = "This is a modal dialog. Pick a button.",
@@ -2001,47 +2001,47 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
             .userdata = NULL,
             .modal = 1,
         };
-        struct yetty_ygui_widget *dlg = yetty_ygui_engine_dialog(app->engine, &dargs);
-        struct yetty_ygui_widget *open_dlg =
-            yetty_ygui_engine_button(app->engine, "el_open_dlg", 24, 0, 220, 30, "Open dialog…");
-        yetty_ygui_widget_button_on_click(open_dlg, on_demo_open_popup_like, dlg);
-        yetty_ygui_widget_add_child(sec, open_dlg);
+        struct yetty_ygui_old_widget *dlg = yetty_ygui_old_engine_dialog(app->engine, &dargs);
+        struct yetty_ygui_old_widget *open_dlg =
+            yetty_ygui_old_engine_button(app->engine, "el_open_dlg", 24, 0, 220, 30, "Open dialog…");
+        yetty_ygui_old_widget_button_on_click(open_dlg, on_demo_open_popup_like, dlg);
+        yetty_ygui_old_widget_add_child(sec, open_dlg);
 
         /* Popup — a labelled overlay you toggle. Identical activation
          * pattern as the dialog. */
-        struct yetty_ygui_widget *pop =
-            yetty_ygui_engine_popup(app->engine, "el_popup", 200, 200, 280, 120, "Popup title");
-        struct yetty_ygui_widget *open_pop =
-            yetty_ygui_engine_button(app->engine, "el_open_pop", 24, 0, 220, 30, "Open popup…");
-        yetty_ygui_widget_button_on_click(open_pop, on_demo_open_popup_like, pop);
-        yetty_ygui_widget_add_child(sec, open_pop);
+        struct yetty_ygui_old_widget *pop =
+            yetty_ygui_old_engine_popup(app->engine, "el_popup", 200, 200, 280, 120, "Popup title");
+        struct yetty_ygui_old_widget *open_pop =
+            yetty_ygui_old_engine_button(app->engine, "el_open_pop", 24, 0, 220, 30, "Open popup…");
+        yetty_ygui_old_widget_button_on_click(open_pop, on_demo_open_popup_like, pop);
+        yetty_ygui_old_widget_add_child(sec, open_pop);
 
         /* Popup menu — anchored to the trigger button's position. */
-        struct yetty_ygui_widget *pmenu =
-            yetty_ygui_engine_popup_menu(app->engine, "el_pmenu", 0, 0, 220);
-        yetty_ygui_widget_popup_menu_add_item(pmenu, "First action", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_item(pmenu, "Second action", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_separator(pmenu);
-        yetty_ygui_widget_popup_menu_add_item(pmenu, "Third action", on_demo_click, NULL);
-        struct yetty_ygui_widget *open_menu =
-            yetty_ygui_engine_button(app->engine, "el_open_menu", 24, 0, 220, 30, "Open menu…");
-        yetty_ygui_widget_button_on_click(open_menu, on_demo_open_menu, pmenu);
-        yetty_ygui_widget_add_child(sec, open_menu);
+        struct yetty_ygui_old_widget *pmenu =
+            yetty_ygui_old_engine_popup_menu(app->engine, "el_pmenu", 0, 0, 220);
+        yetty_ygui_old_widget_popup_menu_add_item(pmenu, "First action", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_item(pmenu, "Second action", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_separator(pmenu);
+        yetty_ygui_old_widget_popup_menu_add_item(pmenu, "Third action", on_demo_click, NULL);
+        struct yetty_ygui_old_widget *open_menu =
+            yetty_ygui_old_engine_button(app->engine, "el_open_menu", 24, 0, 220, 30, "Open menu…");
+        yetty_ygui_old_widget_button_on_click(open_menu, on_demo_open_menu, pmenu);
+        yetty_ygui_old_widget_add_child(sec, open_menu);
 
         /* Right-click context menu — same popup_menu type, attached to
          * a target widget. Engine intercepts right-click and opens at
          * the cursor. */
-        struct yetty_ygui_widget *ctx_target = yetty_ygui_engine_button(
+        struct yetty_ygui_old_widget *ctx_target = yetty_ygui_old_engine_button(
             app->engine, "el_ctx_target", 24, 0, 280, 30, "Right-click me for a context menu");
-        struct yetty_ygui_widget *cmenu =
-            yetty_ygui_engine_popup_menu(app->engine, "el_ctxmenu", 0, 0, 200);
-        yetty_ygui_widget_popup_menu_add_item(cmenu, "Cut", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_item(cmenu, "Copy", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_item(cmenu, "Paste", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_separator(cmenu);
-        yetty_ygui_widget_popup_menu_add_item(cmenu, "Delete", on_demo_click, NULL);
-        yetty_ygui_widget_set_context_menu(ctx_target, cmenu);
-        yetty_ygui_widget_add_child(sec, ctx_target);
+        struct yetty_ygui_old_widget *cmenu =
+            yetty_ygui_old_engine_popup_menu(app->engine, "el_ctxmenu", 0, 0, 200);
+        yetty_ygui_old_widget_popup_menu_add_item(cmenu, "Cut", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_item(cmenu, "Copy", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_item(cmenu, "Paste", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_separator(cmenu);
+        yetty_ygui_old_widget_popup_menu_add_item(cmenu, "Delete", on_demo_click, NULL);
+        yetty_ygui_old_widget_set_context_menu(ctx_target, cmenu);
+        yetty_ygui_old_widget_add_child(sec, ctx_target);
     }
 }
 
@@ -2078,25 +2078,25 @@ int main(int argc, char **argv)
      * yetty-X.Y.Z build already extracted. */
     (void)ygreeter_embedded_assets_extract(yetty_yplatform_get_data_dir());
 
-    if (yetty_ygui_init() != 0) {
+    if (yetty_ygui_old_init() != 0) {
         fprintf(stdout, "ygreeter: ygui_init failed (run inside a real terminal)\n");
         return 1;
     }
 
     /* Theme up front so engine_create can install it during construction;
      * the engine takes ownership when passed in `args.theme`. */
-    struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
-    yetty_ygui_theme_set_font_size(theme, 16.0f);
-    yetty_ygui_theme_set_row_height(theme, 28.0f);
+    struct yetty_ygui_old_theme *theme = yetty_ygui_old_theme_create_default();
+    yetty_ygui_old_theme_set_font_size(theme, 16.0f);
+    yetty_ygui_old_theme_set_row_height(theme, 28.0f);
 
-    struct yetty_ygui_engine_args args = {
+    struct yetty_ygui_old_engine_args args = {
         .name = "ygreeter",
         .theme = theme,
     };
-    struct ygui_engine_ptr_result eng_r = yetty_ygui_engine_create(args);
+    struct ygui_engine_ptr_result eng_r = yetty_ygui_old_engine_create(args);
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
-        yetty_ygui_shutdown();
+        yetty_ygui_old_shutdown();
         return 1;
     }
 
@@ -2107,16 +2107,16 @@ int main(int argc, char **argv)
      * hamburger menu button. The menu we attach below carries the
      * Close entry — clicking it calls engine_close_preserve() so the
      * last frame stays painted on the canvas after we exit. */
-    app.outer = yetty_ygui_engine_window(app.engine, "outer", 0, 0, 100, 100, "ygreeter");
-    struct yetty_ygui_widget *body = yetty_ygui_widget_window_body(app.outer);
+    app.outer = yetty_ygui_old_engine_window(app.engine, "outer", 0, 0, 100, 100, "ygreeter");
+    struct yetty_ygui_old_widget *body = yetty_ygui_old_widget_window_body(app.outer);
 
     /* App menu attached to the hamburger button. */
-    struct yetty_ygui_widget *app_menu =
-        yetty_ygui_engine_popup_menu(app.engine, "app_menu", 0, 0, 200.0f);
-    yetty_ygui_widget_popup_menu_add_item(app_menu, "About", on_menu_about, &app);
-    yetty_ygui_widget_popup_menu_add_separator(app_menu);
-    yetty_ygui_widget_popup_menu_add_item(app_menu, "Close", on_menu_close, &app);
-    yetty_ygui_widget_window_set_menu(app.outer, app_menu);
+    struct yetty_ygui_old_widget *app_menu =
+        yetty_ygui_old_engine_popup_menu(app.engine, "app_menu", 0, 0, 200.0f);
+    yetty_ygui_old_widget_popup_menu_add_item(app_menu, "About", on_menu_about, &app);
+    yetty_ygui_old_widget_popup_menu_add_separator(app_menu);
+    yetty_ygui_old_widget_popup_menu_add_item(app_menu, "Close", on_menu_close, &app);
+    yetty_ygui_old_widget_window_set_menu(app.outer, app_menu);
 
     /* About dialog (popup + rich content + close button). Hidden until
      * the menu's About item opens it. */
@@ -2125,45 +2125,45 @@ int main(int argc, char **argv)
     /* Window-level menubar — File / Edit / Help. Sits between the
      * window's title strip and the body (the tabbar). */
     {
-        struct yetty_ygui_widget *mb =
-            yetty_ygui_engine_menubar(app.engine, "win_mb", 0, 0, 100, 26);
-        struct yetty_ygui_widget *mf =
-            yetty_ygui_engine_popup_menu(app.engine, "win_mf", 0, 0, 180);
-        yetty_ygui_widget_popup_menu_add_item(mf, "New tab", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_item(mf, "Reload", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_separator(mf);
-        yetty_ygui_widget_popup_menu_add_item(mf, "Quit", on_menu_close, &app);
-        struct yetty_ygui_widget *me =
-            yetty_ygui_engine_popup_menu(app.engine, "win_me", 0, 0, 180);
-        yetty_ygui_widget_popup_menu_add_item(me, "Cut", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_item(me, "Copy", on_demo_click, NULL);
-        yetty_ygui_widget_popup_menu_add_item(me, "Paste", on_demo_click, NULL);
-        struct yetty_ygui_widget *mh =
-            yetty_ygui_engine_popup_menu(app.engine, "win_mh", 0, 0, 180);
-        yetty_ygui_widget_popup_menu_add_item(mh, "About", on_menu_about, &app);
-        yetty_ygui_widget_menubar_add(mb, "File", mf);
-        yetty_ygui_widget_menubar_add(mb, "Edit", me);
-        yetty_ygui_widget_menubar_add(mb, "Help", mh);
-        yetty_ygui_widget_window_set_menubar(app.outer, mb);
+        struct yetty_ygui_old_widget *mb =
+            yetty_ygui_old_engine_menubar(app.engine, "win_mb", 0, 0, 100, 26);
+        struct yetty_ygui_old_widget *mf =
+            yetty_ygui_old_engine_popup_menu(app.engine, "win_mf", 0, 0, 180);
+        yetty_ygui_old_widget_popup_menu_add_item(mf, "New tab", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_item(mf, "Reload", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_separator(mf);
+        yetty_ygui_old_widget_popup_menu_add_item(mf, "Quit", on_menu_close, &app);
+        struct yetty_ygui_old_widget *me =
+            yetty_ygui_old_engine_popup_menu(app.engine, "win_me", 0, 0, 180);
+        yetty_ygui_old_widget_popup_menu_add_item(me, "Cut", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_item(me, "Copy", on_demo_click, NULL);
+        yetty_ygui_old_widget_popup_menu_add_item(me, "Paste", on_demo_click, NULL);
+        struct yetty_ygui_old_widget *mh =
+            yetty_ygui_old_engine_popup_menu(app.engine, "win_mh", 0, 0, 180);
+        yetty_ygui_old_widget_popup_menu_add_item(mh, "About", on_menu_about, &app);
+        yetty_ygui_old_widget_menubar_add(mb, "File", mf);
+        yetty_ygui_old_widget_menubar_add(mb, "Edit", me);
+        yetty_ygui_old_widget_menubar_add(mb, "Help", mh);
+        yetty_ygui_old_widget_window_set_menubar(app.outer, mb);
     }
 
     /* Window-level statusbar. */
     {
-        struct yetty_ygui_widget *sb = yetty_ygui_engine_statusbar(app.engine, "win_sb", 0, 0, 100,
+        struct yetty_ygui_old_widget *sb = yetty_ygui_old_engine_statusbar(app.engine, "win_sb", 0, 0, 100,
                                                                    22, "Ready — ygui showcase");
-        yetty_ygui_widget_statusbar_set_right(sb, "v0.2");
-        yetty_ygui_widget_window_set_statusbar(app.outer, sb);
+        yetty_ygui_old_widget_statusbar_set_right(sb, "v0.2");
+        yetty_ygui_old_widget_window_set_statusbar(app.outer, sb);
     }
 
-    app.tabbar = yetty_ygui_engine_tabbar(app.engine, "tabs", 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(app.tabbar, "flex: 1 0 0; align-items: stretch;");
-    yetty_ygui_widget_add_child(body, app.tabbar);
+    app.tabbar = yetty_ygui_old_engine_tabbar(app.engine, "tabs", 0, 0, 0, 0);
+    yetty_ygui_old_widget_apply_css(app.tabbar, "flex: 1 0 0; align-items: stretch;");
+    yetty_ygui_old_widget_add_child(body, app.tabbar);
 
-    yetty_ygui_widget_tabbar_on_change(app.tabbar, on_tab_change, &app);
-    yetty_ygui_widget_tabbar_on_tab_close(app.tabbar, on_tab_close, &app);
+    yetty_ygui_old_widget_tabbar_on_change(app.tabbar, on_tab_change, &app);
+    yetty_ygui_old_widget_tabbar_on_tab_close(app.tabbar, on_tab_close, &app);
 
     /* Welcome */
-    struct yetty_ygui_widget *welcome = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Welcome");
+    struct yetty_ygui_old_widget *welcome = yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Welcome");
     build_tab_body(&app, 0, welcome, WELCOME_NAV,
                    (int)(sizeof(WELCOME_NAV) / sizeof(WELCOME_NAV[0])), "welcome",
                    TAB_KIND_YAML);
@@ -2172,7 +2172,7 @@ int main(int argc, char **argv)
      * plot_nav_entries(); the yexpr-plot source + render config come
      * from plot_entry_at() under TAB_KIND_PLOTS dispatch in load_entry. */
     {
-        struct yetty_ygui_widget *plots = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Plots");
+        struct yetty_ygui_old_widget *plots = yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Plots");
         int plot_count = 0;
         const struct nav_entry *plot_nav = plot_nav_entries(&plot_count);
         build_tab_body(&app, 1, plots, plot_nav, plot_count, "plots", TAB_KIND_PLOTS);
@@ -2183,7 +2183,7 @@ int main(int argc, char **argv)
      * ygui_yimage widget via TAB_KIND_IMAGES dispatch. Falls back to
      * the placeholder YAML row when no logo files are found. */
     discover_logo_images(argv[0]);
-    struct yetty_ygui_widget *images = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Images");
+    struct yetty_ygui_old_widget *images = yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Images");
     if (g_image_path_count > 0) {
         build_tab_body(&app, g_images_tab_index, images, g_image_nav, g_image_path_count, "images",
                        TAB_KIND_IMAGES);
@@ -2198,8 +2198,8 @@ int main(int argc, char **argv)
     }
 
     /* Code */
-    struct yetty_ygui_widget *code = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Code");
-    int code_tab_index = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
+    struct yetty_ygui_old_widget *code = yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Code");
+    int code_tab_index = yetty_ygui_old_widget_tabbar_count(app.tabbar) - 1;
     build_tab_body(&app, code_tab_index, code, CODE_NAV,
                    (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code",
                    TAB_KIND_YAML);
@@ -2210,7 +2210,7 @@ int main(int argc, char **argv)
      * tab_state entry registered because Elements doesn't use the
      * nav+rich pattern. */
     {
-        struct yetty_ygui_widget *el_tab = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Elements");
+        struct yetty_ygui_old_widget *el_tab = yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Elements");
         build_elements_tab(&app, el_tab);
     }
 
@@ -2228,17 +2228,17 @@ int main(int argc, char **argv)
      * menubar / statusbar / tabstrip chrome height). */
 #ifdef YGREETER_HAS_YZOO
     {
-        struct yetty_ygui_widget *yzoo_tab =
-            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Yzoo");
-        g_yzoo_tab_index = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
+        struct yetty_ygui_old_widget *yzoo_tab =
+            yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Yzoo");
+        g_yzoo_tab_index = yetty_ygui_old_widget_tabbar_count(app.tabbar) - 1;
         yzoo_anim_init(&app.yzoo, app.engine, yzoo_tab, /*seed=*/0);
     }
 #endif
 #ifdef YGREETER_HAS_YJUNGLE
     {
-        struct yetty_ygui_widget *yjungle_tab =
-            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Yjungle");
-        g_yjungle_tab_index = yetty_ygui_widget_tabbar_count(app.tabbar) - 1;
+        struct yetty_ygui_old_widget *yjungle_tab =
+            yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Yjungle");
+        g_yjungle_tab_index = yetty_ygui_old_widget_tabbar_count(app.tabbar) - 1;
         yj_anim_init(&app.yjungle, app.engine, yjungle_tab, /*seed=*/0);
     }
 #endif
@@ -2249,59 +2249,59 @@ int main(int argc, char **argv)
      * / test-comprehensive.pdf bytes live inside the .a/.lib). */
 #ifdef YGREETER_HAS_YMARKDOWN
     {
-        struct yetty_ygui_widget *tab =
-            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
-        struct yetty_ygui_widget *w =
-            yetty_ygui_engine_ymarkdown_default(app.engine, "md_view", 0, 0, 100, 100);
+        struct yetty_ygui_old_widget *tab =
+            yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Markdown");
+        struct yetty_ygui_old_widget *w =
+            yetty_ygui_old_engine_ymarkdown_default(app.engine, "md_view", 0, 0, 100, 100);
         if (w) {
-            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-            yetty_ygui_widget_add_child(tab, w);
+            yetty_ygui_old_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_old_widget_add_child(tab, w);
         }
     }
 #endif
 #ifdef YGREETER_HAS_YBROWSER
     {
-        struct yetty_ygui_widget *tab =
-            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
-        struct yetty_ygui_widget *w =
-            yetty_ygui_engine_ybrowser_default(app.engine, "html_view", 0, 0, 100, 100);
+        struct yetty_ygui_old_widget *tab =
+            yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "Browser");
+        struct yetty_ygui_old_widget *w =
+            yetty_ygui_old_engine_ybrowser_default(app.engine, "html_view", 0, 0, 100, 100);
         if (w) {
-            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-            yetty_ygui_widget_add_child(tab, w);
+            yetty_ygui_old_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_old_widget_add_child(tab, w);
         }
     }
 #endif
 #ifdef YGREETER_HAS_YPDF
     {
-        struct yetty_ygui_widget *tab =
-            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "PDF");
-        struct yetty_ygui_widget *w =
-            yetty_ygui_engine_ypdf_default(app.engine, "pdf_view", 0, 0, 100, 100);
+        struct yetty_ygui_old_widget *tab =
+            yetty_ygui_old_widget_tabbar_add_tab(app.tabbar, "PDF");
+        struct yetty_ygui_old_widget *w =
+            yetty_ygui_old_engine_ypdf_default(app.engine, "pdf_view", 0, 0, 100, 100);
         if (w) {
-            yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
-            yetty_ygui_widget_add_child(tab, w);
+            yetty_ygui_old_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+            yetty_ygui_old_widget_add_child(tab, w);
         }
     }
 #endif
 
-    yetty_ygui_engine_on_resize(app.engine, on_resize, &app);
-    yetty_ygui_engine_on_key(app.engine, on_key, NULL);
+    yetty_ygui_old_engine_on_resize(app.engine, on_resize, &app);
+    yetty_ygui_old_engine_on_key(app.engine, on_key, NULL);
     /* DEBUG: start with Images tab active so we can repro the freeze
      * without external mouse input. Revert before commit. */
     if (getenv("YGREETER_START_IMAGES")) {
-        yetty_ygui_widget_tabbar_set_active(app.tabbar, g_images_tab_index);
+        yetty_ygui_old_widget_tabbar_set_active(app.tabbar, g_images_tab_index);
     }
     /* DEBUG: jump straight to the Elements tab (index 4) so the
      * activate path is exercised without needing a mouse click. */
     if (getenv("YGREETER_START_ELEMENTS")) {
-        yetty_ygui_widget_tabbar_set_active(app.tabbar, 4);
+        yetty_ygui_old_widget_tabbar_set_active(app.tabbar, 4);
     }
     /* engine_create already sent the init handshake; the real pixel size
      * arrives via SC_RESIZE on the loop. The window stays at its authored
      * 100x100 until then — on_resize installs the real size as soon as
      * the host replies. */
 
-    yetty_ygui_engine_run(app.engine);
+    yetty_ygui_old_engine_run(app.engine);
 
     free_image_nav();
     free_row_links();
@@ -2313,7 +2313,7 @@ int main(int argc, char **argv)
 #ifdef YGREETER_HAS_YJUNGLE
     yj_anim_shutdown(&app.yjungle);
 #endif
-    yetty_ygui_engine_destroy(app.engine);
-    yetty_ygui_shutdown();
+    yetty_ygui_old_engine_destroy(app.engine);
+    yetty_ygui_old_shutdown();
     return 0;
 }

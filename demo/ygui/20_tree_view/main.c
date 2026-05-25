@@ -18,11 +18,11 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <yetty/ygui/ygui.h>
+#include <yetty/ygui-old/ygui.h>
 
-static struct yetty_ygui_engine *g_engine = NULL;
-static struct yetty_ygui_widget *g_root_list = NULL;
-static struct yetty_ygui_widget *g_status = NULL;
+static struct yetty_ygui_old_engine *g_engine = NULL;
+static struct yetty_ygui_old_widget *g_root_list = NULL;
+static struct yetty_ygui_old_widget *g_status = NULL;
 static unsigned long g_id_counter = 0;
 static char g_root_path[4096];
 
@@ -126,33 +126,33 @@ static void free_fs_entries(struct fs_entry *arr, int n)
 }
 
 /* Forward decls for the populate / toggle pair. */
-static void populate_node(struct yetty_ygui_widget *node, struct dir_entry *entry);
-static void on_folder_toggle(struct yetty_ygui_widget *node, int expanded, void *userdata);
+static void populate_node(struct yetty_ygui_old_widget *node, struct dir_entry *entry);
+static void on_folder_toggle(struct yetty_ygui_old_widget *node, int expanded, void *userdata);
 
-static void on_select(struct yetty_ygui_widget *row, void *userdata)
+static void on_select(struct yetty_ygui_old_widget *row, void *userdata)
 {
     (void)userdata;
     char buf[256];
     const char *label = NULL;
-    if (yetty_ygui_widget_type(row) == YETTY_YGUI_WIDGET_TREE_NODE) {
-        label = yetty_ygui_widget_tree_node_get_label(row);
+    if (yetty_ygui_old_widget_type(row) == YETTY_YGUI_OLD_WIDGET_TREE_NODE) {
+        label = yetty_ygui_old_widget_tree_node_get_label(row);
     } else {
-        label = yetty_ygui_widget_label_get_text(row);
+        label = yetty_ygui_old_widget_label_get_text(row);
     }
     snprintf(buf, sizeof(buf), "Selected: %s", label ? label : "(?)");
-    yetty_ygui_widget_label_set_text(g_status, buf);
+    yetty_ygui_old_widget_label_set_text(g_status, buf);
 }
 
 /* Populate `node`'s children list from the directory it represents.
  * Idempotent — only runs the first time (entry->loaded gates it). */
-static void populate_node(struct yetty_ygui_widget *node, struct dir_entry *entry)
+static void populate_node(struct yetty_ygui_old_widget *node, struct dir_entry *entry)
 {
     if (!entry || entry->loaded) return;
     entry->loaded = 1;
 
     int n = 0;
     struct fs_entry *items = scan_dir(entry->abs_path, &n);
-    struct yetty_ygui_widget *kids = yetty_ygui_widget_tree_node_children(node);
+    struct yetty_ygui_old_widget *kids = yetty_ygui_old_widget_tree_node_children(node);
     if (!kids) {
         free_fs_entries(items, n);
         return;
@@ -161,34 +161,34 @@ static void populate_node(struct yetty_ygui_widget *node, struct dir_entry *entr
     for (int i = 0; i < n; i++) {
         if (items[i].is_dir) {
             char *id = make_id("d");
-            struct yetty_ygui_widget *sub = yetty_ygui_engine_tree_node(g_engine, id, items[i].name);
+            struct yetty_ygui_old_widget *sub = yetty_ygui_old_engine_tree_node(g_engine, id, items[i].name);
             free(id);
             struct dir_entry *sub_entry = make_dir_entry(items[i].full);
-            yetty_ygui_widget_tree_node_on_toggle(sub, on_folder_toggle, sub_entry);
-            yetty_ygui_widget_add_child(kids, sub);
+            yetty_ygui_old_widget_tree_node_on_toggle(sub, on_folder_toggle, sub_entry);
+            yetty_ygui_old_widget_add_child(kids, sub);
         } else {
             char *id = make_id("f");
-            yetty_ygui_widget_add_child(
-                kids, yetty_ygui_engine_label(g_engine, id, 0, 0, items[i].name));
+            yetty_ygui_old_widget_add_child(
+                kids, yetty_ygui_old_engine_label(g_engine, id, 0, 0, items[i].name));
             free(id);
         }
     }
     free_fs_entries(items, n);
 }
 
-static void on_folder_toggle(struct yetty_ygui_widget *node, int expanded, void *userdata)
+static void on_folder_toggle(struct yetty_ygui_old_widget *node, int expanded, void *userdata)
 {
     struct dir_entry *entry = (struct dir_entry *)userdata;
     if (!expanded) return;
     populate_node(node, entry);
 }
 
-static void on_key(struct yetty_ygui_engine *e, uint32_t key, int mods, void *u)
+static void on_key(struct yetty_ygui_old_engine *e, uint32_t key, int mods, void *u)
 {
     (void)mods;
     (void)u;
     if (key == 'q' || key == 'Q') {
-        yetty_ygui_engine_stop(e);
+        yetty_ygui_old_engine_stop(e);
     }
 }
 
@@ -203,19 +203,19 @@ static void query_terminal_cells(int *cols, int *rows)
     }
 }
 
-static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float prev_w,
+static void on_resize(struct yetty_ygui_old_engine *e, float new_w, float new_h, float prev_w,
                       float prev_h, void *u)
 {
     (void)e;
     (void)prev_w;
     (void)prev_h;
     (void)u;
-    yetty_ygui_widget_set_size(g_root_list, new_w - 16, new_h - 70);
+    yetty_ygui_old_widget_set_size(g_root_list, new_w - 16, new_h - 70);
 }
 
 int main(void)
 {
-    if (yetty_ygui_init() != 0) {
+    if (yetty_ygui_old_init() != 0) {
         return 1;
     }
 
@@ -227,10 +227,10 @@ int main(void)
     query_terminal_cells(&cols, &rows);
 
     struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "file-tree"});
+        yetty_ygui_old_engine_create((struct yetty_ygui_old_engine_args){.name = "file-tree"});
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
-        yetty_ygui_shutdown();
+        yetty_ygui_old_shutdown();
         return 1;
     }
     g_engine = eng_r.value;
@@ -238,20 +238,20 @@ int main(void)
      * tree_node header height tracks theme->row_height, so this also
      * resizes the chevron and per-row spacing. We build a theme from
      * scratch and hand ownership over via set_theme. */
-    struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
-    yetty_ygui_theme_set_font_size(theme, 28.0f);
-    yetty_ygui_theme_set_row_height(theme, 44.0f);
-    yetty_ygui_theme_set_padding(theme, 4.0f, 8.0f, 16.0f);
-    yetty_ygui_engine_set_theme(g_engine, theme);
+    struct yetty_ygui_old_theme *theme = yetty_ygui_old_theme_create_default();
+    yetty_ygui_old_theme_set_font_size(theme, 28.0f);
+    yetty_ygui_old_theme_set_row_height(theme, 44.0f);
+    yetty_ygui_old_theme_set_padding(theme, 4.0f, 8.0f, 16.0f);
+    yetty_ygui_old_engine_set_theme(g_engine, theme);
 
     char title_buf[4200];
     snprintf(title_buf, sizeof(title_buf), "%s   (q to quit)", g_root_path);
-    yetty_ygui_engine_label(g_engine, "title", 8, 6, title_buf);
-    g_status = yetty_ygui_engine_label(g_engine, "status", 8, 30, "Click any folder to expand");
+    yetty_ygui_old_engine_label(g_engine, "title", 8, 6, title_buf);
+    g_status = yetty_ygui_old_engine_label(g_engine, "status", 8, 30, "Click any folder to expand");
 
-    g_root_list = yetty_ygui_engine_list(g_engine, "root", 8, 60, 600, 400);
-    yetty_ygui_widget_apply_css(g_root_list, "padding: 6px; gap: 2px;");
-    yetty_ygui_widget_list_on_select(g_root_list, on_select, NULL);
+    g_root_list = yetty_ygui_old_engine_list(g_engine, "root", 8, 60, 600, 400);
+    yetty_ygui_old_widget_apply_css(g_root_list, "padding: 6px; gap: 2px;");
+    yetty_ygui_old_widget_list_on_select(g_root_list, on_select, NULL);
 
     /* Seed the root list with the immediate contents of CWD (no toggle
      * needed — the user is already "inside" the root). Sub-folders get
@@ -261,34 +261,34 @@ int main(void)
     for (int i = 0; i < n; i++) {
         if (items[i].is_dir) {
             char *id = make_id("d");
-            struct yetty_ygui_widget *sub =
-                yetty_ygui_engine_tree_node(g_engine, id, items[i].name);
+            struct yetty_ygui_old_widget *sub =
+                yetty_ygui_old_engine_tree_node(g_engine, id, items[i].name);
             free(id);
             struct dir_entry *entry = make_dir_entry(items[i].full);
-            yetty_ygui_widget_tree_node_on_toggle(sub, on_folder_toggle, entry);
-            yetty_ygui_widget_add_child(g_root_list, sub);
+            yetty_ygui_old_widget_tree_node_on_toggle(sub, on_folder_toggle, entry);
+            yetty_ygui_old_widget_add_child(g_root_list, sub);
         } else {
             char *id = make_id("f");
-            yetty_ygui_widget_add_child(
-                g_root_list, yetty_ygui_engine_label(g_engine, id, 0, 0, items[i].name));
+            yetty_ygui_old_widget_add_child(
+                g_root_list, yetty_ygui_old_engine_label(g_engine, id, 0, 0, items[i].name));
             free(id);
         }
     }
     free_fs_entries(items, n);
 
-    yetty_ygui_engine_on_resize(g_engine, on_resize, NULL);
-    yetty_ygui_engine_on_key(g_engine, on_key, NULL);
+    yetty_ygui_old_engine_on_resize(g_engine, on_resize, NULL);
+    yetty_ygui_old_engine_on_key(g_engine, on_key, NULL);
     {
-        struct pixel_size_result sr = yetty_ygui_engine_get_size(g_engine);
+        struct pixel_size_result sr = yetty_ygui_old_engine_get_size(g_engine);
         if (YETTY_IS_OK(sr) && sr.value.width > 0 && sr.value.height > 0) {
-            yetty_ygui_widget_set_size(g_root_list, sr.value.width - 16, sr.value.height - 70);
+            yetty_ygui_old_widget_set_size(g_root_list, sr.value.width - 16, sr.value.height - 70);
         } else if (YETTY_IS_ERR(sr)) {
             yetty_ycore_error_destroy(sr.error);
         }
     }
-    yetty_ygui_engine_run(g_engine);
+    yetty_ygui_old_engine_run(g_engine);
 
-    yetty_ygui_engine_destroy(g_engine);
-    yetty_ygui_shutdown();
+    yetty_ygui_old_engine_destroy(g_engine);
+    yetty_ygui_old_shutdown();
     return 0;
 }
