@@ -394,6 +394,8 @@ if(YETTY_ENABLE_FEATURE_TESTS)
         add_subdirectory(${YETTY_ROOT}/test/ut/ydiagram ${CMAKE_BINARY_DIR}/test/ut/ydiagram)
     endif()
     add_subdirectory(${YETTY_ROOT}/test/ut/ygui ${CMAKE_BINARY_DIR}/test/ut/ygui)
+    add_subdirectory(${YETTY_ROOT}/test/ut/yfigure ${CMAKE_BINARY_DIR}/test/ut/yfigure)
+    add_subdirectory(${YETTY_ROOT}/test/ut/ygrid ${CMAKE_BINARY_DIR}/test/ut/ygrid)
     add_subdirectory(${YETTY_ROOT}/test/ut/ybrowser ${CMAKE_BINARY_DIR}/test/ut/ybrowser)
     # Integration: ylexbor harness driver. Self-skips when QuickJS or
     # the ylexbor target isn't built.

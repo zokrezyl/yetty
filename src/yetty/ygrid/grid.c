@@ -610,11 +610,18 @@ static struct yetty_ycore_void_result entity_push_prim(struct ygrid_entity *e, u
     return YETTY_OK_VOID();
 }
 
-/* Detach this entity's prims from every cell that holds them, then
- * tombstone the prims so the staging rebuild skips them. The cells
- * scan is O(grid cells * entity prims) — acceptable for now;
- * touched_cells optimization will land in Phase 1b. */
-static void entity_drop_prims(struct yetty_ygrid_grid *g, struct ygrid_entity *e)
+/* Forward decl — bucket_prim is defined further down (next to
+ * parse_and_index_record). rebucket_subtree_to_back below calls it. */
+static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g,
+                                                  uint32_t prim_index);
+
+/* Detach this entity's prims from every cell that holds them. Used
+ * both by `entity_drop_prims` (which then tombstones + clears the
+ * entity's prim list) AND by `rebucket_subtree_to_back` (which keeps
+ * the entity's prim list intact so the prims can be re-bucketed at
+ * the end of every cell). Returns nothing — caller decides what to
+ * do with the surviving prim_indices array. */
+static void entity_drop_from_cells(struct yetty_ygrid_grid *g, struct ygrid_entity *e)
 {
     if (e->prim_count == 0) {
         return;
@@ -638,6 +645,18 @@ static void entity_drop_prims(struct yetty_ygrid_grid *g, struct ygrid_entity *e
         }
         cell->count = w;
     }
+}
+
+/* Detach this entity's prims from every cell that holds them, then
+ * tombstone the prims so the staging rebuild skips them. The cells
+ * scan is O(grid cells * entity prims) — acceptable for now;
+ * touched_cells optimization will land in Phase 1b. */
+static void entity_drop_prims(struct yetty_ygrid_grid *g, struct ygrid_entity *e)
+{
+    if (e->prim_count == 0) {
+        return;
+    }
+    entity_drop_from_cells(g, e);
     for (uint32_t k = 0; k < e->prim_count; k++) {
         uint32_t pi = e->prim_indices[k];
         if (pi < g->prim_count) {
@@ -646,6 +665,74 @@ static void entity_drop_prims(struct yetty_ygrid_grid *g, struct ygrid_entity *e
     }
     e->prim_count = 0;
     g->staging_dirty = 1;
+}
+
+/* Move every descendant entity's prims to the END of their cells,
+ * in entity-tree DFS order (parent-of-descendants first, then their
+ * children, etc.). Called from process_group_body after a CMD_GROUP
+ * for an EXISTING entity has been processed — at that point the
+ * parent's NEW chrome prims have been appended to cells, but the
+ * descendants' (already-existing) prims are still sitting at their
+ * ORIGINAL cell positions from the prior frame, which is BEFORE the
+ * parent's new chrome. Without this re-bucket the parent's chrome
+ * gets painted ON TOP of its own children — exactly the
+ * "section-open-but-body-BG-hides-the-buttons" bug.
+ *
+ * Re-bucketing is a drop-from-cells + bucket_prim cycle. The prim's
+ * meta and entity ownership are untouched; only its position in
+ * `cell->indices[]` changes (moves from somewhere in the middle to
+ * the end). After this walk, cell order matches tree order:
+ *
+ *   [unrelated entities' prims] [parent's NEW prims] [descendant 1]
+ *   [descendant 1's children] [descendant 2] [descendant 2's children]
+ *
+ * which is what the shader expects (composite back-to-front, parent
+ * first, leaves on top). */
+static void rebucket_subtree_to_back(struct yetty_ygrid_grid *g, uint32_t slot)
+{
+    if (slot >= g->entity_capacity) {
+        return;
+    }
+    struct ygrid_entity *e = &g->entities[slot];
+    if (!e->in_use) {
+        return;
+    }
+    for (uint32_t i = 0; i < e->children_count; i++) {
+        uint32_t cs = e->children[i];
+        if (cs >= g->entity_capacity) {
+            continue;
+        }
+        struct ygrid_entity *child = &g->entities[cs];
+        if (!child->in_use) {
+            continue;
+        }
+        /* Move child's own prims to the back of every cell holding
+         * them. entity_drop_from_cells preserves the entity's
+         * prim_indices list, so a second bucket_prim() round just
+         * re-appends each prim at the cell tail. */
+        if (child->prim_count > 0) {
+            entity_drop_from_cells(g, child);
+            for (uint32_t k = 0; k < child->prim_count; k++) {
+                uint32_t pi = child->prim_indices[k];
+                if (pi < g->prim_count &&
+                    g->prims[pi].entity_slot != YGRID_INVALID_SLOT) {
+                    struct yetty_ycore_void_result br = bucket_prim(g, pi);
+                    if (YETTY_IS_ERR(br)) {
+                        /* OOM during re-bucket — best-effort log,
+                         * skip this prim. The visible effect is one
+                         * widget temporarily painted under its
+                         * parent's chrome, which the next emit
+                         * will repair. */
+                        yetty_ycore_error_destroy(br.error);
+                    }
+                }
+            }
+            g->staging_dirty = 1;
+        }
+        /* Recurse so grandchildren get pushed to the back too,
+         * preserving tree order all the way down. */
+        rebucket_subtree_to_back(g, cs);
+    }
 }
 
 /* Recursive subtree delete. Frees the slot AND removes the entry from
@@ -705,11 +792,22 @@ static struct ygrid_entity *entity_lookup(struct yetty_ygrid_grid *g, uint64_t e
     return &g->entities[slot];
 }
 
+/* On exit, *out_was_existing is 1 when the id was already bound (we
+ * re-opened the entity's scope and dropped its prims) and 0 when a
+ * fresh entity was minted. `out_was_existing` may be NULL — callers
+ * that don't care pass NULL. The flag drives `rebucket_subtree_to_back`
+ * in process_group_body: only re-opened entities need their
+ * descendants moved to the back of cells (newly-minted entities have
+ * no descendants yet). */
 static struct yetty_ycore_void_result entity_lookup_or_create(struct yetty_ygrid_grid *g,
                                                               uint32_t parent_slot,
                                                               uint64_t external_id,
-                                                              uint32_t *out_slot)
+                                                              uint32_t *out_slot,
+                                                              int *out_was_existing)
 {
+    if (out_was_existing) {
+        *out_was_existing = 0;
+    }
     if (external_id == 0) {
         return YETTY_ERR(yetty_ycore_void, "ygrid: entity_create with external_id=0 is reserved");
     }
@@ -726,9 +824,19 @@ static struct yetty_ycore_void_result entity_lookup_or_create(struct yetty_ygrid
          * reset the entity's prim_indices list) before returning. The
          * entity's children are NOT touched — dirty children re-emit
          * via their own CMD_GROUP scope (which lands here and clears
-         * them in turn); clean children's prims survive untouched. */
+         * them in turn); clean children's prims survive untouched.
+         *
+         * After the body's new prims are added, the caller must call
+         * `rebucket_subtree_to_back` so the descendants' (stale)
+         * cell entries get moved to AFTER the new prims — otherwise
+         * the parent's chrome (just appended at the tail) gets painted
+         * on top of its own children's prims, which still sit at the
+         * head from the prior frame. */
         entity_drop_prims(g, &g->entities[existing]);
         *out_slot = existing;
+        if (out_was_existing) {
+            *out_was_existing = 1;
+        }
         return YETTY_OK_VOID();
     }
     uint32_t slot;
@@ -1687,13 +1795,27 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
             memcpy(&id, &cmd.flyweight.data[1], sizeof(id));
             memcpy(&payload_size, &cmd.flyweight.data[2], sizeof(payload_size));
             uint32_t child_slot;
-            struct yetty_ycore_void_result cr =
-                entity_lookup_or_create(g, parent_slot, (uint64_t)id, &child_slot);
+            int was_existing = 0;
+            struct yetty_ycore_void_result cr = entity_lookup_or_create(
+                g, parent_slot, (uint64_t)id, &child_slot, &was_existing);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ygrid_process_bytes: CMD_GROUP");
             const uint8_t *body = (const uint8_t *)cmd.flyweight.data + 12u;
             struct yetty_ycore_void_result rr =
                 process_group_body(g, child_slot, body, payload_size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ygrid_process_bytes: CMD_GROUP body");
+            /* Re-bucket descendants to the back of their cells. With
+             * the parent's chrome just appended (sitting at the tail
+             * of every cell it touches), any pre-existing child entity
+             * whose prims were already in those cells is now BEFORE
+             * the parent — wrong z-order, child gets painted under
+             * the parent's body BG. The walk re-bucket fixes that:
+             * for each descendant, drop its prims from cells and
+             * re-append, leaving the cell tail as
+             *   [parent NEW] [child NEW] [grandchild NEW] …
+             * which matches the entity tree's render order. */
+            if (was_existing) {
+                rebucket_subtree_to_back(g, child_slot);
+            }
             off += (uint32_t)pr.value;
             continue;
         }
@@ -1757,6 +1879,167 @@ static struct yetty_ycore_void_result ygrid_reset_content(struct yetty_yfigure_f
     return YETTY_OK_VOID();
 }
 
+/*===========================================================================
+ * Dump — local string builder (same shape as the one in container.c,
+ * kept local so ygrid doesn't pull yfigure_container internals).
+ *=========================================================================*/
+
+#include <stdarg.h>
+
+static char *ygrid_dump_appendf(char *buf, size_t *len, size_t *cap, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    if (!buf) {
+        *len = 0;
+        *cap = 128;
+        buf = (char *)malloc(*cap);
+        if (!buf) {
+            va_end(ap);
+            return NULL;
+        }
+        buf[0] = '\0';
+    }
+    va_list ap2;
+    va_copy(ap2, ap);
+    int need = vsnprintf(NULL, 0, fmt, ap2);
+    va_end(ap2);
+    if (need < 0) {
+        va_end(ap);
+        return buf;
+    }
+    size_t want = *len + (size_t)need + 1u;
+    if (want > *cap) {
+        size_t ncap = *cap ? *cap : 128;
+        while (ncap < want) {
+            ncap *= 2;
+        }
+        char *grown = (char *)realloc(buf, ncap);
+        if (!grown) {
+            free(buf);
+            va_end(ap);
+            return NULL;
+        }
+        buf = grown;
+        *cap = ncap;
+    }
+    int wrote = vsnprintf(buf + *len, *cap - *len, fmt, ap);
+    va_end(ap);
+    if (wrote < 0) {
+        return buf;
+    }
+    *len += (size_t)wrote;
+    return buf;
+}
+
+static void ygrid_dump_pad(char *buf, size_t cap, int indent)
+{
+    int n = indent < 0 ? 0 : indent;
+    if ((size_t)n + 1u > cap) {
+        n = (int)cap - 1;
+    }
+    for (int i = 0; i < n; i++) {
+        buf[i] = ' ';
+    }
+    buf[n] = '\0';
+}
+
+/* Count live prims (non-tombstoned) — a tombstoned entry sets
+ * entity_slot = YGRID_INVALID_SLOT and is skipped by the staging walk. */
+static uint32_t ygrid_live_prim_count(const struct yetty_ygrid_grid *g)
+{
+    uint32_t live = 0;
+    for (uint32_t i = 0; i < g->prim_count; i++) {
+        if (g->prims[i].entity_slot != YGRID_INVALID_SLOT) {
+            live++;
+        }
+    }
+    return live;
+}
+
+static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
+{
+    const struct yetty_ygrid_grid *g = (const struct yetty_ygrid_grid *)self;
+    char pad[64];
+    ygrid_dump_pad(pad, sizeof(pad), indent);
+    size_t len = 0, cap = 0;
+    char *buf = NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%skind: ygrid\n", pad);
+    if (!buf) return NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%srect: [%.1f, %.1f, %.1f, %.1f]\n", pad,
+                             self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y);
+    if (!buf) return NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sdirty: %d\n", pad, self->dirty);
+    if (!buf) return NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sgrid_cols: %u\n", pad, g->grid_cols);
+    if (!buf) return NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sgrid_rows: %u\n", pad, g->grid_rows);
+    if (!buf) return NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sprim_count: %u\n", pad,
+                             ygrid_live_prim_count(g));
+    if (!buf) return NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sprim_count_with_tombstones: %u\n", pad,
+                             g->prim_count);
+    if (!buf) return NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sbytes_len: %zu\n", pad, g->bytes_len);
+    if (!buf) return NULL;
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sentity_high_water: %u\n", pad,
+                             g->entity_high_water);
+    if (!buf) return NULL;
+    /* Entities. Walk every slot up to entity_high_water; skip released
+     * (free-list) slots — those have in_use=false. external_id=0 is the
+     * implicit root and is always present at slot 0. The dump uses
+     * id_index_lookup-style ids so a test can reason about them
+     * symbolically (matches what the producer-side group_id is). */
+    int any = 0;
+    for (uint32_t s = 0; s < g->entity_high_water; s++) {
+        if (g->entities[s].in_use) {
+            any = 1;
+            break;
+        }
+    }
+    if (!any) {
+        buf = ygrid_dump_appendf(buf, &len, &cap, "%sentities: []\n", pad);
+        return buf;
+    }
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sentities:\n", pad);
+    if (!buf) return NULL;
+    for (uint32_t s = 0; s < g->entity_high_water; s++) {
+        const struct ygrid_entity *e = &g->entities[s];
+        if (!e->in_use) {
+            continue;
+        }
+        buf = ygrid_dump_appendf(buf, &len, &cap, "%s  - slot: %u\n", pad, s);
+        if (!buf) return NULL;
+        buf = ygrid_dump_appendf(buf, &len, &cap, "%s    external_id: %llu\n", pad,
+                                 (unsigned long long)e->external_id);
+        if (!buf) return NULL;
+        if (e->parent_slot == YGRID_INVALID_SLOT) {
+            buf = ygrid_dump_appendf(buf, &len, &cap, "%s    parent_slot: ~\n", pad);
+        } else {
+            buf = ygrid_dump_appendf(buf, &len, &cap, "%s    parent_slot: %u\n", pad,
+                                     e->parent_slot);
+        }
+        if (!buf) return NULL;
+        buf = ygrid_dump_appendf(buf, &len, &cap, "%s    prim_count: %u\n", pad, e->prim_count);
+        if (!buf) return NULL;
+        if (e->children_count == 0) {
+            buf = ygrid_dump_appendf(buf, &len, &cap, "%s    children: []\n", pad);
+        } else {
+            buf = ygrid_dump_appendf(buf, &len, &cap, "%s    children: [", pad);
+            if (!buf) return NULL;
+            for (uint32_t i = 0; i < e->children_count; i++) {
+                buf = ygrid_dump_appendf(buf, &len, &cap, "%s%u", i ? ", " : "",
+                                         e->children[i]);
+                if (!buf) return NULL;
+            }
+            buf = ygrid_dump_appendf(buf, &len, &cap, "]\n");
+        }
+        if (!buf) return NULL;
+    }
+    return buf;
+}
+
 static const struct yetty_yfigure_figure_ops *ygrid_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
@@ -1764,6 +2047,7 @@ static const struct yetty_yfigure_figure_ops *ygrid_ops(void)
         .render = ygrid_render,
         .process_bytes = ygrid_process_bytes,
         .reset_content = ygrid_reset_content,
+        .dump = ygrid_dump,
     };
     return &ops;
 }
@@ -1977,12 +2261,15 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
                                                       uint32_t grid_cols, uint32_t grid_rows,
                                                       const struct yetty_context *context)
 {
-    if (!context) {
-        return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: NULL context");
-    }
     if (grid_cols == 0 || grid_rows == 0) {
         return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: grid dims must be non-zero");
     }
+    /* Test/tooling mode: `context == NULL` (or `context->runtime == NULL`)
+     * skips every GPU-touching init step — no shader load, no binder.
+     * The entity tree, flyweight registry, cell bucketing, and the
+     * process_bytes path all still work. Render is a no-op-on-NULL-binder
+     * later; tests never call it. */
+    int headless = (context == NULL) || (context->runtime == NULL);
 
     struct yetty_ygrid_grid *g =
         (struct yetty_ygrid_grid *)calloc(1, sizeof(struct yetty_ygrid_grid));
@@ -1995,10 +2282,12 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     g->base.dirty = 1;
     g->grid_cols = grid_cols;
     g->grid_rows = grid_rows;
-    g->device = context->runtime->gpu.device;
-    g->queue = context->runtime->gpu.queue;
-    g->target_format = context->runtime->gpu.surface_format;
-    g->allocator = context->runtime->gpu.allocator;
+    if (!headless) {
+        g->device = context->runtime->gpu.device;
+        g->queue = context->runtime->gpu.queue;
+        g->target_format = context->runtime->gpu.surface_format;
+        g->allocator = context->runtime->gpu.allocator;
+    }
     g->staging_dirty = 1;
     g->free_slot_head = YGRID_INVALID_SLOT;
 
@@ -2063,20 +2352,22 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         ygrid_destroy(&g->base);
         return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: cells_alloc", cr);
     }
-    struct yetty_ycore_void_result lr = load_sdf_lib(g, context);
-    if (YETTY_IS_ERR(lr)) {
-        ygrid_destroy(&g->base);
-        return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_sdf_lib", lr);
-    }
-    struct yetty_ycore_void_result ls = load_layer_shader(g, context);
-    if (YETTY_IS_ERR(ls)) {
-        ygrid_destroy(&g->base);
-        return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_layer_shader", ls);
-    }
-    struct yetty_ycore_void_result br = build_binder(g);
-    if (YETTY_IS_ERR(br)) {
-        ygrid_destroy(&g->base);
-        return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: build_binder", br);
+    if (!headless) {
+        struct yetty_ycore_void_result lr = load_sdf_lib(g, context);
+        if (YETTY_IS_ERR(lr)) {
+            ygrid_destroy(&g->base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_sdf_lib", lr);
+        }
+        struct yetty_ycore_void_result ls = load_layer_shader(g, context);
+        if (YETTY_IS_ERR(ls)) {
+            ygrid_destroy(&g->base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_layer_shader", ls);
+        }
+        struct yetty_ycore_void_result br = build_binder(g);
+        if (YETTY_IS_ERR(br)) {
+            ygrid_destroy(&g->base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: build_binder", br);
+        }
     }
 
     return YETTY_OK(yetty_ygrid_grid_ptr, g);

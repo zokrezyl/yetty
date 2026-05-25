@@ -1157,7 +1157,19 @@ struct yetty_ygui_engine {
      * pushes onto it. */
     uint32_t next_figure_id;
     uint32_t next_group_id;
-    uint32_t *pending_deletes;
+    /* CMD_GROUP entity deletes: each entry remembers both the entity's
+     * group_id AND the top-level figure_id whose chrome ygrid owns it.
+     * The flush in open_group_as_kind emits CMD_DELETE only inside the
+     * matching figure's routed body; mismatched entries stay queued for
+     * their own figure's next routed open. Without the figure_id tag
+     * we'd have to broadcast every delete to every routed body or
+     * (worse) emit them as admin DELETE_CHILD on the root container —
+     * the latter is a no-op (the ids live inside ygrid, not at root)
+     * which is exactly the "elements still rendered after close" bug. */
+    struct yetty_ygui_pending_delete {
+        uint32_t group_id;
+        uint32_t figure_id;
+    } *pending_deletes;
     uint32_t pending_delete_count;
     uint32_t pending_delete_cap;
     uint32_t *pending_figure_deletes;
@@ -1319,6 +1331,20 @@ struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(
 
 /* Error */
 void yetty_ygui_set_error(const char *msg);
+
+/* Flush every pending CMD_GROUP delete whose figure_id matches `figure_id`
+ * — emit CMD_DELETE(group_id) records into `ctx->buffer` (the chrome
+ * ygrid's routed body, currently open) and remove the matching entries
+ * from engine->pending_deletes. Called from open_group_as_kind right
+ * after a top-level routed begin_record / begin_admin_create_child has
+ * been written, so the deletes land in the same body as the subsequent
+ * CMD_GROUP records the rebuild walk produces.
+ *
+ * `figure_id == 0` is invalid (root scope is the container, not a
+ * chrome figure) and a no-op. */
+void yetty_ygui_internal_flush_chrome_deletes(struct yetty_ygui_engine *engine,
+                                              struct yetty_ydraw_draw_list *buf,
+                                              uint32_t figure_id);
 
 /* Recursively queue scene-canvas DELETE records for every widget in
  * the given subtree that owns a live entity on the receiver

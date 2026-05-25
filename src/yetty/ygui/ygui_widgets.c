@@ -56,25 +56,148 @@ void yetty_ygui_widget_init_base(struct yetty_ygui_widget *widget, float x, floa
     widget->h = h;
 }
 
-/* Queue this widget's group_id for emission as a DELETE record on the
- * next render. Skips if the engine hasn't yet sent a first frame (the
- * receiver doesn't know about the widget yet) or if a full redraw is
- * already pending (CMD_ZERO supersedes deletes). */
-static void engine_queue_pending_delete(struct yetty_ygui_engine *engine, uint32_t group_id)
+/* Walk up the parent chain to find which top-level widget (= which
+ * chrome ygrid figure) this widget belongs to. The top-level widget
+ * carries the figure_id we need to address the chrome on the wire.
+ * Returns 0 if the widget has no top-level ancestor with a figure_id
+ * (shouldn't happen for any widget that ever rendered, but we guard
+ * against it). */
+static uint32_t widget_top_level_figure_id(const struct yetty_ygui_widget *w)
 {
-    if (!engine || engine->needs_full_redraw) {
+    while (w && w->parent) {
+        w = w->parent;
+    }
+    return w ? w->figure_id : 0u;
+}
+
+/* Producer-widget kinds that emit as their OWN figure on the root
+ * container (via the deferred-buf path in open_group_as_kind) instead
+ * of as a CMD_GROUP entity inside the enclosing chrome ygrid. These
+ * widgets need their own GPU pipeline (yplot's stroke shader,
+ * yimage's texture sampler, etc.) so they can't live inside ygrid's
+ * unified SDF/glyph pass. On delete, the receiver-side cleanup is
+ * therefore an admin DELETE_CHILD against the ROOT container, NOT a
+ * CMD_DELETE inside any chrome's body. */
+static int widget_is_deferred_figure(const struct yetty_ygui_widget *w)
+{
+    if (!w) {
+        return 0;
+    }
+    switch (w->type) {
+    case YETTY_YGUI_WIDGET_YPLOT:
+    case YETTY_YGUI_WIDGET_YIMAGE:
+    case YETTY_YGUI_WIDGET_YVIDEO:
+    case YETTY_YGUI_WIDGET_YZOO:
+    case YETTY_YGUI_WIDGET_YJUNGLE:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/* Push `id` into engine->pending_figure_deletes WITHOUT recycling it
+ * into the free_figure_ids pool. The recycling path in
+ * engine_queue_pending_figure_delete assumes the id was minted by
+ * engine->next_figure_id (a dense pool of top-level widget figure_ids).
+ * Deferred-figure widgets (yplot/yimage/…) use their `group_id` as
+ * the receiver-side figure_id — group_ids live in a SEPARATE pool
+ * (next_group_id) and must never end up in free_figure_ids, otherwise
+ * a future top-level widget would be assigned a group_id collision. */
+static void engine_queue_pending_figure_delete_no_recycle(struct yetty_ygui_engine *engine,
+                                                          uint32_t id)
+{
+    if (!engine || id == 0u || engine->needs_full_redraw) {
+        return;
+    }
+    if (engine->pending_figure_delete_count >= engine->pending_figure_delete_cap) {
+        uint32_t new_cap =
+            engine->pending_figure_delete_cap ? engine->pending_figure_delete_cap * 2 : 8;
+        uint32_t *grown =
+            realloc(engine->pending_figure_deletes, new_cap * sizeof(uint32_t));
+        if (!grown) {
+            return;
+        }
+        engine->pending_figure_deletes = grown;
+        engine->pending_figure_delete_cap = new_cap;
+    }
+    engine->pending_figure_deletes[engine->pending_figure_delete_count++] = id;
+}
+
+/* Queue this widget's group_id for emission as a CMD_DELETE inside its
+ * chrome ygrid's body on the next render. Skips if the engine hasn't
+ * yet sent a first frame (the receiver doesn't know about the widget
+ * yet) or if a full redraw is already pending (the chrome's
+ * reset_content supersedes individual deletes).
+ *
+ * Deferred-figure widgets (yplot/yimage/yvideo/yzoo/yjungle) take a
+ * different path: their receiver-side artefact is a full figure under
+ * the root container keyed by `group_id`, NOT a CMD_GROUP entity
+ * inside a chrome ygrid. CMD_DELETE inside chrome's body would not
+ * find their entity and the figure would persist forever (visible
+ * symptom: switching tabs leaves a yzoo / yplot floating over the
+ * new tab). Route them to pending_figure_deletes instead so
+ * engine_emit_pending_deletes emits admin DELETE_CHILD on the root
+ * container. */
+static void engine_queue_pending_delete(struct yetty_ygui_engine *engine,
+                                        const struct yetty_ygui_widget *w)
+{
+    if (!engine || engine->needs_full_redraw || !w) {
+        return;
+    }
+    if (widget_is_deferred_figure(w)) {
+        engine_queue_pending_figure_delete_no_recycle(engine, w->group_id);
+        return;
+    }
+    uint32_t fig_id = widget_top_level_figure_id(w);
+    if (fig_id == 0u) {
+        /* No surviving top-level ancestor — the chrome itself is gone,
+         * the receiver dropped the figure via admin DELETE_CHILD on
+         * root container. No need to schedule individual entity
+         * deletes inside a figure that's about to vanish. */
         return;
     }
     if (engine->pending_delete_count >= engine->pending_delete_cap) {
         uint32_t new_cap = engine->pending_delete_cap ? engine->pending_delete_cap * 2 : 16;
-        uint32_t *grown = realloc(engine->pending_deletes, new_cap * sizeof(uint32_t));
+        struct yetty_ygui_pending_delete *grown = realloc(
+            engine->pending_deletes, new_cap * sizeof(struct yetty_ygui_pending_delete));
         if (!grown) {
             return; /* drop — DELETE will be missing but receiver tolerates */
         }
         engine->pending_deletes = grown;
         engine->pending_delete_cap = new_cap;
     }
-    engine->pending_deletes[engine->pending_delete_count++] = group_id;
+    engine->pending_deletes[engine->pending_delete_count].group_id = w->group_id;
+    engine->pending_deletes[engine->pending_delete_count].figure_id = fig_id;
+    engine->pending_delete_count++;
+}
+
+void yetty_ygui_internal_flush_chrome_deletes(struct yetty_ygui_engine *engine,
+                                              struct yetty_ydraw_draw_list *buf,
+                                              uint32_t figure_id)
+{
+    if (!engine || !buf || figure_id == 0u) {
+        return;
+    }
+    /* Walk pending_deletes once: emit CMD_DELETE for matching figure_id
+     * entries, in-place compact the rest. Stable order preserved for
+     * any remaining entries (different figure's flush will see them
+     * on its own open). */
+    uint32_t w = 0;
+    for (uint32_t r = 0; r < engine->pending_delete_count; r++) {
+        struct yetty_ygui_pending_delete e = engine->pending_deletes[r];
+        if (e.figure_id == figure_id) {
+            struct yetty_ycore_void_result dr =
+                yetty_ydraw_draw_list_add_cmd_delete(buf, e.group_id);
+            if (YETTY_IS_ERR(dr)) {
+                /* Best-effort — log + continue. Missing CMD_DELETE
+                 * leaves a stale entity behind but isn't fatal. */
+                yetty_ycore_error_destroy(dr.error);
+            }
+            continue;
+        }
+        engine->pending_deletes[w++] = e;
+    }
+    engine->pending_delete_count = w;
 }
 
 /* Recursively queue DELETE for every widget in this subtree that owns
@@ -96,7 +219,7 @@ void yetty_ygui_internal_queue_delete_subtree_rendered(struct yetty_ygui_widget 
         return;
     }
     if (w->was_rendered) {
-        engine_queue_pending_delete(w->engine, w->group_id);
+        engine_queue_pending_delete(w->engine, w);
         w->was_rendered = 0;
     }
     w->dirty = 1;
@@ -122,7 +245,7 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
      * normally the "user-initiated" delete; we queue all to be safe
      * (DELETE on unknown id is a warn+continue). */
     if (widget->engine && widget->was_rendered) {
-        engine_queue_pending_delete(widget->engine, widget->group_id);
+        engine_queue_pending_delete(widget->engine, widget);
     }
 
     /* Free children recursively */
@@ -289,6 +412,16 @@ struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
             marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) | buf_bit |
                      YETTY_YGUI_GROUP_MARKER_ROUTED;
             depth_bit = YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH;
+            /* Flush any queued CMD_GROUP entity deletes for this chrome
+             * NOW, inside the routed body, before any of the rebuild
+             * walk's CMD_GROUP records land here. The receiver sees the
+             * deletes first, drops the matching entities (along with
+             * their prims), and any later CMD_GROUPs in this same body
+             * create / refresh entities cleanly. Without this, deleted
+             * widgets keep their prims on the receiver until the next
+             * full redraw — the "elements still rendered after close"
+             * bug surface. */
+            yetty_ygui_internal_flush_chrome_deletes(self->engine, dst, figure_id);
         } else {
             /* Case 1: top-level YGRID CREATE_CHILD (mints / rebuilds).
              * Also the non-YGRID top-level/deferred paths. */
@@ -299,6 +432,25 @@ struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
             marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) | buf_bit;
             if (kind == YETTY_YFIGURE_KIND_YGRID) {
                 depth_bit = YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH;
+                /* CREATE_CHILD on an existing id of the same kind hits
+                 * the container's reset_content fast path on the
+                 * receiver — every entity inside this chrome gets
+                 * wiped. The pending deletes for this figure are then
+                 * implicit; drop them from the queue without emitting
+                 * any explicit CMD_DELETE. (For NEW figures the queue
+                 * already had nothing for this id.) */
+                if (self->engine) {
+                    uint32_t w_idx = 0;
+                    for (uint32_t r = 0; r < self->engine->pending_delete_count; r++) {
+                        struct yetty_ygui_pending_delete e =
+                            self->engine->pending_deletes[r];
+                        if (e.figure_id == figure_id) {
+                            continue;
+                        }
+                        self->engine->pending_deletes[w_idx++] = e;
+                    }
+                    self->engine->pending_delete_count = w_idx;
+                }
             }
         }
     }

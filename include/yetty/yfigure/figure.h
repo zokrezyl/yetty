@@ -92,6 +92,21 @@ struct yetty_yfigure_figure_ops {
      * doesn't support in-place content reset; CREATE_CHILD on an
      * existing id falls back to destroy + mint. */
     struct yetty_ycore_void_result (*reset_content)(struct yetty_yfigure_figure *self);
+
+    /* Return a heap-allocated text snapshot of this figure's state in a
+     * YAML-ish form (no real YAML library is involved — just direct
+     * text formatting). Caller frees with free(). NULL on OOM.
+     *
+     * `indent` is the number of spaces every emitted top-level line
+     * should be prefixed with. Composite figures (containers) emit
+     * their own fields at `indent`, then recurse into children at
+     * `indent + 4` after a `children:` key — the receiver state is
+     * a tree, so the dump is too.
+     *
+     * Used by unit tests to assert receiver state after a wire-byte
+     * stream has been processed. NULL = figure provides no dump (the
+     * base wrapper returns just the kind + rect). */
+    char *(*dump)(const struct yetty_yfigure_figure *self, int indent);
 };
 
 struct yetty_yfigure_figure {
@@ -243,6 +258,16 @@ struct yetty_yfigure_hit {
 
 struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_container *container,
                                                           float x, float y);
+
+/*===========================================================================
+ * Polymorphic dump.
+ *
+ * `yetty_yfigure_dump` dispatches to self->ops->dump when present; if the
+ * concrete kind doesn't implement dump it returns a one-line fallback
+ * with the rect (so tests can still see SOMETHING for unknown kinds).
+ * Caller owns the returned string and frees with free(). NULL on OOM.
+ *=========================================================================*/
+char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent);
 
 #ifdef __cplusplus
 }

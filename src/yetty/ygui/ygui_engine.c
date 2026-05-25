@@ -800,15 +800,12 @@ struct yetty_ycore_void_result yetty_ygui_engine_emit_pending_deletes(
                             "engine_emit_pending_deletes: figure DELETE_CHILD");
     }
     engine->pending_figure_delete_count = 0;
-    /* CMD_GROUP entities inside an ygrid body. Currently emitted as
-     * flat top-level DELETE_CHILD; the receiver tolerates unknown ids. */
-    for (uint32_t i = 0; i < engine->pending_delete_count; i++) {
-        struct yetty_ycore_void_result dr = yetty_ydraw_draw_list_add_admin_delete_child(
-            engine->buffer, engine->pending_deletes[i]);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr,
-                            "engine_emit_pending_deletes: group DELETE_CHILD");
-    }
-    engine->pending_delete_count = 0;
+    /* `pending_deletes` are CMD_GROUP entity ids; they live INSIDE a
+     * chrome ygrid, not at the root container. We don't emit admin
+     * DELETE_CHILD records for them here — open_group_as_kind flushes
+     * the matching entries as CMD_DELETE inside the chrome's routed
+     * body the next time that chrome opens. Untouched on full_redraw
+     * (the receiver will reset_content the chrome figure anyway). */
     return YETTY_OK_VOID();
 }
 
@@ -902,6 +899,64 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
         return r;
     }
     return yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size);
+}
+
+/* Headless variant of engine_render — runs the same layout + rebuild
+ * pipeline but stops just before OSC shipping. After this returns, the
+ * raw record stream that engine_render would have packaged into its OSC
+ * envelope is available verbatim via engine_buffer_data() / _size().
+ *
+ * Skipped vs engine_render:
+ *   - the dedup memcpy + prev_emit_data update (not needed offline),
+ *   - the OSC create_card / update_card emit (we don't have a pty),
+ *   - the card_shown flag toggle (stays at whatever it was).
+ *
+ * Used by unit tests that want to feed the producer's bytes straight
+ * into a yfigure_container without going through OSC framing. */
+struct yetty_ycore_void_result yetty_ygui_engine_render_headless(struct yetty_ygui_engine *engine)
+{
+    if (!engine || !engine->buffer) {
+        return YETTY_ERR(yetty_ycore_void, "engine_render_headless: NULL engine or buffer");
+    }
+    if (engine->needs_resize) {
+        handle_resize(engine);
+        engine->needs_resize = 0;
+    }
+    yetty_ygui_engine_notify_tick(engine);
+    yetty_ydraw_draw_list_clear(engine->buffer);
+
+    int full_redraw = engine->needs_full_redraw || !engine->card_shown;
+    struct yetty_ycore_void_result fd =
+        yetty_ygui_engine_emit_pending_deletes(engine, full_redraw);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fd, "engine_render_headless: emit_pending_deletes");
+
+    yetty_ydraw_draw_list_set_scene_bounds(engine->buffer, 0, 0, engine->width, engine->height);
+
+    struct yetty_ycore_void_result rb = engine_rebuild_with_mode(engine, full_redraw);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rb, "engine_render_headless: rebuild");
+    engine->needs_full_redraw = 0;
+    /* engine_render flips card_shown to 1 inside the OSC create_card
+     * path; headless never gets there, but tests still need the next
+     * render to take the incremental branch (otherwise every test
+     * re-emits CLEAR_ALL and the receiver never accumulates state). */
+    engine->card_shown = 1;
+    return YETTY_OK_VOID();
+}
+
+const void *yetty_ygui_engine_buffer_data(const struct yetty_ygui_engine *engine)
+{
+    if (!engine || !engine->buffer) {
+        return NULL;
+    }
+    return yetty_ydraw_draw_list_data(engine->buffer);
+}
+
+size_t yetty_ygui_engine_buffer_size(const struct yetty_ygui_engine *engine)
+{
+    if (!engine || !engine->buffer) {
+        return 0;
+    }
+    return yetty_ydraw_draw_list_size(engine->buffer);
 }
 
 /* Send the init OSC handshake: cell-size query, mouse subscriptions,
