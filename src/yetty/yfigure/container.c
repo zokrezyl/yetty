@@ -38,6 +38,11 @@ struct child_entry {
     /* Owned child figure. Destroyed when the entry is removed or when
      * the group itself is destroyed. */
     struct yetty_yfigure_figure *figure;
+    /* Kind tag (YETTY_YFIGURE_KIND_*) captured at mint time. Used by
+     * CREATE_CHILD on an existing id to decide between the fast path
+     * (same kind → reset_content + process_bytes, reuse GPU state)
+     * and the destroy + mint fallback (different kind). */
+    uint32_t kind;
     UT_hash_handle hh;
 };
 
@@ -272,17 +277,67 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
             .max = {.x = rect_floats[2] + g->viewport_offset_x,
                     .y = rect_floats[3] + g->viewport_offset_y},
         };
+        /* Fast path: existing id of the same kind that supports
+         * reset_content. Reuse the figure (and its cached binder /
+         * pipeline / textures), just refresh its content. Without
+         * this the receiver destroys + remints on every CREATE_CHILD,
+         * which drops the binder cache and forces a full pipeline
+         * rebuild on the next render — visible as ~100 ms hover lag. */
+        struct child_entry *existing;
+        HASH_FIND_INT(g->children, &child_id, existing);
+        if (existing && existing->kind == kind && existing->figure->ops->reset_content) {
+            struct yetty_ycore_void_result rc =
+                existing->figure->ops->reset_content(existing->figure);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rc,
+                                "container admin CREATE_CHILD: reset_content");
+            existing->figure->rect = rect;
+            if (init_bytes > 0) {
+                if (!existing->figure->ops->process_bytes) {
+                    return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: "
+                                                       "no process_bytes for non-empty init");
+                }
+                struct yetty_ycore_void_result pr =
+                    existing->figure->ops->process_bytes(existing->figure, body + 28, init_bytes);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
+                                    "container admin CREATE_CHILD: child re-init");
+            }
+            existing->figure->dirty = 1;
+            g->base.dirty = 1;
+            return YETTY_OK_VOID();
+        }
+
         struct yetty_yfigure_figure_ptr_result fr =
             yetty_yfigure_registry_mint(g->registry, kind, rect, g->context);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "container admin CREATE_CHILD: registry mint");
         struct yetty_yfigure_figure *child = fr.value;
-        struct yetty_ycore_void_result ar = yetty_yfigure_container_add_child(g, child, child_id);
-        if (YETTY_IS_ERR(ar)) {
-            struct yetty_ycore_void_result dr = child->ops->destroy(child);
+        /* Existing id but different kind (or kind has no reset_content):
+         * in-place swap the figure pointer. The hash entry stays put,
+         * so z-order (uthash insertion order) is preserved, but the
+         * old figure's GPU resources are released. This path is the
+         * slow fallback — kind changes on the same id are rare. */
+        if (existing) {
+            struct yetty_ycore_void_result dr = existing->figure->ops->destroy(existing->figure);
             if (YETTY_IS_ERR(dr)) {
                 yetty_ycore_error_destroy(dr.error);
             }
-            return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: add_child", ar);
+            existing->figure = child;
+            existing->kind = kind;
+            child->dirty = 1;
+        } else {
+            struct yetty_ycore_void_result ar =
+                yetty_yfigure_container_add_child(g, child, child_id);
+            if (YETTY_IS_ERR(ar)) {
+                struct yetty_ycore_void_result dr = child->ops->destroy(child);
+                if (YETTY_IS_ERR(dr)) {
+                    yetty_ycore_error_destroy(dr.error);
+                }
+                return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: add_child", ar);
+            }
+            struct child_entry *fresh;
+            HASH_FIND_INT(g->children, &child_id, fresh);
+            if (fresh) {
+                fresh->kind = kind;
+            }
         }
         if (init_bytes > 0) {
             if (!child->ops->process_bytes) {

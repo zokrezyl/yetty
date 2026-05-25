@@ -229,6 +229,8 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
          * pad of TABBAR_BUTTON_SIZE + 2*TABBAR_BUTTON_PAD on the right
          * so the two don't visually collide). */
         const char *label = self->data.tabbar.labels[i];
+        ydebug("tabbar_render: pill[%d] label=%s pill_xy=(%.1f,%.1f) pw=%.1f", i,
+               label ? label : "(null)", x, y, pw);
         if (label && *label) {
             float fs = theme->font_size > 0 ? theme->font_size : 14.0f;
             float tx = x + TABBAR_PILL_PAD_X;
@@ -237,6 +239,8 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
             if (ty > max_top) {
                 ty = max_top;
             }
+            ydebug("tabbar_render: pill[%d] emit text '%s' at (%.1f,%.1f) color=0x%08x fs=%.1f", i,
+                   label, tx, ty, text_color, fs);
             yetty_ygui_render_ctx_render_text(ctx, label, tx, ty, text_color, fs);
         }
 

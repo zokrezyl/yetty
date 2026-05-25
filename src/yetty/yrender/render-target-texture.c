@@ -11,6 +11,7 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yterm/terminal.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplatform/thread.h>
@@ -149,6 +150,22 @@ struct yetty_yrender_render_target_texture {
      * after wgpuSurfacePresent returns. is_busy() exposes this so the
      * RENDER event handler can skip the whole pipeline. */
     int present_in_flight;
+
+    /* Set by notify_render_skipped when a RENDER event arrives while
+     * present_in_flight=1 and is_busy() forces the loop to drop the
+     * pipeline. Without this the skip is silent and the display stays
+     * one event behind — typical visible symptom is a half-second lag
+     * between hovering a button and seeing its highlight. The present
+     * coro picks this up after present completes and schedules a
+     * catch-up render via event_loop->ops->request_render. */
+    int render_skipped_pending;
+
+    /* Borrowed — used to schedule the catch-up render from the present
+     * coro's tail. NULL on layer/composite targets that never present;
+     * set on the surface-backed desktop target via
+     * yetty_yrender_target_texture_set_event_loop, called from
+     * yframework right after set_wgpu. */
+    struct yetty_yevent_event_loop *event_loop;
 
     /* Per-target present watchdog. NULL when this rt has no surface
      * (layer and composite targets never call wgpuSurfacePresent).
@@ -895,6 +912,15 @@ static void render_target_texture_present_coro(void *arg)
     ydebug("present_coro: AFTER  wgpuTextureViewRelease");
 
     rt->present_in_flight = 0;
+    /* Catch-up: while we were waiting on the GPU/compositor, the render
+     * loop may have dropped one or more RENDER events because is_busy()
+     * was true. Fire a single request_render so the most recent state
+     * lands on screen. Coalesces naturally — multiple drops between
+     * presents collapse to one catch-up. */
+    if (rt->render_skipped_pending && rt->event_loop && rt->event_loop->ops->request_render) {
+        rt->render_skipped_pending = 0;
+        rt->event_loop->ops->request_render(rt->event_loop);
+    }
     free(a);
     ydebug("present_coro: EXIT");
 }
@@ -904,6 +930,13 @@ static bool render_target_texture_is_busy(const struct yetty_ydraw_target *self)
     const struct yetty_yrender_render_target_texture *rt =
         (const struct yetty_yrender_render_target_texture *)self;
     return rt->present_in_flight != 0;
+}
+
+static void render_target_texture_notify_render_skipped(struct yetty_ydraw_target *self)
+{
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)self;
+    rt->render_skipped_pending = 1;
 }
 
 static struct yetty_ycore_void_result render_target_texture_present(struct yetty_ydraw_target *self)
@@ -1176,6 +1209,7 @@ static const struct yetty_yrender_target_ops render_target_texture_ops = {
      * while the presenter coro is mid-await. Without it we'd queue a
      * second render+submit on top of an unpresented swapchain image. */
     .is_busy = render_target_texture_is_busy,
+    .notify_render_skipped = render_target_texture_notify_render_skipped,
 };
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
@@ -1229,4 +1263,15 @@ void yetty_yrender_target_texture_set_wgpu(struct yetty_ydraw_target *target,
     rt->wgpu = wgpu;
     ydebug("render_target_texture: wgpu plumbed in (%p) — present() will use await path",
            (void *)wgpu);
+}
+
+void yetty_yrender_target_texture_set_event_loop(struct yetty_ydraw_target *target,
+                                                 struct yetty_yevent_event_loop *event_loop)
+{
+    if (!target) {
+        return;
+    }
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)target;
+    rt->event_loop = event_loop;
 }

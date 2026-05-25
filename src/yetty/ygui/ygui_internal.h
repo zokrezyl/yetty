@@ -52,6 +52,65 @@ struct yetty_ygui_render_ctx {
      * after create / CMD_ZERO. When 0: emit only widgets whose dirty
      * bit is set, prefixing each with a DELETE record. */
     int force_full_redraw;
+
+    /* YGRID nesting depth. 0 at engine_render entry. Incremented when
+     * a widget opens an ygrid scope (top-level CREATE_CHILD or nested
+     * CMD_GROUP); decremented on close. open_group_as_kind uses this
+     * to decide between CREATE_CHILD (depth=0) and CMD_GROUP (depth>0):
+     * a top-level widget mints one ygrid figure on the receiver; its
+     * descendants live as named entities (CMD_GROUP) inside that one
+     * ygrid's body. */
+    int ygrid_depth;
+
+    /* Absolute origin of the enclosing top-level ygrid figure. Set
+     * when open_group_as_kind opens a top-level CREATE_CHILD(YGRID)
+     * record; restored when that scope closes. Used to translate
+     * body prim coordinates from widget-local into FIGURE-LOCAL
+     * ABSOLUTE before they hit the wire — the receiver stores prim
+     * coords as-is and the shader expects them figure-local, so the
+     * translation has to happen producer-side.
+     *
+     * Why not "relative on the wire, translate on the receiver" (the
+     * canonical scene-canvas model)? Because per-type coord patching
+     * (SDF prims, glyph records, complex prims …) would have to live
+     * inside ygrid for every prim kind it can carry. Doing the math
+     * once here, in ctx, keeps the receiver coord-agnostic. CMD_GROUP
+     * on the wire is therefore just an entity marker — its body
+     * prims already carry figure-local coords. Move support would
+     * later replace this with the canonical relative model + a
+     * per-handler translate op.
+     *
+     * Formula for any widget:
+     *   ctx->offset_x = self->effective_x - figure_origin_x - self->x
+     *   ctx->offset_y = self->effective_y - figure_origin_y - self->y
+     * Top-level widget (self == figure): offset = -self->x → body
+     * coord = dx (figure-local). Nested widget: offset >= 0 → body
+     * coord = (widget-pos-relative-to-figure) + dx (figure-local). */
+    float figure_origin_x;
+    float figure_origin_y;
+
+    /* Absolute coords of the CURRENT widget's parent, accumulated by
+     * open_group as the tree walk descends. open_group computes the
+     * widget's own absolute = parent_abs + self->x; before descending
+     * into children, parent_abs is set to this widget's absolute and
+     * restored on close. Render code that needs absolute coords uses
+     * this — NOT widget->effective_x/y, which is a layout-time cache
+     * that goes stale whenever an intermediate widget shifts its
+     * position at render time (scrollarea, panel scroll, drag move).
+     * Layout-time effective_x/y remains valid for hit-test / spatial
+     * grid which run between layout and render. */
+    float parent_abs_x;
+    float parent_abs_y;
+
+    /* Side buffer for figures that can't live inside an ygrid body
+     * (yplot/yimage/yvideo/yzoo/yjungle/etc. — kinds with their own
+     * pipeline). When a non-YGRID widget is reached at ygrid_depth>0,
+     * its CREATE_CHILD record is appended here instead of the main
+     * buffer. engine_render appends deferred_buf to buffer after the
+     * tree walk so those figures land at the root container level
+     * as siblings of the chrome ygrid. NULL means "emit everything
+     * to ctx->buffer" (legacy path / tests). */
+    struct yetty_ydraw_draw_list *deferred_buf;
 };
 
 /* Wrap one widget's own drawables in a scene-canvas GROUP keyed by
@@ -70,6 +129,14 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *));
 
+/* Result type returned by open_group / open_group_as_kind. The value
+ * is an opaque marker (encoding byte offset + record kind + dest
+ * buffer + depth-bump flag — see YETTY_YGUI_GROUP_MARKER_* below) that
+ * the caller hands back to close_group. The sentinel
+ * YETTY_YGUI_GROUP_SKIPPED is a legitimate OK value meaning "the
+ * widget was clean and skipped" — close_group treats it as a no-op. */
+YETTY_YRESULT_DECLARE(yetty_ygui_group_marker, uint32_t);
+
 /* Open the widget's CREATE_CHILD record under an explicit figure-kind
  * code (instead of the default YGRID). Used by complex producer widgets
  * (yplot/yimage/yvideo/yzoo/yjungle) so their content lands as its own
@@ -78,20 +145,58 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
  *
  * The default-kind sibling, yetty_ygui_widget_open_group, is just this
  * with kind=YETTY_YFIGURE_KIND_YGRID. */
-uint32_t yetty_ygui_widget_open_group_as_kind(
+struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx, uint32_t kind,
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *));
 
-uint32_t yetty_ygui_widget_open_group(
+struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
                                                 struct yetty_ygui_render_ctx *));
 
-void yetty_ygui_widget_close_group(struct yetty_ygui_widget *self,
-                                   struct yetty_ygui_render_ctx *ctx, uint32_t marker);
+struct yetty_ycore_void_result yetty_ygui_widget_close_group(struct yetty_ygui_widget *self,
+                                                             struct yetty_ygui_render_ctx *ctx,
+                                                             uint32_t marker);
 
 #define YETTY_YGUI_GROUP_SKIPPED UINT32_MAX
+
+/* open_group_as_kind returns a uint32_t marker that close_group hands
+ * back to the matching ydraw end_*. Low 27 bits = byte offset of the
+ * record's length slot (128 MB headroom; ygui buffers are tens of KB).
+ * Top 5 bits are flags:
+ *
+ *   bit 31  KIND_CMD_GRP   the record is CMD_GROUP, not CREATE_CHILD
+ *   bit 30  BUF_DEFERRED   the record lives in ctx->deferred_buf
+ *   bit 29  BUMPED_DEPTH   open pushed ctx->ygrid_depth; close pops
+ *   bit 28  FORCED_FULL    open pushed ctx->force_full_redraw; close
+ *                          pops. Only set for top-level YGRID
+ *                          CREATE_CHILD, where the receiver runs
+ *                          reset_content and wipes the entity tree,
+ *                          forcing every descendant to re-emit.
+ *   bit 27  ROUTED         the top-level record is a plain
+ *                          {length, id, payload} route-to-figure
+ *                          (end_record), not an admin CREATE_CHILD
+ *                          (end_admin_create_child). Used when chrome
+ *                          itself is clean but a nested entity is
+ *                          dirty — the dirty CMD_GROUPs land in
+ *                          chrome's ygrid figure without rebuilding
+ *                          it. NEVER set together with KIND_CMD_GRP.
+ *
+ * YETTY_YGUI_GROUP_SKIPPED is the all-ones sentinel; its offset bits
+ * would be 0x07FFFFFF (128 MB), far beyond any realistic buffer. */
+#define YETTY_YGUI_GROUP_MARKER_OFFSET_MASK  0x03FFFFFFu
+#define YETTY_YGUI_GROUP_MARKER_KIND_CMD_GRP 0x80000000u
+#define YETTY_YGUI_GROUP_MARKER_BUF_DEFERRED 0x40000000u
+#define YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH 0x20000000u
+#define YETTY_YGUI_GROUP_MARKER_FORCED_FULL  0x10000000u
+#define YETTY_YGUI_GROUP_MARKER_ROUTED       0x08000000u
+/* "Transparent" — open emitted no wire record but still pushed
+ * parent_abs / ygrid_depth so descendants compute correct coords and
+ * pick the right depth. close_group pops the state without calling
+ * any end_. Used for clean widgets with dirty descendants on the
+ * hover-cheap path. */
+#define YETTY_YGUI_GROUP_MARKER_NO_RECORD    0x04000000u
 
 /*=============================================================================
  * Theme Structure
@@ -239,11 +344,22 @@ struct yetty_ygui_widget {
     ygui_widget_type_t type;
 
     /* Sequential u32 assigned at widget alloc, stable for the widget's
-     * lifetime. Sent on the wire as the GROUP id so the receiver
-     * (scene-canvas) can route incremental DELETE/GROUP updates back to
-     * the same entity. 0 is reserved for the scene-canvas root, so the
-     * sequence starts at 1. */
+     * lifetime. Sent on the wire as the CMD_GROUP id when this widget
+     * is nested inside an enclosing ygrid figure — i.e. the widget's
+     * identity as a named ENTITY in the receiver's ygrid entity tree.
+     * 0 is reserved for the implicit root entity, so the sequence
+     * starts at 1. */
     uint32_t group_id;
+
+    /* Non-zero when this widget is currently a TOP-LEVEL on the
+     * engine (lives in engine->first_widget..last_widget). Sent on the
+     * wire as the CREATE_CHILD id on the receiver's root
+     * yfigure_container — i.e. the widget's identity as a FIGURE.
+     * Allocated from engine->next_figure_id (a small dense pool, kept
+     * separate from group_id), assigned by add_to_engine, recycled by
+     * pending_figure_deletes on remove. 0 = "not a top-level widget"
+     * (nested widgets only have group_id, no figure_id). */
+    uint32_t figure_id;
 
     /* Set by any setter that changes geometry / styling / text. Cleared
      * after the widget's GROUP is re-emitted. The first frame after
@@ -1003,20 +1119,53 @@ struct yetty_ygui_engine {
     } notifications[8];
     int notification_count;
 
-    /* Producer-side scene-canvas wire state.
+    /* Producer-side wire state — TWO separate id namespaces.
      *
-     * `next_group_id` — sequential u32 assigned to each widget. 0 is
-     * reserved for the receiver's implicit root entity, so the counter
-     * starts at 1.
+     * `next_figure_id` — small dense counter for TOP-LEVEL widgets
+     * only (the ones that emit a CREATE_CHILD on the receiver's root
+     * yfigure_container). Bumped when a widget is added to the engine
+     * root chain; lives in `widget->figure_id`. Used as the
+     * `CREATE_CHILD.id` so the root container's child set stays a
+     * tight dense range (1, 2, 3 for window + popup + toast …),
+     * independent of how many internal widgets the engine has ever
+     * allocated. Recycled via `pending_figure_deletes` when a
+     * top-level widget is removed.
      *
-     * `pending_deletes` — group_ids of widgets that were destroyed or
-     * unparented since the last render. The next render flushes these
-     * as DELETE records at the envelope root before re-emitting any
-     * dirty groups. */
+     * `next_group_id` — sequential u32 assigned to EVERY widget on
+     * alloc, kept for the widget's lifetime. Used as the
+     * `CMD_GROUP.id` inside the enclosing ygrid's body — i.e. the
+     * widget's identity as a named entity in the receiver's entity
+     * table. 0 is reserved for the implicit root entity. Sparse
+     * keys here are fine: the entity table uses an id_index hash and
+     * dense internal slots.
+     *
+     * `pending_deletes` — group_ids whose CMD_GROUP entities the
+     * receiver should drop (widget destroyed / re-parented out of a
+     * scope). Flushed inside the enclosing ygrid's body update.
+     *
+     * `pending_figure_deletes` — figure_ids the root container should
+     * drop (top-level widget destroyed / re-parented out of root).
+     * Flushed as `DELETE_CHILD` admin records at envelope root.
+     *
+     * `free_figure_ids` — pool of figure_ids retired by
+     * pending_figure_deletes that are now safe to hand out again.
+     * Without this, next_figure_id is monotonic — long-running
+     * sessions of widget create/destroy churn (popup-menus, toast
+     * notifications) would exhaust the u32 space and eventually
+     * collide with still-live ids. add_to_engine pops from here
+     * before bumping next_figure_id; engine_queue_pending_figure_delete
+     * pushes onto it. */
+    uint32_t next_figure_id;
     uint32_t next_group_id;
     uint32_t *pending_deletes;
     uint32_t pending_delete_count;
     uint32_t pending_delete_cap;
+    uint32_t *pending_figure_deletes;
+    uint32_t pending_figure_delete_count;
+    uint32_t pending_figure_delete_cap;
+    uint32_t *free_figure_ids;
+    uint32_t free_figure_id_count;
+    uint32_t free_figure_id_cap;
 
     /* Set to 1 by engine_create / scene_clear / CMD_ZERO emission;
      * forces the next render to be a full-tree redraw (every widget is
@@ -1250,6 +1399,24 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
  * that public engine_render does. Used by in-process consumers
  * (yui, tools/ycompositor-ygui) that read engine->buffer directly. */
 struct yetty_ycore_void_result yetty_ygui_engine_rebuild(struct yetty_ygui_engine *engine);
+
+/* Same as above but parameterised. full_redraw=1 → every visible
+ * widget re-emits its CREATE_CHILD regardless of its dirty bit (caller
+ * is expected to lead the buffer with CLEAR_ALL). full_redraw=0 → only
+ * widgets with dirty=1 emit, and engine->pending_deletes are flushed
+ * as DELETE_CHILD records first. Combined with the receiver's reset_
+ * content fast path this turns yui chrome hover into a tiny upload
+ * instead of a full pipeline rebuild per frame. */
+struct yetty_ycore_void_result yetty_ygui_engine_rebuild_with_mode(
+    struct yetty_ygui_engine *engine, int full_redraw);
+
+/* Lead the wire envelope with either a CLEAR_ALL (full_redraw=1) or a
+ * burst of DELETE_CHILD records for queued figure / group ids
+ * (full_redraw=0), then clear the queues. Shared between
+ * yetty_ygui_engine_render (OSC envelope) and yetty_yui_render
+ * (in-process compositor) so the two render entry points can't drift. */
+struct yetty_ycore_void_result yetty_ygui_engine_emit_pending_deletes(
+    struct yetty_ygui_engine *engine, int full_redraw);
 
 /* Emit the init OSC handshake (cell size query, subscribe_clicks/moves,
  * CARD_PLACE, CANVAS_FIT placeholder). Called from

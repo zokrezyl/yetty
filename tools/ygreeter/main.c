@@ -2291,6 +2291,11 @@ int main(int argc, char **argv)
     if (getenv("YGREETER_START_IMAGES")) {
         yetty_ygui_widget_tabbar_set_active(app.tabbar, g_images_tab_index);
     }
+    /* DEBUG: jump straight to the Elements tab (index 4) so the
+     * activate path is exercised without needing a mouse click. */
+    if (getenv("YGREETER_START_ELEMENTS")) {
+        yetty_ygui_widget_tabbar_set_active(app.tabbar, 4);
+    }
     /* engine_create already sent the init handshake; the real pixel size
      * arrives via SC_RESIZE on the loop. The window stays at its authored
      * 100x100 until then — on_resize installs the real size as soon as

@@ -272,14 +272,24 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *name,
     engine->cell_width = 0.0f;
     engine->cell_height = 0.0f;
 
-    /* Wire state — sequential u32 ids start at 1 (0 = receiver root).
-     * First render is a full redraw (CMD_ZERO + entire tree); after that
-     * the producer only ships DELETE+GROUP for dirty subtrees. */
+    /* Wire state — TWO id namespaces (see struct doc):
+     *   next_figure_id: small dense pool for top-level widgets (root
+     *                   container's CREATE_CHILD ids).
+     *   next_group_id : per-widget lifetime id for CMD_GROUP entities
+     *                   inside an ygrid body.
+     * First render is a full redraw (CLEAR_ALL + entire tree). */
+    engine->next_figure_id = 1;
     engine->next_group_id = 1;
     engine->needs_full_redraw = 1;
     engine->pending_deletes = NULL;
     engine->pending_delete_count = 0;
     engine->pending_delete_cap = 0;
+    engine->pending_figure_deletes = NULL;
+    engine->pending_figure_delete_count = 0;
+    engine->pending_figure_delete_cap = 0;
+    engine->free_figure_ids = NULL;
+    engine->free_figure_id_count = 0;
+    engine->free_figure_id_cap = 0;
 
     /* View state defaults */
     engine->view_zoom = 1.0f;
@@ -506,6 +516,8 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
 
     /* Free card name */
     free(engine->pending_deletes);
+    free(engine->pending_figure_deletes);
+    free(engine->free_figure_ids);
     free(engine->card_name);
 
     /* Free dedup cache */
@@ -670,7 +682,24 @@ static struct yetty_ycore_void_result engine_rebuild_with_mode(struct yetty_ygui
     yetty_ygui_render_ctx_init(&ctx, engine->buffer, engine->theme);
     ctx.force_full_redraw = full_redraw;
 
-    /* Render all top-level widgets */
+    /* Allocate a per-frame deferred buffer. Non-YGRID figures (yplot /
+     * yimage / yvideo / yzoo / yjungle) that get reached from inside an
+     * enclosing window's ygrid body cannot live in that body (they need
+     * their own pipeline), so open_group_as_kind routes their
+     * CREATE_CHILD here. The bytes are concatenated to engine->buffer
+     * after the tree walk → they land at the root container level as
+     * siblings of the chrome ygrid. */
+    {
+        struct yetty_ydraw_draw_list_result dr =
+            yetty_ydraw_draw_list_config_buffer_create(NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr,
+                            "engine_rebuild: deferred buffer create failed");
+        ctx.deferred_buf = dr.value;
+    }
+
+    /* Render all top-level widgets. Errors are chained: bail to the
+     * cleanup tail on first widget error so the deferred buffer is
+     * always destroyed. */
     for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
         struct yetty_ycore_void_result r;
         if (w->vtable && w->vtable->render_all) {
@@ -679,12 +708,33 @@ static struct yetty_ycore_void_result engine_rebuild_with_mode(struct yetty_ygui
             r = yetty_ygui_widget_render_all_default(w, &ctx);
         }
         if (YETTY_IS_ERR(r)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = r;
-            } else {
-                yetty_ycore_error_destroy(r.error);
+            first_err = r;
+            break;
+        }
+    }
+
+    /* Drain deferred CREATE_CHILD records into the main buffer. They
+     * land AFTER every top-level widget's CREATE_CHILD has been
+     * appended, so on the receiver they're container-level siblings of
+     * the chrome ygrids — drawn on top of the window they're logically
+     * nested in (which matches their previous behaviour as flat
+     * top-level figures). Always destroy the deferred buffer; chain
+     * any drain error into first_err if it isn't already set. */
+    if (ctx.deferred_buf) {
+        if (YETTY_IS_OK(first_err)) {
+            const uint8_t *bytes = (const uint8_t *)yetty_ydraw_draw_list_data(ctx.deferred_buf);
+            size_t sz = yetty_ydraw_draw_list_size(ctx.deferred_buf);
+            if (bytes && sz > 0) {
+                struct yetty_ydraw_id_result wr =
+                    yetty_ydraw_draw_list_add_prim(engine->buffer, bytes, sz);
+                if (YETTY_IS_ERR(wr)) {
+                    first_err = YETTY_ERR(yetty_ycore_void,
+                                          "engine_rebuild: deferred buffer drain failed", wr);
+                }
             }
         }
+        yetty_ydraw_draw_list_destroy(ctx.deferred_buf);
+        ctx.deferred_buf = NULL;
     }
 
     /* Rebuild spatial grid with rendered widgets */
@@ -724,6 +774,44 @@ struct yetty_ycore_void_result yetty_ygui_engine_layout(struct yetty_ygui_engine
     return yetty_ygui_layout_compute_engine(engine);
 }
 
+struct yetty_ycore_void_result yetty_ygui_engine_emit_pending_deletes(
+    struct yetty_ygui_engine *engine, int full_redraw)
+{
+    if (!engine || !engine->buffer) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "engine_emit_pending_deletes: NULL engine or buffer");
+    }
+    if (full_redraw) {
+        struct yetty_ycore_void_result zr =
+            yetty_ydraw_draw_list_add_admin_clear_all(engine->buffer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, zr,
+                            "engine_emit_pending_deletes: CLEAR_ALL");
+        /* CLEAR_ALL supersedes any queued deletes from the prior frame. */
+        engine->pending_delete_count = 0;
+        engine->pending_figure_delete_count = 0;
+        return YETTY_OK_VOID();
+    }
+    /* Top-level widgets that left the engine root → DELETE_CHILD on
+     * the receiver's root container, keyed by figure_id. */
+    for (uint32_t i = 0; i < engine->pending_figure_delete_count; i++) {
+        struct yetty_ycore_void_result dr = yetty_ydraw_draw_list_add_admin_delete_child(
+            engine->buffer, engine->pending_figure_deletes[i]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr,
+                            "engine_emit_pending_deletes: figure DELETE_CHILD");
+    }
+    engine->pending_figure_delete_count = 0;
+    /* CMD_GROUP entities inside an ygrid body. Currently emitted as
+     * flat top-level DELETE_CHILD; the receiver tolerates unknown ids. */
+    for (uint32_t i = 0; i < engine->pending_delete_count; i++) {
+        struct yetty_ycore_void_result dr = yetty_ydraw_draw_list_add_admin_delete_child(
+            engine->buffer, engine->pending_deletes[i]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr,
+                            "engine_emit_pending_deletes: group DELETE_CHILD");
+    }
+    engine->pending_delete_count = 0;
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine *engine)
 {
     if (!engine || !engine->buffer) {
@@ -744,46 +832,16 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
      * effect on the receiver until we ship the envelope). */
     yetty_ydraw_draw_list_clear(engine->buffer);
 
-    /* 1a. Force full-redraw on every frame — the ycompositor receiver
-     * (current production target) builds one yfigure_group + ygrid per
-     * TOP-LEVEL CMD_GROUP and merges nested CMD_GROUPs into the
-     * outermost figure's ygrid via offset accumulation. That model
-     * does not support incremental updates to nested widgets: a
-     * mid-tree CMD_GROUP on a dirty descendant ends up as a NEW
-     * top-level figure layered on top of the still-existing parent
-     * (whose ygrid already paints that widget's pixels) — visible as
-     * double-paint + z-order jump on every hover. Issue #229 covers
-     * the analysis.
-     *
-     * Until per-widget figures (or a parent_id wire field) land,
-     * every emission re-emits the whole tree. CMD_ZERO at the head
-     * wipes the producer's previous frame from the receiver; the
-     * nested CMD_GROUPs re-create the figure with stable insertion
-     * order (= stable z-order). The cost is a full WebGPU rebuild
-     * per frame, which is acceptable while ygreeter / ytop are the
-     * dominant producers. */
-    int full_redraw = 1;
-    (void)engine->card_shown;
-    (void)engine->needs_full_redraw;
-    if (full_redraw) {
-        struct yetty_ycore_void_result zr =
-            yetty_ydraw_draw_list_add_admin_clear_all(engine->buffer);
-        if (YETTY_IS_ERR(zr)) {
-            yetty_ycore_error_destroy(zr.error);
-        }
-        /* CLEAR_ALL supersedes any queued deletes from the prior frame. */
-        engine->pending_delete_count = 0;
-    } else {
-        /* Flush all queued DELETEs for destroyed / unparented widgets. */
-        for (uint32_t i = 0; i < engine->pending_delete_count; i++) {
-            struct yetty_ycore_void_result dr = yetty_ydraw_draw_list_add_admin_delete_child(
-                engine->buffer, engine->pending_deletes[i]);
-            if (YETTY_IS_ERR(dr)) {
-                yetty_ycore_error_destroy(dr.error);
-            }
-        }
-        engine->pending_delete_count = 0;
-    }
+    /* Full redraw on the first frame (no card yet) or when something
+     * affects the whole tree (resize, theme swap, engine_clear,
+     * mark_dirty). Everything else goes incremental: only dirty
+     * widgets re-emit their CREATE_CHILD, which the receiver applies
+     * as an in-place swap of the figure pointer — the hash entry
+     * stays put, so z-order is preserved even for overlays. */
+    int full_redraw = engine->needs_full_redraw || !engine->card_shown;
+    struct yetty_ycore_void_result fd =
+        yetty_ygui_engine_emit_pending_deletes(engine, full_redraw);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fd, "engine_render: emit_pending_deletes");
 
     /* 2. Set explicit scene bounds to match full canvas */
     yetty_ydraw_draw_list_set_scene_bounds(engine->buffer, 0, 0, engine->width, engine->height);
@@ -862,9 +920,10 @@ struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
                                            "bootstrap must run before any OSC emission");
     }
 
-    /* Cell size query — host replies via OSC and runtime stores it. */
-    struct yetty_ycore_void_result qr = yetty_ygui_osc_query_cell_size(engine->output_pty);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, qr, "engine_emit_handshake: query_cell_size failed");
+    /* No cell-size query. engine->cell_width / cell_height are written
+     * by the CSI response handler but only read by a debug log; the
+     * coordinate path uses pixel-size from TIOCGWINSZ. ymarkdown bakes
+     * its own monospace defaults (cell_w=8, cell_h=16). */
 
     /* Subscribe to click AND move events (move needed for slider drag) */
     struct yetty_ycore_void_result sc_r = yetty_ygui_osc_subscribe_clicks(engine->output_pty, 1);
@@ -923,6 +982,9 @@ void yetty_ygui_engine_mouse_move(struct yetty_ygui_engine *engine, float x, flo
     }
 
     struct yetty_ygui_widget *hit = yetty_ygui_grid_query(&engine->grid, x, y);
+    ydebug("engine_mouse_move: x=%.1f y=%.1f hit=%s prev_hover=%s", x, y,
+           hit ? (hit->id ? hit->id : "?") : "NULL",
+           engine->hovered ? (engine->hovered->id ? engine->hovered->id : "?") : "NULL");
 
     /* Handle hover changes — only the two affected widgets need re-emitting. */
     if (hit != engine->hovered) {
@@ -2272,6 +2334,7 @@ void yetty_ygui_engine_clear(struct yetty_ygui_engine *engine)
     /* All widgets gone — next render is a full redraw with CMD_ZERO. */
     engine->needs_full_redraw = 1;
     engine->pending_delete_count = 0;
+    engine->pending_figure_delete_count = 0;
 }
 
 /*=============================================================================
@@ -2320,6 +2383,12 @@ void yetty_ygui_engine_subscribe_moves(struct yetty_ygui_engine *engine, int ena
 struct yetty_ycore_void_result yetty_ygui_engine_rebuild(struct yetty_ygui_engine *engine)
 {
     return engine_rebuild_with_mode(engine, /*full_redraw=*/1);
+}
+
+struct yetty_ycore_void_result yetty_ygui_engine_rebuild_with_mode(
+    struct yetty_ygui_engine *engine, int full_redraw)
+{
+    return engine_rebuild_with_mode(engine, full_redraw);
 }
 
 /*=============================================================================
