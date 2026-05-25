@@ -214,23 +214,28 @@ struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
     float gw = (float)self->layout_w;
     float gh = (float)self->layout_h;
 
-    /* Three emission cases:
-     *   1. Top-level YGRID (ygrid_depth=0):
-     *        emit CREATE_CHILD(YGRID) into ctx->buffer; mints one
-     *        ygrid figure on the receiver. Descendants nest as
-     *        CMD_GROUP entities inside this ygrid's body.
-     *   2. Nested YGRID (ygrid_depth>0):
-     *        emit CMD_GROUP(id) into ctx->buffer — the bytes go inside
-     *        the enclosing ygrid's body and become a named entity.
-     *        No new figure on the receiver — same binder, same atlas,
-     *        same pipeline.
-     *   3. Non-YGRID widget (yplot/yimage/yvideo/…):
-     *        these need their own pipeline; can't live inside an ygrid
-     *        body. If at depth=0, emit CREATE_CHILD into ctx->buffer.
-     *        If at depth>0, route the CREATE_CHILD to ctx->deferred_buf
-     *        so it lands at the root container level as a sibling of
-     *        the enclosing window's ygrid (engine_render concatenates
-     *        deferred_buf after the main pass). */
+    /* Four emission cases:
+     *   1. Top-level YGRID CREATE_CHILD (kind=YGRID, depth=0, self
+     *        dirty OR no figure yet): admin CREATE_CHILD mints/rebuilds
+     *        chrome's ygrid figure on the receiver. Triggers
+     *        reset_content → wipes the entity tree → force_full_redraw
+     *        so every descendant re-emits.
+     *   2. Top-level YGRID ROUTED (kind=YGRID, depth=0, self CLEAN but
+     *        a descendant entity is dirty): plain routed record with
+     *        id=figure_id. The body lands directly in chrome's
+     *        ygrid.process_bytes — only the dirty descendants' CMD_
+     *        GROUPs are shipped, chrome's own prims and clean entities
+     *        survive untouched. The hover-cheap path.
+     *   3. Nested YGRID (kind=YGRID, depth>0):
+     *        emit CMD_GROUP(id) into ctx->buffer when dirty.
+     *        Clean widgets with a dirty descendant return SKIPPED so
+     *        the caller's render_all_default still recurses but no
+     *        CMD_GROUP is written — the dirty leaf emits its
+     *        CMD_GROUP directly. The receiver's id_index looks up the
+     *        entity by id regardless of nesting in the wire.
+     *   4. Non-YGRID widget (yplot/yimage/yvideo/…) at depth>0:
+     *        CREATE_CHILD goes to ctx->deferred_buf, landing as a
+     *        root-container-level sibling after the main pass. */
     uint32_t marker;
     uint32_t depth_bit = 0;
     /* Destination buffer for this open's begin record — recorded so a
@@ -240,40 +245,61 @@ struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
     struct yetty_ydraw_draw_list *dst = ctx->buffer;
     size_t pre_open_size = yetty_ydraw_draw_list_size(ctx->buffer);
     if (kind == YETTY_YFIGURE_KIND_YGRID && ctx->ygrid_depth > 0) {
-        /* Nested → CMD_GROUP, keyed by self->group_id (entity id
-         * inside the enclosing ygrid figure). */
-        struct yetty_ydraw_id_result mark_res =
-            yetty_ydraw_draw_list_begin_group(ctx->buffer, self->group_id);
-        YETTY_RETURN_IF_ERR(yetty_ygui_group_marker, mark_res, "open_group: begin_group");
-        marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) |
-                 YETTY_YGUI_GROUP_MARKER_KIND_CMD_GRP;
-        depth_bit = YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH;
+        /* Case 3: nested YGRID. */
+        if (!self->dirty && !ctx->force_full_redraw) {
+            /* Clean entity with dirty descendants — emit no CMD_GROUP
+             * for self; the dirty leaf below will emit its own
+             * CMD_GROUP which the receiver routes to its entity by
+             * id_index lookup. Still need to push parent_abs +
+             * ygrid_depth (already inside an ygrid scope, no bump
+             * needed) so the descendant computes correct coords; use
+             * the NO_RECORD marker so close_group just pops state. */
+            marker = YETTY_YGUI_GROUP_MARKER_NO_RECORD;
+            /* depth_bit stays 0: we're not opening a new figure scope,
+             * and the enclosing chrome already bumped depth to 1. */
+        } else {
+            struct yetty_ydraw_id_result mark_res =
+                yetty_ydraw_draw_list_begin_group(ctx->buffer, self->group_id);
+            YETTY_RETURN_IF_ERR(yetty_ygui_group_marker, mark_res, "open_group: begin_group");
+            marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) |
+                     YETTY_YGUI_GROUP_MARKER_KIND_CMD_GRP;
+            depth_bit = YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH;
+        }
     } else {
-        /* Top-level (or non-YGRID kind) → CREATE_CHILD on the
-         * receiver's root container, keyed by self->figure_id (small
-         * dense pool, separate from group_id). figure_id is 0 only if
-         * this widget was never added to engine root — fall back to
-         * group_id in that defensive case. */
         uint32_t figure_id = self->figure_id ? self->figure_id : self->group_id;
         uint32_t buf_bit = 0;
         if (kind != YETTY_YFIGURE_KIND_YGRID && ctx->ygrid_depth > 0 && ctx->deferred_buf) {
+            /* Case 4: non-YGRID deferred. */
             dst = ctx->deferred_buf;
             pre_open_size = yetty_ydraw_draw_list_size(dst);
             buf_bit = YETTY_YGUI_GROUP_MARKER_BUF_DEFERRED;
         }
-        ydebug("open_group create_child: id=%s kind=%u figure_id=%u deferred=%d "
-               "rect=(%.1f,%.1f)-(%.1f,%.1f) self->x=%d self->y=%d "
-               "parent_abs=(%.1f,%.1f) self_abs=(%.1f,%.1f)",
-               self->id ? self->id : "?", kind, figure_id, buf_bit ? 1 : 0, gx, gy, gx + gw, gy + gh,
-               (int)self->x, (int)self->y, ctx->parent_abs_x, ctx->parent_abs_y, self_abs_x,
-               self_abs_y);
-        struct yetty_ydraw_id_result mark_res = yetty_ydraw_draw_list_begin_admin_create_child(
-            dst, figure_id, kind, gx, gy, gx + gw, gy + gh);
-        YETTY_RETURN_IF_ERR(yetty_ygui_group_marker, mark_res,
-                            "open_group: begin_admin_create_child");
-        marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) | buf_bit;
-        if (kind == YETTY_YFIGURE_KIND_YGRID) {
+        /* Case 2: top-level YGRID, chrome itself clean, but a nested
+         * entity is dirty. Ship a routed record so chrome's figure
+         * isn't rebuilt — the receiver pipes the body straight into
+         * the existing ygrid's process_bytes. Gated on figure_id != 0
+         * because the routing target is the figure_id; without it the
+         * receiver can't dispatch. */
+        int route_to_existing = (kind == YETTY_YFIGURE_KIND_YGRID && ctx->ygrid_depth == 0 &&
+                                 !self->dirty && self->figure_id != 0);
+        if (route_to_existing) {
+            struct yetty_ydraw_id_result mark_res =
+                yetty_ydraw_draw_list_begin_record(dst, figure_id);
+            YETTY_RETURN_IF_ERR(yetty_ygui_group_marker, mark_res, "open_group: begin_record");
+            marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) | buf_bit |
+                     YETTY_YGUI_GROUP_MARKER_ROUTED;
             depth_bit = YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH;
+        } else {
+            /* Case 1: top-level YGRID CREATE_CHILD (mints / rebuilds).
+             * Also the non-YGRID top-level/deferred paths. */
+            struct yetty_ydraw_id_result mark_res = yetty_ydraw_draw_list_begin_admin_create_child(
+                dst, figure_id, kind, gx, gy, gx + gw, gy + gh);
+            YETTY_RETURN_IF_ERR(yetty_ygui_group_marker, mark_res,
+                                "open_group: begin_admin_create_child");
+            marker = (mark_res.value & YETTY_YGUI_GROUP_MARKER_OFFSET_MASK) | buf_bit;
+            if (kind == YETTY_YFIGURE_KIND_YGRID) {
+                depth_bit = YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH;
+            }
         }
     }
 
@@ -307,15 +333,18 @@ struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
      * the receiver had under us. Without force_full_redraw, a clean
      * descendant skips its CMD_GROUP and the widget vanishes.
      *
-     * For nested CMD_GROUP this would be wrong: entity_lookup_or_create
+     * Skip the bump for the ROUTED path (case 2 above) — that record
+     * does NOT trigger reset_content, so clean descendants' entities
+     * survive and forcing them to re-emit would defeat the hover-
+     * cheap optimisation.
+     *
+     * For nested CMD_GROUP this would be wrong too: entity_lookup_or_create
      * drops only this entity's own prims and keeps the children intact,
      * so clean descendants' entities survive — forcing them to re-emit
-     * defeats the incremental design. For non-YGRID figures (yplot,
-     * yimage, …) the kind has no children at all.
-     *
-     * Marker bit 28 tells close_group to pop only when open pushed. */
+     * defeats the incremental design. */
+    int is_routed = (marker & YETTY_YGUI_GROUP_MARKER_ROUTED) != 0;
     uint32_t forced_full_bit = 0;
-    if (we_are_top_level_ygrid) {
+    if (we_are_top_level_ygrid && !is_routed) {
         ctx->force_full_redraw++;
         forced_full_bit = YETTY_YGUI_GROUP_MARKER_FORCED_FULL;
         marker |= forced_full_bit;
@@ -331,7 +360,17 @@ struct yetty_ygui_group_marker_result yetty_ygui_widget_open_group_as_kind(
     ctx->parent_abs_x = self_abs_x;
     ctx->parent_abs_y = self_abs_y;
 
-    if (render_fn) {
+    /* render_fn paints SELF's own prims. Skip it on the cheap paths
+     * (ROUTED / NO_RECORD) because the receiver already has those
+     * prims from a prior frame — re-emitting them would either
+     * duplicate (ROUTED: free-floating ADDs land at ygrid ROOT) or
+     * pollute the chrome's body (NO_RECORD: the parent's body has no
+     * CMD_GROUP scope to route them into). Self emitted only in
+     * cases 1 (CREATE_CHILD, reset_content wiped everything) and 3
+     * (nested CMD_GROUP, this entity's prims explicitly replaced). */
+    int self_emits_body = !((marker & YETTY_YGUI_GROUP_MARKER_NO_RECORD) ||
+                            (marker & YETTY_YGUI_GROUP_MARKER_ROUTED));
+    if (render_fn && self_emits_body) {
         float saved_off_x = ctx->offset_x;
         float saved_off_y = ctx->offset_y;
         /* Body prims arrive in parent-local coords (caller writes
@@ -421,14 +460,23 @@ struct yetty_ycore_void_result yetty_ygui_widget_close_group(struct yetty_ygui_w
     int is_deferred = (marker & YETTY_YGUI_GROUP_MARKER_BUF_DEFERRED) != 0;
     int bumped_depth = (marker & YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH) != 0;
     int forced_full = (marker & YETTY_YGUI_GROUP_MARKER_FORCED_FULL) != 0;
+    int is_routed = (marker & YETTY_YGUI_GROUP_MARKER_ROUTED) != 0;
+    int no_record = (marker & YETTY_YGUI_GROUP_MARKER_NO_RECORD) != 0;
     struct yetty_ydraw_draw_list *buf = is_deferred ? ctx->deferred_buf : ctx->buffer;
     if (!buf) {
         buf = ctx->buffer;
     }
-    struct yetty_ycore_void_result er = is_cmd_group
-                                            ? yetty_ydraw_draw_list_end_group(buf, offset)
-                                            : yetty_ydraw_draw_list_end_admin_create_child(buf,
-                                                                                           offset);
+    struct yetty_ycore_void_result er = YETTY_OK_VOID();
+    if (no_record) {
+        /* Transparent path: open didn't emit any wire record, only
+         * pushed parent_abs / dirty bookkeeping. Nothing to end. */
+    } else if (is_cmd_group) {
+        er = yetty_ydraw_draw_list_end_group(buf, offset);
+    } else if (is_routed) {
+        er = yetty_ydraw_draw_list_end_record(buf, offset);
+    } else {
+        er = yetty_ydraw_draw_list_end_admin_create_child(buf, offset);
+    }
     /* Depth + force-redraw counter must be restored AND dirty must be
      * cleared even if end_ failed — otherwise the bumps (and the
      * widget's dirty bit) would leak into the next render. Treat as

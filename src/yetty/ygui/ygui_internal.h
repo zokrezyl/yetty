@@ -162,9 +162,9 @@ struct yetty_ycore_void_result yetty_ygui_widget_close_group(struct yetty_ygui_w
 #define YETTY_YGUI_GROUP_SKIPPED UINT32_MAX
 
 /* open_group_as_kind returns a uint32_t marker that close_group hands
- * back to the matching ydraw end_*. Low 28 bits = byte offset of the
- * record's length slot (256 MB headroom; ygui buffers are tens of KB).
- * Top 4 bits are flags:
+ * back to the matching ydraw end_*. Low 27 bits = byte offset of the
+ * record's length slot (128 MB headroom; ygui buffers are tens of KB).
+ * Top 5 bits are flags:
  *
  *   bit 31  KIND_CMD_GRP   the record is CMD_GROUP, not CREATE_CHILD
  *   bit 30  BUF_DEFERRED   the record lives in ctx->deferred_buf
@@ -174,14 +174,29 @@ struct yetty_ycore_void_result yetty_ygui_widget_close_group(struct yetty_ygui_w
  *                          CREATE_CHILD, where the receiver runs
  *                          reset_content and wipes the entity tree,
  *                          forcing every descendant to re-emit.
+ *   bit 27  ROUTED         the top-level record is a plain
+ *                          {length, id, payload} route-to-figure
+ *                          (end_record), not an admin CREATE_CHILD
+ *                          (end_admin_create_child). Used when chrome
+ *                          itself is clean but a nested entity is
+ *                          dirty — the dirty CMD_GROUPs land in
+ *                          chrome's ygrid figure without rebuilding
+ *                          it. NEVER set together with KIND_CMD_GRP.
  *
  * YETTY_YGUI_GROUP_SKIPPED is the all-ones sentinel; its offset bits
- * would be 0x0FFFFFFF (256 MB), far beyond any realistic buffer. */
-#define YETTY_YGUI_GROUP_MARKER_OFFSET_MASK  0x0FFFFFFFu
+ * would be 0x07FFFFFF (128 MB), far beyond any realistic buffer. */
+#define YETTY_YGUI_GROUP_MARKER_OFFSET_MASK  0x03FFFFFFu
 #define YETTY_YGUI_GROUP_MARKER_KIND_CMD_GRP 0x80000000u
 #define YETTY_YGUI_GROUP_MARKER_BUF_DEFERRED 0x40000000u
 #define YETTY_YGUI_GROUP_MARKER_BUMPED_DEPTH 0x20000000u
 #define YETTY_YGUI_GROUP_MARKER_FORCED_FULL  0x10000000u
+#define YETTY_YGUI_GROUP_MARKER_ROUTED       0x08000000u
+/* "Transparent" — open emitted no wire record but still pushed
+ * parent_abs / ygrid_depth so descendants compute correct coords and
+ * pick the right depth. close_group pops the state without calling
+ * any end_. Used for clean widgets with dirty descendants on the
+ * hover-cheap path. */
+#define YETTY_YGUI_GROUP_MARKER_NO_RECORD    0x04000000u
 
 /*=============================================================================
  * Theme Structure
