@@ -19,6 +19,7 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,6 +81,109 @@ static void entry_destroy(struct child_entry *e, struct yetty_ycore_void_result 
         }
     }
     free(e);
+}
+
+/*===========================================================================
+ * Polymorphic dump — base wrapper + a tiny string-builder used by both
+ * the container's own dump impl and the YAML fallback when a concrete
+ * figure doesn't provide one.
+ *=========================================================================*/
+
+/* Grow-as-needed heap string. NULL `buf` starts a fresh allocation.
+ * Returns the new buffer or NULL on OOM (in which case the old buffer
+ * is freed). */
+static char *dump_appendf(char *buf, size_t *len, size_t *cap, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    /* Snprintf needs a real buffer to measure; do it the safe way:
+     * try once into the remaining slot, grow if it didn't fit. */
+    if (!buf) {
+        *len = 0;
+        *cap = 64;
+        buf = (char *)malloc(*cap);
+        if (!buf) {
+            va_end(ap);
+            return NULL;
+        }
+        buf[0] = '\0';
+    }
+    va_list ap2;
+    va_copy(ap2, ap);
+    int need = vsnprintf(NULL, 0, fmt, ap2);
+    va_end(ap2);
+    if (need < 0) {
+        va_end(ap);
+        return buf;
+    }
+    size_t want = *len + (size_t)need + 1u;
+    if (want > *cap) {
+        size_t ncap = *cap ? *cap : 64;
+        while (ncap < want) {
+            ncap *= 2;
+        }
+        char *grown = (char *)realloc(buf, ncap);
+        if (!grown) {
+            free(buf);
+            va_end(ap);
+            return NULL;
+        }
+        buf = grown;
+        *cap = ncap;
+    }
+    int wrote = vsnprintf(buf + *len, *cap - *len, fmt, ap);
+    va_end(ap);
+    if (wrote < 0) {
+        return buf;
+    }
+    *len += (size_t)wrote;
+    return buf;
+}
+
+static void dump_indent_spaces(char *buf, size_t cap, int indent)
+{
+    int n = indent;
+    if (n < 0) {
+        n = 0;
+    }
+    if ((size_t)n + 1u > cap) {
+        n = (int)cap - 1;
+    }
+    for (int i = 0; i < n; i++) {
+        buf[i] = ' ';
+    }
+    buf[n] = '\0';
+}
+
+char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent)
+{
+    if (!self) {
+        char *out = (char *)malloc(8);
+        if (out) {
+            snprintf(out, 8, "null\n");
+        }
+        return out;
+    }
+    if (self->ops && self->ops->dump) {
+        return self->ops->dump(self, indent);
+    }
+    /* Fallback: just rect + dirty. Concrete kinds that haven't migrated
+     * to a real dump still produce something testable. */
+    char pad[64];
+    dump_indent_spaces(pad, sizeof(pad), indent);
+    size_t len = 0, cap = 0;
+    char *buf = NULL;
+    buf = dump_appendf(buf, &len, &cap, "%skind: unknown\n", pad);
+    if (!buf) {
+        return NULL;
+    }
+    buf = dump_appendf(buf, &len, &cap, "%srect: [%.1f, %.1f, %.1f, %.1f]\n", pad, self->rect.min.x,
+                       self->rect.min.y, self->rect.max.x, self->rect.max.y);
+    if (!buf) {
+        return NULL;
+    }
+    buf = dump_appendf(buf, &len, &cap, "%sdirty: %d\n", pad, self->dirty);
+    return buf;
 }
 
 /*===========================================================================
@@ -468,6 +572,63 @@ static struct yetty_ycore_void_result container_process_input(
     return yetty_yfigure_container_consume_envelope(g, sm);
 }
 
+static char *container_dump(const struct yetty_yfigure_figure *self, int indent)
+{
+    const struct yetty_yfigure_container *g = (const struct yetty_yfigure_container *)self;
+    char pad[64];
+    dump_indent_spaces(pad, sizeof(pad), indent);
+    size_t len = 0, cap = 0;
+    char *buf = NULL;
+    buf = dump_appendf(buf, &len, &cap, "%skind: container\n", pad);
+    if (!buf) {
+        return NULL;
+    }
+    buf = dump_appendf(buf, &len, &cap, "%srect: [%.1f, %.1f, %.1f, %.1f]\n", pad, self->rect.min.x,
+                       self->rect.min.y, self->rect.max.x, self->rect.max.y);
+    if (!buf) {
+        return NULL;
+    }
+    buf = dump_appendf(buf, &len, &cap, "%sdirty: %d\n", pad, self->dirty);
+    if (!buf) {
+        return NULL;
+    }
+    buf = dump_appendf(buf, &len, &cap, "%sviewport_offset: [%.1f, %.1f]\n", pad,
+                       g->viewport_offset_x, g->viewport_offset_y);
+    if (!buf) {
+        return NULL;
+    }
+    /* Children section. uthash iter walks insertion order = z-order
+     * (back-to-front), which matches the render order. Tests can assert
+     * z-order from the line order in the dump. Empty when no children. */
+    if (!g->children) {
+        buf = dump_appendf(buf, &len, &cap, "%schildren: {}\n", pad);
+        return buf;
+    }
+    buf = dump_appendf(buf, &len, &cap, "%schildren:\n", pad);
+    if (!buf) {
+        return NULL;
+    }
+    struct child_entry *e, *tmp;
+    HASH_ITER(hh, g->children, e, tmp)
+    {
+        buf = dump_appendf(buf, &len, &cap, "%s  '%u':\n", pad, e->id);
+        if (!buf) {
+            return NULL;
+        }
+        char *child_dump = yetty_yfigure_dump(e->figure, indent + 4);
+        if (!child_dump) {
+            free(buf);
+            return NULL;
+        }
+        buf = dump_appendf(buf, &len, &cap, "%s", child_dump);
+        free(child_dump);
+        if (!buf) {
+            return NULL;
+        }
+    }
+    return buf;
+}
+
 static const struct yetty_yfigure_figure_ops *group_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
@@ -475,6 +636,7 @@ static const struct yetty_yfigure_figure_ops *group_ops(void)
         .render = group_render,
         .process_input = container_process_input,
         .process_bytes = container_process_bytes,
+        .dump = container_dump,
     };
     return &ops;
 }

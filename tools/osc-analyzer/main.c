@@ -44,10 +44,18 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/drawable-iterator.h>
+#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-core/flyweight.h>
+#include <yetty/ydraw-core/font-prim.h>
+#include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yplatform/ycoroutine.h>
+#include <yetty/ysdf/handler.h>
+#include <yetty/ysdf/types.gen.h>
 #include <yetty/yterm/client-input.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/yterm/terminal.h>
@@ -162,6 +170,94 @@ static const char *ymgui_tex_fmt_name(uint32_t f)
     }
 }
 
+static const char *sdf_type_name(uint32_t type)
+{
+    /* Strip HAS_ID flag before comparing (an SDF prim with an id has the
+     * top bit set in its type word — same lookup table). */
+    uint32_t t = type;
+    switch (t) {
+    case YETTY_YSDF_CIRCLE:               return "circle";
+    case YETTY_YSDF_BOX:                  return "box";
+    case YETTY_YSDF_SEGMENT:              return "segment";
+    case YETTY_YSDF_TRIANGLE:             return "triangle";
+    case YETTY_YSDF_ELLIPSE:              return "ellipse";
+    case YETTY_YSDF_ARC:                  return "arc";
+    case YETTY_YSDF_ROUNDED_BOX:          return "rounded_box";
+    case YETTY_YSDF_RHOMBUS:              return "rhombus";
+    case YETTY_YSDF_PENTAGON:             return "pentagon";
+    case YETTY_YSDF_HEXAGON:              return "hexagon";
+    case YETTY_YSDF_STAR:                 return "star";
+    case YETTY_YSDF_PIE:                  return "pie";
+    case YETTY_YSDF_RING:                 return "ring";
+    case YETTY_YSDF_HEART:                return "heart";
+    case YETTY_YSDF_CROSS:                return "cross";
+    case YETTY_YSDF_ROUNDED_X:            return "rounded_x";
+    case YETTY_YSDF_CAPSULE:              return "capsule";
+    case YETTY_YSDF_MOON:                 return "moon";
+    case YETTY_YSDF_EGG:                  return "egg";
+    case YETTY_YSDF_OCTOGON:              return "octogon";
+    case YETTY_YSDF_HEXAGRAM:             return "hexagram";
+    case YETTY_YSDF_PENTAGRAM:            return "pentagram";
+    case YETTY_YSDF_LINEAR_GRADIENT_BOX:  return "linear_gradient_box";
+    case YETTY_YSDF_RADIAL_GRADIENT_BOX:  return "radial_gradient_box";
+    case YETTY_YSDF_SPHERE_3D:            return "sphere_3d";
+    case YETTY_YSDF_BOX_3D:               return "box_3d";
+    case YETTY_YSDF_TORUS_3D:             return "torus_3d";
+    case YETTY_YSDF_CYLINDER_3D:          return "cylinder_3d";
+    default:                              return NULL;
+    }
+}
+
+/* For SDF primitives, return an array of geometry-field names paired
+ * with the type — used so the dump shows `center_x:` not `geom_0:`.
+ * Returns NULL when the type isn't an SDF prim or when no names are
+ * registered for it. Field count = word_count - 5 (the 5 leading slots
+ * are: type, z_order, fill_color, stroke_color, stroke_width). */
+static const char *const *sdf_geom_field_names(uint32_t type, int *out_n)
+{
+    static const char *circle[]    = {"center_x", "center_y", "radius"};
+    static const char *box[]       = {"center_x", "center_y", "half_width", "half_height",
+                                      "corner_radius"};
+    static const char *segment[]   = {"start_x", "start_y", "end_x", "end_y"};
+    static const char *triangle[]  = {"vertex_a_x", "vertex_a_y", "vertex_b_x", "vertex_b_y",
+                                      "vertex_c_x", "vertex_c_y"};
+    static const char *ellipse[]   = {"center_x", "center_y", "radius_x", "radius_y"};
+    static const char *arc[]       = {"center_x", "center_y", "radius",
+                                      "thickness", "angle_start", "angle_end"};
+    static const char *rbox[]      = {"center_x", "center_y", "half_width", "half_height",
+                                      "radius_top_right", "radius_bottom_right",
+                                      "radius_top_left", "radius_bottom_left"};
+    static const char *capsule[]   = {"start_x", "start_y", "end_x", "end_y", "radius"};
+    static const char *gen5xy[]    = {"center_x", "center_y", "size", "rotation", "radius"};
+    static const char *star[]      = {"center_x", "center_y", "outer_radius", "inner_radius",
+                                      "points"};
+    static const char *ring[]      = {"center_x", "center_y", "outer_radius", "inner_radius",
+                                      "angle_start", "angle_end"};
+    static const char *pie[]       = {"center_x", "center_y", "radius", "angle_start",
+                                      "angle_end"};
+    switch (type) {
+    case YETTY_YSDF_CIRCLE:      *out_n = 3; return circle;
+    case YETTY_YSDF_BOX:         *out_n = 5; return box;
+    case YETTY_YSDF_SEGMENT:     *out_n = 4; return segment;
+    case YETTY_YSDF_TRIANGLE:    *out_n = 6; return triangle;
+    case YETTY_YSDF_ELLIPSE:     *out_n = 4; return ellipse;
+    case YETTY_YSDF_ARC:         *out_n = 6; return arc;
+    case YETTY_YSDF_ROUNDED_BOX: *out_n = 8; return rbox;
+    case YETTY_YSDF_CAPSULE:     *out_n = 5; return capsule;
+    case YETTY_YSDF_STAR:        *out_n = 5; return star;
+    case YETTY_YSDF_RING:        *out_n = 6; return ring;
+    case YETTY_YSDF_PIE:         *out_n = 5; return pie;
+    case YETTY_YSDF_PENTAGON:
+    case YETTY_YSDF_HEXAGON:
+    case YETTY_YSDF_RHOMBUS:
+    case YETTY_YSDF_HEART:
+    case YETTY_YSDF_OCTOGON:
+    case YETTY_YSDF_HEXAGRAM:
+    case YETTY_YSDF_PENTAGRAM:   *out_n = 3; return gen5xy;
+    default:                     *out_n = 0; return NULL;
+    }
+}
+
 /*===========================================================================
  * Output: a single FILE* + a small indented print helper.
  *=========================================================================*/
@@ -197,9 +293,299 @@ static void ind(int depth)
  *                      of the YMGUI_WIRE_MAGIC_* self-describing
  *                      headers, or a nested record stream, or a flat
  *                      prim stream).
+ * walk_ygrid_body:     contents of an ygrid figure body (init_payload of
+ *                      CREATE_CHILD(YGRID), or the body of a routed
+ *                      record with id == figure_id). Records here are
+ *                      CMD_GROUP / CMD_DELETE / SDF drawables — NO outer
+ *                      {length, id} framing, since this is INSIDE one
+ *                      figure's body.
  *=========================================================================*/
 
 static void walk_records(const uint8_t *bytes, size_t bytes_len, int depth);
+static void walk_ygrid_body(const uint8_t *bytes, size_t bytes_len, int depth);
+
+/* Glyph wire record laid out by ygrid.c (type id 200, 7 words).
+ *   word 0 type, 1 z_order, 2 x, 3 y, 4 font_size,
+ *   5 packed (glyph_idx | ((slot+1) << 16)),
+ *   6 color */
+#define YGRID_GLYPH_TYPE 200u
+
+/* Built once in main(), drives drawable_command_parse so we walk the
+ * ygrid body knowing every record's exact size. Without it we'd be
+ * guessing (the previous heuristic-step code drifted off after one or
+ * two records and printed garbage for the rest of the body). */
+static struct yetty_ydraw_flyweight_registry *g_registry = NULL;
+
+static struct yetty_ydraw_flyweight_registry *make_full_registry(void)
+{
+    struct yetty_ydraw_flyweight_registry_ptr_result rr =
+        yetty_ydraw_flyweight_registry_create();
+    if (YETTY_IS_ERR(rr)) {
+        fprintf(stderr, "osc-analyzer: registry_create failed: %s\n", rr.error.msg);
+        yetty_ycore_error_destroy(rr.error);
+        return NULL;
+    }
+    yetty_ydraw_flyweight_registry_set_default(rr.value, yetty_ysdf_handler);
+    struct yetty_ycore_void_result a;
+    a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_CMD_BASE,
+                                           YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
+    if (YETTY_IS_ERR(a)) goto err;
+    a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_TYPE_FONT,
+                                           YETTY_YDRAW_TYPE_FONT,
+                                           yetty_ydraw_font_drawable_handler);
+    if (YETTY_IS_ERR(a)) goto err;
+    a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_TYPE_TEXT_SPAN,
+                                           YETTY_YDRAW_TYPE_TEXT_SPAN,
+                                           yetty_ydraw_text_span_drawable_handler);
+    if (YETTY_IS_ERR(a)) goto err;
+    a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_COMPLEX_TYPE_BASE,
+                                           0xFFFFFFFFu, yetty_ydraw_raw_figure_handler);
+    if (YETTY_IS_ERR(a)) goto err;
+    return rr.value;
+err:
+    fprintf(stderr, "osc-analyzer: registry_add failed: %s\n", a.error.msg);
+    yetty_ycore_error_destroy(a.error);
+    yetty_ydraw_flyweight_registry_destroy(rr.value);
+    return NULL;
+}
+
+/* Emit a complete YAML description of one record at `bytes[off..off+rec_len)`.
+ * Caller already knows the record's parse result; this just formats it. */
+static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, int idx,
+                             const struct yetty_ydraw_command *cmd)
+{
+    if (cmd->kind == YETTY_YDRAW_COMMAND_DELETE) {
+        ind(depth); out("- # rec %d\n", idx);
+        ind(depth); out("  kind: CMD_DELETE\n");
+        ind(depth); out("  id: %u\n", cmd->id);
+        return;
+    }
+    if (cmd->kind == YETTY_YDRAW_COMMAND_UPDATE) {
+        ind(depth); out("- # rec %d\n", idx);
+        ind(depth); out("  kind: CMD_UPDATE\n");
+        ind(depth); out("  id: %u\n", cmd->update.id);
+        ind(depth); out("  payload_size: %llu\n", (unsigned long long)cmd->update.size);
+        return;
+    }
+    /* ADD — break down further by type. */
+    uint32_t type = cmd->flyweight.data ? cmd->flyweight.data[0] : 0u;
+
+    if (type == YETTY_YDRAW_CMD_GROUP) {
+        if (rec_len < 12) {
+            ind(depth); out("- # rec %d (truncated CMD_GROUP)\n", idx);
+            return;
+        }
+        uint32_t id, payload_size;
+        memcpy(&id,           bytes + 4, 4);
+        memcpy(&payload_size, bytes + 8, 4);
+        ind(depth); out("- # rec %d\n", idx);
+        ind(depth); out("  kind: CMD_GROUP\n");
+        ind(depth); out("  id: %u\n", id);
+        ind(depth); out("  payload_size: %u\n", payload_size);
+        if (payload_size > 0 && rec_len >= 12u + payload_size) {
+            ind(depth); out("  body:\n");
+            walk_ygrid_body(bytes + 12u, payload_size, depth + 2);
+        } else {
+            ind(depth); out("  body: []\n");
+        }
+        return;
+    }
+    if (type == YETTY_YDRAW_CMD_ZERO) {
+        ind(depth); out("- # rec %d\n", idx);
+        ind(depth); out("  kind: CMD_ZERO\n");
+        return;
+    }
+    if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
+        struct yetty_ydraw_text_span_drawable_view v;
+        if (yetty_ydraw_text_span_drawable_parse((const uint32_t *)bytes, &v) == 0) {
+            ind(depth); out("- # rec %d\n", idx);
+            ind(depth); out("  kind: TEXT_SPAN\n");
+            ind(depth); out("  x: %.2f\n", v.x);
+            ind(depth); out("  y: %.2f\n", v.y);
+            ind(depth); out("  font_size: %.2f\n", v.font_size);
+            ind(depth); out("  rotation: %.2f\n", v.rotation);
+            ind(depth); out("  color: 0x%08x\n", v.color);
+            ind(depth); out("  layer: %u\n", v.layer);
+            ind(depth); out("  font_id: %d\n", v.font_id);
+            ind(depth); out("  text_len: %u\n", v.text_len);
+            /* Print up to 80 chars of the text, quoted, with escapes
+             * for control bytes so binary or multiline content doesn't
+             * corrupt the YAML stream. */
+            ind(depth); out("  text: \"");
+            uint32_t shown = v.text_len > 80u ? 80u : v.text_len;
+            for (uint32_t i = 0; i < shown; i++) {
+                unsigned char c = (unsigned char)v.text[i];
+                if (c == '\\' || c == '"')      out("\\%c", c);
+                else if (c == '\n')             out("\\n");
+                else if (c == '\r')             out("\\r");
+                else if (c == '\t')             out("\\t");
+                else if (c < 0x20 || c >= 0x7f) out("\\x%02x", c);
+                else                            out("%c", c);
+            }
+            if (v.text_len > shown) out("...");
+            out("\"\n");
+            return;
+        }
+        /* fallthrough on parse error */
+    }
+    if (type == YETTY_YDRAW_TYPE_FONT) {
+        struct yetty_ydraw_font_drawable_view v;
+        if (yetty_ydraw_font_drawable_parse((const uint32_t *)bytes, &v) == 0) {
+            ind(depth); out("- # rec %d\n", idx);
+            ind(depth); out("  kind: FONT\n");
+            ind(depth); out("  font_id: %d\n", v.font_id);
+            ind(depth); out("  name_len: %u\n", v.name_len);
+            ind(depth); out("  name: \"");
+            for (uint32_t i = 0; i < v.name_len; i++) {
+                unsigned char c = (unsigned char)v.name[i];
+                if (c == '\\' || c == '"') out("\\%c", c);
+                else if (c >= 0x20 && c < 0x7f) out("%c", c);
+                else out("\\x%02x", c);
+            }
+            out("\"\n");
+            ind(depth); out("  ttf_len: %u  # <data omitted>\n", v.ttf_len);
+            return;
+        }
+    }
+    if (type == YGRID_GLYPH_TYPE && rec_len >= 7u * 4u) {
+        const uint32_t *w = (const uint32_t *)bytes;
+        float gx, gy, gs;
+        memcpy(&gx, &w[2], 4);
+        memcpy(&gy, &w[3], 4);
+        memcpy(&gs, &w[4], 4);
+        uint32_t packed = w[5];
+        uint32_t color  = w[6];
+        ind(depth); out("- # rec %d\n", idx);
+        ind(depth); out("  kind: GLYPH\n");
+        ind(depth); out("  z_order: %u\n", w[1]);
+        ind(depth); out("  x: %.2f\n", gx);
+        ind(depth); out("  y: %.2f\n", gy);
+        ind(depth); out("  font_size: %.2f\n", gs);
+        ind(depth); out("  glyph_index: %u\n", packed & 0xFFFFu);
+        ind(depth); out("  font_slot: %u  # 0 = default-when-zero, else slot-1\n",
+                       (packed >> 16) & 0xFFFFu);
+        ind(depth); out("  color: 0x%08x\n", color);
+        return;
+    }
+    /* Complex prim (yplot / yimage / yvideo / yzoo / yjungle / etc.) —
+     * type >= 0x80000003 and FAM-shaped (word 1 = payload_size). Show
+     * type + size only, NEVER the payload bytes (yimage carries
+     * megabytes of pixel data; dumping it floods the analyzer log). */
+    if (type >= YETTY_YDRAW_COMPLEX_TYPE_BASE && rec_len >= 8) {
+        uint32_t payload_size;
+        memcpy(&payload_size, bytes + 4, 4);
+        ind(depth); out("- # rec %d\n", idx);
+        ind(depth); out("  kind: COMPLEX_PRIM\n");
+        ind(depth); out("  type: 0x%08x\n", type);
+        ind(depth); out("  payload_size: %u  # <data omitted>\n", payload_size);
+        return;
+    }
+    /* SDF prim — fixed size by type, geometry starting at word 5 (or
+     * word 6 when an id slot is present). word_count covers the FULL
+     * record (type + 4 style words + geom). */
+    {
+        uint32_t base_type = type & ~YETTY_YDRAW_HAS_ID_FLAG;
+        uint32_t wcount = yetty_ysdf_word_count((enum yetty_ysdf_type)base_type);
+        if (wcount == 0) {
+            ind(depth); out("- # rec %d\n", idx);
+            ind(depth); out("  kind: UNKNOWN\n");
+            ind(depth); out("  type: 0x%08x\n", type);
+            ind(depth); out("  rec_bytes: %zu\n", rec_len);
+            return;
+        }
+        const uint32_t *w = (const uint32_t *)bytes;
+        uint32_t off = 1u;
+        const char *name = sdf_type_name(base_type);
+        ind(depth); out("- # rec %d\n", idx);
+        ind(depth); out("  kind: SDF\n");
+        ind(depth); out("  type: %s%s  # 0x%08x%s\n",
+                       name ? name : "unknown", "",
+                       base_type,
+                       (type & YETTY_YDRAW_HAS_ID_FLAG) ? " (HAS_ID)" : "");
+        if (type & YETTY_YDRAW_HAS_ID_FLAG) {
+            if (off < wcount) { ind(depth); out("  id: %u\n", w[off]); off++; }
+        }
+        if (off < wcount) { ind(depth); out("  z_order: %u\n", w[off]); off++; }
+        if (off < wcount) { ind(depth); out("  fill_color: 0x%08x\n", w[off]); off++; }
+        if (off < wcount) { ind(depth); out("  stroke_color: 0x%08x\n", w[off]); off++; }
+        if (off < wcount) {
+            float sw;
+            memcpy(&sw, &w[off], 4);
+            ind(depth); out("  stroke_width: %.2f\n", sw);
+            off++;
+        }
+        /* Remaining words are geometry — emit with named fields when
+         * we know them, else as a generic float array. */
+        int n_geom_names = 0;
+        const char *const *names = sdf_geom_field_names(base_type, &n_geom_names);
+        uint32_t geom_left = wcount - off;
+        if (names && geom_left > 0) {
+            ind(depth); out("  geometry:\n");
+            for (uint32_t i = 0; i < geom_left && off < wcount; i++, off++) {
+                const char *fn = (i < (uint32_t)n_geom_names) ? names[i] : NULL;
+                float v;
+                memcpy(&v, &w[off], 4);
+                ind(depth);
+                if (fn) {
+                    out("    %s: %.2f\n", fn, v);
+                } else {
+                    out("    geom_%u: %.2f\n", i, v);
+                }
+            }
+        } else if (geom_left > 0) {
+            ind(depth); out("  geometry: [");
+            for (uint32_t i = 0; i < geom_left && off < wcount; i++, off++) {
+                float v;
+                memcpy(&v, &w[off], 4);
+                out("%s%.2f", i ? ", " : "", v);
+            }
+            out("]\n");
+        }
+    }
+}
+
+/* Walk one ygrid-figure body — the bytes between begin_record/end_record
+ * for a routed payload, or the init_payload of CREATE_CHILD(YGRID).
+ *
+ * The bytes are a stream of drawable records, NOT length-prefixed wire
+ * records. Uses the flyweight registry to know each record's exact
+ * size (no heuristics). CMD_GROUP bodies are walked recursively so the
+ * entity tree shows up. Complex prims (yplot/yimage/yvideo) have their
+ * payload size printed but not their data — the user's complaint was
+ * that yimage bytes flood the log. */
+static void walk_ygrid_body(const uint8_t *bytes, size_t bytes_len, int depth)
+{
+    if (bytes_len == 0) {
+        return;
+    }
+    if (!g_registry) {
+        ind(depth);
+        out("# (no registry — cannot decode body, %zu bytes)\n", bytes_len);
+        return;
+    }
+    size_t off = 0;
+    int idx = 0;
+    while (off < bytes_len) {
+        struct yetty_ydraw_command cmd;
+        struct yetty_ycore_size_result pr = yetty_ydraw_drawable_command_parse(
+            g_registry, bytes + off, (uint32_t)(bytes_len - off), &cmd);
+        if (YETTY_IS_ERR(pr)) {
+            ind(depth);
+            out("# parse error at offset %zu: %s\n", off, pr.error.msg);
+            yetty_ycore_error_destroy(pr.error);
+            return;
+        }
+        if (pr.value == 0) {
+            ind(depth);
+            out("# parser made no progress at offset %zu (trailing %zu B)\n",
+                off, bytes_len - off);
+            return;
+        }
+        emit_record_yaml(bytes + off, pr.value, depth, idx, &cmd);
+        off += pr.value;
+        idx++;
+    }
+}
 
 static void walk_admin_payload(const uint8_t *body, size_t blen, int depth)
 {
@@ -236,11 +622,15 @@ static void walk_admin_payload(const uint8_t *body, size_t blen, int depth)
             child_id, figure_kind_name(kind), kind,
             r[0], r[1], r[2], r[3], init_n);
         if (init_n > 0 && (size_t)init_n + 28u <= tlen) {
-            /* Init payload is opaque to admin — hand it to the routed
-             * walker as if it were targeted at this new child. */
+            /* Init payload is the body of the figure being minted. For
+             * YGRID, that's a CMD_GROUP/CMD_DELETE/SDF stream. */
             ind(depth + 1);
-            out("init payload:\n");
-            walk_records(tail + 28, init_n, depth + 2);
+            out("init payload (figure body):\n");
+            if (kind == YETTY_YFIGURE_KIND_YGRID) {
+                walk_ygrid_body(tail + 28, init_n, depth + 2);
+            } else {
+                walk_records(tail + 28, init_n, depth + 2);
+            }
         }
         break;
     }
@@ -357,6 +747,16 @@ static void walk_routed_payload(uint32_t id, const uint8_t *payload, size_t plen
     }
     if (first == YMGUI_WIRE_MAGIC_TEX) {
         walk_ymgui_tex(payload, plen, depth);
+        return;
+    }
+
+    /* ygrid figure body: routed record where the first u32 is a
+     * drawable command — CMD_GROUP (0x80000002) or CMD_DELETE
+     * (0x80000001). Decode as an ygrid body. */
+    if (first == YETTY_YDRAW_CMD_GROUP || first == YETTY_YDRAW_CMD_DELETE) {
+        ind(depth);
+        out("(ygrid figure body for id=%u)\n", id);
+        walk_ygrid_body(payload, plen, depth + 1);
         return;
     }
 
@@ -742,6 +1142,78 @@ static int run_file(const char *path, struct yetty_ywire_wire_statemachine *sm)
     return rc;
 }
 
+/* --records mode: read a YFIGURE_DUMP_RECORDS file (a stream of
+ * receiver-side records written by yfigure_container_consume_envelope
+ * with the `===FRAME===\n` separator) and decode each frame as if it
+ * were one envelope body. This bypasses the OSC framing entirely —
+ * useful when the user captured wire bytes via YFIGURE_DUMP_RECORDS
+ * (no PTY interpose, no live process needed) and wants to inspect
+ * exactly what records the receiver saw. */
+static int run_records_file(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "open %s: %s\n", path, strerror(errno));
+        return 1;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fprintf(stderr, "seek %s: %s\n", path, strerror(errno));
+        fclose(f);
+        return 1;
+    }
+    long sz = ftell(f);
+    if (sz < 0) {
+        fprintf(stderr, "ftell %s: %s\n", path, strerror(errno));
+        fclose(f);
+        return 1;
+    }
+    rewind(f);
+    uint8_t *buf = malloc((size_t)sz);
+    if (!buf) {
+        fprintf(stderr, "oom reading %s\n", path);
+        fclose(f);
+        return 1;
+    }
+    size_t got = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    if (got != (size_t)sz) {
+        fprintf(stderr, "short read %s: %zu/%ld\n", path, got, sz);
+        free(buf);
+        return 1;
+    }
+    const char *sep = "===FRAME===\n";
+    size_t sep_len = strlen(sep);
+    /* Each occurrence of the separator starts a new frame. The first
+     * separator marks the start of frame 1; bytes before it (if any)
+     * are skipped. */
+    int frame_no = 0;
+    size_t p = 0;
+    while (p < got) {
+        /* Find next separator at-or-after p. */
+        const uint8_t *hit =
+            (const uint8_t *)memmem(buf + p, got - p, sep, sep_len);
+        if (!hit) {
+            /* Trailing bytes after the last separator — decode as the
+             * last frame (no following separator means EOF). */
+            if (frame_no > 0) {
+                size_t frame_len = got - p;
+                out("\n=== FRAME %d (%zu B) ===\n", frame_no, frame_len);
+                walk_records(buf + p, frame_len, 1);
+            }
+            break;
+        }
+        if (frame_no > 0) {
+            size_t frame_len = (size_t)(hit - (buf + p));
+            out("\n=== FRAME %d (%zu B) ===\n", frame_no, frame_len);
+            walk_records(buf + p, frame_len, 1);
+        }
+        p = (size_t)(hit - buf) + sep_len;
+        frame_no++;
+    }
+    free(buf);
+    return 0;
+}
+
 /*===========================================================================
  * Wiring
  *=========================================================================*/
@@ -752,6 +1224,7 @@ static void print_help(const char *prog)
             "usage: %s -e <cmd> [args...] [-o FILE] [--cols N] [--rows N]\n"
             "       %s --interpose [-o FILE]\n"
             "       %s [FILE | -] [-o FILE]\n"
+            "       %s --records FILE [-o FILE]\n"
             "\n"
             "Modes:\n"
             "  -e <cmd> [args...]   fork+exec <cmd> under a PTY (default cols=80\n"
@@ -760,6 +1233,11 @@ static void print_help(const char *prog)
             "  --interpose          read bytes from stdin (already a PTY upstream),\n"
             "                       copy them to stdout, decode in parallel.\n"
             "  FILE | -             replay a captured byte stream from FILE/stdin.\n"
+            "  --records FILE       decode a YFIGURE_DUMP_RECORDS dump (the file\n"
+            "                       a process emits when run with the env var\n"
+            "                       YFIGURE_DUMP_RECORDS=path/to/file.bin set).\n"
+            "                       Each `===FRAME===\\n`-separated chunk is\n"
+            "                       walked as one envelope body — full YAML.\n"
             "\n"
             "Options:\n"
             "  -o FILE              write decoded log to FILE (default: stderr)\n"
@@ -767,8 +1245,13 @@ static void print_help(const char *prog)
             "\n"
             "Decoding walks {length, id} figure-tree records inside\n"
             "YETTY_OSC_YCOMPOSITOR_BIN envelopes (and prints headers for every\n"
-            "other OSC code listed in the public wire headers).\n",
-            prog, prog, prog);
+            "other OSC code listed in the public wire headers). Inside each\n"
+            "record the body is walked via the flyweight registry — every SDF\n"
+            "prim, TEXT_SPAN, FONT, GLYPH, and CMD_GROUP/CMD_DELETE record is\n"
+            "emitted as YAML with named fields. Complex prims (yplot/yimage/\n"
+            "yvideo etc.) report their type + payload size but omit the data\n"
+            "bytes themselves.\n",
+            prog, prog, prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -779,6 +1262,7 @@ int main(int argc, char **argv)
     int exec_at = -1;
     int cols = 80, rows = 24;
     const char *file_path = NULL;
+    const char *records_path = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
@@ -815,6 +1299,14 @@ int main(int argc, char **argv)
             rows = atoi(argv[++i]);
             continue;
         }
+        if (!strcmp(argv[i], "--records")) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "%s: --records needs FILE\n", argv[0]);
+                return 1;
+            }
+            records_path = argv[++i];
+            continue;
+        }
         if (argv[i][0] == '-' && argv[i][1] != '\0') {
             fprintf(stderr, "unknown flag: %s\n", argv[i]);
             print_help(argv[0]);
@@ -827,13 +1319,14 @@ int main(int argc, char **argv)
         file_path = argv[i];
     }
 
-    int mode_count = (exec_at >= 0) + interpose + (file_path != NULL);
+    int mode_count = (exec_at >= 0) + interpose + (file_path != NULL) +
+                     (records_path != NULL);
     if (mode_count == 0) {
         print_help(argv[0]);
         return 1;
     }
     if (mode_count > 1) {
-        fprintf(stderr, "%s: -e, --interpose and FILE are mutually exclusive\n",
+        fprintf(stderr, "%s: -e, --interpose, FILE and --records are mutually exclusive\n",
                 argv[0]);
         return 1;
     }
@@ -846,6 +1339,25 @@ int main(int argc, char **argv)
         }
         setvbuf(f, NULL, _IOLBF, 0);
         g_out = f;
+    }
+
+    /* Flyweight registry — drives drawable_command_parse so ygrid body
+     * walks know each record's exact size. Built once, lives until
+     * teardown below. NULL is tolerated (walk_ygrid_body prints a
+     * stub) but normal runs always have it. */
+    g_registry = make_full_registry();
+
+    /* --records mode: parse a pre-captured YFIGURE_DUMP_RECORDS file
+     * directly — no PTY, no OSC framing, just walk each frame's record
+     * stream and emit YAML. Bypasses the wire SM entirely. */
+    if (records_path) {
+        int rrc = run_records_file(records_path);
+        if (g_registry) {
+            yetty_ydraw_flyweight_registry_destroy(g_registry);
+            g_registry = NULL;
+        }
+        if (g_out != stderr) fclose(g_out);
+        return rrc;
     }
 
     /* Build the SM with NULL PTY — bytes arrive via the async-feed path
@@ -939,6 +1451,10 @@ int main(int argc, char **argv)
     yetty_ywire_wire_statemachine_destroy(sm);
     for (int i = 0; i < kAnalyzedCodes_n; i++) free(mocks[i].buf);
     free(mocks);
+    if (g_registry) {
+        yetty_ydraw_flyweight_registry_destroy(g_registry);
+        g_registry = NULL;
+    }
     if (g_out != stderr) fclose(g_out);
     return rc;
 }

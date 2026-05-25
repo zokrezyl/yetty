@@ -406,6 +406,21 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
  * triggering a render. */
 struct yetty_ycore_void_result yetty_ygui_engine_layout(struct yetty_ygui_engine *engine);
 
+/* Headless render — runs layout + rebuild into the engine's internal
+ * buffer but does NOT ship the result via OSC. After this returns the
+ * RAW record stream that engine_render would have shipped is available
+ * via yetty_ygui_engine_buffer_data() / _size(). Used by unit tests
+ * to feed the producer output directly into a yfigure_container's
+ * process_records (skipping the OSC envelope codec). */
+struct yetty_ycore_void_result yetty_ygui_engine_render_headless(struct yetty_ygui_engine *engine);
+
+/* View into the engine's last-rendered raw record bytes (the body that
+ * engine_render would put inside its OSC envelope). NULL/0 before the
+ * first render. Read-only — lifetime ends at the next render or
+ * engine_destroy. */
+const void *yetty_ygui_engine_buffer_data(const struct yetty_ygui_engine *engine);
+size_t yetty_ygui_engine_buffer_size(const struct yetty_ygui_engine *engine);
+
 /* Run the engine's event loop. Blocks until yetty_ygui_engine_stop() is
  * called, the user closes the card, or the host shuts the pty. */
 void yetty_ygui_engine_run(struct yetty_ygui_engine *engine);
