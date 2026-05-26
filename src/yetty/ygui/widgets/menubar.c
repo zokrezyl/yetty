@@ -53,15 +53,19 @@ struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_ygui_object *
     return yetty_ygui_clickable_on_click_set(btn, on_trigger_click, menu);
 }
 
-static const struct yetty_ygui_op menubar_ops[] = {
+const struct yetty_ygui_class *yetty_ygui_menubar_class_get(void)
+{
+    static const struct yetty_ygui_class *cls = NULL;
+    if (cls) return cls;
+    static const struct yetty_ygui_op ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, menubar_constructor),
-};
-
-static const struct yetty_ygui_class_descriptor menubar_desc = {
-    .name = "yetty_ygui_menubar",
+    };
+    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_menubar",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_menubar_class_get, &menubar_desc, menubar_ops,
-                        yetty_ygui_hbox_class_get(), NULL)
+    .data_size = 0,};
+    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
+        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_hbox_class_get(), NULL, 0);
+    if (YETTY_IS_ERR(r)) return NULL;
+    cls = r.value;
+    return cls;
+}

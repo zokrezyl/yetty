@@ -137,25 +137,21 @@ const char *yetty_ygui_button_get_label(const struct yetty_ygui_object *obj)
     return d->label;
 }
 
-static const struct yetty_ygui_op button_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, button_constructor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, button_destructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, button_paint),
-};
-
-static const struct yetty_ygui_class_descriptor button_desc = {
-    .name = "yetty_ygui_button",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct button_data),
-};
-
 const struct yetty_ygui_class *yetty_ygui_button_class_get(void)
 {
     static const struct yetty_ygui_class *cls = NULL;
     if (!cls) {
+        static const struct yetty_ygui_op ops[] = {
+    YETTY_YGUI_OP(yetty_ygui_constructor, button_constructor),
+    YETTY_YGUI_OP(yetty_ygui_destructor, button_destructor),
+    YETTY_YGUI_OP(yetty_ygui_widget_paint, button_paint),
+        };
+        static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_button",
+    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
+    .data_size = sizeof(struct button_data),};
         const struct yetty_ygui_class *mixins[] = {yetty_ygui_clickable_mixin_get(), NULL};
         struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-            &button_desc, button_ops, sizeof(button_ops) / sizeof(button_ops[0]),
+            &desc, ops, sizeof(ops) / sizeof(ops[0]),
             yetty_ygui_primitive_widget_class_get(), mixins, sizeof(mixins) / sizeof(mixins[0]) - 1);
         if (YETTY_IS_ERR(r)) {
             return NULL;

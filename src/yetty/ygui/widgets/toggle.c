@@ -155,25 +155,21 @@ int yetty_ygui_toggle_get_on(const struct yetty_ygui_object *obj)
     return d->on;
 }
 
-static const struct yetty_ygui_op toggle_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, toggle_constructor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, toggle_destructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, toggle_paint),
-};
-
-static const struct yetty_ygui_class_descriptor toggle_desc = {
-    .name = "yetty_ygui_toggle",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct toggle_data),
-};
-
 const struct yetty_ygui_class *yetty_ygui_toggle_class_get(void)
 {
     static const struct yetty_ygui_class *cls = NULL;
     if (!cls) {
+        static const struct yetty_ygui_op ops[] = {
+    YETTY_YGUI_OP(yetty_ygui_constructor, toggle_constructor),
+    YETTY_YGUI_OP(yetty_ygui_destructor, toggle_destructor),
+    YETTY_YGUI_OP(yetty_ygui_widget_paint, toggle_paint),
+        };
+        static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_toggle",
+    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
+    .data_size = sizeof(struct toggle_data),};
         const struct yetty_ygui_class *mixins[] = {yetty_ygui_clickable_mixin_get()};
         struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-            &toggle_desc, toggle_ops, sizeof(toggle_ops) / sizeof(toggle_ops[0]),
+            &desc, ops, sizeof(ops) / sizeof(ops[0]),
             yetty_ygui_primitive_widget_class_get(), mixins,
             sizeof(mixins) / sizeof(mixins[0]));
         if (YETTY_IS_ERR(r)) return NULL;

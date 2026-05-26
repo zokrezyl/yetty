@@ -88,6 +88,9 @@ static const char *TAB_LABELS[TAB_COUNT] = {"Welcome", "Plots", "Images", "Code"
  * App state.
  *===========================================================================*/
 
+/* Forward decl: client-mode loop state is opaque to non-client code. */
+struct client_state;
+
 struct app {
     struct yetty_ygui_runtime *engine;
     struct yetty_ygui_object *root;
@@ -103,6 +106,16 @@ struct app {
     struct yetty_ygui_object *menu_view;
     struct yetty_ygui_object *menu_help;
     struct yetty_ygui_object *about_dialog;
+
+    /* Popup menus bound to the dropdown/combobox in the Elements tab.
+     * Lifetime spans tab switches, so they live on the app, not on the
+     * tab body that gets recreated. */
+    struct yetty_ygui_object *elements_dropdown_menu;
+    struct yetty_ygui_object *elements_combo_menu;
+
+    /* Client mode back-pointer for the key-handler's stop_cb path.
+     * NULL in standalone mode. */
+    struct client_state *client;
 
     /* Standalone-mode resources, NULL in client mode. */
     struct yetty_yframework *yframework;
@@ -294,11 +307,6 @@ static struct yetty_ycore_void_result build_images_tab(struct yetty_ygui_object 
     return YETTY_OK_VOID();
 }
 
-/* Per-app dropdown / combobox overlay menus — created lazily; the
- * bound popup_menus live under root so they survive tab switches. */
-static struct yetty_ygui_object *g_dropdown_menu_for_elements;
-static struct yetty_ygui_object *g_combo_menu_for_elements;
-
 /* Build one collapsing section with a title; returns the section so
  * the caller can attach rows to it. */
 static struct yetty_ygui_object_ptr_result section(struct yetty_ygui_object *parent,
@@ -382,13 +390,14 @@ static struct yetty_ycore_void_result build_elements_tab(struct app *app,
     YETTY_RETURN_IF_ERR(yetty_ycore_void,
                         add_row(sels.value, yetty_ygui_dropdown_class_get, 30, &w),
                         "sels: dropdown");
-    if (!g_dropdown_menu_for_elements) {
+    if (!app->elements_dropdown_menu) {
         struct yetty_ygui_object_ptr_result mr =
             yetty_ygui_add(yetty_ygui_popup_menu_class_get(), app->root);
-        if (YETTY_IS_OK(mr)) g_dropdown_menu_for_elements = mr.value;
+        if (YETTY_IS_OK(mr)) app->elements_dropdown_menu = mr.value;
     }
-    if (g_dropdown_menu_for_elements) {
-        yetty_ycore_error_destroy_safe(yetty_ygui_dropdown_set_menu(w, g_dropdown_menu_for_elements));
+    if (app->elements_dropdown_menu) {
+        yetty_ycore_error_destroy_safe(
+            yetty_ygui_dropdown_set_menu(w, app->elements_dropdown_menu));
         yetty_ycore_error_destroy_safe(yetty_ygui_dropdown_add_option(w, "Apple"));
         yetty_ycore_error_destroy_safe(yetty_ygui_dropdown_add_option(w, "Banana"));
         yetty_ycore_error_destroy_safe(yetty_ygui_dropdown_add_option(w, "Cherry"));
@@ -397,13 +406,13 @@ static struct yetty_ycore_void_result build_elements_tab(struct app *app,
     YETTY_RETURN_IF_ERR(yetty_ycore_void,
                         add_row(sels.value, yetty_ygui_combobox_class_get, 30, &w),
                         "sels: combobox");
-    if (!g_combo_menu_for_elements) {
+    if (!app->elements_combo_menu) {
         struct yetty_ygui_object_ptr_result mr =
             yetty_ygui_add(yetty_ygui_popup_menu_class_get(), app->root);
-        if (YETTY_IS_OK(mr)) g_combo_menu_for_elements = mr.value;
+        if (YETTY_IS_OK(mr)) app->elements_combo_menu = mr.value;
     }
-    if (g_combo_menu_for_elements) {
-        yetty_ycore_error_destroy_safe(yetty_ygui_combobox_set_menu(w, g_combo_menu_for_elements));
+    if (app->elements_combo_menu) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_combobox_set_menu(w, app->elements_combo_menu));
         yetty_ycore_error_destroy_safe(yetty_ygui_combobox_set_text(w, "Type or pick…"));
         yetty_ycore_error_destroy_safe(yetty_ygui_combobox_add_suggestion(w, "alpha"));
         yetty_ycore_error_destroy_safe(yetty_ygui_combobox_add_suggestion(w, "beta"));
@@ -877,14 +886,9 @@ struct client_state {
     int running;
 };
 
-/* Client mode lives entirely on its own uv loop; no yetty event_loop
- * involvement, so we stash the client_state in a file-static. */
-static struct client_state *g_client_state = NULL;
-
 static void client_stop(struct app *app)
 {
-    (void)app;
-    if (g_client_state) g_client_state->running = 0;
+    if (app && app->client) app->client->running = 0;
 }
 
 static void client_stdin_cb(uv_poll_t *handle, int status, int events)
@@ -959,14 +963,12 @@ static int run_client_mode(void)
     }
     struct app app = {0};
     app.engine = fr.value;
+    app.client = &cs;
 
-    static struct key_ctx kc;
-    kc.app = &app;
-    kc.stop_cb = client_stop;
+    struct key_ctx kc = {.app = &app, .stop_cb = client_stop};
     yetty_ygui_framework_set_key_cb(app.engine, on_key, &kc);
     cs.app = &app;
     cs.running = 1;
-    g_client_state = &cs;
 
     struct yetty_ycore_void_result br = build_ui(&app);
     if (YETTY_IS_ERR(br)) {

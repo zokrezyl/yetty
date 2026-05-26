@@ -116,18 +116,22 @@ size_t yetty_ygui_yimage_bytes_len(const struct yetty_ygui_object *obj)
     return d->len;
 }
 
-static const struct yetty_ygui_op yimage_ops[] = {
+const struct yetty_ygui_class *yetty_ygui_yimage_class_get(void)
+{
+    static const struct yetty_ygui_class *cls = NULL;
+    if (cls) return cls;
+    static const struct yetty_ygui_op ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, yimage_constructor),
     YETTY_YGUI_OP(yetty_ygui_destructor, yimage_destructor),
     YETTY_YGUI_OP(yetty_ygui_widget_emit_container, yimage_emit_container),
     YETTY_YGUI_OP(yetty_ygui_widget_emit_body, yimage_emit_body),
-};
-
-static const struct yetty_ygui_class_descriptor yimage_desc = {
-    .name = "yetty_ygui_yimage",
+    };
+    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_yimage",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct yimage_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_yimage_class_get, &yimage_desc, yimage_ops,
-                        yetty_ygui_widget_class_get(), NULL)
+    .data_size = sizeof(struct yimage_data),};
+    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
+        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_widget_class_get(), NULL, 0);
+    if (YETTY_IS_ERR(r)) return NULL;
+    cls = r.value;
+    return cls;
+}

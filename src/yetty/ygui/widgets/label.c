@@ -130,25 +130,21 @@ struct yetty_ycore_void_result yetty_ygui_label_set_color(struct yetty_ygui_obje
     return yetty_ygui_object_set_dirty(obj);
 }
 
-static const struct yetty_ygui_op label_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, label_constructor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, label_destructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, label_paint),
-};
-
-static const struct yetty_ygui_class_descriptor label_desc = {
-    .name = "yetty_ygui_label",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct label_data),
-};
-
 const struct yetty_ygui_class *yetty_ygui_label_class_get(void)
 {
     static const struct yetty_ygui_class *cls = NULL;
     if (!cls) {
+        static const struct yetty_ygui_op ops[] = {
+    YETTY_YGUI_OP(yetty_ygui_constructor, label_constructor),
+    YETTY_YGUI_OP(yetty_ygui_destructor, label_destructor),
+    YETTY_YGUI_OP(yetty_ygui_widget_paint, label_paint),
+        };
+        static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_label",
+    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
+    .data_size = sizeof(struct label_data),};
         const struct yetty_ygui_class *mixins[] = {NULL};
         struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-            &label_desc, label_ops, sizeof(label_ops) / sizeof(label_ops[0]),
+            &desc, ops, sizeof(ops) / sizeof(ops[0]),
             yetty_ygui_primitive_widget_class_get(), mixins, 0);
         if (YETTY_IS_ERR(r)) {
             return NULL;

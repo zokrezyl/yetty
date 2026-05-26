@@ -917,7 +917,15 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yetty_ygui_framework_emit: layout_compute");
     }
 
-    struct yetty_ycore_void_result r = yetty_ygui_framework_ensure_chrome(engine, &ctx);
+    /* Pending deletes go through the container records stream first. The
+     * id allocator hands freed ids back via free_ids, so a widget added
+     * between two emits can be assigned the id of a widget destroyed in
+     * the same window. Emitting DELETE_CHILD ahead of any CREATE_CHILD
+     * for that id keeps the receiver's view ordered: old gone, new in. */
+    struct yetty_ycore_void_result r = flush_pending_deletes(engine, &ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: flush_pending_deletes");
+
+    r = yetty_ygui_framework_ensure_chrome(engine, &ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: ensure_chrome");
 
     /* Pass 1: container records. */
@@ -925,10 +933,6 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
         r = yetty_ygui_framework_walk_emit_container(engine->root, &ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: walk pass 1");
     }
-
-    /* Pending deletes go through the container records stream too. */
-    r = flush_pending_deletes(engine, &ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: flush_pending_deletes");
 
     /* Pass 2: body records. */
     if (engine->root) {

@@ -34,6 +34,7 @@
 #include "internal.h"
 
 #include <stddef.h>
+#include <stdlib.h>
 
 static float clamp_size(float v, float min_v, float max_v)
 {
@@ -154,12 +155,10 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
     float content_cross = direction_is_row(pl) ? content_h : content_w;
 
     struct flex_summary sum = summarize_children(node, pl);
-    if (sum.child_count == 0) {
-        return YETTY_OK_VOID();
-    }
-
-    /* Total gap consumed between children. */
-    float total_gap = pl->gap * (float)(sum.child_count - 1);
+    /* Total gap consumed between flex children (zero when no flex children
+     * exist). Absolute children still need to be placed, so this function
+     * cannot early-return on `child_count == 0`. */
+    float total_gap = sum.child_count > 1 ? pl->gap * (float)(sum.child_count - 1) : 0.0f;
     float consumed = sum.sum_main_pref + total_gap;
     float free_space = content_main - consumed;
 
@@ -171,17 +170,25 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
         shrink_unit = free_space / sum.sum_shrink;
     }
 
-    /* Compute final main sizes and total. */
+    /* Two-pass: first compute sizes, then place using justify. The size
+     * arrays are allocated for the actual flex-child count; absolute
+     * children are sized inline above and skipped here. */
     float total_main = 0.0f;
     int idx = 0;
-    /* Two-pass: first compute sizes, then place using justify. We use a
-     * small stack array — bounded by reasonable child counts (256). */
-    enum { MAX_CHILDREN = 256 };
-    float main_sizes[MAX_CHILDREN] = {0};
-    float cross_sizes[MAX_CHILDREN] = {0};
+    float *main_sizes = NULL;
+    float *cross_sizes = NULL;
+    if (sum.child_count > 0) {
+        main_sizes = calloc((size_t)sum.child_count, sizeof(*main_sizes));
+        cross_sizes = calloc((size_t)sum.child_count, sizeof(*cross_sizes));
+        if (!main_sizes || !cross_sizes) {
+            free(main_sizes);
+            free(cross_sizes);
+            return YETTY_ERR(yetty_ycore_void, "layout_node: alloc sizes");
+        }
+    }
 
-    for (struct yetty_ygui_object *c = node->first_child; c && idx < MAX_CHILDREN;
-         c = c->next_sibling) {
+    struct yetty_ycore_void_result loop_r = YETTY_OK_VOID();
+    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->absolute) {
             /* Place absolute children directly at (pos_x, pos_y) inside
@@ -193,8 +200,8 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
             crect.min.y = content_min_y + cl->pos_y;
             crect.max.x = crect.min.x + aw;
             crect.max.y = crect.min.y + ah;
-            struct yetty_ycore_void_result rr = layout_node(c, crect);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "layout_node: absolute child");
+            loop_r = layout_node(c, crect);
+            if (YETTY_IS_ERR(loop_r)) goto cleanup;
             continue;
         }
         struct child_axes a = resolve_child_axes(pl, cl);
@@ -294,13 +301,19 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
             crect.max.y = crect.min.y + ms;
         }
 
-        struct yetty_ycore_void_result rr = layout_node(c, crect);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "layout_node: child");
+        loop_r = layout_node(c, crect);
+        if (YETTY_IS_ERR(loop_r)) goto cleanup;
 
         cursor_main += ms + gap_between;
         idx++;
     }
 
+cleanup:
+    free(main_sizes);
+    free(cross_sizes);
+    if (YETTY_IS_ERR(loop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "layout_node: child", loop_r);
+    }
     return YETTY_OK_VOID();
 }
 
