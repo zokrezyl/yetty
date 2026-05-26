@@ -301,6 +301,12 @@ struct yetty_ycore_void_result yetty_ygui_object_set_dirty(struct yetty_ygui_obj
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_object_set_dirty: NULL obj");
     }
     obj->dirty = 1;
+    /* Bubble to engine so the render driver's is_dirty() gate notices. The
+     * per-object flag alone is not seen by the framework's emit scheduler. */
+    struct yetty_ygui_runtime *engine = yetty_ygui_object_engine(obj);
+    if (engine) {
+        yetty_ygui_framework_mark_dirty(engine);
+    }
     return YETTY_OK_VOID();
 }
 
