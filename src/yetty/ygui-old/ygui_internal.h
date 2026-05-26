@@ -155,9 +155,8 @@ struct yetty_ygui_old_group_marker_result yetty_ygui_old_widget_open_group(
     struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_old_widget *,
                                                 struct yetty_ygui_old_render_ctx *));
 
-struct yetty_ycore_void_result yetty_ygui_old_widget_close_group(struct yetty_ygui_old_widget *self,
-                                                             struct yetty_ygui_old_render_ctx *ctx,
-                                                             uint32_t marker);
+struct yetty_ycore_void_result yetty_ygui_old_widget_close_group(
+    struct yetty_ygui_old_widget *self, struct yetty_ygui_old_render_ctx *ctx, uint32_t marker);
 
 #define YETTY_YGUI_OLD_GROUP_SKIPPED UINT32_MAX
 
@@ -185,18 +184,18 @@ struct yetty_ycore_void_result yetty_ygui_old_widget_close_group(struct yetty_yg
  *
  * YETTY_YGUI_OLD_GROUP_SKIPPED is the all-ones sentinel; its offset bits
  * would be 0x07FFFFFF (128 MB), far beyond any realistic buffer. */
-#define YETTY_YGUI_OLD_GROUP_MARKER_OFFSET_MASK  0x03FFFFFFu
+#define YETTY_YGUI_OLD_GROUP_MARKER_OFFSET_MASK 0x03FFFFFFu
 #define YETTY_YGUI_OLD_GROUP_MARKER_KIND_CMD_GRP 0x80000000u
 #define YETTY_YGUI_OLD_GROUP_MARKER_BUF_DEFERRED 0x40000000u
 #define YETTY_YGUI_OLD_GROUP_MARKER_BUMPED_DEPTH 0x20000000u
-#define YETTY_YGUI_OLD_GROUP_MARKER_FORCED_FULL  0x10000000u
-#define YETTY_YGUI_OLD_GROUP_MARKER_ROUTED       0x08000000u
+#define YETTY_YGUI_OLD_GROUP_MARKER_FORCED_FULL 0x10000000u
+#define YETTY_YGUI_OLD_GROUP_MARKER_ROUTED 0x08000000u
 /* "Transparent" — open emitted no wire record but still pushed
  * parent_abs / ygrid_depth so descendants compute correct coords and
  * pick the right depth. close_group pops the state without calling
  * any end_. Used for clean widgets with dirty descendants on the
  * hover-cheap path. */
-#define YETTY_YGUI_OLD_GROUP_MARKER_NO_RECORD    0x04000000u
+#define YETTY_YGUI_OLD_GROUP_MARKER_NO_RECORD 0x04000000u
 
 /*=============================================================================
  * Theme Structure
@@ -262,14 +261,15 @@ typedef void (*ygui_widget_change_fn)(struct yetty_ygui_old_widget *widget, floa
                                       void *userdata);
 typedef void (*ygui_widget_text_fn)(struct yetty_ygui_old_widget *widget, const char *text,
                                     void *userdata);
-typedef void (*ygui_widget_check_fn)(struct yetty_ygui_old_widget *widget, int checked, void *userdata);
+typedef void (*ygui_widget_check_fn)(struct yetty_ygui_old_widget *widget, int checked,
+                                     void *userdata);
 
 /*=============================================================================
  * Widget Function Pointers (internal rendering/events)
  *===========================================================================*/
 
-typedef struct yetty_ycore_void_result (*ygui_widget_render_fn)(struct yetty_ygui_old_widget *self,
-                                                                struct yetty_ygui_old_render_ctx *ctx);
+typedef struct yetty_ycore_void_result (*ygui_widget_render_fn)(
+    struct yetty_ygui_old_widget *self, struct yetty_ygui_old_render_ctx *ctx);
 typedef struct yetty_ycore_void_result (*ygui_widget_render_all_fn)(
     struct yetty_ygui_old_widget *self, struct yetty_ygui_old_render_ctx *ctx);
 typedef int (*ygui_widget_on_press_fn)(struct yetty_ygui_old_widget *self, float lx, float ly,
@@ -553,7 +553,7 @@ struct yetty_ygui_old_widget {
         } combo;
 
         struct {
-            char **labels;                    /* menu button labels */
+            char **labels;                        /* menu button labels */
             struct yetty_ygui_old_widget **menus; /* per-button popup_menu pointers (borrowed) */
             int n;
             int capacity;
@@ -1217,41 +1217,43 @@ static inline char *ygui_strdup(const char *s)
 }
 
 /* Spatial grid */
-void yetty_ygui_old_grid_init(ygui_spatial_grid_t *grid, float width, float height, float cell_size);
+void yetty_ygui_old_grid_init(ygui_spatial_grid_t *grid, float width, float height,
+                              float cell_size);
 void yetty_ygui_old_grid_destroy(ygui_spatial_grid_t *grid);
 void yetty_ygui_old_grid_clear(ygui_spatial_grid_t *grid);
 void yetty_ygui_old_grid_insert(ygui_spatial_grid_t *grid, struct yetty_ygui_old_widget *widget);
 void yetty_ygui_old_grid_remove(ygui_spatial_grid_t *grid, struct yetty_ygui_old_widget *widget);
-struct yetty_ygui_old_widget *yetty_ygui_old_grid_query(const ygui_spatial_grid_t *grid, float x, float y);
+struct yetty_ygui_old_widget *yetty_ygui_old_grid_query(const ygui_spatial_grid_t *grid, float x,
+                                                        float y);
 
 /* Widget helpers */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_widget_alloc(struct yetty_ygui_old_engine *engine,
-                                                         ygui_widget_type_t type, const char *id);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_widget_alloc(
+    struct yetty_ygui_old_engine *engine, ygui_widget_type_t type, const char *id);
 void yetty_ygui_old_widget_free(struct yetty_ygui_old_widget *widget);
-void yetty_ygui_old_widget_init_base(struct yetty_ygui_old_widget *widget, float x, float y, float w,
-                                 float h);
+void yetty_ygui_old_widget_init_base(struct yetty_ygui_old_widget *widget, float x, float y,
+                                     float w, float h);
 
 /* Render context */
 void yetty_ygui_old_render_ctx_init(struct yetty_ygui_old_render_ctx *ctx,
-                                struct yetty_ydraw_draw_list *buffer,
-                                const struct yetty_ygui_old_theme *theme);
-struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box(struct yetty_ygui_old_render_ctx *ctx,
-                                                                float x, float y, float w, float h,
-                                                                uint32_t color, float radius);
+                                    struct yetty_ydraw_draw_list *buffer,
+                                    const struct yetty_ygui_old_theme *theme);
+struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box(
+    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, uint32_t color,
+    float radius);
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_outline(
     struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, uint32_t color,
     float radius, float stroke_width);
-struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_text(struct yetty_ygui_old_render_ctx *ctx,
-                                                                 const char *text, float x, float y,
-                                                                 uint32_t color, float font_size);
+struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_text(
+    struct yetty_ygui_old_render_ctx *ctx, const char *text, float x, float y, uint32_t color,
+    float font_size);
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_circle(
     struct yetty_ygui_old_render_ctx *ctx, float cx, float cy, float r, uint32_t color);
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_circle_outline(
     struct yetty_ygui_old_render_ctx *ctx, float cx, float cy, float r, uint32_t color,
     float stroke_width);
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_triangle(
-    struct yetty_ygui_old_render_ctx *ctx, float x0, float y0, float x1, float y1, float x2, float y2,
-    uint32_t color);
+    struct yetty_ygui_old_render_ctx *ctx, float x0, float y0, float x1, float y1, float x2,
+    float y2, uint32_t color);
 
 /* Soft drop shadow: stacks three slightly larger, semi-transparent rounded
  * boxes behind the surface to fake gaussian falloff using only the existing
@@ -1270,15 +1272,15 @@ struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_shadow(
  * the start of the axis, color1 at the end; pixels off-axis are
  * projected. Both colors must be ABGR (same packing as fill_color). */
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_linear_gradient(
-    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, float radius, float gx0,
-    float gy0, float gx1, float gy1, uint32_t color0, uint32_t color1);
+    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float gx0, float gy0, float gx1, float gy1, uint32_t color0, uint32_t color1);
 
 /* Radial gradient inside a rounded box. The gradient origin is at
  * (cx, cy) and fades over `gradient_radius` pixels. `color_inner` is
  * sampled at the origin, `color_outer` at the radius; both clamped. */
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_radial_gradient(
-    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, float radius, float cx,
-    float cy, float gradient_radius, uint32_t color_inner, uint32_t color_outer);
+    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float cx, float cy, float gradient_radius, uint32_t color_inner, uint32_t color_outer);
 
 /* Default widget functions */
 struct yetty_ycore_void_result yetty_ygui_old_widget_render_all_default(
@@ -1287,7 +1289,8 @@ struct yetty_ycore_void_result yetty_ygui_old_widget_render_all_default(
 /* Layout pass — runs before rendering inside engine_rebuild. Resolves
  * authored geometry into live geometry (x/y/w/h) plus absolute layout_*
  * boxes that the spatial grid uses for hit testing. See ygui_layout.c. */
-struct yetty_ycore_void_result yetty_ygui_old_layout_compute_engine(struct yetty_ygui_old_engine *engine);
+struct yetty_ycore_void_result yetty_ygui_old_layout_compute_engine(
+    struct yetty_ygui_old_engine *engine);
 
 /* OSC output (ygui_osc.c).
  *
@@ -1300,32 +1303,32 @@ struct yetty_ycore_void_result yetty_ygui_old_layout_compute_engine(struct yetty
  * output_pty surfaces as an error rather than blocking on a sync
  * write() that could truncate large envelopes. */
 struct yetty_ycore_void_result yetty_ygui_old_osc_create_card(struct yetty_platform_pty *output_pty,
-                                                          const char *name, int x, int y, int w,
-                                                          int h, const uint8_t *data,
-                                                          uint32_t size);
+                                                              const char *name, int x, int y, int w,
+                                                              int h, const uint8_t *data,
+                                                              uint32_t size);
 struct yetty_ycore_void_result yetty_ygui_old_osc_update_card(struct yetty_platform_pty *output_pty,
-                                                          const char *name, const uint8_t *data,
-                                                          uint32_t size);
+                                                              const char *name, const uint8_t *data,
+                                                              uint32_t size);
 struct yetty_ycore_void_result yetty_ygui_old_osc_kill_card(struct yetty_platform_pty *output_pty,
-                                                        const char *name);
+                                                            const char *name);
 struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_clicks(
     struct yetty_platform_pty *output_pty, int enable);
-struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_moves(struct yetty_platform_pty *output_pty,
-                                                              int enable);
+struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_moves(
+    struct yetty_platform_pty *output_pty, int enable);
 struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_view_changes(
     struct yetty_platform_pty *output_pty, int enable);
 struct yetty_ycore_void_result yetty_ygui_old_osc_query_cell_size(
     struct yetty_platform_pty *output_pty);
 struct yetty_ycore_void_result yetty_ygui_old_osc_card_place(struct yetty_platform_pty *output_pty,
-                                                         uint32_t figure_id, int col, int row,
-                                                         uint32_t w_cells, uint32_t h_cells);
+                                                             uint32_t figure_id, int col, int row,
+                                                             uint32_t w_cells, uint32_t h_cells);
 struct yetty_ycore_void_result yetty_ygui_old_osc_card_remove(struct yetty_platform_pty *output_pty,
-                                                          uint32_t figure_id);
+                                                              uint32_t figure_id);
 struct yetty_ycore_void_result yetty_ygui_old_osc_zoom_card(struct yetty_platform_pty *output_pty,
-                                                        const char *name, float level);
+                                                            const char *name, float level);
 struct yetty_ycore_void_result yetty_ygui_old_osc_scroll_card(struct yetty_platform_pty *output_pty,
-                                                          const char *name, float x, float y,
-                                                          int absolute);
+                                                              const char *name, float x, float y,
+                                                              int absolute);
 struct yetty_ycore_void_result yetty_ygui_old_osc_scroll_card_delta(
     struct yetty_platform_pty *output_pty, const char *name, float dx, float dy);
 
@@ -1343,8 +1346,8 @@ void yetty_ygui_old_set_error(const char *msg);
  * `figure_id == 0` is invalid (root scope is the container, not a
  * chrome figure) and a no-op. */
 void yetty_ygui_old_internal_flush_chrome_deletes(struct yetty_ygui_old_engine *engine,
-                                              struct yetty_ydraw_draw_list *buf,
-                                              uint32_t figure_id);
+                                                  struct yetty_ydraw_draw_list *buf,
+                                                  uint32_t figure_id);
 
 /* Recursively queue scene-canvas DELETE records for every widget in
  * the given subtree that owns a live entity on the receiver
@@ -1366,14 +1369,17 @@ void yetty_ygui_old_internal_bring_to_front(struct yetty_ygui_old_widget *w);
  * widget (yimage / yplot / yvideo / yzoo / yjungle). */
 struct yetty_ydraw_draw_list;
 struct yetty_ycore_void_result yetty_ygui_old_internal_emit_buffer_translated(
-    struct yetty_ygui_old_render_ctx *ctx, const struct yetty_ydraw_draw_list *src, float dx, float dy);
+    struct yetty_ygui_old_render_ctx *ctx, const struct yetty_ydraw_draw_list *src, float dx,
+    float dy);
 
 /* Internal helpers shared between the ygui-core (libuv-free) and the
  * libuv-driven runtime in ygui_engine_uv.c. Not part of the public API
  * — `yetty_ygui_old_internal_` prefix makes the intent obvious. */
-void yetty_ygui_old_internal_process_input(struct yetty_ygui_old_engine *engine, const char *data, int len);
+void yetty_ygui_old_internal_process_input(struct yetty_ygui_old_engine *engine, const char *data,
+                                           int len);
 void yetty_ygui_old_internal_yface_on_osc(void *user, int osc_code, const uint8_t *args,
-                                      size_t args_len, const uint8_t *payload, size_t payload_len);
+                                          size_t args_len, const uint8_t *payload,
+                                          size_t payload_len);
 void yetty_ygui_old_internal_yface_on_raw(void *user, const char *bytes, size_t n);
 extern volatile int yetty_ygui_old_internal_resize_pending;
 extern struct yetty_ygui_old_engine *yetty_ygui_old_internal_active_engine;
@@ -1411,8 +1417,8 @@ struct yetty_ycore_void_result yetty_ygui_old_engine_internal_bootstrap_runtime(
  * (yetty_ygui_old_engine_create, in ygui_engine_uv.c, which follows up
  * with bootstrap_runtime) and the yui in-process path. Lives in
  * ygui_engine.c so ygui_core stays libuv-free. */
-struct ygui_engine_ptr_result yetty_ygui_old_engine_internal_alloc(const char *name,
-                                                               struct yetty_ygui_old_theme *theme);
+struct ygui_engine_ptr_result yetty_ygui_old_engine_internal_alloc(
+    const char *name, struct yetty_ygui_old_theme *theme);
 
 /* yui-specific allocator. Behaviour is currently identical to
  * internal_alloc; kept as a named alias so the yui call-site is

@@ -348,8 +348,8 @@ typedef void (*ygui_check_callback_t)(struct yetty_ygui_old_widget *widget, int 
  * so handlers can react to actual changes without having to remember state
  * across calls. On the first call (initial size set after engine_show),
  * prev_w / prev_h are 0. */
-typedef void (*ygui_resize_callback_t)(struct yetty_ygui_old_engine *engine, float new_w, float new_h,
-                                       float prev_w, float prev_h, void *userdata);
+typedef void (*ygui_resize_callback_t)(struct yetty_ygui_old_engine *engine, float new_w,
+                                       float new_h, float prev_w, float prev_h, void *userdata);
 
 /*=============================================================================
  * Engine API
@@ -412,7 +412,8 @@ struct yetty_ycore_void_result yetty_ygui_old_engine_layout(struct yetty_ygui_ol
  * via yetty_ygui_old_engine_buffer_data() / _size(). Used by unit tests
  * to feed the producer output directly into a yfigure_container's
  * process_records (skipping the OSC envelope codec). */
-struct yetty_ycore_void_result yetty_ygui_old_engine_render_headless(struct yetty_ygui_old_engine *engine);
+struct yetty_ycore_void_result yetty_ygui_old_engine_render_headless(
+    struct yetty_ygui_old_engine *engine);
 
 /* View into the engine's last-rendered raw record bytes (the body that
  * engine_render would put inside its OSC envelope). NULL/0 before the
@@ -429,17 +430,19 @@ void yetty_ygui_old_engine_run(struct yetty_ygui_old_engine *engine);
 void yetty_ygui_old_engine_stop(struct yetty_ygui_old_engine *engine);
 
 /* Configuration */
-void yetty_ygui_old_engine_set_size(struct yetty_ygui_old_engine *engine, float width, float height);
+void yetty_ygui_old_engine_set_size(struct yetty_ygui_old_engine *engine, float width,
+                                    float height);
 struct pixel_size_result yetty_ygui_old_engine_get_size(const struct yetty_ygui_old_engine *engine);
-void yetty_ygui_old_engine_set_theme(struct yetty_ygui_old_engine *engine, struct yetty_ygui_old_theme *theme);
+void yetty_ygui_old_engine_set_theme(struct yetty_ygui_old_engine *engine,
+                                     struct yetty_ygui_old_theme *theme);
 
 /* Keyboard callback */
-void yetty_ygui_old_engine_on_key(struct yetty_ygui_old_engine *engine, ygui_key_callback_t callback,
-                              void *userdata);
+void yetty_ygui_old_engine_on_key(struct yetty_ygui_old_engine *engine,
+                                  ygui_key_callback_t callback, void *userdata);
 
 /* Legacy event callback (all events go through one callback) */
 void yetty_ygui_old_engine_set_event_callback(struct yetty_ygui_old_engine *engine,
-                                          ygui_event_callback_t callback, void *userdata);
+                                              ygui_event_callback_t callback, void *userdata);
 
 /* State */
 int yetty_ygui_old_engine_is_dirty(const struct yetty_ygui_old_engine *engine);
@@ -450,8 +453,10 @@ void yetty_ygui_old_engine_mark_dirty(struct yetty_ygui_old_engine *engine);
  * events here so the engine's hit-test + dispatch routes them to the
  * widget tree). Coords are in widget pixel space, same convention the
  * OSC SC_MOUSE handler uses. */
-void yetty_ygui_old_engine_mouse_down(struct yetty_ygui_old_engine *engine, float x, float y, int button);
-void yetty_ygui_old_engine_mouse_up(struct yetty_ygui_old_engine *engine, float x, float y, int button);
+void yetty_ygui_old_engine_mouse_down(struct yetty_ygui_old_engine *engine, float x, float y,
+                                      int button);
+void yetty_ygui_old_engine_mouse_up(struct yetty_ygui_old_engine *engine, float x, float y,
+                                    int button);
 void yetty_ygui_old_engine_mouse_move(struct yetty_ygui_old_engine *engine, float x, float y);
 
 /* True iff the engine currently has a widget under a held mouse button.
@@ -464,8 +469,10 @@ int yetty_ygui_old_engine_has_pressed_widget(const struct yetty_ygui_old_engine 
  * grabbed the press (drag target), respectively. Both return NULL when
  * nothing is hovered / pressed. Used by hosts that need to cross-check
  * widget kind for things like OS cursor-shape changes. */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_hovered_widget(const struct yetty_ygui_old_engine *engine);
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_pressed_widget(const struct yetty_ygui_old_engine *engine);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_hovered_widget(
+    const struct yetty_ygui_old_engine *engine);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_pressed_widget(
+    const struct yetty_ygui_old_engine *engine);
 
 /* Get the widget's type tag. Returns the underlying YETTY_YGUI_OLD_WIDGET_*
  * enum value as int (negative if widget is NULL). Useful for narrow
@@ -503,15 +510,16 @@ enum yetty_ygui_old_severity {
     YETTY_YGUI_OLD_SEV_ERROR,
 };
 
-void yetty_ygui_old_engine_notify(struct yetty_ygui_old_engine *engine, enum yetty_ygui_old_severity sev,
-                              const char *fmt, ...);
-void yetty_ygui_old_engine_notify_ttl(struct yetty_ygui_old_engine *engine, enum yetty_ygui_old_severity sev,
-                                  uint32_t ttl_ms, const char *fmt, ...);
+void yetty_ygui_old_engine_notify(struct yetty_ygui_old_engine *engine,
+                                  enum yetty_ygui_old_severity sev, const char *fmt, ...);
+void yetty_ygui_old_engine_notify_ttl(struct yetty_ygui_old_engine *engine,
+                                      enum yetty_ygui_old_severity sev, uint32_t ttl_ms,
+                                      const char *fmt, ...);
 
 /* Resize handling. Canvas always tracks the host's reported pixel size
  * (CANVAS_FIT semantics); there is no other mode. */
-void yetty_ygui_old_engine_on_resize(struct yetty_ygui_old_engine *engine, ygui_resize_callback_t callback,
-                                 void *userdata);
+void yetty_ygui_old_engine_on_resize(struct yetty_ygui_old_engine *engine,
+                                     ygui_resize_callback_t callback, void *userdata);
 
 /* View state (read-only, updated from OSC 777779 events) */
 float yetty_ygui_old_engine_get_zoom(const struct yetty_ygui_old_engine *engine);
@@ -530,92 +538,100 @@ void yetty_ygui_old_engine_scroll_by(struct yetty_ygui_old_engine *engine, float
  * Widget Creation
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_button(struct yetty_ygui_old_engine *engine, const char *id,
-                                                   float x, float y, float w, float h,
-                                                   const char *label);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_button(struct yetty_ygui_old_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h, const char *label);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_label(struct yetty_ygui_old_engine *engine, const char *id,
-                                                  float x, float y, const char *text);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_label(struct yetty_ygui_old_engine *engine,
+                                                          const char *id, float x, float y,
+                                                          const char *text);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_slider(struct yetty_ygui_old_engine *engine, const char *id,
-                                                   float x, float y, float w, float h,
-                                                   float min_val, float max_val, float value);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_slider(struct yetty_ygui_old_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h, float min_val,
+                                                           float max_val, float value);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_checkbox(struct yetty_ygui_old_engine *engine,
-                                                     const char *id, float x, float y, float w,
-                                                     float h, const char *label, int checked);
+                                                             const char *id, float x, float y,
+                                                             float w, float h, const char *label,
+                                                             int checked);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_textinput(struct yetty_ygui_old_engine *engine,
-                                                      const char *id, float x, float y, float w,
-                                                      float h, const char *placeholder);
+                                                              const char *id, float x, float y,
+                                                              float w, float h,
+                                                              const char *placeholder);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_panel(struct yetty_ygui_old_engine *engine, const char *id,
-                                                  float x, float y, float w, float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_panel(struct yetty_ygui_old_engine *engine,
+                                                          const char *id, float x, float y, float w,
+                                                          float h);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_hbox(struct yetty_ygui_old_engine *engine, const char *id,
-                                                 float x, float y, float w, float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_hbox(struct yetty_ygui_old_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_vbox(struct yetty_ygui_old_engine *engine, const char *id,
-                                                 float x, float y, float w, float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_vbox(struct yetty_ygui_old_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_dropdown(struct yetty_ygui_old_engine *engine,
-                                                     const char *id, float x, float y, float w,
-                                                     float h, const char **options,
-                                                     int option_count);
+                                                             const char *id, float x, float y,
+                                                             float w, float h, const char **options,
+                                                             int option_count);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_progress(struct yetty_ygui_old_engine *engine,
-                                                     const char *id, float x, float y, float w,
-                                                     float h, float value);
+                                                             const char *id, float x, float y,
+                                                             float w, float h, float value);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_separator(struct yetty_ygui_old_engine *engine,
-                                                      const char *id, float x, float y, float w,
-                                                      float h);
-
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_colorpicker(struct yetty_ygui_old_engine *engine,
-                                                        const char *id, float x, float y, float w,
-                                                        float h);
-
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_popup(struct yetty_ygui_old_engine *engine, const char *id,
-                                                  float x, float y, float w, float h,
-                                                  const char *label);
-
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_collapsing_header(struct yetty_ygui_old_engine *engine,
                                                               const char *id, float x, float y,
-                                                              float w, float h, const char *label);
+                                                              float w, float h);
+
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_colorpicker(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h);
+
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_popup(struct yetty_ygui_old_engine *engine,
+                                                          const char *id, float x, float y, float w,
+                                                          float h, const char *label);
+
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_collapsing_header(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *label);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_tooltip(struct yetty_ygui_old_engine *engine,
-                                                    const char *id, float x, float y, float w,
-                                                    float h, const char *label);
+                                                            const char *id, float x, float y,
+                                                            float w, float h, const char *label);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_selectable(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w,
-                                                       float h, const char *label);
+                                                               const char *id, float x, float y,
+                                                               float w, float h, const char *label);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_choicebox(struct yetty_ygui_old_engine *engine,
-                                                      const char *id, float x, float y, float w,
-                                                      float h, const char **options,
-                                                      int option_count);
+                                                              const char *id, float x, float y,
+                                                              float w, float h,
+                                                              const char **options,
+                                                              int option_count);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_vscrollbar(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w,
-                                                       float h);
+                                                               const char *id, float x, float y,
+                                                               float w, float h);
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_hscrollbar(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w,
-                                                       float h);
+                                                               const char *id, float x, float y,
+                                                               float w, float h);
 
 /* List — generic row-aware vertical container. Children are arbitrary
  * widgets; the list tracks a selected child and fires on_select on
  * click. CSS configures layout (gap, padding). */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_list(struct yetty_ygui_old_engine *engine, const char *id,
-                                                 float x, float y, float w, float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_list(struct yetty_ygui_old_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h);
 
 /* Tree node — a row with a chevron + label header and an auto-allocated
  * children list. add_child(tree_node_children(node), …) populates the
  * sub-rows. set_expanded toggles visibility of the children list (which
  * already participates in flex layout). */
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_tree_node(struct yetty_ygui_old_engine *engine,
-                                                      const char *id, const char *label);
+                                                              const char *id, const char *label);
 
 /* Rich content surface — holds a ydraw-core buffer of pre-built primitives
  * (text spans, SDF shapes, yplot, yimage, ...). The widget reserves a flex
@@ -633,26 +649,26 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_tree_node(struct yetty_ygui_
  *                                                hands the buffer to the
  *                                                widget. Equivalent to
  *                                                rich() + set_yaml(). */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich(struct yetty_ygui_old_engine *engine, const char *id,
-                                                 float x, float y, float w, float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich(struct yetty_ygui_old_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich_from_yaml(struct yetty_ygui_old_engine *engine,
-                                                           const char *id, float x, float y,
-                                                           float w, float h, const char *yaml,
-                                                           size_t yaml_len);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich_from_yaml(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *yaml, size_t yaml_len);
 
 /* Replace the widget's current content with primitives parsed from a YAML
  * string. Mirrors yetty_ydraw_yaml_parse internally; ownership of the
  * resulting buffer stays with the widget. Returns the parser's error result
  * unchanged (use YETTY_IS_ERR / propagate via YETTY_RETURN_IF_ERR). */
-struct yetty_ycore_void_result yetty_ygui_old_widget_rich_set_yaml(struct yetty_ygui_old_widget *widget,
-                                                               const char *yaml, size_t yaml_len);
+struct yetty_ycore_void_result yetty_ygui_old_widget_rich_set_yaml(
+    struct yetty_ygui_old_widget *widget, const char *yaml, size_t yaml_len);
 
 /* Transfer ownership of an externally-constructed ydraw-core buffer into
  * the widget. The widget destroys the buffer in its own destroy hook (and
  * on the next set_yaml / set_buffer / clear call). Passing NULL clears. */
 void yetty_ygui_old_widget_rich_set_buffer(struct yetty_ygui_old_widget *widget,
-                                       struct yetty_ydraw_draw_list *buffer);
+                                           struct yetty_ydraw_draw_list *buffer);
 
 /* Drop the current buffer without replacement. Equivalent to
  * set_buffer(widget, NULL). */
@@ -671,14 +687,16 @@ void yetty_ygui_old_widget_rich_clear(struct yetty_ygui_old_widget *widget);
  * via padding-top, so children don't have to know about the title
  * area. Pass NULL or "" for `title` to render a bare title bar
  * (close button still drawn). */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_window(struct yetty_ygui_old_engine *engine, const char *id,
-                                                   float x, float y, float w, float h,
-                                                   const char *title);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_window(struct yetty_ygui_old_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h, const char *title);
 
 /* Returns the inner body container (a vbox). Add app widgets here. */
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_window_body(struct yetty_ygui_old_widget *window);
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_window_body(
+    struct yetty_ygui_old_widget *window);
 
-void yetty_ygui_old_widget_window_set_title(struct yetty_ygui_old_widget *window, const char *title);
+void yetty_ygui_old_widget_window_set_title(struct yetty_ygui_old_widget *window,
+                                            const char *title);
 const char *yetty_ygui_old_widget_window_get_title(const struct yetty_ygui_old_widget *window);
 
 /* Optional callback fired when the close button is clicked, BEFORE the
@@ -689,7 +707,7 @@ const char *yetty_ygui_old_widget_window_get_title(const struct yetty_ygui_old_w
  * close_action set on the window (no API today; for v1 the callback is
  * notify-only). */
 void yetty_ygui_old_widget_window_on_close(struct yetty_ygui_old_widget *window,
-                                       ygui_click_callback_t callback, void *userdata);
+                                           ygui_click_callback_t callback, void *userdata);
 
 /* Stop the engine loop and arrange for engine_destroy to leave the
  * last rendered ydraw frame on the canvas (no YDRAW_CLEAR sent).
@@ -704,7 +722,7 @@ void yetty_ygui_old_engine_close_preserve(struct yetty_ygui_old_engine *engine);
  * menu is a normal engine-managed widget and is freed alongside the
  * engine. */
 void yetty_ygui_old_widget_window_set_menu(struct yetty_ygui_old_widget *window,
-                                       struct yetty_ygui_old_widget *menu);
+                                           struct yetty_ygui_old_widget *menu);
 
 /*=============================================================================
  * Window menubar + statusbar
@@ -720,9 +738,9 @@ void yetty_ygui_old_widget_window_set_menu(struct yetty_ygui_old_widget *window,
  *===========================================================================*/
 
 void yetty_ygui_old_widget_window_set_menubar(struct yetty_ygui_old_widget *window,
-                                          struct yetty_ygui_old_widget *menubar);
+                                              struct yetty_ygui_old_widget *menubar);
 void yetty_ygui_old_widget_window_set_statusbar(struct yetty_ygui_old_widget *window,
-                                            struct yetty_ygui_old_widget *statusbar);
+                                                struct yetty_ygui_old_widget *statusbar);
 
 /* Popup menu — a floating, vertically-stacked list of clickable items.
  * Inherits the visuals of the popup dialog (rounded body + drop
@@ -741,12 +759,14 @@ void yetty_ygui_old_widget_window_set_statusbar(struct yetty_ygui_old_widget *wi
  * The menu starts closed. Open it via yetty_ygui_old_widget_popup_menu_open_at
  * (positions then toggles OPEN), or let the window's hamburger toggle it. */
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_popup_menu(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w);
+                                                               const char *id, float x, float y,
+                                                               float w);
 
 /* Append a clickable item. cb fires when clicked; the menu auto-closes
  * after the callback returns. */
-void yetty_ygui_old_widget_popup_menu_add_item(struct yetty_ygui_old_widget *menu, const char *label,
-                                           ygui_click_callback_t cb, void *userdata);
+void yetty_ygui_old_widget_popup_menu_add_item(struct yetty_ygui_old_widget *menu,
+                                               const char *label, ygui_click_callback_t cb,
+                                               void *userdata);
 
 /* Append a drill-down item — same as add_item, but the menu STAYS OPEN
  * after the callback returns. Used to navigate into a submenu in place:
@@ -755,8 +775,9 @@ void yetty_ygui_old_widget_popup_menu_add_item(struct yetty_ygui_old_widget *men
  * with the child level's content. The caller is conventionally
  * expected to render a "▸" suffix in the label so users see it's a
  * drill-down. */
-void yetty_ygui_old_widget_popup_menu_add_drill_item(struct yetty_ygui_old_widget *menu, const char *label,
-                                                 ygui_click_callback_t cb, void *userdata);
+void yetty_ygui_old_widget_popup_menu_add_drill_item(struct yetty_ygui_old_widget *menu,
+                                                     const char *label, ygui_click_callback_t cb,
+                                                     void *userdata);
 
 /* Append a non-interactive separator row (a thin divider). */
 void yetty_ygui_old_widget_popup_menu_add_separator(struct yetty_ygui_old_widget *menu);
@@ -777,7 +798,8 @@ void yetty_ygui_old_widget_popup_menu_clear(struct yetty_ygui_old_widget *menu);
  * "breadcrumb" line — e.g. "Menu" or "Menu › New view"). NULL/empty
  * removes the header. The header is shown above the items and pushes
  * the first row down by one row-height. */
-void yetty_ygui_old_widget_popup_menu_set_title(struct yetty_ygui_old_widget *menu, const char *title);
+void yetty_ygui_old_widget_popup_menu_set_title(struct yetty_ygui_old_widget *menu,
+                                                const char *title);
 
 /* Install the back-handler. When non-NULL, a `<` chevron button is
  * painted at the left side of the header; clicking it fires the
@@ -785,7 +807,7 @@ void yetty_ygui_old_widget_popup_menu_set_title(struct yetty_ygui_old_widget *me
  * popup_menu_clear + populates the parent level). Pass NULL to remove
  * the back button (root level). */
 void yetty_ygui_old_widget_popup_menu_set_back(struct yetty_ygui_old_widget *menu,
-                                           ygui_click_callback_t on_back, void *userdata);
+                                               ygui_click_callback_t on_back, void *userdata);
 
 /* Tabbar — browser-style tab strip across the top of the widget's box, with
  * one content panel per tab below. Only the active panel is rendered/laid
@@ -802,18 +824,19 @@ void yetty_ygui_old_widget_popup_menu_set_back(struct yetty_ygui_old_widget *men
  * Use change_callback on the tabbar (yetty_ygui_old_widget_tabbar_on_change) to
  * react to tab switches — the new index is delivered through the standard
  * `float value` field. */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_tabbar(struct yetty_ygui_old_engine *engine, const char *id,
-                                                   float x, float y, float w, float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_tabbar(struct yetty_ygui_old_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_tabbar_add_tab(struct yetty_ygui_old_widget *tabbar,
-                                                           const char *label);
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_tabbar_add_tab(
+    struct yetty_ygui_old_widget *tabbar, const char *label);
 
 void yetty_ygui_old_widget_tabbar_set_active(struct yetty_ygui_old_widget *tabbar, int index);
 int yetty_ygui_old_widget_tabbar_get_active(const struct yetty_ygui_old_widget *tabbar);
 int yetty_ygui_old_widget_tabbar_count(const struct yetty_ygui_old_widget *tabbar);
 
 void yetty_ygui_old_widget_tabbar_on_change(struct yetty_ygui_old_widget *tabbar,
-                                        ygui_change_callback_t callback, void *userdata);
+                                            ygui_change_callback_t callback, void *userdata);
 
 /* Programmatically remove a tab. Frees its panel and label, compacts the
  * internal arrays, and re-anchors the active index (advancing to the
@@ -825,7 +848,7 @@ void yetty_ygui_old_widget_tabbar_remove_tab(struct yetty_ygui_old_widget *tabba
  * runs (which removes the tab). The tab index is delivered through
  * the `value` argument — same shape as the on_change callback. */
 void yetty_ygui_old_widget_tabbar_on_tab_close(struct yetty_ygui_old_widget *tabbar,
-                                           ygui_change_callback_t callback, void *userdata);
+                                               ygui_change_callback_t callback, void *userdata);
 
 /* Optional "+" new-tab button. When `callback` is non-NULL the tabbar
  * renders a small "+" pill at the end of the header strip and routes
@@ -833,7 +856,7 @@ void yetty_ygui_old_widget_tabbar_on_tab_close(struct yetty_ygui_old_widget *tab
  * appending a new tab (via widget_tabbar_add_tab) or asking a host
  * model to do so. Pass NULL to hide the button. */
 void yetty_ygui_old_widget_tabbar_on_new_tab(struct yetty_ygui_old_widget *tabbar,
-                                         ygui_click_callback_t callback, void *userdata);
+                                             ygui_click_callback_t callback, void *userdata);
 
 /* Uniform per-button size used by tab close 'x' and (via the window
  * widget) the hamburger menu. Useful when an app builds custom UI
@@ -846,31 +869,34 @@ float yetty_ygui_old_tabbar_button_size(void);
 
 /* Button */
 void yetty_ygui_old_widget_button_on_click(struct yetty_ygui_old_widget *button,
-                                       ygui_click_callback_t callback, void *userdata);
+                                           ygui_click_callback_t callback, void *userdata);
 
 /* Slider */
 void yetty_ygui_old_widget_slider_on_change(struct yetty_ygui_old_widget *slider,
-                                        ygui_change_callback_t callback, void *userdata);
+                                            ygui_change_callback_t callback, void *userdata);
 
 /* Checkbox */
 void yetty_ygui_old_widget_checkbox_on_change(struct yetty_ygui_old_widget *checkbox,
-                                          ygui_check_callback_t callback, void *userdata);
+                                              ygui_check_callback_t callback, void *userdata);
 
 /* TextInput */
 void yetty_ygui_old_widget_textinput_on_change(struct yetty_ygui_old_widget *input,
-                                           ygui_text_callback_t callback, void *userdata);
+                                               ygui_text_callback_t callback, void *userdata);
 
 /*=============================================================================
  * Widget Hierarchy
  *===========================================================================*/
 
-void yetty_ygui_old_widget_add_child(struct yetty_ygui_old_widget *parent, struct yetty_ygui_old_widget *child);
+void yetty_ygui_old_widget_add_child(struct yetty_ygui_old_widget *parent,
+                                     struct yetty_ygui_old_widget *child);
 void yetty_ygui_old_widget_remove_child(struct yetty_ygui_old_widget *parent,
-                                    struct yetty_ygui_old_widget *child);
+                                        struct yetty_ygui_old_widget *child);
 void yetty_ygui_old_widget_remove(struct yetty_ygui_old_widget *widget);
 struct yetty_ygui_old_widget *yetty_ygui_old_widget_parent(struct yetty_ygui_old_widget *widget);
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_first_child(struct yetty_ygui_old_widget *widget);
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_next_sibling(struct yetty_ygui_old_widget *widget);
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_first_child(
+    struct yetty_ygui_old_widget *widget);
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_next_sibling(
+    struct yetty_ygui_old_widget *widget);
 
 /*=============================================================================
  * Widget Properties (Generic)
@@ -880,21 +906,24 @@ const char *yetty_ygui_old_widget_id(const struct yetty_ygui_old_widget *widget)
 ygui_widget_type_t yetty_ygui_old_widget_type(const struct yetty_ygui_old_widget *widget);
 
 void yetty_ygui_old_widget_set_position(struct yetty_ygui_old_widget *widget, float x, float y);
-struct pixel_coord_result yetty_ygui_old_widget_get_position(const struct yetty_ygui_old_widget *widget);
+struct pixel_coord_result yetty_ygui_old_widget_get_position(
+    const struct yetty_ygui_old_widget *widget);
 
 void yetty_ygui_old_widget_set_size(struct yetty_ygui_old_widget *widget, float w, float h);
 struct pixel_size_result yetty_ygui_old_widget_get_size(const struct yetty_ygui_old_widget *widget);
 
 /* Resolved (post-layout) absolute outer box. Valid after engine_layout() or
  * engine_render() has run. */
-struct rectangle_result yetty_ygui_old_widget_get_layout_box(const struct yetty_ygui_old_widget *widget);
+struct rectangle_result yetty_ygui_old_widget_get_layout_box(
+    const struct yetty_ygui_old_widget *widget);
 
 /* Resolved (post-layout) content area — the layout box minus padding. This
  * is the rectangle inside which the widget's children are positioned, and
  * therefore the right "client area" to query when sizing an embedded
  * producer (yzoo, yjungle, ...) or any other content that must fit within
  * a container without spilling into its padding band. */
-struct rectangle_result yetty_ygui_old_widget_get_content_box(const struct yetty_ygui_old_widget *widget);
+struct rectangle_result yetty_ygui_old_widget_get_content_box(
+    const struct yetty_ygui_old_widget *widget);
 
 void yetty_ygui_old_widget_set_visible(struct yetty_ygui_old_widget *widget, int visible);
 int yetty_ygui_old_widget_is_visible(const struct yetty_ygui_old_widget *widget);
@@ -910,32 +939,39 @@ void yetty_ygui_old_widget_set_fg_color(struct yetty_ygui_old_widget *widget, ui
 void yetty_ygui_old_widget_set_accent_color(struct yetty_ygui_old_widget *widget, uint32_t color);
 
 /* Layout (flexbox) — see ygui_layout_mode_t et al. */
-void yetty_ygui_old_widget_set_layout_mode(struct yetty_ygui_old_widget *widget, ygui_layout_mode_t mode);
+void yetty_ygui_old_widget_set_layout_mode(struct yetty_ygui_old_widget *widget,
+                                           ygui_layout_mode_t mode);
 void yetty_ygui_old_widget_set_flex_direction(struct yetty_ygui_old_widget *widget,
-                                          ygui_flex_direction_t direction);
+                                              ygui_flex_direction_t direction);
 void yetty_ygui_old_widget_set_justify_content(struct yetty_ygui_old_widget *widget,
-                                           ygui_justify_t justify);
-void yetty_ygui_old_widget_set_align_items(struct yetty_ygui_old_widget *widget, ygui_align_t align);
+                                               ygui_justify_t justify);
+void yetty_ygui_old_widget_set_align_items(struct yetty_ygui_old_widget *widget,
+                                           ygui_align_t align);
 void yetty_ygui_old_widget_set_align_self(struct yetty_ygui_old_widget *widget, ygui_align_t align);
 void yetty_ygui_old_widget_set_flex(struct yetty_ygui_old_widget *widget, float grow, float shrink,
-                                float basis);
+                                    float basis);
 void yetty_ygui_old_widget_set_gap(struct yetty_ygui_old_widget *widget, float gap);
 void yetty_ygui_old_widget_set_padding(struct yetty_ygui_old_widget *widget, float top, float right,
-                                   float bottom, float left);
+                                       float bottom, float left);
 void yetty_ygui_old_widget_set_margin(struct yetty_ygui_old_widget *widget, float top, float right,
-                                  float bottom, float left);
-void yetty_ygui_old_widget_set_min_size(struct yetty_ygui_old_widget *widget, float min_w, float min_h);
-void yetty_ygui_old_widget_set_max_size(struct yetty_ygui_old_widget *widget, float max_w, float max_h);
-void yetty_ygui_old_widget_set_flex_wrap(struct yetty_ygui_old_widget *widget, ygui_flex_wrap_t wrap);
-void yetty_ygui_old_widget_set_align_content(struct yetty_ygui_old_widget *widget, ygui_align_t align);
+                                      float bottom, float left);
+void yetty_ygui_old_widget_set_min_size(struct yetty_ygui_old_widget *widget, float min_w,
+                                        float min_h);
+void yetty_ygui_old_widget_set_max_size(struct yetty_ygui_old_widget *widget, float max_w,
+                                        float max_h);
+void yetty_ygui_old_widget_set_flex_wrap(struct yetty_ygui_old_widget *widget,
+                                         ygui_flex_wrap_t wrap);
+void yetty_ygui_old_widget_set_align_content(struct yetty_ygui_old_widget *widget,
+                                             ygui_align_t align);
 void yetty_ygui_old_widget_set_position_mode(struct yetty_ygui_old_widget *widget,
-                                         ygui_position_t position);
+                                             ygui_position_t position);
 void yetty_ygui_old_widget_set_flex_basis_percent(struct yetty_ygui_old_widget *widget, float pct);
-void yetty_ygui_old_widget_set_size_percent(struct yetty_ygui_old_widget *widget, float w_pct, float h_pct);
-void yetty_ygui_old_widget_set_min_size_percent(struct yetty_ygui_old_widget *widget, float min_w_pct,
-                                            float min_h_pct);
-void yetty_ygui_old_widget_set_max_size_percent(struct yetty_ygui_old_widget *widget, float max_w_pct,
-                                            float max_h_pct);
+void yetty_ygui_old_widget_set_size_percent(struct yetty_ygui_old_widget *widget, float w_pct,
+                                            float h_pct);
+void yetty_ygui_old_widget_set_min_size_percent(struct yetty_ygui_old_widget *widget,
+                                                float min_w_pct, float min_h_pct);
+void yetty_ygui_old_widget_set_max_size_percent(struct yetty_ygui_old_widget *widget,
+                                                float max_w_pct, float max_h_pct);
 
 /* Apply a CSS-like one-shot string to a widget's layout. Recognized
  * properties (each terminated by ';' or end-of-string):
@@ -962,14 +998,15 @@ void yetty_ygui_old_widget_set_max_size_percent(struct yetty_ygui_old_widget *wi
  * Returns ok or an error result. Unknown properties are reported but do
  * not abort parsing of the rest of the string. */
 struct yetty_ycore_void_result yetty_ygui_old_widget_apply_css(struct yetty_ygui_old_widget *widget,
-                                                           const char *css);
+                                                               const char *css);
 
 /*=============================================================================
  * Widget-Specific Properties
  *===========================================================================*/
 
 /* Button */
-void yetty_ygui_old_widget_button_set_label(struct yetty_ygui_old_widget *widget, const char *label);
+void yetty_ygui_old_widget_button_set_label(struct yetty_ygui_old_widget *widget,
+                                            const char *label);
 const char *yetty_ygui_old_widget_button_get_label(const struct yetty_ygui_old_widget *widget);
 
 /* Label */
@@ -981,23 +1018,27 @@ void yetty_ygui_old_widget_label_set_font_size(struct yetty_ygui_old_widget *wid
 void yetty_ygui_old_widget_slider_set_value(struct yetty_ygui_old_widget *widget, float value);
 float yetty_ygui_old_widget_slider_get_value(const struct yetty_ygui_old_widget *widget);
 void yetty_ygui_old_widget_slider_set_range(struct yetty_ygui_old_widget *widget, float min_val,
-                                        float max_val);
+                                            float max_val);
 
 /* Checkbox */
 void yetty_ygui_old_widget_checkbox_set_checked(struct yetty_ygui_old_widget *widget, int checked);
 int yetty_ygui_old_widget_checkbox_get_checked(const struct yetty_ygui_old_widget *widget);
-void yetty_ygui_old_widget_checkbox_set_label(struct yetty_ygui_old_widget *widget, const char *label);
+void yetty_ygui_old_widget_checkbox_set_label(struct yetty_ygui_old_widget *widget,
+                                              const char *label);
 
 /* TextInput */
-void yetty_ygui_old_widget_textinput_set_text(struct yetty_ygui_old_widget *widget, const char *text);
+void yetty_ygui_old_widget_textinput_set_text(struct yetty_ygui_old_widget *widget,
+                                              const char *text);
 const char *yetty_ygui_old_widget_textinput_get_text(const struct yetty_ygui_old_widget *widget);
 void yetty_ygui_old_widget_textinput_set_placeholder(struct yetty_ygui_old_widget *widget,
-                                                 const char *text);
+                                                     const char *text);
 
 /* Panel */
 void yetty_ygui_old_widget_panel_set_scroll(struct yetty_ygui_old_widget *widget, float x, float y);
-void yetty_ygui_old_widget_panel_get_scroll(const struct yetty_ygui_old_widget *widget, float *x, float *y);
-void yetty_ygui_old_widget_panel_set_content_size(struct yetty_ygui_old_widget *widget, float w, float h);
+void yetty_ygui_old_widget_panel_get_scroll(const struct yetty_ygui_old_widget *widget, float *x,
+                                            float *y);
+void yetty_ygui_old_widget_panel_set_content_size(struct yetty_ygui_old_widget *widget, float w,
+                                                  float h);
 void yetty_ygui_old_widget_panel_set_header_height(struct yetty_ygui_old_widget *widget, float h);
 
 /* Progress */
@@ -1005,16 +1046,16 @@ void yetty_ygui_old_widget_progress_set_value(struct yetty_ygui_old_widget *widg
 float yetty_ygui_old_widget_progress_get_value(const struct yetty_ygui_old_widget *widget);
 
 /* Dropdown */
-void yetty_ygui_old_widget_dropdown_set_options(struct yetty_ygui_old_widget *widget, const char **options,
-                                            int count);
+void yetty_ygui_old_widget_dropdown_set_options(struct yetty_ygui_old_widget *widget,
+                                                const char **options, int count);
 void yetty_ygui_old_widget_dropdown_set_selected(struct yetty_ygui_old_widget *widget, int index);
 int yetty_ygui_old_widget_dropdown_get_selected(const struct yetty_ygui_old_widget *widget);
 
 /* ColorPicker */
-void yetty_ygui_old_widget_colorpicker_set_color(struct yetty_ygui_old_widget *widget, float r, float g,
-                                             float b, float a);
-void yetty_ygui_old_widget_colorpicker_get_color(const struct yetty_ygui_old_widget *widget, float *r,
-                                             float *g, float *b, float *a);
+void yetty_ygui_old_widget_colorpicker_set_color(struct yetty_ygui_old_widget *widget, float r,
+                                                 float g, float b, float a);
+void yetty_ygui_old_widget_colorpicker_get_color(const struct yetty_ygui_old_widget *widget,
+                                                 float *r, float *g, float *b, float *a);
 
 /* Popup */
 void yetty_ygui_old_widget_popup_set_label(struct yetty_ygui_old_widget *widget, const char *label);
@@ -1023,29 +1064,36 @@ void yetty_ygui_old_widget_popup_set_modal(struct yetty_ygui_old_widget *widget,
 int yetty_ygui_old_widget_popup_is_modal(const struct yetty_ygui_old_widget *widget);
 void yetty_ygui_old_widget_popup_set_open(struct yetty_ygui_old_widget *widget, int open);
 int yetty_ygui_old_widget_popup_is_open(const struct yetty_ygui_old_widget *widget);
-void yetty_ygui_old_widget_popup_set_scene_size(struct yetty_ygui_old_widget *widget, float w, float h);
-void yetty_ygui_old_widget_popup_set_header_color(struct yetty_ygui_old_widget *widget, uint32_t color);
+void yetty_ygui_old_widget_popup_set_scene_size(struct yetty_ygui_old_widget *widget, float w,
+                                                float h);
+void yetty_ygui_old_widget_popup_set_header_color(struct yetty_ygui_old_widget *widget,
+                                                  uint32_t color);
 
 /* CollapsingHeader */
 void yetty_ygui_old_widget_collapsing_header_set_label(struct yetty_ygui_old_widget *widget,
-                                                   const char *label);
-const char *yetty_ygui_old_widget_collapsing_header_get_label(const struct yetty_ygui_old_widget *widget);
-void yetty_ygui_old_widget_collapsing_header_set_open(struct yetty_ygui_old_widget *widget, int open);
+                                                       const char *label);
+const char *yetty_ygui_old_widget_collapsing_header_get_label(
+    const struct yetty_ygui_old_widget *widget);
+void yetty_ygui_old_widget_collapsing_header_set_open(struct yetty_ygui_old_widget *widget,
+                                                      int open);
 int yetty_ygui_old_widget_collapsing_header_is_open(const struct yetty_ygui_old_widget *widget);
 
 /* Tooltip */
-void yetty_ygui_old_widget_tooltip_set_label(struct yetty_ygui_old_widget *widget, const char *label);
+void yetty_ygui_old_widget_tooltip_set_label(struct yetty_ygui_old_widget *widget,
+                                             const char *label);
 const char *yetty_ygui_old_widget_tooltip_get_label(const struct yetty_ygui_old_widget *widget);
 
 /* Selectable */
-void yetty_ygui_old_widget_selectable_set_label(struct yetty_ygui_old_widget *widget, const char *label);
+void yetty_ygui_old_widget_selectable_set_label(struct yetty_ygui_old_widget *widget,
+                                                const char *label);
 const char *yetty_ygui_old_widget_selectable_get_label(const struct yetty_ygui_old_widget *widget);
-void yetty_ygui_old_widget_selectable_set_checked(struct yetty_ygui_old_widget *widget, int checked);
+void yetty_ygui_old_widget_selectable_set_checked(struct yetty_ygui_old_widget *widget,
+                                                  int checked);
 int yetty_ygui_old_widget_selectable_is_checked(const struct yetty_ygui_old_widget *widget);
 
 /* ChoiceBox */
-void yetty_ygui_old_widget_choicebox_set_options(struct yetty_ygui_old_widget *widget, const char **options,
-                                             int count);
+void yetty_ygui_old_widget_choicebox_set_options(struct yetty_ygui_old_widget *widget,
+                                                 const char **options, int count);
 void yetty_ygui_old_widget_choicebox_set_selected(struct yetty_ygui_old_widget *widget, int index);
 int yetty_ygui_old_widget_choicebox_get_selected(const struct yetty_ygui_old_widget *widget);
 
@@ -1068,21 +1116,21 @@ float yetty_ygui_old_widget_scrollbar_get_value(const struct yetty_ygui_old_widg
  *   yetty_ygui_old_widget_radio_group_on_change(group, my_cb, NULL);
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_radio_group(struct yetty_ygui_old_engine *engine,
-                                                        const char *id, float x, float y, float w,
-                                                        float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_radio_group(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h);
 
 /* Append a radio. Returns the newly-created radio widget so the caller
  * can apply CSS / hook a per-radio callback if needed. */
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_radio_group_add(struct yetty_ygui_old_widget *group,
-                                                            const char *id, const char *label);
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_radio_group_add(
+    struct yetty_ygui_old_widget *group, const char *id, const char *label);
 
-void yetty_ygui_old_widget_radio_group_set_selected_index(struct yetty_ygui_old_widget *group, int index);
+void yetty_ygui_old_widget_radio_group_set_selected_index(struct yetty_ygui_old_widget *group,
+                                                          int index);
 int yetty_ygui_old_widget_radio_group_get_selected_index(const struct yetty_ygui_old_widget *group);
 
 /* Cb gets the new index in `value` (cast from float). -1 means none. */
 void yetty_ygui_old_widget_radio_group_on_change(struct yetty_ygui_old_widget *group,
-                                             ygui_change_callback_t cb, void *userdata);
+                                                 ygui_change_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Spinner — numeric input with ± buttons.
@@ -1094,18 +1142,19 @@ void yetty_ygui_old_widget_radio_group_on_change(struct yetty_ygui_old_widget *g
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_spinner(struct yetty_ygui_old_engine *engine,
-                                                    const char *id, float x, float y, float w,
-                                                    float h, float min_val, float max_val,
-                                                    float step, float value);
+                                                            const char *id, float x, float y,
+                                                            float w, float h, float min_val,
+                                                            float max_val, float step, float value);
 
 void yetty_ygui_old_widget_spinner_set_value(struct yetty_ygui_old_widget *widget, float value);
 float yetty_ygui_old_widget_spinner_get_value(const struct yetty_ygui_old_widget *widget);
 void yetty_ygui_old_widget_spinner_set_range(struct yetty_ygui_old_widget *widget, float min_val,
-                                         float max_val);
+                                             float max_val);
 void yetty_ygui_old_widget_spinner_set_step(struct yetty_ygui_old_widget *widget, float step);
-void yetty_ygui_old_widget_spinner_set_precision(struct yetty_ygui_old_widget *widget, int decimals);
+void yetty_ygui_old_widget_spinner_set_precision(struct yetty_ygui_old_widget *widget,
+                                                 int decimals);
 void yetty_ygui_old_widget_spinner_on_change(struct yetty_ygui_old_widget *widget,
-                                         ygui_change_callback_t cb, void *userdata);
+                                             ygui_change_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Splitter — drag-to-resize divider.
@@ -1128,8 +1177,8 @@ void yetty_ygui_old_widget_spinner_on_change(struct yetty_ygui_old_widget *widge
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_splitter(struct yetty_ygui_old_engine *engine,
-                                                     const char *id, float x, float y, float w,
-                                                     float h);
+                                                             const char *id, float x, float y,
+                                                             float w, float h);
 
 /* Minimum size enforced on each side during drag. Default 30 px. */
 void yetty_ygui_old_widget_splitter_set_min(struct yetty_ygui_old_widget *widget, float min_size);
@@ -1142,7 +1191,7 @@ void yetty_ygui_old_widget_splitter_set_min(struct yetty_ygui_old_widget *widget
  * widget itself. Use this when the divided regions aren't sibling
  * widgets in a flex container (e.g. yui's pane tile tree). */
 void yetty_ygui_old_widget_splitter_on_change(struct yetty_ygui_old_widget *widget,
-                                          ygui_change_callback_t cb, void *userdata);
+                                              ygui_change_callback_t cb, void *userdata);
 
 /* Pin the drag axis explicitly. row=1 → vertical bar that resizes left
  * vs right; row=0 → horizontal bar that resizes top vs bottom. Use
@@ -1177,8 +1226,8 @@ int yetty_ygui_old_widget_splitter_get_axis(const struct yetty_ygui_old_widget *
  * dialog. The dialog widget is owned by the engine (regular popup
  * lifetime); the helper does not destroy it. */
 
-typedef void (*yetty_ygui_old_dialog_button_fn)(struct yetty_ygui_old_widget *dialog, int button_index,
-                                            void *userdata);
+typedef void (*yetty_ygui_old_dialog_button_fn)(struct yetty_ygui_old_widget *dialog,
+                                                int button_index, void *userdata);
 
 struct yetty_ygui_old_dialog_args {
     const char *id;
@@ -1191,8 +1240,8 @@ struct yetty_ygui_old_dialog_args {
     int modal; /* non-zero → dim the rest of the canvas while open */
 };
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_dialog(struct yetty_ygui_old_engine *engine,
-                                                   const struct yetty_ygui_old_dialog_args *args);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_dialog(
+    struct yetty_ygui_old_engine *engine, const struct yetty_ygui_old_dialog_args *args);
 
 /*=============================================================================
  * Multi-line text area — editable text with cursor + keyboard nav.
@@ -1214,23 +1263,24 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_dialog(struct yetty_ygui_old
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_textarea(struct yetty_ygui_old_engine *engine,
-                                                     const char *id, float x, float y, float w,
-                                                     float h, const char *initial_text);
+                                                             const char *id, float x, float y,
+                                                             float w, float h,
+                                                             const char *initial_text);
 
 /* Same as engine_textarea but with word-wrap enabled at construction.
  * Equivalent to engine_textarea(...) + widget_textarea_set_wrap(...,1).
  * Use this for read-only / display-oriented text where lines may exceed
  * the widget's width — they wrap at word boundaries instead of being
  * truncated at the right edge. */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_textarea_wrapped(struct yetty_ygui_old_engine *engine,
-                                                             const char *id, float x, float y,
-                                                             float w, float h,
-                                                             const char *initial_text);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_textarea_wrapped(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *initial_text);
 
-void yetty_ygui_old_widget_textarea_set_text(struct yetty_ygui_old_widget *widget, const char *text);
+void yetty_ygui_old_widget_textarea_set_text(struct yetty_ygui_old_widget *widget,
+                                             const char *text);
 const char *yetty_ygui_old_widget_textarea_get_text(const struct yetty_ygui_old_widget *widget);
-void yetty_ygui_old_widget_textarea_on_change(struct yetty_ygui_old_widget *widget, ygui_text_callback_t cb,
-                                          void *userdata);
+void yetty_ygui_old_widget_textarea_on_change(struct yetty_ygui_old_widget *widget,
+                                              ygui_text_callback_t cb, void *userdata);
 
 /* Toggle word-wrap. When enabled, lines that don't fit the widget's
  * inner width are broken at word boundaries (or hard-broken mid-word
@@ -1260,8 +1310,8 @@ void yetty_ygui_old_widget_textarea_set_wrap(struct yetty_ygui_old_widget *widge
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_scrollarea(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w,
-                                                       float h);
+                                                               const char *id, float x, float y,
+                                                               float w, float h);
 
 void yetty_ygui_old_widget_scrollarea_scroll_to(struct yetty_ygui_old_widget *widget, float y);
 void yetty_ygui_old_widget_scrollarea_scroll_by(struct yetty_ygui_old_widget *widget, float dy);
@@ -1271,25 +1321,26 @@ float yetty_ygui_old_widget_scrollarea_get_scroll(const struct yetty_ygui_old_wi
  * Toggle switch — boolean on/off with sliding thumb.
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_toggle(struct yetty_ygui_old_engine *engine, const char *id,
-                                                   float x, float y, float w, float h,
-                                                   const char *label, int on);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_toggle(struct yetty_ygui_old_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h, const char *label,
+                                                           int on);
 
 void yetty_ygui_old_widget_toggle_set_on(struct yetty_ygui_old_widget *widget, int on);
 int yetty_ygui_old_widget_toggle_get_on(const struct yetty_ygui_old_widget *widget);
-void yetty_ygui_old_widget_toggle_on_change(struct yetty_ygui_old_widget *widget, ygui_check_callback_t cb,
-                                        void *userdata);
+void yetty_ygui_old_widget_toggle_on_change(struct yetty_ygui_old_widget *widget,
+                                            ygui_check_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Chip / tag — small pill label with optional close button.
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_chip(struct yetty_ygui_old_engine *engine, const char *id,
-                                                 float x, float y, float w, float h,
-                                                 const char *label, int closable);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_chip(struct yetty_ygui_old_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h, const char *label, int closable);
 
-void yetty_ygui_old_widget_chip_on_remove(struct yetty_ygui_old_widget *widget, ygui_click_callback_t cb,
-                                      void *userdata);
+void yetty_ygui_old_widget_chip_on_remove(struct yetty_ygui_old_widget *widget,
+                                          ygui_click_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Breadcrumbs — horizontal segments separated by ' › '.
@@ -1297,12 +1348,12 @@ void yetty_ygui_old_widget_chip_on_remove(struct yetty_ygui_old_widget *widget, 
  * on_change fires with the clicked segment index as the float value.
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_breadcrumbs(struct yetty_ygui_old_engine *engine,
-                                                        const char *id, float x, float y, float w,
-                                                        float h, const char *const *labels, int n);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_breadcrumbs(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *const *labels, int n);
 
 void yetty_ygui_old_widget_breadcrumbs_on_change(struct yetty_ygui_old_widget *widget,
-                                             ygui_change_callback_t cb, void *userdata);
+                                                 ygui_change_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Indeterminate progress
@@ -1312,7 +1363,7 @@ void yetty_ygui_old_widget_breadcrumbs_on_change(struct yetty_ygui_old_widget *w
  *===========================================================================*/
 
 void yetty_ygui_old_widget_progress_set_indeterminate(struct yetty_ygui_old_widget *widget,
-                                                  int indeterminate);
+                                                      int indeterminate);
 
 /*=============================================================================
  * Right-click context menu
@@ -1326,7 +1377,7 @@ void yetty_ygui_old_widget_progress_set_indeterminate(struct yetty_ygui_old_widg
  *===========================================================================*/
 
 void yetty_ygui_old_widget_set_context_menu(struct yetty_ygui_old_widget *widget,
-                                        struct yetty_ygui_old_widget *menu);
+                                            struct yetty_ygui_old_widget *menu);
 
 /*=============================================================================
  * Combo box — editable textinput with a dropdown of suggestions.
@@ -1339,15 +1390,16 @@ void yetty_ygui_old_widget_set_context_menu(struct yetty_ygui_old_widget *widget
  * suggestion), with the new text in `data.string_value`.
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_combo(struct yetty_ygui_old_engine *engine, const char *id,
-                                                  float x, float y, float w, float h,
-                                                  const char *initial_text,
-                                                  const char *const *options, int option_count);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_combo(struct yetty_ygui_old_engine *engine,
+                                                          const char *id, float x, float y, float w,
+                                                          float h, const char *initial_text,
+                                                          const char *const *options,
+                                                          int option_count);
 
 void yetty_ygui_old_widget_combo_set_text(struct yetty_ygui_old_widget *widget, const char *text);
 const char *yetty_ygui_old_widget_combo_get_text(const struct yetty_ygui_old_widget *widget);
-void yetty_ygui_old_widget_combo_on_change(struct yetty_ygui_old_widget *widget, ygui_text_callback_t cb,
-                                       void *userdata);
+void yetty_ygui_old_widget_combo_on_change(struct yetty_ygui_old_widget *widget,
+                                           ygui_text_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Menubar — top-of-window strip of menu buttons.
@@ -1363,11 +1415,11 @@ void yetty_ygui_old_widget_combo_on_change(struct yetty_ygui_old_widget *widget,
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_menubar(struct yetty_ygui_old_engine *engine,
-                                                    const char *id, float x, float y, float w,
-                                                    float h);
+                                                            const char *id, float x, float y,
+                                                            float w, float h);
 
 void yetty_ygui_old_widget_menubar_add(struct yetty_ygui_old_widget *menubar, const char *label,
-                                   struct yetty_ygui_old_widget *menu);
+                                       struct yetty_ygui_old_widget *menu);
 
 /*=============================================================================
  * Stepper — numbered-step progress indicator.
@@ -1379,9 +1431,9 @@ void yetty_ygui_old_widget_menubar_add(struct yetty_ygui_old_widget *menubar, co
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_stepper(struct yetty_ygui_old_engine *engine,
-                                                    const char *id, float x, float y, float w,
-                                                    float h, const char *const *labels,
-                                                    int n_steps);
+                                                            const char *id, float x, float y,
+                                                            float w, float h,
+                                                            const char *const *labels, int n_steps);
 
 void yetty_ygui_old_widget_stepper_set_current(struct yetty_ygui_old_widget *widget, int step);
 int yetty_ygui_old_widget_stepper_get_current(const struct yetty_ygui_old_widget *widget);
@@ -1400,7 +1452,8 @@ int yetty_ygui_old_widget_stepper_get_current(const struct yetty_ygui_old_widget
 void yetty_ygui_old_widget_table_set_sortable(struct yetty_ygui_old_widget *table, int enabled);
 int yetty_ygui_old_widget_table_get_sort_column(const struct yetty_ygui_old_widget *table);
 int yetty_ygui_old_widget_table_get_sort_order(const struct yetty_ygui_old_widget *table);
-void yetty_ygui_old_widget_table_sort_by(struct yetty_ygui_old_widget *table, int column, int descending);
+void yetty_ygui_old_widget_table_sort_by(struct yetty_ygui_old_widget *table, int column,
+                                         int descending);
 
 /*=============================================================================
  * Date picker — compact month calendar.
@@ -1411,15 +1464,15 @@ void yetty_ygui_old_widget_table_sort_by(struct yetty_ygui_old_widget *table, in
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_datepicker(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w,
-                                                       float h);
+                                                               const char *id, float x, float y,
+                                                               float w, float h);
 
 void yetty_ygui_old_widget_datepicker_set_date(struct yetty_ygui_old_widget *widget, int year,
-                                           int month_0_based, int day);
-void yetty_ygui_old_widget_datepicker_get_date(const struct yetty_ygui_old_widget *widget, int *year,
-                                           int *month_0_based, int *day);
+                                               int month_0_based, int day);
+void yetty_ygui_old_widget_datepicker_get_date(const struct yetty_ygui_old_widget *widget,
+                                               int *year, int *month_0_based, int *day);
 void yetty_ygui_old_widget_datepicker_on_change(struct yetty_ygui_old_widget *widget,
-                                            ygui_change_callback_t cb, void *userdata);
+                                                ygui_change_callback_t cb, void *userdata);
 
 /*=============================================================================
  * File picker — directory listing widget.
@@ -1434,15 +1487,17 @@ void yetty_ygui_old_widget_datepicker_on_change(struct yetty_ygui_old_widget *wi
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_filepicker(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w,
-                                                       float h, const char *initial_dir);
+                                                               const char *id, float x, float y,
+                                                               float w, float h,
+                                                               const char *initial_dir);
 
 const char *yetty_ygui_old_widget_filepicker_get_cwd(const struct yetty_ygui_old_widget *widget);
 /* Returns the currently-selected entry name (e.g. "main.c"); NULL if
  * nothing is selected. Combine with get_cwd to form a full path. */
-const char *yetty_ygui_old_widget_filepicker_get_selected(const struct yetty_ygui_old_widget *widget);
+const char *yetty_ygui_old_widget_filepicker_get_selected(
+    const struct yetty_ygui_old_widget *widget);
 void yetty_ygui_old_widget_filepicker_on_change(struct yetty_ygui_old_widget *widget,
-                                            ygui_text_callback_t cb, void *userdata);
+                                                ygui_text_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Statusbar — bottom-of-window strip with primary + optional secondary text.
@@ -1455,11 +1510,14 @@ void yetty_ygui_old_widget_filepicker_on_change(struct yetty_ygui_old_widget *wi
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_statusbar(struct yetty_ygui_old_engine *engine,
-                                                      const char *id, float x, float y, float w,
-                                                      float h, const char *left_text);
+                                                              const char *id, float x, float y,
+                                                              float w, float h,
+                                                              const char *left_text);
 
-void yetty_ygui_old_widget_statusbar_set_left(struct yetty_ygui_old_widget *widget, const char *text);
-void yetty_ygui_old_widget_statusbar_set_right(struct yetty_ygui_old_widget *widget, const char *text);
+void yetty_ygui_old_widget_statusbar_set_left(struct yetty_ygui_old_widget *widget,
+                                              const char *text);
+void yetty_ygui_old_widget_statusbar_set_right(struct yetty_ygui_old_widget *widget,
+                                               const char *text);
 
 /*=============================================================================
  * Engine-wide bars: titlebar + menubar + statusbar
@@ -1476,11 +1534,11 @@ void yetty_ygui_old_widget_statusbar_set_right(struct yetty_ygui_old_widget *wid
  *===========================================================================*/
 
 void yetty_ygui_old_engine_set_titlebar(struct yetty_ygui_old_engine *engine,
-                                    struct yetty_ygui_old_widget *widget);
+                                        struct yetty_ygui_old_widget *widget);
 void yetty_ygui_old_engine_set_menubar(struct yetty_ygui_old_engine *engine,
-                                   struct yetty_ygui_old_widget *widget);
+                                       struct yetty_ygui_old_widget *widget);
 void yetty_ygui_old_engine_set_statusbar(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 /* Bind a scrollbar to a scrollable widget (today: ypdf — anything that
  * exposes the internal scrollable interface). The scrollbar becomes a
@@ -1499,14 +1557,15 @@ void yetty_ygui_old_engine_set_statusbar(struct yetty_ygui_old_engine *engine,
  * unbind and revert to free-running mode (the scrollbar value is what
  * yetty_ygui_old_widget_scrollbar_set_value puts there). */
 void yetty_ygui_old_widget_scrollbar_bind(struct yetty_ygui_old_widget *scrollbar,
-                                      struct yetty_ygui_old_widget *target);
+                                          struct yetty_ygui_old_widget *target);
 
 /* List */
 void yetty_ygui_old_widget_list_set_selected(struct yetty_ygui_old_widget *list,
-                                         struct yetty_ygui_old_widget *child);
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_list_get_selected(const struct yetty_ygui_old_widget *list);
-void yetty_ygui_old_widget_list_on_select(struct yetty_ygui_old_widget *list, ygui_click_callback_t cb,
-                                      void *userdata);
+                                             struct yetty_ygui_old_widget *child);
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_list_get_selected(
+    const struct yetty_ygui_old_widget *list);
+void yetty_ygui_old_widget_list_on_select(struct yetty_ygui_old_widget *list,
+                                          ygui_click_callback_t cb, void *userdata);
 
 /* Table — header row + N data rows × N columns of strings.
  *
@@ -1523,23 +1582,25 @@ void yetty_ygui_old_widget_list_on_select(struct yetty_ygui_old_widget *list, yg
  * an existing row's contents; clear_rows wipes everything but keeps the
  * column configuration. on_select fires when a non-header row is clicked. */
 typedef void (*yetty_ygui_old_table_select_fn)(struct yetty_ygui_old_widget *table, int row,
-                                           void *userdata);
+                                               void *userdata);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_table(struct yetty_ygui_old_engine *engine, const char *id,
-                                                  float x, float y, float w, float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_table(struct yetty_ygui_old_engine *engine,
+                                                          const char *id, float x, float y, float w,
+                                                          float h);
 
-void yetty_ygui_old_widget_table_set_columns(struct yetty_ygui_old_widget *table, const char *const *names,
-                                         const float *widths, int n_columns);
+void yetty_ygui_old_widget_table_set_columns(struct yetty_ygui_old_widget *table,
+                                             const char *const *names, const float *widths,
+                                             int n_columns);
 
 void yetty_ygui_old_widget_table_clear_rows(struct yetty_ygui_old_widget *table);
 
 /* Append a row of n_cells strings (must equal the column count). */
-void yetty_ygui_old_widget_table_add_row(struct yetty_ygui_old_widget *table, const char *const *cells,
-                                     int n_cells);
+void yetty_ygui_old_widget_table_add_row(struct yetty_ygui_old_widget *table,
+                                         const char *const *cells, int n_cells);
 
 /* Replace contents of an existing row. No-op if row index is out of range. */
 void yetty_ygui_old_widget_table_set_row(struct yetty_ygui_old_widget *table, int row,
-                                     const char *const *cells, int n_cells);
+                                         const char *const *cells, int n_cells);
 
 int yetty_ygui_old_widget_table_row_count(const struct yetty_ygui_old_widget *table);
 
@@ -1547,29 +1608,32 @@ void yetty_ygui_old_widget_table_set_selected(struct yetty_ygui_old_widget *tabl
 int yetty_ygui_old_widget_table_get_selected(const struct yetty_ygui_old_widget *table);
 
 void yetty_ygui_old_widget_table_on_select(struct yetty_ygui_old_widget *table,
-                                       yetty_ygui_old_table_select_fn cb, void *userdata);
+                                           yetty_ygui_old_table_select_fn cb, void *userdata);
 
 /* 0 = use theme->row_height. */
 void yetty_ygui_old_widget_table_set_row_height(struct yetty_ygui_old_widget *table, float h);
 
 /* Tree node */
-void yetty_ygui_old_widget_tree_node_set_label(struct yetty_ygui_old_widget *node, const char *label);
+void yetty_ygui_old_widget_tree_node_set_label(struct yetty_ygui_old_widget *node,
+                                               const char *label);
 const char *yetty_ygui_old_widget_tree_node_get_label(const struct yetty_ygui_old_widget *node);
 void yetty_ygui_old_widget_tree_node_set_expanded(struct yetty_ygui_old_widget *node, int expanded);
 int yetty_ygui_old_widget_tree_node_is_expanded(const struct yetty_ygui_old_widget *node);
 /* Auto-allocated children list (a YETTY_YGUI_OLD_WIDGET_LIST). Use as the
  * parent for sub-tree_nodes or any other widgets. */
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_tree_node_children(struct yetty_ygui_old_widget *node);
-void yetty_ygui_old_widget_tree_node_on_toggle(struct yetty_ygui_old_widget *node, ygui_check_callback_t cb,
-                                           void *userdata);
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_tree_node_children(
+    struct yetty_ygui_old_widget *node);
+void yetty_ygui_old_widget_tree_node_on_toggle(struct yetty_ygui_old_widget *node,
+                                               ygui_check_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Widget Lookup
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_find(struct yetty_ygui_old_engine *engine, const char *id);
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_widget_at(struct yetty_ygui_old_engine *engine, float x,
-                                                      float y);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_find(struct yetty_ygui_old_engine *engine,
+                                                         const char *id);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_widget_at(struct yetty_ygui_old_engine *engine,
+                                                              float x, float y);
 
 /*=============================================================================
  * Theme API
@@ -1579,8 +1643,10 @@ struct yetty_ygui_old_theme *yetty_ygui_old_theme_create(void);
 struct yetty_ygui_old_theme *yetty_ygui_old_theme_create_default(void);
 void yetty_ygui_old_theme_destroy(struct yetty_ygui_old_theme *theme);
 
-void yetty_ygui_old_theme_set_padding(struct yetty_ygui_old_theme *theme, float sm, float med, float lg);
-void yetty_ygui_old_theme_set_radius(struct yetty_ygui_old_theme *theme, float sm, float med, float lg);
+void yetty_ygui_old_theme_set_padding(struct yetty_ygui_old_theme *theme, float sm, float med,
+                                      float lg);
+void yetty_ygui_old_theme_set_radius(struct yetty_ygui_old_theme *theme, float sm, float med,
+                                     float lg);
 void yetty_ygui_old_theme_set_row_height(struct yetty_ygui_old_theme *theme, float height);
 void yetty_ygui_old_theme_set_font_size(struct yetty_ygui_old_theme *theme, float size);
 void yetty_ygui_old_theme_set_scrollbar_size(struct yetty_ygui_old_theme *theme, float size);
@@ -1605,7 +1671,7 @@ void yetty_ygui_old_theme_set_selection_bg(struct yetty_ygui_old_theme *theme, u
  * shadows globally without zeroing each level). enable_gradient toggles
  * the subtle top-edge highlight on buttons. */
 void yetty_ygui_old_theme_set_elevation(struct yetty_ygui_old_theme *theme, float low, float medium,
-                                    float high, float alpha);
+                                        float high, float alpha);
 void yetty_ygui_old_theme_set_gradient(struct yetty_ygui_old_theme *theme, int enable);
 
 /* Overlay the style/ygui/... block from a loaded yetty config on top of
@@ -1619,7 +1685,7 @@ void yetty_ygui_old_theme_set_gradient(struct yetty_ygui_old_theme *theme, int e
  *   yetty_ygui_old_theme_apply_config(theme, config);
  *   yetty_ygui_old_engine_set_theme(engine, theme); */
 void yetty_ygui_old_theme_apply_config(struct yetty_ygui_old_theme *theme,
-                                   const struct yetty_yconfig_config *config);
+                                       const struct yetty_yconfig_config *config);
 
 /*=============================================================================
  * Testing API
@@ -1637,17 +1703,18 @@ void yetty_ygui_old_engine_set_output_fd(struct yetty_ygui_old_engine *engine, i
  * engine. Pass NULL to revert to the file-descriptor sink. */
 struct yetty_platform_pty;
 void yetty_ygui_old_engine_set_output_pty(struct yetty_ygui_old_engine *engine,
-                                      struct yetty_platform_pty *pty);
+                                          struct yetty_platform_pty *pty);
 
 /* Set card dimensions for testing coordinate scaling
  * These are normally set by ygui_engine_create() but can be overridden for tests */
-void yetty_ygui_old_engine_set_card_size(struct yetty_ygui_old_engine *engine, int card_w, int card_h);
+void yetty_ygui_old_engine_set_card_size(struct yetty_ygui_old_engine *engine, int card_w,
+                                         int card_h);
 
 /* Set display pixel size directly for testing.
  * Normally this comes from OSC 777780 after show().
  * For tests, call this to set canvas size before creating widgets. */
 void yetty_ygui_old_engine_set_display_pixel_size(struct yetty_ygui_old_engine *engine, float width,
-                                              float height);
+                                                  float height);
 
 /* Get access to engine's libuv loop (after attach/run) */
 uv_loop_t *yetty_ygui_old_engine_get_loop(struct yetty_ygui_old_engine *engine);

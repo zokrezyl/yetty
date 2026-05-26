@@ -1459,18 +1459,16 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * which start at 1 and count up. The container cascades destroy. */
     {
         struct yetty_yterm_shader_glyph_figure_ptr_result sgf_res =
-            yetty_yterm_shader_glyph_figure_create(root_rect, cols, rows,
-                                                   text_layer->cell_size.width,
-                                                   text_layer->cell_size.height, text_layer,
-                                                   yetty_context, terminal_request_render_callback,
-                                                   terminal);
+            yetty_yterm_shader_glyph_figure_create(
+                root_rect, cols, rows, text_layer->cell_size.width, text_layer->cell_size.height,
+                text_layer, yetty_context, terminal_request_render_callback, terminal);
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, sgf_res,
                             "terminal_create: shader_glyph figure create failed");
         terminal->shader_glyph_figure = sgf_res.value;
         struct yetty_yfigure_figure *sgf_base =
             yetty_yterm_shader_glyph_figure_as_figure(terminal->shader_glyph_figure);
-        struct yetty_ycore_void_result ar = yetty_yfigure_container_add_child(
-            terminal->root_container, sgf_base, 0xFFFFFFFEu);
+        struct yetty_ycore_void_result ar =
+            yetty_yfigure_container_add_child(terminal->root_container, sgf_base, 0xFFFFFFFEu);
         if (YETTY_IS_ERR(ar)) {
             struct yetty_ycore_void_result dr = sgf_base->ops->destroy(sgf_base);
             if (YETTY_IS_ERR(dr)) {

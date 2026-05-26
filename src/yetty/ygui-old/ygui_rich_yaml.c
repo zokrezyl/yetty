@@ -18,8 +18,8 @@
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
 
-struct yetty_ycore_void_result yetty_ygui_old_widget_rich_set_yaml(struct yetty_ygui_old_widget *widget,
-                                                               const char *yaml, size_t yaml_len)
+struct yetty_ycore_void_result yetty_ygui_old_widget_rich_set_yaml(
+    struct yetty_ygui_old_widget *widget, const char *yaml, size_t yaml_len)
 {
     if (!widget || widget->type != YETTY_YGUI_OLD_WIDGET_RICH) {
         return YETTY_ERR(yetty_ycore_void, "rich_set_yaml: not a rich widget");
@@ -34,10 +34,9 @@ struct yetty_ycore_void_result yetty_ygui_old_widget_rich_set_yaml(struct yetty_
     return YETTY_OK_VOID();
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich_from_yaml(struct yetty_ygui_old_engine *engine,
-                                                           const char *id, float x, float y,
-                                                           float w, float h, const char *yaml,
-                                                           size_t yaml_len)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich_from_yaml(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *yaml, size_t yaml_len)
 {
     struct yetty_ygui_old_widget *r = yetty_ygui_old_engine_rich(engine, id, x, y, w, h);
     if (!r) {

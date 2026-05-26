@@ -24,7 +24,7 @@
 
 /* Forward decl — same pattern ygui_rich.c uses. */
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 /*=============================================================================
  * State management
@@ -191,10 +191,11 @@ static const struct yetty_ygui_old_widget_vtable *yzoo_vtable_ptr(void)
  * Construction + public API
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_yzoo(struct yetty_ygui_old_engine *engine, const char *id,
-                                                 float x, float y, float w, float h,
-                                                 const struct yetty_yzoo_config *config,
-                                                 uint32_t seed)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_yzoo(struct yetty_ygui_old_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h,
+                                                         const struct yetty_yzoo_config *config,
+                                                         uint32_t seed)
 {
     struct yetty_ygui_old_widget *widget =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_YZOO, id);
@@ -226,7 +227,7 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_yzoo(struct yetty_ygui_old_e
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_widget_yzoo_tick(struct yetty_ygui_old_widget *widget,
-                                                           float dt_seconds)
+                                                               float dt_seconds)
 {
     if (!widget || widget->type != YETTY_YGUI_OLD_WIDGET_YZOO) {
         return YETTY_ERR(yetty_ycore_void, "yzoo_tick: not a yzoo widget");

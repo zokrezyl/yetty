@@ -21,7 +21,7 @@
 
 /* Forward decl — same pattern ygui_rich.c uses. */
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 /*=============================================================================
  * State management
@@ -48,8 +48,8 @@ static void yimage_clear_source(struct yetty_ygui_old_widget *self)
 
 /* Build a fresh yimage prim from the current source at (w, h). NULL
  * is returned for "no source", "decode failed", or "zero size". */
-static struct yetty_ydraw_draw_list *yimage_build_buffer(struct yetty_ygui_old_widget *self, float w,
-                                                         float h)
+static struct yetty_ydraw_draw_list *yimage_build_buffer(struct yetty_ygui_old_widget *self,
+                                                         float w, float h)
 {
     if (w <= 0.0f || h <= 0.0f) {
         return NULL;
@@ -104,7 +104,8 @@ static struct yetty_ycore_void_result yimage_render(struct yetty_ygui_old_widget
      * the widget's absolute position. Prims stay in widget-local coords
      * (the cached buffer was authored that way); the receiver adds
      * rect.min on draw. */
-    return yetty_ygui_old_internal_emit_buffer_translated(ctx, self->data.yimage.cached, 0.0f, 0.0f);
+    return yetty_ygui_old_internal_emit_buffer_translated(ctx, self->data.yimage.cached, 0.0f,
+                                                          0.0f);
 }
 
 static void yimage_destroy(struct yetty_ygui_old_widget *self)
@@ -122,8 +123,8 @@ static struct yetty_ycore_void_result yimage_render_all(struct yetty_ygui_old_wi
         return YETTY_OK_VOID();
     }
     self->was_rendered = 1;
-    struct yetty_ygui_old_group_marker_result mr =
-        yetty_ygui_old_widget_open_group_as_kind(self, ctx, YETTY_YFIGURE_KIND_YIMAGE, yimage_render);
+    struct yetty_ygui_old_group_marker_result mr = yetty_ygui_old_widget_open_group_as_kind(
+        self, ctx, YETTY_YFIGURE_KIND_YIMAGE, yimage_render);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "yimage_render_all: open_group");
     struct yetty_ycore_void_result cr = yetty_ygui_old_widget_close_group(self, ctx, mr.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "yimage_render_all: close_group");
@@ -144,8 +145,9 @@ static const struct yetty_ygui_old_widget_vtable *yimage_vtable_ptr(void)
  * Construction + setters
  *===========================================================================*/
 
-static struct yetty_ygui_old_widget *yimage_alloc(struct yetty_ygui_old_engine *engine, const char *id,
-                                              float x, float y, float w, float h)
+static struct yetty_ygui_old_widget *yimage_alloc(struct yetty_ygui_old_engine *engine,
+                                                  const char *id, float x, float y, float w,
+                                                  float h)
 {
     struct yetty_ygui_old_widget *widget =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_YIMAGE, id);
@@ -180,7 +182,8 @@ static int yimage_set_path_locked(struct yetty_ygui_old_widget *widget, const ch
     return 1;
 }
 
-static int yimage_set_data_locked(struct yetty_ygui_old_widget *widget, const uint8_t *data, size_t len)
+static int yimage_set_data_locked(struct yetty_ygui_old_widget *widget, const uint8_t *data,
+                                  size_t len)
 {
     if (!data || len == 0) {
         yimage_clear_source(widget);
@@ -197,9 +200,9 @@ static int yimage_set_data_locked(struct yetty_ygui_old_widget *widget, const ui
     return 1;
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_yimage_from_file(struct yetty_ygui_old_engine *engine,
-                                                             const char *id, float x, float y,
-                                                             float w, float h, const char *path)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_yimage_from_file(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *path)
 {
     struct yetty_ygui_old_widget *widget = yimage_alloc(engine, id, x, y, w, h);
     if (!widget) {
@@ -217,10 +220,9 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_yimage_from_file(struct yett
     return widget;
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_yimage_from_buffer(struct yetty_ygui_old_engine *engine,
-                                                               const char *id, float x, float y,
-                                                               float w, float h,
-                                                               const uint8_t *data, size_t len)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_yimage_from_buffer(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const uint8_t *data, size_t len)
 {
     struct yetty_ygui_old_widget *widget = yimage_alloc(engine, id, x, y, w, h);
     if (!widget) {
@@ -236,8 +238,8 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_yimage_from_buffer(struct ye
     return widget;
 }
 
-struct yetty_ycore_void_result yetty_ygui_old_widget_yimage_set_file(struct yetty_ygui_old_widget *widget,
-                                                                 const char *path)
+struct yetty_ycore_void_result yetty_ygui_old_widget_yimage_set_file(
+    struct yetty_ygui_old_widget *widget, const char *path)
 {
     if (!widget || widget->type != YETTY_YGUI_OLD_WIDGET_YIMAGE) {
         return YETTY_ERR(yetty_ycore_void, "yimage_set_file: not a yimage widget");
@@ -253,8 +255,8 @@ struct yetty_ycore_void_result yetty_ygui_old_widget_yimage_set_file(struct yett
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_old_widget_yimage_set_buffer(struct yetty_ygui_old_widget *widget,
-                                                                   const uint8_t *data, size_t len)
+struct yetty_ycore_void_result yetty_ygui_old_widget_yimage_set_buffer(
+    struct yetty_ygui_old_widget *widget, const uint8_t *data, size_t len)
 {
     if (!widget || widget->type != YETTY_YGUI_OLD_WIDGET_YIMAGE) {
         return YETTY_ERR(yetty_ycore_void, "yimage_set_buffer: not a yimage widget");

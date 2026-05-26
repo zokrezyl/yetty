@@ -171,8 +171,8 @@ static void notify_close_clicked(struct yetty_ygui_old_widget *btn, void *userda
  *
  * S is a 4-px-wide stripe coloured by severity. The actual brand
  * palette goes into the card via apply_css. */
-static struct yetty_ygui_old_widget *notify_build_card(struct yetty_ygui_old_engine *engine, int slot,
-                                                   int severity, const char *message)
+static struct yetty_ygui_old_widget *notify_build_card(struct yetty_ygui_old_engine *engine,
+                                                       int slot, int severity, const char *message)
 {
     char figure_id[48], stripe_id[48], lbl_id[48], close_id[48], row_id[48];
     snprintf(figure_id, sizeof(figure_id), "ygui_notif_%d_card", slot);
@@ -201,12 +201,14 @@ static struct yetty_ygui_old_widget *notify_build_card(struct yetty_ygui_old_eng
         yetty_ygui_old_widget_remove(card);
         return NULL;
     }
-    yetty_ygui_old_widget_apply_css(row, "display:flex;flex-direction:row;gap:10;align-items:start;");
+    yetty_ygui_old_widget_apply_css(row,
+                                    "display:flex;flex-direction:row;gap:10;align-items:start;");
     yetty_ygui_old_widget_add_child(card, row);
 
     /* Severity stripe — a thin vertical bar. yetty_ygui_old_engine_separator
      * is the lightest widget for "a coloured rectangle". */
-    struct yetty_ygui_old_widget *stripe = yetty_ygui_old_engine_separator(engine, stripe_id, 0, 0, 4, 0);
+    struct yetty_ygui_old_widget *stripe =
+        yetty_ygui_old_engine_separator(engine, stripe_id, 0, 0, 4, 0);
     if (stripe) {
         char css[64];
         snprintf(css, sizeof(css), "background:#%06X;flex:0 0 4;align-self:stretch;",
@@ -271,8 +273,8 @@ static void notify_push(struct yetty_ygui_old_engine *engine, int severity, uint
     notify_relayout(engine);
 }
 
-void yetty_ygui_old_engine_notify(struct yetty_ygui_old_engine *engine, enum yetty_ygui_old_severity sev,
-                              const char *fmt, ...)
+void yetty_ygui_old_engine_notify(struct yetty_ygui_old_engine *engine,
+                                  enum yetty_ygui_old_severity sev, const char *fmt, ...)
 {
     if (!engine || !fmt) {
         return;
@@ -285,8 +287,9 @@ void yetty_ygui_old_engine_notify(struct yetty_ygui_old_engine *engine, enum yet
     notify_push(engine, (int)sev, severity_default_ttl_ms((int)sev), buf);
 }
 
-void yetty_ygui_old_engine_notify_ttl(struct yetty_ygui_old_engine *engine, enum yetty_ygui_old_severity sev,
-                                  uint32_t ttl_ms, const char *fmt, ...)
+void yetty_ygui_old_engine_notify_ttl(struct yetty_ygui_old_engine *engine,
+                                      enum yetty_ygui_old_severity sev, uint32_t ttl_ms,
+                                      const char *fmt, ...)
 {
     if (!engine || !fmt) {
         return;

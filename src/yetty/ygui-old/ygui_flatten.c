@@ -105,8 +105,8 @@ static struct yetty_ycore_void_result flatten_bytes(struct yetty_ydraw_draw_list
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_old_flatten_draw_list(struct yetty_ydraw_draw_list *dst,
-                                                            const struct yetty_ydraw_draw_list *src)
+struct yetty_ycore_void_result yetty_ygui_old_flatten_draw_list(
+    struct yetty_ydraw_draw_list *dst, const struct yetty_ydraw_draw_list *src)
 {
     if (!dst || !src) {
         return YETTY_ERR(yetty_ycore_void, "flatten: NULL arg");

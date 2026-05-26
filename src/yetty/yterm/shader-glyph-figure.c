@@ -529,9 +529,10 @@ static uint32_t figure_pack_instances(struct yetty_yterm_shader_glyph_figure *f)
 static inline struct yetty_yterm_shader_glyph_figure *figure_from_listener(
     struct yetty_yevent_event_listener *l)
 {
-    return (struct yetty_yterm_shader_glyph_figure *)((char *)l -
-                                                      offsetof(struct yetty_yterm_shader_glyph_figure,
-                                                               listener));
+    return (
+        struct yetty_yterm_shader_glyph_figure *)((char *)l -
+                                                  offsetof(struct yetty_yterm_shader_glyph_figure,
+                                                           listener));
 }
 
 static void anim_timer_stop(struct yetty_yterm_shader_glyph_figure *f)
@@ -582,8 +583,7 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yfigure_figure
     if (!self) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yterm_shader_glyph_figure *f =
-        (struct yetty_yterm_shader_glyph_figure *)self;
+    struct yetty_yterm_shader_glyph_figure *f = (struct yetty_yterm_shader_glyph_figure *)self;
 
     if (f->timer_created && f->event_loop && f->event_loop->ops) {
         if (f->timer_running && f->event_loop->ops->stop_timer) {
@@ -619,9 +619,8 @@ static struct yetty_ycore_void_result figure_ensure_binder(
         return YETTY_OK_VOID();
     }
     struct yetty_yframework_gpu_context *gpu = &f->context->runtime->gpu;
-    struct yetty_yrender_gpu_resource_binder_result br =
-        yetty_yrender_gpu_resource_binder_create(gpu->device, gpu->queue, gpu->surface_format,
-                                                 gpu->allocator);
+    struct yetty_yrender_gpu_resource_binder_result br = yetty_yrender_gpu_resource_binder_create(
+        gpu->device, gpu->queue, gpu->surface_format, gpu->allocator);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "shader-glyph figure: binder create failed");
     f->binder = br.value;
     return YETTY_OK_VOID();
@@ -630,8 +629,7 @@ static struct yetty_ycore_void_result figure_ensure_binder(
 static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure *self,
                                                     struct yetty_ydraw_target *target)
 {
-    struct yetty_yterm_shader_glyph_figure *f =
-        (struct yetty_yterm_shader_glyph_figure *)self;
+    struct yetty_yterm_shader_glyph_figure *f = (struct yetty_yterm_shader_glyph_figure *)self;
 
     /* No shader-glyph cells visible → stop ticking, skip the draw.
      * Without this the layer would burn a render pass every frame for an
@@ -800,8 +798,7 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
     free(template_res.value.data);
     free(glyph_blob);
     if (!spliced) {
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr,
-                         "shader-glyph figure: splice failed");
+        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: splice failed");
     }
 
     struct yetty_yterm_shader_glyph_figure *f =

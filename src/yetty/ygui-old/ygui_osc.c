@@ -103,8 +103,9 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_osc_create_card(struct yetty_platform_pty *output_pty,
-                                                          const char *name, int x, int y, int w,
-                                                          int h, const uint8_t *data, uint32_t size)
+                                                              const char *name, int x, int y, int w,
+                                                              int h, const uint8_t *data,
+                                                              uint32_t size)
 {
     (void)name;
     (void)x;
@@ -115,15 +116,15 @@ struct yetty_ycore_void_result yetty_ygui_old_osc_create_card(struct yetty_platf
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_osc_update_card(struct yetty_platform_pty *output_pty,
-                                                          const char *name, const uint8_t *data,
-                                                          uint32_t size)
+                                                              const char *name, const uint8_t *data,
+                                                              uint32_t size)
 {
     (void)name;
     return write_bin(output_pty, data, size);
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_osc_kill_card(struct yetty_platform_pty *output_pty,
-                                                        const char *name)
+                                                            const char *name)
 {
     /* No named-card concept on this sink — kill = clear the canvas. */
     (void)name;
@@ -140,8 +141,8 @@ struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_clicks(
     return write_pty_all(output_pty, "\033[?1500l", 8);
 }
 
-struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_moves(struct yetty_platform_pty *output_pty,
-                                                              int enable)
+struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_moves(
+    struct yetty_platform_pty *output_pty, int enable)
 {
     if (enable) {
         return write_pty_all(output_pty, "\033[?1501h", 8);
@@ -149,7 +150,8 @@ struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_moves(struct yetty_p
     return write_pty_all(output_pty, "\033[?1501l", 8);
 }
 
-struct yetty_ycore_void_result yetty_ygui_old_osc_query_cell_size(struct yetty_platform_pty *output_pty)
+struct yetty_ycore_void_result yetty_ygui_old_osc_query_cell_size(
+    struct yetty_platform_pty *output_pty)
 {
     /* CSI 16 t - request cell size in pixels */
     return write_pty_all(output_pty, "\033[16t", 5);
@@ -169,8 +171,8 @@ struct yetty_ycore_void_result yetty_ygui_old_osc_subscribe_view_changes(
  * card and routes mouse events to it as YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE with
  * card-local coords. */
 struct yetty_ycore_void_result yetty_ygui_old_osc_card_place(struct yetty_platform_pty *output_pty,
-                                                         uint32_t figure_id, int col, int row,
-                                                         uint32_t w_cells, uint32_t h_cells)
+                                                             uint32_t figure_id, int col, int row,
+                                                             uint32_t w_cells, uint32_t h_cells)
 {
     struct yetty_ymgui_wire_card_place msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_PLACE,
@@ -203,7 +205,7 @@ struct yetty_ycore_void_result yetty_ygui_old_osc_card_place(struct yetty_platfo
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_osc_card_remove(struct yetty_platform_pty *output_pty,
-                                                          uint32_t figure_id)
+                                                              uint32_t figure_id)
 {
     struct yetty_ymgui_wire_card_remove msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_REMOVE,
@@ -232,7 +234,7 @@ struct yetty_ycore_void_result yetty_ygui_old_osc_card_remove(struct yetty_platf
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_osc_zoom_card(struct yetty_platform_pty *output_pty,
-                                                        const char *name, float level)
+                                                            const char *name, float level)
 {
     char buf[256];
     int len = snprintf(buf, sizeof(buf), "\033]" VENDOR_ID ";zoom --name %s --level %.2f\033\\",
@@ -244,8 +246,8 @@ struct yetty_ycore_void_result yetty_ygui_old_osc_zoom_card(struct yetty_platfor
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_osc_scroll_card(struct yetty_platform_pty *output_pty,
-                                                          const char *name, float x, float y,
-                                                          int absolute)
+                                                              const char *name, float x, float y,
+                                                              int absolute)
 {
     char buf[256];
     int len;

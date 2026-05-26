@@ -41,7 +41,7 @@ struct path_bundle {
 };
 
 struct yetty_yui_config_dialog {
-    struct yetty_ygui_old_engine *engine;          /* borrowed */
+    struct yetty_ygui_old_engine *engine;      /* borrowed */
     const struct yetty_yconfig_config *config; /* borrowed */
     struct yetty_ygui_old_widget *window;
     struct yetty_ygui_old_widget *textarea;
@@ -186,7 +186,8 @@ static void build_tree(struct yetty_yui_config_dialog *dlg, struct yetty_ygui_ol
          * already use them (e.g. "yui_dlg_gpu_info/text"). */
         char node_id[YUI_CFG_DLG_PATH_MAX + 32];
         snprintf(node_id, sizeof(node_id), "yui_dlg_settings/tree/%s", child_path);
-        struct yetty_ygui_old_widget *node = yetty_ygui_old_engine_tree_node(dlg->engine, node_id, key);
+        struct yetty_ygui_old_widget *node =
+            yetty_ygui_old_engine_tree_node(dlg->engine, node_id, key);
         if (!node) {
             continue;
         }
@@ -239,7 +240,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
 
     struct yetty_ygui_old_widget *win =
         yetty_ygui_old_engine_window(engine, "yui_dlg_settings", /*x=*/140.0f, /*y=*/90.0f,
-                                 /*w=*/720.0f, /*h=*/460.0f, "Settings");
+                                     /*w=*/720.0f, /*h=*/460.0f, "Settings");
     if (!win) {
         free(dlg->bundles);
         free(dlg);
@@ -252,8 +253,8 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     if (!body) {
         return YETTY_OK(yetty_yui_config_dialog_ptr, dlg);
     }
-    yetty_ygui_old_widget_apply_css(body,
-                                "display:flex;flex-direction:column;gap:10;padding:14 14 14 14;");
+    yetty_ygui_old_widget_apply_css(
+        body, "display:flex;flex-direction:column;gap:10;padding:14 14 14 14;");
 
     struct yetty_ygui_old_widget *split =
         yetty_ygui_old_engine_hbox(engine, "yui_dlg_settings/split", 0, 0, 0, 0);
@@ -298,8 +299,8 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
         yetty_ygui_old_engine_hbox(engine, "yui_dlg_settings/actions", 0, 0, 0, 36);
     if (actions) {
         yetty_ygui_old_widget_apply_css(actions,
-                                    "display:flex;flex-direction:row;justify-content:end;gap:8;"
-                                    "flex:0 0 auto;align-items:center;");
+                                        "display:flex;flex-direction:row;justify-content:end;gap:8;"
+                                        "flex:0 0 auto;align-items:center;");
         yetty_ygui_old_widget_add_child(body, actions);
         struct yetty_ygui_old_widget *close =
             yetty_ygui_old_engine_button(engine, "yui_dlg_settings/close", 0, 0, 80, 28, "Close");

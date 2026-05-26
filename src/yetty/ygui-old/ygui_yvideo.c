@@ -24,7 +24,7 @@
 
 /* Forward decl — same pattern ygui_rich.c uses. */
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 enum yvideo_source_kind {
     YVIDEO_SRC_NONE = 0,
@@ -85,8 +85,8 @@ static uint32_t yvideo_cfg_flags_clean(const struct yetty_ygui_old_widget *self)
     return self->data.yvideo.cfg.flags & ~YVIDEO_SRC_TAG_MASK;
 }
 
-static struct yetty_ydraw_draw_list *yvideo_build_buffer(struct yetty_ygui_old_widget *self, float w,
-                                                         float h)
+static struct yetty_ydraw_draw_list *yvideo_build_buffer(struct yetty_ygui_old_widget *self,
+                                                         float w, float h)
 {
     if (w <= 0.0f || h <= 0.0f) {
         return NULL;
@@ -162,7 +162,8 @@ static struct yetty_ycore_void_result yvideo_render(struct yetty_ygui_old_widget
         return YETTY_OK_VOID();
     }
     /* Figure-local: see ygui_yplot.c for rationale. */
-    return yetty_ygui_old_internal_emit_buffer_translated(ctx, self->data.yvideo.cached, 0.0f, 0.0f);
+    return yetty_ygui_old_internal_emit_buffer_translated(ctx, self->data.yvideo.cached, 0.0f,
+                                                          0.0f);
 }
 
 static void yvideo_destroy(struct yetty_ygui_old_widget *self)
@@ -178,8 +179,8 @@ static struct yetty_ycore_void_result yvideo_render_all(struct yetty_ygui_old_wi
         return YETTY_OK_VOID();
     }
     self->was_rendered = 1;
-    struct yetty_ygui_old_group_marker_result mr =
-        yetty_ygui_old_widget_open_group_as_kind(self, ctx, YETTY_YFIGURE_KIND_YVIDEO, yvideo_render);
+    struct yetty_ygui_old_group_marker_result mr = yetty_ygui_old_widget_open_group_as_kind(
+        self, ctx, YETTY_YFIGURE_KIND_YVIDEO, yvideo_render);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "yvideo_render_all: open_group");
     struct yetty_ycore_void_result cr = yetty_ygui_old_widget_close_group(self, ctx, mr.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "yvideo_render_all: close_group");
@@ -200,8 +201,9 @@ static const struct yetty_ygui_old_widget_vtable *yvideo_vtable_ptr(void)
  * Construction + setters
  *===========================================================================*/
 
-static struct yetty_ygui_old_widget *yvideo_alloc(struct yetty_ygui_old_engine *engine, const char *id,
-                                              float x, float y, float w, float h)
+static struct yetty_ygui_old_widget *yvideo_alloc(struct yetty_ygui_old_engine *engine,
+                                                  const char *id, float x, float y, float w,
+                                                  float h)
 {
     struct yetty_ygui_old_widget *widget =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_YVIDEO, id);
@@ -400,7 +402,8 @@ struct yetty_ycore_void_result yetty_ygui_old_widget_yvideo_set_mp4_file(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_old_widget_yvideo_clear(struct yetty_ygui_old_widget *widget)
+struct yetty_ycore_void_result yetty_ygui_old_widget_yvideo_clear(
+    struct yetty_ygui_old_widget *widget)
 {
     if (!widget || widget->type != YETTY_YGUI_OLD_WIDGET_YVIDEO) {
         return YETTY_ERR(yetty_ycore_void, "yvideo_clear: not a yvideo widget");

@@ -401,9 +401,9 @@ static void prepare_cb(uv_prepare_t *handle)
             if (new_w != engine->card_w || new_h != engine->card_h) {
                 engine->card_w = new_w;
                 engine->card_h = new_h;
-                struct yetty_ycore_void_result pr =
-                    yetty_ygui_old_osc_card_place(engine->output_pty, engine->figure_id, engine->card_x,
-                                              engine->card_y, (uint32_t)new_w, (uint32_t)new_h);
+                struct yetty_ycore_void_result pr = yetty_ygui_old_osc_card_place(
+                    engine->output_pty, engine->figure_id, engine->card_x, engine->card_y,
+                    (uint32_t)new_w, (uint32_t)new_h);
                 if (YETTY_IS_ERR(pr)) {
                     yerror("ygui_uv: card_place on SIGWINCH: %s", pr.error.msg);
                     yetty_ycore_error_destroy(pr.error);
@@ -586,14 +586,15 @@ void yetty_ygui_old_engine_run(struct yetty_ygui_old_engine *engine)
 
 struct ygui_engine_ptr_result yetty_ygui_old_engine_create(struct yetty_ygui_old_engine_args args)
 {
-    struct ygui_engine_ptr_result alloc_r = yetty_ygui_old_engine_internal_alloc(args.name, args.theme);
+    struct ygui_engine_ptr_result alloc_r =
+        yetty_ygui_old_engine_internal_alloc(args.name, args.theme);
     if (YETTY_IS_ERR(alloc_r)) {
         return alloc_r;
     }
     struct yetty_ygui_old_engine *engine = alloc_r.value;
     struct yetty_ycore_void_result br =
         yetty_ygui_old_engine_internal_bootstrap_runtime(engine, /*borrowed_pty=*/NULL,
-                                                     /*borrowed_loop=*/NULL);
+                                                         /*borrowed_loop=*/NULL);
     if (YETTY_IS_ERR(br)) {
         /* engine_destroy tears down whatever the partial bootstrap did
          * manage to wire up. */
@@ -601,7 +602,8 @@ struct ygui_engine_ptr_result yetty_ygui_old_engine_create(struct yetty_ygui_old
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
-        return YETTY_ERR(ygui_engine_ptr, "yetty_ygui_old_engine_create: runtime bootstrap failed", br);
+        return YETTY_ERR(ygui_engine_ptr, "yetty_ygui_old_engine_create: runtime bootstrap failed",
+                         br);
     }
     return YETTY_OK(ygui_engine_ptr, engine);
 }

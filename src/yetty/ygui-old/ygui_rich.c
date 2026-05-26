@@ -233,7 +233,8 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
  * widget (yimage / yplot / yvideo / yzoo / yjungle) so they all share
  * one rendering substrate without going through rich. */
 struct yetty_ycore_void_result yetty_ygui_old_internal_emit_buffer_translated(
-    struct yetty_ygui_old_render_ctx *ctx, const struct yetty_ydraw_draw_list *src, float dx, float dy)
+    struct yetty_ygui_old_render_ctx *ctx, const struct yetty_ydraw_draw_list *src, float dx,
+    float dy)
 {
     if (!ctx || !ctx->buffer || !src) {
         return YETTY_OK_VOID();
@@ -305,8 +306,8 @@ struct yetty_ycore_void_result yetty_ygui_old_internal_emit_buffer_translated(
 static struct yetty_ycore_void_result rich_render(struct yetty_ygui_old_widget *self,
                                                   struct yetty_ygui_old_render_ctx *ctx)
 {
-    return yetty_ygui_old_internal_emit_buffer_translated(ctx, self->data.rich.buffer, self->layout_x,
-                                                      self->layout_y);
+    return yetty_ygui_old_internal_emit_buffer_translated(ctx, self->data.rich.buffer,
+                                                          self->layout_x, self->layout_y);
 }
 
 static void rich_destroy(struct yetty_ygui_old_widget *self)
@@ -327,15 +328,16 @@ static void rich_destroy(struct yetty_ygui_old_widget *self)
  * the new widget files (this one, ygui_tabbar.c) don't have to duplicate
  * linked-list bookkeeping. */
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 static const struct yetty_ygui_old_widget_vtable rich_vtable = {
     .render = rich_render,
     .destroy = rich_destroy,
 };
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich(struct yetty_ygui_old_engine *engine, const char *id,
-                                                 float x, float y, float w, float h)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich(struct yetty_ygui_old_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h)
 {
     struct yetty_ygui_old_widget *r =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_RICH, id);
@@ -353,7 +355,7 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_rich(struct yetty_ygui_old_e
  * of this file for the rationale. */
 
 void yetty_ygui_old_widget_rich_set_buffer(struct yetty_ygui_old_widget *widget,
-                                       struct yetty_ydraw_draw_list *buffer)
+                                           struct yetty_ydraw_draw_list *buffer)
 {
     if (!widget || widget->type != YETTY_YGUI_OLD_WIDGET_RICH) {
         return;

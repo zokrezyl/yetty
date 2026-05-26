@@ -2,13 +2,13 @@
 #
 # Split into two libraries following the established XXX-core pattern:
 #
-#   ygui_core
+#   ygui_old_core
 #     Widget tree, layout, rendering, OSC emit, theme — all libuv-free.
 #     Linkable into any target including emscripten / cross-builds where
 #     libuv isn't a fit.
 #
 #   ygui
-#     ygui_core + the libuv-driven event-loop integration
+#     ygui_old_core + the libuv-driven event-loop integration
 #     (ygui_engine_uv.c — yetty_ygui_old_engine_attach / _run / _poll /
 #     _get_loop). Used by standalone interactive tools (ygreeter, ytop).
 #     Builds only when libuv is available (NOT EMSCRIPTEN).
@@ -16,7 +16,7 @@
 # Public header (ygui.h) stays unified; the libuv-typed forward decl is
 # guarded so consumers don't need <uv.h>.
 
-# ygui_core sources: libuv-free.
+# ygui_old_core sources: libuv-free.
 set(YGUI_CORE_SOURCES
     ygui_engine.c
     ygui_grid.c
@@ -44,17 +44,17 @@ set(YGUI_STATIC_ONLY_SOURCES
 )
 
 # ---------------------------------------------------------------------
-# ygui_core — libuv-free widget runtime.
+# ygui_old_core — libuv-free widget runtime.
 # ---------------------------------------------------------------------
 
-add_library(ygui_core STATIC ${YGUI_CORE_SOURCES} ${YGUI_STATIC_ONLY_SOURCES})
+add_library(ygui_old_core STATIC ${YGUI_CORE_SOURCES} ${YGUI_STATIC_ONLY_SOURCES})
 
-target_include_directories(ygui_core PUBLIC
+target_include_directories(ygui_old_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${YETTY_ROOT}/include
 )
 
-target_link_libraries(ygui_core PUBLIC
+target_link_libraries(ygui_old_core PUBLIC
     yetty_ydraw_core
     yetty_ysdf
     yetty_ycore
@@ -67,7 +67,7 @@ target_link_libraries(ygui_core PUBLIC
     yetty_yvideo_core # ygui_yvideo widget — yvideo prim serializer (+ MP4 helper)
 )
 
-set_target_properties(ygui_core PROPERTIES
+set_target_properties(ygui_old_core PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED ON
 )
@@ -75,32 +75,32 @@ set_target_properties(ygui_core PROPERTIES
 # ---------------------------------------------------------------------
 # ygui — libuv-coupled full runtime. Only built when libuv is available
 # (NOT EMSCRIPTEN). Standalone tools that drive their own event loop
-# (ygreeter, ytop) link this; webasm consumers link ygui_core directly.
+# (ygreeter, ytop) link this; webasm consumers link ygui_old_core directly.
 # ---------------------------------------------------------------------
 
 if(NOT EMSCRIPTEN)
-    add_library(ygui STATIC ygui_engine_uv.c)
+    add_library(ygui_old STATIC ygui_engine_uv.c)
 
-    target_include_directories(ygui PUBLIC
+    target_include_directories(ygui_old PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${YETTY_ROOT}/include
     )
 
-    target_link_libraries(ygui PUBLIC
-        ygui_core
+    target_link_libraries(ygui_old PUBLIC
+        ygui_old_core
         uv_a
     )
 
-    set_target_properties(ygui PROPERTIES
+    set_target_properties(ygui_old PROPERTIES
         C_STANDARD 11
         C_STANDARD_REQUIRED ON
     )
 
-    install(TARGETS ygui ARCHIVE DESTINATION lib)
+    install(TARGETS ygui_old ARCHIVE DESTINATION lib)
 endif()
 
 install(FILES ygui.h DESTINATION include)
-install(TARGETS ygui_core ARCHIVE DESTINATION lib)
+install(TARGETS ygui_old_core ARCHIVE DESTINATION lib)
 
 # ---------------------------------------------------------------------
 # Per-producer widget libs.
@@ -109,7 +109,7 @@ install(TARGETS ygui_core ARCHIVE DESTINATION lib)
 # ybrowser, yjungle, yzoo) and exposes it as a ygui widget by
 # building a draw_list at construction time and handing it to the
 # generic RICH widget. Each lives in its own static library so callers
-# only link the producer dependencies they actually use; ygui_core stays
+# only link the producer dependencies they actually use; ygui_old_core stays
 # free of pdfio / lexbor / libcurl / etc.
 #
 # Two of the wrappers (yjungle, yzoo) share a small flatten helper that
@@ -148,64 +148,64 @@ function(ygui_embed_default_asset LIB_TARGET NAME ASSET_PATH)
 endfunction()
 
 if(YETTY_ENABLE_FEATURE_YMARKDOWN)
-    add_library(ygui_ymarkdown STATIC ygui_ymarkdown.c)
-    target_include_directories(ygui_ymarkdown PUBLIC
+    add_library(ygui_old_ymarkdown STATIC ygui_ymarkdown.c)
+    target_include_directories(ygui_old_ymarkdown PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${YETTY_ROOT}/include
     )
-    target_link_libraries(ygui_ymarkdown PUBLIC ygui_core yetty_ymarkdown)
-    set_target_properties(ygui_ymarkdown PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    target_link_libraries(ygui_old_ymarkdown PUBLIC ygui_old_core yetty_ymarkdown)
+    set_target_properties(ygui_old_ymarkdown PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
     # Bundle the repo README as the markdown widget's default sample.
-    ygui_embed_default_asset(ygui_ymarkdown ymarkdown "${YETTY_ROOT}/README.md")
-    install(TARGETS ygui_ymarkdown ARCHIVE DESTINATION lib)
+    ygui_embed_default_asset(ygui_old_ymarkdown ymarkdown "${YETTY_ROOT}/README.md")
+    install(TARGETS ygui_old_ymarkdown ARCHIVE DESTINATION lib)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YPDF)
-    add_library(ygui_ypdf STATIC ygui_ypdf.c)
-    target_include_directories(ygui_ypdf PUBLIC
+    add_library(ygui_old_ypdf STATIC ygui_ypdf.c)
+    target_include_directories(ygui_old_ypdf PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${YETTY_ROOT}/include
     )
-    target_link_libraries(ygui_ypdf PUBLIC ygui_core yetty_ypdf)
-    set_target_properties(ygui_ypdf PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    ygui_embed_default_asset(ygui_ypdf ypdf
+    target_link_libraries(ygui_old_ypdf PUBLIC ygui_old_core yetty_ypdf)
+    set_target_properties(ygui_old_ypdf PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    ygui_embed_default_asset(ygui_old_ypdf ypdf
         "${YETTY_ROOT}/test/ut/ypdf/test-comprehensive.pdf")
-    install(TARGETS ygui_ypdf ARCHIVE DESTINATION lib)
+    install(TARGETS ygui_old_ypdf ARCHIVE DESTINATION lib)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YBROWSER)
-    add_library(ygui_ybrowser STATIC ygui_ybrowser.c)
-    target_include_directories(ygui_ybrowser PUBLIC
+    add_library(ygui_old_ybrowser STATIC ygui_ybrowser.c)
+    target_include_directories(ygui_old_ybrowser PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${YETTY_ROOT}/include
     )
-    target_link_libraries(ygui_ybrowser PUBLIC ygui_core yetty_ybrowser)
-    set_target_properties(ygui_ybrowser PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    ygui_embed_default_asset(ygui_ybrowser ybrowser
+    target_link_libraries(ygui_old_ybrowser PUBLIC ygui_old_core yetty_ybrowser)
+    set_target_properties(ygui_old_ybrowser PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    ygui_embed_default_asset(ygui_old_ybrowser ybrowser
         "${YETTY_ROOT}/demo/ygui/26_ybrowser/sample.html")
-    install(TARGETS ygui_ybrowser ARCHIVE DESTINATION lib)
+    install(TARGETS ygui_old_ybrowser ARCHIVE DESTINATION lib)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YJUNGLE)
-    add_library(ygui_yjungle STATIC ygui_yjungle.c ygui_flatten.c)
-    target_include_directories(ygui_yjungle PUBLIC
+    add_library(ygui_old_yjungle STATIC ygui_yjungle.c ygui_flatten.c)
+    target_include_directories(ygui_old_yjungle PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${YETTY_ROOT}/include
     )
-    target_link_libraries(ygui_yjungle PUBLIC ygui_core yetty_yjungle)
-    set_target_properties(ygui_yjungle PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    install(TARGETS ygui_yjungle ARCHIVE DESTINATION lib)
+    target_link_libraries(ygui_old_yjungle PUBLIC ygui_old_core yetty_yjungle)
+    set_target_properties(ygui_old_yjungle PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_old_yjungle ARCHIVE DESTINATION lib)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YZOO)
-    add_library(ygui_yzoo STATIC ygui_yzoo.c ygui_flatten.c)
-    target_include_directories(ygui_yzoo PUBLIC
+    add_library(ygui_old_yzoo STATIC ygui_yzoo.c ygui_flatten.c)
+    target_include_directories(ygui_old_yzoo PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${YETTY_ROOT}/include
     )
-    target_link_libraries(ygui_yzoo PUBLIC ygui_core yetty_yzoo)
-    set_target_properties(ygui_yzoo PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    install(TARGETS ygui_yzoo ARCHIVE DESTINATION lib)
+    target_link_libraries(ygui_old_yzoo PUBLIC ygui_old_core yetty_yzoo)
+    set_target_properties(ygui_old_yzoo PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_old_yzoo ARCHIVE DESTINATION lib)
 endif()
 
 install(FILES
@@ -226,9 +226,9 @@ install(FILES
 # runtime). Not produced for emscripten.
 # ---------------------------------------------------------------------
 
-option(YETTY_BUILD_YGUI_SHARED "Build a libygui.so for FFI consumers" ON)
+option(YETTY_BUILD_YGUI_OLD_SHARED "Build a libygui_old.so for FFI consumers" ON)
 
-if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
+if(YETTY_BUILD_YGUI_OLD_SHARED AND NOT EMSCRIPTEN)
     if(WIN32)
         set(_YGUI_PLATFORM_SOURCES
             ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
@@ -245,19 +245,19 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         )
     endif()
 
-    add_library(ygui_shared SHARED
+    add_library(ygui_old_shared_target SHARED
         ${YGUI_CORE_SOURCES}
         ygui_engine_uv.c
         ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
         ${_YGUI_PLATFORM_SOURCES}
     )
 
-    target_include_directories(ygui_shared PUBLIC
+    target_include_directories(ygui_old_shared_target PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${YETTY_ROOT}/include
     )
 
-    target_link_libraries(ygui_shared PRIVATE
+    target_link_libraries(ygui_old_shared_target PRIVATE
         yetty_ydraw_core
         yetty_ysdf
         yetty_ycore
@@ -269,18 +269,18 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         uv_a
     )
 
-    set_target_properties(ygui_shared PROPERTIES
+    set_target_properties(ygui_old_shared_target PROPERTIES
         C_STANDARD 11
         C_STANDARD_REQUIRED ON
-        OUTPUT_NAME ygui
+        OUTPUT_NAME ygui_old
         POSITION_INDEPENDENT_CODE ON
     )
 
     if(WIN32)
-        set_target_properties(ygui_shared PROPERTIES
-            ARCHIVE_OUTPUT_NAME ygui_import
+        set_target_properties(ygui_old_shared_target PROPERTIES
+            ARCHIVE_OUTPUT_NAME ygui_old_import
         )
     endif()
 
-    install(TARGETS ygui_shared LIBRARY DESTINATION lib)
+    install(TARGETS ygui_old_shared_target LIBRARY DESTINATION lib)
 endif()

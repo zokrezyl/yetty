@@ -94,7 +94,8 @@ struct yetty_ycore_void_result yetty_ygui_old_widget_yvideo_set_mp4_file(
 /* Drop the playback prim — the widget's draw_list is cleared. The
  * receiving canvas tears the yvideo entity down (decoder, audio
  * device, animation subscription all go with it). */
-struct yetty_ycore_void_result yetty_ygui_old_widget_yvideo_clear(struct yetty_ygui_old_widget *widget);
+struct yetty_ycore_void_result yetty_ygui_old_widget_yvideo_clear(
+    struct yetty_ygui_old_widget *widget);
 
 #ifdef __cplusplus
 }

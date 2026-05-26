@@ -21,7 +21,7 @@
 
 /* Forward decl — same pattern ygui_rich.c uses. */
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 /*=============================================================================
  * State management
@@ -206,8 +206,8 @@ static const struct yetty_ygui_old_widget_vtable *yplot_vtable_ptr(void)
  * Construction + setters
  *===========================================================================*/
 
-static struct yetty_ygui_old_widget *yplot_alloc(struct yetty_ygui_old_engine *engine, const char *id,
-                                             float x, float y, float w, float h)
+static struct yetty_ygui_old_widget *yplot_alloc(struct yetty_ygui_old_engine *engine,
+                                                 const char *id, float x, float y, float w, float h)
 {
     struct yetty_ygui_old_widget *widget =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_YPLOT, id);
@@ -289,7 +289,7 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_yplot_from_source(
     const char *source, size_t source_len, const struct yetty_yplot_render_config *config)
 {
     return yetty_ygui_old_engine_yplot_from_buffers(engine, id, x, y, w, h, source, source_len,
-                                                /*buffers=*/NULL, /*buffer_count=*/0, config);
+                                                    /*buffers=*/NULL, /*buffer_count=*/0, config);
 }
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_yplot_from_buffers(
@@ -321,7 +321,7 @@ struct yetty_ycore_void_result yetty_ygui_old_widget_yplot_set_source(
     const struct yetty_yplot_render_config *config)
 {
     return yetty_ygui_old_widget_yplot_set_buffers(widget, source, source_len,
-                                               /*buffers=*/NULL, /*buffer_count=*/0, config);
+                                                   /*buffers=*/NULL, /*buffer_count=*/0, config);
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_widget_yplot_set_buffers(

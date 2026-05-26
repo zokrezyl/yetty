@@ -34,7 +34,7 @@
 #include <yetty/ytrace/ytrace.h>
 
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 float yetty_ygui_old_tabbar_button_size(void);
 
 #define WINDOW_DEFAULT_TITLE_H 30.0f
@@ -101,20 +101,21 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_old_widget
      * sits as a solid band on top. */
     ydebug("window_render: frame box=(%.1f,%.1f,%.1f,%.1f)", self->x, self->y, self->w, self->h);
     yetty_ygui_old_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, theme->bg_primary,
-                                     WINDOW_CORNER_RADIUS);
+                                         WINDOW_CORNER_RADIUS);
     ydebug("window_render: titlebar box=(%.1f,%.1f,%.1f,%.1f)", self->x, self->y, self->w, th);
     yetty_ygui_old_render_ctx_render_box(ctx, self->x, self->y, self->w, th, theme->bg_header,
-                                     WINDOW_CORNER_RADIUS);
+                                         WINDOW_CORNER_RADIUS);
     /* Hairline at the bottom of the title bar separates header from body. */
     yetty_ygui_old_render_ctx_render_box(ctx, self->x, self->y + th - 1.0f, self->w, 1.0f,
-                                     theme->border_muted, 0.0f);
+                                         theme->border_muted, 0.0f);
 
     /* Title text — left-padded, vertically centred. */
     const char *title = self->data.window.title;
     if (title && *title) {
         float fs = theme->font_size > 0 ? theme->font_size : 14.0f;
         float ty = self->y + (th - fs) * 0.5f;
-        yetty_ygui_old_render_ctx_render_text(ctx, title, self->x + 14.0f, ty, theme->text_primary, fs);
+        yetty_ygui_old_render_ctx_render_text(ctx, title, self->x + 14.0f, ty, theme->text_primary,
+                                              fs);
     }
 
     /* Hamburger button — soft-bg square with three horizontal bars. */
@@ -135,16 +136,17 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_old_widget
     float inner_mid = (inner_top + inner_bot) * 0.5f;
     uint32_t bar_color = theme->text_muted;
     yetty_ygui_old_render_ctx_render_box(ctx, ax + WINDOW_HAMBURGER_INSET_X, inner_top, line_w,
-                                     WINDOW_HAMBURGER_LINE_H, bar_color, 1.0f);
+                                         WINDOW_HAMBURGER_LINE_H, bar_color, 1.0f);
     yetty_ygui_old_render_ctx_render_box(ctx, ax + WINDOW_HAMBURGER_INSET_X, inner_mid, line_w,
-                                     WINDOW_HAMBURGER_LINE_H, bar_color, 1.0f);
+                                         WINDOW_HAMBURGER_LINE_H, bar_color, 1.0f);
     yetty_ygui_old_render_ctx_render_box(ctx, ax + WINDOW_HAMBURGER_INSET_X, inner_bot, line_w,
-                                     WINDOW_HAMBURGER_LINE_H, bar_color, 1.0f);
+                                         WINDOW_HAMBURGER_LINE_H, bar_color, 1.0f);
 
     return YETTY_OK_VOID();
 }
 
-static int window_on_press(struct yetty_ygui_old_widget *self, float lx, float ly, ygui_event_t *out)
+static int window_on_press(struct yetty_ygui_old_widget *self, float lx, float ly,
+                           ygui_event_t *out)
 {
     (void)out;
     float cx, cy, cw, ch;
@@ -227,7 +229,8 @@ static int window_on_drag(struct yetty_ygui_old_widget *self, float lx, float ly
     return 1;
 }
 
-static int window_on_release(struct yetty_ygui_old_widget *self, float lx, float ly, ygui_event_t *out)
+static int window_on_release(struct yetty_ygui_old_widget *self, float lx, float ly,
+                             ygui_event_t *out)
 {
     (void)lx;
     (void)ly;
@@ -251,9 +254,9 @@ static const struct yetty_ygui_old_widget_vtable window_vtable = {
     .destroy = window_destroy,
 };
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_window(struct yetty_ygui_old_engine *engine, const char *id,
-                                                   float x, float y, float w, float h,
-                                                   const char *title)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_window(struct yetty_ygui_old_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h, const char *title)
 {
     struct yetty_ygui_old_widget *win =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_WINDOW, id);
@@ -297,7 +300,8 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_window(struct yetty_ygui_old
     return win;
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_window_body(struct yetty_ygui_old_widget *window)
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_window_body(
+    struct yetty_ygui_old_widget *window)
 {
     if (!window || window->type != YETTY_YGUI_OLD_WIDGET_WINDOW) {
         return NULL;
@@ -327,7 +331,7 @@ const char *yetty_ygui_old_widget_window_get_title(const struct yetty_ygui_old_w
 }
 
 void yetty_ygui_old_widget_window_on_close(struct yetty_ygui_old_widget *window,
-                                       ygui_click_callback_t callback, void *userdata)
+                                           ygui_click_callback_t callback, void *userdata)
 {
     if (!window || window->type != YETTY_YGUI_OLD_WIDGET_WINDOW) {
         return;
@@ -346,7 +350,7 @@ void yetty_ygui_old_engine_close_preserve(struct yetty_ygui_old_engine *engine)
 }
 
 void yetty_ygui_old_widget_window_set_menu(struct yetty_ygui_old_widget *window,
-                                       struct yetty_ygui_old_widget *menu)
+                                           struct yetty_ygui_old_widget *menu)
 {
     if (!window || window->type != YETTY_YGUI_OLD_WIDGET_WINDOW) {
         return;

@@ -23,7 +23,7 @@ target_include_directories(ytop PRIVATE
 
 # ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yrender, libuv as
 # transitive PUBLIC deps — no need to list them again here.
-target_link_libraries(ytop PRIVATE ygui)
+target_link_libraries(ytop PRIVATE ygui_old)
 
 if(NOT MSVC)
     target_compile_options(ytop PRIVATE -Wall -Wextra)

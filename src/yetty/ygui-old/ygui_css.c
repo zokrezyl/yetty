@@ -279,8 +279,8 @@ static int parse_justify(const char *v, size_t vlen, ygui_justify_t *out)
     return 0;
 }
 
-static void apply_one(struct yetty_ygui_old_widget *w, const char *prop, size_t plen, const char *val,
-                      size_t vlen, struct css_diag *diag)
+static void apply_one(struct yetty_ygui_old_widget *w, const char *prop, size_t plen,
+                      const char *val, size_t vlen, struct css_diag *diag)
 {
     css_trim(&prop, &plen);
     css_trim(&val, &vlen);
@@ -522,7 +522,7 @@ static void apply_one(struct yetty_ygui_old_widget *w, const char *prop, size_t 
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ygui_old_widget_apply_css(struct yetty_ygui_old_widget *widget,
-                                                           const char *css)
+                                                               const char *css)
 {
     if (!widget) {
         return YETTY_ERR(yetty_ycore_void, "apply_css: NULL widget");

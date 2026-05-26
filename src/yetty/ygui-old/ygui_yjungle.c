@@ -22,7 +22,7 @@
 #include <yetty/yjungle/yjungle.h>
 
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 /*=============================================================================
  * Live segment map (mirrors what scene-canvas would build on the wire)
@@ -48,7 +48,8 @@ static void live_remove(struct yetty_ygui_old_widget *self, uint32_t id)
     }
 }
 
-static int live_append(struct yetty_ygui_old_widget *self, uint32_t id, const uint8_t *src, size_t size)
+static int live_append(struct yetty_ygui_old_widget *self, uint32_t id, const uint8_t *src,
+                       size_t size)
 {
     if (self->data.yjungle.live_count == self->data.yjungle.live_cap) {
         size_t nc = self->data.yjungle.live_cap ? self->data.yjungle.live_cap * 2 : 64;
@@ -312,11 +313,9 @@ static const struct yetty_ygui_old_widget_vtable *yj_vtable_ptr(void)
  * Construction + public API
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_yjungle(struct yetty_ygui_old_engine *engine,
-                                                    const char *id, float x, float y, float w,
-                                                    float h,
-                                                    const struct yetty_yjungle_config *config,
-                                                    uint32_t seed)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_yjungle(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const struct yetty_yjungle_config *config, uint32_t seed)
 {
     struct yetty_ygui_old_widget *widget =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_YJUNGLE, id);
@@ -351,8 +350,8 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_yjungle(struct yetty_ygui_ol
     return widget;
 }
 
-struct yetty_ycore_void_result yetty_ygui_old_widget_yjungle_tick(struct yetty_ygui_old_widget *widget,
-                                                              uint64_t now_ms)
+struct yetty_ycore_void_result yetty_ygui_old_widget_yjungle_tick(
+    struct yetty_ygui_old_widget *widget, uint64_t now_ms)
 {
     if (!widget || widget->type != YETTY_YGUI_OLD_WIDGET_YJUNGLE) {
         return YETTY_ERR(yetty_ycore_void, "yjungle_tick: not a yjungle widget");

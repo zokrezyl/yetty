@@ -30,21 +30,18 @@ extern "C" {
 struct yetty_ygui_old_engine;
 struct yetty_ygui_old_widget;
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_ybrowser_from_file(struct yetty_ygui_old_engine *engine,
-                                                               const char *id, float x, float y,
-                                                               float w, float h, const char *path);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_ybrowser_from_file(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *path);
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_ybrowser_from_buffer(struct yetty_ygui_old_engine *engine,
-                                                                 const char *id, float x, float y,
-                                                                 float w, float h,
-                                                                 const uint8_t *data, size_t len,
-                                                                 const char *base_url);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_ybrowser_from_buffer(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const uint8_t *data, size_t len, const char *base_url);
 
 /* Default sample HTML embedded into ygui_ybrowser. Returns NULL on
  * failure or when the library was built without an asset. */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_ybrowser_default(struct yetty_ygui_old_engine *engine,
-                                                             const char *id, float x, float y,
-                                                             float w, float h);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_ybrowser_default(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h);
 
 #ifdef __cplusplus
 }

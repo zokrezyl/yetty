@@ -1,102 +1,93 @@
-# ygreeter — the "first contact" tool shown on the RISCV Linux VM (also
-# loadable as a regular yetty tool). Demos the ygui tabbar + rich widgets:
-# four tabs (Welcome / Plots / Images / Code), each with a small tree
-# nav on the left and a rich content surface on the right.
+# ygreeter — first-contact tool. Dual-mode:
+#   - TERM_PROGRAM=yetty  → ships OSC envelopes over stdout to the host.
+#   - otherwise           → opens its own GPU window via yinit_run +
+#                           yframework_create, renders the figure tree
+#                           locally through an in-process wire SM →
+#                           yfigure_container → render_target chain.
 #
-# ytrace + the per-platform yplatform impls (thread/term/fs/time) are
-# compiled per-final-target — they're not standalone libraries. Use
-# YETTY_YPLATFORM_THREAD_SOURCES which shared.cmake populates with the
-# correct {default,windows}.c picks so the build stays portable. (The
-# variable name predates fs/ being lumped in; same shape as the main
-# yetty target.)
+# ygui itself has no knowledge of either mode; this file is the wiring.
+#
+# Linux + webgpu-only for v1, matching yaudio (the only other
+# standalone-window app using the same yinit/yframework bring-up).
+
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    return()
+endif()
+
+if(NOT YETTY_ENABLE_LIB_WEBGPU)
+    return()
+endif()
+
+# Platform / yinit / yframework / yconfig sources — same set yaudio
+# inlines, because there isn't a single static lib for the yinit
+# layer (window, surface, event-pipes), so each standalone-window
+# binary pulls the sources directly.
+set(YGREETER_PLATFORM_SOURCES
+    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+    ${YETTY_ROOT}/src/yetty/yframework/yframework.c
+    ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/window-manager/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
+    ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
+    ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
+    ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
+    ${YETTY_ROOT}/src/yetty/yconfig/config.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
+)
 
 add_executable(ygreeter
     main.c
-    embedded-assets.c
-    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    ${YGREETER_PLATFORM_SOURCES}
 )
 
-target_include_directories(ygreeter PRIVATE
-    ${YETTY_ROOT}/include
+target_include_directories(ygreeter BEFORE PRIVATE
     ${YETTY_ROOT}/src
-    ${CMAKE_CURRENT_BINARY_DIR}
+    ${YETTY_ROOT}/include
 )
 
-# ygui carries everything ygreeter needs: ydraw-core, ysdf, ycore,
-# yface, yfont_core, ydraw-yaml (rich's create_from_yaml), plus the
-# yplot / yimage / yvideo prim serializers used by the embedded
-# ygui_yplot / ygui_yimage / ygui_yvideo widgets. yplatform_core
-# stays explicit — ygreeter calls yetty_yplatform_* directly.
-target_link_libraries(ygreeter PRIVATE ygui yetty_yplatform_core)
+target_compile_definitions(ygreeter PRIVATE
+    YETTY_WEB=0
+    YETTY_ANDROID=0
+    YETTY_USE_FORKPTY=1
+    YETTY_YGUI_HAS_UV
+)
 
-# Optional showcase widgets — each gated on the feature flag that turns
-# the underlying backend on. Missing flag → tab silently absent.
-if(YETTY_ENABLE_FEATURE_YMARKDOWN)
-    target_link_libraries(ygreeter PRIVATE ygui_ymarkdown)
-    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YMARKDOWN)
-endif()
-if(YETTY_ENABLE_FEATURE_YBROWSER)
-    target_link_libraries(ygreeter PRIVATE ygui_ybrowser)
-    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YBROWSER)
-endif()
-if(YETTY_ENABLE_FEATURE_YPDF)
-    target_link_libraries(ygreeter PRIVATE ygui_ypdf)
-    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YPDF)
-endif()
-if(YETTY_ENABLE_FEATURE_YZOO)
-    target_link_libraries(ygreeter PRIVATE ygui_yzoo)
-    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YZOO)
-endif()
-if(YETTY_ENABLE_FEATURE_YJUNGLE)
-    target_link_libraries(ygreeter PRIVATE ygui_yjungle)
-    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YJUNGLE)
-endif()
+find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
+
+target_link_libraries(ygreeter PRIVATE
+    ygui
+    yetty_ywire
+    yetty_yfigure
+    yetty_ygrid
+    yetty_yfont_core
+    ${YETTY_LIBS}
+    yetty_yplatform_core
+    yetty_yplatform_move_resize
+    yetty_yco
+    yetty_telnet
+    ${BROTLIDEC_LIBRARIES}
+    Threads::Threads
+    ${FONTCONFIG_LIBRARIES}
+    rt
+    util
+)
+target_include_directories(ygreeter PRIVATE ${FONTCONFIG_INCLUDE_DIRS})
+
+# Dawn (libwebgpu_dawn) is C++ — needs C++ runtime even though our
+# sources are C. Same trick yaudio uses.
+set_target_properties(ygreeter PROPERTIES LINKER_LANGUAGE CXX)
 
 if(NOT MSVC)
     target_compile_options(ygreeter PRIVATE -Wall -Wextra)
-endif()
-
-# Self-contained ygreeter: embed the assets that drive the structurally
-# required tabs (Images, Video) plus the small repo samples that feed
-# the optional Markdown / Browser / PDF tabs. Mirrors yetty_embed_assets
-# at a much smaller scale — a single "data/" section, extracted on first
-# run into <data_dir>/ (i.e. ~/.local/share/yetty on Linux). The
-# YETTY_ENABLE_LIB_INCBIN guard lets the dev build skip embedding;
-# embedded-assets.c becomes a no-op then and main.c falls back to the
-# argv0-relative lookup.
-if(YETTY_ENABLE_LIB_INCBIN)
-    include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
-
-    yetty_compute_build_version()
-    target_compile_definitions(ygreeter PRIVATE
-        YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
-
-    set(_YGREETER_EMBED_DIR "${CMAKE_CURRENT_BINARY_DIR}/embed-data")
-    file(REMOVE_RECURSE "${_YGREETER_EMBED_DIR}")
-    file(MAKE_DIRECTORY "${_YGREETER_EMBED_DIR}")
-
-    # Structurally required by the Images tab.
-    foreach(_F
-            "assets/logo-1.jpeg"
-            "assets/logo-2.jpeg"
-            "assets/logo-3.jpeg"
-            "assets/logo-4.jpeg")
-        if(EXISTS "${YETTY_ROOT}/${_F}")
-            get_filename_component(_NAME "${_F}" NAME)
-            configure_file("${YETTY_ROOT}/${_F}"
-                "${_YGREETER_EMBED_DIR}/${_NAME}" COPYONLY)
-        endif()
-    endforeach()
-
-    # README / sample.html / test-comprehensive.pdf are NOT embedded here:
-    # the ygui_ymarkdown / ygui_ybrowser / ygui_ypdf widget libraries
-    # each carry their own default sample via incbin, and ygreeter's
-    # showcase tabs use the widget's `_default()` API.
-
-    incbin_add_directory(ygreeter "data" "${_YGREETER_EMBED_DIR}" "*" TRUE)
-
-    # incbin_add_directory only adds the brotli headers on the include
-    # path via the brotlidec IMPORTED target; the .a goes here.
-    include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
-    target_link_libraries(ygreeter PRIVATE brotlidec brotlicommon)
 endif()

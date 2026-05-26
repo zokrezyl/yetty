@@ -235,8 +235,8 @@ struct ygrid_cell {
  * whole window — no more "one ygrid figure per widget".
  *=========================================================================*/
 
-#define YGRID_ROOT_SLOT     0u
-#define YGRID_INVALID_SLOT  UINT32_MAX
+#define YGRID_ROOT_SLOT 0u
+#define YGRID_INVALID_SLOT UINT32_MAX
 
 struct ygrid_entity {
     uint64_t external_id;
@@ -264,7 +264,7 @@ struct ygrid_id_index_entry {
     uint32_t slot;
 };
 
-#define YGRID_ID_INDEX_EMPTY     0u
+#define YGRID_ID_INDEX_EMPTY 0u
 #define YGRID_ID_INDEX_TOMBSTONE UINT64_MAX
 
 /*===========================================================================
@@ -612,8 +612,7 @@ static struct yetty_ycore_void_result entity_push_prim(struct ygrid_entity *e, u
 
 /* Forward decl — bucket_prim is defined further down (next to
  * parse_and_index_record). rebucket_subtree_to_back below calls it. */
-static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g,
-                                                  uint32_t prim_index);
+static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, uint32_t prim_index);
 
 /* Detach this entity's prims from every cell that holds them. Used
  * both by `entity_drop_prims` (which then tombstones + clears the
@@ -714,8 +713,7 @@ static void rebucket_subtree_to_back(struct yetty_ygrid_grid *g, uint32_t slot)
             entity_drop_from_cells(g, child);
             for (uint32_t k = 0; k < child->prim_count; k++) {
                 uint32_t pi = child->prim_indices[k];
-                if (pi < g->prim_count &&
-                    g->prims[pi].entity_slot != YGRID_INVALID_SLOT) {
+                if (pi < g->prim_count && g->prims[pi].entity_slot != YGRID_INVALID_SLOT) {
                     struct yetty_ycore_void_result br = bucket_prim(g, pi);
                     if (YETTY_IS_ERR(br)) {
                         /* OOM during re-bucket — best-effort log,
@@ -850,8 +848,7 @@ static struct yetty_ycore_void_result entity_lookup_or_create(struct yetty_ygrid
         entity_release_slot(g, slot);
         return YETTY_ERR(yetty_ycore_void, "ygrid: id_index_insert", ir);
     }
-    struct yetty_ycore_void_result cr =
-        entity_push_child(&g->entities[parent_slot], slot);
+    struct yetty_ycore_void_result cr = entity_push_child(&g->entities[parent_slot], slot);
     if (YETTY_IS_ERR(cr)) {
         entity_release_slot(g, slot);
         return YETTY_ERR(yetty_ycore_void, "ygrid: entity_push_child", cr);
@@ -1715,8 +1712,8 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
 /* Add a flat ADD record to the entity in `parent_slot`. Handles the
  * u32-alignment padding ygrid_add_record requires. */
 static struct yetty_ycore_void_result process_add_record(struct yetty_ygrid_grid *g,
-                                                         uint32_t parent_slot,
-                                                         const uint8_t *bytes, size_t rec_size)
+                                                         uint32_t parent_slot, const uint8_t *bytes,
+                                                         size_t rec_size)
 {
     uint32_t saved = g->current_entity_slot;
     g->current_entity_slot = parent_slot;
@@ -1751,8 +1748,8 @@ static struct yetty_ycore_void_result process_add_record(struct yetty_ygrid_grid
  * CMD_GROUP and routes plain ADD records to process_add_record under
  * the current parent. Recurses for nested CMD_GROUP. */
 static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid *g,
-                                                         uint32_t parent_slot,
-                                                         const uint8_t *bytes, size_t bytes_len)
+                                                         uint32_t parent_slot, const uint8_t *bytes,
+                                                         size_t bytes_len)
 {
     uint32_t off = 0;
     while (off < bytes_len) {
@@ -1796,8 +1793,8 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
             memcpy(&payload_size, &cmd.flyweight.data[2], sizeof(payload_size));
             uint32_t child_slot;
             int was_existing = 0;
-            struct yetty_ycore_void_result cr = entity_lookup_or_create(
-                g, parent_slot, (uint64_t)id, &child_slot, &was_existing);
+            struct yetty_ycore_void_result cr =
+                entity_lookup_or_create(g, parent_slot, (uint64_t)id, &child_slot, &was_existing);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ygrid_process_bytes: CMD_GROUP");
             const uint8_t *body = (const uint8_t *)cmd.flyweight.data + 12u;
             struct yetty_ycore_void_result rr =
@@ -1965,27 +1962,45 @@ static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
     size_t len = 0, cap = 0;
     char *buf = NULL;
     buf = ygrid_dump_appendf(buf, &len, &cap, "%skind: ygrid\n", pad);
-    if (!buf) return NULL;
-    buf = ygrid_dump_appendf(buf, &len, &cap, "%srect: [%.1f, %.1f, %.1f, %.1f]\n", pad,
-                             self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y);
-    if (!buf) return NULL;
+    if (!buf) {
+        return NULL;
+    }
+    buf =
+        ygrid_dump_appendf(buf, &len, &cap, "%srect: [%.1f, %.1f, %.1f, %.1f]\n", pad,
+                           self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y);
+    if (!buf) {
+        return NULL;
+    }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sdirty: %d\n", pad, self->dirty);
-    if (!buf) return NULL;
+    if (!buf) {
+        return NULL;
+    }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sgrid_cols: %u\n", pad, g->grid_cols);
-    if (!buf) return NULL;
+    if (!buf) {
+        return NULL;
+    }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sgrid_rows: %u\n", pad, g->grid_rows);
-    if (!buf) return NULL;
-    buf = ygrid_dump_appendf(buf, &len, &cap, "%sprim_count: %u\n", pad,
-                             ygrid_live_prim_count(g));
-    if (!buf) return NULL;
+    if (!buf) {
+        return NULL;
+    }
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sprim_count: %u\n", pad, ygrid_live_prim_count(g));
+    if (!buf) {
+        return NULL;
+    }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sprim_count_with_tombstones: %u\n", pad,
                              g->prim_count);
-    if (!buf) return NULL;
+    if (!buf) {
+        return NULL;
+    }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sbytes_len: %zu\n", pad, g->bytes_len);
-    if (!buf) return NULL;
-    buf = ygrid_dump_appendf(buf, &len, &cap, "%sentity_high_water: %u\n", pad,
-                             g->entity_high_water);
-    if (!buf) return NULL;
+    if (!buf) {
+        return NULL;
+    }
+    buf =
+        ygrid_dump_appendf(buf, &len, &cap, "%sentity_high_water: %u\n", pad, g->entity_high_water);
+    if (!buf) {
+        return NULL;
+    }
     /* Entities. Walk every slot up to entity_high_water; skip released
      * (free-list) slots — those have in_use=false. external_id=0 is the
      * implicit root and is always present at slot 0. The dump uses
@@ -2003,39 +2018,54 @@ static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
         return buf;
     }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sentities:\n", pad);
-    if (!buf) return NULL;
+    if (!buf) {
+        return NULL;
+    }
     for (uint32_t s = 0; s < g->entity_high_water; s++) {
         const struct ygrid_entity *e = &g->entities[s];
         if (!e->in_use) {
             continue;
         }
         buf = ygrid_dump_appendf(buf, &len, &cap, "%s  - slot: %u\n", pad, s);
-        if (!buf) return NULL;
+        if (!buf) {
+            return NULL;
+        }
         buf = ygrid_dump_appendf(buf, &len, &cap, "%s    external_id: %llu\n", pad,
                                  (unsigned long long)e->external_id);
-        if (!buf) return NULL;
+        if (!buf) {
+            return NULL;
+        }
         if (e->parent_slot == YGRID_INVALID_SLOT) {
             buf = ygrid_dump_appendf(buf, &len, &cap, "%s    parent_slot: ~\n", pad);
         } else {
-            buf = ygrid_dump_appendf(buf, &len, &cap, "%s    parent_slot: %u\n", pad,
-                                     e->parent_slot);
+            buf =
+                ygrid_dump_appendf(buf, &len, &cap, "%s    parent_slot: %u\n", pad, e->parent_slot);
         }
-        if (!buf) return NULL;
+        if (!buf) {
+            return NULL;
+        }
         buf = ygrid_dump_appendf(buf, &len, &cap, "%s    prim_count: %u\n", pad, e->prim_count);
-        if (!buf) return NULL;
+        if (!buf) {
+            return NULL;
+        }
         if (e->children_count == 0) {
             buf = ygrid_dump_appendf(buf, &len, &cap, "%s    children: []\n", pad);
         } else {
             buf = ygrid_dump_appendf(buf, &len, &cap, "%s    children: [", pad);
-            if (!buf) return NULL;
+            if (!buf) {
+                return NULL;
+            }
             for (uint32_t i = 0; i < e->children_count; i++) {
-                buf = ygrid_dump_appendf(buf, &len, &cap, "%s%u", i ? ", " : "",
-                                         e->children[i]);
-                if (!buf) return NULL;
+                buf = ygrid_dump_appendf(buf, &len, &cap, "%s%u", i ? ", " : "", e->children[i]);
+                if (!buf) {
+                    return NULL;
+                }
             }
             buf = ygrid_dump_appendf(buf, &len, &cap, "]\n");
         }
-        if (!buf) return NULL;
+        if (!buf) {
+            return NULL;
+        }
     }
     return buf;
 }
@@ -2388,8 +2418,10 @@ static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *ou
 {
     float w = rect.max.x - rect.min.x;
     float h = rect.max.y - rect.min.y;
-    uint32_t cols = (uint32_t)((w + (float)YGRID_TARGET_CELL_PX - 1.0f) / (float)YGRID_TARGET_CELL_PX);
-    uint32_t rows = (uint32_t)((h + (float)YGRID_TARGET_CELL_PX - 1.0f) / (float)YGRID_TARGET_CELL_PX);
+    uint32_t cols =
+        (uint32_t)((w + (float)YGRID_TARGET_CELL_PX - 1.0f) / (float)YGRID_TARGET_CELL_PX);
+    uint32_t rows =
+        (uint32_t)((h + (float)YGRID_TARGET_CELL_PX - 1.0f) / (float)YGRID_TARGET_CELL_PX);
     if (cols == 0u) {
         cols = 1u;
     }
@@ -2411,8 +2443,7 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_r
 {
     uint32_t grid_cols, grid_rows;
     ygrid_dims_from_rect(rect, &grid_cols, &grid_rows);
-    struct yetty_ygrid_grid_ptr_result gr =
-        yetty_ygrid_create(rect, grid_cols, grid_rows, context);
+    struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, grid_cols, grid_rows, context);
     if (YETTY_IS_ERR(gr)) {
         return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: create", gr);
     }

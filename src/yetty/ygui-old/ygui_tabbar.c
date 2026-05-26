@@ -38,7 +38,7 @@
 
 /* Shared engine-attachment helper (see ygui_widgets.c). */
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 /*=============================================================================
  * Geometry helpers
@@ -193,7 +193,8 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_old_widget
     }
 
     /* Strip background — a flat band the width of the widget. */
-    yetty_ygui_old_render_ctx_render_box(ctx, self->x, self->y, self->w, hh, theme->bg_surface, 0.0f);
+    yetty_ygui_old_render_ctx_render_box(ctx, self->x, self->y, self->w, hh, theme->bg_surface,
+                                         0.0f);
 
     float x = self->x;
     float y = self->y;
@@ -209,7 +210,7 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_old_widget
 
         if (is_active) {
             yetty_ygui_old_render_ctx_render_box(ctx, x, y + hh - TABBAR_ACCENT_BAR_H, pw,
-                                             TABBAR_ACCENT_BAR_H, theme->accent, 0.0f);
+                                                 TABBAR_ACCENT_BAR_H, theme->accent, 0.0f);
         }
 
         /* Browser-style separator: draw between this pill and the next
@@ -221,7 +222,7 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_old_widget
             float sep_y = y + TABBAR_SEPARATOR_INSET_Y;
             float sep_h = hh - 2 * TABBAR_SEPARATOR_INSET_Y;
             yetty_ygui_old_render_ctx_render_box(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h,
-                                             theme->border_muted, 0.0f);
+                                                 theme->border_muted, 0.0f);
         }
 
         /* Label. The text path renders top-aligned at (tx, ty); the
@@ -255,7 +256,8 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_old_widget
         float ax = x + cx;
         float ay = y + cy;
         uint32_t close_bg = is_active ? theme->bg_surface : theme->bg_hover;
-        yetty_ygui_old_render_ctx_render_box(ctx, ax, ay, cw, ch, close_bg, TABBAR_PILL_RADIUS * 0.5f);
+        yetty_ygui_old_render_ctx_render_box(ctx, ax, ay, cw, ch, close_bg,
+                                             TABBAR_PILL_RADIUS * 0.5f);
         float gfs = ch * 0.85f;
         if (gfs < 10.0f) {
             gfs = 10.0f;
@@ -276,7 +278,7 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_old_widget
         float ax = self->x + nx;
         float ay = self->y + ny;
         yetty_ygui_old_render_ctx_render_box(ctx, ax, ay, nw, nh, theme->bg_hover,
-                                         TABBAR_PILL_RADIUS * 0.5f);
+                                             TABBAR_PILL_RADIUS * 0.5f);
         float fs = nh * 0.85f;
         if (fs < 12.0f) {
             fs = 12.0f;
@@ -284,8 +286,8 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_old_widget
         /* "+" is roughly font_size/2 wide — center it inside the pill. */
         float gx = ax + (nw - fs * 0.5f) * 0.5f;
         float gy = ay + (nh - fs) * 0.5f - 1.0f;
-        yetty_ygui_old_render_ctx_render_text(ctx, "+", gx, gy,
-                                          theme->accent ? theme->accent : theme->text_primary, fs);
+        yetty_ygui_old_render_ctx_render_text(
+            ctx, "+", gx, gy, theme->accent ? theme->accent : theme->text_primary, fs);
     }
     return YETTY_OK_VOID();
 }
@@ -295,7 +297,8 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_old_widget
  * close a tab without switching to it first.
  *===========================================================================*/
 
-static int tabbar_on_press(struct yetty_ygui_old_widget *self, float lx, float ly, ygui_event_t *out)
+static int tabbar_on_press(struct yetty_ygui_old_widget *self, float lx, float ly,
+                           ygui_event_t *out)
 {
     (void)out;
     float hh = tabbar_header_h(self);
@@ -393,8 +396,9 @@ static const struct yetty_ygui_old_widget_vtable tabbar_vtable = {
  * Public API
  *===========================================================================*/
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_tabbar(struct yetty_ygui_old_engine *engine, const char *id,
-                                                   float x, float y, float w, float h)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_tabbar(struct yetty_ygui_old_engine *engine,
+                                                           const char *id, float x, float y,
+                                                           float w, float h)
 {
     struct yetty_ygui_old_widget *t =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_TABBAR, id);
@@ -448,8 +452,8 @@ static int tabbar_grow_capacity(struct yetty_ygui_old_widget *self, int need)
     return 1;
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_widget_tabbar_add_tab(struct yetty_ygui_old_widget *tabbar,
-                                                           const char *label)
+struct yetty_ygui_old_widget *yetty_ygui_old_widget_tabbar_add_tab(
+    struct yetty_ygui_old_widget *tabbar, const char *label)
 {
     if (!tabbar || tabbar->type != YETTY_YGUI_OLD_WIDGET_TABBAR) {
         return NULL;
@@ -461,7 +465,8 @@ struct yetty_ygui_old_widget *yetty_ygui_old_widget_tabbar_add_tab(struct yetty_
     snprintf(panel_id, sizeof(panel_id), "%s__tab%d", tabbar->id ? tabbar->id : "tabbar",
              tabbar->data.tabbar.n_tabs);
 
-    struct yetty_ygui_old_widget *panel = yetty_ygui_old_engine_vbox(tabbar->engine, panel_id, 0, 0, 0, 0);
+    struct yetty_ygui_old_widget *panel =
+        yetty_ygui_old_engine_vbox(tabbar->engine, panel_id, 0, 0, 0, 0);
     if (!panel) {
         return NULL;
     }
@@ -559,7 +564,7 @@ void yetty_ygui_old_widget_tabbar_remove_tab(struct yetty_ygui_old_widget *tabba
 }
 
 void yetty_ygui_old_widget_tabbar_on_tab_close(struct yetty_ygui_old_widget *tabbar,
-                                           ygui_change_callback_t callback, void *userdata)
+                                               ygui_change_callback_t callback, void *userdata)
 {
     if (!tabbar || tabbar->type != YETTY_YGUI_OLD_WIDGET_TABBAR) {
         return;
@@ -613,7 +618,7 @@ int yetty_ygui_old_widget_tabbar_count(const struct yetty_ygui_old_widget *tabba
 }
 
 void yetty_ygui_old_widget_tabbar_on_change(struct yetty_ygui_old_widget *tabbar,
-                                        ygui_change_callback_t callback, void *userdata)
+                                            ygui_change_callback_t callback, void *userdata)
 {
     if (!tabbar || tabbar->type != YETTY_YGUI_OLD_WIDGET_TABBAR) {
         return;
@@ -623,7 +628,7 @@ void yetty_ygui_old_widget_tabbar_on_change(struct yetty_ygui_old_widget *tabbar
 }
 
 void yetty_ygui_old_widget_tabbar_on_new_tab(struct yetty_ygui_old_widget *tabbar,
-                                         ygui_click_callback_t callback, void *userdata)
+                                             ygui_click_callback_t callback, void *userdata)
 {
     if (!tabbar || tabbar->type != YETTY_YGUI_OLD_WIDGET_TABBAR) {
         return;

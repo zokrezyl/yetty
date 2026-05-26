@@ -91,7 +91,8 @@ static void layout_widget(struct yetty_ygui_old_widget *w, float parent_abs_x, f
  * Position: absolute
  *===========================================================================*/
 
-static void layout_absolute_child(struct yetty_ygui_old_widget *parent, struct yetty_ygui_old_widget *c)
+static void layout_absolute_child(struct yetty_ygui_old_widget *parent,
+                                  struct yetty_ygui_old_widget *c)
 {
     /* Absolute positioning is relative to the parent's *content* box. The
      * authored x/y are interpreted as offsets inside that box; authored
@@ -165,7 +166,7 @@ static float flex_main_basis(const struct yetty_ygui_old_widget *c, ygui_flex_di
 static float flex_main_margin(const struct yetty_ygui_old_widget *c, ygui_flex_direction_t dir)
 {
     return (dir == YETTY_YGUI_OLD_FLEX_ROW) ? (c->layout.margin_left + c->layout.margin_right)
-                                        : (c->layout.margin_top + c->layout.margin_bottom);
+                                            : (c->layout.margin_top + c->layout.margin_bottom);
 }
 
 static float flex_cross_size(const struct yetty_ygui_old_widget *c, ygui_flex_direction_t dir,
@@ -800,7 +801,8 @@ static void preflight_intrinsic_size(struct yetty_ygui_old_widget *w)
 
 extern void yetty_ygui_old_internal_engine_pin_bars(struct yetty_ygui_old_engine *engine);
 
-struct yetty_ycore_void_result yetty_ygui_old_layout_compute_engine(struct yetty_ygui_old_engine *engine)
+struct yetty_ycore_void_result yetty_ygui_old_layout_compute_engine(
+    struct yetty_ygui_old_engine *engine)
 {
     if (!engine) {
         return YETTY_ERR(yetty_ycore_void, "ygui_layout_compute_engine: NULL engine");

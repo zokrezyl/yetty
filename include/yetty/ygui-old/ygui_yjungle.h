@@ -29,17 +29,15 @@ struct yetty_yjungle_config;
 
 /* Create a yjungle widget; the producer is instantiated lazily on
  * the first tick. `seed = 0` seeds from CLOCK_MONOTONIC. */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_yjungle(struct yetty_ygui_old_engine *engine,
-                                                    const char *id, float x, float y, float w,
-                                                    float h,
-                                                    const struct yetty_yjungle_config *config,
-                                                    uint32_t seed);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_yjungle(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const struct yetty_yjungle_config *config, uint32_t seed);
 
 /* Advance the yjungle producer by one tick at the given monotonic
  * millisecond clock value. If no event fires this tick the cached
  * buffer is left alone. */
-struct yetty_ycore_void_result yetty_ygui_old_widget_yjungle_tick(struct yetty_ygui_old_widget *widget,
-                                                              uint64_t now_ms);
+struct yetty_ycore_void_result yetty_ygui_old_widget_yjungle_tick(
+    struct yetty_ygui_old_widget *widget, uint64_t now_ms);
 
 #ifdef __cplusplus
 }

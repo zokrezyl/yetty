@@ -23,7 +23,7 @@
 #include <string.h>
 
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 #define MENU_DEFAULT_ITEM_H 28.0f
 #define MENU_PAD_X 12.0f
@@ -116,20 +116,20 @@ static struct yetty_ycore_void_result popup_menu_render(struct yetty_ygui_old_wi
      * top. */
     if (self->data.popup_menu.modal && self->engine) {
         yetty_ygui_old_render_ctx_render_box(ctx, -self->x, -self->y, self->engine->width,
-                                         self->engine->height, theme->overlay_modal, 0);
+                                             self->engine->height, theme->overlay_modal, 0);
     }
 
     /* Soft drop shadow — mirrors the popup dialog. */
     yetty_ygui_old_render_ctx_render_box_shadow(ctx, self->x, self->y, self->w, self->h,
-                                            theme->radius_large, theme->elevation_high,
-                                            theme->shadow, theme->elevation_alpha);
+                                                theme->radius_large, theme->elevation_high,
+                                                theme->shadow, theme->elevation_alpha);
 
     /* Body + outline. */
-    yetty_ygui_old_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h,
-                                     theme->bg_dropdown ? theme->bg_dropdown : theme->bg_primary,
-                                     theme->radius_large);
+    yetty_ygui_old_render_ctx_render_box(
+        ctx, self->x, self->y, self->w, self->h,
+        theme->bg_dropdown ? theme->bg_dropdown : theme->bg_primary, theme->radius_large);
     yetty_ygui_old_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h,
-                                             theme->border_muted, theme->radius_large, 1.0f);
+                                                 theme->border_muted, theme->radius_large, 1.0f);
 
     float fs = theme->font_size > 0 ? theme->font_size : 14.0f;
     int hover = self->data.popup_menu.hover_index;
@@ -160,8 +160,8 @@ static struct yetty_ycore_void_result popup_menu_render(struct yetty_ygui_old_wi
         }
         /* Hairline separator below the header. */
         yetty_ygui_old_render_ctx_render_box(ctx, self->x + 4.0f, self->y + MENU_HEADER_H,
-                                         self->w - 8.0f, MENU_HEADER_SEPARATOR_H,
-                                         theme->border_muted, 0.0f);
+                                             self->w - 8.0f, MENU_HEADER_SEPARATOR_H,
+                                             theme->border_muted, 0.0f);
     }
 
     for (int i = 0; i < self->data.popup_menu.n_items; i++) {
@@ -172,8 +172,8 @@ static struct yetty_ycore_void_result popup_menu_render(struct yetty_ygui_old_wi
             float y =
                 self->y + menu_item_top(self, i) + (MENU_SEPARATOR_H - MENU_SEPARATOR_LINE) * 0.5f;
             yetty_ygui_old_render_ctx_render_box(ctx, self->x + MENU_PAD_X * 0.5f, y,
-                                             self->w - MENU_PAD_X, MENU_SEPARATOR_LINE,
-                                             theme->border_muted, 0.0f);
+                                                 self->w - MENU_PAD_X, MENU_SEPARATOR_LINE,
+                                                 theme->border_muted, 0.0f);
             continue;
         }
 
@@ -181,12 +181,12 @@ static struct yetty_ycore_void_result popup_menu_render(struct yetty_ygui_old_wi
 
         if (i == hover) {
             yetty_ygui_old_render_ctx_render_box(ctx, self->x + 4.0f, row_y, self->w - 8.0f, ih,
-                                             theme->bg_hover, theme->radius_small);
+                                                 theme->bg_hover, theme->radius_small);
         }
 
         float ty = row_y + (ih - fs) * 0.5f;
-        yetty_ygui_old_render_ctx_render_text(ctx, label, self->x + MENU_PAD_X, ty, theme->text_primary,
-                                          fs);
+        yetty_ygui_old_render_ctx_render_text(ctx, label, self->x + MENU_PAD_X, ty,
+                                              theme->text_primary, fs);
     }
     return YETTY_OK_VOID();
 }
@@ -329,7 +329,8 @@ static const struct yetty_ygui_old_widget_vtable popup_menu_vtable = {
  *===========================================================================*/
 
 struct yetty_ygui_old_widget *yetty_ygui_old_engine_popup_menu(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w)
+                                                               const char *id, float x, float y,
+                                                               float w)
 {
     struct yetty_ygui_old_widget *m =
         yetty_ygui_old_engine_widget_alloc(engine, YETTY_YGUI_OLD_WIDGET_POPUP_MENU, id);
@@ -419,14 +420,16 @@ static void menu_add_row(struct yetty_ygui_old_widget *menu, const char *label,
     }
 }
 
-void yetty_ygui_old_widget_popup_menu_add_item(struct yetty_ygui_old_widget *menu, const char *label,
-                                           ygui_click_callback_t cb, void *userdata)
+void yetty_ygui_old_widget_popup_menu_add_item(struct yetty_ygui_old_widget *menu,
+                                               const char *label, ygui_click_callback_t cb,
+                                               void *userdata)
 {
     menu_add_row(menu, label ? label : "", cb, userdata, /*is_drill=*/0);
 }
 
-void yetty_ygui_old_widget_popup_menu_add_drill_item(struct yetty_ygui_old_widget *menu, const char *label,
-                                                 ygui_click_callback_t cb, void *userdata)
+void yetty_ygui_old_widget_popup_menu_add_drill_item(struct yetty_ygui_old_widget *menu,
+                                                     const char *label, ygui_click_callback_t cb,
+                                                     void *userdata)
 {
     menu_add_row(menu, label ? label : "", cb, userdata, /*is_drill=*/1);
 }
@@ -455,7 +458,8 @@ void yetty_ygui_old_widget_popup_menu_clear(struct yetty_ygui_old_widget *menu)
     }
 }
 
-void yetty_ygui_old_widget_popup_menu_set_title(struct yetty_ygui_old_widget *menu, const char *title)
+void yetty_ygui_old_widget_popup_menu_set_title(struct yetty_ygui_old_widget *menu,
+                                                const char *title)
 {
     if (!menu || menu->type != YETTY_YGUI_OLD_WIDGET_POPUP_MENU) {
         return;
@@ -470,7 +474,7 @@ void yetty_ygui_old_widget_popup_menu_set_title(struct yetty_ygui_old_widget *me
 }
 
 void yetty_ygui_old_widget_popup_menu_set_back(struct yetty_ygui_old_widget *menu,
-                                           ygui_click_callback_t on_back, void *userdata)
+                                               ygui_click_callback_t on_back, void *userdata)
 {
     if (!menu || menu->type != YETTY_YGUI_OLD_WIDGET_POPUP_MENU) {
         return;

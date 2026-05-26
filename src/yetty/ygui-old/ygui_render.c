@@ -19,8 +19,8 @@
  *===========================================================================*/
 
 void yetty_ygui_old_render_ctx_init(struct yetty_ygui_old_render_ctx *ctx,
-                                struct yetty_ydraw_draw_list *buffer,
-                                const struct yetty_ygui_old_theme *theme)
+                                    struct yetty_ydraw_draw_list *buffer,
+                                    const struct yetty_ygui_old_theme *theme)
 {
     ctx->buffer = buffer;
     ctx->theme = theme;
@@ -44,9 +44,9 @@ void yetty_ygui_old_render_ctx_init(struct yetty_ygui_old_render_ctx *ctx,
  * Drawing Functions
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box(struct yetty_ygui_old_render_ctx *ctx,
-                                                                float x, float y, float w, float h,
-                                                                uint32_t color, float radius)
+struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box(
+    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, uint32_t color,
+    float radius)
 {
     if (!ctx->buffer) {
         return YETTY_ERR(yetty_ycore_void, "ygui_render_box: NULL buffer");
@@ -132,9 +132,9 @@ struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_outline(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_text(struct yetty_ygui_old_render_ctx *ctx,
-                                                                 const char *text, float x, float y,
-                                                                 uint32_t color, float font_size)
+struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_text(
+    struct yetty_ygui_old_render_ctx *ctx, const char *text, float x, float y, uint32_t color,
+    float font_size)
 {
     if (!ctx->buffer || !text) {
         return YETTY_ERR(yetty_ycore_void, "ygui_render_text: NULL buffer or text");
@@ -257,8 +257,8 @@ struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_shadow(
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_linear_gradient(
-    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, float radius, float gx0,
-    float gy0, float gx1, float gy1, uint32_t color0, uint32_t color1)
+    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float gx0, float gy0, float gx1, float gy1, uint32_t color0, uint32_t color1)
 {
     if (!ctx->buffer) {
         return YETTY_ERR(yetty_ycore_void, "ygui_render_box_linear_gradient: NULL buffer");
@@ -286,8 +286,8 @@ struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_linear_gradi
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_radial_gradient(
-    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, float radius, float cx,
-    float cy, float gradient_radius, uint32_t color_inner, uint32_t color_outer)
+    struct yetty_ygui_old_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float cx, float cy, float gradient_radius, uint32_t color_inner, uint32_t color_outer)
 {
     if (!ctx->buffer) {
         return YETTY_ERR(yetty_ycore_void, "ygui_render_box_radial_gradient: NULL buffer");
@@ -314,8 +314,8 @@ struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_box_radial_gradi
 }
 
 struct yetty_ycore_void_result yetty_ygui_old_render_ctx_render_triangle(
-    struct yetty_ygui_old_render_ctx *ctx, float x0, float y0, float x1, float y1, float x2, float y2,
-    uint32_t color)
+    struct yetty_ygui_old_render_ctx *ctx, float x0, float y0, float x1, float y1, float x2,
+    float y2, uint32_t color)
 {
     if (!ctx->buffer) {
         return YETTY_ERR(yetty_ycore_void, "ygui_render_triangle: NULL buffer");

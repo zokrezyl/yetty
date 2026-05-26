@@ -31,17 +31,18 @@ struct yetty_yzoo_config;
  * first tick (or first render if no tick has fired yet) so the
  * scene size matches the resolved layout box. `seed = 0` seeds from
  * CLOCK_MONOTONIC. */
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_yzoo(struct yetty_ygui_old_engine *engine, const char *id,
-                                                 float x, float y, float w, float h,
-                                                 const struct yetty_yzoo_config *config,
-                                                 uint32_t seed);
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_yzoo(struct yetty_ygui_old_engine *engine,
+                                                         const char *id, float x, float y, float w,
+                                                         float h,
+                                                         const struct yetty_yzoo_config *config,
+                                                         uint32_t seed);
 
 /* Advance the yzoo simulation by `dt_seconds` and rebuild the
  * cached paint buffer. The host typically calls this from a ~33ms
  * uv_timer. Calling tick on a freshly-attached widget builds the
  * initial frame. */
 struct yetty_ycore_void_result yetty_ygui_old_widget_yzoo_tick(struct yetty_ygui_old_widget *widget,
-                                                           float dt_seconds);
+                                                               float dt_seconds);
 
 #ifdef __cplusplus
 }

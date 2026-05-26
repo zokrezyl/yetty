@@ -452,7 +452,7 @@ static void ypdf_destroy(struct yetty_ygui_old_widget *self)
  *===========================================================================*/
 
 void yetty_ygui_old_engine_attach_widget(struct yetty_ygui_old_engine *engine,
-                                     struct yetty_ygui_old_widget *widget);
+                                         struct yetty_ygui_old_widget *widget);
 
 static const struct yetty_ygui_old_widget_vtable *ypdf_vtable_ptr(void)
 {
@@ -522,8 +522,8 @@ static void build_stacking(struct ypdf_page_entry *pages, int n, float page_gap,
 }
 
 static struct yetty_ygui_old_widget *build_widget_from_pdf(struct yetty_ygui_old_engine *engine,
-                                                       const char *id, float x, float y, float w,
-                                                       float h, pdfio_file_t *pdf)
+                                                           const char *id, float x, float y,
+                                                           float w, float h, pdfio_file_t *pdf)
 {
     if (!pdf) {
         return NULL;
@@ -601,9 +601,9 @@ static struct yetty_ygui_old_widget *build_widget_from_pdf(struct yetty_ygui_old
     return widget;
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_ypdf_from_file(struct yetty_ygui_old_engine *engine,
-                                                           const char *id, float x, float y,
-                                                           float w, float h, const char *path)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_ypdf_from_file(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const char *path)
 {
     if (!path) {
         return NULL;
@@ -612,10 +612,9 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_ypdf_from_file(struct yetty_
     return build_widget_from_pdf(engine, id, x, y, w, h, pdf);
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_ypdf_from_buffer(struct yetty_ygui_old_engine *engine,
-                                                             const char *id, float x, float y,
-                                                             float w, float h, const uint8_t *data,
-                                                             size_t len)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_ypdf_from_buffer(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h,
+    const uint8_t *data, size_t len)
 {
     if (!data || len == 0) {
         return NULL;
@@ -660,15 +659,14 @@ static void ypdf_capture_default(const char *name, const uint8_t *data, size_t s
     g_ypdf_default_size = size;
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_engine_ypdf_default(struct yetty_ygui_old_engine *engine,
-                                                         const char *id, float x, float y, float w,
-                                                         float h)
+struct yetty_ygui_old_widget *yetty_ygui_old_engine_ypdf_default(
+    struct yetty_ygui_old_engine *engine, const char *id, float x, float y, float w, float h)
 {
     if (!g_ypdf_default_data) {
         register_ypdf_default_assets_c(ypdf_capture_default);
     }
     return yetty_ygui_old_engine_ypdf_from_buffer(engine, id, x, y, w, h, g_ypdf_default_data,
-                                              g_ypdf_default_size);
+                                                  g_ypdf_default_size);
 }
 
 /*=============================================================================
@@ -743,7 +741,8 @@ int yetty_ygui_old_widget_ypdf_page_count(const struct yetty_ygui_old_widget *wi
 }
 
 void yetty_ygui_old_widget_ypdf_on_scroll_change(struct yetty_ygui_old_widget *widget,
-                                             yetty_ygui_old_ypdf_scroll_change_fn cb, void *userdata)
+                                                 yetty_ygui_old_ypdf_scroll_change_fn cb,
+                                                 void *userdata)
 {
     if (!is_ypdf(widget)) {
         return;

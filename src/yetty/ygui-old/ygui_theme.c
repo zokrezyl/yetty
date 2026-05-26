@@ -106,7 +106,8 @@ void yetty_ygui_old_theme_destroy(struct yetty_ygui_old_theme *theme)
  * Theme Setters
  *===========================================================================*/
 
-void yetty_ygui_old_theme_set_padding(struct yetty_ygui_old_theme *theme, float sm, float med, float lg)
+void yetty_ygui_old_theme_set_padding(struct yetty_ygui_old_theme *theme, float sm, float med,
+                                      float lg)
 {
     if (!theme) {
         return;
@@ -116,7 +117,8 @@ void yetty_ygui_old_theme_set_padding(struct yetty_ygui_old_theme *theme, float 
     theme->pad_large = lg;
 }
 
-void yetty_ygui_old_theme_set_radius(struct yetty_ygui_old_theme *theme, float sm, float med, float lg)
+void yetty_ygui_old_theme_set_radius(struct yetty_ygui_old_theme *theme, float sm, float med,
+                                     float lg)
 {
     if (!theme) {
         return;
@@ -255,7 +257,7 @@ void yetty_ygui_old_theme_set_selection_bg(struct yetty_ygui_old_theme *theme, u
 }
 
 void yetty_ygui_old_theme_set_elevation(struct yetty_ygui_old_theme *theme, float low, float medium,
-                                    float high, float alpha)
+                                        float high, float alpha)
 {
     if (!theme) {
         return;
@@ -296,7 +298,7 @@ static void apply_color(struct yetty_ygui_old_theme *theme, uint32_t *dst,
 }
 
 void yetty_ygui_old_theme_apply_config(struct yetty_ygui_old_theme *theme,
-                                   const struct yetty_yconfig_config *config)
+                                       const struct yetty_yconfig_config *config)
 {
     if (!theme || !config || !config->ops || !config->ops->get_string) {
         return;

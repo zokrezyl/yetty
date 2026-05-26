@@ -58,8 +58,8 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
 
     char id_buf[64];
     snprintf(id_buf, sizeof(id_buf), "yui_debug_window_%llu", (unsigned long long)pane_id);
-    dw->window = yetty_ygui_old_engine_window(engine, id_buf, 0.0f, 0.0f, DEBUG_WIN_W, DEBUG_WIN_H,
-                                          "Debug");
+    dw->window =
+        yetty_ygui_old_engine_window(engine, id_buf, 0.0f, 0.0f, DEBUG_WIN_W, DEBUG_WIN_H, "Debug");
     if (!dw->window) {
         free(dw);
         return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: window widget");

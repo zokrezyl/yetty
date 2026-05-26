@@ -206,7 +206,8 @@ void yetty_ygui_old_grid_remove(ygui_spatial_grid_t *grid, struct yetty_ygui_old
     }
 }
 
-struct yetty_ygui_old_widget *yetty_ygui_old_grid_query(const ygui_spatial_grid_t *grid, float x, float y)
+struct yetty_ygui_old_widget *yetty_ygui_old_grid_query(const ygui_spatial_grid_t *grid, float x,
+                                                        float y)
 {
     if (!grid->cells) {
         return NULL;
@@ -237,7 +238,8 @@ struct yetty_ygui_old_widget *yetty_ygui_old_grid_query(const ygui_spatial_grid_
                  in_y, w->flags);
         if (in_x && in_y) {
             /* Check visibility */
-            if (!(w->flags & YETTY_YGUI_OLD_FLAG_VISIBLE) || (w->flags & YETTY_YGUI_OLD_FLAG_DISABLED)) {
+            if (!(w->flags & YETTY_YGUI_OLD_FLAG_VISIBLE) ||
+                (w->flags & YETTY_YGUI_OLD_FLAG_DISABLED)) {
                 GRID_LOG("  -> skipped (not visible or disabled)");
                 continue;
             }
