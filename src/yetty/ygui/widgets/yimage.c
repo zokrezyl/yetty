@@ -14,8 +14,10 @@
 
 #include "../internal.h"
 
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/widgets/yimage.h>
+#include <yetty/yimage/yimage.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -67,12 +69,32 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_ygui_object 
          * with empty content. */
         return YETTY_OK_VOID();
     }
-    /* Hand-roll the record append because the wrapper's
-     * yetty_ygui_emit_figure_body wants uint32_t len; clamp on the way. */
-    if (d->len > 0xFFFFFFFFu) {
-        return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: payload too large");
+    /* The receiver-side YIMAGE figure is in fact a ygrid (the platform
+     * registers ygrid's factory under YETTY_YFIGURE_KIND_YIMAGE so all
+     * producer widgets share one renderer), so the body bytes must be
+     * a ydraw draw_list containing one yimage complex prim — NOT the
+     * raw JPEG/PNG bytes. yetty_yimage_render builds that draw_list. */
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_yimage_render_config cfg = {
+        .bounds_x = 0.0f,
+        .bounds_y = 0.0f,
+        .bounds_w = r.max.x - r.min.x,
+        .bounds_h = r.max.y - r.min.y,
+    };
+    struct yetty_ydraw_draw_list_result dlr = yetty_yimage_render(d->bytes, d->len, &cfg);
+    if (YETTY_IS_ERR(dlr)) {
+        return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: yimage_render", dlr);
     }
-    return yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), d->bytes, (uint32_t)d->len);
+    struct yetty_ydraw_draw_list *dl = dlr.value;
+    const void *bytes = yetty_ydraw_draw_list_data(dl);
+    size_t size = yetty_ydraw_draw_list_size(dl);
+    struct yetty_ycore_void_result er = YETTY_OK_VOID();
+    if (bytes && size > 0 && size <= 0xFFFFFFFFu) {
+        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), (const uint8_t *)bytes,
+                                         (uint32_t)size);
+    }
+    yetty_ydraw_draw_list_destroy(dl);
+    return er;
 }
 
 struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_ygui_object *obj,
@@ -116,22 +138,18 @@ size_t yetty_ygui_yimage_bytes_len(const struct yetty_ygui_object *obj)
     return d->len;
 }
 
-const struct yetty_ygui_class *yetty_ygui_yimage_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op yimage_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, yimage_constructor),
     YETTY_YGUI_OP(yetty_ygui_destructor, yimage_destructor),
     YETTY_YGUI_OP(yetty_ygui_widget_emit_container, yimage_emit_container),
     YETTY_YGUI_OP(yetty_ygui_widget_emit_body, yimage_emit_body),
-    };
-    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_yimage",
+};
+
+static const struct yetty_ygui_class_descriptor yimage_desc = {
+    .name = "yetty_ygui_yimage",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct yimage_data),};
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_widget_class_get(), NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
-}
+    .data_size = sizeof(struct yimage_data),
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_yimage_class_get, &yimage_desc, yimage_ops, yetty_ygui_widget_class_get(), NULL)

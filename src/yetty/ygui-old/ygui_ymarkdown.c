@@ -114,7 +114,7 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_ymarkdown_from_buffer(
 
 /* Built-in default sample (the repo's README.md), baked into the
  * library via ygui_embed_default_asset (incbin / RCDATA). */
-#include "ygui_ymarkdown_ymarkdown_default_manifest.h"
+#include "ygui_old_ymarkdown_ymarkdown_default_manifest.h"
 
 static const uint8_t *g_ymarkdown_default_data = NULL;
 static size_t g_ymarkdown_default_size = 0;

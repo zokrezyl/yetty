@@ -308,11 +308,8 @@ const struct yetty_ygui_layout *yetty_ygui_widget_layout_get(const struct yetty_
  * Class definition.
  *=========================================================================*/
 
-const struct yetty_ygui_class *yetty_ygui_widget_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op widget_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, widget_default_constructor),
     YETTY_YGUI_OP(yetty_ygui_destructor, widget_default_destructor),
     YETTY_YGUI_OP(yetty_ygui_widget_on_press, widget_default_on_press),
@@ -321,13 +318,12 @@ const struct yetty_ygui_class *yetty_ygui_widget_class_get(void)
     YETTY_YGUI_OP(yetty_ygui_widget_emit_container, widget_default_emit_container),
     YETTY_YGUI_OP(yetty_ygui_widget_emit_body, widget_default_emit_body),
     YETTY_YGUI_OP(yetty_ygui_widget_paint, widget_default_paint),
-    };
-    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_widget",
+};
+
+static const struct yetty_ygui_class_descriptor widget_desc = {
+    .name = "yetty_ygui_widget",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct yetty_ygui_widget_data),};
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &desc, ops, sizeof(ops) / sizeof(ops[0]), NULL, NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
-}
+    .data_size = sizeof(struct yetty_ygui_widget_data),
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_widget_class_get, &widget_desc, widget_ops, NULL, NULL)

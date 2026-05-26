@@ -107,26 +107,17 @@ static const struct yetty_ygui_class *tooltip_get_parent(void)
     return yetty_ygui_primitive_widget_class_get();
 }
 
-const struct yetty_ygui_class *yetty_ygui_tooltip_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (!cls) {
-        static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op tooltip_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, tooltip_constructor),
     YETTY_YGUI_OP(yetty_ygui_destructor, tooltip_destructor),
     YETTY_YGUI_OP(yetty_ygui_widget_paint, tooltip_paint),
-        };
-        static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_tooltip",
+};
+
+static const struct yetty_ygui_class_descriptor tooltip_desc = {
+    .name = "yetty_ygui_tooltip",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct tooltip_data),};
-        const struct yetty_ygui_class *mixins[] = {NULL};
-        struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-            &desc, ops, sizeof(ops) / sizeof(ops[0]),
-            tooltip_get_parent(), mixins, 0);
-        if (YETTY_IS_ERR(r)) {
-            return NULL;
-        }
-        cls = r.value;
-    }
-    return cls;
-}
+    .data_size = sizeof(struct tooltip_data),
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_tooltip_class_get, &tooltip_desc, tooltip_ops, tooltip_get_parent(), NULL)

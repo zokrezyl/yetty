@@ -117,21 +117,17 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_ygui_
     return yetty_ygui_object_set_dirty(obj);
 }
 
-const struct yetty_ygui_class *yetty_ygui_statusbar_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op statusbar_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, statusbar_constructor),
     YETTY_YGUI_OP(yetty_ygui_destructor, statusbar_destructor),
     YETTY_YGUI_OP(yetty_ygui_widget_paint, statusbar_paint),
-    };
-    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_statusbar",
+};
+
+static const struct yetty_ygui_class_descriptor statusbar_desc = {
+    .name = "yetty_ygui_statusbar",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct statusbar_data),};
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_primitive_widget_class_get(), NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
-}
+    .data_size = sizeof(struct statusbar_data),
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_statusbar_class_get, &statusbar_desc, statusbar_ops, yetty_ygui_primitive_widget_class_get(), NULL)

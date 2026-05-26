@@ -647,7 +647,7 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_ypdf_from_buffer(
 
 /* Built-in default sample (test/ut/ypdf/test-comprehensive.pdf), baked
  * into the library via ygui_embed_default_asset (incbin / RCDATA). */
-#include "ygui_ypdf_ypdf_default_manifest.h"
+#include "ygui_old_ypdf_ypdf_default_manifest.h"
 
 static const uint8_t *g_ypdf_default_data = NULL;
 static size_t g_ypdf_default_size = 0;

@@ -328,23 +328,19 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_ygui
     return yetty_ygui_popup_menu_open_at(obj, x, y);
 }
 
-const struct yetty_ygui_class *yetty_ygui_popup_menu_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op popup_menu_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, popup_menu_constructor),
     YETTY_YGUI_OP(yetty_ygui_destructor, popup_menu_destructor),
     YETTY_YGUI_OP(yetty_ygui_widget_paint, popup_menu_paint),
     YETTY_YGUI_OP(yetty_ygui_widget_on_press, popup_menu_on_press),
     YETTY_YGUI_OP(yetty_ygui_widget_on_motion, popup_menu_on_motion),
-    };
-    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_popup_menu",
+};
+
+static const struct yetty_ygui_class_descriptor popup_menu_desc = {
+    .name = "yetty_ygui_popup_menu",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct popup_menu_data),};
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_primitive_widget_class_get(), NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
-}
+    .data_size = sizeof(struct popup_menu_data),
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_popup_menu_class_get, &popup_menu_desc, popup_menu_ops, yetty_ygui_primitive_widget_class_get(), NULL)

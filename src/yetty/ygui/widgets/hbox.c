@@ -27,19 +27,15 @@ static struct yetty_ycore_void_result hbox_constructor(struct yetty_ygui_object 
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-const struct yetty_ygui_class *yetty_ygui_hbox_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op hbox_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, hbox_constructor),
-    };
-    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_hbox",
+};
+
+static const struct yetty_ygui_class_descriptor hbox_desc = {
+    .name = "yetty_ygui_hbox",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,};
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_primitive_widget_class_get(), NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
-}
+    .data_size = 0,
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_hbox_class_get, &hbox_desc, hbox_ops, yetty_ygui_primitive_widget_class_get(), NULL)

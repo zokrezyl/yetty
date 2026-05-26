@@ -91,6 +91,12 @@ struct yetty_ygui_object {
     /* Dirty flag — content changed without geometry move. */
     int dirty;
 
+    /* Hover state — set by the framework's pointer-tracking pass when
+     * this widget is the deepest hit; cleared when the mouse leaves.
+     * Widgets read it via yetty_ygui_object_is_hovered() to paint a
+     * hover variant. */
+    int hovered;
+
     /* Engine that owns this widget tree. Stored only on the root; child
      * widgets resolve via parent walk through yetty_ygui_object_engine. */
     struct yetty_ygui_runtime *engine;
@@ -177,6 +183,11 @@ struct yetty_ygui_runtime {
     /* App-level key callback. */
     yetty_ygui_key_cb key_cb;
     void *key_userdata;
+
+    /* Deepest widget currently under the mouse, tracked by
+     * feed_mouse_motion. Used to dispatch enter/leave + flip the
+     * obj->hovered flag so widgets can paint a hover variant. */
+    struct yetty_ygui_object *hovered_obj;
 };
 
 /*===========================================================================

@@ -34,19 +34,15 @@ static struct yetty_ycore_void_result primitive_emit_body(struct yetty_ygui_obje
     return yetty_ygui_widget_paint(obj, ctx);
 }
 
-const struct yetty_ygui_class *yetty_ygui_primitive_widget_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op primitive_widget_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_widget_emit_body, primitive_emit_body),
-    };
-    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_primitive_widget",
+};
+
+static const struct yetty_ygui_class_descriptor primitive_widget_desc = {
+    .name = "yetty_ygui_primitive_widget",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,};
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_widget_class_get(), NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
-}
+    .data_size = 0,
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_primitive_widget_class_get, &primitive_widget_desc, primitive_widget_ops, yetty_ygui_widget_class_get(), NULL)

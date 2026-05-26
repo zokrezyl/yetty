@@ -168,21 +168,17 @@ int yetty_ygui_dialog_is_open(const struct yetty_ygui_object *obj)
     return d->open;
 }
 
-const struct yetty_ygui_class *yetty_ygui_dialog_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op dialog_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, dialog_constructor),
     YETTY_YGUI_OP(yetty_ygui_destructor, dialog_destructor),
     YETTY_YGUI_OP(yetty_ygui_widget_paint, dialog_paint),
-    };
-    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_dialog",
+};
+
+static const struct yetty_ygui_class_descriptor dialog_desc = {
+    .name = "yetty_ygui_dialog",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct dialog_data),};
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_vbox_class_get(), NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
-}
+    .data_size = sizeof(struct dialog_data),
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_dialog_class_get, &dialog_desc, dialog_ops, yetty_ygui_vbox_class_get(), NULL)

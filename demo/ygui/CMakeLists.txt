@@ -62,6 +62,27 @@ target_compile_definitions(demo_ygui_runner PUBLIC
     YETTY_WEB=0
     YETTY_ANDROID=0
     YETTY_USE_FORKPTY=1
+    YETTY_YGUI_HAS_UV
+)
+# Inherit usage requirements (include dirs, defs) from every dep that
+# the inlined platform sources transitively reach: webgpu headers from
+# Dawn, glfw, ygui's own headers, yetty_yplatform_*, etc. OBJECT libs
+# propagate these to consumers but also use them to compile their own
+# sources — exactly what we need for runner.c + the platform .c files.
+target_link_libraries(demo_ygui_runner PUBLIC
+    ygui
+    yetty_ywire
+    yetty_yfigure
+    yetty_ygrid
+    yetty_yfont_core
+    yetty_ydraw_factory
+    yetty_yimage
+    yetty_yplot
+    ${YETTY_LIBS}
+    yetty_yplatform_core
+    yetty_yplatform_move_resize
+    yetty_yco
+    yetty_telnet
 )
 
 # Helper macro: define one demo executable. `name` is the suffix
@@ -147,6 +168,12 @@ if(YETTY_ENABLE_FEATURE_YPDF)
 endif()
 if(YETTY_ENABLE_FEATURE_YBROWSER)
     demo_ygui_add(26-ybrowser 26_ybrowser)
+    # ybrowser pulls libcurl→openssl-new while ${YETTY_LIBS}'s yetty_ssh
+    # pulls libssh2→openssl. The two libcryptos define the same symbols;
+    # the linker fails on multi-def. The first-in-list openssl (openssl-new
+    # here) wins at runtime — acceptable for a demo. Tracked by the
+    # project-wide openssl unification work; not invented for this demo.
+    target_link_options(demo-ygui-26-ybrowser PRIVATE -Wl,--allow-multiple-definition)
 endif()
 if(YETTY_ENABLE_FEATURE_YJUNGLE)
     demo_ygui_add(27-yjungle 27_yjungle)

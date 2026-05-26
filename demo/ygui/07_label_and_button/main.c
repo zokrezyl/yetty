@@ -1,55 +1,49 @@
 /*
- * Demo 07: Label and Button — click counter with reset.
- * Ported from yetty-poc/demo/assets/ygui-c/python/02_label_and_button.py.
+ * Demo 07_label_and_button: Label + button.
+ *
+ * Standalone-mode ygui demo. The runner brings up window + GPU +
+ * receiver-side container; this file only populates the widget tree.
+ * Press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <yetty/ygui-old/ygui.h>
+#include <string.h>
 
-static struct yetty_ygui_old_engine* g_engine = NULL;
-static struct yetty_ygui_old_widget* g_counter_label = NULL;
-static int g_clicks = 0;
+#include "../runner.h"
+#include <yetty/ygui/ygui.h>
 
-static void on_increment(struct yetty_ygui_old_widget* w, void* u) {
-    (void)w; (void)u;
-    g_clicks++;
-    char buf[32];
-    snprintf(buf, sizeof(buf), "Clicks: %d", g_clicks);
-    yetty_ygui_old_widget_label_set_text(g_counter_label, buf);
+static inline void err_ok(struct yetty_ycore_void_result r)
+{
+    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
 }
 
-static void on_reset(struct yetty_ygui_old_widget* w, void* u) {
-    (void)w; (void)u;
-    g_clicks = 0;
-    yetty_ygui_old_widget_label_set_text(g_counter_label, "Clicks: 0");
+static struct yetty_ycore_void_result build(struct demo_runner *runner,
+                                            struct yetty_ygui_object *root)
+{
+    (void)runner;
+    {
+        struct yetty_ygui_object_ptr_result r =
+            yetty_ygui_add(yetty_ygui_label_class_get(), root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "label");
+        err_ok(yetty_ygui_label_set_text(r.value, "A label above a button"));
+        struct yetty_ygui_object *w = r.value;
+    {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+        l.height = 24;
+        err_ok(yetty_ygui_widget_layout_set(w, &l));
+    }
+    }
+    struct yetty_ygui_object_ptr_result br =
+        yetty_ygui_add(yetty_ygui_button_class_get(), root);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "button");
+    err_ok(yetty_ygui_button_set_label(br.value, "OK"));
+    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(br.value);
+    l.height = 32;
+    return yetty_ygui_widget_layout_set(br.value, &l);
 }
 
-static void on_key(struct yetty_ygui_old_engine* e, uint32_t key, int mods, void* u) {
-    (void)mods; (void)u;
-    if (key == 'q' || key == 'Q') yetty_ygui_old_engine_stop(e);
-}
-
-int main(void) {
-    if (yetty_ygui_old_init() != 0) return 1;
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_old_engine_create((struct yetty_ygui_old_engine_args){.name = "counter"});
-        if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
-        g_engine = _eng_r.value; }
-    if (!g_engine) { yetty_ygui_old_shutdown(); return 1; }
-
-    yetty_ygui_old_engine_label(g_engine, "title", 50, 30, "Click Counter");
-    g_counter_label = yetty_ygui_old_engine_label(g_engine, "counter", 50, 80, "Clicks: 0");
-
-    struct yetty_ygui_old_widget* inc = yetty_ygui_old_engine_button(g_engine, "increment", 50, 130, 120, 40, "Add +1");
-    yetty_ygui_old_widget_button_on_click(inc, on_increment, NULL);
-
-    struct yetty_ygui_old_widget* rst = yetty_ygui_old_engine_button(g_engine, "reset", 190, 130, 120, 40, "Reset");
-    yetty_ygui_old_widget_button_on_click(rst, on_reset, NULL);
-
-    yetty_ygui_old_engine_on_key(g_engine, on_key, NULL);
-    yetty_ygui_old_engine_run(g_engine);
-
-    yetty_ygui_old_engine_destroy(g_engine);
-    yetty_ygui_old_shutdown();
-    return 0;
+int main(int argc, char **argv)
+{
+    return demo_runner_run(argc, argv, "07_label_and_button", build);
 }

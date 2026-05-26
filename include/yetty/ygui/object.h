@@ -57,6 +57,11 @@ struct yetty_ycore_void_result yetty_ygui_object_set_dirty(struct yetty_ygui_obj
 
 int yetty_ygui_object_is_dirty(const struct yetty_ygui_object *obj);
 
+/* True when this widget is the deepest hit under the mouse pointer.
+ * Maintained by the framework's pointer-tracking pass — widgets read
+ * the flag from their paint method to render a hover variant. */
+int yetty_ygui_object_is_hovered(const struct yetty_ygui_object *obj);
+
 /* Lifecycle method ids (declared as public stubs). Other code may pass
  * these to super invokers / dispatch helpers using their address. */
 YETTY_YGUI_DECLARE_METHOD(yetty_ygui_constructor, struct yetty_ycore_void_result,

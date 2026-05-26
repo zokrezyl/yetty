@@ -163,22 +163,18 @@ float yetty_ygui_slider_get_value(const struct yetty_ygui_object *obj)
     return d->value;
 }
 
-const struct yetty_ygui_class *yetty_ygui_slider_class_get(void)
-{
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    static const struct yetty_ygui_op ops[] = {
+
+static const struct yetty_ygui_op slider_ops[] = {
     YETTY_YGUI_OP(yetty_ygui_constructor, slider_constructor),
     YETTY_YGUI_OP(yetty_ygui_widget_paint, slider_paint),
     YETTY_YGUI_OP(yetty_ygui_widget_on_press, slider_on_press),
     YETTY_YGUI_OP(yetty_ygui_widget_on_motion, slider_on_motion),
-    };
-    static const struct yetty_ygui_class_descriptor desc = {.name = "yetty_ygui_slider",
+};
+
+static const struct yetty_ygui_class_descriptor slider_desc = {
+    .name = "yetty_ygui_slider",
     .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct slider_data),};
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &desc, ops, sizeof(ops) / sizeof(ops[0]), yetty_ygui_primitive_widget_class_get(), NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
-}
+    .data_size = sizeof(struct slider_data),
+};
+
+YETTY_YGUI_DEFINE_CLASS(yetty_ygui_slider_class_get, &slider_desc, slider_ops, yetty_ygui_primitive_widget_class_get(), NULL)

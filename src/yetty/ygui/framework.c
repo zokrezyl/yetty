@@ -409,6 +409,21 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
         return YETTY_OK_VOID();
     }
     struct yetty_ygui_object *target = hit_test(engine->root, x, y);
+    /* Hover bookkeeping — flip enter/leave when the deepest-hit widget
+     * changes from the previous motion event. Mark both old and new
+     * dirty so the next emit repaints them with the correct variant. */
+    if (target != engine->hovered_obj) {
+        if (engine->hovered_obj) {
+            engine->hovered_obj->hovered = 0;
+            engine->hovered_obj->dirty = 1;
+        }
+        if (target) {
+            target->hovered = 1;
+            target->dirty = 1;
+        }
+        engine->hovered_obj = target;
+        engine->dirty = 1;
+    }
     while (target) {
         struct yetty_ycore_int_result r = yetty_ygui_widget_on_motion(target, x, y);
         if (YETTY_IS_ERR(r)) {
@@ -705,10 +720,30 @@ fail:
  * Tree walkers.
  *=========================================================================*/
 
+/* Skip an absolute-positioned widget (popup, dialog, tooltip) when its
+ * layout width or height is zero. Closed popups and closed dialogs sit
+ * in the tree at width/height = 0 and rely on their own paint to
+ * short-circuit on an internal `open` flag — but the framework's tree
+ * walker still recurses into their children, and children paint at the
+ * popup's (0, 0) resolved position, leaking text and pills onto the
+ * screen. Anchor the skip to the absolute-positioned case so flex
+ * children that the layout pass legitimately gave a 0-px main-axis
+ * size (e.g. labels without explicit height) still emit — they paint
+ * their content from `rect.min` outward and a 0-height row is intended. */
+static int should_skip_subtree(const struct yetty_ygui_object *node)
+{
+    const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(node);
+    if (!l || !l->absolute) return 0;
+    return l->width <= 0.0f || l->height <= 0.0f;
+}
+
 struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
     struct yetty_ygui_object *node, struct yetty_ygui_emit_ctx *ctx)
 {
     if (!node) {
+        return YETTY_OK_VOID();
+    }
+    if (should_skip_subtree(node)) {
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result r = yetty_ygui_widget_emit_container(node, ctx);
@@ -726,6 +761,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
                                                                 struct yetty_ygui_emit_ctx *ctx)
 {
     if (!node) {
+        return YETTY_OK_VOID();
+    }
+    if (should_skip_subtree(node)) {
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result r = yetty_ygui_widget_emit_body(node, ctx);

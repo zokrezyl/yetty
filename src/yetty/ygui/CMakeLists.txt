@@ -75,6 +75,7 @@ target_link_libraries(ygui PUBLIC
     yetty_yplatform_core
     yetty_ysdf
     yetty_yplot_core
+    yetty_yimage_core
     yetty_ymarkdown
     yetty_ybrowser
     yetty_ypdf

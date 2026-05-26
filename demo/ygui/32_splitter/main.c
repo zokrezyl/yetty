@@ -1,79 +1,60 @@
 /*
- * Demo 32: splitter.
+ * Demo 32_splitter: Splitter — resizable divider.
  *
- * hbox { left | splitter | right }. Drag the splitter to resize the
- * two panels. Press 'q' to quit.
+ * Standalone-mode ygui demo. The runner brings up window + GPU +
+ * receiver-side container; this file only populates the widget tree.
+ * Press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <yetty/ygui-old/ygui.h>
+#include <string.h>
 
-static struct yetty_ygui_old_widget *g_outer = NULL;
+#include "../runner.h"
+#include <yetty/ygui/ygui.h>
 
-static void on_key(struct yetty_ygui_old_engine *e, uint32_t key, int mods, void *u)
+static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    (void)mods; (void)u;
-    if (key == 'q' || key == 'Q') yetty_ygui_old_engine_stop(e);
+    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
 }
 
-static void on_resize(struct yetty_ygui_old_engine *e, float nw, float nh, float pw, float ph, void *u)
+static struct yetty_ycore_void_result build(struct demo_runner *runner,
+                                            struct yetty_ygui_object *root)
 {
-    (void)e; (void)pw; (void)ph; (void)u;
-    yetty_ygui_old_widget_set_size(g_outer, nw, nh);
-}
-
-int main(void)
-{
-    if (yetty_ygui_old_init() != 0) return 1;
-    struct ygui_engine_ptr_result eng_r = yetty_ygui_old_engine_create(
-        (struct yetty_ygui_old_engine_args){.name = "splitter-demo"});
-    if (YETTY_IS_ERR(eng_r)) { yetty_ycore_error_destroy(eng_r.error); yetty_ygui_old_shutdown(); return 1; }
-    struct yetty_ygui_old_engine *engine = eng_r.value;
-
-    g_outer = yetty_ygui_old_engine_hbox(engine, "outer", 0, 0, 100, 100);
-    yetty_ygui_old_widget_apply_css(g_outer, "padding: 0; gap: 0; align-items: stretch;");
-
-    float cw = 800, ch = 600;
-    struct pixel_size_result sr = yetty_ygui_old_engine_get_size(engine);
-    if (YETTY_IS_OK(sr)) {
-        if (sr.value.width  > 0) cw = sr.value.width;
-        if (sr.value.height > 0) ch = sr.value.height;
-    } else {
-        yetty_ycore_error_destroy(sr.error);
+    (void)runner;
+    {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(root);
+        l.direction = YETTY_YGUI_FLEX_ROW;
+        err_ok(yetty_ygui_widget_layout_set(root, &l));
     }
-    yetty_ygui_old_widget_set_size(g_outer, cw, ch);
+    {
+        struct yetty_ygui_object_ptr_result p =
+            yetty_ygui_add(yetty_ygui_panel_class_get(), root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, p, "left");
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(p.value);
+        l.flex_grow = 1.0f;
+        err_ok(yetty_ygui_widget_layout_set(p.value, &l));
+    }
+    {
+        struct yetty_ygui_object_ptr_result s =
+            yetty_ygui_add(yetty_ygui_splitter_class_get(), root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, s, "splitter");
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(s.value);
+        l.width = 4;
+        err_ok(yetty_ygui_widget_layout_set(s.value, &l));
+    }
+    {
+        struct yetty_ygui_object_ptr_result p =
+            yetty_ygui_add(yetty_ygui_panel_class_get(), root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, p, "right");
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(p.value);
+        l.flex_grow = 1.0f;
+        err_ok(yetty_ygui_widget_layout_set(p.value, &l));
+    }
+    return YETTY_OK_VOID();
+}
 
-    /* Two panels with authored widths so the splitter has something to
-     * resize. Do NOT apply `flex: 1 0 0` here — that would zero the
-     * basis and ignore authored_w. */
-    struct yetty_ygui_old_widget *left = yetty_ygui_old_engine_panel(engine, "left", 0, 0, 280, ch);
-    yetty_ygui_old_widget_set_bg_color(left, 0xFF1E262C);
-    yetty_ygui_old_widget_apply_css(left, "align-self: stretch;");
-    yetty_ygui_old_widget_add_child(g_outer, left);
-
-    struct yetty_ygui_old_widget *split = yetty_ygui_old_engine_splitter(engine, "split", 0, 0, 6, ch);
-    yetty_ygui_old_widget_apply_css(split, "align-self: stretch;");
-    yetty_ygui_old_widget_add_child(g_outer, split);
-
-    struct yetty_ygui_old_widget *right = yetty_ygui_old_engine_panel(engine, "right", 0, 0, cw - 286, ch);
-    yetty_ygui_old_widget_set_bg_color(right, 0xFF141A1F);
-    yetty_ygui_old_widget_apply_css(right, "align-self: stretch;");
-    yetty_ygui_old_widget_add_child(g_outer, right);
-
-    /* Decorative labels so the panes are visibly distinguishable. */
-    struct yetty_ygui_old_widget *lbl_l = yetty_ygui_old_engine_label(engine, "lbl_l", 16, 16,
-                                                              "left pane — drag splitter →");
-    yetty_ygui_old_widget_add_child(left, lbl_l);
-    struct yetty_ygui_old_widget *lbl_r = yetty_ygui_old_engine_label(engine, "lbl_r", 16, 16,
-                                                              "right pane");
-    yetty_ygui_old_widget_add_child(right, lbl_r);
-
-    yetty_ygui_old_engine_on_resize(engine, on_resize, NULL);
-    yetty_ygui_old_engine_on_key(engine, on_key, NULL);
-
-    yetty_ygui_old_engine_run(engine);
-    yetty_ygui_old_engine_destroy(engine);
-    yetty_ygui_old_shutdown();
-    return 0;
+int main(int argc, char **argv)
+{
+    return demo_runner_run(argc, argv, "32_splitter", build);
 }

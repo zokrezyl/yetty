@@ -1,60 +1,44 @@
 /*
- * Demo 11: Progress Bar — start/pause/reset over a progress widget.
- * Ported from yetty-poc/demo/assets/ygui-c/python/06_progress_bar.py.
+ * Demo 11_progress_bar: Progress bars.
+ *
+ * Standalone-mode ygui demo. The runner brings up window + GPU +
+ * receiver-side container; this file only populates the widget tree.
+ * Press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <yetty/ygui-old/ygui.h>
+#include <string.h>
 
-static struct yetty_ygui_old_engine* g_engine = NULL;
-static struct yetty_ygui_old_widget* g_progress = NULL;
-static struct yetty_ygui_old_widget* g_percent_label = NULL;
-static struct yetty_ygui_old_widget* g_start_btn = NULL;
-static int g_running = 0;
-static float g_current = 0.0f;
+#include "../runner.h"
+#include <yetty/ygui/ygui.h>
 
-static void on_start(struct yetty_ygui_old_widget* w, void* u) {
-    (void)w; (void)u;
-    g_running = !g_running;
-    yetty_ygui_old_widget_button_set_label(g_start_btn, g_running ? "Pause" : "Resume");
+static inline void err_ok(struct yetty_ycore_void_result r)
+{
+    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
 }
 
-static void on_reset(struct yetty_ygui_old_widget* w, void* u) {
-    (void)w; (void)u;
-    g_running = 0;
-    g_current = 0;
-    yetty_ygui_old_widget_progress_set_value(g_progress, 0);
-    yetty_ygui_old_widget_label_set_text(g_percent_label, "0%");
-    yetty_ygui_old_widget_button_set_label(g_start_btn, "Start");
+static struct yetty_ycore_void_result build(struct demo_runner *runner,
+                                            struct yetty_ygui_object *root)
+{
+    (void)runner;
+    float values[] = {0.1f, 0.4f, 0.75f, 1.0f};
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
+        struct yetty_ygui_object_ptr_result r =
+            yetty_ygui_add(yetty_ygui_progress_class_get(), root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "progress");
+        err_ok(yetty_ygui_progress_set_value(r.value, values[i]));
+        struct yetty_ygui_object *w = r.value;
+    {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+        l.height = 14;
+        err_ok(yetty_ygui_widget_layout_set(w, &l));
+    }
+    }
+    return YETTY_OK_VOID();
 }
 
-static void on_key(struct yetty_ygui_old_engine* e, uint32_t key, int mods, void* u) {
-    (void)mods; (void)u;
-    if (key == 'q' || key == 'Q') yetty_ygui_old_engine_stop(e);
-}
-
-int main(void) {
-    if (yetty_ygui_old_init() != 0) return 1;
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_old_engine_create((struct yetty_ygui_old_engine_args){.name = "progress-demo"});
-        if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
-        g_engine = _eng_r.value; }
-    if (!g_engine) { yetty_ygui_old_shutdown(); return 1; }
-
-    yetty_ygui_old_engine_label(g_engine, "title", 40, 20, "Download Progress");
-    g_progress = yetty_ygui_old_engine_progress(g_engine, "download", 40, 60, 350, 30, 0.0f);
-    g_percent_label = yetty_ygui_old_engine_label(g_engine, "percent", 410, 65, "0%");
-
-    g_start_btn = yetty_ygui_old_engine_button(g_engine, "start", 40, 120, 100, 40, "Start");
-    yetty_ygui_old_widget_button_on_click(g_start_btn, on_start, NULL);
-
-    struct yetty_ygui_old_widget* reset = yetty_ygui_old_engine_button(g_engine, "reset", 160, 120, 100, 40, "Reset");
-    yetty_ygui_old_widget_button_on_click(reset, on_reset, NULL);
-
-    yetty_ygui_old_engine_on_key(g_engine, on_key, NULL);
-    yetty_ygui_old_engine_run(g_engine);
-
-    yetty_ygui_old_engine_destroy(g_engine);
-    yetty_ygui_old_shutdown();
-    return 0;
+int main(int argc, char **argv)
+{
+    return demo_runner_run(argc, argv, "11_progress_bar", build);
 }

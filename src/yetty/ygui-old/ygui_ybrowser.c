@@ -171,7 +171,7 @@ struct yetty_ygui_old_widget *yetty_ygui_old_engine_ybrowser_from_buffer(
 
 /* Built-in default sample (demo/ygui/26_ybrowser/sample.html), baked
  * into the library via ygui_embed_default_asset (incbin / RCDATA). */
-#include "ygui_ybrowser_ybrowser_default_manifest.h"
+#include "ygui_old_ybrowser_ybrowser_default_manifest.h"
 
 static const uint8_t *g_ybrowser_default_data = NULL;
 static size_t g_ybrowser_default_size = 0;

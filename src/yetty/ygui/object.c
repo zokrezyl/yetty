@@ -254,6 +254,11 @@ struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj)
             yetty_ycore_error_destroy(fr.error);
         }
     }
+    /* Clear the framework's hover bookkeeping if it pointed at us — the
+     * next motion event will discover whatever's underneath. */
+    if (engine && engine->hovered_obj == obj) {
+        engine->hovered_obj = NULL;
+    }
 
     object_unlink_from_parent(obj);
     free(obj);
@@ -313,4 +318,9 @@ struct yetty_ycore_void_result yetty_ygui_object_set_dirty(struct yetty_ygui_obj
 int yetty_ygui_object_is_dirty(const struct yetty_ygui_object *obj)
 {
     return obj && obj->dirty;
+}
+
+int yetty_ygui_object_is_hovered(const struct yetty_ygui_object *obj)
+{
+    return obj && obj->hovered;
 }
