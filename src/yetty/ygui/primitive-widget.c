@@ -6,6 +6,19 @@
  * hbox, vbox, tabbar, tooltip) only need to override paint to write
  * their SDF / glyph prim records into ctx->ygrid_draw_list.
  *
+ * NOTE on CMD_GROUP: the widget.h header documents an emit_body that
+ * wraps paint() in CMD_GROUP(obj->id, rect) so each widget's prims are
+ * entity-scoped. The current ygrid receiver, however, has no exact-
+ * match disambiguation for CMD_GROUP (type=0x80000002): the type word
+ * falls into the complex-prim range [0x80000000, 0xffffffff] and is
+ * routed to the complex-prim handler, which reads the next u32 as
+ * `payload_size`, advances the stride wrong, and the rest of the
+ * stream becomes garbage. Until the ygrid iterator special-cases the
+ * three cmd constants (CMD_GROUP / CMD_DELETE / CMD_UPDATE) the way
+ * cmds.h says it should, primitive_emit_body must keep the prims
+ * anonymous — that's full-redraw-only (no per-widget invalidation)
+ * but it's what the receiver actually parses today.
+ *
  * Figure widgets (yimage, yplot, …) do NOT inherit from this class —
  * they extend the base widget directly and override both emit_container
  * and emit_body themselves.

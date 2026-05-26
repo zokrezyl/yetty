@@ -15,22 +15,49 @@ set(YGUI_SOURCES
     layout.c
     mixins/clickable.c
     widgets/label.c
+    widgets/breadcrumbs.c
     widgets/button.c
     widgets/checkbox.c
+    widgets/chip.c
+    widgets/choicebox.c
+    widgets/collapsing_header.c
+    widgets/colorpicker.c
+    widgets/combobox.c
     widgets/dialog.c
+    widgets/dropdown.c
     widgets/hbox.c
+    widgets/list.c
     widgets/menubar.c
+    widgets/popup_menu.c
     widgets/progress.c
-    widgets/statusbar.c
+    widgets/radio.c
+    widgets/rich.c
+    widgets/scrollarea.c
+    widgets/selectable.c
     widgets/separator.c
     widgets/slider.c
+    widgets/spinner.c
+    widgets/splitter.c
+    widgets/statusbar.c
+    widgets/stepper.c
+    widgets/tabbar.c
+    widgets/table.c
+    widgets/textarea.c
+    widgets/textinput.c
     widgets/toggle.c
+    widgets/tooltip.c
+    widgets/tree_node.c
     widgets/vbox.c
     widgets/panel.c
-    widgets/popup_menu.c
-    widgets/tabbar.c
-    widgets/tooltip.c
+    widgets/ybrowser.c
+    widgets/ydraw_embed.c
     widgets/yimage.c
+    widgets/yjungle.c
+    widgets/ymarkdown.c
+    widgets/ypdf.c
+    widgets/yplot.c
+    widgets/yvideo.c
+    widgets/yzoo.c
 )
 
 add_library(ygui STATIC ${YGUI_SOURCES})
@@ -47,6 +74,10 @@ target_link_libraries(ygui PUBLIC
     yetty_yfigure
     yetty_yplatform_core
     yetty_ysdf
+    yetty_yplot
+    yetty_ymarkdown
+    yetty_ybrowser
+    yetty_ypdf
 )
 
 set_target_properties(ygui PROPERTIES

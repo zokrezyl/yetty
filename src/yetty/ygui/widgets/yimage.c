@@ -45,14 +45,15 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_ygui_object
                                  (yetty_ygui_method_id_t)yetty_ygui_destructor);
 }
 
-/* Mint the receiver-side YIMAGE figure (or update its rect on
- * subsequent emits). The kind is hardcoded here — the framework
- * class system doesn't know about figure kinds. */
+/* Mint the receiver-side YIMAGE figure on first emit; on subsequent
+ * emits the helper switches to SET_CHILD_RECT so the binder cache
+ * stays warm. The kind is hardcoded here — the framework class
+ * system doesn't know about figure kinds. */
 static struct yetty_ycore_void_result yimage_emit_container(struct yetty_ygui_object *obj,
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    return yetty_ygui_emit_create_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YIMAGE,
+    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YIMAGE,
                                         r.min.x, r.min.y, r.max.x, r.max.y,
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }

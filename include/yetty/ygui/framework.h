@@ -155,6 +155,15 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_rect(struct yetty_ygui_
                                                               float min_y, float max_x,
                                                               float max_y);
 
+/* Idempotent helper for figure widgets: on first call for `child_id`
+ * emits CREATE_CHILD; on subsequent calls emits SET_CHILD_RECT.
+ * Tracks per-engine state so the receiver's binder cache is preserved
+ * across frames. Figure widgets should use this from emit_container
+ * instead of calling yetty_ygui_emit_create_child unconditionally. */
+struct yetty_ycore_void_result yetty_ygui_emit_ensure_child(
+    struct yetty_ygui_emit_ctx *ctx, uint32_t child_id, uint32_t kind, float min_x, float min_y,
+    float max_x, float max_y, const uint8_t *init_payload, uint32_t init_payload_bytes);
+
 struct yetty_ycore_void_result yetty_ygui_emit_figure_body(struct yetty_ygui_emit_ctx *ctx,
                                                            uint32_t figure_id,
                                                            const uint8_t *payload,

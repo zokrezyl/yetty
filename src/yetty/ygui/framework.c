@@ -21,6 +21,7 @@
 
 #include "internal.h"
 
+#include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yfigure/wire.h>
@@ -79,6 +80,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_ru
     /* output_pty is borrowed — caller destroys it. */
     free(engine->free_ids);
     free(engine->pending_deletes);
+    free(engine->minted_figures);
     yetty_ycore_buffer_destroy(&engine->container_records);
     if (engine->ygrid_draw_list) {
         yetty_ydraw_draw_list_destroy(engine->ygrid_draw_list);
@@ -87,6 +89,58 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_ru
     yetty_ycore_buffer_destroy(&engine->figure_bodies);
     free(engine);
     return YETTY_OK_VOID();
+}
+
+/* Membership probe + insert for the minted_figures set. Linear scan —
+ * the set is small (handful of figure widgets per app). */
+static int figure_is_minted(const struct yetty_ygui_runtime *engine, uint32_t id)
+{
+    for (size_t i = 0; i < engine->minted_figure_count; ++i) {
+        if (engine->minted_figures[i] == id) return 1;
+    }
+    return 0;
+}
+
+static struct yetty_ycore_void_result figure_mark_minted(struct yetty_ygui_runtime *engine,
+                                                         uint32_t id)
+{
+    if (figure_is_minted(engine, id)) return YETTY_OK_VOID();
+    if (engine->minted_figure_count == engine->minted_figure_cap) {
+        size_t ncap = engine->minted_figure_cap ? engine->minted_figure_cap * 2 : 8;
+        uint32_t *na = realloc(engine->minted_figures, ncap * sizeof(*na));
+        if (!na) return YETTY_ERR(yetty_ycore_void, "figure_mark_minted: realloc");
+        engine->minted_figures = na;
+        engine->minted_figure_cap = ncap;
+    }
+    engine->minted_figures[engine->minted_figure_count++] = id;
+    return YETTY_OK_VOID();
+}
+
+static void figure_forget_minted(struct yetty_ygui_runtime *engine, uint32_t id)
+{
+    for (size_t i = 0; i < engine->minted_figure_count; ++i) {
+        if (engine->minted_figures[i] == id) {
+            engine->minted_figures[i] =
+                engine->minted_figures[--engine->minted_figure_count];
+            return;
+        }
+    }
+}
+
+struct yetty_ycore_void_result yetty_ygui_emit_ensure_child(
+    struct yetty_ygui_emit_ctx *ctx, uint32_t child_id, uint32_t kind, float min_x, float min_y,
+    float max_x, float max_y, const uint8_t *init_payload, uint32_t init_payload_bytes)
+{
+    if (!ctx || !ctx->engine) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_ensure_child: NULL ctx");
+    }
+    if (figure_is_minted(ctx->engine, child_id)) {
+        return yetty_ygui_emit_set_child_rect(ctx, child_id, min_x, min_y, max_x, max_y);
+    }
+    struct yetty_ycore_void_result r = yetty_ygui_emit_create_child(
+        ctx, child_id, kind, min_x, min_y, max_x, max_y, init_payload, init_payload_bytes);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_emit_ensure_child: create");
+    return figure_mark_minted(ctx->engine, child_id);
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(struct yetty_ygui_runtime *engine,
@@ -416,6 +470,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_free_id(struct yetty_ygui_ru
     if (!engine || id == 0) {
         return YETTY_OK_VOID();
     }
+    /* If the id was a minted figure, drop it from the set so a later
+     * id reuse re-fires CREATE_CHILD instead of SET_CHILD_RECT. */
+    figure_forget_minted(engine, id);
     /* Queue a delete for the next envelope. */
     if (engine->pending_delete_count == engine->pending_delete_cap) {
         size_t ncap = engine->pending_delete_cap ? engine->pending_delete_cap * 2 : 16;
@@ -830,6 +887,16 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
         engine->ygrid_draw_list = dlr.value;
     } else {
         yetty_ydraw_draw_list_clear(engine->ygrid_draw_list);
+    }
+
+    /* Full-redraw model: prepend CMD_ZERO so the receiver wipes its
+     * ygrid display list before applying this frame's prims. Without
+     * this the prims accumulate on the receiver every frame —
+     * documented in include/yetty/ydraw-core/cmds.h:89. */
+    {
+        struct yetty_ycore_void_result zr =
+            yetty_ydraw_draw_list_add_cmd_zero(engine->ygrid_draw_list);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yetty_ygui_framework_emit: CMD_ZERO");
     }
 
     struct yetty_ygui_emit_ctx ctx = {

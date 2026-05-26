@@ -71,6 +71,9 @@ target_link_libraries(ygreeter PRIVATE
     yetty_yfigure
     yetty_ygrid
     yetty_yfont_core
+    yetty_ydraw_factory
+    yetty_yimage
+    yetty_yplot
     ${YETTY_LIBS}
     yetty_yplatform_core
     yetty_yplatform_move_resize

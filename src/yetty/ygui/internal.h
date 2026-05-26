@@ -142,6 +142,17 @@ struct yetty_ygui_runtime {
     uint32_t ygrid_id;
     int ygrid_created;
 
+    /* Set of figure ids that have already been minted on the receiver
+     * via CREATE_CHILD. Each frame: figure widgets check this set; if
+     * their id is present they emit SET_CHILD_RECT (cheap rect update);
+     * otherwise they emit CREATE_CHILD and add themselves to the set.
+     *
+     * The set is a sorted dense array kept small — figure widgets are
+     * rare (a handful per app). free_id drops the id back out. */
+    uint32_t *minted_figures;
+    size_t minted_figure_count;
+    size_t minted_figure_cap;
+
     struct yetty_ygui_object *root;
 
     /* Viewport in pixels — root widget bounds for the next layout
