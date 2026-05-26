@@ -1188,6 +1188,11 @@ static struct yetty_ycore_int_result standalone_event_handler(
         struct yetty_ycore_void_result r =
             yetty_ygui_framework_feed_mouse_motion(app->engine, ev->mouse.x, ev->mouse.y);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        /* Hover state may have flipped — request a render so the new
+         * hovered widget repaints before the next event. */
+        if (app->yframework->event_loop->ops->request_render) {
+            app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
     default:
