@@ -714,7 +714,7 @@ if click:
 
 else:
     def main():
-        print("Click not installed. Use: uv run yrpc.py")
+        print("Click not installed. Use: uv run yctl.py")
 
 
 if __name__ == "__main__":

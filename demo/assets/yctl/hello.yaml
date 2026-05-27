@@ -1,5 +1,5 @@
-# Minimal yrpc script — types one line and presses Enter.
-# Useful as a smoke test that yrpc.py can talk to a running yetty.
+# Minimal yctl script — types one line and presses Enter.
+# Useful as a smoke test that yctl.py can talk to a running yetty.
 
 config:
   defaults:
@@ -10,6 +10,6 @@ config:
 
 script:
   - sleep: 0.5
-  - type: "echo hello from yrpc"
+  - type: "echo hello from yctl"
   - special-char: ENTER
   - sleep: 0.5

@@ -1,6 +1,6 @@
 /* RPC message parsing and serialization */
 
-#include <yetty/yrpc/rpc-message.h>
+#include <yetty/yctl/rpc-message.h>
 
 #include <msgpack.h>
 #include <stdlib.h>
@@ -13,13 +13,13 @@
  *   Notification: [2, channel, method, params]
  */
 
-struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, size_t len,
+struct yetty_rpc_message_result yetty_yctl_message_parse(const uint8_t *data, size_t len,
                                                          size_t *out_consumed)
 {
     msgpack_unpacked unpacked;
     msgpack_unpack_return ret;
     msgpack_object *array;
-    struct yetty_yrpc_message msg = {0};
+    struct yetty_yctl_message msg = {0};
     size_t array_size;
     int type;
     size_t off = 0;
@@ -65,14 +65,14 @@ struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, si
 
     type = (int)array->via.array.ptr[0].via.u64;
 
-    if (type == YETTY_YRPC_MSG_REQUEST) {
+    if (type == YETTY_YCTL_MSG_REQUEST) {
         /* Request: [0, msgid, channel, method, params] */
         if (array_size < 5) {
             msgpack_unpacked_destroy(&unpacked);
             return YETTY_ERR(yetty_rpc_message, "request needs 5 elements");
         }
 
-        msg.type = YETTY_YRPC_MSG_REQUEST;
+        msg.type = YETTY_YCTL_MSG_REQUEST;
         msg.msgid = (uint32_t)array->via.array.ptr[1].via.u64;
         msg.channel = (uint32_t)array->via.array.ptr[2].via.u64;
 
@@ -95,25 +95,25 @@ struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, si
             msg.params_len = sbuf.size;
         }
 
-    } else if (type == YETTY_YRPC_MSG_RESPONSE) {
+    } else if (type == YETTY_YCTL_MSG_RESPONSE) {
         /* Response: [1, msgid, error, result] */
         if (array_size < 4) {
             msgpack_unpacked_destroy(&unpacked);
             return YETTY_ERR(yetty_rpc_message, "response needs 4 elements");
         }
 
-        msg.type = YETTY_YRPC_MSG_RESPONSE;
+        msg.type = YETTY_YCTL_MSG_RESPONSE;
         msg.msgid = (uint32_t)array->via.array.ptr[1].via.u64;
         /* error and result parsing handled by caller */
 
-    } else if (type == YETTY_YRPC_MSG_NOTIFICATION) {
+    } else if (type == YETTY_YCTL_MSG_NOTIFICATION) {
         /* Notification: [2, channel, method, params] */
         if (array_size < 4) {
             msgpack_unpacked_destroy(&unpacked);
             return YETTY_ERR(yetty_rpc_message, "notification needs 4 elements");
         }
 
-        msg.type = YETTY_YRPC_MSG_NOTIFICATION;
+        msg.type = YETTY_YCTL_MSG_NOTIFICATION;
         msg.msgid = 0;
         msg.channel = (uint32_t)array->via.array.ptr[1].via.u64;
 
@@ -148,7 +148,7 @@ struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, si
     return YETTY_OK(yetty_rpc_message, msg);
 }
 
-void yetty_yrpc_write_buffer_init(struct yetty_yrpc_write_buffer *buf, uint8_t *storage,
+void yetty_yctl_write_buffer_init(struct yetty_yctl_write_buffer *buf, uint8_t *storage,
                                   size_t capacity)
 {
     buf->data = storage;
@@ -156,7 +156,7 @@ void yetty_yrpc_write_buffer_init(struct yetty_yrpc_write_buffer *buf, uint8_t *
     buf->capacity = capacity;
 }
 
-void yetty_yrpc_write_buffer_reset(struct yetty_yrpc_write_buffer *buf)
+void yetty_yctl_write_buffer_reset(struct yetty_yctl_write_buffer *buf)
 {
     buf->len = 0;
 }
@@ -164,7 +164,7 @@ void yetty_yrpc_write_buffer_reset(struct yetty_yrpc_write_buffer *buf)
 /* Helper to write msgpack to buffer */
 static int buffer_write(void *data, const char *buf, size_t len)
 {
-    struct yetty_yrpc_write_buffer *wb = data;
+    struct yetty_yctl_write_buffer *wb = data;
     if (wb->len + len > wb->capacity) {
         return -1;
     }
@@ -173,18 +173,18 @@ static int buffer_write(void *data, const char *buf, size_t len)
     return 0;
 }
 
-struct yetty_ycore_void_result yetty_yrpc_write_response_ok(struct yetty_yrpc_write_buffer *buf,
+struct yetty_ycore_void_result yetty_yctl_write_response_ok(struct yetty_yctl_write_buffer *buf,
                                                             uint32_t msgid, const uint8_t *result,
                                                             size_t result_len)
 {
     msgpack_packer pk;
 
-    yetty_yrpc_write_buffer_reset(buf);
+    yetty_yctl_write_buffer_reset(buf);
     msgpack_packer_init(&pk, buf, buffer_write);
 
     /* [1, msgid, nil, result] */
     msgpack_pack_array(&pk, 4);
-    msgpack_pack_int(&pk, YETTY_YRPC_MSG_RESPONSE);
+    msgpack_pack_int(&pk, YETTY_YCTL_MSG_RESPONSE);
     msgpack_pack_uint32(&pk, msgid);
     msgpack_pack_nil(&pk); /* no error */
 
@@ -202,21 +202,21 @@ struct yetty_ycore_void_result yetty_yrpc_write_response_ok(struct yetty_yrpc_wr
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yrpc_write_response_error(struct yetty_yrpc_write_buffer *buf,
+struct yetty_ycore_void_result yetty_yctl_write_response_error(struct yetty_yctl_write_buffer *buf,
                                                                uint32_t msgid,
                                                                const char *error_msg)
 {
     msgpack_packer pk;
     size_t error_len;
 
-    yetty_yrpc_write_buffer_reset(buf);
+    yetty_yctl_write_buffer_reset(buf);
     msgpack_packer_init(&pk, buf, buffer_write);
 
     error_len = error_msg ? strlen(error_msg) : 0;
 
     /* [1, msgid, error, nil] */
     msgpack_pack_array(&pk, 4);
-    msgpack_pack_int(&pk, YETTY_YRPC_MSG_RESPONSE);
+    msgpack_pack_int(&pk, YETTY_YCTL_MSG_RESPONSE);
     msgpack_pack_uint32(&pk, msgid);
     msgpack_pack_str(&pk, error_len);
     if (error_len > 0) {
@@ -227,17 +227,17 @@ struct yetty_ycore_void_result yetty_yrpc_write_response_error(struct yetty_yrpc
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yrpc_write_response_bool(struct yetty_yrpc_write_buffer *buf,
+struct yetty_ycore_void_result yetty_yctl_write_response_bool(struct yetty_yctl_write_buffer *buf,
                                                               uint32_t msgid, int value)
 {
     msgpack_packer pk;
 
-    yetty_yrpc_write_buffer_reset(buf);
+    yetty_yctl_write_buffer_reset(buf);
     msgpack_packer_init(&pk, buf, buffer_write);
 
     /* [1, msgid, nil, bool] */
     msgpack_pack_array(&pk, 4);
-    msgpack_pack_int(&pk, YETTY_YRPC_MSG_RESPONSE);
+    msgpack_pack_int(&pk, YETTY_YCTL_MSG_RESPONSE);
     msgpack_pack_uint32(&pk, msgid);
     msgpack_pack_nil(&pk); /* no error */
 

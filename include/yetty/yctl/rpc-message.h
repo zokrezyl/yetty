@@ -1,5 +1,5 @@
-#ifndef YETTY_YRPC_RPC_MESSAGE_H
-#define YETTY_YRPC_RPC_MESSAGE_H
+#ifndef YETTY_YCTL_RPC_MESSAGE_H
+#define YETTY_YCTL_RPC_MESSAGE_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -17,21 +17,21 @@ extern "C" {
  */
 
 /* Message types */
-enum yetty_yrpc_message_type {
-    YETTY_YRPC_MSG_REQUEST = 0,
-    YETTY_YRPC_MSG_RESPONSE = 1,
-    YETTY_YRPC_MSG_NOTIFICATION = 2,
+enum yetty_yctl_message_type {
+    YETTY_YCTL_MSG_REQUEST = 0,
+    YETTY_YCTL_MSG_RESPONSE = 1,
+    YETTY_YCTL_MSG_NOTIFICATION = 2,
 };
 
 /* Channel IDs (extensible) */
-enum yetty_yrpc_channel {
-    YETTY_YRPC_CHANNEL_EVENT_LOOP = 0,
-    YETTY_YRPC_CHANNEL_STREAM = 1,
+enum yetty_yctl_channel {
+    YETTY_YCTL_CHANNEL_EVENT_LOOP = 0,
+    YETTY_YCTL_CHANNEL_STREAM = 1,
 };
 
 /* Parsed RPC message */
-struct yetty_yrpc_message {
-    enum yetty_yrpc_message_type type;
+struct yetty_yctl_message {
+    enum yetty_yctl_message_type type;
     uint32_t msgid;        /* 0 for notifications */
     uint32_t channel;      /* target channel */
     const char *method;    /* method name (borrowed, valid during handling) */
@@ -41,7 +41,7 @@ struct yetty_yrpc_message {
 };
 
 /* Result types */
-YETTY_YRESULT_DECLARE(yetty_rpc_message, struct yetty_yrpc_message);
+YETTY_YRESULT_DECLARE(yetty_rpc_message, struct yetty_yctl_message);
 
 /*
  * Parse a msgpack-RPC message from raw bytes.
@@ -61,41 +61,41 @@ YETTY_YRESULT_DECLARE(yetty_rpc_message, struct yetty_yrpc_message);
  * input buffer. msg.params is heap-allocated (re-packed) and must be
  * freed by the caller.
  */
-struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, size_t len,
+struct yetty_rpc_message_result yetty_yctl_message_parse(const uint8_t *data, size_t len,
                                                          size_t *out_consumed);
 
 /*
  * Write buffer for serializing responses.
  */
-struct yetty_yrpc_write_buffer {
+struct yetty_yctl_write_buffer {
     uint8_t *data;
     size_t len;
     size_t capacity;
 };
 
 /* Initialize write buffer (caller owns memory) */
-void yetty_yrpc_write_buffer_init(struct yetty_yrpc_write_buffer *buf, uint8_t *storage,
+void yetty_yctl_write_buffer_init(struct yetty_yctl_write_buffer *buf, uint8_t *storage,
                                   size_t capacity);
 
 /* Reset buffer for reuse */
-void yetty_yrpc_write_buffer_reset(struct yetty_yrpc_write_buffer *buf);
+void yetty_yctl_write_buffer_reset(struct yetty_yctl_write_buffer *buf);
 
 /* Serialize success response: [1, msgid, nil, result] */
-struct yetty_ycore_void_result yetty_yrpc_write_response_ok(struct yetty_yrpc_write_buffer *buf,
+struct yetty_ycore_void_result yetty_yctl_write_response_ok(struct yetty_yctl_write_buffer *buf,
                                                             uint32_t msgid, const uint8_t *result,
                                                             size_t result_len);
 
 /* Serialize error response: [1, msgid, error_msg, nil] */
-struct yetty_ycore_void_result yetty_yrpc_write_response_error(struct yetty_yrpc_write_buffer *buf,
+struct yetty_ycore_void_result yetty_yctl_write_response_error(struct yetty_yctl_write_buffer *buf,
                                                                uint32_t msgid,
                                                                const char *error_msg);
 
 /* Serialize bool result (common case) */
-struct yetty_ycore_void_result yetty_yrpc_write_response_bool(struct yetty_yrpc_write_buffer *buf,
+struct yetty_ycore_void_result yetty_yctl_write_response_bool(struct yetty_yctl_write_buffer *buf,
                                                               uint32_t msgid, int value);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YRPC_RPC_MESSAGE_H */
+#endif /* YETTY_YCTL_RPC_MESSAGE_H */

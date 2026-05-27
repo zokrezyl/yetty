@@ -168,12 +168,6 @@ if(YETTY_ENABLE_FEATURE_YPDF)
 endif()
 if(YETTY_ENABLE_FEATURE_YBROWSER)
     demo_ygui_add(26-ybrowser 26_ybrowser)
-    # ybrowser pulls libcurl→openssl-new while ${YETTY_LIBS}'s yetty_ssh
-    # pulls libssh2→openssl. The two libcryptos define the same symbols;
-    # the linker fails on multi-def. The first-in-list openssl (openssl-new
-    # here) wins at runtime — acceptable for a demo. Tracked by the
-    # project-wide openssl unification work; not invented for this demo.
-    target_link_options(demo-ygui-26-ybrowser PRIVATE -Wl,--allow-multiple-definition)
 endif()
 if(YETTY_ENABLE_FEATURE_YJUNGLE)
     demo_ygui_add(27-yjungle 27_yjungle)

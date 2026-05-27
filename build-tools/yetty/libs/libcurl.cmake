@@ -16,14 +16,6 @@
 #
 # Exposes `CURL::libcurl` (the find_package(CURL) target name yetty + cpr
 # expect).
-#
-# WARNING / SCOPE:
-# At time of writing, libssh2 still links the OLD janbar 1.1.1w openssl
-# (see libs/libssh2.cmake → openssl.cmake). Linking yetty with BOTH this
-# libcurl AND libssh2 in the same binary will cause OpenSSL symbol
-# conflicts. Either:
-#   - disable libssh2 (YETTY_ENABLE_LIB_LIBSSH2=OFF) until it migrates, OR
-#   - migrate libssh2 to also use openssl-new (not done yet).
 
 include_guard(GLOBAL)
 include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)

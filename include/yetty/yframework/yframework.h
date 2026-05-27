@@ -38,7 +38,7 @@ struct yetty_yplatform_window_manager;
 struct yetty_yevent_event_loop;
 struct yetty_yplatform_wgpu;
 struct yetty_yvnc_server;
-struct yetty_yrpc_server;
+struct yetty_yctl_server;
 struct yetty_ydraw_target;
 struct yetty_yfigure_registry;
 struct yetty_context;
@@ -69,7 +69,7 @@ struct yetty_yframework {
     struct yetty_yevent_event_loop *event_loop;
     struct yetty_yplatform_wgpu *wgpu;    /* coroutine-aware wgpu await */
     struct yetty_yvnc_server *vnc_server; /* NULL when vnc config off */
-    struct yetty_yrpc_server *rpc_server; /* NULL when rpc/port unset */
+    struct yetty_yctl_server *rpc_server; /* NULL when rpc/port unset */
     struct yetty_ydraw_target *render_target;
 
     /* Per-kind factory args bundles (e.g. ymgui's lazy-pipeline cache).

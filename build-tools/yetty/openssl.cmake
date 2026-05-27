@@ -1,26 +1,24 @@
-# OpenSSL — pinned to 1.1.1w via the janbar/openssl-cmake wrapper.
+# OpenSSL — consumes the openssl-new prebuilt (upstream OpenSSL 4.x).
 #
-# Consumes a prebuilt static lib + headers from the 3rdparty release
-# tarball published by build-3rdparty-openssl.yml. The from-source build
-# (CMake driver, per-platform handling) lives in
-# build-tools/3rdparty/openssl/_build.sh.
+# Static lib + headers come from the 3rdparty release tarball published
+# by build-3rdparty-openssl-new.yml; the from-source build (Configure +
+# make, per-platform handling) lives in
+# build-tools/3rdparty/openssl-new/_build.sh.
 #
-# A parallel build of upstream OpenSSL 4.x lives at
-# build-tools/3rdparty/openssl-new/ + build-3rdparty-openssl-new.yml,
-# attached to `lib-openssl-new-*` releases. Yetty currently consumes the
-# 1.1.1w build because cpr / libcurl / libssh2 pinned versions still
-# expect the 1.1.1 API. When those are bumped, this file flips to
-# `yetty_3rdparty_fetch(openssl-new ...)` and the openssl-new dir
-# becomes the canonical openssl.
+# Legacy: build-tools/3rdparty/openssl/ + build-3rdparty-openssl.yml
+# held a janbar/openssl-cmake 1.1.1w build that this file used to fetch.
+# All consumers (libcurl, libssh2) now expect the 3.x/4.x API, so this
+# file fetches openssl-new and the legacy `openssl` 3rdparty dir is
+# scheduled for removal.
 #
-# Exposed targets (matched to what cpr / libcurl / libssh2 expect):
+# Exposed targets (matched to what libcurl / libssh2 expect):
 #   OpenSSL::SSL        interface lib that links libssl.a + libcrypto.a
 #   OpenSSL::Crypto     interface lib that links libcrypto.a
 # Plus the standard find_package(OpenSSL) compat variables.
 #
 # Opt-out: -DYETTY_OPENSSL_USE_SYSTEM=ON falls back to find_package(OpenSSL).
 # This is escape-hatch territory; the prebuilt is the default to keep
-# every cross target on the same OpenSSL version (see version file).
+# every cross target on the same OpenSSL version (see openssl-new/version).
 
 include_guard(GLOBAL)
 include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
@@ -40,7 +38,7 @@ endif()
 #-----------------------------------------------------------------------------
 # Fetch + import static targets
 #-----------------------------------------------------------------------------
-yetty_3rdparty_fetch(openssl _OPENSSL_DIR)
+yetty_3rdparty_fetch(openssl-new _OPENSSL_DIR)
 
 # Tarball layout: lib/libssl.a + lib/libcrypto.a + include/openssl/*.h
 # (Windows: lib/libssl.lib + lib/libcrypto.lib)
@@ -60,7 +58,7 @@ foreach(_F "${_SSL_LIB_PATH}" "${_CRYPTO_LIB_PATH}")
     if(NOT EXISTS "${_F}")
         message(FATAL_ERROR
             "openssl: prebuilt library not found: ${_F} — \
-tarball layout changed? (check build-tools/3rdparty/openssl/_build.sh)")
+tarball layout changed? (check build-tools/3rdparty/openssl-new/_build.sh)")
     endif()
 endforeach()
 if(NOT EXISTS "${_OPENSSL_INC_DIR}/openssl/ssl.h")
@@ -106,10 +104,10 @@ set(OPENSSL_INCLUDE_DIR     "${_OPENSSL_INC_DIR}"             CACHE PATH    "" F
 set(OPENSSL_CRYPTO_LIBRARY  "${_CRYPTO_LIB_PATH}"             CACHE FILEPATH "" FORCE)
 set(OPENSSL_SSL_LIBRARY     "${_SSL_LIB_PATH}"                CACHE FILEPATH "" FORCE)
 set(OPENSSL_LIBRARIES       "OpenSSL::SSL;OpenSSL::Crypto"    CACHE STRING  "" FORCE)
-# Hardcode the semantic openssl version. cpr / libcurl / libssh2 read
-# this and decide which API to use; they expect a clean "1.1.1" prefix,
-# not the janbar release tag (which carries a date suffix).
-set(OPENSSL_VERSION         "1.1.1w"                          CACHE STRING  "" FORCE)
+# Surface the actual upstream openssl version (read from the openssl-new
+# prebuilt's version file). Downstream cmake that branches on
+# OPENSSL_VERSION sees the real number, not a frozen string.
+set(OPENSSL_VERSION         "${YETTY_3RDPARTY_openssl-new_VERSION}" CACHE STRING "" FORCE)
 
-message(STATUS "openssl: prebuilt v${YETTY_3RDPARTY_openssl_VERSION} "
+message(STATUS "openssl: prebuilt v${YETTY_3RDPARTY_openssl-new_VERSION} "
                "(${_SSL_LIB_PATH}, ${_CRYPTO_LIB_PATH})")

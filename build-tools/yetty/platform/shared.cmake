@@ -363,6 +363,12 @@ if(YETTY_ENABLE_LIB_LIBSSH2)
     include(${YETTY_ROOT}/build-tools/yetty/libs/libssh2.cmake)
 endif()
 
+# yclass — tiny class/object runtime + optional binary RPC. Lives at
+# the top of src/ (sibling of src/yetty) like ut/uthash on the include
+# side. Declared before src/yetty so any module under src/yetty/ can
+# link yetty_yclass.
+add_subdirectory(${YETTY_ROOT}/src/yclass ${CMAKE_BINARY_DIR}/src/yclass)
+
 # Reusable render utilities (GPU tile diff, …). Lives outside src/yetty so it
 # can be consumed by both the main yetty modules and standalone tools. Must
 # be declared before src/yetty so yetty_vnc (et al.) can link against it.
@@ -451,7 +457,7 @@ if(YETTY_ENABLE_LIB_VTERM)
     list(APPEND YETTY_LIBS vterm)
 endif()
 if(YETTY_ENABLE_LIB_MSGPACK)
-    # yetty's only msgpack consumer (yrpc) uses the C API → link the static
+    # yetty's only msgpack consumer (yctl) uses the C API → link the static
     # C library. The C++ msgpack-cxx target was dropped — see msgpack.cmake.
     list(APPEND YETTY_LIBS msgpack-c)
 endif()
@@ -540,8 +546,8 @@ endif()
 if(YETTY_ENABLE_FEATURE_YDVNC)
     list(APPEND YETTY_LIBS yetty_ydvnc)
 endif()
-if(YETTY_ENABLE_FEATURE_YRPC)
-    list(APPEND YETTY_LIBS yetty_yrpc)
+if(YETTY_ENABLE_FEATURE_YCTL)
+    list(APPEND YETTY_LIBS yetty_yctl)
 endif()
 if(YETTY_ENABLE_FEATURE_YVCODEC)
     list(APPEND YETTY_LIBS yetty_yvcodec)

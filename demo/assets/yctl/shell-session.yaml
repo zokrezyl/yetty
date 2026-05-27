@@ -12,7 +12,7 @@ config:
 script:
   - sleep: 1.0
 
-  - type: "# yrpc-driven demo"
+  - type: "# yctl-driven demo"
   - special-char: ENTER
   - sleep: 0.8
 
@@ -24,15 +24,15 @@ script:
   - special-char: ENTER
   - sleep: 1.2
 
-  - type: "echo 'recording demo via yrpc plays' > /tmp/yrpc-demo.txt"
+  - type: "echo 'recording demo via yctl plays' > /tmp/yctl-demo.txt"
   - special-char: ENTER
   - sleep: 0.6
 
-  - type: "cat /tmp/yrpc-demo.txt"
+  - type: "cat /tmp/yctl-demo.txt"
   - special-char: ENTER
   - sleep: 1.0
 
-  - type: "rm /tmp/yrpc-demo.txt"
+  - type: "rm /tmp/yctl-demo.txt"
   - special-char: ENTER
   - sleep: 0.5
 

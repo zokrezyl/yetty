@@ -5,9 +5,9 @@
 #   ./build-desktop-ytrace-release/yetty --rpc-port=9999 -e bash
 #
 # Then in another shell:
-#   ./demo/scripts/yrpc-scripts/hello.sh
+#   ./demo/scripts/yctl-scripts/hello.sh
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$DIR/_common.sh"
-play_asset "$ROOT/demo/assets/yrpc-scripts/hello.yaml"
+play_asset "$ROOT/demo/assets/yctl-scripts/hello.yaml"

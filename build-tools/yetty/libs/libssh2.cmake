@@ -2,9 +2,9 @@
 #
 # Consumes a prebuilt static lib + headers from the 3rdparty release
 # tarball published by build-3rdparty-libssh2.yml. The from-source build
-# (cmake driver, openssl backend, per-platform handling) lives in
+# (cmake driver, openssl-new backend, per-platform handling) lives in
 # build-tools/3rdparty/libssh2/_build.sh — it links statically against
-# the prebuilt openssl tarball we already use.
+# the same openssl-new prebuilt yetty itself consumes.
 #
 # Exposed target: `libssh2_static` — IMPORTED static archive. Same name
 # the from-source CPM build exported, so existing consumers don't need
@@ -23,9 +23,10 @@ if(TARGET libssh2_static)
     return()
 endif()
 
-# openssl must be resolved before us — the prebuilt libssh2 archive
+# openssl-new must be resolved before us — the prebuilt libssh2 archive
 # carries unresolved openssl symbols that yetty links via OpenSSL::SSL /
-# OpenSSL::Crypto.
+# OpenSSL::Crypto (both defined by openssl.cmake, which fetches the
+# openssl-new prebuilt).
 include(${YETTY_ROOT}/build-tools/yetty/openssl.cmake)
 
 yetty_3rdparty_fetch(libssh2 _LIBSSH2_DIR)
