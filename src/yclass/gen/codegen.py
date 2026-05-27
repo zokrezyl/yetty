@@ -572,7 +572,7 @@ def emit_dispatch_body(m: dict) -> str:
     static yetty_yclass_method_slot _slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {{
         struct yetty_yclass_method_slot_result _sr =
-            yetty_yclass_method_slot_get("{m['domain']}", (yetty_yclass_method_id_t){qs});
+            yetty_yclass_method_slot_get("yetty_{m['domain']}", (yetty_yclass_method_id_t){qs});
         if (YETTY_IS_ERR(_sr))
             return YETTY_ERR({rid}, "{qs}: method_slot_get failed", _sr);
         _slot = _sr.value;
@@ -643,12 +643,18 @@ def emit_class_accessor(cls: dict) -> str:
         typecheck_block += "\n\n"
 
     # Each op references its slot by (slot_domain, local_name). The
-    # slot_table is per-domain (see yetty_yclass_slot_table_get), so
-    # the runtime can locate the right table without any string
-    # splitting. The slot's C public-stub identifier is
-    # "yetty_<domain>_<local_name>".
+    # domain string is the YETTY-prefixed module name — one canonical
+    # convention shared by:
+    #   - slot table registration (yetty_yclass_method_slot_register)
+    #   - dispatch lookup        (yetty_yclass_method_slot_get)
+    #   - wire qname             (qname = "yetty_<module>_<localname>")
+    #   - skel rows              (name-keyed lookup in <module>_skel_lookup)
+    # Mixing prefixed and unprefixed forms silently breaks server-side
+    # CALL dispatch (method_slot_name returns one form, skel_rows
+    # contains the other) — so every site uses the yetty_-prefixed
+    # form and string compares match.
     op_lines = [
-        f'        {{"{op["slot_domain"]}", "{op["slot"]}", '
+        f'        {{"yetty_{op["slot_domain"]}", "{op["slot"]}", '
         f"(yetty_yclass_method_id_t){op_c_name(op)}, "
         f"(yetty_yclass_impl_t){op['impl']}}},"
         for op in cls["ops"]

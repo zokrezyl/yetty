@@ -327,6 +327,18 @@ static struct yetty_ycore_void_result class_registry_add(struct yetty_yclass *cl
 {
     ydebug("cls=%s", cls && cls->desc ? cls->desc->name : "(null)");
     struct class_registry *reg = class_registry_get();
+    /* Reject duplicate qualified names. Generated accessors gate
+     * themselves with a static cache and won't repeat, but direct API
+     * use or two modules accidentally minting the same qualified name
+     * would otherwise leave duplicate hash entries and ambiguous
+     * yetty_yclass_by_name results. */
+    struct yetty_yclass *existing = NULL;
+    HASH_FIND_STR(reg->by_name, cls->desc->name, existing);
+    if (existing) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "class_registry_add: class with this qualified name "
+                         "is already registered");
+    }
     if (reg->count == reg->cap) {
         size_t ncap = reg->cap ? reg->cap * 2 : 16;
         struct yetty_yclass **na = realloc(reg->by_index, ncap * sizeof(*na));
