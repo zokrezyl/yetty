@@ -2,7 +2,7 @@ methods:
   - slot: vehicle_ctor
     domain: yvehicle
     owning_class: vehicle
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -11,7 +11,7 @@ methods:
   - slot: vehicle_dtor
     domain: yvehicle
     owning_class: vehicle
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -20,7 +20,7 @@ methods:
   - slot: vehicle_start
     domain: yvehicle
     owning_class: vehicle
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -29,7 +29,7 @@ methods:
   - slot: vehicle_accelerate
     domain: yvehicle
     owning_class: vehicle
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -40,7 +40,7 @@ methods:
   - slot: vehicle_brake
     domain: yvehicle
     owning_class: vehicle
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -51,7 +51,7 @@ methods:
   - slot: vehicle_describe
     domain: yvehicle
     owning_class: vehicle
-    return_type: struct str
+    return_type: struct str_result
     args:
       - name: ctx
         type: "struct ctx *"

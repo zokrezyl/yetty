@@ -2,7 +2,7 @@ methods:
   - slot: animal_ctor
     domain: yanimal
     owning_class: animal
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -11,7 +11,7 @@ methods:
   - slot: animal_dtor
     domain: yanimal
     owning_class: animal
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -20,7 +20,7 @@ methods:
   - slot: animal_breathe
     domain: yanimal
     owning_class: animal
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -29,7 +29,7 @@ methods:
   - slot: animal_speak
     domain: yanimal
     owning_class: animal
-    return_type: struct str
+    return_type: struct str_result
     args:
       - name: ctx
         type: "struct ctx *"
@@ -40,7 +40,7 @@ methods:
   - slot: animal_eat
     domain: yanimal
     owning_class: animal
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: ctx
         type: "struct ctx *"

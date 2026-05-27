@@ -5,6 +5,8 @@
  * actually compose into a working cross-domain vtable. */
 
 #include "class.h"
+#include "result.h"
+#include "ytrace.h"
 
 #include <stdio.h>
 
@@ -14,16 +16,15 @@ struct [[clang::annotate("class@ytuning:tuned_sportscar")]]
 };
 
 [[clang::annotate("override@ytuning:tuned_sportscar:yvehicle:vehicle_describe")]]
-static struct str tuned_sportscar_describe(struct ctx *ctx, struct object *obj,
-                                           float distance)
+static struct str_result tuned_sportscar_describe(struct ctx *ctx, struct object *obj,
+                                                  float distance)
 {
     (void)ctx;
     struct str r;
-    snprintf(r.buf, sizeof(r.buf),
-             "TUNED sportscar@%p super-describe(distance=%.1f)",
+    snprintf(r.buf, sizeof(r.buf), "TUNED sportscar@%p super-describe(distance=%.1f)",
              (void *)obj, distance);
-    fprintf(stderr, "  [impl] tuned_sportscar_describe -> '%s'\n", r.buf);
-    return r;
+    ydebug("-> '%s'", r.buf);
+    return YETTY_OK(str, r);
 }
 
 #include "tuned_sportscar.gen.c"

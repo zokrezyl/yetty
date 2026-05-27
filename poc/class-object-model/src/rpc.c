@@ -1,7 +1,9 @@
 /* RPC runtime — packed-header wire, op enum, uthash translations. */
 
 #include "rpc.h"
+#include "result.h"
 #include "uthash.h"
+#include "ytrace.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -143,11 +145,17 @@ static size_t handle_resolve_slot(const void *body, size_t body_len,
     size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
     memcpy(name, body, n);
     name[n] = 0;
-    method_slot slot = method_slot_by_qname(name);
-    uint32_t out = (slot == METHOD_SLOT_UNDEFINED) ? UINT32_MAX : (uint32_t)slot;
+    struct method_slot_result sr = method_slot_by_qname(name);
+    uint32_t out;
+    if (YETTY_IS_ERR(sr)) {
+        yetty_ycore_error_destroy(sr.error);
+        out = UINT32_MAX;
+    } else {
+        out = (uint32_t)sr.value;
+    }
     if (resp_max < sizeof(out)) return 0;
     memcpy(resp, &out, sizeof(out));
-    fprintf(stderr, "[server] resolve_slot('%s') -> %u\n", name, out);
+    ydebug("resolve_slot('%s') -> %u", name, out);
     return sizeof(out);
 }
 
@@ -173,12 +181,15 @@ static size_t handle_get_class(const void *body, size_t body_len,
     size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
     memcpy(name, body, n);
     name[n] = 0;
-    const struct class *cls = class_by_name(name);
-    if (!cls) return 0;
-    struct get_class_ctx gc = { resp, 0, resp_max };
-    class_for_each_slot(cls, get_class_emit, &gc);
-    fprintf(stderr, "[server] get_class('%s') -> %zu entries (%zu bytes)\n",
-            name, gc.off / 6, gc.off);
+    struct class_ptr_result cr = class_by_name(name);
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_print(stderr, "[server] get_class", cr.error);
+        yetty_ycore_error_destroy(cr.error);
+        return 0;
+    }
+    struct get_class_ctx gc = {resp, 0, resp_max};
+    class_for_each_slot(cr.value, get_class_emit, &gc);
+    ydebug("get_class('%s') -> %zu entries (%zu bytes)", name, gc.off / 6, gc.off);
     return gc.off;
 }
 
@@ -189,13 +200,22 @@ static size_t handle_create(const void *body, size_t body_len,
     size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
     memcpy(name, body, n);
     name[n] = 0;
-    const struct class *cls = class_by_name(name);
-    struct object *obj = cls ? object_alloc(cls) : NULL;
-    uint64_t h = obj ? rpc_register_object(obj) : 0;
+    struct class_ptr_result cr = class_by_name(name);
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_print(stderr, "[server] create class_by_name", cr.error);
+        yetty_ycore_error_destroy(cr.error);
+        return 0;
+    }
+    struct object_ptr_result or = object_alloc(cr.value);
+    if (YETTY_IS_ERR(or)) {
+        yetty_ycore_error_print(stderr, "[server] create object_alloc", or.error);
+        yetty_ycore_error_destroy(or.error);
+        return 0;
+    }
+    uint64_t h = rpc_register_object(or.value);
     if (resp_max < sizeof(h)) return 0;
     memcpy(resp, &h, sizeof(h));
-    fprintf(stderr, "[server] create('%s') -> handle=%llu\n",
-            name, (unsigned long long)h);
+    ydebug("create('%s') -> handle=%llu", name, (unsigned long long)h);
     return sizeof(h);
 }
 
@@ -223,10 +243,10 @@ void rpc_server_run(int fd)
         case RPC_OP_CALL: {
             rpc_skel_fn fn = rpc_skel_for((method_slot)id);
             if (fn) {
-                fprintf(stderr, "[server] CALL slot=%u body_len=%u\n", id, body_len);
+                ydebug("CALL slot=%u body_len=%u", id, body_len);
                 resp_len = (uint32_t)fn(body, body_len, resp, BUF_MAX);
             } else {
-                fprintf(stderr, "[server] CALL slot=%u — no skel\n", id);
+                ywarn("CALL slot=%u — no skel", id);
             }
             break;
         }
@@ -240,7 +260,7 @@ void rpc_server_run(int fd)
             resp_len = (uint32_t)handle_create(body, body_len, resp, BUF_MAX);
             break;
         default:
-            fprintf(stderr, "[server] unknown op=%u\n", op);
+            ywarn("unknown op=%u", op);
             break;
         }
 
@@ -325,7 +345,7 @@ size_t rpc_call(struct rpc_session *s, enum rpc_op op, uint32_t id,
 {
     if (!s) return 0;
     uint32_t header = RPC_HDR_MAKE(op, id);
-    fprintf(stderr, "[client] op=%u id=%u body_len=%zu\n", op, id, body_len);
+    ydebug("op=%u id=%u body_len=%zu", op, id, body_len);
 
     uint32_t bl = (uint32_t)body_len;
     if (write_full(s->fd, &header, 4) < 0) return 0;
@@ -356,18 +376,21 @@ uint32_t rpc_session_ensure_remote_id(struct rpc_session *s, method_slot local_s
     uint32_t cached = rpc_session_remote_id(s, local_slot);
     if (cached != REMOTE_ID_UNRESOLVED) return cached;
 
-    const char *name = method_slot_name(local_slot);
-    if (!name) return REMOTE_ID_UNRESOLVED;
+    struct const_char_ptr_result nr = method_slot_name(local_slot);
+    if (YETTY_IS_ERR(nr)) {
+        yetty_ycore_error_destroy(nr.error);
+        return REMOTE_ID_UNRESOLVED;
+    }
+    const char *name = nr.value;
 
     uint32_t remote = REMOTE_ID_UNRESOLVED;
-    size_t n = rpc_call(s, RPC_OP_RESOLVE_SLOT, 0,
-                        name, strlen(name), &remote, sizeof(remote));
+    size_t n =
+        rpc_call(s, RPC_OP_RESOLVE_SLOT, 0, name, strlen(name), &remote, sizeof(remote));
     if (n != sizeof(remote) || remote == REMOTE_ID_UNRESOLVED)
         return REMOTE_ID_UNRESOLVED;
 
     rpc_session_set_remote_id(s, local_slot, remote);
-    fprintf(stderr, "[client] lazy resolve '%s' local=%u remote=%u\n",
-            name, local_slot, remote);
+    ydebug("lazy resolve '%s' local=%u remote=%u", name, local_slot, remote);
     return remote;
 }
 
@@ -397,11 +420,12 @@ int rpc_session_translate_class(struct rpc_session *s, const char *class_name)
         uint32_t rid;
         memcpy(&rid, buf + off, 4); off += 4;
 
-        method_slot local = method_slot_by_qname(slot_name);
-        if (local != METHOD_SLOT_UNDEFINED) {
-            rpc_session_set_remote_id(s, local, rid);
-            fprintf(stderr, "[client] xlat['%s'] local=%u remote=%u\n",
-                    slot_name, local, rid);
+        struct method_slot_result lr = method_slot_by_qname(slot_name);
+        if (YETTY_IS_OK(lr)) {
+            rpc_session_set_remote_id(s, lr.value, rid);
+            ydebug("xlat['%s'] local=%u remote=%u", slot_name, lr.value, rid);
+        } else {
+            yetty_ycore_error_destroy(lr.error);
         }
     }
 

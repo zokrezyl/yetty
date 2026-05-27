@@ -78,6 +78,52 @@ def op_c_name(op: dict) -> str:
     return f"{op['slot_domain']}_{op['slot']}"
 
 
+def result_type_id(ret: str) -> str:
+    """Map an impl's return type to the YETTY_YRESULT_DECLARE identifier.
+    Every impl now returns a Result, so the canonical input here is a
+    `struct <id>_result` — we peel `_result` off. Raw scalar / pointer
+    inputs are still accepted (handy for tests), in which case the id
+    is the conventional one (yetty_ycore_int, yetty_ycore_void, str,
+    foo_ptr, …). Identifiers used here MUST exist (be declared via
+    YETTY_YRESULT_DECLARE somewhere visible to the .gen.c)."""
+    r = ret.strip()
+    m = re.match(r"^struct\s+(\w+)_result\s*$", r)
+    if m:
+        return m.group(1)
+    if r == "void":
+        return "yetty_ycore_void"
+    if r == "int":
+        return "yetty_ycore_int"
+    if r == "size_t":
+        return "yetty_ycore_size"
+    m = re.match(r"^struct\s+(\w+)\s*\*\s*$", r)
+    if m:
+        return f"{m.group(1)}_ptr"
+    m = re.match(r"^struct\s+(\w+)\s*$", r)
+    if m:
+        return m.group(1)
+    return r
+
+
+def result_type(ret: str) -> str:
+    """The full C type — `struct <id>_result`."""
+    return f"struct {result_type_id(ret)}_result"
+
+
+def ret_value_type(rid: str):
+    """Underlying value C type for a Result identifier. None for void
+    (no payload). Mirrors the YETTY_YRESULT_DECLARE table in class.h."""
+    if rid == "yetty_ycore_void":
+        return None
+    if rid == "yetty_ycore_int":
+        return "int"
+    if rid == "yetty_ycore_size":
+        return "size_t"
+    if rid.endswith("_ptr"):
+        return f"struct {rid[:-4]} *"
+    return f"struct {rid}"
+
+
 # ============== model — annotated C → in-memory dict ====================
 #
 # Annotation schema. Every annotation is `<verb>@<domain>:<path...>` —
@@ -443,10 +489,12 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
         type_only = ", ".join(a["type"] for a in m["args"])
-        # Public-stub declaration + a function-pointer typedef any
-        # override impl can be type-checked against from its own .gen.c.
-        parts.append(f"{m['return_type']} {qualified_slot(m)}({params});\n")
-        parts.append(f"typedef {m['return_type']} (*{qualified_slot(m)}_fn)({type_only});\n")
+        rt = result_type(m["return_type"])
+        # Public-stub declaration (returns Result) + a function-pointer
+        # typedef any override impl can be type-checked against from
+        # its own .gen.c. Impls return the same Result type.
+        parts.append(f"{rt} {qualified_slot(m)}({params});\n")
+        parts.append(f"typedef {rt} (*{qualified_slot(m)}_fn)({type_only});\n")
 
     parts.append("\n#endif\n")
     out_path.write_text("".join(parts))
@@ -456,12 +504,12 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
 
 def emit_dispatch_body(m: dict) -> str:
     args = m["args"]
-    ret = m["return_type"].strip()
+    rid = result_type_id(m["return_type"])
+    vt = ret_value_type(rid)
+    slot_fn = f"{qualified_slot(m)}_fn"
     ctx_name = args[0]["name"]
     obj_name = args[1]["name"]
-    cast_params = ", ".join(a["type"] for a in args)
     call_args = ", ".join(a["name"] for a in args)
-    null_ret = "return;" if ret == "void" else f"return {default_return_for(ret)};"
 
     wargs = wire_args(m)
     init_parts = []
@@ -477,47 +525,56 @@ def emit_dispatch_body(m: dict) -> str:
     init = ", ".join(init_parts)
     fields = args_struct_body(wargs, indent="            ")
 
-    if ret == "void":
-        remote_call = (
-            "        rpc_call(_s->session, RPC_OP_CALL, _rid, &_a, sizeof(_a), NULL, 0);\n"
-            "        return;\n"
-        )
+    # Wire response: status byte (0=OK, 1=ERR) + optional payload.
+    # For void slots the payload is empty so resp_len == 1 on success;
+    # for value slots it's 1 + sizeof(value).
+    if vt is None:
+        remote_call = f"""\
+        uint8_t _wbuf[1];
+        size_t _wn = rpc_call(_s->session, RPC_OP_CALL, _rid, &_a, sizeof(_a),
+                              _wbuf, sizeof(_wbuf));
+        if (_wn < 1) return YETTY_ERR({rid}, "{qualified_slot(m)}: short RPC response");
+        if (_wbuf[0] != 0) return YETTY_ERR({rid}, "{qualified_slot(m)}: remote impl returned error");
+        return YETTY_OK_VOID();
+"""
     else:
-        remote_call = (
-            f"        {ret} _r = {{0}};\n"
-            "        rpc_call(_s->session, RPC_OP_CALL, _rid, &_a, sizeof(_a), &_r, sizeof(_r));\n"
-            "        return _r;\n"
-        )
-
-    if ret == "void":
-        local_call = (
-            f"        if (fn) ((void (*)({cast_params}))fn)({call_args});\n"
-            "        return;\n"
-        )
-    else:
-        local_call = (
-            f"        if (!fn) {null_ret}\n"
-            f"        return (({ret} (*)({cast_params}))fn)({call_args});\n"
-        )
+        remote_call = f"""\
+        uint8_t _wbuf[1 + sizeof({vt})];
+        size_t _wn = rpc_call(_s->session, RPC_OP_CALL, _rid, &_a, sizeof(_a),
+                              _wbuf, sizeof(_wbuf));
+        if (_wn < 1) return YETTY_ERR({rid}, "{qualified_slot(m)}: short RPC response");
+        if (_wbuf[0] != 0) return YETTY_ERR({rid}, "{qualified_slot(m)}: remote impl returned error");
+        if (_wn != sizeof(_wbuf)) return YETTY_ERR({rid}, "{qualified_slot(m)}: truncated RPC payload");
+        {vt} _v;
+        memcpy(&_v, _wbuf + 1, sizeof(_v));
+        return YETTY_OK({rid}, _v);
+"""
 
     return f"""\
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
-    if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get("{m['domain']}", (method_id_t){qualified_slot(m)});
+    if (_slot == METHOD_SLOT_UNDEFINED) {{
+        struct method_slot_result _sr =
+            method_slot_get("{m['domain']}", (method_id_t){qualified_slot(m)});
+        if (YETTY_IS_ERR(_sr))
+            return YETTY_ERR({rid}, "{qualified_slot(m)}: method_slot_get failed", _sr);
+        _slot = _sr.value;
+    }}
 
-    if (!{obj_name}) {{ {null_ret} }}
+    if (!{obj_name}) return YETTY_ERR({rid}, "{qualified_slot(m)}: NULL object");
 
     struct ctx *_s = {ctx_name};
     if (_s && _s->session) {{
         uint32_t _rid = rpc_session_ensure_remote_id(_s->session, _slot);
-        if (_rid == RPC_REMOTE_ID_UNRESOLVED) {{ {null_ret} }}
+        if (_rid == RPC_REMOTE_ID_UNRESOLVED)
+            return YETTY_ERR({rid}, "{qualified_slot(m)}: remote id unresolved");
         struct __attribute__((packed)) {{
 {fields}\
         }} _a = {{ {init} }};
 {remote_call}\
     }} else {{
         impl_t fn = class_dispatch_lookup(object_class({obj_name}), _slot);
-{local_call}\
+        if (!fn) return YETTY_ERR({rid}, "{qualified_slot(m)}: no impl on this class");
+        return (({slot_fn})fn)({call_args});
     }}
 """
 
@@ -525,11 +582,14 @@ def emit_dispatch_body(m: dict) -> str:
 def emit_methods_c(model: dict, module: str, out_path: Path):
     parts = [HEADER,
              f'#include "{module}/methods.gen.h"\n',
+             '#include "result.h"\n',
              '#include "rpc.h"\n',
+             '#include "ytrace.h"\n',
              '#include <stdint.h>\n#include <string.h>\n\n']
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
-        parts.append(f"{m['return_type']} {qualified_slot(m)}({params})\n{{\n"
+        rt = result_type(m["return_type"])
+        parts.append(f"{rt} {qualified_slot(m)}({params})\n{{\n"
                      f"{emit_dispatch_body(m)}}}\n\n")
     out_path.write_text("".join(parts))
 
@@ -576,43 +636,69 @@ def emit_class_accessor(cls: dict) -> str:
     ]
     ops_block = "\n".join(op_lines)
 
+    qname = qualified_class(cls)
+
     parent = cls.get("parent")
     if parent:
-        parent_expr = f"{parent['domain']}_{parent['name']}_class_get()"
+        parent_accessor = f"{parent['domain']}_{parent['name']}_class_get"
+        parent_block = (
+            f"    struct class_ptr_result _parent_r = {parent_accessor}();\n"
+            f"    if (YETTY_IS_ERR(_parent_r))\n"
+            f"        return YETTY_ERR(class_ptr, \"{qname}_class_get: parent accessor failed\", _parent_r);\n"
+        )
+        parent_expr = "_parent_r.value"
     else:
+        parent_block = ""
         parent_expr = "NULL"
 
     mixins = cls.get("mixins") or []
     if mixins:
-        resolved = [f"{m['domain']}_{m['name']}_mixin_get()" for m in mixins]
-        mixin_inits = ", ".join(resolved)
-        mixin_decl = f"    const struct class *mixins[] = {{ {mixin_inits} }};\n"
+        mixin_lines = []
+        mixin_values = []
+        for i, m in enumerate(mixins):
+            mixin_accessor = f"{m['domain']}_{m['name']}_mixin_get"
+            mixin_lines.append(
+                f"    struct class_ptr_result _mixin{i}_r = {mixin_accessor}();\n"
+                f"    if (YETTY_IS_ERR(_mixin{i}_r))\n"
+                f"        return YETTY_ERR(class_ptr, \"{qname}_class_get: mixin{i} accessor failed\", _mixin{i}_r);\n"
+            )
+            mixin_values.append(f"_mixin{i}_r.value")
+        mixin_block = "".join(mixin_lines)
+        mixin_block += (
+            f"    const struct class *mixins[] = {{ {', '.join(mixin_values)} }};\n"
+        )
         mixin_arg = "mixins"
         mixin_count = str(len(mixins))
     else:
-        mixin_decl = ""
+        mixin_block = ""
         mixin_arg = "NULL"
         mixin_count = "0"
 
     return f"""\
 {typecheck_block}\
-const struct class *{accessor}(void)
+struct class_ptr_result {accessor}(void)
 {{
     static const struct class *cls = NULL;
-    if (cls) return cls;
+    if (cls) return YETTY_OK(class_ptr, cls);
+    ydebug("registering class={qname}");
 
     static const struct class_descriptor desc = {{
-        .name = "{qualified_class(cls)}",
+        .name = "{qname}",
         .type = {type_const},
         .data_size = sizeof({data}),
     }};
     static const struct op ops[] = {{
 {ops_block}
     }};
-{mixin_decl}\
-    cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                         {parent_expr}, {mixin_arg}, {mixin_count});
-    return cls;
+{parent_block}\
+{mixin_block}\
+    struct class_ptr_result _r =
+        class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
+                       {parent_expr}, {mixin_arg}, {mixin_count});
+    if (YETTY_IS_ERR(_r))
+        return YETTY_ERR(class_ptr, "{qname}_class_get: class_register failed", _r);
+    cls = _r.value;
+    return _r;
 }}
 """
 
@@ -638,7 +724,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             + f"#ifndef {guard}\n#define {guard}\n\n"
             + '#include "class.h"\n'
             + '#include "methods.gen.h"  /* every public method stub in this module */\n\n'
-            + f"const struct class *{qname}{suffix}(void);\n\n"
+            + f"struct class_ptr_result {qname}{suffix}(void);\n\n"
             + "#endif\n"
         )
 
@@ -693,9 +779,12 @@ def class_header_for(cls: dict, module: str) -> str:
 
 def emit_skel(m: dict) -> str:
     """Unpack the wire body, resolve obj handle, re-enter the public stub
-    with a local ctx so the right override fires on the actual class."""
+    with a local ctx so the right override fires on the actual class.
+    The wire response carries a status byte (0=OK, 1=ERR); for value
+    slots the OK payload is the raw value bytes that follow."""
     slot = qualified_slot(m)
-    ret = m["return_type"].strip()
+    rid = result_type_id(m["return_type"])
+    vt = ret_value_type(rid)
     args = wire_args(m)
     fields = args_struct_body(args, indent="        ")
 
@@ -708,19 +797,35 @@ def emit_skel(m: dict) -> str:
             call_parts.append(f"_a.{a['name']}")
     call = ", ".join(call_parts)
 
-    if ret == "void":
-        body = (
-            f"    {slot}({call});\n"
-            "    (void)_resp; (void)_resp_max;\n"
-            "    return 0;\n"
-        )
+    rt = f"struct {rid}_result"
+    if vt is None:
+        body = f"""\
+    {rt} _r = {slot}({call});
+    if (_resp_max < 1) return 0;
+    if (YETTY_IS_ERR(_r)) {{
+        yetty_ycore_error_print(stderr, "[skel] {slot}", _r.error);
+        yetty_ycore_error_destroy(_r.error);
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }}
+    ((uint8_t *)_resp)[0] = 0;
+    return 1;
+"""
     else:
-        body = (
-            f"    {ret} _r = {slot}({call});\n"
-            "    if (_resp_max < sizeof(_r)) return 0;\n"
-            "    memcpy(_resp, &_r, sizeof(_r));\n"
-            "    return sizeof(_r);\n"
-        )
+        body = f"""\
+    {rt} _r = {slot}({call});
+    if (_resp_max < 1) return 0;
+    if (YETTY_IS_ERR(_r)) {{
+        yetty_ycore_error_print(stderr, "[skel] {slot}", _r.error);
+        yetty_ycore_error_destroy(_r.error);
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }}
+    if (_resp_max < 1 + sizeof(_r.value)) return 0;
+    ((uint8_t *)_resp)[0] = 0;
+    memcpy((uint8_t *)_resp + 1, &_r.value, sizeof(_r.value));
+    return 1 + sizeof(_r.value);
+"""
 
     return f"""\
 static size_t {slot}_skel(const void *_body, size_t _body_len,
@@ -741,13 +846,17 @@ def emit_create_fn(cls: dict) -> str:
     accessor = cls["accessor"]
     qname = qualified_class(cls)
     return f"""\
-struct object *{qname}_create(struct ctx *ctx)
+struct object_ptr_result {qname}_create(struct ctx *ctx)
 {{
+    ydebug("class={qname}");
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = {accessor}();
+    struct class_ptr_result _kr = {accessor}();
+    if (YETTY_IS_ERR(_kr))
+        return YETTY_ERR(object_ptr, "{qname}_create: class accessor failed", _kr);
+    const struct class *_klass = _kr.value;
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -759,17 +868,18 @@ struct object *{qname}_create(struct ctx *ctx)
     const char *_name = "{qname}";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
-        return NULL;
+        return YETTY_ERR(object_ptr, "{qname}_create: remote create failed");
 
     /* Proxy: object header + uint64_t handle. Same class accessor on
      * both sides — proxies never local-dispatch, so the class's
      * data_size contract isn't honoured for this allocation. */
     void *_mem = calloc(1, sizeof(struct object) + sizeof(uint64_t));
-    if (!_mem) return NULL;
+    if (!_mem)
+        return YETTY_ERR(object_ptr, "{qname}_create: calloc(proxy) failed");
     struct object *_obj = _mem;
     *(const struct class **)_obj = _klass;
     *(uint64_t *)((char *)_obj + sizeof(*_obj)) = _h;
-    return _obj;
+    return YETTY_OK(object_ptr, _obj);
 }}
 """
 
@@ -780,6 +890,8 @@ def emit_lookup_tables(model: dict, module: str) -> str:
 
     # Lookup keys are the QUALIFIED class names — that's what the wire
     # carries on GET_CLASS/CREATE, and what class_by_name resolves to.
+    # Each branch calls the class accessor, which now returns
+    # class_ptr_result; we forward that result on a name match.
     class_branches = "\n".join(
         f'    if (strcmp(name, "{qualified_class(c)}") == 0) return {c["accessor"]}();'
         for c in classes
@@ -788,10 +900,11 @@ def emit_lookup_tables(model: dict, module: str) -> str:
     accessor_section = f"""\
 /* ---- {module}: class name → accessor (lazy) ---------------------- */
 
-static const struct class *{module}_accessor_lookup(const char *name)
+static struct class_ptr_result {module}_accessor_lookup(const char *name)
 {{
 {class_branches}
-    return NULL;
+    /* "Not mine": OK with NULL value — class_by_name walks to next hook. */
+    return YETTY_OK(class_ptr, NULL);
 }}
 """
 
@@ -819,8 +932,9 @@ static const struct {module}_skel_row {module}_skel_rows[] = {{
 
 static rpc_skel_fn {module}_skel_lookup(method_slot slot)
 {{
-    const char *name = method_slot_name(slot);
-    if (!name) return NULL;
+    struct const_char_ptr_result nr = method_slot_name(slot);
+    if (YETTY_IS_ERR(nr)) {{ yetty_ycore_error_destroy(nr.error); return NULL; }}
+    const char *name = nr.value;
     for (size_t i = 0; i < sizeof({module}_skel_rows) / sizeof({module}_skel_rows[0]); ++i)
         if (strcmp({module}_skel_rows[i].name, name) == 0)
             return {module}_skel_rows[i].fn;
@@ -838,7 +952,12 @@ static rpc_skel_fn {module}_skel_lookup(method_slot slot)
 __attribute__((constructor))
 static void {module}_install_hooks(void)
 {{
-    class_add_accessor_lookup({module}_accessor_lookup);
+    struct yetty_ycore_void_result _ar = class_add_accessor_lookup({module}_accessor_lookup);
+    if (YETTY_IS_ERR(_ar)) {{
+        yetty_ycore_error_print(stderr, "{module}_install_hooks", _ar.error);
+        yetty_ycore_error_destroy(_ar.error);
+        abort();
+    }}
 {skel_install}\
 }}
 """
@@ -847,7 +966,7 @@ static void {module}_install_hooks(void)
 def emit_rpc_h(model: dict, module: str, out_path: Path):
     guard = f"POC_{module.upper()}_RPC_GEN_H"
     decls = "\n".join(
-        f"struct object *{qualified_class(c)}_create(struct ctx *ctx);"
+        f"struct object_ptr_result {qualified_class(c)}_create(struct ctx *ctx);"
         for c in regular_classes(model)
     )
     out_path.write_text(
@@ -866,11 +985,14 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
     )
     parts = [HEADER,
              '#include "rpc.h"\n',
+             '#include "result.h"\n',
+             '#include "ytrace.h"\n',
              f'#include "{module}/rpc.gen.h"\n',
              f'#include "{module}/methods.gen.h"\n',
              '#include "class.h"\n',
              class_includes,
-             '#include <stdint.h>\n#include <stdlib.h>\n#include <string.h>\n\n']
+             '#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'
+             '#include <string.h>\n\n']
     for m in model["methods"]:
         parts.append(emit_skel(m))
         parts.append("\n")

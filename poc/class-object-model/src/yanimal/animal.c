@@ -1,6 +1,8 @@
 /* Animal — base class default impls. */
 
 #include "class.h"
+#include "result.h"
+#include "ytrace.h"
 
 #include <stdio.h>
 
@@ -9,45 +11,47 @@ struct [[clang::annotate("class@yanimal:animal")]] animal_data {
 };
 
 [[clang::annotate("override@yanimal:animal:animal_ctor")]]
-static void animal_default_ctor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result animal_default_ctor(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
-    fprintf(stderr, "  [impl] animal_default_ctor(obj=%p)\n", (void *)obj);
+    ydebug("obj=%p", (void *)obj);
+    return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yanimal:animal:animal_dtor")]]
-static void animal_default_dtor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result animal_default_dtor(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
-    fprintf(stderr, "  [impl] animal_default_dtor(obj=%p)\n", (void *)obj);
+    ydebug("obj=%p", (void *)obj);
+    return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yanimal:animal:animal_breathe")]]
-static void animal_default_breathe(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result animal_default_breathe(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
-    fprintf(stderr, "  [impl] animal_default_breathe(obj=%p)\n", (void *)obj);
+    ydebug("obj=%p", (void *)obj);
+    return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yanimal:animal:animal_speak")]]
-static struct str animal_default_speak(struct ctx *ctx, struct object *obj, int volume)
+static struct str_result animal_default_speak(struct ctx *ctx, struct object *obj, int volume)
 {
     (void)ctx;
     struct str r;
-    snprintf(r.buf, sizeof(r.buf),
-             "animal@%p makes a generic sound (volume=%d)",
-             (void *)obj, volume);
-    fprintf(stderr, "  [impl] animal_default_speak -> '%s'\n", r.buf);
-    return r;
+    snprintf(r.buf, sizeof(r.buf), "animal@%p makes a generic sound (volume=%d)", (void *)obj,
+             volume);
+    ydebug("-> '%s'", r.buf);
+    return YETTY_OK(str, r);
 }
 
 [[clang::annotate("override@yanimal:animal:animal_eat")]]
-static int animal_default_eat(struct ctx *ctx, struct object *obj, float amount)
+static struct yetty_ycore_int_result animal_default_eat(struct ctx *ctx, struct object *obj,
+                                                        float amount)
 {
     (void)ctx;
-    fprintf(stderr, "  [impl] animal_default_eat(obj=%p, amount=%.1fkg)\n",
-            (void *)obj, amount);
-    return 0;
+    ydebug("obj=%p amount=%.1fkg", (void *)obj, amount);
+    return YETTY_OK(yetty_ycore_int, 0);
 }
 
 #include "animal.gen.c"

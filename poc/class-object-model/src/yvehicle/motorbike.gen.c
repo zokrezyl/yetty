@@ -5,10 +5,11 @@
 __attribute__((unused))
 static yvehicle_vehicle_describe_fn _yvehicle_motorbike_yvehicle_vehicle_describe_check = motorbike_describe;
 
-const struct class *yvehicle_motorbike_class_get(void)
+struct class_ptr_result yvehicle_motorbike_class_get(void)
 {
     static const struct class *cls = NULL;
-    if (cls) return cls;
+    if (cls) return YETTY_OK(class_ptr, cls);
+    ydebug("registering class=yvehicle_motorbike");
 
     static const struct class_descriptor desc = {
         .name = "yvehicle_motorbike",
@@ -18,7 +19,14 @@ const struct class *yvehicle_motorbike_class_get(void)
     static const struct op ops[] = {
         {"yvehicle", "vehicle_describe", (method_id_t)yvehicle_vehicle_describe, (impl_t)motorbike_describe},
     };
-    cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                         yvehicle_vehicle_class_get(), NULL, 0);
-    return cls;
+    struct class_ptr_result _parent_r = yvehicle_vehicle_class_get();
+    if (YETTY_IS_ERR(_parent_r))
+        return YETTY_ERR(class_ptr, "yvehicle_motorbike_class_get: parent accessor failed", _parent_r);
+    struct class_ptr_result _r =
+        class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
+                       _parent_r.value, NULL, 0);
+    if (YETTY_IS_ERR(_r))
+        return YETTY_ERR(class_ptr, "yvehicle_motorbike_class_get: class_register failed", _r);
+    cls = _r.value;
+    return _r;
 }

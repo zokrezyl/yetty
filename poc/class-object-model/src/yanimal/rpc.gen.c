@@ -1,5 +1,7 @@
 /* GENERATED — do not edit. */
 #include "rpc.h"
+#include "result.h"
+#include "ytrace.h"
 #include "yanimal/rpc.gen.h"
 #include "yanimal/methods.gen.h"
 #include "class.h"
@@ -8,6 +10,7 @@
 #include "yanimal/dog.h"
 #include "yanimal/pet.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -20,9 +23,16 @@ static size_t yanimal_animal_ctor_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    yanimal_animal_ctor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
-    (void)_resp; (void)_resp_max;
-    return 0;
+    struct yetty_ycore_void_result _r = yanimal_animal_ctor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    if (_resp_max < 1) return 0;
+    if (YETTY_IS_ERR(_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yanimal_animal_ctor", _r.error);
+        yetty_ycore_error_destroy(_r.error);
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }
+    ((uint8_t *)_resp)[0] = 0;
+    return 1;
 }
 
 static size_t yanimal_animal_dtor_skel(const void *_body, size_t _body_len,
@@ -34,9 +44,16 @@ static size_t yanimal_animal_dtor_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    yanimal_animal_dtor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
-    (void)_resp; (void)_resp_max;
-    return 0;
+    struct yetty_ycore_void_result _r = yanimal_animal_dtor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    if (_resp_max < 1) return 0;
+    if (YETTY_IS_ERR(_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yanimal_animal_dtor", _r.error);
+        yetty_ycore_error_destroy(_r.error);
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }
+    ((uint8_t *)_resp)[0] = 0;
+    return 1;
 }
 
 static size_t yanimal_animal_breathe_skel(const void *_body, size_t _body_len,
@@ -48,9 +65,16 @@ static size_t yanimal_animal_breathe_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    yanimal_animal_breathe(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
-    (void)_resp; (void)_resp_max;
-    return 0;
+    struct yetty_ycore_void_result _r = yanimal_animal_breathe(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    if (_resp_max < 1) return 0;
+    if (YETTY_IS_ERR(_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yanimal_animal_breathe", _r.error);
+        yetty_ycore_error_destroy(_r.error);
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }
+    ((uint8_t *)_resp)[0] = 0;
+    return 1;
 }
 
 static size_t yanimal_animal_speak_skel(const void *_body, size_t _body_len,
@@ -63,10 +87,18 @@ static size_t yanimal_animal_speak_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    struct str _r = yanimal_animal_speak(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.volume);
-    if (_resp_max < sizeof(_r)) return 0;
-    memcpy(_resp, &_r, sizeof(_r));
-    return sizeof(_r);
+    struct str_result _r = yanimal_animal_speak(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.volume);
+    if (_resp_max < 1) return 0;
+    if (YETTY_IS_ERR(_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yanimal_animal_speak", _r.error);
+        yetty_ycore_error_destroy(_r.error);
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }
+    if (_resp_max < 1 + sizeof(_r.value)) return 0;
+    ((uint8_t *)_resp)[0] = 0;
+    memcpy((uint8_t *)_resp + 1, &_r.value, sizeof(_r.value));
+    return 1 + sizeof(_r.value);
 }
 
 static size_t yanimal_animal_eat_skel(const void *_body, size_t _body_len,
@@ -79,19 +111,31 @@ static size_t yanimal_animal_eat_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    int _r = yanimal_animal_eat(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.amount);
-    if (_resp_max < sizeof(_r)) return 0;
-    memcpy(_resp, &_r, sizeof(_r));
-    return sizeof(_r);
+    struct yetty_ycore_int_result _r = yanimal_animal_eat(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.amount);
+    if (_resp_max < 1) return 0;
+    if (YETTY_IS_ERR(_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yanimal_animal_eat", _r.error);
+        yetty_ycore_error_destroy(_r.error);
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }
+    if (_resp_max < 1 + sizeof(_r.value)) return 0;
+    ((uint8_t *)_resp)[0] = 0;
+    memcpy((uint8_t *)_resp + 1, &_r.value, sizeof(_r.value));
+    return 1 + sizeof(_r.value);
 }
 
-struct object *yanimal_animal_create(struct ctx *ctx)
+struct object_ptr_result yanimal_animal_create(struct ctx *ctx)
 {
+    ydebug("class=yanimal_animal");
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = yanimal_animal_class_get();
+    struct class_ptr_result _kr = yanimal_animal_class_get();
+    if (YETTY_IS_ERR(_kr))
+        return YETTY_ERR(object_ptr, "yanimal_animal_create: class accessor failed", _kr);
+    const struct class *_klass = _kr.value;
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -103,26 +147,31 @@ struct object *yanimal_animal_create(struct ctx *ctx)
     const char *_name = "yanimal_animal";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
-        return NULL;
+        return YETTY_ERR(object_ptr, "yanimal_animal_create: remote create failed");
 
     /* Proxy: object header + uint64_t handle. Same class accessor on
      * both sides — proxies never local-dispatch, so the class's
      * data_size contract isn't honoured for this allocation. */
     void *_mem = calloc(1, sizeof(struct object) + sizeof(uint64_t));
-    if (!_mem) return NULL;
+    if (!_mem)
+        return YETTY_ERR(object_ptr, "yanimal_animal_create: calloc(proxy) failed");
     struct object *_obj = _mem;
     *(const struct class **)_obj = _klass;
     *(uint64_t *)((char *)_obj + sizeof(*_obj)) = _h;
-    return _obj;
+    return YETTY_OK(object_ptr, _obj);
 }
 
-struct object *yanimal_cat_create(struct ctx *ctx)
+struct object_ptr_result yanimal_cat_create(struct ctx *ctx)
 {
+    ydebug("class=yanimal_cat");
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = yanimal_cat_class_get();
+    struct class_ptr_result _kr = yanimal_cat_class_get();
+    if (YETTY_IS_ERR(_kr))
+        return YETTY_ERR(object_ptr, "yanimal_cat_create: class accessor failed", _kr);
+    const struct class *_klass = _kr.value;
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -134,26 +183,31 @@ struct object *yanimal_cat_create(struct ctx *ctx)
     const char *_name = "yanimal_cat";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
-        return NULL;
+        return YETTY_ERR(object_ptr, "yanimal_cat_create: remote create failed");
 
     /* Proxy: object header + uint64_t handle. Same class accessor on
      * both sides — proxies never local-dispatch, so the class's
      * data_size contract isn't honoured for this allocation. */
     void *_mem = calloc(1, sizeof(struct object) + sizeof(uint64_t));
-    if (!_mem) return NULL;
+    if (!_mem)
+        return YETTY_ERR(object_ptr, "yanimal_cat_create: calloc(proxy) failed");
     struct object *_obj = _mem;
     *(const struct class **)_obj = _klass;
     *(uint64_t *)((char *)_obj + sizeof(*_obj)) = _h;
-    return _obj;
+    return YETTY_OK(object_ptr, _obj);
 }
 
-struct object *yanimal_dog_create(struct ctx *ctx)
+struct object_ptr_result yanimal_dog_create(struct ctx *ctx)
 {
+    ydebug("class=yanimal_dog");
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = yanimal_dog_class_get();
+    struct class_ptr_result _kr = yanimal_dog_class_get();
+    if (YETTY_IS_ERR(_kr))
+        return YETTY_ERR(object_ptr, "yanimal_dog_create: class accessor failed", _kr);
+    const struct class *_klass = _kr.value;
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -165,28 +219,30 @@ struct object *yanimal_dog_create(struct ctx *ctx)
     const char *_name = "yanimal_dog";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
-        return NULL;
+        return YETTY_ERR(object_ptr, "yanimal_dog_create: remote create failed");
 
     /* Proxy: object header + uint64_t handle. Same class accessor on
      * both sides — proxies never local-dispatch, so the class's
      * data_size contract isn't honoured for this allocation. */
     void *_mem = calloc(1, sizeof(struct object) + sizeof(uint64_t));
-    if (!_mem) return NULL;
+    if (!_mem)
+        return YETTY_ERR(object_ptr, "yanimal_dog_create: calloc(proxy) failed");
     struct object *_obj = _mem;
     *(const struct class **)_obj = _klass;
     *(uint64_t *)((char *)_obj + sizeof(*_obj)) = _h;
-    return _obj;
+    return YETTY_OK(object_ptr, _obj);
 }
 
 /* ---- yanimal: class name → accessor (lazy) ---------------------- */
 
-static const struct class *yanimal_accessor_lookup(const char *name)
+static struct class_ptr_result yanimal_accessor_lookup(const char *name)
 {
     if (strcmp(name, "yanimal_animal") == 0) return yanimal_animal_class_get();
     if (strcmp(name, "yanimal_cat") == 0) return yanimal_cat_class_get();
     if (strcmp(name, "yanimal_dog") == 0) return yanimal_dog_class_get();
     if (strcmp(name, "yanimal_pet") == 0) return yanimal_pet_mixin_get();
-    return NULL;
+    /* "Not mine": OK with NULL value — class_by_name walks to next hook. */
+    return YETTY_OK(class_ptr, NULL);
 }
 
 /* ---- yanimal: slot → skel, name-keyed static data --------------- */
@@ -203,8 +259,9 @@ static const struct yanimal_skel_row yanimal_skel_rows[] = {
 
 static rpc_skel_fn yanimal_skel_lookup(method_slot slot)
 {
-    const char *name = method_slot_name(slot);
-    if (!name) return NULL;
+    struct const_char_ptr_result nr = method_slot_name(slot);
+    if (YETTY_IS_ERR(nr)) { yetty_ycore_error_destroy(nr.error); return NULL; }
+    const char *name = nr.value;
     for (size_t i = 0; i < sizeof(yanimal_skel_rows) / sizeof(yanimal_skel_rows[0]); ++i)
         if (strcmp(yanimal_skel_rows[i].name, name) == 0)
             return yanimal_skel_rows[i].fn;
@@ -216,6 +273,11 @@ static rpc_skel_fn yanimal_skel_lookup(method_slot slot)
 __attribute__((constructor))
 static void yanimal_install_hooks(void)
 {
-    class_add_accessor_lookup(yanimal_accessor_lookup);
+    struct yetty_ycore_void_result _ar = class_add_accessor_lookup(yanimal_accessor_lookup);
+    if (YETTY_IS_ERR(_ar)) {
+        yetty_ycore_error_print(stderr, "yanimal_install_hooks", _ar.error);
+        yetty_ycore_error_destroy(_ar.error);
+        abort();
+    }
     rpc_add_skel_lookup(yanimal_skel_lookup);
 }

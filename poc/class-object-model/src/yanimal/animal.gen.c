@@ -12,10 +12,11 @@ static yanimal_animal_speak_fn _yanimal_animal_yanimal_animal_speak_check = anim
 __attribute__((unused))
 static yanimal_animal_eat_fn _yanimal_animal_yanimal_animal_eat_check = animal_default_eat;
 
-const struct class *yanimal_animal_class_get(void)
+struct class_ptr_result yanimal_animal_class_get(void)
 {
     static const struct class *cls = NULL;
-    if (cls) return cls;
+    if (cls) return YETTY_OK(class_ptr, cls);
+    ydebug("registering class=yanimal_animal");
 
     static const struct class_descriptor desc = {
         .name = "yanimal_animal",
@@ -29,7 +30,11 @@ const struct class *yanimal_animal_class_get(void)
         {"yanimal", "animal_speak", (method_id_t)yanimal_animal_speak, (impl_t)animal_default_speak},
         {"yanimal", "animal_eat", (method_id_t)yanimal_animal_eat, (impl_t)animal_default_eat},
     };
-    cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                         NULL, NULL, 0);
-    return cls;
+    struct class_ptr_result _r =
+        class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
+                       NULL, NULL, 0);
+    if (YETTY_IS_ERR(_r))
+        return YETTY_ERR(class_ptr, "yanimal_animal_class_get: class_register failed", _r);
+    cls = _r.value;
+    return _r;
 }

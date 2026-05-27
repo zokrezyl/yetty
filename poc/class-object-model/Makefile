@@ -16,8 +16,11 @@ CFLAGS  ?= -std=c2x -Wall -Wextra -Wno-attributes -Iinclude -g \
            -Werror=incompatible-pointer-types
 
 # Shared runtime — hand-written, no codegen.
-RUNTIME_HEADERS := include/class.h include/rpc.h include/uthash.h
-RUNTIME_SRC := src/class.c src/rpc.c
+RUNTIME_HEADERS := include/class.h include/rpc.h include/uthash.h \
+                   include/result.h include/ytrace.h
+RUNTIME_SRC := src/class.c src/rpc.c src/result.c src/ytrace.c
+
+LDFLAGS ?= -lpthread
 
 # ---- yvehicle module --------------------------------------------------
 YV_SRCDIR := src/yvehicle
@@ -94,7 +97,7 @@ clean:
 	@rmdir $(YV_INCDIR) $(YA_INCDIR) $(YT_INCDIR) 2>/dev/null || true
 
 $(BIN): $(ALL_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Compile rule. Every .c depends on every generated header so that a
 # regen of any module's headers triggers a rebuild of everything that

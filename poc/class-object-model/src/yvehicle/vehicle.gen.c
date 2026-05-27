@@ -14,10 +14,11 @@ static yvehicle_vehicle_brake_fn _yvehicle_vehicle_yvehicle_vehicle_brake_check 
 __attribute__((unused))
 static yvehicle_vehicle_describe_fn _yvehicle_vehicle_yvehicle_vehicle_describe_check = vehicle_default_describe;
 
-const struct class *yvehicle_vehicle_class_get(void)
+struct class_ptr_result yvehicle_vehicle_class_get(void)
 {
     static const struct class *cls = NULL;
-    if (cls) return cls;
+    if (cls) return YETTY_OK(class_ptr, cls);
+    ydebug("registering class=yvehicle_vehicle");
 
     static const struct class_descriptor desc = {
         .name = "yvehicle_vehicle",
@@ -32,7 +33,11 @@ const struct class *yvehicle_vehicle_class_get(void)
         {"yvehicle", "vehicle_brake", (method_id_t)yvehicle_vehicle_brake, (impl_t)vehicle_default_brake},
         {"yvehicle", "vehicle_describe", (method_id_t)yvehicle_vehicle_describe, (impl_t)vehicle_default_describe},
     };
-    cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                         NULL, NULL, 0);
-    return cls;
+    struct class_ptr_result _r =
+        class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
+                       NULL, NULL, 0);
+    if (YETTY_IS_ERR(_r))
+        return YETTY_ERR(class_ptr, "yvehicle_vehicle_class_get: class_register failed", _r);
+    cls = _r.value;
+    return _r;
 }
