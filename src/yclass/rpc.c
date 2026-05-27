@@ -216,6 +216,17 @@ static void get_class_emit(const char *name, yetty_yclass_method_slot slot, void
 {
     struct get_class_ctx *gc = ud;
     size_t name_len = strlen(name);
+    /* Wire length field is u16 — silently truncating it while copying
+     * the full name desyncs the client (it parses `nl` bytes as the
+     * name, then reads u32 rid from the middle of what's actually
+     * still name). Skip with a warning instead; the client falls back
+     * to per-slot RESOLVE_SLOT for any entry we drop here. */
+    if (name_len > UINT16_MAX) {
+        ywarn("get_class_emit: slot name '%.32s...' (%zu bytes) exceeds u16 wire length; "
+              "skipping entry",
+              name, name_len);
+        return;
+    }
     size_t need = 2 + name_len + 4;
     if (gc->off + need > gc->cap)
         return;
@@ -541,7 +552,7 @@ int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
             break;
         char *slot_name = dup_wire_name(buf + off, nl);
         if (!slot_name)
-            break; /* alloc fail mid-parse; skip the rest, keep what we got */
+            break; /* alloc fail mid-parse — bail and don't cache. */
         off += nl;
         uint32_t rid;
         memcpy(&rid, buf + off, 4);
@@ -556,6 +567,18 @@ int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
             yetty_ycore_error_destroy(lr.error);
         }
         free(slot_name);
+    }
+
+    /* A well-formed response consumes exactly resp_len bytes — entries
+     * are packed back-to-back. If we bailed mid-loop (truncated entry,
+     * dup_wire_name alloc failure, or trailing junk), don't mark the
+     * class translated. The per-slot RESOLVE_SLOT fallback in
+     * ensure_remote_id can still fill in any missed mappings, and a
+     * later translate_class call gets another shot at the full table. */
+    if (off != resp_len) {
+        ywarn("translate_class('%s'): parse consumed %zu of %zu bytes — not caching",
+              class_name, off, resp_len);
+        return -1;
     }
 
     t = calloc(1, sizeof(*t));
