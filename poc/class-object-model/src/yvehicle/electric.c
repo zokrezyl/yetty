@@ -4,11 +4,11 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("mixin:electric")]] electric_data {
+struct [[clang::annotate("mixin@yvehicle:electric")]] electric_data {
     int battery_percent;
 };
 
-[[clang::annotate("override:electric:vehicle_brake")]]
+[[clang::annotate("override@yvehicle:electric:vehicle_brake")]]
 static int electric_brake(struct ctx *ctx, struct object *obj, float intensity)
 {
     (void)ctx;

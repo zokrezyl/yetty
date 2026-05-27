@@ -9,13 +9,13 @@ const struct class *sportscar_class_get(void)
     if (cls) return cls;
 
     static const struct class_descriptor desc = {
-        .name = "sportscar",
+        .name = "yvehicle_sportscar",
         .type = CLASS_TYPE_REGULAR,
         .data_size = sizeof(struct sportscar_data),
     };
     static const struct op ops[] = {
-        {"vehicle_describe", (method_id_t)vehicle_describe, (impl_t)sportscar_describe},
-        {"vehicle_accelerate", (method_id_t)vehicle_accelerate, (impl_t)sportscar_accelerate},
+        {"yvehicle_vehicle_describe", (method_id_t)vehicle_describe, (impl_t)sportscar_describe},
+        {"yvehicle_vehicle_accelerate", (method_id_t)vehicle_accelerate, (impl_t)sportscar_accelerate},
     };
     const struct class *mixins[] = { electric_mixin_get() };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),

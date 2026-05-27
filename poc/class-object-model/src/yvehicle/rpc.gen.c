@@ -114,10 +114,10 @@ struct object *vehicle_create(struct ctx *ctx)
         return object_alloc(_klass);
 
     /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    rpc_session_translate_class(ctx->session, "vehicle");
+    rpc_session_translate_class(ctx->session, "yvehicle_vehicle");
 
     uint64_t _h = 0;
-    const char *_name = "vehicle";
+    const char *_name = "yvehicle_vehicle";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
         return NULL;
@@ -145,10 +145,10 @@ struct object *motorbike_create(struct ctx *ctx)
         return object_alloc(_klass);
 
     /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    rpc_session_translate_class(ctx->session, "motorbike");
+    rpc_session_translate_class(ctx->session, "yvehicle_motorbike");
 
     uint64_t _h = 0;
-    const char *_name = "motorbike";
+    const char *_name = "yvehicle_motorbike";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
         return NULL;
@@ -176,10 +176,10 @@ struct object *car_create(struct ctx *ctx)
         return object_alloc(_klass);
 
     /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    rpc_session_translate_class(ctx->session, "car");
+    rpc_session_translate_class(ctx->session, "yvehicle_car");
 
     uint64_t _h = 0;
-    const char *_name = "car";
+    const char *_name = "yvehicle_car";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
         return NULL;
@@ -207,10 +207,10 @@ struct object *sportscar_create(struct ctx *ctx)
         return object_alloc(_klass);
 
     /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    rpc_session_translate_class(ctx->session, "sportscar");
+    rpc_session_translate_class(ctx->session, "yvehicle_sportscar");
 
     uint64_t _h = 0;
-    const char *_name = "sportscar";
+    const char *_name = "yvehicle_sportscar";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
         return NULL;
@@ -230,11 +230,11 @@ struct object *sportscar_create(struct ctx *ctx)
 
 static const struct class *yvehicle_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "vehicle") == 0) return vehicle_class_get();
-    if (strcmp(name, "motorbike") == 0) return motorbike_class_get();
-    if (strcmp(name, "car") == 0) return car_class_get();
-    if (strcmp(name, "sportscar") == 0) return sportscar_class_get();
-    if (strcmp(name, "electric") == 0) return electric_mixin_get();
+    if (strcmp(name, "yvehicle_vehicle") == 0) return vehicle_class_get();
+    if (strcmp(name, "yvehicle_motorbike") == 0) return motorbike_class_get();
+    if (strcmp(name, "yvehicle_car") == 0) return car_class_get();
+    if (strcmp(name, "yvehicle_sportscar") == 0) return sportscar_class_get();
+    if (strcmp(name, "yvehicle_electric") == 0) return electric_mixin_get();
     return NULL;
 }
 
@@ -243,12 +243,12 @@ static const struct class *yvehicle_accessor_lookup(const char *name)
 struct yvehicle_skel_row { const char *name; rpc_skel_fn fn; };
 
 static const struct yvehicle_skel_row yvehicle_skel_rows[] = {
-    {"vehicle_ctor", vehicle_ctor_skel},
-    {"vehicle_dtor", vehicle_dtor_skel},
-    {"vehicle_start", vehicle_start_skel},
-    {"vehicle_accelerate", vehicle_accelerate_skel},
-    {"vehicle_brake", vehicle_brake_skel},
-    {"vehicle_describe", vehicle_describe_skel}
+    {"yvehicle_vehicle_ctor", vehicle_ctor_skel},
+    {"yvehicle_vehicle_dtor", vehicle_dtor_skel},
+    {"yvehicle_vehicle_start", vehicle_start_skel},
+    {"yvehicle_vehicle_accelerate", vehicle_accelerate_skel},
+    {"yvehicle_vehicle_brake", vehicle_brake_skel},
+    {"yvehicle_vehicle_describe", vehicle_describe_skel}
 };
 
 static rpc_skel_fn yvehicle_skel_lookup(method_slot slot)

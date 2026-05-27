@@ -58,6 +58,19 @@ from pathlib import Path
 HEADER = "/* GENERATED — do not edit. */\n"
 
 
+# Qualified-name helpers: the global slot_table and class_registry
+# treat names as `<domain>_<localname>` so two modules can share local
+# names without colliding. C function/type names stay unqualified.
+def qualified_class(c: dict) -> str:
+    return f"{c['domain']}_{c['name']}"
+
+def qualified_slot(m: dict) -> str:
+    return f"{m['domain']}_{m['slot']}"
+
+def qualified(domain: str, name: str) -> str:
+    return f"{domain}_{name}"
+
+
 # ============== model — annotated C → in-memory dict ====================
 #
 # Annotation schema (role-first, colon-separated, class name always
@@ -132,22 +145,46 @@ def _walk_decls(node: dict):
 
 
 def _split_ann(ann: str):
-    parts = [p.strip() for p in ann.split(":")]
-    return parts[0], parts[1:]
+    """Annotation grammar: `<verb>@<domain>:<…>`. The `@` separates the
+    role from the colon-separated path. Legacy `verb:path` is rejected."""
+    if "@" not in ann:
+        sys.stderr.write(
+            f"error: annotation '{ann}' lacks '@' separator; "
+            f"expected `<verb>@<domain>:<path...>`\n")
+        sys.exit(1)
+    verb, rest = ann.split("@", 1)
+    return verb.strip(), [p.strip() for p in rest.split(":") if p.strip()]
 
 
-def parse_sources(include_dirs: list, sources: list) -> dict:
+def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
+    """Walk annotated sources, build the model. `module` is the
+    codegen's CLI argument; the `<domain>` segment in every class/
+    mixin/override annotation MUST equal it. parent/uses annotations
+    may name a different domain (cross-module reference)."""
     methods: dict = {}
     classes: dict = {}
 
     def bucket(name: str) -> dict:
         if name not in classes:
             classes[name] = {
-                "name": name, "accessor": None, "type": None,
+                "name": name, "domain": None, "accessor": None, "type": None,
                 "source_file": None, "parent": None, "mixins": [],
                 "data": None, "ops": [],
             }
         return classes[name]
+
+    def require_segments(role: str, args: list, n: int, shape: str):
+        if len(args) != n:
+            sys.stderr.write(
+                f"error: '{role}@{':'.join(args)}' — expected {shape}\n")
+            sys.exit(1)
+
+    def require_local_domain(role: str, dom: str):
+        if dom != module:
+            sys.stderr.write(
+                f"error: '{role}' domain '{dom}' != current module '{module}'. "
+                f"class/mixin/override must live in their own module's domain.\n")
+            sys.exit(1)
 
     for path in sources:
         src = path.read_bytes()
@@ -160,29 +197,37 @@ def parse_sources(include_dirs: list, sources: list) -> dict:
             if kind == "FunctionDecl":
                 for ann in anns:
                     role, args = _split_ann(ann)
-                    if role == "override" and len(args) >= 2:
-                        cls, slot = args[0], args[1]
+                    if role == "override":
+                        require_segments(role, args, 3, "override@<DOMAIN>:<CLASS>:<SLOT>")
+                        dom, cls, slot = args
+                        require_local_domain(role, dom)
                         b = bucket(cls)
                         b["ops"].append({"slot": slot, "impl": decl["name"]})
                         if slot not in methods:
                             qt = decl.get("type", {}).get("qualType", "")
                             methods[slot] = {
-                                "slot": slot, "owning_class": cls,
+                                "slot": slot, "domain": dom,
+                                "owning_class": cls,
                                 "return_type": _parse_return_type(qt),
                                 "args": _fn_args(decl),
                             }
             elif kind == "RecordDecl":
-                # class:X / mixin:X on a struct subsume the old data:X —
-                # the annotated struct IS the class's data slice.
-                primary, kind2 = None, None
+                # class@<D>:<C> / mixin@<D>:<C> sit on the data struct.
+                primary, kind2, primary_dom = None, None, None
                 for ann in anns:
                     role, args = _split_ann(ann)
-                    if role == "class" and args:
-                        primary, kind2 = args[0], "regular"; break
-                    if role == "mixin" and args:
-                        primary, kind2 = args[0], "mixin"; break
+                    if role == "class":
+                        require_segments(role, args, 2, "class@<DOMAIN>:<CLASS>")
+                        primary_dom, primary, kind2 = args[0], args[1], "regular"
+                        break
+                    if role == "mixin":
+                        require_segments(role, args, 2, "mixin@<DOMAIN>:<CLASS>")
+                        primary_dom, primary, kind2 = args[0], args[1], "mixin"
+                        break
                 if primary:
+                    require_local_domain(kind2, primary_dom)
                     b = bucket(primary)
+                    b["domain"] = primary_dom
                     b["type"] = kind2
                     b["source_file"] = str(path)
                     suffix = "_mixin_get" if kind2 == "mixin" else "_class_get"
@@ -192,10 +237,12 @@ def parse_sources(include_dirs: list, sources: list) -> dict:
                         b["data"] = f"struct {tag}"
                     for ann in anns:
                         role, args = _split_ann(ann)
-                        if role == "parent" and args:
-                            b["parent"] = args[0]
-                        elif role == "uses" and args:
-                            b["mixins"].append(args[0])
+                        if role == "parent":
+                            require_segments(role, args, 2, "parent@<DOMAIN>:<CLASS>")
+                            b["parent"] = {"domain": args[0], "name": args[1]}
+                        elif role == "uses":
+                            require_segments(role, args, 2, "uses@<DOMAIN>:<MIXIN>")
+                            b["mixins"].append({"domain": args[0], "name": args[1]})
 
     return {
         "methods": list(methods.values()),
@@ -432,33 +479,35 @@ def emit_methods_c(model: dict, module: str, out_path: Path):
 
 # ---------------- .gen.inc — class accessor body -------------------------
 
-def emit_class_accessor(cls: dict, class_index: dict) -> str:
+def emit_class_accessor(cls: dict) -> str:
     accessor = cls["accessor"]
     is_mixin = cls["type"] == "mixin"
     data = cls["data"] or "char"
     type_const = "CLASS_TYPE_MIXIN" if is_mixin else "CLASS_TYPE_REGULAR"
+
+    # Each op's slot name in slot_table is qualified by the slot's
+    # owning domain. The override annotation places it in the same
+    # domain as the class itself (single-domain shortcut), so we
+    # qualify with this class's domain.
     op_lines = [
-        f'        {{"{op["slot"]}", (method_id_t){op["slot"]}, '
-        f"(impl_t){op['impl']}}},"
+        f'        {{"{qualified(cls["domain"], op["slot"])}", '
+        f"(method_id_t){op['slot']}, (impl_t){op['impl']}}},"
         for op in cls["ops"]
     ]
     ops_block = "\n".join(op_lines)
+
     parent = cls.get("parent")
     if parent:
-        p = class_index.get(parent)
-        if not p:
-            sys.stderr.write(f"unknown parent class: {parent}\n"); sys.exit(1)
-        parent_expr = f"{p['accessor']}()"
+        # Accessor is the parent's unqualified C function (`<class>_class_get`).
+        # Header that declares it is included by emit_class_gen_c via the
+        # parent's {domain, name} record.
+        parent_expr = f"{parent['name']}_class_get()"
     else:
         parent_expr = "NULL"
+
     mixins = cls.get("mixins") or []
     if mixins:
-        resolved = []
-        for mname in mixins:
-            mm = class_index.get(mname)
-            if not mm:
-                sys.stderr.write(f"unknown mixin class: {mname}\n"); sys.exit(1)
-            resolved.append(f"{mm['accessor']}()")
+        resolved = [f"{m['name']}_mixin_get()" for m in mixins]
         mixin_inits = ", ".join(resolved)
         mixin_decl = f"    const struct class *mixins[] = {{ {mixin_inits} }};\n"
         mixin_arg = "mixins"
@@ -467,6 +516,7 @@ def emit_class_accessor(cls: dict, class_index: dict) -> str:
         mixin_decl = ""
         mixin_arg = "NULL"
         mixin_count = "0"
+
     return f"""\
 const struct class *{accessor}(void)
 {{
@@ -474,7 +524,7 @@ const struct class *{accessor}(void)
     if (cls) return cls;
 
     static const struct class_descriptor desc = {{
-        .name = "{cls['name']}",
+        .name = "{qualified_class(cls)}",
         .type = {type_const},
         .data_size = sizeof({data}),
     }};
@@ -521,25 +571,28 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
     prototype, any parent and mixin headers for their accessor calls)
     so the hand-written .c stays minimal — typically only
     `#include "class.h"`."""
-    class_index = {c["name"]: c for c in model["classes"]}
     groups: dict = {}
     for c in model["classes"]:
         groups.setdefault(c["source_file"], []).append(c)
     for src_path, classes in groups.items():
         inc_path = module_dir / (Path(src_path).stem + ".gen.c")
 
-        # Collect headers needed for this .gen.c: each class's own + parents + mixins.
+        # Collect headers needed for this .gen.c: each class's own
+        # header + the (possibly cross-domain) parent + mixin headers.
+        # parent/uses now carry {domain, name} so a future cross-module
+        # subclass picks up the right header path automatically.
         needed = set()
         for c in classes:
-            needed.add(f"{module}/{c['name']}.h")
-            if c.get("parent"):
-                needed.add(f"{module}/{c['parent']}.h")
+            needed.add(f"{c['domain']}/{c['name']}.h")
+            p = c.get("parent")
+            if p:
+                needed.add(f"{p['domain']}/{p['name']}.h")
             for mx in c.get("mixins", []):
-                needed.add(f"{module}/{mx}.h")
+                needed.add(f"{mx['domain']}/{mx['name']}.h")
         include_block = "".join(f'#include "{h}"\n' for h in sorted(needed))
 
         body = HEADER + include_block + "\n" \
-             + "\n".join(emit_class_accessor(c, class_index) for c in classes)
+             + "\n".join(emit_class_accessor(c) for c in classes)
         inc_path.write_text(body)
 
 
@@ -602,6 +655,7 @@ def emit_create_fn(cls: dict) -> str:
     """Per-class factory. ctx decides; caller is location-agnostic."""
     name = cls["name"]
     accessor = cls["accessor"]
+    qname = qualified_class(cls)
     return f"""\
 struct object *{name}_create(struct ctx *ctx)
 {{
@@ -615,10 +669,10 @@ struct object *{name}_create(struct ctx *ctx)
         return object_alloc(_klass);
 
     /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    rpc_session_translate_class(ctx->session, "{name}");
+    rpc_session_translate_class(ctx->session, "{qname}");
 
     uint64_t _h = 0;
-    const char *_name = "{name}";
+    const char *_name = "{qname}";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
         return NULL;
@@ -640,13 +694,18 @@ def emit_lookup_tables(model: dict, module: str) -> str:
     classes = model.get("classes", [])
     methods = model.get("methods", [])
 
+    # Lookup keys are the QUALIFIED class names — that's what the wire
+    # carries on GET_CLASS/CREATE, and what class_by_name resolves to.
     class_branches = "\n".join(
-        f'    if (strcmp(name, "{c["name"]}") == 0) return {c["accessor"]}();'
+        f'    if (strcmp(name, "{qualified_class(c)}") == 0) return {c["accessor"]}();'
         for c in classes
     )
 
+    # Skel rows keyed by qualified slot name. method_slot_name returns
+    # the qualified name (that's what gets stored when class_register
+    # walks the ops table).
     skel_rows = ",\n".join(
-        f'    {{"{m["slot"]}", {m["slot"]}_skel}}'
+        f'    {{"{qualified_slot(m)}", {m["slot"]}_skel}}'
         for m in methods
     )
 
@@ -762,7 +821,7 @@ def main():
     # Clang search path: shared include/, the module's own generated-
     # header dir (include/<module>/), and the module src dir (for
     # any neighbour .h that might still exist transiently).
-    model = parse_sources([include_base, include_module, module_src], sources)
+    model = parse_sources([include_base, include_module, module_src], sources, module)
     for m in model["methods"]:
         validate_method(m)
 

@@ -4,12 +4,12 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class:car")]]
-       [[clang::annotate("parent:vehicle")]] car_data {
+struct [[clang::annotate("class@yvehicle:car")]]
+       [[clang::annotate("parent@yvehicle:vehicle")]] car_data {
     int doors;
 };
 
-[[clang::annotate("override:car:vehicle_describe")]]
+[[clang::annotate("override@yvehicle:car:vehicle_describe")]]
 static struct str car_describe(struct ctx *ctx, struct object *obj, float distance)
 {
     (void)ctx;

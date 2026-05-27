@@ -4,32 +4,32 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class:vehicle")]] vehicle_data {
+struct [[clang::annotate("class@yvehicle:vehicle")]] vehicle_data {
     int mileage;
 };
 
-[[clang::annotate("override:vehicle:vehicle_ctor")]]
+[[clang::annotate("override@yvehicle:vehicle:vehicle_ctor")]]
 static void vehicle_default_ctor(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
     fprintf(stderr, "  [impl] vehicle_default_ctor(obj=%p)\n", (void *)obj);
 }
 
-[[clang::annotate("override:vehicle:vehicle_dtor")]]
+[[clang::annotate("override@yvehicle:vehicle:vehicle_dtor")]]
 static void vehicle_default_dtor(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
     fprintf(stderr, "  [impl] vehicle_default_dtor(obj=%p)\n", (void *)obj);
 }
 
-[[clang::annotate("override:vehicle:vehicle_start")]]
+[[clang::annotate("override@yvehicle:vehicle:vehicle_start")]]
 static void vehicle_default_start(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
     fprintf(stderr, "  [impl] vehicle_default_start(obj=%p)\n", (void *)obj);
 }
 
-[[clang::annotate("override:vehicle:vehicle_accelerate")]]
+[[clang::annotate("override@yvehicle:vehicle:vehicle_accelerate")]]
 static int vehicle_default_accelerate(struct ctx *ctx, struct object *obj, float speed)
 {
     (void)ctx;
@@ -38,7 +38,7 @@ static int vehicle_default_accelerate(struct ctx *ctx, struct object *obj, float
     return 0;
 }
 
-[[clang::annotate("override:vehicle:vehicle_brake")]]
+[[clang::annotate("override@yvehicle:vehicle:vehicle_brake")]]
 static int vehicle_default_brake(struct ctx *ctx, struct object *obj, float intensity)
 {
     (void)ctx;
@@ -47,7 +47,7 @@ static int vehicle_default_brake(struct ctx *ctx, struct object *obj, float inte
     return 0;
 }
 
-[[clang::annotate("override:vehicle:vehicle_describe")]]
+[[clang::annotate("override@yvehicle:vehicle:vehicle_describe")]]
 static struct str vehicle_default_describe(struct ctx *ctx, struct object *obj, float distance)
 {
     (void)ctx;

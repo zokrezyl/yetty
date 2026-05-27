@@ -97,10 +97,10 @@ struct object *animal_create(struct ctx *ctx)
         return object_alloc(_klass);
 
     /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    rpc_session_translate_class(ctx->session, "animal");
+    rpc_session_translate_class(ctx->session, "yanimal_animal");
 
     uint64_t _h = 0;
-    const char *_name = "animal";
+    const char *_name = "yanimal_animal";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
         return NULL;
@@ -128,10 +128,10 @@ struct object *cat_create(struct ctx *ctx)
         return object_alloc(_klass);
 
     /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    rpc_session_translate_class(ctx->session, "cat");
+    rpc_session_translate_class(ctx->session, "yanimal_cat");
 
     uint64_t _h = 0;
-    const char *_name = "cat";
+    const char *_name = "yanimal_cat";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
         return NULL;
@@ -159,10 +159,10 @@ struct object *dog_create(struct ctx *ctx)
         return object_alloc(_klass);
 
     /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    rpc_session_translate_class(ctx->session, "dog");
+    rpc_session_translate_class(ctx->session, "yanimal_dog");
 
     uint64_t _h = 0;
-    const char *_name = "dog";
+    const char *_name = "yanimal_dog";
     if (rpc_call(ctx->session, RPC_OP_CREATE, 0, _name, strlen(_name),
                  &_h, sizeof(_h)) != sizeof(_h) || !_h)
         return NULL;
@@ -182,10 +182,10 @@ struct object *dog_create(struct ctx *ctx)
 
 static const struct class *yanimal_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "animal") == 0) return animal_class_get();
-    if (strcmp(name, "cat") == 0) return cat_class_get();
-    if (strcmp(name, "dog") == 0) return dog_class_get();
-    if (strcmp(name, "pet") == 0) return pet_mixin_get();
+    if (strcmp(name, "yanimal_animal") == 0) return animal_class_get();
+    if (strcmp(name, "yanimal_cat") == 0) return cat_class_get();
+    if (strcmp(name, "yanimal_dog") == 0) return dog_class_get();
+    if (strcmp(name, "yanimal_pet") == 0) return pet_mixin_get();
     return NULL;
 }
 
@@ -194,11 +194,11 @@ static const struct class *yanimal_accessor_lookup(const char *name)
 struct yanimal_skel_row { const char *name; rpc_skel_fn fn; };
 
 static const struct yanimal_skel_row yanimal_skel_rows[] = {
-    {"animal_ctor", animal_ctor_skel},
-    {"animal_dtor", animal_dtor_skel},
-    {"animal_breathe", animal_breathe_skel},
-    {"animal_speak", animal_speak_skel},
-    {"animal_eat", animal_eat_skel}
+    {"yanimal_animal_ctor", animal_ctor_skel},
+    {"yanimal_animal_dtor", animal_dtor_skel},
+    {"yanimal_animal_breathe", animal_breathe_skel},
+    {"yanimal_animal_speak", animal_speak_skel},
+    {"yanimal_animal_eat", animal_eat_skel}
 };
 
 static rpc_skel_fn yanimal_skel_lookup(method_slot slot)

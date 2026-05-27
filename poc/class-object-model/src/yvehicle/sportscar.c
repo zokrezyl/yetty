@@ -4,13 +4,13 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class:sportscar")]]
-       [[clang::annotate("parent:car")]]
-       [[clang::annotate("uses:electric")]] sportscar_data {
+struct [[clang::annotate("class@yvehicle:sportscar")]]
+       [[clang::annotate("parent@yvehicle:car")]]
+       [[clang::annotate("uses@yvehicle:electric")]] sportscar_data {
     int top_speed;
 };
 
-[[clang::annotate("override:sportscar:vehicle_describe")]]
+[[clang::annotate("override@yvehicle:sportscar:vehicle_describe")]]
 static struct str sportscar_describe(struct ctx *ctx, struct object *obj, float distance)
 {
     (void)ctx;
@@ -22,7 +22,7 @@ static struct str sportscar_describe(struct ctx *ctx, struct object *obj, float 
     return r;
 }
 
-[[clang::annotate("override:sportscar:vehicle_accelerate")]]
+[[clang::annotate("override@yvehicle:sportscar:vehicle_accelerate")]]
 static int sportscar_accelerate(struct ctx *ctx, struct object *obj, float speed)
 {
     (void)ctx;

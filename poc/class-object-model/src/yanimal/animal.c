@@ -4,32 +4,32 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class:animal")]] animal_data {
+struct [[clang::annotate("class@yanimal:animal")]] animal_data {
     int age;
 };
 
-[[clang::annotate("override:animal:animal_ctor")]]
+[[clang::annotate("override@yanimal:animal:animal_ctor")]]
 static void animal_default_ctor(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
     fprintf(stderr, "  [impl] animal_default_ctor(obj=%p)\n", (void *)obj);
 }
 
-[[clang::annotate("override:animal:animal_dtor")]]
+[[clang::annotate("override@yanimal:animal:animal_dtor")]]
 static void animal_default_dtor(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
     fprintf(stderr, "  [impl] animal_default_dtor(obj=%p)\n", (void *)obj);
 }
 
-[[clang::annotate("override:animal:animal_breathe")]]
+[[clang::annotate("override@yanimal:animal:animal_breathe")]]
 static void animal_default_breathe(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
     fprintf(stderr, "  [impl] animal_default_breathe(obj=%p)\n", (void *)obj);
 }
 
-[[clang::annotate("override:animal:animal_speak")]]
+[[clang::annotate("override@yanimal:animal:animal_speak")]]
 static struct str animal_default_speak(struct ctx *ctx, struct object *obj, int volume)
 {
     (void)ctx;
@@ -41,7 +41,7 @@ static struct str animal_default_speak(struct ctx *ctx, struct object *obj, int 
     return r;
 }
 
-[[clang::annotate("override:animal:animal_eat")]]
+[[clang::annotate("override@yanimal:animal:animal_eat")]]
 static int animal_default_eat(struct ctx *ctx, struct object *obj, float amount)
 {
     (void)ctx;

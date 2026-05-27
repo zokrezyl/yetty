@@ -8,12 +8,12 @@ const struct class *car_class_get(void)
     if (cls) return cls;
 
     static const struct class_descriptor desc = {
-        .name = "car",
+        .name = "yvehicle_car",
         .type = CLASS_TYPE_REGULAR,
         .data_size = sizeof(struct car_data),
     };
     static const struct op ops[] = {
-        {"vehicle_describe", (method_id_t)vehicle_describe, (impl_t)car_describe},
+        {"yvehicle_vehicle_describe", (method_id_t)vehicle_describe, (impl_t)car_describe},
     };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                          vehicle_class_get(), NULL, 0);

@@ -9,12 +9,12 @@ const struct class *dog_class_get(void)
     if (cls) return cls;
 
     static const struct class_descriptor desc = {
-        .name = "dog",
+        .name = "yanimal_dog",
         .type = CLASS_TYPE_REGULAR,
         .data_size = sizeof(struct dog_data),
     };
     static const struct op ops[] = {
-        {"animal_speak", (method_id_t)animal_speak, (impl_t)dog_speak},
+        {"yanimal_animal_speak", (method_id_t)animal_speak, (impl_t)dog_speak},
     };
     const struct class *mixins[] = { pet_mixin_get() };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),

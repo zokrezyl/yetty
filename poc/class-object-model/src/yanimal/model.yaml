@@ -1,5 +1,6 @@
 methods:
   - slot: animal_ctor
+    domain: yanimal
     owning_class: animal
     return_type: void
     args:
@@ -8,6 +9,7 @@ methods:
       - name: obj
         type: "struct object *"
   - slot: animal_dtor
+    domain: yanimal
     owning_class: animal
     return_type: void
     args:
@@ -16,6 +18,7 @@ methods:
       - name: obj
         type: "struct object *"
   - slot: animal_breathe
+    domain: yanimal
     owning_class: animal
     return_type: void
     args:
@@ -24,6 +27,7 @@ methods:
       - name: obj
         type: "struct object *"
   - slot: animal_speak
+    domain: yanimal
     owning_class: animal
     return_type: struct str
     args:
@@ -34,6 +38,7 @@ methods:
       - name: volume
         type: int
   - slot: animal_eat
+    domain: yanimal
     owning_class: animal
     return_type: int
     args:
@@ -45,6 +50,7 @@ methods:
         type: float
 classes:
   - name: animal
+    domain: yanimal
     accessor: animal_class_get
     type: regular
     source_file: src/yanimal/animal.c
@@ -63,28 +69,37 @@ classes:
       - slot: animal_eat
         impl: animal_default_eat
   - name: cat
+    domain: yanimal
     accessor: cat_class_get
     type: regular
     source_file: src/yanimal/cat.c
-    parent: animal
+    parent:
+      domain: yanimal
+      name: animal
     mixins:
-      - pet
+      - domain: yanimal
+        name: pet
     data: struct cat_data
     ops:
       - slot: animal_speak
         impl: cat_speak
   - name: dog
+    domain: yanimal
     accessor: dog_class_get
     type: regular
     source_file: src/yanimal/dog.c
-    parent: animal
+    parent:
+      domain: yanimal
+      name: animal
     mixins:
-      - pet
+      - domain: yanimal
+        name: pet
     data: struct dog_data
     ops:
       - slot: animal_speak
         impl: dog_speak
   - name: pet
+    domain: yanimal
     accessor: pet_mixin_get
     type: mixin
     source_file: src/yanimal/pet.c

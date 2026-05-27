@@ -7,12 +7,12 @@ const struct class *electric_mixin_get(void)
     if (cls) return cls;
 
     static const struct class_descriptor desc = {
-        .name = "electric",
+        .name = "yvehicle_electric",
         .type = CLASS_TYPE_MIXIN,
         .data_size = sizeof(struct electric_data),
     };
     static const struct op ops[] = {
-        {"vehicle_brake", (method_id_t)vehicle_brake, (impl_t)electric_brake},
+        {"yvehicle_vehicle_brake", (method_id_t)vehicle_brake, (impl_t)electric_brake},
     };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                          NULL, NULL, 0);

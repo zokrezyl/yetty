@@ -7,12 +7,12 @@ const struct class *pet_mixin_get(void)
     if (cls) return cls;
 
     static const struct class_descriptor desc = {
-        .name = "pet",
+        .name = "yanimal_pet",
         .type = CLASS_TYPE_MIXIN,
         .data_size = sizeof(struct pet_data),
     };
     static const struct op ops[] = {
-        {"animal_eat", (method_id_t)animal_eat, (impl_t)pet_eat},
+        {"yanimal_animal_eat", (method_id_t)animal_eat, (impl_t)pet_eat},
     };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                          NULL, NULL, 0);

@@ -4,13 +4,13 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class:cat")]]
-       [[clang::annotate("parent:animal")]]
-       [[clang::annotate("uses:pet")]] cat_data {
+struct [[clang::annotate("class@yanimal:cat")]]
+       [[clang::annotate("parent@yanimal:animal")]]
+       [[clang::annotate("uses@yanimal:pet")]] cat_data {
     int lives_remaining;
 };
 
-[[clang::annotate("override:cat:animal_speak")]]
+[[clang::annotate("override@yanimal:cat:animal_speak")]]
 static struct str cat_speak(struct ctx *ctx, struct object *obj, int volume)
 {
     (void)ctx;
