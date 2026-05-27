@@ -1,6 +1,9 @@
 /* GENERATED — do not edit. */
 #include "yanimal/pet.h"
 
+__attribute__((unused))
+static yanimal_animal_eat_fn _yanimal_pet_yanimal_animal_eat_check = pet_eat;
+
 const struct class *yanimal_pet_mixin_get(void)
 {
     static const struct class *cls = NULL;

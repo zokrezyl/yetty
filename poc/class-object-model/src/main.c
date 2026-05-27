@@ -3,14 +3,14 @@
  * skel table behind a single -Iinclude. main.c uses each module strictly
  * through `#include "<module>/<class>.h"`. */
 
-#include "yvehicle/sportscar.h"   /* pulls yvehicle/methods.gen.h transitively */
+#include "yvehicle/sportscar.h" /* pulls yvehicle/methods.gen.h transitively */
 #include "yvehicle/rpc.gen.h"
 
 #include "yanimal/cat.h"
 #include "yanimal/dog.h"
 #include "yanimal/rpc.gen.h"
 
-#include "ytuning/tuned_sportscar.h"  /* cross-domain subclass of yvehicle:sportscar */
+#include "ytuning/tuned_sportscar.h" /* cross-domain subclass of yvehicle:sportscar */
 #include "ytuning/rpc.gen.h"
 
 #include "rpc.h"
@@ -26,6 +26,11 @@ static void exercise_sportscar(struct ctx *ctx, struct object *obj)
     yvehicle_vehicle_ctor(ctx, obj);
     yvehicle_vehicle_start(ctx, obj);
     int a = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
+    a = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
+    fprintf(stderr, "[caller] accelerate -> %d\n", a);
+    a = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
+    fprintf(stderr, "[caller] accelerate -> %d\n", a);
+    a = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
     fprintf(stderr, "[caller] accelerate -> %d\n", a);
     int b = yvehicle_vehicle_brake(ctx, obj, 0.5f);
     fprintf(stderr, "[caller] brake -> %d\n", b);
@@ -56,7 +61,7 @@ static void run_client(int fd)
 {
     struct rpc_session *s = rpc_session_create(fd);
     struct ctx local = {0};
-    struct ctx remote = { .session = s };
+    struct ctx remote = {.session = s};
 
     fprintf(stderr, "\n=== local sportscar (yvehicle) ===\n");
     struct object *sc = yvehicle_sportscar_create(&local);
@@ -99,8 +104,15 @@ int main(void)
         return 1;
     }
     pid_t pid = fork();
-    if (pid < 0) { perror("fork"); return 1; }
-    if (pid == 0) { close(sv[0]); run_server(sv[1]); _exit(0); }
+    if (pid < 0) {
+        perror("fork");
+        return 1;
+    }
+    if (pid == 0) {
+        close(sv[0]);
+        run_server(sv[1]);
+        _exit(0);
+    }
     close(sv[1]);
     run_client(sv[0]);
     int status = 0;

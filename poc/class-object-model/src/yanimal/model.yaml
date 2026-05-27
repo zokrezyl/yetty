@@ -61,57 +61,18 @@ classes:
       - slot: animal_ctor
         slot_domain: yanimal
         impl: animal_default_ctor
-        impl_sig:
-          return_type: void
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
       - slot: animal_dtor
         slot_domain: yanimal
         impl: animal_default_dtor
-        impl_sig:
-          return_type: void
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
       - slot: animal_breathe
         slot_domain: yanimal
         impl: animal_default_breathe
-        impl_sig:
-          return_type: void
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
       - slot: animal_speak
         slot_domain: yanimal
         impl: animal_default_speak
-        impl_sig:
-          return_type: struct str
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: volume
-              type: int
       - slot: animal_eat
         slot_domain: yanimal
         impl: animal_default_eat
-        impl_sig:
-          return_type: int
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: amount
-              type: float
   - name: cat
     domain: yanimal
     accessor: yanimal_cat_class_get
@@ -128,15 +89,6 @@ classes:
       - slot: animal_speak
         slot_domain: yanimal
         impl: cat_speak
-        impl_sig:
-          return_type: struct str
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: volume
-              type: int
   - name: dog
     domain: yanimal
     accessor: yanimal_dog_class_get
@@ -153,15 +105,6 @@ classes:
       - slot: animal_speak
         slot_domain: yanimal
         impl: dog_speak
-        impl_sig:
-          return_type: struct str
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: volume
-              type: int
   - name: pet
     domain: yanimal
     accessor: yanimal_pet_mixin_get
@@ -174,12 +117,3 @@ classes:
       - slot: animal_eat
         slot_domain: yanimal
         impl: pet_eat
-        impl_sig:
-          return_type: int
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: amount
-              type: float

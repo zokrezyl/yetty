@@ -2,6 +2,9 @@
 #include "yvehicle/motorbike.h"
 #include "yvehicle/vehicle.h"
 
+__attribute__((unused))
+static yvehicle_vehicle_describe_fn _yvehicle_motorbike_yvehicle_vehicle_describe_check = motorbike_describe;
+
 const struct class *yvehicle_motorbike_class_get(void)
 {
     static const struct class *cls = NULL;

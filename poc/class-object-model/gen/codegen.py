@@ -175,14 +175,13 @@ def _split_ann(ann: str):
     return verb.strip(), [p.strip() for p in rest.split(":") if p.strip()]
 
 
-def parse_sources(include_dirs: list, sources: list, module: str,
-                  include_base: Path) -> dict:
+def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     """Walk annotated sources, build the model. `module` is the
     codegen's CLI argument; the `<domain>` segment in every class/
     mixin/override annotation MUST equal it. parent/uses annotations
-    may name a different domain (cross-module reference). Cross-domain
-    overrides are signature-validated against the foreign module's
-    slots.json manifest under `include_base` — see emit_slots_manifest."""
+    may name a different domain (cross-module reference). Override
+    signatures are NOT checked here — the generator emits a C-side
+    typedef assignment per override that the compiler type-checks."""
     methods: dict = {}
     classes: dict = {}
 
@@ -237,28 +236,23 @@ def parse_sources(include_dirs: list, sources: list, module: str,
                                 "override@<DOMAIN>:<CLASS>:<SLOT_DOMAIN>:<SLOT>\n")
                             sys.exit(1)
                         require_local_domain(role, impl_dom)
-                        qt = decl.get("type", {}).get("qualType", "")
-                        impl_sig = {
-                            "return_type": _parse_return_type(qt),
-                            "args": _fn_args(decl),
-                        }
                         b = bucket(cls)
                         b["ops"].append({
                             "slot": slot,
                             "slot_domain": slot_dom,
                             "impl": decl["name"],
-                            "impl_sig": impl_sig,
                         })
                         # Only emit a public stub for slots OWNED by this
                         # module. A cross-domain override targets a slot
                         # whose stub already lives in the slot's home
                         # module.
                         if slot_dom == module and slot not in methods:
+                            qt = decl.get("type", {}).get("qualType", "")
                             methods[slot] = {
                                 "slot": slot, "domain": slot_dom,
                                 "owning_class": cls,
-                                "return_type": impl_sig["return_type"],
-                                "args": impl_sig["args"],
+                                "return_type": _parse_return_type(qt),
+                                "args": _fn_args(decl),
                             }
             elif kind == "RecordDecl":
                 # class@<D>:<C> / mixin@<D>:<C> sit on the data struct.
@@ -293,94 +287,20 @@ def parse_sources(include_dirs: list, sources: list, module: str,
                             require_segments(role, args, 2, "uses@<DOMAIN>:<MIXIN>")
                             b["mixins"].append({"domain": args[0], "name": args[1]})
 
-    model = {
+    return {
         "methods": list(methods.values()),
         "classes": [c for c in classes.values() if c["accessor"]],
     }
-    validate_cross_domain_overrides(model, module, include_base)
-    return model
 
 
-# ============== slot manifest + cross-domain validation ==================
-#
-# Each module's run emits <include_base>/<module>/slots.json carrying
-# the signature of every slot the module OWNS. A second module that
-# overrides a foreign-owned slot loads that manifest to confirm its
-# impl matches — without this, the wrong-signature impl would be cast
-# through impl_t (void(*)(void)) and the C compiler couldn't catch the
-# mismatch, leaving undefined behaviour at dispatch time.
-#
-# Build order matters: the foreign module must have been codegen'd at
-# least once (so its slots.json exists). The Makefile encodes this as
-# a per-module stamp dependency.
-
-def slots_manifest_path(include_base: Path, domain: str) -> Path:
-    return include_base / domain / "slots.json"
-
-
-def emit_slots_manifest(model: dict, module: str, out_path: Path):
-    """Write the per-module slot-signature manifest. Indexed by local
-    slot name (the form used in override annotations); the foreign
-    consumer concatenates "<domain>_<local>" to get the qualified C
-    symbol name on its own."""
-    payload = {
-        m["slot"]: {
-            "return_type": m["return_type"],
-            "args": m["args"],
-        }
-        for m in model.get("methods", [])
-    }
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2) + "\n")
-
-
-def _sig_args_canonical(args: list) -> list:
-    # Names don't matter for signature equality; types do.
-    return [a.get("type", "").strip() for a in args]
-
-
-def validate_cross_domain_overrides(model: dict, module: str, include_base: Path):
-    """For every op whose slot_domain != module, locate the slot's
-    home-module manifest and refuse the build on mismatched signature
-    or missing manifest."""
-    foreign_cache: dict = {}
-
-    def load(dom: str):
-        if dom in foreign_cache:
-            return foreign_cache[dom]
-        p = slots_manifest_path(include_base, dom)
-        if not p.exists():
-            sys.stderr.write(
-                f"error: cross-domain override targets domain '{dom}' but "
-                f"{p} is missing. Build '{dom}' first.\n")
-            sys.exit(1)
-        foreign_cache[dom] = json.loads(p.read_text())
-        return foreign_cache[dom]
-
-    for cls in model.get("classes", []):
-        for op in cls.get("ops", []):
-            if op["slot_domain"] == module:
-                continue
-            manifest = load(op["slot_domain"])
-            slot = op["slot"]
-            if slot not in manifest:
-                sys.stderr.write(
-                    f"error: override@{module}:{cls['name']}:"
-                    f"{op['slot_domain']}:{slot} — slot not declared in "
-                    f"'{op['slot_domain']}' manifest.\n")
-                sys.exit(1)
-            want_ret = manifest[slot]["return_type"].strip()
-            want_args = _sig_args_canonical(manifest[slot]["args"])
-            got_ret = op["impl_sig"]["return_type"].strip()
-            got_args = _sig_args_canonical(op["impl_sig"]["args"])
-            if want_ret != got_ret or want_args != got_args:
-                sys.stderr.write(
-                    f"error: signature mismatch for cross-domain override "
-                    f"of {op['slot_domain']}:{slot} (impl '{op['impl']}' "
-                    f"in class {cls['name']}):\n"
-                    f"  expected: {want_ret} ({', '.join(want_args)})\n"
-                    f"  got:      {got_ret} ({', '.join(got_args)})\n")
-                sys.exit(1)
+# Signature validation for cross-domain (and same-domain) overrides is
+# done in *C*, not here. Each public stub gets a per-slot function-
+# pointer typedef in methods.gen.h (see emit_methods_h). Each override
+# emits a file-scope `static <slot>_fn _check_… = <impl>;` line in
+# the class's .gen.c (see emit_class_accessor). If the impl signature
+# doesn't match the slot's, the C compiler errors at the assignment.
+# No JSON, no YAML, no out-of-band manifest, no codegen-order coupling
+# in the Makefile beyond the headers already needed for compilation.
 
 
 # ============== yaml writer (informational dump) ========================
@@ -522,7 +442,11 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
 
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
+        type_only = ", ".join(a["type"] for a in m["args"])
+        # Public-stub declaration + a function-pointer typedef any
+        # override impl can be type-checked against from its own .gen.c.
         parts.append(f"{m['return_type']} {qualified_slot(m)}({params});\n")
+        parts.append(f"typedef {m['return_type']} (*{qualified_slot(m)}_fn)({type_only});\n")
 
     parts.append("\n#endif\n")
     out_path.write_text("".join(parts))
@@ -618,6 +542,28 @@ def emit_class_accessor(cls: dict) -> str:
     data = cls["data"] or "char"
     type_const = "CLASS_TYPE_MIXIN" if is_mixin else "CLASS_TYPE_REGULAR"
 
+    # Compile-time signature check: assigning each override impl to a
+    # variable of the slot's function-pointer typedef forces the C
+    # compiler to verify return type + parameter types match. Mismatch
+    # ⇒ compile error at this line, well before the impl_t cast in the
+    # ops table erases types. Works for both same-domain and cross-
+    # domain overrides — the typedef lives in <slot_domain>/methods.gen.h
+    # which the .gen.c already includes.
+    #
+    # The check variable name MUST include slot_domain — a class that
+    # overrides the same local slot name from two different domains
+    # (e.g. yzoo:cleanup and ymachine:cleanup) would otherwise collide
+    # on the static variable name.
+    qcls = qualified_class(cls)
+    typecheck_lines = [
+        f"__attribute__((unused))\n"
+        f"static {op_c_name(op)}_fn _{qcls}_{op_c_name(op)}_check = {op['impl']};"
+        for op in cls["ops"]
+    ]
+    typecheck_block = "\n".join(typecheck_lines)
+    if typecheck_block:
+        typecheck_block += "\n\n"
+
     # Each op references its slot by (slot_domain, local_name). The
     # slot_table is per-domain (see slot_table_get in class.c), so the
     # runtime can locate the right table without any string splitting.
@@ -649,6 +595,7 @@ def emit_class_accessor(cls: dict) -> str:
         mixin_count = "0"
 
     return f"""\
+{typecheck_block}\
 const struct class *{accessor}(void)
 {{
     static const struct class *cls = NULL;
@@ -971,14 +918,9 @@ def main():
     # Clang search path: shared include/, the module's own generated-
     # header dir (include/<module>/), and the module src dir (for
     # any neighbour .h that might still exist transiently).
-    model = parse_sources([include_base, include_module, module_src], sources,
-                          module, include_base)
+    model = parse_sources([include_base, include_module, module_src], sources, module)
     for m in model["methods"]:
         validate_method(m)
-
-    # Emit the slot-signature manifest first so any sibling module
-    # built after this one can validate its cross-domain overrides.
-    emit_slots_manifest(model, module, slots_manifest_path(include_base, module))
 
     emit_class_public_headers(model, module, include_module)
     emit_methods_h(model, module, include_module / "methods.gen.h")

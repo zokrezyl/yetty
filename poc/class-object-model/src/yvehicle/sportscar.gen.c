@@ -3,6 +3,11 @@
 #include "yvehicle/electric.h"
 #include "yvehicle/sportscar.h"
 
+__attribute__((unused))
+static yvehicle_vehicle_describe_fn _yvehicle_sportscar_yvehicle_vehicle_describe_check = sportscar_describe;
+__attribute__((unused))
+static yvehicle_vehicle_accelerate_fn _yvehicle_sportscar_yvehicle_vehicle_accelerate_check = sportscar_accelerate;
+
 const struct class *yvehicle_sportscar_class_get(void)
 {
     static const struct class *cls = NULL;

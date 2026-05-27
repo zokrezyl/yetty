@@ -3,6 +3,9 @@
 #include "yanimal/dog.h"
 #include "yanimal/pet.h"
 
+__attribute__((unused))
+static yanimal_animal_speak_fn _yanimal_dog_yanimal_animal_speak_check = dog_speak;
+
 const struct class *yanimal_dog_class_get(void)
 {
     static const struct class *cls = NULL;

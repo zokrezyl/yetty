@@ -1,6 +1,19 @@
 /* GENERATED — do not edit. */
 #include "yvehicle/vehicle.h"
 
+__attribute__((unused))
+static yvehicle_vehicle_ctor_fn _yvehicle_vehicle_yvehicle_vehicle_ctor_check = vehicle_default_ctor;
+__attribute__((unused))
+static yvehicle_vehicle_dtor_fn _yvehicle_vehicle_yvehicle_vehicle_dtor_check = vehicle_default_dtor;
+__attribute__((unused))
+static yvehicle_vehicle_start_fn _yvehicle_vehicle_yvehicle_vehicle_start_check = vehicle_default_start;
+__attribute__((unused))
+static yvehicle_vehicle_accelerate_fn _yvehicle_vehicle_yvehicle_vehicle_accelerate_check = vehicle_default_accelerate;
+__attribute__((unused))
+static yvehicle_vehicle_brake_fn _yvehicle_vehicle_yvehicle_vehicle_brake_check = vehicle_default_brake;
+__attribute__((unused))
+static yvehicle_vehicle_describe_fn _yvehicle_vehicle_yvehicle_vehicle_describe_check = vehicle_default_describe;
+
 const struct class *yvehicle_vehicle_class_get(void)
 {
     static const struct class *cls = NULL;

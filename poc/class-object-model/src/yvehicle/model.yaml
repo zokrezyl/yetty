@@ -72,69 +72,21 @@ classes:
       - slot: vehicle_ctor
         slot_domain: yvehicle
         impl: vehicle_default_ctor
-        impl_sig:
-          return_type: void
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
       - slot: vehicle_dtor
         slot_domain: yvehicle
         impl: vehicle_default_dtor
-        impl_sig:
-          return_type: void
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
       - slot: vehicle_start
         slot_domain: yvehicle
         impl: vehicle_default_start
-        impl_sig:
-          return_type: void
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
       - slot: vehicle_accelerate
         slot_domain: yvehicle
         impl: vehicle_default_accelerate
-        impl_sig:
-          return_type: int
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: speed
-              type: float
       - slot: vehicle_brake
         slot_domain: yvehicle
         impl: vehicle_default_brake
-        impl_sig:
-          return_type: int
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: intensity
-              type: float
       - slot: vehicle_describe
         slot_domain: yvehicle
         impl: vehicle_default_describe
-        impl_sig:
-          return_type: struct str
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: distance
-              type: float
   - name: motorbike
     domain: yvehicle
     accessor: yvehicle_motorbike_class_get
@@ -149,15 +101,6 @@ classes:
       - slot: vehicle_describe
         slot_domain: yvehicle
         impl: motorbike_describe
-        impl_sig:
-          return_type: struct str
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: distance
-              type: float
   - name: car
     domain: yvehicle
     accessor: yvehicle_car_class_get
@@ -172,15 +115,6 @@ classes:
       - slot: vehicle_describe
         slot_domain: yvehicle
         impl: car_describe
-        impl_sig:
-          return_type: struct str
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: distance
-              type: float
   - name: sportscar
     domain: yvehicle
     accessor: yvehicle_sportscar_class_get
@@ -197,27 +131,9 @@ classes:
       - slot: vehicle_describe
         slot_domain: yvehicle
         impl: sportscar_describe
-        impl_sig:
-          return_type: struct str
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: distance
-              type: float
       - slot: vehicle_accelerate
         slot_domain: yvehicle
         impl: sportscar_accelerate
-        impl_sig:
-          return_type: int
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: speed
-              type: float
   - name: electric
     domain: yvehicle
     accessor: yvehicle_electric_mixin_get
@@ -230,12 +146,3 @@ classes:
       - slot: vehicle_brake
         slot_domain: yvehicle
         impl: electric_brake
-        impl_sig:
-          return_type: int
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: intensity
-              type: float

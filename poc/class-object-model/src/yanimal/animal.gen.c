@@ -1,6 +1,17 @@
 /* GENERATED — do not edit. */
 #include "yanimal/animal.h"
 
+__attribute__((unused))
+static yanimal_animal_ctor_fn _yanimal_animal_yanimal_animal_ctor_check = animal_default_ctor;
+__attribute__((unused))
+static yanimal_animal_dtor_fn _yanimal_animal_yanimal_animal_dtor_check = animal_default_dtor;
+__attribute__((unused))
+static yanimal_animal_breathe_fn _yanimal_animal_yanimal_animal_breathe_check = animal_default_breathe;
+__attribute__((unused))
+static yanimal_animal_speak_fn _yanimal_animal_yanimal_animal_speak_check = animal_default_speak;
+__attribute__((unused))
+static yanimal_animal_eat_fn _yanimal_animal_yanimal_animal_eat_check = animal_default_eat;
+
 const struct class *yanimal_animal_class_get(void)
 {
     static const struct class *cls = NULL;

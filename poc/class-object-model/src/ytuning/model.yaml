@@ -14,12 +14,3 @@ classes:
       - slot: vehicle_describe
         slot_domain: yvehicle
         impl: tuned_sportscar_describe
-        impl_sig:
-          return_type: struct str
-          args:
-            - name: ctx
-              type: "struct ctx *"
-            - name: obj
-              type: "struct object *"
-            - name: distance
-              type: float

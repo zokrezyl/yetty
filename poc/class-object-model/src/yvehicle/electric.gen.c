@@ -1,6 +1,9 @@
 /* GENERATED — do not edit. */
 #include "yvehicle/electric.h"
 
+__attribute__((unused))
+static yvehicle_vehicle_brake_fn _yvehicle_electric_yvehicle_vehicle_brake_check = electric_brake;
+
 const struct class *yvehicle_electric_mixin_get(void)
 {
     static const struct class *cls = NULL;

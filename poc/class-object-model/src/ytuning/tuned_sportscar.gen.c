@@ -3,6 +3,9 @@
 #include "yvehicle/methods.gen.h"
 #include "yvehicle/sportscar.h"
 
+__attribute__((unused))
+static yvehicle_vehicle_describe_fn _ytuning_tuned_sportscar_yvehicle_vehicle_describe_check = tuned_sportscar_describe;
+
 const struct class *ytuning_tuned_sportscar_class_get(void)
 {
     static const struct class *cls = NULL;

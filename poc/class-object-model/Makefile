@@ -8,7 +8,12 @@
 CC      ?= cc
 UV      ?= uv
 
-CFLAGS  ?= -std=c2x -Wall -Wextra -Wno-attributes -Iinclude -g
+# -Werror=incompatible-pointer-types so the typedef-based override
+# signature check (see emit_class_accessor in gen/codegen.py) is a
+# hard error on every supported compiler — clang already errors by
+# default, GCC only warns without this flag.
+CFLAGS  ?= -std=c2x -Wall -Wextra -Wno-attributes -Iinclude -g \
+           -Werror=incompatible-pointer-types
 
 # Shared runtime — hand-written, no codegen.
 RUNTIME_HEADERS := include/class.h include/rpc.h include/uthash.h
@@ -27,7 +32,7 @@ YV_PUB_H := $(YV_INCDIR)/vehicle.h $(YV_INCDIR)/motorbike.h \
 YV_INTERNAL := $(patsubst %.c,%.gen.c,$(YV_ANN)) \
                $(YV_SRCDIR)/methods.gen.c $(YV_SRCDIR)/rpc.gen.c \
                $(YV_SRCDIR)/model.yaml
-YV_STAMP := $(YV_SRCDIR)/.stamp
+YV_GEN := $(YV_PUB_H) $(YV_INTERNAL)
 YV_OBJ := $(patsubst %.c,%.o,$(YV_ANN)) \
           $(YV_SRCDIR)/methods.gen.o $(YV_SRCDIR)/rpc.gen.o
 
@@ -42,31 +47,29 @@ YA_PUB_H := $(YA_INCDIR)/animal.h $(YA_INCDIR)/cat.h \
 YA_INTERNAL := $(patsubst %.c,%.gen.c,$(YA_ANN)) \
                $(YA_SRCDIR)/methods.gen.c $(YA_SRCDIR)/rpc.gen.c \
                $(YA_SRCDIR)/model.yaml
-YA_STAMP := $(YA_SRCDIR)/.stamp
+YA_GEN := $(YA_PUB_H) $(YA_INTERNAL)
 YA_OBJ := $(patsubst %.c,%.o,$(YA_ANN)) \
           $(YA_SRCDIR)/methods.gen.o $(YA_SRCDIR)/rpc.gen.o
 
-# ---- ytuning module (cross-domain subclass of yvehicle:sportscar) -------
-YM_SRCDIR := src/ytuning
-YM_INCDIR := include/ytuning
-YM_ANN := $(YM_SRCDIR)/tuned_sportscar.c
-YM_PUB_H := $(YM_INCDIR)/tuned_sportscar.h \
-            $(YM_INCDIR)/methods.gen.h $(YM_INCDIR)/rpc.gen.h
-YM_INTERNAL := $(patsubst %.c,%.gen.c,$(YM_ANN)) \
-               $(YM_SRCDIR)/methods.gen.c $(YM_SRCDIR)/rpc.gen.c \
-               $(YM_SRCDIR)/model.yaml
-YM_STAMP := $(YM_SRCDIR)/.stamp
-YM_OBJ := $(patsubst %.c,%.o,$(YM_ANN)) \
-          $(YM_SRCDIR)/methods.gen.o $(YM_SRCDIR)/rpc.gen.o
+# ---- ytuning module (cross-domain subclass of yvehicle:sportscar) -----
+YT_SRCDIR := src/ytuning
+YT_INCDIR := include/ytuning
+YT_ANN := $(YT_SRCDIR)/tuned_sportscar.c
+YT_PUB_H := $(YT_INCDIR)/tuned_sportscar.h \
+            $(YT_INCDIR)/methods.gen.h $(YT_INCDIR)/rpc.gen.h
+YT_INTERNAL := $(patsubst %.c,%.gen.c,$(YT_ANN)) \
+               $(YT_SRCDIR)/methods.gen.c $(YT_SRCDIR)/rpc.gen.c \
+               $(YT_SRCDIR)/model.yaml
+YT_GEN := $(YT_PUB_H) $(YT_INTERNAL)
+YT_OBJ := $(patsubst %.c,%.o,$(YT_ANN)) \
+          $(YT_SRCDIR)/methods.gen.o $(YT_SRCDIR)/rpc.gen.o
 
 # ---- aggregate --------------------------------------------------------
 RUNTIME_OBJ := $(patsubst %.c,%.o,$(RUNTIME_SRC))
-ALL_OBJ := $(RUNTIME_OBJ) $(YV_OBJ) $(YA_OBJ) $(YM_OBJ) src/main.o
+ALL_OBJ := $(RUNTIME_OBJ) $(YV_OBJ) $(YA_OBJ) $(YT_OBJ) src/main.o
 
-ALL_HEADERS := $(RUNTIME_HEADERS) $(YV_PUB_H) $(YA_PUB_H) $(YM_PUB_H)
-ALL_GEN := $(YV_PUB_H) $(YV_INTERNAL) $(YV_STAMP) \
-           $(YA_PUB_H) $(YA_INTERNAL) $(YA_STAMP) \
-           $(YM_PUB_H) $(YM_INTERNAL) $(YM_STAMP)
+ALL_HEADERS := $(RUNTIME_HEADERS) $(YV_PUB_H) $(YA_PUB_H) $(YT_PUB_H)
+ALL_GEN := $(YV_GEN) $(YA_GEN) $(YT_GEN)
 
 BIN := poc
 
@@ -88,39 +91,33 @@ run: build
 ## clean     remove build artefacts and every generated file
 clean:
 	rm -f $(ALL_OBJ) $(BIN) $(ALL_GEN)
-	rm -f $(YV_INCDIR)/slots.json $(YA_INCDIR)/slots.json $(YM_INCDIR)/slots.json
-	@rmdir $(YV_INCDIR) $(YA_INCDIR) $(YM_INCDIR) 2>/dev/null || true
+	@rmdir $(YV_INCDIR) $(YA_INCDIR) $(YT_INCDIR) 2>/dev/null || true
 
 $(BIN): $(ALL_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
-# Compile rule. All module stamps are global deps — a header touched in
-# any module triggers a recompile of everything that depends on the
-# shared search path.
-%.o: %.c $(YV_STAMP) $(YA_STAMP) $(YM_STAMP) $(ALL_HEADERS)
+# Compile rule. Every .c depends on every generated header so that a
+# regen of any module's headers triggers a rebuild of everything that
+# shares the -Iinclude search path.
+%.o: %.c $(ALL_HEADERS) $(ALL_GEN)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# Per-module codegen invocation. include/<module>/ is created by the
-# generator; module_src is the existing src/<module>/.
-$(YV_STAMP): gen/codegen.py $(YV_ANN) $(RUNTIME_HEADERS)
+# Per-module codegen — grouped-target rule (GNU make >= 4.3). One
+# codegen invocation produces ALL of $(YV_GEN); the `&:` syntax tells
+# make so. If ANY file in the group is missing or older than any
+# prerequisite (the annotated .c, the runtime headers, or the codegen
+# script), make re-runs the recipe and refreshes all of them.
+$(YV_GEN) &: gen/codegen.py $(YV_ANN) $(RUNTIME_HEADERS)
 	$(UV) run gen/codegen.py yvehicle include $(YV_SRCDIR) $(YV_ANN)
-	@touch $@
 
-$(YA_STAMP): gen/codegen.py $(YA_ANN) $(RUNTIME_HEADERS)
+$(YA_GEN) &: gen/codegen.py $(YA_ANN) $(RUNTIME_HEADERS)
 	$(UV) run gen/codegen.py yanimal include $(YA_SRCDIR) $(YA_ANN)
-	@touch $@
 
 # ytuning has a cross-domain override targeting a yvehicle-owned slot.
-# Its codegen MUST run after yvehicle's so that yvehicle's slots.json
-# manifest exists for signature validation — encoded as a stamp dep.
-$(YM_STAMP): gen/codegen.py $(YM_ANN) $(RUNTIME_HEADERS) $(YV_STAMP)
-	$(UV) run gen/codegen.py ytuning include $(YM_SRCDIR) $(YM_ANN)
-	@touch $@
-
-# Existence of the stamp implies the generated artefacts exist.
-$(YV_PUB_H) $(YV_INTERNAL): $(YV_STAMP)
-	@test -f $@
-$(YA_PUB_H) $(YA_INTERNAL): $(YA_STAMP)
-	@test -f $@
-$(YM_PUB_H) $(YM_INTERNAL): $(YM_STAMP)
-	@test -f $@
+# Its codegen needs yvehicle's generated headers — specifically the
+# function-pointer typedef in yvehicle/methods.gen.h the .gen.c uses
+# for the compile-time signature check. Depend on that header (and
+# on yvehicle/sportscar.h, the parent's accessor decl) directly.
+$(YT_GEN) &: gen/codegen.py $(YT_ANN) $(RUNTIME_HEADERS) \
+             $(YV_INCDIR)/methods.gen.h $(YV_INCDIR)/sportscar.h
+	$(UV) run gen/codegen.py ytuning include $(YT_SRCDIR) $(YT_ANN)
