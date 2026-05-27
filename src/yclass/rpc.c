@@ -164,13 +164,30 @@ static int write_full(struct yetty_yclass_transport *t, const void *buf, size_t 
 
 /* -------- admin handlers (server side) ----------------------------- */
 
+/* Copy `len` wire bytes into a freshly-allocated NUL-terminated C
+ * string. No fixed cap — qualified yclass names can be long when a
+ * module/class/slot chain is deep, and silent truncation was making
+ * lookups fail invisibly. Caller owns the returned pointer.
+ *
+ * Returns NULL on alloc failure; the caller should treat that the
+ * same as a lookup miss (return 0 from the handler). */
+static char *dup_wire_name(const void *bytes, size_t len)
+{
+    char *s = malloc(len + 1);
+    if (!s)
+        return NULL;
+    if (len)
+        memcpy(s, bytes, len);
+    s[len] = 0;
+    return s;
+}
+
 static size_t handle_resolve_slot(const void *body, size_t body_len, void *resp,
                                   size_t resp_max)
 {
-    char name[128];
-    size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
-    memcpy(name, body, n);
-    name[n] = 0;
+    char *name = dup_wire_name(body, body_len);
+    if (!name)
+        return 0;
     struct yetty_yclass_method_slot_result sr = yetty_yclass_method_slot_by_qname(name);
     uint32_t out;
     if (YETTY_IS_ERR(sr)) {
@@ -179,10 +196,13 @@ static size_t handle_resolve_slot(const void *body, size_t body_len, void *resp,
     } else {
         out = (uint32_t)sr.value;
     }
-    if (resp_max < sizeof(out))
+    if (resp_max < sizeof(out)) {
+        free(name);
         return 0;
+    }
     memcpy(resp, &out, sizeof(out));
     ydebug("resolve_slot('%s') -> %u", name, out);
+    free(name);
     return sizeof(out);
 }
 
@@ -211,38 +231,40 @@ static void get_class_emit(const char *name, yetty_yclass_method_slot slot, void
 
 static size_t handle_get_class(const void *body, size_t body_len, void *resp, size_t resp_max)
 {
-    char name[128];
-    size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
-    memcpy(name, body, n);
-    name[n] = 0;
+    char *name = dup_wire_name(body, body_len);
+    if (!name)
+        return 0;
     struct yetty_yclass_ptr_result cr = yetty_yclass_by_name(name);
     if (YETTY_IS_ERR(cr)) {
         yetty_ycore_error_print(stderr, "[server] get_class", cr.error);
         yetty_ycore_error_destroy(cr.error);
+        free(name);
         return 0;
     }
     struct get_class_ctx gc = {resp, 0, resp_max};
     yetty_yclass_for_each_slot(cr.value, get_class_emit, &gc);
     ydebug("get_class('%s') -> %zu entries (%zu bytes)", name, gc.off / 6, gc.off);
+    free(name);
     return gc.off;
 }
 
 static size_t handle_create(const void *body, size_t body_len, void *resp, size_t resp_max)
 {
-    char name[128];
-    size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
-    memcpy(name, body, n);
-    name[n] = 0;
+    char *name = dup_wire_name(body, body_len);
+    if (!name)
+        return 0;
     struct yetty_yclass_ptr_result cr = yetty_yclass_by_name(name);
     if (YETTY_IS_ERR(cr)) {
         yetty_ycore_error_print(stderr, "[server] create class_by_name", cr.error);
         yetty_ycore_error_destroy(cr.error);
+        free(name);
         return 0;
     }
     struct yetty_yclass_object_ptr_result obj_r = yetty_yclass_object_alloc(cr.value);
     if (YETTY_IS_ERR(obj_r)) {
         yetty_ycore_error_print(stderr, "[server] create object_alloc", obj_r.error);
         yetty_ycore_error_destroy(obj_r.error);
+        free(name);
         return 0;
     }
     uint64_t h = yetty_yclass_rpc_register_object(obj_r.value);
@@ -251,12 +273,16 @@ static size_t handle_create(const void *body, size_t body_len, void *resp, size_
          * Free it here so handle=0 (client failure path) doesn't leak. */
         yetty_yclass_object_free(obj_r.value);
         ywarn("create('%s'): rpc_register_object full, allocation freed", name);
+        free(name);
         return 0;
     }
-    if (resp_max < sizeof(h))
+    if (resp_max < sizeof(h)) {
+        free(name);
         return 0;
+    }
     memcpy(resp, &h, sizeof(h));
     ydebug("create('%s') -> handle=%llu", name, (unsigned long long)h);
+    free(name);
     return sizeof(h);
 }
 
@@ -413,6 +439,23 @@ size_t yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s, enum yetty_ycla
               BUF_MAX);
         return 0;
     }
+    /* The wire id field is 28 bits — RPC_HDR_MAKE silently masks
+     * anything larger. Reject loudly instead so the caller sees the
+     * bug rather than the peer receiving a corrupted id. */
+    if (id > YETTY_YCLASS_RPC_ID_MASK) {
+        ywarn("rpc_call: id=0x%08x exceeds 28-bit wire field", id);
+        return 0;
+    }
+    /* op occupies a 4-bit field. An out-of-range enum value (whether
+     * from a caller bug or wire-protocol drift) would either be
+     * silently masked into a different op by RPC_HDR_MAKE, or land on
+     * the server's `default:` branch — neither is what callers
+     * expect. Cap at the highest defined op rather than just the
+     * mask width so unknown-but-fits-in-4-bits values are also caught. */
+    if (op > YETTY_YCLASS_RPC_OP_CREATE) {
+        ywarn("rpc_call: op=%u is not a defined yetty_yclass_rpc_op", op);
+        return 0;
+    }
     uint32_t header = YETTY_YCLASS_RPC_HDR_MAKE(op, id);
     ydebug("op=%u id=%u body_len=%zu", op, id, body_len);
 
@@ -496,10 +539,9 @@ int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
         off += 2;
         if (off + nl + 4 > resp_len)
             break;
-        char slot_name[128];
-        size_t copy = nl < sizeof(slot_name) - 1 ? nl : sizeof(slot_name) - 1;
-        memcpy(slot_name, buf + off, copy);
-        slot_name[copy] = 0;
+        char *slot_name = dup_wire_name(buf + off, nl);
+        if (!slot_name)
+            break; /* alloc fail mid-parse; skip the rest, keep what we got */
         off += nl;
         uint32_t rid;
         memcpy(&rid, buf + off, 4);
@@ -513,6 +555,7 @@ int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
         } else {
             yetty_ycore_error_destroy(lr.error);
         }
+        free(slot_name);
     }
 
     t = calloc(1, sizeof(*t));

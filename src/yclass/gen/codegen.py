@@ -860,7 +860,11 @@ static size_t {slot}_skel(const void *_body, size_t _body_len,
     struct __attribute__((packed)) {{
 {fields}\
     }} _a;
-    if (_body_len < sizeof(_a)) return 0;
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (_body_len != sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct yetty_yclass_ctx _local = {{0}};
 {body}}}

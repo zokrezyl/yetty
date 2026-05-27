@@ -132,6 +132,19 @@ yetty_yclass_method_slot_register(const char *domain, const char *name,
     struct slot_entry *e = NULL;
     HASH_FIND(hh_lname, tbl->by_local_name, name, strlen(name), e);
     if (e) {
+        /* (domain, name) is registered idempotently — calling twice
+         * with the same id returns the same slot. But a SECOND call
+         * with a DIFFERENT method_id_t is a contract violation: the
+         * by_local_id table still only contains the original id, so
+         * a later method_slot_get(domain, new_id) would silently miss
+         * while dispatch through the old id keeps working. Reject so
+         * the build / startup fails loudly instead. */
+        if (e->local_id != id) {
+            return YETTY_ERR(yetty_yclass_method_slot,
+                             "method_slot_register: (domain,name) already bound to a "
+                             "different method_id_t — stale generated file or duplicate "
+                             "registration?");
+        }
         return YETTY_OK(yetty_yclass_method_slot, e->slot_index);
     }
 
@@ -382,6 +395,21 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
            parent && parent->desc ? parent->desc->name : "(none)", mixin_count);
     if (!desc) {
         return YETTY_ERR(yetty_yclass_ptr, "class_register: NULL descriptor");
+    }
+    /* desc->name is used as the registry hash key (class_registry_add)
+     * and printed in error messages. ops/mixins arrays are dereferenced
+     * up to their count below. Reject NULL-with-count combos here
+     * rather than crashing in the loops further down — this is the
+     * exported runtime API and must not assume generator discipline. */
+    if (!desc->name) {
+        return YETTY_ERR(yetty_yclass_ptr, "class_register: descriptor missing name");
+    }
+    if (ops_count > 0 && !ops) {
+        return YETTY_ERR(yetty_yclass_ptr, "class_register: ops_count > 0 but ops is NULL");
+    }
+    if (mixin_count > 0 && !mixins) {
+        return YETTY_ERR(yetty_yclass_ptr,
+                         "class_register: mixin_count > 0 but mixins is NULL");
     }
     struct yetty_yclass *cls = calloc(1, sizeof(*cls));
     if (!cls) {
