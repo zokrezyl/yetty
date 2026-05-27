@@ -59,14 +59,19 @@ classes:
     data: struct animal_data
     ops:
       - slot: animal_ctor
+        slot_domain: yanimal
         impl: animal_default_ctor
       - slot: animal_dtor
+        slot_domain: yanimal
         impl: animal_default_dtor
       - slot: animal_breathe
+        slot_domain: yanimal
         impl: animal_default_breathe
       - slot: animal_speak
+        slot_domain: yanimal
         impl: animal_default_speak
       - slot: animal_eat
+        slot_domain: yanimal
         impl: animal_default_eat
   - name: cat
     domain: yanimal
@@ -82,6 +87,7 @@ classes:
     data: struct cat_data
     ops:
       - slot: animal_speak
+        slot_domain: yanimal
         impl: cat_speak
   - name: dog
     domain: yanimal
@@ -97,6 +103,7 @@ classes:
     data: struct dog_data
     ops:
       - slot: animal_speak
+        slot_domain: yanimal
         impl: dog_speak
   - name: pet
     domain: yanimal
@@ -108,4 +115,5 @@ classes:
     data: struct pet_data
     ops:
       - slot: animal_eat
+        slot_domain: yanimal
         impl: pet_eat

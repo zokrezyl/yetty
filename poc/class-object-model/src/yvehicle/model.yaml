@@ -70,16 +70,22 @@ classes:
     data: struct vehicle_data
     ops:
       - slot: vehicle_ctor
+        slot_domain: yvehicle
         impl: vehicle_default_ctor
       - slot: vehicle_dtor
+        slot_domain: yvehicle
         impl: vehicle_default_dtor
       - slot: vehicle_start
+        slot_domain: yvehicle
         impl: vehicle_default_start
       - slot: vehicle_accelerate
+        slot_domain: yvehicle
         impl: vehicle_default_accelerate
       - slot: vehicle_brake
+        slot_domain: yvehicle
         impl: vehicle_default_brake
       - slot: vehicle_describe
+        slot_domain: yvehicle
         impl: vehicle_default_describe
   - name: motorbike
     domain: yvehicle
@@ -93,6 +99,7 @@ classes:
     data: struct motorbike_data
     ops:
       - slot: vehicle_describe
+        slot_domain: yvehicle
         impl: motorbike_describe
   - name: car
     domain: yvehicle
@@ -106,6 +113,7 @@ classes:
     data: struct car_data
     ops:
       - slot: vehicle_describe
+        slot_domain: yvehicle
         impl: car_describe
   - name: sportscar
     domain: yvehicle
@@ -121,8 +129,10 @@ classes:
     data: struct sportscar_data
     ops:
       - slot: vehicle_describe
+        slot_domain: yvehicle
         impl: sportscar_describe
       - slot: vehicle_accelerate
+        slot_domain: yvehicle
         impl: sportscar_accelerate
   - name: electric
     domain: yvehicle
@@ -134,4 +144,5 @@ classes:
     data: struct electric_data
     ops:
       - slot: vehicle_brake
+        slot_domain: yvehicle
         impl: electric_brake

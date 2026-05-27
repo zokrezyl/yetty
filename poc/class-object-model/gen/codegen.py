@@ -73,19 +73,31 @@ def qualified(domain: str, name: str) -> str:
 
 # ============== model — annotated C → in-memory dict ====================
 #
-# Annotation schema (role-first, colon-separated, class name always
-# second segment):
+# Annotation schema. Every annotation is `<verb>@<domain>:<path...>` —
+# the `@` separates the role from the colon-separated path. The first
+# `<domain>` segment is the impl/owning module's domain (must match the
+# codegen's --module argument). `parent` and `uses` may name a foreign
+# domain (cross-module reference).
 #
-#   class:<CLASS>                 on accessor decl  — regular class
-#   mixin:<CLASS>                 on accessor decl  — mixin class
-#   data:<CLASS>                  on struct decl    — class's data slice
-#   override:<CLASS>:<SLOT>       on impl fn        — register impl for SLOT on CLASS
-#   parent:<CLASS>                on accessor decl  — parent class
-#   uses:<CLASS>                  on accessor decl  — included mixin
+#   class@<DOMAIN>:<CLASS>                            on data struct  — regular class
+#   mixin@<DOMAIN>:<CLASS>                            on data struct  — mixin class
+#   parent@<DOMAIN>:<CLASS>                           on data struct  — parent class
+#   uses@<DOMAIN>:<MIXIN>                             on data struct  — included mixin
+#   override@<DOMAIN>:<CLASS>:<SLOT>                  on impl fn      — same-domain
+#                                                                       override (slot lives
+#                                                                       in <DOMAIN>)
+#   override@<DOMAIN>:<CLASS>:<SLOT_DOMAIN>:<SLOT>    on impl fn      — cross-domain
+#                                                                       override; the impl
+#                                                                       class is in <DOMAIN>,
+#                                                                       the slot is owned by
+#                                                                       <SLOT_DOMAIN> (a
+#                                                                       different module).
 #
-# Methods are inferred — every distinct SLOT seen across all `override:`
-# annotations becomes a public method. Its signature is taken from the
-# first impl encountered for that slot.
+# Methods are inferred — every distinct SLOT whose owning domain equals
+# the current module becomes a public method. Its C signature is taken
+# from the first impl encountered. Cross-domain overrides do NOT
+# introduce a new method entry in this module: the slot's public stub
+# is owned by the slot's home module and is included from there.
 
 def ast_dump(path: Path, include_dirs: list) -> dict:
     clang = os.environ.get("CLANG", "clang")
@@ -198,15 +210,37 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                 for ann in anns:
                     role, args = _split_ann(ann)
                     if role == "override":
-                        require_segments(role, args, 3, "override@<DOMAIN>:<CLASS>:<SLOT>")
-                        dom, cls, slot = args
-                        require_local_domain(role, dom)
+                        # Two shapes accepted:
+                        #   3 segs — slot lives in the impl class's domain
+                        #            (same-module override)
+                        #   4 segs — slot's domain explicit; may differ
+                        #            (cross-module override)
+                        if len(args) == 3:
+                            impl_dom, cls, slot = args
+                            slot_dom = impl_dom
+                        elif len(args) == 4:
+                            impl_dom, cls, slot_dom, slot = args
+                        else:
+                            sys.stderr.write(
+                                f"error: 'override@{':'.join(args)}' — expected "
+                                "override@<DOMAIN>:<CLASS>:<SLOT> or "
+                                "override@<DOMAIN>:<CLASS>:<SLOT_DOMAIN>:<SLOT>\n")
+                            sys.exit(1)
+                        require_local_domain(role, impl_dom)
                         b = bucket(cls)
-                        b["ops"].append({"slot": slot, "impl": decl["name"]})
-                        if slot not in methods:
+                        b["ops"].append({
+                            "slot": slot,
+                            "slot_domain": slot_dom,
+                            "impl": decl["name"],
+                        })
+                        # Only emit a public stub for slots OWNED by this
+                        # module. A cross-domain override targets a slot
+                        # whose stub already lives in the slot's home
+                        # module.
+                        if slot_dom == module and slot not in methods:
                             qt = decl.get("type", {}).get("qualType", "")
                             methods[slot] = {
-                                "slot": slot, "domain": dom,
+                                "slot": slot, "domain": slot_dom,
                                 "owning_class": cls,
                                 "return_type": _parse_return_type(qt),
                                 "args": _fn_args(decl),
@@ -485,12 +519,12 @@ def emit_class_accessor(cls: dict) -> str:
     data = cls["data"] or "char"
     type_const = "CLASS_TYPE_MIXIN" if is_mixin else "CLASS_TYPE_REGULAR"
 
-    # Each op's slot name in slot_table is qualified by the slot's
-    # owning domain. The override annotation places it in the same
-    # domain as the class itself (single-domain shortcut), so we
-    # qualify with this class's domain.
+    # Each op's slot name in slot_table is qualified by the SLOT'S OWN
+    # domain (carried on the op since the override annotation may name
+    # a different domain than the impl class — that's how cross-module
+    # overrides land impls onto a foreign-owned slot).
     op_lines = [
-        f'        {{"{qualified(cls["domain"], op["slot"])}", '
+        f'        {{"{qualified(op["slot_domain"], op["slot"])}", '
         f"(method_id_t){op['slot']}, (impl_t){op['impl']}}},"
         for op in cls["ops"]
     ]
@@ -578,9 +612,11 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
         inc_path = module_dir / (Path(src_path).stem + ".gen.c")
 
         # Collect headers needed for this .gen.c: each class's own
-        # header + the (possibly cross-domain) parent + mixin headers.
-        # parent/uses now carry {domain, name} so a future cross-module
-        # subclass picks up the right header path automatically.
+        # header + the (possibly cross-domain) parent + mixin headers
+        # + the slot's home module's methods.gen.h for every op whose
+        # slot lives in a foreign domain (cross-module override). The
+        # last is needed so the foreign public-stub C symbol used as
+        # method_id_t is declared.
         needed = set()
         for c in classes:
             needed.add(f"{c['domain']}/{c['name']}.h")
@@ -589,6 +625,10 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
                 needed.add(f"{p['domain']}/{p['name']}.h")
             for mx in c.get("mixins", []):
                 needed.add(f"{mx['domain']}/{mx['name']}.h")
+            for op in c.get("ops", []):
+                sd = op.get("slot_domain", c["domain"])
+                if sd != c["domain"]:
+                    needed.add(f"{sd}/methods.gen.h")
         include_block = "".join(f'#include "{h}"\n' for h in sorted(needed))
 
         body = HEADER + include_block + "\n" \
