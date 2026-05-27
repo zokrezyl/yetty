@@ -46,13 +46,27 @@ YA_STAMP := $(YA_SRCDIR)/.stamp
 YA_OBJ := $(patsubst %.c,%.o,$(YA_ANN)) \
           $(YA_SRCDIR)/methods.gen.o $(YA_SRCDIR)/rpc.gen.o
 
+# ---- ytuning module (cross-domain subclass of yvehicle:sportscar) -------
+YM_SRCDIR := src/ytuning
+YM_INCDIR := include/ytuning
+YM_ANN := $(YM_SRCDIR)/tuned_sportscar.c
+YM_PUB_H := $(YM_INCDIR)/tuned_sportscar.h \
+            $(YM_INCDIR)/methods.gen.h $(YM_INCDIR)/rpc.gen.h
+YM_INTERNAL := $(patsubst %.c,%.gen.c,$(YM_ANN)) \
+               $(YM_SRCDIR)/methods.gen.c $(YM_SRCDIR)/rpc.gen.c \
+               $(YM_SRCDIR)/model.yaml
+YM_STAMP := $(YM_SRCDIR)/.stamp
+YM_OBJ := $(patsubst %.c,%.o,$(YM_ANN)) \
+          $(YM_SRCDIR)/methods.gen.o $(YM_SRCDIR)/rpc.gen.o
+
 # ---- aggregate --------------------------------------------------------
 RUNTIME_OBJ := $(patsubst %.c,%.o,$(RUNTIME_SRC))
-ALL_OBJ := $(RUNTIME_OBJ) $(YV_OBJ) $(YA_OBJ) src/main.o
+ALL_OBJ := $(RUNTIME_OBJ) $(YV_OBJ) $(YA_OBJ) $(YM_OBJ) src/main.o
 
-ALL_HEADERS := $(RUNTIME_HEADERS) $(YV_PUB_H) $(YA_PUB_H)
+ALL_HEADERS := $(RUNTIME_HEADERS) $(YV_PUB_H) $(YA_PUB_H) $(YM_PUB_H)
 ALL_GEN := $(YV_PUB_H) $(YV_INTERNAL) $(YV_STAMP) \
-           $(YA_PUB_H) $(YA_INTERNAL) $(YA_STAMP)
+           $(YA_PUB_H) $(YA_INTERNAL) $(YA_STAMP) \
+           $(YM_PUB_H) $(YM_INTERNAL) $(YM_STAMP)
 
 BIN := poc
 
@@ -74,15 +88,16 @@ run: build
 ## clean     remove build artefacts and every generated file
 clean:
 	rm -f $(ALL_OBJ) $(BIN) $(ALL_GEN)
-	@rmdir $(YV_INCDIR) $(YA_INCDIR) 2>/dev/null || true
+	rm -f $(YV_INCDIR)/slots.json $(YA_INCDIR)/slots.json $(YM_INCDIR)/slots.json
+	@rmdir $(YV_INCDIR) $(YA_INCDIR) $(YM_INCDIR) 2>/dev/null || true
 
 $(BIN): $(ALL_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
-# Compile rule. Both module stamps are global deps — a header touched in
-# either module triggers a recompile of everything that depends on the
+# Compile rule. All module stamps are global deps — a header touched in
+# any module triggers a recompile of everything that depends on the
 # shared search path.
-%.o: %.c $(YV_STAMP) $(YA_STAMP) $(ALL_HEADERS)
+%.o: %.c $(YV_STAMP) $(YA_STAMP) $(YM_STAMP) $(ALL_HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Per-module codegen invocation. include/<module>/ is created by the
@@ -95,8 +110,17 @@ $(YA_STAMP): gen/codegen.py $(YA_ANN) $(RUNTIME_HEADERS)
 	$(UV) run gen/codegen.py yanimal include $(YA_SRCDIR) $(YA_ANN)
 	@touch $@
 
+# ytuning has a cross-domain override targeting a yvehicle-owned slot.
+# Its codegen MUST run after yvehicle's so that yvehicle's slots.json
+# manifest exists for signature validation — encoded as a stamp dep.
+$(YM_STAMP): gen/codegen.py $(YM_ANN) $(RUNTIME_HEADERS) $(YV_STAMP)
+	$(UV) run gen/codegen.py ytuning include $(YM_SRCDIR) $(YM_ANN)
+	@touch $@
+
 # Existence of the stamp implies the generated artefacts exist.
 $(YV_PUB_H) $(YV_INTERNAL): $(YV_STAMP)
 	@test -f $@
 $(YA_PUB_H) $(YA_INTERNAL): $(YA_STAMP)
+	@test -f $@
+$(YM_PUB_H) $(YM_INTERNAL): $(YM_STAMP)
 	@test -f $@

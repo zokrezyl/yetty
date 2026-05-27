@@ -1,0 +1,25 @@
+methods: []
+classes:
+  - name: tuned_sportscar
+    domain: ytuning
+    accessor: ytuning_tuned_sportscar_class_get
+    type: regular
+    source_file: src/ytuning/tuned_sportscar.c
+    parent:
+      domain: yvehicle
+      name: sportscar
+    mixins: []
+    data: struct tuned_sportscar_data
+    ops:
+      - slot: vehicle_describe
+        slot_domain: yvehicle
+        impl: tuned_sportscar_describe
+        impl_sig:
+          return_type: struct str
+          args:
+            - name: ctx
+              type: "struct ctx *"
+            - name: obj
+              type: "struct object *"
+            - name: distance
+              type: float

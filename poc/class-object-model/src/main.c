@@ -10,6 +10,9 @@
 #include "yanimal/dog.h"
 #include "yanimal/rpc.gen.h"
 
+#include "ytuning/tuned_sportscar.h"  /* cross-domain subclass of yvehicle:sportscar */
+#include "ytuning/rpc.gen.h"
+
 #include "rpc.h"
 
 #include <stdio.h>
@@ -65,6 +68,11 @@ static void run_client(int fd)
     exercise_animal(&local, c);
     object_free(c);
 
+    fprintf(stderr, "\n=== local tuned_sportscar (ytuning extends yvehicle) ===\n");
+    struct object *tsc = ytuning_tuned_sportscar_create(&local);
+    exercise_sportscar(&local, tsc);
+    object_free(tsc);
+
     fprintf(stderr, "\n=== remote sportscar (yvehicle) ===\n");
     struct object *rsc = yvehicle_sportscar_create(&remote);
     exercise_sportscar(&remote, rsc);
@@ -74,6 +82,11 @@ static void run_client(int fd)
     struct object *rd = yanimal_dog_create(&remote);
     exercise_animal(&remote, rd);
     free(rd);
+
+    fprintf(stderr, "\n=== remote tuned_sportscar (ytuning extends yvehicle) ===\n");
+    struct object *rtsc = ytuning_tuned_sportscar_create(&remote);
+    exercise_sportscar(&remote, rtsc);
+    free(rtsc);
 
     rpc_session_destroy(s);
 }

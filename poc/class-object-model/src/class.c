@@ -378,7 +378,11 @@ const struct class *class_register(const struct class_descriptor *desc, const st
         method_slot slot = method_slot_register(ops[i].slot_domain, ops[i].name,
                                                 ops[i].method_id);
         if (slot == METHOD_SLOT_UNDEFINED) {
-            continue;
+            /* Hard fail: skipping leaves the class without a vtable
+             * entry the codegen promised. Dispatch and RPC would then
+             * silently degrade — refuse to register instead. */
+            class_destroy(cls);
+            return NULL;
         }
         uint8_t dom = METHOD_SLOT_DOMAIN_OF(slot);
         uint32_t idx = METHOD_SLOT_INDEX_OF(slot);
