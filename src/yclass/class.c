@@ -124,6 +124,14 @@ yetty_yclass_method_slot_register(const char *domain, const char *name,
         return YETTY_ERR(yetty_yclass_method_slot,
                          "method_slot_register: NULL domain or name");
     }
+    /* `id` is the public-stub fn-ptr used as the by_local_id hash key.
+     * method_slot_get rejects NULL ids, so accepting NULL here would
+     * create a slot that can't be located through the dispatch path —
+     * silently broken at first call. Reject at registration time. */
+    if (!id) {
+        return YETTY_ERR(yetty_yclass_method_slot,
+                         "method_slot_register: NULL method_id_t");
+    }
     struct yetty_yclass_slot_table_ptr_result tbl_r = yetty_yclass_slot_table_get(domain);
     YETTY_RETURN_IF_ERR(yetty_yclass_method_slot, tbl_r,
                         "method_slot_register: slot_table_get failed");
@@ -459,6 +467,15 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
     }
 
     for (size_t i = 0; i < ops_count; ++i) {
+        /* `op` means "this class overrides this slot with this impl".
+         * A NULL impl is a contract violation — it would register the
+         * slot, then dispatch as "no impl" (indistinguishable from
+         * pure inheritance) and silently drop out of for_each_slot.
+         * Reject up front. */
+        if (!ops[i].impl) {
+            class_destroy(cls);
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: op has NULL impl");
+        }
         struct yetty_yclass_method_slot_result sr = yetty_yclass_method_slot_register(
             ops[i].slot_domain, ops[i].name, ops[i].method_id);
         if (YETTY_IS_ERR(sr)) {

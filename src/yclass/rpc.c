@@ -558,6 +558,19 @@ int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
         memcpy(&rid, buf + off, 4);
         off += 4;
 
+        /* rid must fit in the wire's 28-bit id field — yetty_yclass_rpc_call
+         * rejects anything larger. Caching a too-large rid would poison
+         * the session: future stub calls would fail in rpc_call, and
+         * ensure_remote_id's "is this UNRESOLVED?" check would see a
+         * non-sentinel value and skip the RESOLVE_SLOT retry. Bail and
+         * let the off != resp_len guard below drop the cache. */
+        if (rid > YETTY_YCLASS_RPC_ID_MASK) {
+            ywarn("translate_class('%s'): peer sent rid=0x%08x > id-mask for slot '%s'",
+                  class_name, rid, slot_name);
+            free(slot_name);
+            break;
+        }
+
         struct yetty_yclass_method_slot_result lr =
             yetty_yclass_method_slot_by_qname(slot_name);
         if (YETTY_IS_OK(lr)) {
