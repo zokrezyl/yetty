@@ -7,6 +7,6 @@
 #include "class.h"
 #include "methods.gen.h"  /* every public method stub in this module */
 
-const struct class *electric_mixin_get(void);
+const struct class *yvehicle_electric_mixin_get(void);
 
 #endif

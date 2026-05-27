@@ -2,7 +2,7 @@
 #include "yvehicle/car.h"
 #include "yvehicle/vehicle.h"
 
-const struct class *car_class_get(void)
+const struct class *yvehicle_car_class_get(void)
 {
     static const struct class *cls = NULL;
     if (cls) return cls;
@@ -13,9 +13,9 @@ const struct class *car_class_get(void)
         .data_size = sizeof(struct car_data),
     };
     static const struct op ops[] = {
-        {"yvehicle_vehicle_describe", (method_id_t)vehicle_describe, (impl_t)car_describe},
+        {"yvehicle", "vehicle_describe", (method_id_t)yvehicle_vehicle_describe, (impl_t)car_describe},
     };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                         vehicle_class_get(), NULL, 0);
+                         yvehicle_vehicle_class_get(), NULL, 0);
     return cls;
 }

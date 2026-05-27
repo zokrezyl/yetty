@@ -4,11 +4,11 @@
 #include <stdint.h>
 #include <string.h>
 
-void vehicle_ctor(struct ctx * ctx, struct object * obj)
+void yvehicle_vehicle_ctor(struct ctx * ctx, struct object * obj)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)vehicle_ctor);
+        _slot = method_slot_get("yvehicle", (method_id_t)yvehicle_vehicle_ctor);
 
     if (!obj) { return; }
 
@@ -28,11 +28,11 @@ void vehicle_ctor(struct ctx * ctx, struct object * obj)
     }
 }
 
-void vehicle_dtor(struct ctx * ctx, struct object * obj)
+void yvehicle_vehicle_dtor(struct ctx * ctx, struct object * obj)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)vehicle_dtor);
+        _slot = method_slot_get("yvehicle", (method_id_t)yvehicle_vehicle_dtor);
 
     if (!obj) { return; }
 
@@ -52,11 +52,11 @@ void vehicle_dtor(struct ctx * ctx, struct object * obj)
     }
 }
 
-void vehicle_start(struct ctx * ctx, struct object * obj)
+void yvehicle_vehicle_start(struct ctx * ctx, struct object * obj)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)vehicle_start);
+        _slot = method_slot_get("yvehicle", (method_id_t)yvehicle_vehicle_start);
 
     if (!obj) { return; }
 
@@ -76,11 +76,11 @@ void vehicle_start(struct ctx * ctx, struct object * obj)
     }
 }
 
-int vehicle_accelerate(struct ctx * ctx, struct object * obj, float speed)
+int yvehicle_vehicle_accelerate(struct ctx * ctx, struct object * obj, float speed)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)vehicle_accelerate);
+        _slot = method_slot_get("yvehicle", (method_id_t)yvehicle_vehicle_accelerate);
 
     if (!obj) { return (int){0}; }
 
@@ -102,11 +102,11 @@ int vehicle_accelerate(struct ctx * ctx, struct object * obj, float speed)
     }
 }
 
-int vehicle_brake(struct ctx * ctx, struct object * obj, float intensity)
+int yvehicle_vehicle_brake(struct ctx * ctx, struct object * obj, float intensity)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)vehicle_brake);
+        _slot = method_slot_get("yvehicle", (method_id_t)yvehicle_vehicle_brake);
 
     if (!obj) { return (int){0}; }
 
@@ -128,11 +128,11 @@ int vehicle_brake(struct ctx * ctx, struct object * obj, float intensity)
     }
 }
 
-struct str vehicle_describe(struct ctx * ctx, struct object * obj, float distance)
+struct str yvehicle_vehicle_describe(struct ctx * ctx, struct object * obj, float distance)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)vehicle_describe);
+        _slot = method_slot_get("yvehicle", (method_id_t)yvehicle_vehicle_describe);
 
     if (!obj) { return (struct str){0}; }
 

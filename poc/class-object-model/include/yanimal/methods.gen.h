@@ -5,10 +5,10 @@
 #include "class.h"
 
 
-void animal_ctor(struct ctx * ctx, struct object * obj);
-void animal_dtor(struct ctx * ctx, struct object * obj);
-void animal_breathe(struct ctx * ctx, struct object * obj);
-struct str animal_speak(struct ctx * ctx, struct object * obj, int volume);
-int animal_eat(struct ctx * ctx, struct object * obj, float amount);
+void yanimal_animal_ctor(struct ctx * ctx, struct object * obj);
+void yanimal_animal_dtor(struct ctx * ctx, struct object * obj);
+void yanimal_animal_breathe(struct ctx * ctx, struct object * obj);
+struct str yanimal_animal_speak(struct ctx * ctx, struct object * obj, int volume);
+int yanimal_animal_eat(struct ctx * ctx, struct object * obj, float amount);
 
 #endif

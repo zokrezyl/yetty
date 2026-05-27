@@ -20,26 +20,26 @@
 
 static void exercise_sportscar(struct ctx *ctx, struct object *obj)
 {
-    vehicle_ctor(ctx, obj);
-    vehicle_start(ctx, obj);
-    int a = vehicle_accelerate(ctx, obj, 60.0f);
+    yvehicle_vehicle_ctor(ctx, obj);
+    yvehicle_vehicle_start(ctx, obj);
+    int a = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
     fprintf(stderr, "[caller] accelerate -> %d\n", a);
-    int b = vehicle_brake(ctx, obj, 0.5f);
+    int b = yvehicle_vehicle_brake(ctx, obj, 0.5f);
     fprintf(stderr, "[caller] brake -> %d\n", b);
-    struct str d = vehicle_describe(ctx, obj, 123.4f);
+    struct str d = yvehicle_vehicle_describe(ctx, obj, 123.4f);
     fprintf(stderr, "[caller] describe: '%s'\n", d.buf);
-    vehicle_dtor(ctx, obj);
+    yvehicle_vehicle_dtor(ctx, obj);
 }
 
 static void exercise_animal(struct ctx *ctx, struct object *obj)
 {
-    animal_ctor(ctx, obj);
-    animal_breathe(ctx, obj);
-    struct str s = animal_speak(ctx, obj, 7);
+    yanimal_animal_ctor(ctx, obj);
+    yanimal_animal_breathe(ctx, obj);
+    struct str s = yanimal_animal_speak(ctx, obj, 7);
     fprintf(stderr, "[caller] speak: '%s'\n", s.buf);
-    int e = animal_eat(ctx, obj, 0.8f);
+    int e = yanimal_animal_eat(ctx, obj, 0.8f);
     fprintf(stderr, "[caller] eat -> %d\n", e);
-    animal_dtor(ctx, obj);
+    yanimal_animal_dtor(ctx, obj);
 }
 
 static void run_server(int fd)
@@ -56,22 +56,22 @@ static void run_client(int fd)
     struct ctx remote = { .session = s };
 
     fprintf(stderr, "\n=== local sportscar (yvehicle) ===\n");
-    struct object *sc = sportscar_create(&local);
+    struct object *sc = yvehicle_sportscar_create(&local);
     exercise_sportscar(&local, sc);
     object_free(sc);
 
     fprintf(stderr, "\n=== local cat (yanimal) ===\n");
-    struct object *c = cat_create(&local);
+    struct object *c = yanimal_cat_create(&local);
     exercise_animal(&local, c);
     object_free(c);
 
     fprintf(stderr, "\n=== remote sportscar (yvehicle) ===\n");
-    struct object *rsc = sportscar_create(&remote);
+    struct object *rsc = yvehicle_sportscar_create(&remote);
     exercise_sportscar(&remote, rsc);
     free(rsc);
 
     fprintf(stderr, "\n=== remote dog (yanimal) ===\n");
-    struct object *rd = dog_create(&remote);
+    struct object *rd = yanimal_dog_create(&remote);
     exercise_animal(&remote, rd);
     free(rd);
 

@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static size_t animal_ctor_skel(const void *_body, size_t _body_len,
+static size_t yanimal_animal_ctor_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -20,12 +20,12 @@ static size_t animal_ctor_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    animal_ctor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    yanimal_animal_ctor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
     (void)_resp; (void)_resp_max;
     return 0;
 }
 
-static size_t animal_dtor_skel(const void *_body, size_t _body_len,
+static size_t yanimal_animal_dtor_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -34,12 +34,12 @@ static size_t animal_dtor_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    animal_dtor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    yanimal_animal_dtor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
     (void)_resp; (void)_resp_max;
     return 0;
 }
 
-static size_t animal_breathe_skel(const void *_body, size_t _body_len,
+static size_t yanimal_animal_breathe_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -48,12 +48,12 @@ static size_t animal_breathe_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    animal_breathe(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    yanimal_animal_breathe(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
     (void)_resp; (void)_resp_max;
     return 0;
 }
 
-static size_t animal_speak_skel(const void *_body, size_t _body_len,
+static size_t yanimal_animal_speak_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -63,13 +63,13 @@ static size_t animal_speak_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    struct str _r = animal_speak(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.volume);
+    struct str _r = yanimal_animal_speak(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.volume);
     if (_resp_max < sizeof(_r)) return 0;
     memcpy(_resp, &_r, sizeof(_r));
     return sizeof(_r);
 }
 
-static size_t animal_eat_skel(const void *_body, size_t _body_len,
+static size_t yanimal_animal_eat_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -79,19 +79,19 @@ static size_t animal_eat_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    int _r = animal_eat(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.amount);
+    int _r = yanimal_animal_eat(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.amount);
     if (_resp_max < sizeof(_r)) return 0;
     memcpy(_resp, &_r, sizeof(_r));
     return sizeof(_r);
 }
 
-struct object *animal_create(struct ctx *ctx)
+struct object *yanimal_animal_create(struct ctx *ctx)
 {
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = animal_class_get();
+    const struct class *_klass = yanimal_animal_class_get();
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -116,13 +116,13 @@ struct object *animal_create(struct ctx *ctx)
     return _obj;
 }
 
-struct object *cat_create(struct ctx *ctx)
+struct object *yanimal_cat_create(struct ctx *ctx)
 {
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = cat_class_get();
+    const struct class *_klass = yanimal_cat_class_get();
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -147,13 +147,13 @@ struct object *cat_create(struct ctx *ctx)
     return _obj;
 }
 
-struct object *dog_create(struct ctx *ctx)
+struct object *yanimal_dog_create(struct ctx *ctx)
 {
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = dog_class_get();
+    const struct class *_klass = yanimal_dog_class_get();
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -182,10 +182,10 @@ struct object *dog_create(struct ctx *ctx)
 
 static const struct class *yanimal_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yanimal_animal") == 0) return animal_class_get();
-    if (strcmp(name, "yanimal_cat") == 0) return cat_class_get();
-    if (strcmp(name, "yanimal_dog") == 0) return dog_class_get();
-    if (strcmp(name, "yanimal_pet") == 0) return pet_mixin_get();
+    if (strcmp(name, "yanimal_animal") == 0) return yanimal_animal_class_get();
+    if (strcmp(name, "yanimal_cat") == 0) return yanimal_cat_class_get();
+    if (strcmp(name, "yanimal_dog") == 0) return yanimal_dog_class_get();
+    if (strcmp(name, "yanimal_pet") == 0) return yanimal_pet_mixin_get();
     return NULL;
 }
 
@@ -194,11 +194,11 @@ static const struct class *yanimal_accessor_lookup(const char *name)
 struct yanimal_skel_row { const char *name; rpc_skel_fn fn; };
 
 static const struct yanimal_skel_row yanimal_skel_rows[] = {
-    {"yanimal_animal_ctor", animal_ctor_skel},
-    {"yanimal_animal_dtor", animal_dtor_skel},
-    {"yanimal_animal_breathe", animal_breathe_skel},
-    {"yanimal_animal_speak", animal_speak_skel},
-    {"yanimal_animal_eat", animal_eat_skel}
+    {"yanimal_animal_ctor", yanimal_animal_ctor_skel},
+    {"yanimal_animal_dtor", yanimal_animal_dtor_skel},
+    {"yanimal_animal_breathe", yanimal_animal_breathe_skel},
+    {"yanimal_animal_speak", yanimal_animal_speak_skel},
+    {"yanimal_animal_eat", yanimal_animal_eat_skel}
 };
 
 static rpc_skel_fn yanimal_skel_lookup(method_slot slot)

@@ -62,7 +62,7 @@ methods:
 classes:
   - name: vehicle
     domain: yvehicle
-    accessor: vehicle_class_get
+    accessor: yvehicle_vehicle_class_get
     type: regular
     source_file: src/yvehicle/vehicle.c
     parent: null
@@ -89,7 +89,7 @@ classes:
         impl: vehicle_default_describe
   - name: motorbike
     domain: yvehicle
-    accessor: motorbike_class_get
+    accessor: yvehicle_motorbike_class_get
     type: regular
     source_file: src/yvehicle/motorbike.c
     parent:
@@ -103,7 +103,7 @@ classes:
         impl: motorbike_describe
   - name: car
     domain: yvehicle
-    accessor: car_class_get
+    accessor: yvehicle_car_class_get
     type: regular
     source_file: src/yvehicle/car.c
     parent:
@@ -117,7 +117,7 @@ classes:
         impl: car_describe
   - name: sportscar
     domain: yvehicle
-    accessor: sportscar_class_get
+    accessor: yvehicle_sportscar_class_get
     type: regular
     source_file: src/yvehicle/sportscar.c
     parent:
@@ -136,7 +136,7 @@ classes:
         impl: sportscar_accelerate
   - name: electric
     domain: yvehicle
-    accessor: electric_mixin_get
+    accessor: yvehicle_electric_mixin_get
     type: mixin
     source_file: src/yvehicle/electric.c
     parent: null

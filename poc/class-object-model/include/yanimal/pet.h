@@ -7,6 +7,6 @@
 #include "class.h"
 #include "methods.gen.h"  /* every public method stub in this module */
 
-const struct class *pet_mixin_get(void);
+const struct class *yanimal_pet_mixin_get(void);
 
 #endif

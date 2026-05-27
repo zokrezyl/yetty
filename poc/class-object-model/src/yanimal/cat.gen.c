@@ -3,7 +3,7 @@
 #include "yanimal/cat.h"
 #include "yanimal/pet.h"
 
-const struct class *cat_class_get(void)
+const struct class *yanimal_cat_class_get(void)
 {
     static const struct class *cls = NULL;
     if (cls) return cls;
@@ -14,10 +14,10 @@ const struct class *cat_class_get(void)
         .data_size = sizeof(struct cat_data),
     };
     static const struct op ops[] = {
-        {"yanimal_animal_speak", (method_id_t)animal_speak, (impl_t)cat_speak},
+        {"yanimal", "animal_speak", (method_id_t)yanimal_animal_speak, (impl_t)cat_speak},
     };
-    const struct class *mixins[] = { pet_mixin_get() };
+    const struct class *mixins[] = { yanimal_pet_mixin_get() };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                         animal_class_get(), mixins, 1);
+                         yanimal_animal_class_get(), mixins, 1);
     return cls;
 }

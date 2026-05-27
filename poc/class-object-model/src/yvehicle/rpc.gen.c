@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static size_t vehicle_ctor_skel(const void *_body, size_t _body_len,
+static size_t yvehicle_vehicle_ctor_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -21,12 +21,12 @@ static size_t vehicle_ctor_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    vehicle_ctor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    yvehicle_vehicle_ctor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
     (void)_resp; (void)_resp_max;
     return 0;
 }
 
-static size_t vehicle_dtor_skel(const void *_body, size_t _body_len,
+static size_t yvehicle_vehicle_dtor_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -35,12 +35,12 @@ static size_t vehicle_dtor_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    vehicle_dtor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    yvehicle_vehicle_dtor(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
     (void)_resp; (void)_resp_max;
     return 0;
 }
 
-static size_t vehicle_start_skel(const void *_body, size_t _body_len,
+static size_t yvehicle_vehicle_start_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -49,12 +49,12 @@ static size_t vehicle_start_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    vehicle_start(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
+    yvehicle_vehicle_start(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle));
     (void)_resp; (void)_resp_max;
     return 0;
 }
 
-static size_t vehicle_accelerate_skel(const void *_body, size_t _body_len,
+static size_t yvehicle_vehicle_accelerate_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -64,13 +64,13 @@ static size_t vehicle_accelerate_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    int _r = vehicle_accelerate(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.speed);
+    int _r = yvehicle_vehicle_accelerate(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.speed);
     if (_resp_max < sizeof(_r)) return 0;
     memcpy(_resp, &_r, sizeof(_r));
     return sizeof(_r);
 }
 
-static size_t vehicle_brake_skel(const void *_body, size_t _body_len,
+static size_t yvehicle_vehicle_brake_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -80,13 +80,13 @@ static size_t vehicle_brake_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    int _r = vehicle_brake(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.intensity);
+    int _r = yvehicle_vehicle_brake(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.intensity);
     if (_resp_max < sizeof(_r)) return 0;
     memcpy(_resp, &_r, sizeof(_r));
     return sizeof(_r);
 }
 
-static size_t vehicle_describe_skel(const void *_body, size_t _body_len,
+static size_t yvehicle_vehicle_describe_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
     struct __attribute__((packed)) {
@@ -96,19 +96,19 @@ static size_t vehicle_describe_skel(const void *_body, size_t _body_len,
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct ctx _local = {0};
-    struct str _r = vehicle_describe(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.distance);
+    struct str _r = yvehicle_vehicle_describe(&_local, (struct object *)rpc_handle_resolve(_a.obj_handle), _a.distance);
     if (_resp_max < sizeof(_r)) return 0;
     memcpy(_resp, &_r, sizeof(_r));
     return sizeof(_r);
 }
 
-struct object *vehicle_create(struct ctx *ctx)
+struct object *yvehicle_vehicle_create(struct ctx *ctx)
 {
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = vehicle_class_get();
+    const struct class *_klass = yvehicle_vehicle_class_get();
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -133,13 +133,13 @@ struct object *vehicle_create(struct ctx *ctx)
     return _obj;
 }
 
-struct object *motorbike_create(struct ctx *ctx)
+struct object *yvehicle_motorbike_create(struct ctx *ctx)
 {
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = motorbike_class_get();
+    const struct class *_klass = yvehicle_motorbike_class_get();
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -164,13 +164,13 @@ struct object *motorbike_create(struct ctx *ctx)
     return _obj;
 }
 
-struct object *car_create(struct ctx *ctx)
+struct object *yvehicle_car_create(struct ctx *ctx)
 {
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = car_class_get();
+    const struct class *_klass = yvehicle_car_class_get();
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -195,13 +195,13 @@ struct object *car_create(struct ctx *ctx)
     return _obj;
 }
 
-struct object *sportscar_create(struct ctx *ctx)
+struct object *yvehicle_sportscar_create(struct ctx *ctx)
 {
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    const struct class *_klass = sportscar_class_get();
+    const struct class *_klass = yvehicle_sportscar_class_get();
 
     if (!ctx || !ctx->session)
         return object_alloc(_klass);
@@ -230,11 +230,11 @@ struct object *sportscar_create(struct ctx *ctx)
 
 static const struct class *yvehicle_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yvehicle_vehicle") == 0) return vehicle_class_get();
-    if (strcmp(name, "yvehicle_motorbike") == 0) return motorbike_class_get();
-    if (strcmp(name, "yvehicle_car") == 0) return car_class_get();
-    if (strcmp(name, "yvehicle_sportscar") == 0) return sportscar_class_get();
-    if (strcmp(name, "yvehicle_electric") == 0) return electric_mixin_get();
+    if (strcmp(name, "yvehicle_vehicle") == 0) return yvehicle_vehicle_class_get();
+    if (strcmp(name, "yvehicle_motorbike") == 0) return yvehicle_motorbike_class_get();
+    if (strcmp(name, "yvehicle_car") == 0) return yvehicle_car_class_get();
+    if (strcmp(name, "yvehicle_sportscar") == 0) return yvehicle_sportscar_class_get();
+    if (strcmp(name, "yvehicle_electric") == 0) return yvehicle_electric_mixin_get();
     return NULL;
 }
 
@@ -243,12 +243,12 @@ static const struct class *yvehicle_accessor_lookup(const char *name)
 struct yvehicle_skel_row { const char *name; rpc_skel_fn fn; };
 
 static const struct yvehicle_skel_row yvehicle_skel_rows[] = {
-    {"yvehicle_vehicle_ctor", vehicle_ctor_skel},
-    {"yvehicle_vehicle_dtor", vehicle_dtor_skel},
-    {"yvehicle_vehicle_start", vehicle_start_skel},
-    {"yvehicle_vehicle_accelerate", vehicle_accelerate_skel},
-    {"yvehicle_vehicle_brake", vehicle_brake_skel},
-    {"yvehicle_vehicle_describe", vehicle_describe_skel}
+    {"yvehicle_vehicle_ctor", yvehicle_vehicle_ctor_skel},
+    {"yvehicle_vehicle_dtor", yvehicle_vehicle_dtor_skel},
+    {"yvehicle_vehicle_start", yvehicle_vehicle_start_skel},
+    {"yvehicle_vehicle_accelerate", yvehicle_vehicle_accelerate_skel},
+    {"yvehicle_vehicle_brake", yvehicle_vehicle_brake_skel},
+    {"yvehicle_vehicle_describe", yvehicle_vehicle_describe_skel}
 };
 
 static rpc_skel_fn yvehicle_skel_lookup(method_slot slot)

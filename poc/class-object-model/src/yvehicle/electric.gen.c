@@ -1,7 +1,7 @@
 /* GENERATED — do not edit. */
 #include "yvehicle/electric.h"
 
-const struct class *electric_mixin_get(void)
+const struct class *yvehicle_electric_mixin_get(void)
 {
     static const struct class *cls = NULL;
     if (cls) return cls;
@@ -12,7 +12,7 @@ const struct class *electric_mixin_get(void)
         .data_size = sizeof(struct electric_data),
     };
     static const struct op ops[] = {
-        {"yvehicle_vehicle_brake", (method_id_t)vehicle_brake, (impl_t)electric_brake},
+        {"yvehicle", "vehicle_brake", (method_id_t)yvehicle_vehicle_brake, (impl_t)electric_brake},
     };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                          NULL, NULL, 0);

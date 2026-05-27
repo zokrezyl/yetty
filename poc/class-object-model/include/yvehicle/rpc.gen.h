@@ -4,9 +4,9 @@
 
 #include "rpc.h"
 
-struct object *vehicle_create(struct ctx *ctx);
-struct object *motorbike_create(struct ctx *ctx);
-struct object *car_create(struct ctx *ctx);
-struct object *sportscar_create(struct ctx *ctx);
+struct object *yvehicle_vehicle_create(struct ctx *ctx);
+struct object *yvehicle_motorbike_create(struct ctx *ctx);
+struct object *yvehicle_car_create(struct ctx *ctx);
+struct object *yvehicle_sportscar_create(struct ctx *ctx);
 
 #endif

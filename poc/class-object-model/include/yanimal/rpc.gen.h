@@ -4,8 +4,8 @@
 
 #include "rpc.h"
 
-struct object *animal_create(struct ctx *ctx);
-struct object *cat_create(struct ctx *ctx);
-struct object *dog_create(struct ctx *ctx);
+struct object *yanimal_animal_create(struct ctx *ctx);
+struct object *yanimal_cat_create(struct ctx *ctx);
+struct object *yanimal_dog_create(struct ctx *ctx);
 
 #endif

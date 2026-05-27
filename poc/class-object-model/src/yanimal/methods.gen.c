@@ -4,11 +4,11 @@
 #include <stdint.h>
 #include <string.h>
 
-void animal_ctor(struct ctx * ctx, struct object * obj)
+void yanimal_animal_ctor(struct ctx * ctx, struct object * obj)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)animal_ctor);
+        _slot = method_slot_get("yanimal", (method_id_t)yanimal_animal_ctor);
 
     if (!obj) { return; }
 
@@ -28,11 +28,11 @@ void animal_ctor(struct ctx * ctx, struct object * obj)
     }
 }
 
-void animal_dtor(struct ctx * ctx, struct object * obj)
+void yanimal_animal_dtor(struct ctx * ctx, struct object * obj)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)animal_dtor);
+        _slot = method_slot_get("yanimal", (method_id_t)yanimal_animal_dtor);
 
     if (!obj) { return; }
 
@@ -52,11 +52,11 @@ void animal_dtor(struct ctx * ctx, struct object * obj)
     }
 }
 
-void animal_breathe(struct ctx * ctx, struct object * obj)
+void yanimal_animal_breathe(struct ctx * ctx, struct object * obj)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)animal_breathe);
+        _slot = method_slot_get("yanimal", (method_id_t)yanimal_animal_breathe);
 
     if (!obj) { return; }
 
@@ -76,11 +76,11 @@ void animal_breathe(struct ctx * ctx, struct object * obj)
     }
 }
 
-struct str animal_speak(struct ctx * ctx, struct object * obj, int volume)
+struct str yanimal_animal_speak(struct ctx * ctx, struct object * obj, int volume)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)animal_speak);
+        _slot = method_slot_get("yanimal", (method_id_t)yanimal_animal_speak);
 
     if (!obj) { return (struct str){0}; }
 
@@ -102,11 +102,11 @@ struct str animal_speak(struct ctx * ctx, struct object * obj, int volume)
     }
 }
 
-int animal_eat(struct ctx * ctx, struct object * obj, float amount)
+int yanimal_animal_eat(struct ctx * ctx, struct object * obj, float amount)
 {
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t)animal_eat);
+        _slot = method_slot_get("yanimal", (method_id_t)yanimal_animal_eat);
 
     if (!obj) { return (int){0}; }
 

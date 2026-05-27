@@ -58,9 +58,12 @@ from pathlib import Path
 HEADER = "/* GENERATED — do not edit. */\n"
 
 
-# Qualified-name helpers: the global slot_table and class_registry
-# treat names as `<domain>_<localname>` so two modules can share local
-# names without colliding. C function/type names stay unqualified.
+# Qualified-name helpers: every generated C identifier that is visible
+# at link time (public method stubs, class/mixin accessors, create
+# functions, skel functions) is prefixed with its owning domain so two
+# modules can share local names without colliding. The same
+# `<domain>_<localname>` form is also the slot_table key and the wire
+# label — one canonical name, three uses.
 def qualified_class(c: dict) -> str:
     return f"{c['domain']}_{c['name']}"
 
@@ -69,6 +72,10 @@ def qualified_slot(m: dict) -> str:
 
 def qualified(domain: str, name: str) -> str:
     return f"{domain}_{name}"
+
+def op_c_name(op: dict) -> str:
+    """C identifier of the public stub for this op's slot."""
+    return f"{op['slot_domain']}_{op['slot']}"
 
 
 # ============== model — annotated C → in-memory dict ====================
@@ -265,7 +272,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                     b["type"] = kind2
                     b["source_file"] = str(path)
                     suffix = "_mixin_get" if kind2 == "mixin" else "_class_get"
-                    b["accessor"] = primary + suffix
+                    b["accessor"] = f"{primary_dom}_{primary}{suffix}"
                     tag = decl.get("name")
                     if tag:
                         b["data"] = f"struct {tag}"
@@ -423,7 +430,7 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
 
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
-        parts.append(f"{m['return_type']} {m['slot']}({params});\n")
+        parts.append(f"{m['return_type']} {qualified_slot(m)}({params});\n")
 
     parts.append("\n#endif\n")
     out_path.write_text("".join(parts))
@@ -480,7 +487,7 @@ def emit_dispatch_body(m: dict) -> str:
     return f"""\
     static method_slot _slot = METHOD_SLOT_UNDEFINED;
     if (_slot == METHOD_SLOT_UNDEFINED)
-        _slot = method_slot_get((method_id_t){m['slot']});
+        _slot = method_slot_get("{m['domain']}", (method_id_t){qualified_slot(m)});
 
     if (!{obj_name}) {{ {null_ret} }}
 
@@ -506,7 +513,7 @@ def emit_methods_c(model: dict, module: str, out_path: Path):
              '#include <stdint.h>\n#include <string.h>\n\n']
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
-        parts.append(f"{m['return_type']} {m['slot']}({params})\n{{\n"
+        parts.append(f"{m['return_type']} {qualified_slot(m)}({params})\n{{\n"
                      f"{emit_dispatch_body(m)}}}\n\n")
     out_path.write_text("".join(parts))
 
@@ -519,29 +526,27 @@ def emit_class_accessor(cls: dict) -> str:
     data = cls["data"] or "char"
     type_const = "CLASS_TYPE_MIXIN" if is_mixin else "CLASS_TYPE_REGULAR"
 
-    # Each op's slot name in slot_table is qualified by the SLOT'S OWN
-    # domain (carried on the op since the override annotation may name
-    # a different domain than the impl class — that's how cross-module
-    # overrides land impls onto a foreign-owned slot).
+    # Each op references its slot by (slot_domain, local_name). The
+    # slot_table is per-domain (see slot_table_get in class.c), so the
+    # runtime can locate the right table without any string splitting.
+    # The slot's C public-stub identifier is "<domain>_<local_name>",
+    # the same string concatenated.
     op_lines = [
-        f'        {{"{qualified(op["slot_domain"], op["slot"])}", '
-        f"(method_id_t){op['slot']}, (impl_t){op['impl']}}},"
+        f'        {{"{op["slot_domain"]}", "{op["slot"]}", '
+        f"(method_id_t){op_c_name(op)}, (impl_t){op['impl']}}},"
         for op in cls["ops"]
     ]
     ops_block = "\n".join(op_lines)
 
     parent = cls.get("parent")
     if parent:
-        # Accessor is the parent's unqualified C function (`<class>_class_get`).
-        # Header that declares it is included by emit_class_gen_c via the
-        # parent's {domain, name} record.
-        parent_expr = f"{parent['name']}_class_get()"
+        parent_expr = f"{parent['domain']}_{parent['name']}_class_get()"
     else:
         parent_expr = "NULL"
 
     mixins = cls.get("mixins") or []
     if mixins:
-        resolved = [f"{m['name']}_mixin_get()" for m in mixins]
+        resolved = [f"{m['domain']}_{m['name']}_mixin_get()" for m in mixins]
         mixin_inits = ", ".join(resolved)
         mixin_decl = f"    const struct class *mixins[] = {{ {mixin_inits} }};\n"
         mixin_arg = "mixins"
@@ -583,6 +588,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         suffix = "_mixin_get" if is_mixin else "_class_get"
         kind = "mixin" if is_mixin else "regular class"
         name = cls["name"]
+        qname = qualified_class(cls)
         guard = f"POC_{module.upper()}_{name.upper()}_H"
         header_path = include_module_dir / f"{name}.h"
         header_path.write_text(
@@ -593,7 +599,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             + f"#ifndef {guard}\n#define {guard}\n\n"
             + '#include "class.h"\n'
             + '#include "methods.gen.h"  /* every public method stub in this module */\n\n'
-            + f"const struct class *{name}{suffix}(void);\n\n"
+            + f"const struct class *{qname}{suffix}(void);\n\n"
             + "#endif\n"
         )
 
@@ -649,7 +655,7 @@ def class_header_for(cls: dict, module: str) -> str:
 def emit_skel(m: dict) -> str:
     """Unpack the wire body, resolve obj handle, re-enter the public stub
     with a local ctx so the right override fires on the actual class."""
-    slot = m["slot"]
+    slot = qualified_slot(m)
     ret = m["return_type"].strip()
     args = wire_args(m)
     fields = args_struct_body(args, indent="        ")
@@ -693,11 +699,10 @@ static size_t {slot}_skel(const void *_body, size_t _body_len,
 
 def emit_create_fn(cls: dict) -> str:
     """Per-class factory. ctx decides; caller is location-agnostic."""
-    name = cls["name"]
     accessor = cls["accessor"]
     qname = qualified_class(cls)
     return f"""\
-struct object *{name}_create(struct ctx *ctx)
+struct object *{qname}_create(struct ctx *ctx)
 {{
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
@@ -743,9 +748,10 @@ def emit_lookup_tables(model: dict, module: str) -> str:
 
     # Skel rows keyed by qualified slot name. method_slot_name returns
     # the qualified name (that's what gets stored when class_register
-    # walks the ops table).
+    # walks the ops table). The skel function itself is also named with
+    # the qualified prefix (see emit_skel).
     skel_rows = ",\n".join(
-        f'    {{"{qualified_slot(m)}", {m["slot"]}_skel}}'
+        f'    {{"{qualified_slot(m)}", {qualified_slot(m)}_skel}}'
         for m in methods
     )
 
@@ -790,7 +796,7 @@ static void {module}_install_hooks(void)
 def emit_rpc_h(model: dict, module: str, out_path: Path):
     guard = f"POC_{module.upper()}_RPC_GEN_H"
     decls = "\n".join(
-        f"struct object *{c['name']}_create(struct ctx *ctx);"
+        f"struct object *{qualified_class(c)}_create(struct ctx *ctx);"
         for c in regular_classes(model)
     )
     out_path.write_text(

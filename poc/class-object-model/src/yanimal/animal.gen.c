@@ -1,7 +1,7 @@
 /* GENERATED — do not edit. */
 #include "yanimal/animal.h"
 
-const struct class *animal_class_get(void)
+const struct class *yanimal_animal_class_get(void)
 {
     static const struct class *cls = NULL;
     if (cls) return cls;
@@ -12,11 +12,11 @@ const struct class *animal_class_get(void)
         .data_size = sizeof(struct animal_data),
     };
     static const struct op ops[] = {
-        {"yanimal_animal_ctor", (method_id_t)animal_ctor, (impl_t)animal_default_ctor},
-        {"yanimal_animal_dtor", (method_id_t)animal_dtor, (impl_t)animal_default_dtor},
-        {"yanimal_animal_breathe", (method_id_t)animal_breathe, (impl_t)animal_default_breathe},
-        {"yanimal_animal_speak", (method_id_t)animal_speak, (impl_t)animal_default_speak},
-        {"yanimal_animal_eat", (method_id_t)animal_eat, (impl_t)animal_default_eat},
+        {"yanimal", "animal_ctor", (method_id_t)yanimal_animal_ctor, (impl_t)animal_default_ctor},
+        {"yanimal", "animal_dtor", (method_id_t)yanimal_animal_dtor, (impl_t)animal_default_dtor},
+        {"yanimal", "animal_breathe", (method_id_t)yanimal_animal_breathe, (impl_t)animal_default_breathe},
+        {"yanimal", "animal_speak", (method_id_t)yanimal_animal_speak, (impl_t)animal_default_speak},
+        {"yanimal", "animal_eat", (method_id_t)yanimal_animal_eat, (impl_t)animal_default_eat},
     };
     cls = class_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                          NULL, NULL, 0);

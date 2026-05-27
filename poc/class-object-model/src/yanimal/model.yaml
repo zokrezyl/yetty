@@ -51,7 +51,7 @@ methods:
 classes:
   - name: animal
     domain: yanimal
-    accessor: animal_class_get
+    accessor: yanimal_animal_class_get
     type: regular
     source_file: src/yanimal/animal.c
     parent: null
@@ -75,7 +75,7 @@ classes:
         impl: animal_default_eat
   - name: cat
     domain: yanimal
-    accessor: cat_class_get
+    accessor: yanimal_cat_class_get
     type: regular
     source_file: src/yanimal/cat.c
     parent:
@@ -91,7 +91,7 @@ classes:
         impl: cat_speak
   - name: dog
     domain: yanimal
-    accessor: dog_class_get
+    accessor: yanimal_dog_class_get
     type: regular
     source_file: src/yanimal/dog.c
     parent:
@@ -107,7 +107,7 @@ classes:
         impl: dog_speak
   - name: pet
     domain: yanimal
-    accessor: pet_mixin_get
+    accessor: yanimal_pet_mixin_get
     type: mixin
     source_file: src/yanimal/pet.c
     parent: null

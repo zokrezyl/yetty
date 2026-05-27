@@ -1,14 +1,27 @@
-/* Tiny class/object runtime.
+/* Tiny class/object runtime — per-domain slot tables.
+ *
+ * Each module ("domain") owns its own slot_table with its own 0-based
+ * local index space. A method_slot value is the packed pair
+ * (domain_id << 24) | local_idx:
+ *
+ *     bits 31..28   reserved (always 0 for valid slots; UINT32_MAX
+ *                   is the sentinel METHOD_SLOT_UNDEFINED).
+ *     bits 27..24   domain_id (1..15; 0 is invalid / never returned).
+ *     bits 23..0    local index inside that domain's slot_table.
+ *
+ * The wire treats method_slot as opaque — both sides exchange 28-bit
+ * ids that round-trip through this packing. The encoding fits inside
+ * the rpc header's 28-bit id field.
  *
  * Two translations live in this PoC; this header owns ONE of them:
  *
- *   T1 (name <-> local slot id) — slot_table, populated when class_register
- *      walks its ops. uthash-indexed by BOTH name and id. Used on every
- *      side independently.
+ *   T1 ((domain, local_name) <-> method_slot) — per-domain slot_table,
+ *      populated when class_register walks its ops. Each side runs
+ *      its T1 independently.
  *
- *   T2 (local id <-> remote id) — lives in the RPC layer (see rpc.h),
- *      only on the client. Populated by the server's RESOLVE/GET_CLASS
- *      handshakes. */
+ *   T2 (local method_slot <-> remote method_slot) — lives in the RPC
+ *      layer (see rpc.h), only on the client. Populated by the
+ *      server's RESOLVE/GET_CLASS handshakes. */
 
 #ifndef POC_CLASS_H
 #define POC_CLASS_H
@@ -18,10 +31,11 @@
 
 struct object;
 struct class;
+struct slot_table;
 struct rpc_session;
 
 struct ctx {
-    struct rpc_session *session;   /* NULL → local; set → remote */
+    struct rpc_session *session; /* NULL → local; set → remote */
 };
 
 enum class_type {
@@ -32,18 +46,28 @@ enum class_type {
 typedef void (*method_id_t)(void);
 typedef void (*impl_t)(void);
 typedef uint32_t method_slot;
-#define METHOD_SLOT_UNDEFINED  UINT32_MAX
+#define METHOD_SLOT_UNDEFINED UINT32_MAX
+
+#define METHOD_SLOT_DOMAIN_BITS 4
+#define METHOD_SLOT_MAX_DOMAINS (1u << METHOD_SLOT_DOMAIN_BITS)
+#define METHOD_SLOT_INDEX_SHIFT 24
+#define METHOD_SLOT_INDEX_MASK ((1u << METHOD_SLOT_INDEX_SHIFT) - 1)
+#define METHOD_SLOT_DOMAIN_OF(s) (((s) >> METHOD_SLOT_INDEX_SHIFT) & 0xFu)
+#define METHOD_SLOT_INDEX_OF(s) ((s) & METHOD_SLOT_INDEX_MASK)
+#define METHOD_SLOT_PACK(dom, idx) \
+    (((uint32_t)(dom) << METHOD_SLOT_INDEX_SHIFT) | ((idx) & METHOD_SLOT_INDEX_MASK))
 
 struct class_descriptor {
-    const char *name;
+    const char *name; /* qualified, e.g. "yvehicle_sportscar" */
     enum class_type type;
     size_t data_size;
 };
 
 struct op {
-    const char *name;       /* slot identity — same on every side */
-    method_id_t method_id;  /* the public-stub fn ptr (vtable key) */
-    impl_t      impl;       /* override for this slot */
+    const char *slot_domain; /* slot's owning module, e.g. "yvehicle" */
+    const char *name;        /* slot local name, e.g. "vehicle_describe" */
+    method_id_t method_id;   /* the public-stub fn ptr (vtable key) */
+    impl_t impl;             /* override for this slot */
 };
 
 struct object {
@@ -54,23 +78,35 @@ struct str {
     char buf[128];
 };
 
+/* --- Per-domain slot_table ---------------------------------------- */
+
+/* Return the slot_table for `domain`, allocating one on first sighting
+ * (until we run out of domain ids — current cap is METHOD_SLOT_MAX_DOMAINS - 1).
+ * Two calls with the same string share the same table; different
+ * strings get independent tables with independent local index spaces. */
+struct slot_table *slot_table_get(const char *domain);
+
 /* --- Registration (one-shot, at class_register) ------------------- */
 
-/* Allocate (or look up) the slot identified by `name`. If first sighting,
- * binds `id` to it. Subsequent registrations with the same name return
- * the existing slot. Indexed in slot_table by name AND id. O(1). */
-method_slot method_slot_register(const char *name, method_id_t id);
+/* Allocate (or look up) the slot for (`domain`, `name`). If first
+ * sighting, binds `id` to it. Subsequent registrations with the same
+ * (domain, name) return the existing slot. O(1). */
+method_slot method_slot_register(const char *domain, const char *name, method_id_t id);
 
 /* --- Lookups (per call / per handshake) --------------------------- */
 
-/* Dispatch: only the fn-ptr identity is available at the public stub.
- * Returns the slot or METHOD_SLOT_UNDEFINED. O(1). */
-method_slot method_slot_get(method_id_t id);
+/* Dispatch: only the fn-ptr identity is available at the public stub,
+ * but the stub knows its own (compile-time) domain. O(1). */
+method_slot method_slot_get(const char *domain, method_id_t id);
 
-/* Handshake interpretation (client) / RESOLVE handling (server). O(1). */
-method_slot method_slot_by_name(const char *name);
+/* Local-name lookup within a domain. O(1). */
+method_slot method_slot_by_name(const char *domain, const char *name);
 
-/* Reverse: slot → name (interned). NULL if unknown. */
+/* Wire-side lookup: caller passes the full "<domain>_<local_name>"
+ * the remote sent. O(1) via the cross-domain qname hash. */
+method_slot method_slot_by_qname(const char *qname);
+
+/* Reverse: slot → fully qualified name (interned). NULL if unknown. */
 const char *method_slot_name(method_slot slot);
 
 /* --- Dispatch / registry ------------------------------------------ */
@@ -79,14 +115,15 @@ impl_t class_dispatch_lookup(const struct class *cls, method_slot slot);
 
 const struct class *object_class(const struct object *obj);
 
-const struct class *class_register(
-    const struct class_descriptor *desc, const struct op *ops,
-    size_t ops_count, const struct class *parent,
-    const struct class *const *mixins, size_t mixin_count);
+const struct class *class_register(const struct class_descriptor *desc,
+                                   const struct op *ops, size_t ops_count,
+                                   const struct class *parent,
+                                   const struct class *const *mixins,
+                                   size_t mixin_count);
 
 /* uthash-backed. O(1) on cache hit. On miss, calls the installed lazy
- * accessor lookup (see class_set_accessor_lookup) — that's the path the
- * server uses to discover classes it has never touched. */
+ * accessor lookup (see class_add_accessor_lookup) — that's the path
+ * the server uses to discover classes it has never touched. */
 const struct class *class_by_name(const char *name);
 
 /* Server-side lazy class registration hook. Each module's generated
@@ -95,7 +132,6 @@ const struct class *class_by_name(const char *name);
  * non-NULL class. */
 typedef const struct class *(*accessor_lookup_fn)(const char *name);
 void class_add_accessor_lookup(accessor_lookup_fn fn);
-
 
 /* Walk the class's populated dispatch slots — used by the GET_CLASS
  * handler on the server. */

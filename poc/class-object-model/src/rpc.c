@@ -21,17 +21,22 @@ struct skel_lookup_node {
     struct skel_lookup_node *next;
 };
 
+struct skel_cache_entry {
+    method_slot slot;
+    rpc_skel_fn fn;
+    UT_hash_handle hh;
+};
+
 struct rpc_server_state {
     struct object_entry objects[MAX_OBJECTS];
     size_t object_count;
     uint64_t next_handle;
 
     /* Per-module skel lookups, chained. First one that returns
-     * non-NULL wins. Result cached per-slot. */
+     * non-NULL wins. Result cached per-slot. slot values are sparse
+     * (domain id in bits 27..24), so use a hash, not a flat array. */
     struct skel_lookup_node *lookup_chain;
-    rpc_skel_fn *skel_cache;
-    size_t skel_cache_count;
-    size_t skel_cache_cap;
+    struct skel_cache_entry *skel_cache;
 };
 
 static struct rpc_server_state *server(void)
@@ -63,9 +68,9 @@ rpc_skel_fn rpc_skel_for(method_slot slot)
     struct rpc_server_state *s = server();
     if (slot == METHOD_SLOT_UNDEFINED) return NULL;
 
-    /* Cache hit. */
-    if (slot < s->skel_cache_count && s->skel_cache[slot])
-        return s->skel_cache[slot];
+    struct skel_cache_entry *e = NULL;
+    HASH_FIND(hh, s->skel_cache, &slot, sizeof(slot), e);
+    if (e) return e->fn;
 
     /* Walk the chain. First hit wins. */
     rpc_skel_fn fn = NULL;
@@ -75,19 +80,11 @@ rpc_skel_fn rpc_skel_for(method_slot slot)
     }
     if (!fn) return NULL;
 
-    /* Populate cache. */
-    if (slot >= s->skel_cache_cap) {
-        size_t ncap = s->skel_cache_cap ? s->skel_cache_cap * 2 : 32;
-        while (ncap <= slot) ncap *= 2;
-        rpc_skel_fn *nt = realloc(s->skel_cache, ncap * sizeof(*nt));
-        if (!nt) return fn;
-        memset(nt + s->skel_cache_cap, 0,
-               (ncap - s->skel_cache_cap) * sizeof(*nt));
-        s->skel_cache = nt;
-        s->skel_cache_cap = ncap;
-    }
-    if (slot >= s->skel_cache_count) s->skel_cache_count = slot + 1;
-    s->skel_cache[slot] = fn;
+    e = calloc(1, sizeof(*e));
+    if (!e) return fn;
+    e->slot = slot;
+    e->fn = fn;
+    HASH_ADD(hh, s->skel_cache, slot, sizeof(slot), e);
     return fn;
 }
 
@@ -146,7 +143,7 @@ static size_t handle_resolve_slot(const void *body, size_t body_len,
     size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
     memcpy(name, body, n);
     name[n] = 0;
-    method_slot slot = method_slot_by_name(name);
+    method_slot slot = method_slot_by_qname(name);
     uint32_t out = (slot == METHOD_SLOT_UNDEFINED) ? UINT32_MAX : (uint32_t)slot;
     if (resp_max < sizeof(out)) return 0;
     memcpy(resp, &out, sizeof(out));
@@ -256,10 +253,17 @@ void rpc_server_run(int fd)
 
 struct translated_class { char *name; UT_hash_handle hh; };
 
+struct remote_id_entry {
+    method_slot local_slot;
+    uint32_t remote_id;
+    UT_hash_handle hh;
+};
+
 struct rpc_session {
     int fd;
-    uint32_t *remote_ids;       /* indexed by local slot, 0 = unresolved */
-    size_t remote_ids_count;
+    /* Local slot → remote id. Local slots are sparse (domain id in
+     * upper bits), so hash by slot rather than flat-array. */
+    struct remote_id_entry *remote_ids;
     struct translated_class *translated;  /* by class name */
 };
 
@@ -279,7 +283,11 @@ void rpc_session_destroy(struct rpc_session *s)
         free(cur->name);
         free(cur);
     }
-    free(s->remote_ids);
+    struct remote_id_entry *rcur, *rtmp;
+    HASH_ITER(hh, s->remote_ids, rcur, rtmp) {
+        HASH_DEL(s->remote_ids, rcur);
+        free(rcur);
+    }
     if (s->fd >= 0) close(s->fd);
     free(s);
 }
@@ -289,31 +297,27 @@ void rpc_session_destroy(struct rpc_session *s)
  * >= 2^28 (let alone UINT32_MAX) cannot be a real slot. */
 #define REMOTE_ID_UNRESOLVED UINT32_MAX
 
-static void session_ensure_slot(struct rpc_session *s, method_slot slot)
-{
-    if (slot < s->remote_ids_count) return;
-    size_t ncount = slot + 1;
-    uint32_t *nr = realloc(s->remote_ids, ncount * sizeof(*nr));
-    if (!nr) return;
-    /* memset with 0xFF gives every byte 0xFF → every uint32_t = UINT32_MAX. */
-    memset(nr + s->remote_ids_count, 0xFF,
-           (ncount - s->remote_ids_count) * sizeof(*nr));
-    s->remote_ids = nr;
-    s->remote_ids_count = ncount;
-}
-
 uint32_t rpc_session_remote_id(struct rpc_session *s, method_slot slot)
 {
-    if (!s || slot >= s->remote_ids_count) return REMOTE_ID_UNRESOLVED;
-    return s->remote_ids[slot];
+    if (!s) return REMOTE_ID_UNRESOLVED;
+    struct remote_id_entry *e = NULL;
+    HASH_FIND(hh, s->remote_ids, &slot, sizeof(slot), e);
+    return e ? e->remote_id : REMOTE_ID_UNRESOLVED;
 }
 
 void rpc_session_set_remote_id(struct rpc_session *s, method_slot slot,
                                uint32_t remote_id)
 {
     if (!s) return;
-    session_ensure_slot(s, slot);
-    if (slot < s->remote_ids_count) s->remote_ids[slot] = remote_id;
+    struct remote_id_entry *e = NULL;
+    HASH_FIND(hh, s->remote_ids, &slot, sizeof(slot), e);
+    if (!e) {
+        e = calloc(1, sizeof(*e));
+        if (!e) return;
+        e->local_slot = slot;
+        HASH_ADD(hh, s->remote_ids, local_slot, sizeof(method_slot), e);
+    }
+    e->remote_id = remote_id;
 }
 
 size_t rpc_call(struct rpc_session *s, enum rpc_op op, uint32_t id,
@@ -393,7 +397,7 @@ int rpc_session_translate_class(struct rpc_session *s, const char *class_name)
         uint32_t rid;
         memcpy(&rid, buf + off, 4); off += 4;
 
-        method_slot local = method_slot_by_name(slot_name);
+        method_slot local = method_slot_by_qname(slot_name);
         if (local != METHOD_SLOT_UNDEFINED) {
             rpc_session_set_remote_id(s, local, rid);
             fprintf(stderr, "[client] xlat['%s'] local=%u remote=%u\n",
