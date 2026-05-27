@@ -966,13 +966,16 @@ struct hit_visitor_state {
 static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user)
 {
     struct hit_visitor_state *st = user;
-    if (st->hit.figure_id != 0) {
-        return 0; /* already found */
-    }
     if (st->x < child->rect.min.x || st->x >= child->rect.max.x || st->y < child->rect.min.y ||
         st->y >= child->rect.max.y) {
         return 0;
     }
+    /* uthash walks insertion order = back-to-front z-order. The front-most
+     * figure must win, so we keep overwriting — the last match in the
+     * walk is the top of the z-stack. Returning early on first match
+     * would make decoration figures (e.g. shader-glyph at 0xFFFFFFFE,
+     * inserted at terminal create) steal hits from interactive figures
+     * (ygreeter / ygui chrome) inserted later. */
     st->hit.figure_id = id;
     st->hit.local_x = st->x - child->rect.min.x;
     st->hit.local_y = st->y - child->rect.min.y;

@@ -1,0 +1,119 @@
+methods:
+  - slot: constructor
+    owning_class: vehicle
+    return_type: void
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: destructor
+    owning_class: vehicle
+    return_type: void
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: vehicle_start
+    owning_class: vehicle
+    return_type: void
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: vehicle_accelerate
+    owning_class: vehicle
+    return_type: int
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+      - name: speed
+        type: float
+  - slot: vehicle_brake
+    owning_class: vehicle
+    return_type: int
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+      - name: intensity
+        type: float
+  - slot: vehicle_describe
+    owning_class: vehicle
+    return_type: struct str
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+      - name: distance
+        type: float
+classes:
+  - name: vehicle
+    accessor: vehicle_class_get
+    type: regular
+    source_file: src/vehicle.c
+    parent: null
+    mixins: []
+    data: struct vehicle_data
+    ops:
+      - slot: constructor
+        impl: vehicle_default_ctor
+      - slot: destructor
+        impl: vehicle_default_dtor
+      - slot: vehicle_start
+        impl: vehicle_default_start
+      - slot: vehicle_accelerate
+        impl: vehicle_default_accelerate
+      - slot: vehicle_brake
+        impl: vehicle_default_brake
+      - slot: vehicle_describe
+        impl: vehicle_default_describe
+  - name: motorbike
+    accessor: motorbike_class_get
+    type: regular
+    source_file: src/motorbike.c
+    parent: vehicle
+    mixins: []
+    data: struct motorbike_data
+    ops:
+      - slot: vehicle_describe
+        impl: motorbike_describe
+  - name: car
+    accessor: car_class_get
+    type: regular
+    source_file: src/car.c
+    parent: vehicle
+    mixins: []
+    data: struct car_data
+    ops:
+      - slot: vehicle_describe
+        impl: car_describe
+  - name: sportscar
+    accessor: sportscar_class_get
+    type: regular
+    source_file: src/sportscar.c
+    parent: car
+    mixins:
+      - electric
+    data: struct sportscar_data
+    ops:
+      - slot: vehicle_describe
+        impl: sportscar_describe
+      - slot: vehicle_accelerate
+        impl: sportscar_accelerate
+  - name: electric
+    accessor: electric_mixin_get
+    type: mixin
+    source_file: src/electric.c
+    parent: null
+    mixins: []
+    data: struct electric_data
+    ops:
+      - slot: vehicle_brake
+        impl: electric_brake

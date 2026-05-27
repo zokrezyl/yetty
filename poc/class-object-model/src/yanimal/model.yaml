@@ -1,0 +1,96 @@
+methods:
+  - slot: animal_ctor
+    owning_class: animal
+    return_type: void
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: animal_dtor
+    owning_class: animal
+    return_type: void
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: animal_breathe
+    owning_class: animal
+    return_type: void
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: animal_speak
+    owning_class: animal
+    return_type: struct str
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+      - name: volume
+        type: int
+  - slot: animal_eat
+    owning_class: animal
+    return_type: int
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+      - name: amount
+        type: float
+classes:
+  - name: animal
+    accessor: animal_class_get
+    type: regular
+    source_file: src/yanimal/animal.c
+    parent: null
+    mixins: []
+    data: struct animal_data
+    ops:
+      - slot: animal_ctor
+        impl: animal_default_ctor
+      - slot: animal_dtor
+        impl: animal_default_dtor
+      - slot: animal_breathe
+        impl: animal_default_breathe
+      - slot: animal_speak
+        impl: animal_default_speak
+      - slot: animal_eat
+        impl: animal_default_eat
+  - name: cat
+    accessor: cat_class_get
+    type: regular
+    source_file: src/yanimal/cat.c
+    parent: animal
+    mixins:
+      - pet
+    data: struct cat_data
+    ops:
+      - slot: animal_speak
+        impl: cat_speak
+  - name: dog
+    accessor: dog_class_get
+    type: regular
+    source_file: src/yanimal/dog.c
+    parent: animal
+    mixins:
+      - pet
+    data: struct dog_data
+    ops:
+      - slot: animal_speak
+        impl: dog_speak
+  - name: pet
+    accessor: pet_mixin_get
+    type: mixin
+    source_file: src/yanimal/pet.c
+    parent: null
+    mixins: []
+    data: struct pet_data
+    ops:
+      - slot: animal_eat
+        impl: pet_eat

@@ -109,9 +109,14 @@ static struct yetty_ycore_void_result button_paint(struct yetty_ygui_object *obj
     if (radius > w * 0.5f) radius = w * 0.5f;
     if (radius > h * 0.5f) radius = h * 0.5f;
 
-    /* Convex gradient on the idle/hover surface (top lighter, bottom
-     * darker by ~10%). Pressed state stays flat so the depression reads
-     * as "this is now the highlight, not a 3D button". */
+    /* Surface paint:
+     *  - idle:     convex gradient (top lighter, bottom darker)
+     *  - hovered:  same gradient + a 2px accent-bright stroke around
+     *              the perimeter, drawn by the same gradient primitive
+     *              (fill_color/stroke_color are independent fields on
+     *              the SDF op, the way panel.c uses bg+border).
+     *  - pressed:  flat accent fill, 1 px y-offset so it reads as
+     *              "depressed" against the surrounding surface. */
     if (!pressed) {
         uint32_t top = pack_lighten(surface);
         uint32_t bot = pack_darken(surface);
@@ -128,9 +133,10 @@ static struct yetty_ycore_void_result button_paint(struct yetty_ygui_object *obj
             .color0 = top,
             .color1 = bot,
         };
+        uint32_t stroke = hovered ? BTN_HOVER_OUTLINE : 0u;
+        float stroke_w = hovered ? 2.0f : 0.0f;
         struct yetty_ycore_void_result rr = yetty_ydraw_draw_list_add_cmd_add_linear_gradient_box(
-            ctx->ygrid_draw_list, /*id=*/0, /*z_order=*/0, /*fill=*/0u, /*stroke=*/0u,
-            /*stroke_w=*/0.0f, &gg);
+            ctx->ygrid_draw_list, /*id=*/0, /*z_order=*/0, /*fill=*/0u, stroke, stroke_w, &gg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: gradient surface");
     } else {
         struct yetty_ysdf_rounded_box geom = {
@@ -147,26 +153,6 @@ static struct yetty_ycore_void_result button_paint(struct yetty_ygui_object *obj
             ctx->ygrid_draw_list, /*id=*/0, /*z_order=*/0, surface, /*stroke=*/0u,
             /*stroke_w=*/0.0f, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: pressed surface");
-    }
-
-    /* Hover outline — accent-bright ring around the surface so the
-     * cursor's button is unambiguous. Only when not pressed (pressed
-     * already changes the fill to accent, an outline would be noise). */
-    if (hovered && !pressed) {
-        struct yetty_ysdf_rounded_box outline = {
-            .center_x = r.min.x + w * 0.5f,
-            .center_y = r.min.y + h * 0.5f,
-            .half_width = w * 0.5f,
-            .half_height = h * 0.5f,
-            .radius_top_right = radius,
-            .radius_bottom_right = radius,
-            .radius_top_left = radius,
-            .radius_bottom_left = radius,
-        };
-        struct yetty_ycore_void_result rr = yetty_ydraw_draw_list_add_cmd_add_rounded_box(
-            ctx->ygrid_draw_list, /*id=*/0, /*z_order=*/0, /*fill=*/0u, BTN_HOVER_OUTLINE,
-            /*stroke_w=*/1.5f, &outline);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: hover outline");
     }
 
     if (d->label && d->label[0]) {
