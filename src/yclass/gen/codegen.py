@@ -344,6 +344,20 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                             require_segments(role, args, 2, "uses@<DOMAIN>:<MIXIN>")
                             b["mixins"].append({"domain": args[0], "name": args[1]})
 
+    # Every bucket created by an `override` annotation MUST end up
+    # with a matching `class@...` or `mixin@...` record by the end of
+    # the walk — otherwise the override is silently dropped from
+    # registration (no accessor → filtered out of classes[]) while
+    # potentially still emitting a public method stub referencing a
+    # non-existent owning_class. Fail loudly instead.
+    orphans = [name for name, c in classes.items() if not c["accessor"]]
+    if orphans:
+        sys.stderr.write(
+            f"error: override annotations target undeclared class(es) "
+            f"{orphans} — every override@<DOMAIN>:<CLASS>:<SLOT> needs a "
+            f"matching class@<DOMAIN>:<CLASS> or mixin@<DOMAIN>:<CLASS> "
+            f"record on the data struct.\n")
+        sys.exit(1)
     return {
         "methods": list(methods.values()),
         "classes": [c for c in classes.values() if c["accessor"]],
@@ -450,15 +464,31 @@ def validate_method(m: dict):
             f"error: method {m['slot']}: second arg must be 'struct yetty_yclass_object *' "
             f"(got '{args[1]['type']}')\n")
         sys.exit(1)
-    # Extra struct-ptr args after obj would silently marshal as NULL on the
-    # wire — bail rather than ship broken behaviour.
+    # Any pointer arg after obj is rejected — not just `struct X *`.
+    # Marshalling a raw address (char *, void *, int *, ...) is wrong
+    # across the wire: the bytes are the local heap pointer and mean
+    # nothing on the peer. Use scalars or yclass object handles.
     for a in args[2:]:
-        if is_struct_ptr(a["type"]):
+        if "*" in a["type"]:
             sys.stderr.write(
-                f"error: method {m['slot']}: arg '{a['name']}' is a struct "
-                f"pointer ({a['type']}). Only the obj at arg[1] is supported "
-                f"as a wire handle. Pass scalars or extend the wire format.\n")
+                f"error: method {m['slot']}: arg '{a['name']}' has pointer "
+                f"type ({a['type']}). Only the obj at arg[1] is wire-marshalled "
+                f"as a handle; other pointer types can't cross process / RPC "
+                f"boundaries. Use scalars or a yclass object handle.\n")
             sys.exit(1)
+    # Same reasoning for return values — a `_ptr` Result id would
+    # memcpy the server's pointer bytes into the wire response and
+    # the client would wrap that meaningless address in YETTY_OK.
+    # Reject. Return a value or a yclass object handle (uint64_t)
+    # instead.
+    rid = result_type_id(m["return_type"])
+    if rid.endswith("_ptr"):
+        sys.stderr.write(
+            f"error: method {m['slot']}: return type '{m['return_type']}' "
+            f"maps to Result id '{rid}' (pointer payload). Pointer returns "
+            f"can't cross process / RPC boundaries. Return a value or a "
+            f"yclass object handle (uint64_t).\n")
+        sys.exit(1)
 
 
 def wire_args(m: dict) -> list:
@@ -532,8 +562,13 @@ def emit_dispatch_body(m: dict) -> str:
     for i, a in enumerate(wargs):
         if is_struct_ptr(a["type"]):
             if i == 0:
+                # The obj at wire-arg[0] is a proxy on the client side
+                # (allocated by <class>_create). Read its handle via
+                # the aligned proxy struct rather than punning bytes
+                # past the header — the prior layout was misaligned
+                # on 32-bit ABIs.
                 init_parts.append(
-                    f"*(uint64_t *)((char *){a['name']} + sizeof(*{a['name']}))")
+                    f"container_of({a['name']}, struct yetty_yclass_proxy, header)->handle")
             else:
                 init_parts.append("0")
         else:
@@ -549,8 +584,11 @@ def emit_dispatch_body(m: dict) -> str:
     if vt is None:
         remote_call = f"""\
         uint8_t _wbuf[1];
-        size_t _wn = yetty_yclass_rpc_call(_s->session, YETTY_YCLASS_RPC_OP_CALL, _rid,
-                                           &_a, sizeof(_a), _wbuf, sizeof(_wbuf));
+        struct yetty_ycore_size_result _wr = yetty_yclass_rpc_call(
+            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, &_a, sizeof(_a),
+            _wbuf, sizeof(_wbuf));
+        YETTY_RETURN_IF_ERR({rid}, _wr, "{qs}: RPC call failed");
+        size_t _wn = _wr.value;
         if (_wn < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
         if (_wbuf[0] != 0) return YETTY_ERR({rid}, "{qs}: remote impl returned error");
         return YETTY_OK_VOID();
@@ -558,8 +596,11 @@ def emit_dispatch_body(m: dict) -> str:
     else:
         remote_call = f"""\
         uint8_t _wbuf[1 + sizeof({vt})];
-        size_t _wn = yetty_yclass_rpc_call(_s->session, YETTY_YCLASS_RPC_OP_CALL, _rid,
-                                           &_a, sizeof(_a), _wbuf, sizeof(_wbuf));
+        struct yetty_ycore_size_result _wr = yetty_yclass_rpc_call(
+            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, &_a, sizeof(_a),
+            _wbuf, sizeof(_wbuf));
+        YETTY_RETURN_IF_ERR({rid}, _wr, "{qs}: RPC call failed");
+        size_t _wn = _wr.value;
         if (_wn < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
         if (_wbuf[0] != 0) return YETTY_ERR({rid}, "{qs}: remote impl returned error");
         if (_wn != sizeof(_wbuf)) return YETTY_ERR({rid}, "{qs}: truncated RPC payload");
@@ -582,18 +623,22 @@ def emit_dispatch_body(m: dict) -> str:
 
     struct yetty_yclass_ctx *_s = {ctx_name};
     if (_s && _s->session) {{
-        uint32_t _rid = yetty_yclass_rpc_session_ensure_remote_id(_s->session, _slot);
-        if (_rid == YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED)
-            return YETTY_ERR({rid}, "{qs}: remote id unresolved");
+        struct uint32_result _rr =
+            yetty_yclass_rpc_session_ensure_remote_id(_s->session, _slot);
+        YETTY_RETURN_IF_ERR({rid}, _rr, "{qs}: ensure_remote_id failed");
+        uint32_t _rid = _rr.value;
         struct __attribute__((packed)) {{
 {fields}\
         }} _a = {{ {init} }};
 {remote_call}\
     }} else {{
-        yetty_yclass_impl_t fn =
-            yetty_yclass_dispatch_lookup(yetty_yclass_object_class({obj_name}), _slot);
-        if (!fn) return YETTY_ERR({rid}, "{qs}: no impl on this class");
-        return (({slot_fn})fn)({call_args});
+        struct yetty_yclass_ptr_result _cr_local =
+            yetty_yclass_object_class({obj_name});
+        YETTY_RETURN_IF_ERR({rid}, _cr_local, "{qs}: object_class failed");
+        struct yetty_yclass_impl_t_result _ir =
+            yetty_yclass_dispatch_lookup(_cr_local.value, _slot);
+        YETTY_RETURN_IF_ERR({rid}, _ir, "{qs}: dispatch_lookup failed");
+        return (({slot_fn})_ir.value)({call_args});
     }}
 """
 
@@ -603,6 +648,7 @@ def emit_methods_c(model: dict, module: str, out_path: Path):
              f'#include "{module}/methods.gen.h"\n',
              '#include <yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
+             '#include <yetty/ycore/types.h>  /* container_of */\n',
              '#include <yetty/ytrace/ytrace.h>\n',
              '#include <stdint.h>\n#include <string.h>\n\n']
     for m in model["methods"]:
@@ -813,20 +859,43 @@ def emit_skel(m: dict) -> str:
     """Unpack the wire body, resolve obj handle, re-enter the public stub
     with a local ctx so the right override fires on the actual class.
     The wire response carries a status byte (0=OK, 1=ERR); for value
-    slots the OK payload is the raw value bytes that follow."""
+    slots the OK payload is the raw value bytes that follow.
+
+    The skel itself returns size_t per the rpc_skel_fn contract
+    (the RPC engine calls it as a fn-pointer); Result-shaped failures
+    surfaced from handle_resolve / the user impl are encoded as the
+    1-byte status=1 wire response and the skel returns 1."""
     slot = qualified_slot(m)
     rid = result_type_id(m["return_type"])
     vt = ret_value_type(rid)
     args = wire_args(m)
     fields = args_struct_body(args, indent="        ")
 
+    # Pre-resolve every struct-ptr arg as a separate statement — each
+    # handle_resolve now returns a Result, so we must unpack it (and
+    # bail with a 1-byte ERR response on failure) before the call.
+    resolves = []
     call_parts = ["&_local"]
     for a in args:
         if is_struct_ptr(a["type"]):
-            call_parts.append(
-                f"({a['type'].strip()})yetty_yclass_rpc_handle_resolve(_a.{wire_name(a)})")
+            var = f"_hr_{a['name']}"
+            resolves.append(
+                f"""\
+    struct yetty_yclass_void_ptr_result {var} =
+        yetty_yclass_rpc_handle_resolve(_a.{wire_name(a)});
+    if (YETTY_IS_ERR({var})) {{
+        yetty_ycore_error_print(stderr,
+            "[skel] {slot}: handle_resolve", {var}.error);
+        yetty_ycore_error_destroy({var}.error);
+        if (_resp_max < 1) return 0;
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }}
+""")
+            call_parts.append(f"({a['type'].strip()}){var}.value")
         else:
             call_parts.append(f"_a.{a['name']}")
+    resolve_block = "".join(resolves)
     call = ", ".join(call_parts)
 
     rt = f"struct {rid}_result"
@@ -873,6 +942,7 @@ static size_t {slot}_skel(const void *_body, size_t _body_len,
     if (_body_len != sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
     struct yetty_yclass_ctx _local = {{0}};
+{resolve_block}\
 {body}}}
 """
 
@@ -898,25 +968,46 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
     if (!ctx || !ctx->session)
         return yetty_yclass_object_alloc(_klass);
 
-    /* Prefetch the class's local-id ↔ remote-id mapping (idempotent). */
-    yetty_yclass_rpc_session_translate_class(ctx->session, "{qname}");
+    /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
+     * if it fails (the per-slot ensure_remote_id fallback can still
+     * resolve ids on demand), but log so a malformed GET_CLASS
+     * response isn't silently swallowed. */
+    {{
+        struct yetty_ycore_void_result _tr =
+            yetty_yclass_rpc_session_translate_class(ctx->session, "{qname}");
+        if (YETTY_IS_ERR(_tr)) {{
+            yetty_ycore_error_print(stderr,
+                "{qname}_create: translate_class (degraded — will lazy-resolve)",
+                _tr.error);
+            yetty_ycore_error_destroy(_tr.error);
+        }}
+    }}
 
     uint64_t _h = 0;
     const char *_name = "{qname}";
-    if (yetty_yclass_rpc_call(ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, _name,
-                              strlen(_name), &_h, sizeof(_h)) != sizeof(_h) || !_h)
-        return YETTY_ERR(yetty_yclass_object_ptr, "{qname}_create: remote create failed");
+    struct yetty_ycore_size_result _cr = yetty_yclass_rpc_call(
+        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, _name, strlen(_name), &_h,
+        sizeof(_h));
+    if (YETTY_IS_ERR(_cr))
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "{qname}_create: CREATE call failed", _cr);
+    if (_cr.value != sizeof(_h) || !_h)
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "{qname}_create: CREATE returned no/invalid handle");
 
-    /* Proxy: object header + uint64_t handle. Same class accessor on
-     * both sides — proxies never local-dispatch, so the class's
-     * data_size contract isn't honoured for this allocation. */
-    void *_mem = calloc(1, sizeof(struct yetty_yclass_object) + sizeof(uint64_t));
-    if (!_mem)
+    /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
+     * and writing the handle past the header was misaligned on 32-bit
+     * ABIs where sizeof(struct yetty_yclass_object) == 4. The proxy
+     * struct in <yclass/class.h> uses natural alignment for both
+     * fields. The class accessor is the same on both sides — proxies
+     * never local-dispatch, so the class's data_size contract isn't
+     * honoured for this allocation. */
+    struct yetty_yclass_proxy *_proxy = calloc(1, sizeof(*_proxy));
+    if (!_proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "{qname}_create: calloc(proxy) failed");
-    struct yetty_yclass_object *_obj = _mem;
-    *(const struct yetty_yclass **)_obj = _klass;
-    *(uint64_t *)((char *)_obj + sizeof(*_obj)) = _h;
-    return YETTY_OK(yetty_yclass_object_ptr, _obj);
+    _proxy->header.klass = _klass;
+    _proxy->handle = _h;
+    return YETTY_OK(yetty_yclass_object_ptr, &_proxy->header);
 }}
 """
 
@@ -980,7 +1071,18 @@ static yetty_yclass_rpc_skel_fn yetty_{module}_skel_lookup(yetty_yclass_method_s
     return NULL;
 }}
 """
-        skel_install = f"    yetty_yclass_rpc_add_skel_lookup(yetty_{module}_skel_lookup);\n"
+        skel_install = (
+            f"    {{\n"
+            f"        struct yetty_ycore_void_result _sr =\n"
+            f"            yetty_yclass_rpc_add_skel_lookup(yetty_{module}_skel_lookup);\n"
+            f"        if (YETTY_IS_ERR(_sr)) {{\n"
+            f"            yetty_ycore_error_print(stderr,\n"
+            f'                "yetty_{module}_install_hooks: rpc_add_skel_lookup", _sr.error);\n'
+            f"            yetty_ycore_error_destroy(_sr.error);\n"
+            f"            abort();\n"
+            f"        }}\n"
+            f"    }}\n"
+        )
 
     return f"""\
 {accessor_section}\

@@ -22,14 +22,22 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <yetty/ycore/types.h> /* uint32_result */
 
 struct yetty_yclass_rpc_session;
+
+/* --- Result types for yclass-specific values ----------------------- */
+YETTY_YRESULT_DECLARE(yetty_yclass_rpc_session_ptr, struct yetty_yclass_rpc_session *);
+YETTY_YRESULT_DECLARE(yetty_yclass_handle, uint64_t); /* server-minted object id */
+YETTY_YRESULT_DECLARE(yetty_yclass_void_ptr, void *); /* user-stored opaque ptr */
 
 /* Wire-bytes → typed-call bridge for one slot. Generator emits one body
  * per method; the RPC layer owns the slot→skel table. The class layer
  * is unaware of this type. */
 typedef size_t (*yetty_yclass_rpc_skel_fn)(const void *body, size_t body_len, void *resp,
                                            size_t resp_max);
+
+YETTY_YRESULT_DECLARE(yetty_yclass_rpc_skel_fn, yetty_yclass_rpc_skel_fn);
 
 enum yetty_yclass_rpc_op {
     YETTY_YCLASS_RPC_OP_CALL = 0,     /* id = slot index; body = packed args */
@@ -48,58 +56,97 @@ enum yetty_yclass_rpc_op {
 #define YETTY_YCLASS_RPC_HDR_ID(h) ((h) & YETTY_YCLASS_RPC_ID_MASK)
 
 /* ---- Server side -------------------------------------------------- */
+/*
+ * Single-server limitation
+ * ------------------------
+ * The server state (object handle table, skel cache, skel-lookup
+ * chain) is process-global; yetty_yclass_rpc_server_run() also uses
+ * static body/resp scratch buffers. Running multiple concurrent
+ * yclass servers in the same process is NOT supported:
+ *
+ *   - Object handles minted via rpc_register_object are drawn from a
+ *     single global counter — two servers would mint colliding ids.
+ *   - The skel cache is global — once cached for slot S, a CALL on
+ *     either server resolves to the SAME skel.
+ *   - The body/resp static buffers in rpc_server_run are shared —
+ *     concurrent calls on two transports would corrupt frames.
+ *
+ * If multi-server support is needed, the state belongs on a server-
+ * instance struct passed into rpc_server_run / register_object /
+ * handle_resolve / skel_for. For now: one server per process.
+ */
 
-void yetty_yclass_rpc_init(void);
-uint64_t yetty_yclass_rpc_register_object(void *obj);
-void *yetty_yclass_rpc_handle_resolve(uint64_t handle);
+struct yetty_ycore_void_result yetty_yclass_rpc_init(void);
+
+/* Register a user object and mint a new handle for it. Errors: table
+ * full (MAX_OBJECTS), object_count overflow guards. */
+struct yetty_yclass_handle_result yetty_yclass_rpc_register_object(void *obj);
+
+/* Resolve a previously-minted handle to the user object. Errors:
+ * handle=0 (invalid), handle not registered. */
+struct yetty_yclass_void_ptr_result yetty_yclass_rpc_handle_resolve(uint64_t handle);
 
 /* Serve requests from `transport` until the peer disconnects (recv
- * returns 0). The transport is borrowed; caller retains ownership. */
-void yetty_yclass_rpc_server_run(struct yetty_yclass_transport *transport);
+ * returns 0). The transport is borrowed; caller retains ownership.
+ * Returns OK on clean disconnect, ERR on transport / dispatch failure
+ * that ended the loop. */
+struct yetty_ycore_void_result
+yetty_yclass_rpc_server_run(struct yetty_yclass_transport *transport);
 
 /* Skel lookup hook. Each module's generated rpc.gen.c adds its own
  * lookup at startup via a constructor; yetty_yclass_rpc_skel_for walks
  * the chain on cache miss. */
 typedef yetty_yclass_rpc_skel_fn (*yetty_yclass_rpc_skel_lookup_fn)(yetty_yclass_method_slot slot);
-void yetty_yclass_rpc_add_skel_lookup(yetty_yclass_rpc_skel_lookup_fn fn);
+struct yetty_ycore_void_result
+yetty_yclass_rpc_add_skel_lookup(yetty_yclass_rpc_skel_lookup_fn fn);
 
 /* Server's CALL dispatch resolves skels via this. Cached after first
- * lookup per slot. */
-yetty_yclass_rpc_skel_fn yetty_yclass_rpc_skel_for(yetty_yclass_method_slot slot);
+ * lookup per slot. Errors: METHOD_SLOT_UNDEFINED, no skel registered
+ * for this slot, lookup-chain hook failure. */
+struct yetty_yclass_rpc_skel_fn_result
+yetty_yclass_rpc_skel_for(yetty_yclass_method_slot slot);
 
 /* ---- Client side -------------------------------------------------- */
 
 /* The session takes ownership of `transport` and destroys it on
- * session destroy. */
-struct yetty_yclass_rpc_session *
+ * session destroy. Errors: NULL transport, alloc failure. */
+struct yetty_yclass_rpc_session_ptr_result
 yetty_yclass_rpc_session_create(struct yetty_yclass_transport *transport);
-void yetty_yclass_rpc_session_destroy(struct yetty_yclass_rpc_session *s);
+struct yetty_ycore_void_result
+yetty_yclass_rpc_session_destroy(struct yetty_yclass_rpc_session *s);
 
-/* Generic call. Packs (op, id) into the wire header. */
-size_t yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s, enum yetty_yclass_rpc_op op,
-                             uint32_t id, const void *body, size_t body_len, void *resp,
-                             size_t resp_max);
+/* Generic call. Packs (op, id) into the wire header. The successful
+ * value is the response payload length in bytes. */
+struct yetty_ycore_size_result
+yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s, enum yetty_yclass_rpc_op op,
+                      uint32_t id, const void *body, size_t body_len, void *resp,
+                      size_t resp_max);
 
 /* T2 translation table — indexed by local slot. UINT32_MAX = unresolved
  * (no valid wire id can be ≥ 2^28 since the wire reserves the top 4
  * bits for the op). */
 #define YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED UINT32_MAX
 
-uint32_t yetty_yclass_rpc_session_remote_id(struct yetty_yclass_rpc_session *s,
-                                            yetty_yclass_method_slot local_slot);
-void yetty_yclass_rpc_session_set_remote_id(struct yetty_yclass_rpc_session *s,
-                                            yetty_yclass_method_slot local_slot,
-                                            uint32_t remote_id);
+/* Look up the cached remote id for `local_slot`. Errors: not cached
+ * (caller falls back to ensure_remote_id), NULL session. */
+struct uint32_result yetty_yclass_rpc_session_remote_id(struct yetty_yclass_rpc_session *s,
+                                                        yetty_yclass_method_slot local_slot);
+struct yetty_ycore_void_result
+yetty_yclass_rpc_session_set_remote_id(struct yetty_yclass_rpc_session *s,
+                                       yetty_yclass_method_slot local_slot,
+                                       uint32_t remote_id);
 
 /* Batched per-class trigger. Sends GET_CLASS, parses entries, populates
  * the session xlat for every slot of `class_name` the client knows.
  * Idempotent per (session, class_name). */
-int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
-                                             const char *class_name);
+struct yetty_ycore_void_result
+yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
+                                         const char *class_name);
 
 /* Lazy per-slot fallback. Returns the remote_id, doing a single
- * RESOLVE_SLOT round-trip if the xlat entry is still 0. */
-uint32_t yetty_yclass_rpc_session_ensure_remote_id(struct yetty_yclass_rpc_session *s,
-                                                   yetty_yclass_method_slot local_slot);
+ * RESOLVE_SLOT round-trip if the xlat entry is missing. */
+struct uint32_result
+yetty_yclass_rpc_session_ensure_remote_id(struct yetty_yclass_rpc_session *s,
+                                          yetty_yclass_method_slot local_slot);
 
 #endif /* YCLASS_RPC_H */

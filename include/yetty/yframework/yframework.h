@@ -97,8 +97,9 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
 struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework *rt);
 
 /* Dump adapter info (vendor, backend, type, IDs, key limits) via yinfo.
- * Safe to call any time after the adapter is up. */
-void yetty_yframework_log_gpu_info(WGPUAdapter adapter);
+ * Safe to call any time after the adapter is up. Errors: NULL adapter,
+ * adapter-info-fetch failure (the WebGPU call surface). */
+struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter);
 
 /* Reconfigure surface after a window resize. Called from the app's RESIZE
  * handler — yframework keeps the present_mode the initial capability scan
@@ -125,11 +126,14 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
 
 /* Per-host accessor for the yrdawn factory args. Host installs its
  * own emit_osc / request_render before calling
- * register_figure_factories. Returns NULL when the build has no yrdawn
- * server (webasm). The pointer is owned by `framework`; do not free. */
+ * register_figure_factories. The pointer is owned by `framework`; do
+ * not free. Errors: NULL framework, this build has no yrdawn server
+ * compiled in (webasm — distinguishable from a runtime failure by the
+ * error msg). */
 struct yetty_yrdawn_factory_args;
-struct yetty_yrdawn_factory_args *yetty_yframework_factory_args_yrdawn(
-    struct yetty_yframework *framework);
+YETTY_YRESULT_DECLARE(yetty_yrdawn_factory_args_ptr, struct yetty_yrdawn_factory_args *);
+struct yetty_yrdawn_factory_args_ptr_result
+yetty_yframework_factory_args_yrdawn(struct yetty_yframework *framework);
 
 #ifdef __cplusplus
 }

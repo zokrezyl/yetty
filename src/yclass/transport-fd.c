@@ -41,12 +41,13 @@ static struct yetty_ycore_size_result fd_recv(struct yetty_yclass_transport *t, 
     }
 }
 
-static void fd_destroy(struct yetty_yclass_transport *t)
+static struct yetty_ycore_void_result fd_destroy(struct yetty_yclass_transport *t)
 {
     struct fd_transport *ft = (struct fd_transport *)t;
     if (ft->fd >= 0)
         close(ft->fd);
     free(ft);
+    return YETTY_OK_VOID();
 }
 
 struct yetty_yclass_transport_ptr_result yetty_yclass_transport_fd_create(int fd)

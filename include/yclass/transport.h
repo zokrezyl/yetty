@@ -36,7 +36,7 @@ struct yetty_yclass_transport_ops {
                                            size_t len);
     struct yetty_ycore_size_result (*recv)(struct yetty_yclass_transport *t, void *buf,
                                            size_t max);
-    void (*destroy)(struct yetty_yclass_transport *t);
+    struct yetty_ycore_void_result (*destroy)(struct yetty_yclass_transport *t);
 };
 
 struct yetty_yclass_transport {

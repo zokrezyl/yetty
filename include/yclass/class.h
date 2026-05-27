@@ -72,6 +72,22 @@ struct yetty_yclass_object {
     const struct yetty_yclass *klass;
 };
 
+/* Remote-object proxy. Allocated on the client side by the generated
+ * `<class>_create` when ctx->session is set; the embedded `header` is
+ * what callers see (so `struct yetty_yclass_object *` keeps working
+ * for both local and proxy objects), and `handle` is the server-side
+ * id minted by RPC_OP_CREATE.
+ *
+ * Codegen reaches the handle via container_of(obj, struct
+ * yetty_yclass_proxy, header)->handle in the remote-dispatch branch;
+ * a dedicated struct keeps the uint64_t naturally aligned (the prior
+ * "header byte + raw uint64" layout was misaligned on 32-bit ABIs
+ * where sizeof(struct yetty_yclass_object) == 4). */
+struct yetty_yclass_proxy {
+    struct yetty_yclass_object header;
+    uint64_t handle;
+};
+
 /* --- Result types ------------------------------------------------- */
 /* Per the project convention, every fallible entry point returns a
  * Result. For pointer types the type identifier suffix is `_ptr`.
@@ -81,6 +97,7 @@ YETTY_YRESULT_DECLARE(yetty_yclass_ptr, const struct yetty_yclass *);
 YETTY_YRESULT_DECLARE(yetty_yclass_object_ptr, struct yetty_yclass_object *);
 YETTY_YRESULT_DECLARE(yetty_yclass_method_slot, yetty_yclass_method_slot);
 YETTY_YRESULT_DECLARE(yetty_yclass_impl, yetty_yclass_impl_t);
+YETTY_YRESULT_DECLARE(yetty_yclass_impl_t, yetty_yclass_impl_t);
 YETTY_YRESULT_DECLARE(yetty_yclass_const_char_ptr, const char *);
 
 /* --- Per-domain slot_table ---------------------------------------- */
@@ -121,13 +138,17 @@ yetty_yclass_method_slot_name(yetty_yclass_method_slot slot);
 
 /* --- Dispatch / registry ------------------------------------------ */
 
-/* Dispatch is a NORMAL flow: a class may not override every slot.
- * Returns NULL (not Result-error) when the class does not implement
- * the slot — callers walk inheritance / mixin chains themselves. */
-yetty_yclass_impl_t yetty_yclass_dispatch_lookup(const struct yetty_yclass *cls,
-                                                 yetty_yclass_method_slot slot);
+/* Look up the impl for a slot on this class's dispatch table. Errors:
+ * NULL cls, invalid slot encoding, no impl registered for the slot
+ * (callers may treat that as "walk the inheritance chain" if their
+ * dispatch model supports it). */
+struct yetty_yclass_impl_t_result
+yetty_yclass_dispatch_lookup(const struct yetty_yclass *cls, yetty_yclass_method_slot slot);
 
-const struct yetty_yclass *yetty_yclass_object_class(const struct yetty_yclass_object *obj);
+/* Returns the class pointer the object was minted under. Errors:
+ * NULL obj. */
+struct yetty_yclass_ptr_result
+yetty_yclass_object_class(const struct yetty_yclass_object *obj);
 
 struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_descriptor *desc,
                                                      const struct yetty_yclass_op *ops,
@@ -151,12 +172,13 @@ yetty_yclass_add_accessor_lookup(yetty_yclass_accessor_lookup_fn fn);
 
 /* Walk the class's populated dispatch slots — used by the GET_CLASS
  * handler on the server. */
-void yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
-                                void (*cb)(const char *name, yetty_yclass_method_slot slot,
-                                           void *ud),
-                                void *userdata);
+struct yetty_ycore_void_result
+yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
+                           void (*cb)(const char *name, yetty_yclass_method_slot slot,
+                                      void *ud),
+                           void *userdata);
 
 struct yetty_yclass_object_ptr_result yetty_yclass_object_alloc(const struct yetty_yclass *cls);
-void yetty_yclass_object_free(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_object *obj);
 
 #endif /* YCLASS_CLASS_H */

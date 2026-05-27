@@ -1417,13 +1417,20 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
          * terminal-scoped — install them on the framework's per-kind
          * bundle before registration so the freshly-minted yrdawn
          * factory captures them. */
-        struct yetty_yrdawn_factory_args *yrdawn_args =
+        /* Best-effort: yrdawn factory args are absent on builds
+         * compiled without the yrdawn server (webasm). The error
+         * carries the reason (NULL framework vs feature disabled);
+         * we just skip the callback install in that case. */
+        struct yetty_yrdawn_factory_args_ptr_result yr =
             yetty_yframework_factory_args_yrdawn(yetty_context->runtime);
-        if (yrdawn_args) {
+        if (YETTY_IS_OK(yr)) {
+            struct yetty_yrdawn_factory_args *yrdawn_args = yr.value;
             yrdawn_args->emit_osc_fn = terminal_layer_emit_osc;
             yrdawn_args->emit_osc_user = terminal;
             yrdawn_args->request_render_fn = terminal_request_render_callback;
             yrdawn_args->request_render_user = terminal;
+        } else {
+            yetty_ycore_error_destroy(yr.error);
         }
 
         struct yetty_ycore_void_result fr = yetty_yframework_register_figure_factories(

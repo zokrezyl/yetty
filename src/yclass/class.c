@@ -17,8 +17,22 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Saturating add — returns true on overflow without writing *out.
+ * Used in every place where a size_t accumulator could wrap and end
+ * up smaller than the constituent values (instance_size summation,
+ * qname buffer sizing). Cheaper than __builtin_add_overflow gates
+ * across compilers. */
+static inline _Bool size_add_check(size_t a, size_t b, size_t *out)
+{
+    if (a > SIZE_MAX - b)
+        return 1;
+    *out = a + b;
+    return 0;
+}
 
 struct yetty_yclass {
     const struct yetty_yclass_descriptor *desc;
@@ -164,7 +178,18 @@ yetty_yclass_method_slot_register(const char *domain, const char *name,
 
     size_t dom_len = strlen(tbl->domain);
     size_t loc_len = strlen(name);
-    e->qname = malloc(dom_len + 1 + loc_len + 1);
+    /* Checked size for qname buffer: dom_len + 1('_') + loc_len + 1(NUL).
+     * Without this, pathological inputs could wrap size_t and trigger
+     * a tiny malloc followed by a huge memcpy. */
+    size_t qname_size = 0;
+    if (size_add_check(dom_len, 1, &qname_size) ||
+        size_add_check(qname_size, loc_len, &qname_size) ||
+        size_add_check(qname_size, 1, &qname_size)) {
+        free(e);
+        return YETTY_ERR(yetty_yclass_method_slot,
+                         "method_slot_register: qname size overflow");
+    }
+    e->qname = malloc(qname_size);
     if (!e->qname) {
         free(e);
         return YETTY_ERR(yetty_yclass_method_slot,
@@ -178,8 +203,29 @@ yetty_yclass_method_slot_register(const char *domain, const char *name,
 
     if (tbl->count >= tbl->cap) {
         size_t ncap = tbl->cap ? tbl->cap * 2 : 32;
+        /* Doubling can overflow size_t for pathological tbl->cap.
+         * Also gate the eventual ncap * sizeof so we don't realloc(0). */
+        if (tbl->cap && ncap / 2 != tbl->cap) {
+            free(e->qname);
+            free(e);
+            return YETTY_ERR(yetty_yclass_method_slot,
+                             "method_slot_register: by_index cap doubling overflowed");
+        }
         while (ncap <= tbl->count) {
-            ncap *= 2;
+            size_t next = ncap * 2;
+            if (next / 2 != ncap) {
+                free(e->qname);
+                free(e);
+                return YETTY_ERR(yetty_yclass_method_slot,
+                                 "method_slot_register: by_index cap growth overflowed");
+            }
+            ncap = next;
+        }
+        if (ncap > SIZE_MAX / sizeof(struct slot_entry *)) {
+            free(e->qname);
+            free(e);
+            return YETTY_ERR(yetty_yclass_method_slot,
+                             "method_slot_register: by_index byte size overflow");
         }
         struct slot_entry **na = realloc(tbl->by_index, ncap * sizeof(*na));
         if (!na) {
@@ -283,29 +329,37 @@ yetty_yclass_method_slot_name(yetty_yclass_method_slot slot)
     return YETTY_OK(yetty_yclass_const_char_ptr, tbl->by_index[idx]->qname);
 }
 
-yetty_yclass_impl_t yetty_yclass_dispatch_lookup(const struct yetty_yclass *cls,
-                                                 yetty_yclass_method_slot slot)
+struct yetty_yclass_impl_t_result
+yetty_yclass_dispatch_lookup(const struct yetty_yclass *cls, yetty_yclass_method_slot slot)
 {
-    /* Not Result — "this class does not override this slot" is a
-     * normal flow, not an error. Returns NULL to indicate that. */
-    if (!cls || slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        return NULL;
-    }
+    if (!cls)
+        return YETTY_ERR(yetty_yclass_impl_t, "dispatch_lookup: NULL class");
+    if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED)
+        return YETTY_ERR(yetty_yclass_impl_t,
+                         "dispatch_lookup: METHOD_SLOT_UNDEFINED");
     uint8_t dom = YETTY_YCLASS_METHOD_SLOT_DOMAIN_OF(slot);
     uint32_t idx = YETTY_YCLASS_METHOD_SLOT_INDEX_OF(slot);
-    if (dom == 0 || dom >= YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS) {
-        return NULL;
-    }
+    if (dom == 0 || dom >= YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS)
+        return YETTY_ERR(yetty_yclass_impl_t,
+                         "dispatch_lookup: invalid slot domain id");
     const struct dispatch_slice *ds = &cls->dispatch_by_domain[dom];
-    if (idx >= ds->count) {
-        return NULL;
-    }
-    return ds->impls[idx];
+    if (idx >= ds->count)
+        return YETTY_ERR(yetty_yclass_impl_t,
+                         "dispatch_lookup: slot index out of class's dispatch range");
+    if (!ds->impls[idx])
+        return YETTY_ERR(yetty_yclass_impl_t,
+                         "dispatch_lookup: class does not implement this slot");
+    return YETTY_OK(yetty_yclass_impl_t, ds->impls[idx]);
 }
 
-const struct yetty_yclass *yetty_yclass_object_class(const struct yetty_yclass_object *obj)
+struct yetty_yclass_ptr_result
+yetty_yclass_object_class(const struct yetty_yclass_object *obj)
 {
-    return obj ? obj->klass : NULL;
+    if (!obj)
+        return YETTY_ERR(yetty_yclass_ptr, "object_class: NULL object");
+    if (!obj->klass)
+        return YETTY_ERR(yetty_yclass_ptr, "object_class: object has no class");
+    return YETTY_OK(yetty_yclass_ptr, obj->klass);
 }
 
 /* --- class_registry ----------------------------------------------- */
@@ -431,6 +485,13 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
         return YETTY_ERR(yetty_yclass_ptr,
                          "class_register: mixin_count > 0 but mixins is NULL");
     }
+    /* NULL mixin element would be dereferenced later in instance_size
+     * accumulation and class_inherit_dispatch — reject up front. */
+    for (size_t m = 0; m < mixin_count; ++m) {
+        if (!mixins[m]) {
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: NULL mixin element");
+        }
+    }
     struct yetty_yclass *cls = calloc(1, sizeof(*cls));
     if (!cls) {
         return YETTY_ERR(yetty_yclass_ptr, "class_register: calloc(class) failed");
@@ -448,16 +509,36 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
         cls->mixin_count = mixin_count;
     }
 
+    /* Sum the per-frame data sizes (parent chain + their mixins + own
+     * data + own mixins) into instance_size. Each += is overflow-
+     * checked so a pathological data_size doesn't wrap and produce a
+     * too-small object_alloc later. */
     size_t offset = sizeof(struct yetty_yclass_object);
     for (const struct yetty_yclass *p = parent; p != NULL; p = p->parent) {
-        offset += p->desc->data_size;
+        if (size_add_check(offset, p->desc->data_size, &offset)) {
+            class_destroy(cls);
+            return YETTY_ERR(yetty_yclass_ptr,
+                             "class_register: instance_size overflow (parent data)");
+        }
         for (size_t m = 0; m < p->mixin_count; ++m) {
-            offset += p->mixins[m]->desc->data_size;
+            if (size_add_check(offset, p->mixins[m]->desc->data_size, &offset)) {
+                class_destroy(cls);
+                return YETTY_ERR(yetty_yclass_ptr,
+                                 "class_register: instance_size overflow (parent mixin)");
+            }
         }
     }
-    offset += desc->data_size;
+    if (size_add_check(offset, desc->data_size, &offset)) {
+        class_destroy(cls);
+        return YETTY_ERR(yetty_yclass_ptr,
+                         "class_register: instance_size overflow (own data)");
+    }
     for (size_t m = 0; m < mixin_count; ++m) {
-        offset += mixins[m]->desc->data_size;
+        if (size_add_check(offset, mixins[m]->desc->data_size, &offset)) {
+            class_destroy(cls);
+            return YETTY_ERR(yetty_yclass_ptr,
+                             "class_register: instance_size overflow (own mixin)");
+        }
     }
     cls->instance_size = offset;
 
@@ -575,15 +656,17 @@ struct yetty_yclass_ptr_result yetty_yclass_by_name(const char *name)
                      "class_by_name: class not found in registry or any hook");
 }
 
-void yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
-                                void (*cb)(const char *name, yetty_yclass_method_slot slot,
-                                           void *ud),
-                                void *userdata)
+struct yetty_ycore_void_result
+yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
+                           void (*cb)(const char *name, yetty_yclass_method_slot slot,
+                                      void *ud),
+                           void *userdata)
 {
     ydebug("cls=%s", cls && cls->desc ? cls->desc->name : "(null)");
-    if (!cls || !cb) {
-        return;
-    }
+    if (!cls)
+        return YETTY_ERR(yetty_ycore_void, "for_each_slot: NULL cls");
+    if (!cb)
+        return YETTY_ERR(yetty_ycore_void, "for_each_slot: NULL cb");
     for (uint8_t d = 0; d < YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS; ++d) {
         const struct dispatch_slice *ds = &cls->dispatch_by_domain[d];
         for (size_t i = 0; i < ds->count; ++i) {
@@ -600,6 +683,7 @@ void yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
             }
         }
     }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_yclass_object_ptr_result yetty_yclass_object_alloc(const struct yetty_yclass *cls)
@@ -617,8 +701,9 @@ struct yetty_yclass_object_ptr_result yetty_yclass_object_alloc(const struct yet
     return YETTY_OK(yetty_yclass_object_ptr, obj);
 }
 
-void yetty_yclass_object_free(struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_object *obj)
 {
     ydebug("obj=%p", (void *)obj);
     free(obj);
+    return YETTY_OK_VOID();
 }

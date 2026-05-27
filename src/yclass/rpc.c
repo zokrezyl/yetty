@@ -49,36 +49,48 @@ static struct rpc_server_state *server(void)
     return &s;
 }
 
-void yetty_yclass_rpc_init(void)
+struct yetty_ycore_void_result yetty_yclass_rpc_init(void)
 {
     struct rpc_server_state *s = server();
-    s->object_count = 0;
+    /* Idempotent one-shot bootstrap: the object table holds caller-
+     * owned objects we cannot free here (we never took ownership), and
+     * the skel-cache / lookup-chain are populated by per-module
+     * constructors before main() — clearing them would orphan the
+     * mappings. Initialise next_handle to 1 on the first call only;
+     * subsequent calls are no-ops so a stale "rpc_init looks like a
+     * reset" expectation can't silently invalidate live handles. */
+    if (s->next_handle != 0)
+        return YETTY_OK_VOID();
     s->next_handle = 1;
+    return YETTY_OK_VOID();
 }
 
-void yetty_yclass_rpc_add_skel_lookup(yetty_yclass_rpc_skel_lookup_fn fn)
+struct yetty_ycore_void_result
+yetty_yclass_rpc_add_skel_lookup(yetty_yclass_rpc_skel_lookup_fn fn)
 {
     if (!fn)
-        return;
+        return YETTY_ERR(yetty_ycore_void, "rpc_add_skel_lookup: NULL fn");
     struct skel_lookup_node *node = calloc(1, sizeof(*node));
     if (!node)
-        return;
+        return YETTY_ERR(yetty_ycore_void, "rpc_add_skel_lookup: calloc failed");
     struct rpc_server_state *s = server();
     node->fn = fn;
     node->next = s->lookup_chain;
     s->lookup_chain = node;
+    return YETTY_OK_VOID();
 }
 
-yetty_yclass_rpc_skel_fn yetty_yclass_rpc_skel_for(yetty_yclass_method_slot slot)
+struct yetty_yclass_rpc_skel_fn_result
+yetty_yclass_rpc_skel_for(yetty_yclass_method_slot slot)
 {
     struct rpc_server_state *s = server();
     if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED)
-        return NULL;
+        return YETTY_ERR(yetty_yclass_rpc_skel_fn, "skel_for: METHOD_SLOT_UNDEFINED");
 
     struct skel_cache_entry *e = NULL;
     HASH_FIND(hh, s->skel_cache, &slot, sizeof(slot), e);
     if (e)
-        return e->fn;
+        return YETTY_OK(yetty_yclass_rpc_skel_fn, e->fn);
 
     /* Walk the chain. First hit wins. */
     yetty_yclass_rpc_skel_fn fn = NULL;
@@ -88,38 +100,42 @@ yetty_yclass_rpc_skel_fn yetty_yclass_rpc_skel_for(yetty_yclass_method_slot slot
             break;
     }
     if (!fn)
-        return NULL;
+        return YETTY_ERR(yetty_yclass_rpc_skel_fn,
+                         "skel_for: no skel registered for this slot");
 
     e = calloc(1, sizeof(*e));
-    if (!e)
-        return fn;
+    if (!e) {
+        /* Cache alloc failed but we have the fn — return it OK; next
+         * call will retry the chain walk and try caching again. */
+        return YETTY_OK(yetty_yclass_rpc_skel_fn, fn);
+    }
     e->slot = slot;
     e->fn = fn;
     HASH_ADD(hh, s->skel_cache, slot, sizeof(slot), e);
-    return fn;
+    return YETTY_OK(yetty_yclass_rpc_skel_fn, fn);
 }
 
-uint64_t yetty_yclass_rpc_register_object(void *obj)
+struct yetty_yclass_handle_result yetty_yclass_rpc_register_object(void *obj)
 {
     struct rpc_server_state *s = server();
     if (s->object_count >= MAX_OBJECTS)
-        return 0;
+        return YETTY_ERR(yetty_yclass_handle, "rpc_register_object: object table full");
     uint64_t h = s->next_handle++;
     s->objects[s->object_count].handle = h;
     s->objects[s->object_count].ptr = obj;
     s->object_count++;
-    return h;
+    return YETTY_OK(yetty_yclass_handle, h);
 }
 
-void *yetty_yclass_rpc_handle_resolve(uint64_t h)
+struct yetty_yclass_void_ptr_result yetty_yclass_rpc_handle_resolve(uint64_t h)
 {
     if (!h)
-        return NULL;
+        return YETTY_ERR(yetty_yclass_void_ptr, "rpc_handle_resolve: handle is 0");
     struct rpc_server_state *s = server();
     for (size_t i = 0; i < s->object_count; ++i)
         if (s->objects[i].handle == h)
-            return s->objects[i].ptr;
-    return NULL;
+            return YETTY_OK(yetty_yclass_void_ptr, s->objects[i].ptr);
+    return YETTY_ERR(yetty_yclass_void_ptr, "rpc_handle_resolve: handle not registered");
 }
 
 /* -------- io helpers (transport-routed) ---------------------------- */
@@ -169,10 +185,18 @@ static int write_full(struct yetty_yclass_transport *t, const void *buf, size_t 
  * module/class/slot chain is deep, and silent truncation was making
  * lookups fail invisibly. Caller owns the returned pointer.
  *
- * Returns NULL on alloc failure; the caller should treat that the
- * same as a lookup miss (return 0 from the handler). */
+ * Rejects embedded NUL bytes: the registry hash keys are strlen()
+ * /uthash string keys, so "valid\0junk" would silently resolve as
+ * "valid" — a malformed wire body could masquerade as a shorter
+ * legitimate name. Length-prefixed names with embedded NULs are
+ * always malformed, so fail closed.
+ *
+ * Returns NULL on alloc failure OR embedded NUL; the caller should
+ * treat that the same as a lookup miss (return 0 from the handler). */
 static char *dup_wire_name(const void *bytes, size_t len)
 {
+    if (len && memchr(bytes, 0, len) != NULL)
+        return NULL;
     char *s = malloc(len + 1);
     if (!s)
         return NULL;
@@ -253,7 +277,13 @@ static size_t handle_get_class(const void *body, size_t body_len, void *resp, si
         return 0;
     }
     struct get_class_ctx gc = {resp, 0, resp_max};
-    yetty_yclass_for_each_slot(cr.value, get_class_emit, &gc);
+    struct yetty_ycore_void_result fe = yetty_yclass_for_each_slot(cr.value, get_class_emit, &gc);
+    if (YETTY_IS_ERR(fe)) {
+        yetty_ycore_error_print(stderr, "[server] get_class for_each_slot", fe.error);
+        yetty_ycore_error_destroy(fe.error);
+        free(name);
+        return 0;
+    }
     ydebug("get_class('%s') -> %zu entries (%zu bytes)", name, gc.off / 6, gc.off);
     free(name);
     return gc.off;
@@ -278,15 +308,20 @@ static size_t handle_create(const void *body, size_t body_len, void *resp, size_
         free(name);
         return 0;
     }
-    uint64_t h = yetty_yclass_rpc_register_object(obj_r.value);
-    if (!h) {
-        /* Object table full — the registry orphans the alloc otherwise.
-         * Free it here so handle=0 (client failure path) doesn't leak. */
-        yetty_yclass_object_free(obj_r.value);
-        ywarn("create('%s'): rpc_register_object full, allocation freed", name);
+    struct yetty_yclass_handle_result rh = yetty_yclass_rpc_register_object(obj_r.value);
+    if (YETTY_IS_ERR(rh)) {
+        /* Registry rejected (table full, …) — free the alloc so we
+         * don't orphan it, then surface the failure as zero bytes to
+         * the client (handle=0 maps to client-side failure). */
+        struct yetty_ycore_void_result fr = yetty_yclass_object_free(obj_r.value);
+        if (YETTY_IS_ERR(fr))
+            yetty_ycore_error_destroy(fr.error);
+        ywarn("create('%s'): rpc_register_object failed, allocation freed", name);
+        yetty_ycore_error_destroy(rh.error);
         free(name);
         return 0;
     }
+    uint64_t h = rh.value;
     if (resp_max < sizeof(h)) {
         free(name);
         return 0;
@@ -299,7 +334,8 @@ static size_t handle_create(const void *body, size_t body_len, void *resp, size_
 
 /* -------- server loop ---------------------------------------------- */
 
-void yetty_yclass_rpc_server_run(struct yetty_yclass_transport *transport)
+struct yetty_ycore_void_result
+yetty_yclass_rpc_server_run(struct yetty_yclass_transport *transport)
 {
     struct rpc_server_state *gs = server();
     static uint8_t body[BUF_MAX];
@@ -307,17 +343,19 @@ void yetty_yclass_rpc_server_run(struct yetty_yclass_transport *transport)
 
     (void)gs;
     if (!transport)
-        return;
+        return YETTY_ERR(yetty_ycore_void, "rpc_server_run: NULL transport");
     for (;;) {
         uint32_t header = 0, body_len = 0;
         if (read_full(transport, &header, 4) < 0)
-            return;
+            return YETTY_OK_VOID(); /* clean peer disconnect */
         if (read_full(transport, &body_len, 4) < 0)
-            return;
+            return YETTY_ERR(yetty_ycore_void,
+                             "rpc_server_run: short read on body_len");
         if (body_len > BUF_MAX)
-            return;
+            return YETTY_ERR(yetty_ycore_void,
+                             "rpc_server_run: body_len exceeds BUF_MAX");
         if (body_len && read_full(transport, body, body_len) < 0)
-            return;
+            return YETTY_ERR(yetty_ycore_void, "rpc_server_run: short read on body");
 
         enum yetty_yclass_rpc_op op = YETTY_YCLASS_RPC_HDR_OP(header);
         uint32_t id = YETTY_YCLASS_RPC_HDR_ID(header);
@@ -325,13 +363,15 @@ void yetty_yclass_rpc_server_run(struct yetty_yclass_transport *transport)
 
         switch (op) {
         case YETTY_YCLASS_RPC_OP_CALL: {
-            yetty_yclass_rpc_skel_fn fn =
+            struct yetty_yclass_rpc_skel_fn_result sr =
                 yetty_yclass_rpc_skel_for((yetty_yclass_method_slot)id);
-            if (fn) {
+            if (YETTY_IS_OK(sr)) {
                 ydebug("CALL slot=%u body_len=%u", id, body_len);
-                resp_len = (uint32_t)fn(body, body_len, resp, BUF_MAX);
+                resp_len = (uint32_t)sr.value(body, body_len, resp, BUF_MAX);
             } else {
-                ywarn("CALL slot=%u — no skel", id);
+                ywarn("CALL slot=%u — skel_for failed: %s", id,
+                      sr.error.msg ? sr.error.msg : "(no msg)");
+                yetty_ycore_error_destroy(sr.error);
             }
             break;
         }
@@ -350,9 +390,9 @@ void yetty_yclass_rpc_server_run(struct yetty_yclass_transport *transport)
         }
 
         if (write_full(transport, &resp_len, 4) < 0)
-            return;
+            return YETTY_ERR(yetty_ycore_void, "rpc_server_run: short write on resp_len");
         if (resp_len && write_full(transport, resp, resp_len) < 0)
-            return;
+            return YETTY_ERR(yetty_ycore_void, "rpc_server_run: short write on resp");
     }
 }
 
@@ -377,21 +417,23 @@ struct yetty_yclass_rpc_session {
     struct translated_class *translated; /* by class name */
 };
 
-struct yetty_yclass_rpc_session *
+struct yetty_yclass_rpc_session_ptr_result
 yetty_yclass_rpc_session_create(struct yetty_yclass_transport *transport)
 {
     if (!transport)
-        return NULL;
+        return YETTY_ERR(yetty_yclass_rpc_session_ptr, "session_create: NULL transport");
     struct yetty_yclass_rpc_session *s = calloc(1, sizeof(*s));
-    if (s)
-        s->transport = transport;
-    return s;
+    if (!s)
+        return YETTY_ERR(yetty_yclass_rpc_session_ptr, "session_create: calloc failed");
+    s->transport = transport;
+    return YETTY_OK(yetty_yclass_rpc_session_ptr, s);
 }
 
-void yetty_yclass_rpc_session_destroy(struct yetty_yclass_rpc_session *s)
+struct yetty_ycore_void_result
+yetty_yclass_rpc_session_destroy(struct yetty_yclass_rpc_session *s)
 {
     if (!s)
-        return;
+        return YETTY_OK_VOID();
     struct translated_class *cur, *tmp;
     HASH_ITER(hh, s->translated, cur, tmp) {
         HASH_DEL(s->translated, cur);
@@ -403,84 +445,105 @@ void yetty_yclass_rpc_session_destroy(struct yetty_yclass_rpc_session *s)
         HASH_DEL(s->remote_ids, rcur);
         free(rcur);
     }
+    /* Best-effort cleanup: still free the session even if transport
+     * destroy fails — propagate the error after freeing so resources
+     * are released either way (multi-step *_destroy pattern). */
+    struct yetty_ycore_void_result td = YETTY_OK_VOID();
     if (s->transport && s->transport->ops->destroy)
-        s->transport->ops->destroy(s->transport);
+        td = s->transport->ops->destroy(s->transport);
     free(s);
+    if (YETTY_IS_ERR(td))
+        return YETTY_ERR(yetty_ycore_void, "session_destroy: transport destroy failed", td);
+    return YETTY_OK_VOID();
 }
 
-uint32_t yetty_yclass_rpc_session_remote_id(struct yetty_yclass_rpc_session *s,
-                                            yetty_yclass_method_slot slot)
+struct uint32_result yetty_yclass_rpc_session_remote_id(struct yetty_yclass_rpc_session *s,
+                                                         yetty_yclass_method_slot slot)
 {
     if (!s)
-        return YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED;
+        return YETTY_ERR(uint32, "remote_id: NULL session");
     struct remote_id_entry *e = NULL;
     HASH_FIND(hh, s->remote_ids, &slot, sizeof(slot), e);
-    return e ? e->remote_id : YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED;
+    if (!e)
+        return YETTY_ERR(uint32, "remote_id: slot not cached in this session");
+    return YETTY_OK(uint32, e->remote_id);
 }
 
-void yetty_yclass_rpc_session_set_remote_id(struct yetty_yclass_rpc_session *s,
-                                            yetty_yclass_method_slot slot, uint32_t remote_id)
+struct yetty_ycore_void_result
+yetty_yclass_rpc_session_set_remote_id(struct yetty_yclass_rpc_session *s,
+                                       yetty_yclass_method_slot slot, uint32_t remote_id)
 {
     if (!s)
-        return;
+        return YETTY_ERR(yetty_ycore_void, "set_remote_id: NULL session");
+    /* Public API — direct callers can otherwise poison the xlat table
+     * with values that translate_class now refuses to cache:
+     *   - METHOD_SLOT_UNDEFINED as the local slot has nothing to map.
+     *   - remote_id == UINT32_MAX collides with REMOTE_ID_UNRESOLVED,
+     *     making ensure_remote_id retry forever (or worse, fail the
+     *     stub if it's read back as cached).
+     *   - remote_id > RPC_ID_MASK doesn't fit in the wire id field
+     *     and would be rejected at rpc_call time, breaking dispatch
+     *     for that slot. */
+    if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED)
+        return YETTY_ERR(yetty_ycore_void,
+                         "set_remote_id: METHOD_SLOT_UNDEFINED local slot");
+    if (remote_id == YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED ||
+        remote_id > YETTY_YCLASS_RPC_ID_MASK)
+        return YETTY_ERR(yetty_ycore_void,
+                         "set_remote_id: invalid remote_id (UNRESOLVED or > ID_MASK)");
     struct remote_id_entry *e = NULL;
     HASH_FIND(hh, s->remote_ids, &slot, sizeof(slot), e);
     if (!e) {
         e = calloc(1, sizeof(*e));
         if (!e)
-            return;
+            return YETTY_ERR(yetty_ycore_void, "set_remote_id: calloc failed");
         e->local_slot = slot;
         HASH_ADD(hh, s->remote_ids, local_slot, sizeof(yetty_yclass_method_slot), e);
     }
     e->remote_id = remote_id;
+    return YETTY_OK_VOID();
 }
 
-size_t yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s, enum yetty_yclass_rpc_op op,
-                             uint32_t id, const void *body, size_t body_len, void *resp,
-                             size_t resp_max)
+struct yetty_ycore_size_result
+yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s, enum yetty_yclass_rpc_op op,
+                      uint32_t id, const void *body, size_t body_len, void *resp,
+                      size_t resp_max)
 {
     if (!s)
-        return 0;
-    /* The wire body_len is a u32, and the peer reads body bytes into
-     * a BUF_MAX-sized static buffer. Reject anything that would
-     * truncate (cast to u32) or overrun the peer's buffer BEFORE
-     * writing the header, so the stream stays framed on rejection. */
-    if (body_len > UINT32_MAX || body_len > BUF_MAX) {
-        ywarn("rpc_call: body_len=%zu exceeds wire/buffer limit (BUF_MAX=%u)", body_len,
-              BUF_MAX);
-        return 0;
-    }
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: NULL session");
+    /* Reject before touching the wire: the body_len is a u32 on the
+     * wire and the peer reads into a BUF_MAX-sized static buffer. */
+    if (body_len > UINT32_MAX || body_len > BUF_MAX)
+        return YETTY_ERR(yetty_ycore_size,
+                         "rpc_call: body_len exceeds wire/buffer limit");
     /* The wire id field is 28 bits — RPC_HDR_MAKE silently masks
-     * anything larger. Reject loudly instead so the caller sees the
-     * bug rather than the peer receiving a corrupted id. */
-    if (id > YETTY_YCLASS_RPC_ID_MASK) {
-        ywarn("rpc_call: id=0x%08x exceeds 28-bit wire field", id);
-        return 0;
-    }
-    /* op occupies a 4-bit field. An out-of-range enum value (whether
-     * from a caller bug or wire-protocol drift) would either be
-     * silently masked into a different op by RPC_HDR_MAKE, or land on
-     * the server's `default:` branch — neither is what callers
-     * expect. Cap at the highest defined op rather than just the
-     * mask width so unknown-but-fits-in-4-bits values are also caught. */
-    if (op > YETTY_YCLASS_RPC_OP_CREATE) {
-        ywarn("rpc_call: op=%u is not a defined yetty_yclass_rpc_op", op);
-        return 0;
-    }
+     * anything larger. */
+    if (id > YETTY_YCLASS_RPC_ID_MASK)
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: id exceeds 28-bit wire field");
+    /* op occupies a 4-bit field; cap at the highest defined op so
+     * undefined-but-fits-in-4-bits values are also caught. */
+    if (op > YETTY_YCLASS_RPC_OP_CREATE)
+        return YETTY_ERR(yetty_ycore_size,
+                         "rpc_call: op is not a defined yetty_yclass_rpc_op");
+    if (body_len > 0 && body == NULL)
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: body_len>0 but body is NULL");
+    if (resp_max > 0 && resp == NULL)
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: resp_max>0 but resp is NULL");
+
     uint32_t header = YETTY_YCLASS_RPC_HDR_MAKE(op, id);
     ydebug("op=%u id=%u body_len=%zu", op, id, body_len);
 
     uint32_t bl = (uint32_t)body_len;
     if (write_full(s->transport, &header, 4) < 0)
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: short write on header");
     if (write_full(s->transport, &bl, 4) < 0)
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: short write on body_len");
     if (body_len && write_full(s->transport, body, body_len) < 0)
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: short write on body");
 
     uint32_t resp_len = 0;
     if (read_full(s->transport, &resp_len, 4) < 0)
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: short read on resp_len");
     if (resp_len > resp_max) {
         /* Drain the oversized payload so the next frame read starts
          * aligned. Without this we'd parse garbage from mid-stream. */
@@ -489,59 +552,81 @@ size_t yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s, enum yetty_ycla
         while (remain) {
             size_t chunk = remain > sizeof(drain) ? sizeof(drain) : remain;
             if (read_full(s->transport, drain, chunk) < 0)
-                return 0;
+                return YETTY_ERR(yetty_ycore_size,
+                                 "rpc_call: short read while draining oversized resp");
             remain -= chunk;
         }
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: response exceeds caller's resp_max");
     }
     if (resp_len && read_full(s->transport, resp, resp_len) < 0)
-        return 0;
-    return resp_len;
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: short read on resp body");
+    return YETTY_OK(yetty_ycore_size, (size_t)resp_len);
 }
 
-uint32_t yetty_yclass_rpc_session_ensure_remote_id(struct yetty_yclass_rpc_session *s,
-                                                   yetty_yclass_method_slot local_slot)
+struct uint32_result
+yetty_yclass_rpc_session_ensure_remote_id(struct yetty_yclass_rpc_session *s,
+                                          yetty_yclass_method_slot local_slot)
 {
     if (!s)
-        return YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED;
-    uint32_t cached = yetty_yclass_rpc_session_remote_id(s, local_slot);
-    if (cached != YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED)
+        return YETTY_ERR(uint32, "ensure_remote_id: NULL session");
+    struct uint32_result cached = yetty_yclass_rpc_session_remote_id(s, local_slot);
+    if (YETTY_IS_OK(cached))
         return cached;
+    /* Not cached — drop the lookup error and do the round-trip. */
+    yetty_ycore_error_destroy(cached.error);
 
     struct yetty_yclass_const_char_ptr_result nr = yetty_yclass_method_slot_name(local_slot);
-    if (YETTY_IS_ERR(nr)) {
-        yetty_ycore_error_destroy(nr.error);
-        return YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED;
-    }
+    if (YETTY_IS_ERR(nr))
+        return YETTY_ERR(uint32, "ensure_remote_id: slot name lookup failed", nr);
     const char *name = nr.value;
 
     uint32_t remote = YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED;
-    size_t n = yetty_yclass_rpc_call(s, YETTY_YCLASS_RPC_OP_RESOLVE_SLOT, 0, name,
-                                     strlen(name), &remote, sizeof(remote));
-    if (n != sizeof(remote) || remote == YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED)
-        return YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED;
+    struct yetty_ycore_size_result nr2 =
+        yetty_yclass_rpc_call(s, YETTY_YCLASS_RPC_OP_RESOLVE_SLOT, 0, name, strlen(name),
+                              &remote, sizeof(remote));
+    if (YETTY_IS_ERR(nr2))
+        return YETTY_ERR(uint32, "ensure_remote_id: RESOLVE_SLOT call failed", nr2);
+    if (nr2.value != sizeof(remote) || remote == YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED)
+        return YETTY_ERR(uint32, "ensure_remote_id: RESOLVE_SLOT returned unresolved");
 
-    yetty_yclass_rpc_session_set_remote_id(s, local_slot, remote);
+    struct yetty_ycore_void_result sr =
+        yetty_yclass_rpc_session_set_remote_id(s, local_slot, remote);
+    if (YETTY_IS_ERR(sr)) {
+        /* Caching failed (validation or alloc) — return the resolved
+         * id to the caller anyway so this one call can proceed;
+         * future calls will retry the round-trip. Log so a persistent
+         * cache failure doesn't silently degrade every call to a
+         * round-trip. */
+        ywarn("ensure_remote_id: cache write for slot=0x%08x rid=%u failed: %s",
+              local_slot, remote, sr.error.msg ? sr.error.msg : "(no msg)");
+        yetty_ycore_error_destroy(sr.error);
+    }
     ydebug("lazy resolve '%s' local=%u remote=%u", name, local_slot, remote);
-    return remote;
+    return YETTY_OK(uint32, remote);
 }
 
-int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
-                                             const char *class_name)
+struct yetty_ycore_void_result
+yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
+                                         const char *class_name)
 {
-    if (!s || !class_name)
-        return -1;
+    if (!s)
+        return YETTY_ERR(yetty_ycore_void, "translate_class: NULL session");
+    if (!class_name)
+        return YETTY_ERR(yetty_ycore_void, "translate_class: NULL class_name");
     struct translated_class *t = NULL;
     HASH_FIND_STR(s->translated, class_name, t);
     if (t)
-        return 0;
+        return YETTY_OK_VOID();
 
     uint8_t buf[BUF_MAX];
     size_t name_len = strlen(class_name);
-    size_t resp_len = yetty_yclass_rpc_call(s, YETTY_YCLASS_RPC_OP_GET_CLASS, 0, class_name,
-                                            name_len, buf, sizeof(buf));
+    struct yetty_ycore_size_result rr =
+        yetty_yclass_rpc_call(s, YETTY_YCLASS_RPC_OP_GET_CLASS, 0, class_name, name_len, buf,
+                              sizeof(buf));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "translate_class: GET_CLASS call failed");
+    size_t resp_len = rr.value;
     if (resp_len == 0)
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "translate_class: empty GET_CLASS response");
 
     size_t off = 0;
     while (off + 2 + 4 <= resp_len) {
@@ -574,8 +659,19 @@ int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
         struct yetty_yclass_method_slot_result lr =
             yetty_yclass_method_slot_by_qname(slot_name);
         if (YETTY_IS_OK(lr)) {
-            yetty_yclass_rpc_session_set_remote_id(s, lr.value, rid);
-            ydebug("xlat['%s'] local=%u remote=%u", slot_name, lr.value, rid);
+            struct yetty_ycore_void_result sr =
+                yetty_yclass_rpc_session_set_remote_id(s, lr.value, rid);
+            if (YETTY_IS_ERR(sr)) {
+                /* Per-entry cache failure — log and keep parsing the
+                 * rest; per-slot RESOLVE_SLOT fallback can recover
+                 * any entry we drop here. */
+                ywarn("translate_class['%s']: cache write for slot '%s' rid=%u failed: %s",
+                      class_name, slot_name, rid,
+                      sr.error.msg ? sr.error.msg : "(no msg)");
+                yetty_ycore_error_destroy(sr.error);
+            } else {
+                ydebug("xlat['%s'] local=%u remote=%u", slot_name, lr.value, rid);
+            }
         } else {
             yetty_ycore_error_destroy(lr.error);
         }
@@ -591,17 +687,18 @@ int yetty_yclass_rpc_session_translate_class(struct yetty_yclass_rpc_session *s,
     if (off != resp_len) {
         ywarn("translate_class('%s'): parse consumed %zu of %zu bytes — not caching",
               class_name, off, resp_len);
-        return -1;
+        return YETTY_ERR(yetty_ycore_void,
+                         "translate_class: parse did not consume exactly resp_len bytes");
     }
 
     t = calloc(1, sizeof(*t));
     if (!t)
-        return 0;
+        return YETTY_ERR(yetty_ycore_void, "translate_class: cache entry calloc failed");
     t->name = strdup(class_name);
     if (!t->name) {
         free(t);
-        return 0;
+        return YETTY_ERR(yetty_ycore_void, "translate_class: cache entry strdup failed");
     }
     HASH_ADD_KEYPTR(hh, s->translated, t->name, strlen(t->name), t);
-    return 0;
+    return YETTY_OK_VOID();
 }
