@@ -246,6 +246,13 @@ static size_t handle_create(const void *body, size_t body_len, void *resp, size_
         return 0;
     }
     uint64_t h = yetty_yclass_rpc_register_object(obj_r.value);
+    if (!h) {
+        /* Object table full — the registry orphans the alloc otherwise.
+         * Free it here so handle=0 (client failure path) doesn't leak. */
+        yetty_yclass_object_free(obj_r.value);
+        ywarn("create('%s'): rpc_register_object full, allocation freed", name);
+        return 0;
+    }
     if (resp_max < sizeof(h))
         return 0;
     memcpy(resp, &h, sizeof(h));
@@ -397,6 +404,15 @@ size_t yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s, enum yetty_ycla
 {
     if (!s)
         return 0;
+    /* The wire body_len is a u32, and the peer reads body bytes into
+     * a BUF_MAX-sized static buffer. Reject anything that would
+     * truncate (cast to u32) or overrun the peer's buffer BEFORE
+     * writing the header, so the stream stays framed on rejection. */
+    if (body_len > UINT32_MAX || body_len > BUF_MAX) {
+        ywarn("rpc_call: body_len=%zu exceeds wire/buffer limit (BUF_MAX=%u)", body_len,
+              BUF_MAX);
+        return 0;
+    }
     uint32_t header = YETTY_YCLASS_RPC_HDR_MAKE(op, id);
     ydebug("op=%u id=%u body_len=%zu", op, id, body_len);
 

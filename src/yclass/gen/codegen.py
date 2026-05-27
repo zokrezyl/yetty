@@ -478,11 +478,18 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
     """Public-stub-only header. Knows nothing about RPC — anyone who only
     wants to *call* methods includes this and gets typed declarations.
     Lives at include/<module>/methods.gen.h. Per-class headers in the
-    same directory `#include "methods.gen.h"` (sibling)."""
+    same directory `#include "methods.gen.h"` (sibling).
+
+    Pulls the module-owned <module>/types.h ahead of any stub decl so
+    YETTY_YRESULT_DECLARE for module-specific return types is in scope
+    when the generated `struct <id>_result` references it. Modules
+    that have no custom result types still get an (empty / guard-only)
+    types.h scaffolded by main()."""
     guard = f"YETTY_{module.upper()}_METHODS_GEN_H"
     parts = [HEADER]
     parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
-    parts.append('#include <yclass/class.h>\n\n')
+    parts.append('#include <yclass/class.h>\n')
+    parts.append(f'#include "{module}/types.h"\n\n')
 
     structs = set()
     for m in model["methods"]:
@@ -789,7 +796,11 @@ def regular_classes(model: dict) -> list:
 
 
 def class_header_for(cls: dict, module: str) -> str:
-    return f"{module}/{Path(cls['source_file']).stem}.h"
+    """Generated public header path for a class. Keyed by class name —
+    NOT the source filename — because emit_class_public_headers writes
+    one header per class (<class>.h), and a single source file may
+    declare several classes."""
+    return f"{module}/{cls['name']}.h"
 
 
 def emit_skel(m: dict) -> str:
@@ -1056,6 +1067,23 @@ def main():
         p = include_module / stub
         if not p.exists():
             p.write_text(placeholder_class_h)
+
+    # Module-owned types.h carries module-specific YETTY_YRESULT_DECLAREs.
+    # Scaffold an empty (guard-only) one if missing so first-time AST
+    # parsing of the annotated sources resolves the include emitted from
+    # methods.gen.h. Existing user content is never overwritten.
+    types_h = include_module / "types.h"
+    if not types_h.exists():
+        guard = f"YETTY_{module.upper()}_TYPES_H"
+        types_h.write_text(
+            f"/* Module-owned result type declarations.\n"
+            f" * Add YETTY_YRESULT_DECLARE(<id>, <type>) lines here for any\n"
+            f" * struct/scalar return type used by {module}'s yclass methods.\n"
+            f" * Hand-written — codegen will NOT overwrite. */\n"
+            f"#ifndef {guard}\n#define {guard}\n\n"
+            f"#include <yetty/ycore/result.h>\n\n"
+            f"#endif /* {guard} */\n"
+        )
 
     # Clang search path: shared include/, the module's own generated-
     # header dir (include/<module>/), and the module src dir (for
