@@ -10,52 +10,67 @@
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_CHEV 0xFFA8A79Fu
 
-struct combo_data {
+struct [[clang::annotate("class@ygui:combobox")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]]
+       [[clang::annotate("uses@ygui:clickable")]] combo_data {
     char *text;
     struct yetty_ygui_object *menu;
 };
 
-static struct yetty_ycore_void_result on_pick(struct yetty_ygui_object *menu, int item, void *ud)
+static struct yetty_ycore_void_result on_pick(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, int item, void *ud)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *menu = (struct yetty_ygui_object *)_yc_obj;
     (void)menu;
     (void)item;
     (void)ud;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result on_click(struct yetty_ygui_object *obj, void *ud)
+static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *ud)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     (void)ud;
-    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get());
+    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     if (!d->menu) return YETTY_OK_VOID();
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_popup_menu_toggle_at(d->menu, r.min.x, r.max.y + 2);
 }
 
-static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:combobox:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_combobox_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_combobox_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "combo: super");
-    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get());
+    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     d->text = NULL;
     d->menu = NULL;
     return yetty_ygui_clickable_on_click_set(obj, on_click, NULL);
 }
 
-static struct yetty_ycore_void_result dtor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:combobox:destructor")]]
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     free(d->text);
-    return yetty_ygui_super_void(obj, yetty_ygui_combobox_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_combobox_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:combobox:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "combo paint: NULL ctx");
-    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get());
+    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) return YETTY_OK_VOID();
@@ -76,7 +91,7 @@ struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_ygui_ob
                                                             const char *t)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "combo_set_text: NULL");
-    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get());
+    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     free(d->text);
     d->text = NULL;
     if (t) {
@@ -92,7 +107,7 @@ struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_y
                                                                   const char *t)
 {
     if (!obj || !t) return YETTY_ERR(yetty_ycore_void, "combo_add_suggestion: NULL");
-    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get());
+    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     if (!d->menu) return YETTY_OK_VOID();
     return yetty_ygui_popup_menu_add_item(d->menu, t, on_pick, obj);
 }
@@ -101,7 +116,7 @@ struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_ygui_ob
                                                             struct yetty_ygui_object *menu)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "combo_set_menu: NULL");
-    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get());
+    struct combo_data *d = yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     d->menu = menu;
     return YETTY_OK_VOID();
 }
@@ -110,21 +125,8 @@ const char *yetty_ygui_combobox_get_text(const struct yetty_ygui_object *obj)
 {
     if (!obj) return "";
     struct combo_data *d = yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                                               yetty_ygui_combobox_class_get());
+                                               yetty_ygui_combobox_class_get().value);
     return d->text ? d->text : "";
 }
 
-
-static const struct yetty_ygui_op combobox_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ctor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, dtor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
-};
-
-static const struct yetty_ygui_class_descriptor combobox_desc = {
-    .name = "yetty_ygui_combobox",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct combo_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_combobox_class_get, &combobox_desc, combobox_ops, yetty_ygui_primitive_widget_class_get(), yetty_ygui_clickable_mixin_get(), NULL)
+#include "combobox.gen.c"

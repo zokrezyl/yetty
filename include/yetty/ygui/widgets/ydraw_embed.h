@@ -1,37 +1,23 @@
-/*
- * ygui-ydraw_embed.h — base widget that hosts a yetty_ydraw_draw_list
- * and paints it translated by the widget's own rect origin.
- *
- * Used as the base class for content-producer widgets (ymarkdown,
- * ybrowser, ypdf, yzoo, yjungle): they each build a draw_list from
- * their source, hand it to this base via _set_buffer, and rely on
- * the inherited paint to position it inside the layout.
- *
- * The buffer ownership transfers in — the base destroys it on
- * destruction or on subsequent _set_buffer.
- */
-#ifndef YETTY_YGUI_WIDGETS_YDRAW_EMBED_H
-#define YETTY_YGUI_WIDGETS_YDRAW_EMBED_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `ydraw_embed` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YDRAW_EMBED_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_YDRAW_EMBED_H
 
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct yetty_yclass_ptr_result yetty_ygui_ydraw_embed_class_get(void);
 
-struct yetty_ydraw_draw_list;
-
-const struct yetty_ygui_class *yetty_ygui_ydraw_embed_class_get(void);
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 /* Replace the embedded draw_list. Takes ownership — the widget will
  * destroy the buffer on next replace or on destruction. NULL clears. */
 struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_ygui_object *obj,
                                                                  struct yetty_ydraw_draw_list *buf);
-
-#ifdef __cplusplus
-}
-#endif
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

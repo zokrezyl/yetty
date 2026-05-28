@@ -23,7 +23,7 @@ extern "C" {
  * leaf class; each ctor is expected to chain via yetty_ygui_super_void
  * before its own work. On any ctor failure, already-constructed slices
  * are torn down (destructors run leaf-first) and the block freed. */
-struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_ygui_class *cls,
+struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cls,
                                                    struct yetty_ygui_object *parent);
 
 /* Destroy `obj`. Runs destructors leaf-first, detaches from parent,
@@ -34,7 +34,7 @@ struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj);
  * casts to the slice struct type. Infallible: `cls` must be in `obj`'s
  * class chain (own class, parent chain, or any mixin). Debug builds
  * assert; release builds trust the call site. */
-void *yetty_ygui_data_get(struct yetty_ygui_object *obj, const struct yetty_ygui_class *cls);
+void *yetty_ygui_data_get(struct yetty_ygui_object *obj, const struct yetty_yclass *cls);
 
 /* Parent / first-child / next-sibling access. NULL when no relation. */
 struct yetty_ygui_object *yetty_ygui_object_parent(struct yetty_ygui_object *obj);
@@ -62,13 +62,10 @@ int yetty_ygui_object_is_dirty(const struct yetty_ygui_object *obj);
  * the flag from their paint method to render a hover variant. */
 int yetty_ygui_object_is_hovered(const struct yetty_ygui_object *obj);
 
-/* Lifecycle method ids (declared as public stubs). Other code may pass
- * these to super invokers / dispatch helpers using their address. */
-YETTY_YGUI_DECLARE_METHOD(yetty_ygui_constructor, struct yetty_ycore_void_result,
-                          (struct yetty_ygui_object * obj));
-
-YETTY_YGUI_DECLARE_METHOD(yetty_ygui_destructor, struct yetty_ycore_void_result,
-                          (struct yetty_ygui_object * obj));
+/* `yetty_ygui_constructor` / `yetty_ygui_destructor` public stubs are
+ * emitted by yclass codegen from the override annotations in
+ * widget.c; pull them in via the module-wide methods.h. */
+#include <yetty/ygui/methods.h>
 
 /*-----------------------------------------------------------------------------
  * Super invokers — one per Result type.
@@ -80,12 +77,12 @@ YETTY_YGUI_DECLARE_METHOD(yetty_ygui_destructor, struct yetty_ycore_void_result,
  * dispatch table; super always means "the parent's slot value".
  *---------------------------------------------------------------------------*/
 struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_ygui_object *obj,
-                                                     const struct yetty_ygui_class *self_class,
-                                                     yetty_ygui_method_id_t method_id);
+                                                     const struct yetty_yclass *self_class,
+                                                     yetty_yclass_method_id_t method_id);
 
 struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_ygui_object *obj,
-                                                   const struct yetty_ygui_class *self_class,
-                                                   yetty_ygui_method_id_t method_id);
+                                                   const struct yetty_yclass *self_class,
+                                                   yetty_yclass_method_id_t method_id);
 
 #ifdef __cplusplus
 }

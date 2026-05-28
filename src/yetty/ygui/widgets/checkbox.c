@@ -23,15 +23,19 @@
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_CHECK 0xFF14100Bu  /* BRAND_BG — dark check on bright accent */
 
-struct checkbox_data {
+struct [[clang::annotate("class@ygui:checkbox")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]]
+       [[clang::annotate("uses@ygui:clickable")]] checkbox_data {
     char *label;
     int checked;
 };
 
-static struct yetty_ycore_void_result on_click_toggle(struct yetty_ygui_object *obj, void *userdata)
+static struct yetty_ycore_void_result on_click_toggle(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *userdata)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     (void)userdata;
-    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get());
+    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
     d->checked = !d->checked;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) return dr;
@@ -42,24 +46,30 @@ static struct yetty_ycore_void_result on_click_toggle(struct yetty_ygui_object *
     return yetty_ygui_object_emit(obj, &ev);
 }
 
-static struct yetty_ycore_void_result checkbox_constructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:checkbox:constructor")]]
+static struct yetty_ycore_void_result checkbox_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_checkbox_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_checkbox_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "checkbox_constructor: super");
-    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get());
+    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
     d->label = NULL;
     d->checked = 0;
     return yetty_ygui_clickable_on_click_set(obj, on_click_toggle, NULL);
 }
 
-static struct yetty_ycore_void_result checkbox_destructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:checkbox:destructor")]]
+static struct yetty_ycore_void_result checkbox_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
     free(d->label);
     d->label = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_checkbox_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_checkbox_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx, float x, float y,
@@ -83,13 +93,16 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                                          0.0f, &geom);
 }
 
-static struct yetty_ycore_void_result checkbox_paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:checkbox:widget_paint")]]
+static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "checkbox_paint: NULL ctx");
     }
-    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get());
+    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float h = r.max.y - r.min.y;
     float box_size = h - 4.0f;
@@ -124,7 +137,7 @@ struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_ygui_o
                                                              const char *label)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "checkbox_set_label: NULL obj");
-    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get());
+    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
     free(d->label);
     if (!label) {
         d->label = NULL;
@@ -141,7 +154,7 @@ struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_ygui
                                                                int checked)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "checkbox_set_checked: NULL obj");
-    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get());
+    struct checkbox_data *d = yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
     d->checked = checked ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -150,21 +163,8 @@ int yetty_ygui_checkbox_get_checked(const struct yetty_ygui_object *obj)
 {
     if (!obj) return 0;
     struct checkbox_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_checkbox_class_get());
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_checkbox_class_get().value);
     return d->checked;
 }
 
-
-static const struct yetty_ygui_op checkbox_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, checkbox_constructor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, checkbox_destructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, checkbox_paint),
-};
-
-static const struct yetty_ygui_class_descriptor checkbox_desc = {
-    .name = "yetty_ygui_checkbox",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct checkbox_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_checkbox_class_get, &checkbox_desc, checkbox_ops, yetty_ygui_primitive_widget_class_get(), yetty_ygui_clickable_mixin_get(), NULL)
+#include "checkbox.gen.c"

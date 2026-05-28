@@ -1,45 +1,21 @@
-/*
- * yetty_ymgui_figure — one Dear-ImGui frame as a compositor figure.
- *
- * Subclass of yetty_yfigure_figure. Replaces the per-card slot in the
- * old ymgui terminal layer: a single ImGui-app instance positioned in
- * absolute target pixel space. Move/resize is by the compositor calling
- * yfigure container set_rect — there is no rolling-row anchor,
- * no col/row, no cell math.
- *
- * Owned state: decoded ImGui frame bytes (per the wire format in
- * <yetty/ymgui/wire.h>) + font atlas + per-instance GPU buffers
- * (vertex/index/uniform/bind group + atlas texture/view).
- *
- * Borrowed: a yetty_ymgui_pipeline pointer for the shared shader +
- * sampler + render pipeline. The pipeline must outlive every figure.
- *
- * Render coordinate model:
- *   The frame's vertex coords are in frame-local pixels (origin at the
- *   frame's top-left, matching ImGui DisplayPos=(0,0) /
- *   DisplaySize=(frame_w, frame_h)). At render time the figure passes
- *   `display_size = (frame_w, frame_h)` from the frame header and
- *   `frame_top = figure->rect.min` so the shader places the frame at
- *   the figure's absolute rect. Move = just changes the origin uniform.
- *   Resize = viewport grows/shrinks; the frame keeps its authored size
- *   until the client ships a fresh frame matching the new pixel rect.
- */
-#ifndef YETTY_YMGUI_FIGURE_H
-#define YETTY_YMGUI_FIGURE_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `figure` (module: ymgui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YMGUI_FIGURE_H
+#define YETTY_YCLASSGEN_YMGUI_FIGURE_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include <yclass/class.h>
+#include <yetty/ymgui/methods.h>
 
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
-#include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/registry.h>
+struct yetty_yclass_ptr_result yetty_ymgui_figure_class_get(void);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+struct yetty_context;
+struct yetty_yfigure_registry;
 struct yetty_ymgui_figure;
 struct yetty_ymgui_pipeline;
 
@@ -73,7 +49,7 @@ struct yetty_ycore_void_result yetty_ymgui_pipeline_destroy(struct yetty_ymgui_p
 /* Create at `rect` (absolute target pixel space). The pipeline pointer
  * is borrowed and must outlive the figure. Frame + atlas start empty;
  * the figure renders nothing until both have been set at least once. */
-struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create(
+struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_ycore_rectangle rect, struct yetty_ymgui_pipeline *pipeline,
     const struct yetty_context *context);
 
@@ -136,9 +112,6 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
  * an ymgui figure (identified by its ops vtable), NULL otherwise. Use
  * this to filter the heterogeneous children of a yfigure container. */
 struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base);
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* YETTY_YMGUI_FIGURE_H */

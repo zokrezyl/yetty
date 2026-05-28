@@ -1,29 +1,24 @@
-/*
- * ygui-checkbox.h — boolean input.
- *
- * Clickable. State change fires VALUE_CHANGED with i0 = 0/1.
- */
-#ifndef YETTY_YGUI_WIDGETS_CHECKBOX_H
-#define YETTY_YGUI_WIDGETS_CHECKBOX_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `checkbox` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_CHECKBOX_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_CHECKBOX_H
 
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct yetty_yclass_ptr_result yetty_ygui_checkbox_class_get(void);
 
-const struct yetty_ygui_class *yetty_ygui_checkbox_class_get(void);
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_ygui_object *obj,
                                                              const char *label);
 struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_ygui_object *obj,
                                                                int checked);
 int yetty_ygui_checkbox_get_checked(const struct yetty_ygui_object *obj);
-
-#ifdef __cplusplus
-}
-#endif
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

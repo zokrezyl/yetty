@@ -1,31 +1,19 @@
-/*
- * ygui-yplot.h — figure-shaped widget wrapping the YPLOT figure kind.
- *
- * On the wire the widget IS its own figure: emit_container sends
- * CREATE_CHILD(kind=YPLOT) with the widget's rect; emit_body ships a
- * single yplot complex primitive built from the widget's source string
- * (and optional precomputed data buffers).
- *
- * Source syntax is the multi-function plot DSL parsed by yexpr_parse_plot:
- *
- *     "f = sin(x); g = cos(x); @f.color = #FF6B6B"
- */
-#ifndef YETTY_YGUI_WIDGETS_YPLOT_H
-#define YETTY_YGUI_WIDGETS_YPLOT_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `yplot` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YPLOT_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_YPLOT_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+struct yetty_yclass_ptr_result yetty_ygui_yplot_class_get(void);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-const struct yetty_ygui_class *yetty_ygui_yplot_class_get(void);
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 /* Replace the expression source. The widget rebuilds its primitive on
  * the next emit. */
 struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_object *obj,
@@ -43,9 +31,6 @@ struct yetty_ygui_yplot_config {
 };
 struct yetty_ycore_void_result yetty_ygui_yplot_set_config(struct yetty_ygui_object *obj,
                                                            const struct yetty_ygui_yplot_config *cfg);
-
-#ifdef __cplusplus
-}
-#endif
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

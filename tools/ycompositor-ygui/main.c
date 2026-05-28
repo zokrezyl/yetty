@@ -660,7 +660,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         .max = {.x = (float)app->surface_w, .y = (float)app->surface_h},
     };
     struct yetty_yfigure_container_ptr_result cr =
-        yetty_yfigure_container_create(root_rect, &app->ctx, app->registry);
+        yetty_yfigure_container_create_local(root_rect, &app->ctx, app->registry);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "root_container create failed");
     app->root = cr.value;
 

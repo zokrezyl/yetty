@@ -10,17 +10,21 @@
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_CHEV 0xFFA8A79Fu
 
-struct tn_data {
+struct [[clang::annotate("class@ygui:tree_node")]]
+       [[clang::annotate("parent@ygui:vbox")]] tn_data {
     char *label;
     int open;
 };
 
-static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:tree_node:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_tree_node_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_tree_node_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "tree_node: super");
-    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get());
+    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     d->label = NULL;
     d->open = 1;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -30,20 +34,26 @@ static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-static struct yetty_ycore_void_result dtor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:tree_node:destructor")]]
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     free(d->label);
-    return yetty_ygui_super_void(obj, yetty_ygui_tree_node_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_tree_node_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_int_result on_press(struct yetty_ygui_object *obj, float x, float y,
+[[clang::annotate("override@ygui:tree_node:widget_on_press")]]
+static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, float x, float y,
                                               int btn)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     (void)x;
     (void)btn;
-    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get());
+    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     if (y - r.min.y > HEADER_H) return YETTY_OK(yetty_ycore_int, 0);
     d->open = !d->open;
@@ -58,11 +68,14 @@ static struct yetty_ycore_int_result on_press(struct yetty_ygui_object *obj, flo
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:tree_node:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "tree_node paint: NULL ctx");
-    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get());
+    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float fs = 13.0f;
     float ty = r.min.y + (HEADER_H + fs) * 0.5f - 3;
@@ -80,7 +93,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_label(struct yetty_ygui_
                                                               const char *label)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "tn_set_label: NULL");
-    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get());
+    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     free(d->label);
     d->label = NULL;
     if (label) {
@@ -96,7 +109,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_ygui_o
                                                              int o)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "tn_set_open: NULL");
-    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get());
+    struct tn_data *d = yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     d->open = o ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -105,22 +118,8 @@ int yetty_ygui_tree_node_is_open(const struct yetty_ygui_object *obj)
 {
     if (!obj) return 0;
     return ((struct tn_data *)yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                                                  yetty_ygui_tree_node_class_get()))
+                                                  yetty_ygui_tree_node_class_get().value))
         ->open;
 }
 
-
-static const struct yetty_ygui_op tree_node_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ctor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, dtor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
-    YETTY_YGUI_OP(yetty_ygui_widget_on_press, on_press),
-};
-
-static const struct yetty_ygui_class_descriptor tree_node_desc = {
-    .name = "yetty_ygui_tree_node",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct tn_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_tree_node_class_get, &tree_node_desc, tree_node_ops, yetty_ygui_vbox_class_get(), NULL)
+#include "tree_node.gen.c"

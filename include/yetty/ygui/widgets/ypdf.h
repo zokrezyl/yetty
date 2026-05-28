@@ -7,10 +7,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-const struct yetty_ygui_class *yetty_ygui_ypdf_class_get(void);
+struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void);
+
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object *obj,
                                                         const char *path);
-#ifdef __cplusplus
-}
-#endif
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
+
 #endif

@@ -1,31 +1,20 @@
-/*
- * primitive-widget.h — base class for widgets whose visual content
- * lives as SDF / glyph prims in the framework's shared ygrid.
- *
- * The chrome widget set (label, button, hbox / vbox, panel, tabbar,
- * tooltip, …) inherits from this class. Subclasses override the
- * `paint` virtual to append ydraw prim records into the per-emit
- * draw_list carried by the emit context — primitive_widget's
- * emit_body wraps the call.
- *
- * Figure widgets (yimage, yplot, …) do NOT inherit from this class;
- * they inherit from the base widget directly and override both
- * emit_container (to mint their own receiver-side figure via
- * CREATE_CHILD) and emit_body (to ship their figure-specific bytes).
- */
-#ifndef YETTY_YGUI_PRIMITIVE_WIDGET_H
-#define YETTY_YGUI_PRIMITIVE_WIDGET_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `primitive_widget` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_PRIMITIVE_WIDGET_H
+#define YETTY_YCLASSGEN_YGUI_PRIMITIVE_WIDGET_H
 
-#include <yetty/ygui/class.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
+struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void);
+
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
+
 #endif
-
-const struct yetty_ygui_class *yetty_ygui_primitive_widget_class_get(void);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* YETTY_YGUI_PRIMITIVE_WIDGET_H */

@@ -1,31 +1,24 @@
-/*
- * ygui-menubar.h — top-of-window menu bar.
- *
- * Hbox of trigger buttons; each opens its bound popup_menu when
- * clicked. The popup_menu must already exist as a sibling under the
- * root, since it positions itself absolutely.
- */
-#ifndef YETTY_YGUI_WIDGETS_MENUBAR_H
-#define YETTY_YGUI_WIDGETS_MENUBAR_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `menubar` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_MENUBAR_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_MENUBAR_H
 
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct yetty_yclass_ptr_result yetty_ygui_menubar_class_get(void);
 
-const struct yetty_ygui_class *yetty_ygui_menubar_class_get(void);
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 /* Append a trigger button labelled `label` that toggles `menu` when
  * clicked. The menu is borrowed (caller owns lifetime). */
 struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_ygui_object *bar,
                                                       const char *label,
                                                       struct yetty_ygui_object *menu);
-
-#ifdef __cplusplus
-}
-#endif
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

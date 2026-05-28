@@ -17,7 +17,8 @@
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_ACC 0xFF92A86Bu
 
-struct spinner_data {
+struct [[clang::annotate("class@ygui:spinner")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] spinner_data {
     float value, min_v, max_v, step;
 };
 
@@ -27,12 +28,15 @@ static inline void yetty_ycore_error_destroy_unused(struct yetty_ycore_void_resu
     if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
 }
 
-static struct yetty_ycore_void_result spinner_constructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:spinner:constructor")]]
+static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_spinner_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_spinner_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "spinner_constructor: super");
-    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get());
+    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get().value);
     d->value = 0;
     d->min_v = 0;
     d->max_v = 100;
@@ -40,12 +44,15 @@ static struct yetty_ycore_void_result spinner_constructor(struct yetty_ygui_obje
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_int_result spinner_on_press(struct yetty_ygui_object *obj, float x,
+[[clang::annotate("override@ygui:spinner:widget_on_press")]]
+static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, float x,
                                                      float y, int button)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     (void)y;
     (void)button;
-    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get());
+    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float third = w / 3.0f;
@@ -92,12 +99,15 @@ static struct yetty_ycore_void_result paint_text(struct yetty_ygui_emit_ctx *ctx
     return yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, x, y, &tb, fs, c, 0, -1, 0);
 }
 
-static struct yetty_ycore_void_result spinner_paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:spinner:widget_paint")]]
+static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx || !ctx->ygrid_draw_list)
         return YETTY_ERR(yetty_ycore_void, "spinner_paint: NULL ctx");
-    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get());
+    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) return YETTY_OK_VOID();
@@ -128,7 +138,7 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_ygui_object *ob
 struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_ygui_object *obj, float v)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "spinner_set_value: NULL");
-    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get());
+    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get().value);
     d->value = v;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -136,7 +146,7 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_ygui_ob
                                                             float mx, float step)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "spinner_set_range: NULL");
-    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get());
+    struct spinner_data *d = yetty_ygui_data_get(obj, yetty_ygui_spinner_class_get().value);
     d->min_v = mn;
     d->max_v = mx;
     d->step = step > 0 ? step : 1;
@@ -146,21 +156,8 @@ float yetty_ygui_spinner_get_value(const struct yetty_ygui_object *obj)
 {
     if (!obj) return 0;
     return ((struct spinner_data *)yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                                                       yetty_ygui_spinner_class_get()))
+                                                       yetty_ygui_spinner_class_get().value))
         ->value;
 }
 
-
-static const struct yetty_ygui_op spinner_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, spinner_constructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, spinner_paint),
-    YETTY_YGUI_OP(yetty_ygui_widget_on_press, spinner_on_press),
-};
-
-static const struct yetty_ygui_class_descriptor spinner_desc = {
-    .name = "yetty_ygui_spinner",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct spinner_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_spinner_class_get, &spinner_desc, spinner_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "spinner.gen.c"

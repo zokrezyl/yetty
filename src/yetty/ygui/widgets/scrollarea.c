@@ -7,10 +7,13 @@
 #define COLOR_THUMB 0xFF474A36u
 #define SCROLLBAR_W 6.0f
 
-static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:scrollarea:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_scrollarea_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_scrollarea_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "scrollarea: super");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
     l.padding_right = SCROLLBAR_W + 4.0f;
@@ -21,9 +24,12 @@ static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:scrollarea:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "scrollarea paint: NULL ctx");
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
@@ -41,15 +47,9 @@ static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
 }
 
 
-static const struct yetty_ygui_op scrollarea_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ctor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
+struct [[clang::annotate("class@ygui:scrollarea")]]
+       [[clang::annotate("parent@ygui:vbox")]] scrollarea_data {
+    char _empty;
 };
 
-static const struct yetty_ygui_class_descriptor scrollarea_desc = {
-    .name = "yetty_ygui_scrollarea",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_scrollarea_class_get, &scrollarea_desc, scrollarea_ops, yetty_ygui_vbox_class_get(), NULL)
+#include "scrollarea.gen.c"

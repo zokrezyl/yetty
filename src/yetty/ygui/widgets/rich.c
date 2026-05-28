@@ -29,18 +29,22 @@ struct rich_line {
     int cap;
 };
 
-struct rich_data {
+struct [[clang::annotate("class@ygui:rich")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] rich_data {
     struct rich_line *lines;
     int n_lines;
     int cap;
 };
 
-static struct yetty_ycore_void_result rich_constructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:rich:constructor")]]
+static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_rich_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_rich_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rich_constructor: super");
-    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get());
+    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
     d->lines = NULL;
     d->n_lines = 0;
     d->cap = 0;
@@ -56,23 +60,29 @@ static void free_line(struct rich_line *line)
     line->cap = 0;
 }
 
-static struct yetty_ycore_void_result rich_destructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:rich:destructor")]]
+static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
     for (int i = 0; i < d->n_lines; ++i) free_line(&d->lines[i]);
     free(d->lines);
     d->lines = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_rich_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_rich_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_void_result rich_paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:rich:widget_paint")]]
+static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                  struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "rich_paint: NULL ctx");
     }
-    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get());
+    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -139,7 +149,7 @@ static int spans_grow(struct rich_line *l, int need)
 struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *obj)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "rich_clear: NULL obj");
-    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get());
+    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
     for (int i = 0; i < d->n_lines; ++i) free_line(&d->lines[i]);
     d->n_lines = 0;
     return yetty_ygui_object_set_dirty(obj);
@@ -148,7 +158,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *o
 struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object *obj)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "rich_add_line: NULL obj");
-    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get());
+    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
     if (!lines_grow(d, d->n_lines + 1)) {
         return YETTY_ERR(yetty_ycore_void, "rich_add_line: realloc");
     }
@@ -164,7 +174,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object
                                                         uint32_t color_rgba)
 {
     if (!obj || !text) return YETTY_ERR(yetty_ycore_void, "rich_add_span: NULL arg");
-    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get());
+    struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
     if (d->n_lines == 0) {
         struct yetty_ycore_void_result lr = yetty_ygui_rich_add_line(obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "rich_add_span: implicit line");
@@ -184,17 +194,4 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object
     return yetty_ygui_object_set_dirty(obj);
 }
 
-
-static const struct yetty_ygui_op rich_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, rich_constructor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, rich_destructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, rich_paint),
-};
-
-static const struct yetty_ygui_class_descriptor rich_desc = {
-    .name = "yetty_ygui_rich",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct rich_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_rich_class_get, &rich_desc, rich_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "rich.gen.c"

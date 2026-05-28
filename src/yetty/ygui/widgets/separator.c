@@ -11,9 +11,12 @@
 
 #define COLOR_BORDER 0xFF474A36u
 
-static struct yetty_ycore_void_result separator_paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:separator:widget_paint")]]
+static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "separator_paint: NULL ctx");
     }
@@ -34,14 +37,9 @@ static struct yetty_ycore_void_result separator_paint(struct yetty_ygui_object *
 }
 
 
-static const struct yetty_ygui_op separator_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, separator_paint),
+struct [[clang::annotate("class@ygui:separator")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] separator_data {
+    char _empty;
 };
 
-static const struct yetty_ygui_class_descriptor separator_desc = {
-    .name = "yetty_ygui_separator",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_separator_class_get, &separator_desc, separator_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "separator.gen.c"

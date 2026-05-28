@@ -118,13 +118,13 @@ static void test_yimage_emit(void)
     struct yetty_ygui_runtime *engine = er.value;
 
     /* Build root = panel containing one yimage. */
-    struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_panel_class_get(), NULL);
+    struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
     CHECK(YETTY_IS_OK(rr), "add panel");
     struct yetty_ygui_object *root = rr.value;
     struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(engine, root);
     CHECK(YETTY_IS_OK(sr), "engine_set_root");
 
-    struct yetty_ygui_object_ptr_result ir = yetty_ygui_add(yetty_ygui_yimage_class_get(), root);
+    struct yetty_ygui_object_ptr_result ir = yetty_ygui_add(yetty_ygui_yimage_class_get().value, root);
     CHECK(YETTY_IS_OK(ir), "add yimage");
     struct yetty_ygui_object *img = ir.value;
 

@@ -1,39 +1,19 @@
-/*
- * yfigure — base type for compositor figures.
- *
- * A figure is a positioned, axis-aligned rectangular thing that knows
- * how to paint itself inside its rectangle. The compositor (ycompositor,
- * defined elsewhere) hosts a list of figures and drives damage-rect
- * repaint; the figure itself is unaware of the compositor.
- *
- * Concrete figure kinds (ygrid, yimage, yplot, …) each live in their
- * own module, embed `struct yetty_yfigure_figure` as the first member,
- * and install an ops vtable. A group is itself a figure (composite
- * pattern, same model as scene-canvas).
- *
- * Coordinate system:
- *   A figure's `rect` is its position + size in absolute target pixel
- *   space. The figure knows where it is from its own state — render
- *   ops do NOT take position parameters.
- *
- *   The wire format encodes coordinates relative to the enclosing
- *   group for compactness and cheap subtree moves; the decoder
- *   translates wire-relative to runtime-absolute as it walks each
- *   CMD_GROUP. When a group moves at runtime, the move walks
- *   descendants and updates their absolute rects accordingly.
- */
-#ifndef YETTY_YFIGURE_FIGURE_H
-#define YETTY_YFIGURE_FIGURE_H
+/* GENERATED — do not edit. */
+/* Public interface for mixin(es) `figure` (module: yfigure).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YFIGURE_FIGURE_H
+#define YETTY_YCLASSGEN_YFIGURE_FIGURE_H
 
-#include <stddef.h>
+#include <yclass/class.h>
+#include <yetty/yfigure/methods.h>
 
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
+struct yetty_yclass_ptr_result yetty_yfigure_figure_mixin_get(void);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 struct yetty_yfigure_figure;
 struct yetty_ydraw_target;
 struct yetty_ywire_wire_statemachine;
@@ -156,7 +136,7 @@ struct yetty_yfigure_registry;
  * inherit both pointers. Either may be NULL: a NULL registry causes
  * any CREATE_CHILD record to fail with a "no registry" error, useful
  * for containers that should never accept new children. */
-struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create(
+struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create_local(
     struct yetty_ycore_rectangle rect, const struct yetty_context *context,
     struct yetty_yfigure_registry *registry);
 
@@ -268,9 +248,6 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
  * Caller owns the returned string and frees with free(). NULL on OOM.
  *=========================================================================*/
 char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent);
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* YETTY_YFIGURE_FIGURE_H */

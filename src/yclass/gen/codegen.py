@@ -12,10 +12,10 @@ touch another.
 Reads annotated .c sources, builds the in-memory model, emits:
 
   Public (under <include_base>/<module>/):
-    <class>.h          — accessor decl, includes sibling methods.gen.h.
+    <class>.h          — accessor decl, includes sibling methods.h.
                          GENERATED (replaces any hand-written class header).
-    methods.gen.h      — every public stub in this module.
-    rpc.gen.h          — every <class>_create() in this module.
+    methods.h      — every public stub in this module.
+    rpc.h          — every <class>_create() in this module.
 
   Internal (under <module_src_dir>/):
     <class>.gen.c      — accessor body, included at the foot of <class>.c.
@@ -122,14 +122,30 @@ def result_type(ret: str) -> str:
 
 def ret_value_type(rid: str):
     """Underlying value C type for a Result identifier. None for void
-    (no payload). Mirrors the YETTY_YRESULT_DECLARE table in
-    yetty/ycore/result.h."""
-    if rid == "yetty_ycore_void":
-        return None
-    if rid == "yetty_ycore_int":
-        return "int"
-    if rid == "yetty_ycore_size":
-        return "size_t"
+    (no payload).
+
+    Mirrors:
+      - `YETTY_YRESULT_DECLARE` table in yetty/ycore/result.h
+        (yetty_ycore_void / _int / _size)
+      - Public scalar entries in yetty/ycore/types.h
+        (uint32, float)
+      - Module-local convention: `_ptr` suffix → `struct <prefix> *`,
+        any other id → `struct <id>` (matches the standard
+        `YETTY_YRESULT_DECLARE(<id>, struct <id>)` idiom modules use).
+
+    Result ids declared over scalar typedefs / primitives MUST be
+    listed here — otherwise the fallback `struct <id>` produces
+    invalid C (e.g. `struct uint32` for `YETTY_YRESULT_DECLARE(uint32,
+    uint32_t)`). Add entries as ycore grows."""
+    known_scalars = {
+        "yetty_ycore_void": None,
+        "yetty_ycore_int": "int",
+        "yetty_ycore_size": "size_t",
+        "uint32": "uint32_t",
+        "float": "float",
+    }
+    if rid in known_scalars:
+        return known_scalars[rid]
     if rid.endswith("_ptr"):
         return f"struct {rid[:-4]} *"
     return f"struct {rid}"
@@ -165,34 +181,75 @@ def ret_value_type(rid: str):
 
 def ast_dump(path: Path, include_dirs: list) -> dict:
     clang = os.environ.get("CLANG", "clang")
-    cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-std=c2x"]
+    # Tolerate semantic errors in the source — what we need from clang
+    # is the parse tree (Decl + annotation nodes), not a clean
+    # syntax-check. ygui's annotated sources reference codegen-emitted
+    # public-stub symbols (yetty_ygui_widget_paint, yetty_ygui_constructor,
+    # etc.) that won't exist until methods.h has been written, and
+    # the placeholder methods.h is intentionally empty. We let
+    # clang emit "undeclared identifier" errors but still produce JSON
+    # AST as long as the file parses syntactically.
+    cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-std=c2x",
+           "-ferror-limit=0", "-Wno-error", "-Wno-everything"]
     for d in include_dirs:
         cmd.append(f"-I{d}")
+    extra = os.environ.get("YCLASS_CODEGEN_INCLUDES", "")
+    for d in extra.split(":") if extra else []:
+        d = d.strip()
+        if d:
+            cmd.append(f"-I{d}")
     cmd.append(str(path))
     r = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if r.returncode != 0:
+    # Don't abort on returncode != 0 — clang exits non-zero on any
+    # semantic error but the AST dump on stdout is still well-formed
+    # JSON in those cases.
+    if not r.stdout:
         sys.stderr.write(r.stderr)
         sys.exit(1)
-    return json.loads(r.stdout)
+    try:
+        return json.loads(r.stdout)
+    except json.JSONDecodeError:
+        # Genuine syntax error — bail with clang's stderr so the caller
+        # can see what went wrong.
+        sys.stderr.write(r.stderr)
+        sys.exit(1)
 
 
-def _annotate_value(attr_node: dict, src: bytes):
+def _annotate_value(attr_node: dict, file_bytes_cache: dict, current_file: str):
+    """Decode an AnnotateAttr's payload string. The byte offsets in the
+    range nodes index into the FILE the attribute was declared in —
+    which may be a header pulled in transitively, not the .c source
+    fed to codegen. The walk-state's `current_file` (updated whenever
+    a node carries a `loc.file` indicator) tells us which file to
+    slice. `file_bytes_cache` memoises the read of each header. """
     rng = attr_node.get("range", {})
     beg = rng.get("begin", {}); end = rng.get("end", {})
     if "offset" not in beg or "offset" not in end:
         return None
+    # The range itself may also carry a `file` override (the attribute
+    # could live in a header included only inside one specific decl).
+    attr_file = beg.get("file") or current_file
+    if not attr_file:
+        return None
+    blob = file_bytes_cache.get(attr_file)
+    if blob is None:
+        try:
+            blob = Path(attr_file).read_bytes()
+        except OSError:
+            return None
+        file_bytes_cache[attr_file] = blob
     start = beg["offset"]
     stop = end["offset"] + end.get("tokLen", 1)
-    blob = src[start:stop].decode("utf-8", errors="replace")
-    m = re.search(r'annotate\s*\(\s*"([^"]*)"', blob)
+    text = blob[start:stop].decode("utf-8", errors="replace")
+    m = re.search(r'annotate\s*\(\s*"([^"]*)"', text)
     return m.group(1) if m else None
 
 
-def _collect_annotations(decl: dict, src: bytes) -> list:
+def _collect_annotations(decl: dict, file_bytes_cache: dict, current_file: str) -> list:
     out = []
     for child in decl.get("inner", []):
         if child.get("kind") == "AnnotateAttr":
-            v = _annotate_value(child, src)
+            v = _annotate_value(child, file_bytes_cache, current_file)
             if v: out.append(v)
     return out
 
@@ -213,11 +270,39 @@ def _parse_return_type(qual_type: str) -> str:
     return m.group(1).strip() if m else qual_type
 
 
-def _walk_decls(node: dict):
-    if node.get("kind") in ("FunctionDecl", "RecordDecl"):
-        yield node
-    for child in node.get("inner", []):
-        yield from _walk_decls(child)
+def _walk_decls(node: dict, current_file: str = None):
+    """Yield FunctionDecl/RecordDecl nodes paired with the file they
+    were declared in.
+
+    clang's JSON AST uses a STATEFUL "current file" model: a location
+    only carries `file` when it differs from the immediately preceding
+    location in document order. So the file tracker is global to the
+    whole walk, not lexically scoped to a parent's subtree — a sibling
+    that crosses into a header changes the state for later siblings
+    too. We thread the tracker through via a mutable single-element
+    list so updates anywhere in the recursion are visible everywhere
+    after that point. """
+    state = [current_file]
+
+    def visit(n):
+        # Recurse into BEGIN-locations too: clang puts the file
+        # indicator on the begin/end of a range when no top-level
+        # `loc.file` exists. Without this, attribute-only nodes
+        # (which carry `range` but no `loc`) wouldn't update state.
+        loc = n.get("loc")
+        if isinstance(loc, dict) and "file" in loc:
+            state[0] = loc["file"]
+        rng = n.get("range")
+        if isinstance(rng, dict):
+            beg = rng.get("begin", {})
+            if isinstance(beg, dict) and "file" in beg:
+                state[0] = beg["file"]
+        if n.get("kind") in ("FunctionDecl", "RecordDecl"):
+            yield n, state[0]
+        for child in n.get("inner", []) or []:
+            yield from visit(child)
+
+    yield from visit(node)
 
 
 def _split_ann(ann: str):
@@ -264,11 +349,21 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                 f"class/mixin/override must live in their own module's domain.\n")
             sys.exit(1)
 
+    # File-bytes cache shared across every source — headers are
+    # frequently included by multiple .c files, no need to re-read
+    # them per source.
+    file_bytes_cache: dict = {}
     for path in sources:
-        src = path.read_bytes()
+        # Seed the cache so the .c's own annotations resolve regardless
+        # of whether clang emits a `loc.file` on its top-level decls
+        # (it usually does, but seeding here removes the dependency).
+        file_bytes_cache[str(path)] = path.read_bytes()
         tu = ast_dump(path, include_dirs)
-        for decl in _walk_decls(tu):
-            anns = _collect_annotations(decl, src)
+        # The .c being processed is the default "current file" for the
+        # top-level translation unit — clang annotates the file change
+        # only on the FIRST declaration that moves into a header.
+        for decl, decl_file in _walk_decls(tu, current_file=str(path)):
+            anns = _collect_annotations(decl, file_bytes_cache, decl_file)
             if not anns: continue
             kind = decl.get("kind")
 
@@ -292,7 +387,12 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                                 "override@<DOMAIN>:<CLASS>:<SLOT> or "
                                 "override@<DOMAIN>:<CLASS>:<SLOT_DOMAIN>:<SLOT>\n")
                             sys.exit(1)
-                        require_local_domain(role, impl_dom)
+                        # Skip override impls that belong to a foreign
+                        # module — they'd only reach us via a header
+                        # inclusion of someone else's source, which
+                        # shouldn't happen but is harmless to ignore.
+                        if impl_dom != module:
+                            continue
                         b = bucket(cls)
                         b["ops"].append({
                             "slot": slot,
@@ -325,24 +425,43 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         primary_dom, primary, kind2 = args[0], args[1], "mixin"
                         break
                 if primary:
-                    require_local_domain(kind2, primary_dom)
+                    # Foreign-module class/mixin annotations reach us
+                    # via header inclusion (e.g. ygrid's grid.c pulls
+                    # in `<yetty/yfigure/figure.h>` which carries the
+                    # `mixin@yfigure:figure` annotation on the struct).
+                    # The owning module generates that class's accessor
+                    # — we just ignore the annotation here. Same goes
+                    # for any parent/uses annotations attached to the
+                    # foreign class; they describe the foreign class's
+                    # relationships, not ours.
+                    if primary_dom != module:
+                        continue
                     b = bucket(primary)
-                    b["domain"] = primary_dom
-                    b["type"] = kind2
-                    b["source_file"] = str(path)
-                    suffix = "_mixin_get" if kind2 == "mixin" else "_class_get"
-                    b["accessor"] = f"yetty_{primary_dom}_{primary}{suffix}"
-                    tag = decl.get("name")
-                    if tag:
-                        b["data"] = f"struct {tag}"
-                    for ann in anns:
-                        role, args = _split_ann(ann)
-                        if role == "parent":
-                            require_segments(role, args, 2, "parent@<DOMAIN>:<CLASS>")
-                            b["parent"] = {"domain": args[0], "name": args[1]}
-                        elif role == "uses":
-                            require_segments(role, args, 2, "uses@<DOMAIN>:<MIXIN>")
-                            b["mixins"].append({"domain": args[0], "name": args[1]})
+                    # Set descriptive fields ONLY on first sighting.
+                    # The same annotation reaches every TU that pulls
+                    # the defining header in transitively — overwriting
+                    # `source_file` each time would point it at the
+                    # last-seen including .c, not the file the struct
+                    # actually lives in. The first .c we process and
+                    # see the annotation through is the closest stand-
+                    # in we have for the canonical owner.
+                    if not b["source_file"]:
+                        b["domain"] = primary_dom
+                        b["type"] = kind2
+                        b["source_file"] = str(path)
+                        suffix = "_mixin_get" if kind2 == "mixin" else "_class_get"
+                        b["accessor"] = f"yetty_{primary_dom}_{primary}{suffix}"
+                        tag = decl.get("name")
+                        if tag:
+                            b["data"] = f"struct {tag}"
+                        for ann in anns:
+                            role, args = _split_ann(ann)
+                            if role == "parent":
+                                require_segments(role, args, 2, "parent@<DOMAIN>:<CLASS>")
+                                b["parent"] = {"domain": args[0], "name": args[1]}
+                            elif role == "uses":
+                                require_segments(role, args, 2, "uses@<DOMAIN>:<MIXIN>")
+                                b["mixins"].append({"domain": args[0], "name": args[1]})
 
     # Every bucket created by an `override` annotation MUST end up
     # with a matching `class@...` or `mixin@...` record by the end of
@@ -366,7 +485,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
 
 # Signature validation for cross-domain (and same-domain) overrides is
 # done in *C*, not here. Each public stub gets a per-slot function-
-# pointer typedef in methods.gen.h (see emit_methods_h). Each override
+# pointer typedef in methods.h (see emit_methods_h). Each override
 # emits a file-scope `static <slot>_fn _check_… = <impl>;` line in
 # the class's .gen.c (see emit_class_accessor). If the impl signature
 # doesn't match the slot's, the C compiler errors at the assignment.
@@ -425,12 +544,32 @@ def is_specific_struct_ptr(t: str, name: str) -> bool:
     return bool(re.match(rf"^\s*(const\s+)?struct\s+{name}\s*\*\s*$", t))
 
 
+# Codegen's one blessed value-typed blob arg shape. `struct yetty_ycore_buffer`
+# (by value, NOT pointer) is recognised as a (data, size, capacity) carrier;
+# the wire encodes it as a u32 size field in the packed scalar header plus
+# the bytes appended verbatim after. Any other value-typed struct would be
+# memcpy'd as raw bytes — meaningless across processes if it carries
+# pointers internally — so we still refuse those at validate_method time.
+def is_buffer(t: str) -> bool:
+    return bool(re.match(r"^\s*(const\s+)?struct\s+yetty_ycore_buffer\s*$", t))
+
+
 def wire_type(t: str) -> str:
-    return "uint64_t" if is_struct_ptr(t) else t.strip()
+    if is_struct_ptr(t):
+        return "uint64_t"
+    if is_buffer(t):
+        # Only the size lives in the packed header; the payload bytes are
+        # appended to the body after the packed struct, in declared order.
+        return "uint32_t"
+    return t.strip()
 
 
 def wire_name(arg: dict) -> str:
-    return f"{arg['name']}_handle" if is_struct_ptr(arg["type"]) else arg["name"]
+    if is_struct_ptr(arg["type"]):
+        return f"{arg['name']}_handle"
+    if is_buffer(arg["type"]):
+        return f"{arg['name']}_len"
+    return arg["name"]
 
 
 def struct_names_in(*types: str) -> set:
@@ -450,6 +589,22 @@ def default_return_for(ret: str) -> str:
 
 def validate_method(m: dict):
     args = m["args"]
+    # Enforce the project Result-return contract on every slot impl.
+    # Without this, raw returns (void/int/size_t/struct X/struct X *)
+    # get silently mapped into Result ids by result_type_id() —
+    # generating a public stub typed as `struct <id>_result` while
+    # the actual impl returns the raw type, which the compile-time
+    # signature check then trips on at compile time. Reject up front
+    # so the diagnostic points at the annotated source, not at the
+    # generated typedef-assignment line.
+    rt = m["return_type"].strip()
+    if not re.match(r"^struct\s+\w+_result\s*$", rt):
+        sys.stderr.write(
+            f"error: method {m['slot']}: return type '{rt}' is not a Result.\n"
+            f"  All slot impls must return a `struct <id>_result` declared via\n"
+            f"  YETTY_YRESULT_DECLARE. Use `struct yetty_ycore_void_result` for\n"
+            f"  methods that have no success value.\n")
+        sys.exit(1)
     if len(args) < 2:
         sys.stderr.write(
             f"error: method {m['slot']} needs (ctx*, obj*, ...). got {len(args)}\n")
@@ -464,17 +619,26 @@ def validate_method(m: dict):
             f"error: method {m['slot']}: second arg must be 'struct yetty_yclass_object *' "
             f"(got '{args[1]['type']}')\n")
         sys.exit(1)
-    # Any pointer arg after obj is rejected — not just `struct X *`.
-    # Marshalling a raw address (char *, void *, int *, ...) is wrong
-    # across the wire: the bytes are the local heap pointer and mean
-    # nothing on the peer. Use scalars or yclass object handles.
+    # Pointer args after obj are accepted ONLY when they have the
+    # shape `struct X *` — those are wire-marshalled as yclass object
+    # handles, same way obj itself is. Every other pointer flavour
+    # (char *, void *, int *, struct yetty_ycore_buffer *, …) is
+    # rejected: marshalling a raw address would write the producer's
+    # local heap pointer onto the wire, meaningless on the peer.
     for a in args[2:]:
+        if is_buffer(a["type"]):
+            continue  # length-prefixed payload after the packed header
+        if is_struct_ptr(a["type"]):
+            continue  # extra object-handle arg, treated like obj
         if "*" in a["type"]:
+            # `struct yetty_ycore_buffer *` (pointer to buffer) is
+            # also rejected — buffer is taken by value so the wire
+            # layer owns the marshalling.
             sys.stderr.write(
                 f"error: method {m['slot']}: arg '{a['name']}' has pointer "
-                f"type ({a['type']}). Only the obj at arg[1] is wire-marshalled "
-                f"as a handle; other pointer types can't cross process / RPC "
-                f"boundaries. Use scalars or a yclass object handle.\n")
+                f"type ({a['type']}). Only `struct X *` (yclass object handle), "
+                f"`struct yetty_ycore_buffer` (by value), and scalars cross the "
+                f"wire. Other pointer types have no meaning on the peer.\n")
             sys.exit(1)
     # Same reasoning for return values — a `_ptr` Result id would
     # memcpy the server's pointer bytes into the wire response and
@@ -489,6 +653,17 @@ def validate_method(m: dict):
             f"can't cross process / RPC boundaries. Return a value or a "
             f"yclass object handle (uint64_t).\n")
         sys.exit(1)
+    # `struct yetty_ycore_buffer` as a Result payload would silently
+    # memcpy (data ptr + size + capacity) onto the wire — meaningless on
+    # the peer. Buffer is an INPUT shape only; if a slot needs to return
+    # bytes, redesign as either (a) a yclass object handle to a buffer-
+    # owning class, or (b) a follow-up call from peer back to producer.
+    if rid == "yetty_ycore_buffer":
+        sys.stderr.write(
+            f"error: method {m['slot']}: return type '{m['return_type']}' "
+            f"is a buffer — wire-marshalling a buffer back to the caller "
+            f"is not supported. Buffer is an input-only shape.\n")
+        sys.exit(1)
 
 
 def wire_args(m: dict) -> list:
@@ -502,31 +677,46 @@ def args_struct_body(args: list, indent: str) -> str:
     return "".join(f"{indent}{wire_type(a['type'])} {wire_name(a)};\n" for a in args)
 
 
-# ---------------- methods.gen.h ------------------------------------------
+# ---------------- methods.h (public) ------------------------------------
 
 def emit_methods_h(model: dict, module: str, out_path: Path):
-    """Public-stub-only header. Knows nothing about RPC — anyone who only
-    wants to *call* methods includes this and gets typed declarations.
-    Lives at include/<module>/methods.gen.h. Per-class headers in the
-    same directory `#include "methods.gen.h"` (sibling).
+    """Public method-declaration header. Lives at
+    include/yetty/<module>/methods.h (clean name, no .gen.h — it's a
+    public-API header, callers don't care that codegen produced it).
+    Per-class public headers in the same directory `#include
+    "methods.h"` (sibling) so a caller that includes a class header
+    gets the module's full method API.
+
+    Contains ONLY public function declarations — the actual stubs
+    users call (`yetty_yfigure_add_child(ctx, obj, …)`). The
+    `_fn` impl-side typedefs are an internal codegen detail used
+    only by the .gen.c override registrations, so they live in
+    src/yetty/<module>/methods.gen.h (see emit_methods_gen_h).
 
     Pulls the module-owned <module>/types.h ahead of any stub decl so
     YETTY_YRESULT_DECLARE for module-specific return types is in scope
     when the generated `struct <id>_result` references it. Modules
     that have no custom result types still get an (empty / guard-only)
     types.h scaffolded by main()."""
-    guard = f"YETTY_{module.upper()}_METHODS_GEN_H"
+    guard = f"YETTY_YCLASSGEN_{module.upper()}_METHODS_H"
     parts = [HEADER]
     parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
     parts.append('#include <yclass/class.h>\n')
-    parts.append(f'#include "{module}/types.h"\n\n')
+    # ycore/types.h carries the buffer struct codegen recognises as a
+    # blob arg. Public-stub signatures use it by value, so the full
+    # definition must be in scope — a forward-decl isn't enough.
+    parts.append('#include <yetty/ycore/types.h>\n')
+    parts.append(f'#include "yetty/{module}/types.h"\n\n')
 
     structs = set()
     for m in model["methods"]:
         structs |= struct_names_in(m["return_type"])
         for a in m["args"]:
             structs |= struct_names_in(a["type"])
-    for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass"):
+    # Already declared by the includes above — don't double-up with a
+    # redundant forward-decl.
+    for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
+                  "yetty_ycore_buffer"):
         structs.discard(known)
     for s in sorted(structs):
         parts.append(f"struct {s};\n")
@@ -534,12 +724,37 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
 
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
+        rt = result_type(m["return_type"])
+        # Public-stub declaration only. The matching `<slot>_fn`
+        # typedef is internal and lives in the sibling methods.gen.h
+        # under src/yetty/<module>/.
+        parts.append(f"{rt} {qualified_slot(m)}({params});\n")
+
+    parts.append("\n#endif\n")
+    out_path.write_text("".join(parts))
+
+
+# ---------------- methods.gen.h (internal) ------------------------------
+
+def emit_methods_gen_h(model: dict, module: str, out_path: Path):
+    """Internal companion to methods.h. Lives at
+    src/yetty/<module>/methods.gen.h — keeps the `.gen.h` suffix
+    because it's NOT part of the public API surface; the `_fn` impl
+    typedefs are useful only inside the module (.gen.c files use
+    them to type-check the impl pointer when registering it on the
+    ops vtable).
+
+    Includes the sibling public methods.h so callers can include just
+    methods.gen.h and get both the typedefs and the declarations
+    they refer to."""
+    guard = f"YETTY_YCLASSGEN_{module.upper()}_METHODS_GEN_H"
+    parts = [HEADER]
+    parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
+    parts.append(f"#include <yetty/{module}/methods.h>\n\n")
+
+    for m in model["methods"]:
         type_only = ", ".join(a["type"] for a in m["args"])
         rt = result_type(m["return_type"])
-        # Public-stub declaration (returns Result) + a function-pointer
-        # typedef any override impl can be type-checked against from
-        # its own .gen.c. Impls return the same Result type.
-        parts.append(f"{rt} {qualified_slot(m)}({params});\n")
         parts.append(f"typedef {rt} (*{qualified_slot(m)}_fn)({type_only});\n")
 
     parts.append("\n#endif\n")
@@ -561,32 +776,69 @@ def emit_dispatch_body(m: dict) -> str:
     init_parts = []
     for i, a in enumerate(wargs):
         if is_struct_ptr(a["type"]):
-            if i == 0:
-                # The obj at wire-arg[0] is a proxy on the client side
-                # (allocated by <class>_create). Read its handle via
-                # the aligned proxy struct rather than punning bytes
-                # past the header — the prior layout was misaligned
-                # on 32-bit ABIs.
-                init_parts.append(
-                    f"container_of({a['name']}, struct yetty_yclass_proxy, header)->handle")
-            else:
-                init_parts.append("0")
+            # Every struct-ptr wire arg (obj at i=0 plus any extra
+            # object handles) was minted on this side by `<class>_create`
+            # and is a `struct yetty_yclass_proxy *` wearing a `struct
+            # yetty_yclass_object *` (or class-specific *) hat. The
+            # handle is the proxy's `handle` field, reached via
+            # container_of so the layout is alignment-correct on 32-bit
+            # ABIs (the old `*(uint64_t *)(obj + 1)` byte-pun was
+            # misaligned when sizeof(yclass_object) == 4).
+            init_parts.append(
+                f"container_of((struct yetty_yclass_object *){a['name']}, "
+                f"struct yetty_yclass_proxy, header)->handle")
+        elif is_buffer(a["type"]):
+            # Buffer arg: only the payload size lives in the packed header.
+            # The payload bytes are appended to the wire body after the
+            # packed struct (see buffer-aware remote_call below).
+            init_parts.append(f"(uint32_t){a['name']}.size")
         else:
             init_parts.append(a["name"])
     init = ", ".join(init_parts)
     fields = args_struct_body(wargs, indent="            ")
+    buf_args = [a for a in wargs if is_buffer(a["type"])]
 
     qs = qualified_slot(m)
+
+    # Build the wire body. No buffer args = fast path, body is &_a /
+    # sizeof(_a). With buffer args we heap-allocate `sizeof(_a) +
+    # Σ size_i`, copy the packed scalars, then concatenate every blob's
+    # bytes in declared order; the skel decodes by reading the same
+    # lengths back out of the packed header.
+    if buf_args:
+        buf_total_terms = " + ".join(
+            [f"sizeof(_a)"] + [f"(size_t){a['name']}.size" for a in buf_args])
+        buf_copies = "".join(
+            f"        memcpy(_body_buf + _bo, {a['name']}.data, {a['name']}.size);\n"
+            f"        _bo += {a['name']}.size;\n"
+            for a in buf_args
+        )
+        body_setup = f"""\
+        size_t _body_total = {buf_total_terms};
+        uint8_t *_body_buf = (uint8_t *)malloc(_body_total ? _body_total : 1);
+        if (!_body_buf) return YETTY_ERR({rid}, "{qs}: body buf oom");
+        memcpy(_body_buf, &_a, sizeof(_a));
+        size_t _bo = sizeof(_a);
+{buf_copies}\
+"""
+        body_arg = "_body_buf, _body_total"
+        body_cleanup = "        free(_body_buf);\n"
+    else:
+        body_setup = ""
+        body_arg = "&_a, sizeof(_a)"
+        body_cleanup = ""
 
     # Wire response: status byte (0=OK, 1=ERR) + optional payload.
     # For void slots the payload is empty so resp_len == 1 on success;
     # for value slots it's 1 + sizeof(value).
     if vt is None:
         remote_call = f"""\
+{body_setup}\
         uint8_t _wbuf[1];
         struct yetty_ycore_size_result _wr = yetty_yclass_rpc_call(
-            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, &_a, sizeof(_a),
+            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, {body_arg},
             _wbuf, sizeof(_wbuf));
+{body_cleanup}\
         YETTY_RETURN_IF_ERR({rid}, _wr, "{qs}: RPC call failed");
         size_t _wn = _wr.value;
         if (_wn < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
@@ -595,10 +847,12 @@ def emit_dispatch_body(m: dict) -> str:
 """
     else:
         remote_call = f"""\
+{body_setup}\
         uint8_t _wbuf[1 + sizeof({vt})];
         struct yetty_ycore_size_result _wr = yetty_yclass_rpc_call(
-            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, &_a, sizeof(_a),
+            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, {body_arg},
             _wbuf, sizeof(_wbuf));
+{body_cleanup}\
         YETTY_RETURN_IF_ERR({rid}, _wr, "{qs}: RPC call failed");
         size_t _wn = _wr.value;
         if (_wn < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
@@ -644,13 +898,19 @@ def emit_dispatch_body(m: dict) -> str:
 
 
 def emit_methods_c(model: dict, module: str, out_path: Path):
+    # methods.gen.h carries the `_fn` typedefs the dispatch body casts
+    # to; it itself includes the public methods.h for the matching
+    # function declarations. Absolute path (resolved via `-Isrc`) so
+    # the include also works from .gen.c files in subdirs.
     parts = [HEADER,
-             f'#include "{module}/methods.gen.h"\n',
+             f'#include "yetty/{module}/methods.gen.h"\n',
              '#include <yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ycore/types.h>  /* container_of */\n',
              '#include <yetty/ytrace/ytrace.h>\n',
-             '#include <stdint.h>\n#include <string.h>\n\n']
+             '#include <stdint.h>\n'
+             '#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */\n'
+             '#include <string.h>\n\n']
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
         rt = result_type(m["return_type"])
@@ -672,7 +932,7 @@ def emit_class_accessor(cls: dict) -> str:
     # compiler to verify return type + parameter types match. Mismatch
     # ⇒ compile error at this line, well before the impl_t cast in the
     # ops table erases types. Works for both same-domain and cross-
-    # domain overrides — the typedef lives in <slot_domain>/methods.gen.h
+    # domain overrides — the typedef lives in <slot_domain>/methods.h
     # which the .gen.c already includes.
     #
     # The check variable name MUST include slot_domain — a class that
@@ -777,64 +1037,159 @@ struct yetty_yclass_ptr_result {accessor}(void)
 """
 
 
+_MANUAL_BEGIN = "/* === MANUAL CONTENT BELOW — preserved across codegen runs === */"
+_MANUAL_END = "/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */"
+
+
+def _extract_manual_block(existing_text: str) -> str:
+    """Pull the hand-written content out of a previously-emitted
+    `<class>.h` between the explicit BEGIN/END markers. Strict: if
+    the markers aren't present we return empty — first-migration
+    callers have to move their hand-written content into the marker
+    block by hand once codegen has run once. (The auto-salvage path
+    proved too fragile in practice — it routinely grabbed file-guard
+    `#endif`s and stray `extern \"C\"` braces.)"""
+    if not existing_text:
+        return ""
+    bi = existing_text.find(_MANUAL_BEGIN)
+    ei = existing_text.find(_MANUAL_END)
+    if bi >= 0 and ei > bi:
+        return existing_text[bi + len(_MANUAL_BEGIN):ei].strip("\n")
+    return ""
+
+
 def emit_class_public_headers(model: dict, module: str, include_module_dir: Path):
-    """One generated public header per class. Declares the accessor and
-    pulls the module's public method stubs (sibling header in the same
-    directory) so a single `#include "<module>/<class>.h"` is enough to
-    instantiate AND call methods on that class."""
+    """One generated public header per class. Output path mirrors the
+    source's subdir structure under `include/yetty/<module>/` so a
+    widget at `src/yetty/<module>/widgets/foo.c` lands at
+    `include/yetty/<module>/widgets/foo.h` (not `.gen.h` — the file
+    IS the public interface; consumers don't care that it's
+    generated).
+
+    Hand-written content (helper declarations, custom enums, etc.)
+    that lives in the same file is preserved across regenerations
+    via the `/* === MANUAL CONTENT === */` marker block. On the
+    first emission for a file that previously held a hand-written
+    `<class>.h`, the salvage path lifts everything between the last
+    pre-existing #include and the final #endif (minus the now-
+    redundant class accessor declaration) into the manual block."""
+    # Group classes by source file: each output header is named after
+    # the source's stem (so `widgets/button.c` → `widgets/button.h`,
+    # `primitive-widget.c` → `primitive-widget.h` — preserving the
+    # exact file naming the rest of the tree #include's already).
+    groups: dict = {}
     for cls in model.get("classes", []):
-        is_mixin = cls["type"] == "mixin"
-        suffix = "_mixin_get" if is_mixin else "_class_get"
-        kind = "mixin" if is_mixin else "regular class"
-        name = cls["name"]
-        qname = qualified_class(cls)
-        guard = f"YETTY_{module.upper()}_{name.upper()}_H"
-        header_path = include_module_dir / f"{name}.h"
-        header_path.write_text(
+        groups.setdefault(cls["source_file"], []).append(cls)
+    for src_file, classes in groups.items():
+        src_path = Path(src_file).resolve()
+        stem = src_path.stem
+        # Mirror the source's subdir under include/yetty/<module>/.
+        anchor_parts = ("src", "yetty", module)
+        parts = src_path.parts
+        rel_subdir = Path(".")
+        for i in range(len(parts) - len(anchor_parts) + 1):
+            if parts[i:i + len(anchor_parts)] == anchor_parts:
+                rel_subdir = Path(*parts[i + len(anchor_parts):]).parent
+                break
+        out_dir = include_module_dir / rel_subdir
+        out_dir.mkdir(parents=True, exist_ok=True)
+        header_path = out_dir / f"{stem}.h"
+        existing = header_path.read_text() if header_path.exists() else ""
+        manual = _extract_manual_block(existing)
+        # Distinct guard per file path under the module — prevents
+        # collisions between widgets/button.h and any other button.h
+        # that might exist in the tree.
+        guard_path = "_".join(rel_subdir.parts + (stem,)) if rel_subdir != Path(".") else stem
+        guard = (f"YETTY_YCLASSGEN_{module.upper()}_"
+                 f"{guard_path.upper().replace('-', '_')}_H")
+        decls = "\n".join(
+            f"struct yetty_yclass_ptr_result {qualified_class(c)}"
+            f"{'_mixin_get' if c['type'] == 'mixin' else '_class_get'}"
+            f"(void);"
+            for c in classes
+        )
+        kind = "mixin" if all(c['type'] == "mixin" for c in classes) else "regular class"
+        # Class-name list for the file header banner.
+        name_list = ", ".join(c["name"] for c in classes)
+        body = (
             HEADER
-            + f"/* Public interface for {kind} `{name}` (module: {module}).\n"
-            + " * GENERATED — do not edit. Edit the annotated source under "
-            + f"src/{module}/ instead. */\n"
+            + f"/* Public interface for {kind}(es) `{name_list}` "
+            + f"(module: {module}).\n"
+            + " * Codegen regenerates the section above the MANUAL markers;\n"
+            + " * hand-written content between the markers is preserved\n"
+            + " * across runs. Edit annotated source for accessor + slot\n"
+            + " * changes; edit between MANUAL markers for app-facing\n"
+            + " * helper declarations, enums, etc. */\n"
             + f"#ifndef {guard}\n#define {guard}\n\n"
             + '#include <yclass/class.h>\n'
-            + '#include "methods.gen.h"  /* every public method stub in this module */\n\n'
-            + f"struct yetty_yclass_ptr_result {qname}{suffix}(void);\n\n"
+            + f'#include <yetty/{module}/methods.h>\n\n'
+            + decls + "\n\n"
+            + _MANUAL_BEGIN + "\n"
+            + (manual + "\n" if manual else "\n")
+            + _MANUAL_END + "\n\n"
             + "#endif\n"
         )
+        header_path.write_text(body)
 
 
 def emit_class_gen_c(model: dict, module: str, module_dir: Path):
     """One `<class>.gen.c` per annotated source. `#include`d at the foot
-    of the matching hand-written `<class>.c`. The generator pulls every
-    header the accessor body needs (the class's own .h for the
-    prototype, any parent and mixin headers for their accessor calls)
-    so the hand-written .c stays minimal — typically only
-    `#include <yclass/class.h>`."""
+    of the matching hand-written `<class>.c` — so it must sit in the
+    SAME directory as that .c, not at the module root. A widget at
+    `src/yetty/ygui/widgets/panel.c` therefore gets its `panel.gen.c`
+    next to it at `src/yetty/ygui/widgets/panel.gen.c`; a top-level
+    module source at `src/yetty/ygui/widget.c` gets `widget.gen.c`
+    right alongside.
+
+    The generator pulls every header the accessor body needs (the
+    class's own .h for the prototype, any parent and mixin headers
+    for their accessor calls) so the hand-written .c stays minimal —
+    typically only `#include <yclass/class.h>`."""
     groups: dict = {}
     for c in model["classes"]:
         groups.setdefault(c["source_file"], []).append(c)
     for src_path, classes in groups.items():
-        inc_path = module_dir / (Path(src_path).stem + ".gen.c")
+        # Place the .gen.c in the SAME directory as its source.
+        src_path_p = Path(src_path)
+        inc_path = src_path_p.with_name(src_path_p.stem + ".gen.c")
 
         # Collect headers needed for this .gen.c: each class's own
         # header + the (possibly cross-domain) parent + mixin headers
-        # + the slot's home module's methods.gen.h for every op whose
-        # slot lives in a foreign domain (cross-module override). The
-        # last is needed so the foreign public-stub C symbol used as
-        # yetty_yclass_method_id_t is declared.
+        # + this module's internal methods.gen.h (carries the `_fn`
+        # typedefs the impl-pointer static checks use) + the same
+        # internal methods.gen.h for every foreign slot domain (cross-
+        # module override). methods.gen.h transitively pulls in its
+        # sibling public methods.h so the function declarations the
+        # impl is built from are also in scope.
         needed = set()
+        needed.add(f"yetty/{module}/methods.gen.h")
         for c in classes:
-            needed.add(f"{c['domain']}/{c['name']}.h")
+            needed.add(class_header_for(c, module))
             p = c.get("parent")
             if p:
-                needed.add(f"{p['domain']}/{p['name']}.h")
+                # Parent path can't be derived from this class's
+                # source — use the foreign module's <name>.h directly.
+                # Cross-module parents land under `yetty/<dom>/<name>.h`;
+                # within-module parents likewise — codegen owns those
+                # files too.
+                needed.add(_class_header_lookup(model, p, fallback_dom=p['domain']))
             for mx in c.get("mixins", []):
-                needed.add(f"{mx['domain']}/{mx['name']}.h")
+                needed.add(_class_header_lookup(model, mx, fallback_dom=mx['domain']))
             for op in c.get("ops", []):
                 sd = op.get("slot_domain", c["domain"])
                 if sd != c["domain"]:
-                    needed.add(f"{sd}/methods.gen.h")
+                    needed.add(f"yetty/{sd}/methods.gen.h")
         include_block = "".join(f'#include "{h}"\n' for h in sorted(needed))
+        # The accessor body emits ydebug() and YETTY_OK / YETTY_ERR
+        # which expand to ycore + ytrace primitives. Pull those in
+        # explicitly so a per-class .gen.c is self-sufficient when
+        # included from a hand-written .c that hasn't imported them
+        # yet (the hand-written .c may include only its module-local
+        # header for backward compat).
+        include_block += (
+            '#include <yetty/ycore/result.h>\n'
+            '#include <yetty/ytrace/ytrace.h>\n'
+        )
 
         body = HEADER + include_block + "\n" \
              + "\n".join(emit_class_accessor(c) for c in classes)
@@ -847,12 +1202,38 @@ def regular_classes(model: dict) -> list:
     return [c for c in model.get("classes", []) if c.get("type") == "regular"]
 
 
+def _class_header_lookup(model: dict, ref: dict, fallback_dom: str) -> str:
+    """Resolve a `{domain, name}` parent/mixin reference to its
+    include-path. For same-module refs we use the model to find the
+    source's subdir; for cross-module refs we fall back to the bare
+    `yetty/<dom>/<name>.h` path (the foreign module's codegen owns
+    that file's actual layout)."""
+    dom = ref.get("domain", fallback_dom)
+    name = ref["name"]
+    for c in model.get("classes", []):
+        if c["domain"] == dom and c["name"] == name:
+            return class_header_for(c, dom)
+    return f"yetty/{dom}/{name}.h"
+
+
 def class_header_for(cls: dict, module: str) -> str:
-    """Generated public header path for a class. Keyed by class name —
-    NOT the source filename — because emit_class_public_headers writes
-    one header per class (<class>.h), and a single source file may
-    declare several classes."""
-    return f"{module}/{cls['name']}.h"
+    """Public header path for a class. The file is named after the
+    annotated source's stem (so the public-include path matches
+    whatever name the source already uses — widgets/button.c →
+    yetty/<module>/widgets/button.h, primitive-widget.c →
+    yetty/<module>/primitive-widget.h). Codegen owns the file; hand-
+    written helper declarations are preserved across regenerations
+    via the MANUAL markers in emit_class_public_headers."""
+    anchor = ("src", "yetty", module)
+    src_path = Path(cls["source_file"]).resolve()
+    parts = src_path.parts
+    rel_subdir = ""
+    for i in range(len(parts) - len(anchor) + 1):
+        if parts[i:i + len(anchor)] == anchor:
+            tail = Path(*parts[i + len(anchor):]).parent
+            rel_subdir = str(tail) + "/" if str(tail) != "." else ""
+            break
+    return f"yetty/{module}/{rel_subdir}{src_path.stem}.h"
 
 
 def emit_skel(m: dict) -> str:
@@ -874,8 +1255,13 @@ def emit_skel(m: dict) -> str:
     # Pre-resolve every struct-ptr arg as a separate statement — each
     # handle_resolve now returns a Result, so we must unpack it (and
     # bail with a 1-byte ERR response on failure) before the call.
+    # Buffer args get reconstructed as local `struct yetty_ycore_buffer`
+    # values pointing at slices of the wire body (zero-copy on the
+    # server side — the impl sees the bytes for the duration of the
+    # call, and is forbidden from holding onto `.data` past return).
     resolves = []
     call_parts = ["&_local"]
+    buf_args = [a for a in args if is_buffer(a["type"])]
     for a in args:
         if is_struct_ptr(a["type"]):
             var = f"_hr_{a['name']}"
@@ -893,10 +1279,47 @@ def emit_skel(m: dict) -> str:
     }}
 """)
             call_parts.append(f"({a['type'].strip()}){var}.value")
+        elif is_buffer(a["type"]):
+            call_parts.append(f"_buf_{a['name']}")
         else:
             call_parts.append(f"_a.{a['name']}")
     resolve_block = "".join(resolves)
     call = ", ".join(call_parts)
+
+    if buf_args:
+        # Server-side framing: after the packed scalar header, the body
+        # carries each buffer's payload bytes back-to-back in declared
+        # order. Walk them, reconstruct local buffer values, and check
+        # the total length matches exactly — leftover bytes mean signature
+        # drift between the two sides.
+        len_terms = " + ".join(
+            ["sizeof(_a)"] + [f"(size_t)_a.{wire_name(a)}" for a in buf_args])
+        buf_block_lines = [
+            f"    if (_body_len < sizeof(_a)) return 0;",
+            f"    memcpy(&_a, _body, sizeof(_a));",
+            f"    if (_body_len != {len_terms}) return 0;",
+            f"    size_t _bo = sizeof(_a);",
+        ]
+        for a in buf_args:
+            wn = wire_name(a)
+            buf_block_lines += [
+                f"    struct yetty_ycore_buffer _buf_{a['name']} = {{",
+                f"        .data = (uint8_t *)((const uint8_t *)_body + _bo),",
+                f"        .size = (size_t)_a.{wn},",
+                f"        .capacity = (size_t)_a.{wn},",
+                f"    }};",
+                f"    _bo += (size_t)_a.{wn};",
+            ]
+        unpack_block = "\n".join(buf_block_lines) + "\n"
+    else:
+        unpack_block = (
+            "    /* Strict length match — both sides regenerate from the same\n"
+            "     * annotated source; a size mismatch means signature drift, and\n"
+            "     * silently truncating to the local prefix would let the server\n"
+            "     * execute against a misaligned struct. */\n"
+            "    if (_body_len != sizeof(_a)) return 0;\n"
+            "    memcpy(&_a, _body, sizeof(_a));\n"
+        )
 
     rt = f"struct {rid}_result"
     if vt is None:
@@ -935,12 +1358,7 @@ static size_t {slot}_skel(const void *_body, size_t _body_len,
     struct __attribute__((packed)) {{
 {fields}\
     }} _a;
-    /* Strict length match — both sides regenerate from the same
-     * annotated source; a size mismatch means signature drift, and
-     * silently truncating to the local prefix would let the server
-     * execute against a misaligned struct. */
-    if (_body_len != sizeof(_a)) return 0;
-    memcpy(&_a, _body, sizeof(_a));
+{unpack_block}\
     struct yetty_yclass_ctx _local = {{0}};
 {resolve_block}\
 {body}}}
@@ -1106,7 +1524,7 @@ static void yetty_{module}_install_hooks(void)
 
 
 def emit_rpc_h(model: dict, module: str, out_path: Path):
-    guard = f"YETTY_{module.upper()}_RPC_GEN_H"
+    guard = f"YETTY_YCLASSGEN_{module.upper()}_RPC_H"
     decls = "\n".join(
         f"struct yetty_yclass_object_ptr_result "
         f"{qualified_class(c)}_create(struct yetty_yclass_ctx *ctx);"
@@ -1130,8 +1548,8 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
              '#include <yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ytrace/ytrace.h>\n',
-             f'#include "{module}/rpc.gen.h"\n',
-             f'#include "{module}/methods.gen.h"\n',
+             f'#include "yetty/{module}/rpc.h"\n',
+             f'#include "yetty/{module}/methods.h"\n',
              '#include <yclass/class.h>\n',
              class_includes,
              '#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'
@@ -1169,24 +1587,51 @@ def main():
     placeholder_class_h = '#include <yclass/class.h>\n'
     for s in sources:
         if s.suffix == ".c":
-            inc = module_src / (s.stem + ".gen.c")
+            # Place the per-source .gen.c next to its annotated source
+            # (matches emit_class_gen_c). Widget files live under
+            # `widgets/` so their .gen.c also lands there — the
+            # hand-written .c's `#include "<stem>.gen.c"` then resolves
+            # via the same-directory search.
+            inc = s.with_name(s.stem + ".gen.c")
             if not inc.exists():
                 inc.write_text("")
-            hdr = include_module / (s.stem + ".h")
+            # Pre-touch the per-class header at the source-mirrored
+            # subdir. We don't know the class name (and a source can
+            # define more than one) at this point, so we use the file
+            # stem as a best-effort placeholder for first parse.
+            # emit_class_public_headers may pick a different name
+            # later; the orphan stub is harmless.
+            anchor = ("src", "yetty", module)
+            parts = s.resolve().parts
+            rel_subdir = Path(".")
+            for i in range(len(parts) - len(anchor) + 1):
+                if parts[i:i + len(anchor)] == anchor:
+                    rel_subdir = Path(*parts[i + len(anchor):]).parent
+                    break
+            hdr_dir = include_module / rel_subdir
+            hdr_dir.mkdir(parents=True, exist_ok=True)
+            hdr = hdr_dir / (s.stem + ".h")
             if not hdr.exists():
                 hdr.write_text(placeholder_class_h)
-    for stub in ("methods.gen.h", "rpc.gen.h"):
+    # Public placeholders under include/yetty/<module>/.
+    for stub in ("methods.h", "rpc.h"):
         p = include_module / stub
         if not p.exists():
             p.write_text(placeholder_class_h)
+    # Internal placeholder under src/yetty/<module>/. The `.gen.h`
+    # suffix marks it as codegen-output sitting inside the module's
+    # private area (.gen.c files include it for the impl typedefs).
+    p_internal = module_src / "methods.gen.h"
+    if not p_internal.exists():
+        p_internal.write_text(placeholder_class_h)
 
     # Module-owned types.h carries module-specific YETTY_YRESULT_DECLAREs.
     # Scaffold an empty (guard-only) one if missing so first-time AST
     # parsing of the annotated sources resolves the include emitted from
-    # methods.gen.h. Existing user content is never overwritten.
+    # methods.h. Existing user content is never overwritten.
     types_h = include_module / "types.h"
     if not types_h.exists():
-        guard = f"YETTY_{module.upper()}_TYPES_H"
+        guard = f"YETTY_YCLASSGEN_{module.upper()}_TYPES_H"
         types_h.write_text(
             f"/* Module-owned result type declarations.\n"
             f" * Add YETTY_YRESULT_DECLARE(<id>, <type>) lines here for any\n"
@@ -1205,10 +1650,11 @@ def main():
         validate_method(m)
 
     emit_class_public_headers(model, module, include_module)
-    emit_methods_h(model, module, include_module / "methods.gen.h")
+    emit_methods_h(model, module, include_module / "methods.h")
+    emit_methods_gen_h(model, module, module_src / "methods.gen.h")
     emit_methods_c(model, module, module_src / "methods.gen.c")
     emit_class_gen_c(model, module, module_src)
-    emit_rpc_h(model, module, include_module / "rpc.gen.h")
+    emit_rpc_h(model, module, include_module / "rpc.h")
     emit_rpc_c(model, module, module_src / "rpc.gen.c")
 
     (module_src / "model.yaml").write_text(yaml_dump(model) + "\n")

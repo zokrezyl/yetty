@@ -11,19 +11,23 @@
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_NUM 0xFF14100Bu
 
-struct stepper_data {
+struct [[clang::annotate("class@ygui:stepper")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] stepper_data {
     char **labels;
     int n;
     int cap;
     int current;
 };
 
-static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:stepper:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_stepper_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_stepper_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "stepper: super");
-    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get());
+    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     d->labels = NULL;
     d->n = 0;
     d->cap = 0;
@@ -31,20 +35,26 @@ static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result dtor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:stepper:destructor")]]
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     for (int i = 0; i < d->n; i++) free(d->labels[i]);
     free(d->labels);
-    return yetty_ygui_super_void(obj, yetty_ygui_stepper_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_stepper_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:stepper:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "stepper paint: NULL ctx");
-    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get());
+    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     if (d->n <= 0) return YETTY_OK_VOID();
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
@@ -98,7 +108,7 @@ struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_obj
                                                            const char *label)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "stepper_add_step: NULL");
-    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get());
+    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     if (!grow(d, d->n + 1)) return YETTY_ERR(yetty_ycore_void, "stepper_add_step: realloc");
     if (label) {
         size_t n = strlen(label);
@@ -116,22 +126,9 @@ struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_ygui_
                                                               int i)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "stepper_set_current: NULL");
-    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get());
+    struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     d->current = i;
     return yetty_ygui_object_set_dirty(obj);
 }
 
-
-static const struct yetty_ygui_op stepper_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ctor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, dtor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
-};
-
-static const struct yetty_ygui_class_descriptor stepper_desc = {
-    .name = "yetty_ygui_stepper",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct stepper_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_stepper_class_get, &stepper_desc, stepper_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "stepper.gen.c"

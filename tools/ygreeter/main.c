@@ -253,7 +253,7 @@ static const struct code_line code_widget_lines[] = {
     {{{"/* Adding a button — single call site. */", CODE_COMMENT}}},
     {{{"struct ", CODE_KEYWORD}, {"yetty_ygui_object_ptr_result ", CODE_TYPE},
       {"br = yetty_ygui_add(", BRAND_TEXT}}},
-    {{{"    yetty_ygui_button_class_get(), parent);", BRAND_TEXT}}},
+    {{{"    yetty_ygui_button_class_get().value, parent);", BRAND_TEXT}}},
     {{{"yetty_ygui_button_set_label(br.value, ", BRAND_TEXT}, {"\"Apply\"", CODE_STRING},
       {");", CODE_PUNCT}}},
 };
@@ -365,9 +365,11 @@ static void discover_logo_images(void)
  * simplest correct way to swap content. */
 static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int tab_index);
 
-static struct yetty_ycore_void_result load_plot_entry(struct yetty_ygui_object *plot,
+static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                       const struct nav_entry *entry)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *plot = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ygui_yplot_config cfg = {
         .x_min = entry->x_min,
         .x_max = entry->x_max,
@@ -379,9 +381,11 @@ static struct yetty_ycore_void_result load_plot_entry(struct yetty_ygui_object *
     return yetty_ygui_yplot_set_source(plot, entry->payload);
 }
 
-static struct yetty_ycore_void_result load_image_entry(struct yetty_ygui_object *image,
+static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                        const char *path)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *image = (struct yetty_ygui_object *)_yc_obj;
     if (!path) {
         return yetty_ygui_yimage_set_bytes(image, NULL, 0);
     }
@@ -406,9 +410,11 @@ static struct yetty_ycore_void_result load_image_entry(struct yetty_ygui_object 
     return r;
 }
 
-static struct yetty_ycore_void_result write_code_snippet(struct yetty_ygui_object *rich,
+static struct yetty_ycore_void_result write_code_snippet(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                          const char *snippet_id)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *rich = (struct yetty_ygui_object *)_yc_obj;
     const struct code_snippet *snip = code_snippet_at(snippet_id);
     if (!snip) return YETTY_OK_VOID();
     for (size_t li = 0; li < snip->n_lines; ++li) {
@@ -426,10 +432,12 @@ static struct yetty_ycore_void_result write_code_snippet(struct yetty_ygui_objec
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result write_welcome_spans(struct yetty_ygui_object *rich,
+static struct yetty_ycore_void_result write_welcome_spans(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                           const struct rich_span *spans,
                                                           size_t n_spans)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *rich = (struct yetty_ygui_object *)_yc_obj;
     for (size_t i = 0; i < n_spans; ++i) {
         if (spans[i].new_line_first) {
             struct yetty_ycore_void_result lr = yetty_ygui_rich_add_line(rich);
@@ -450,7 +458,9 @@ struct row_link {
     int entry;
 };
 
-static struct yetty_ycore_void_result on_row_clicked(struct yetty_ygui_object *btn, void *userdata);
+static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *ctx,
+                                                     struct yetty_yclass_object *btn,
+                                                     void *userdata);
 
 /*-----------------------------------------------------------------------------
  * build_tab_body — for one tab index, lay out hbox(nav, content) inside
@@ -540,7 +550,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
 
     /* Outer hbox: nav + content side-by-side. */
     struct yetty_ygui_object_ptr_result hr =
-        yetty_ygui_add(yetty_ygui_hbox_class_get(), app->body_panel);
+        yetty_ygui_add(yetty_ygui_hbox_class_get().value, app->body_panel);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "rebuild: hbox");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(hr.value);
@@ -551,7 +561,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
 
     /* Nav vbox — fixed 220-px wide column of clickable rows. */
     struct yetty_ygui_object_ptr_result nr =
-        yetty_ygui_add(yetty_ygui_vbox_class_get(), hr.value);
+        yetty_ygui_add(yetty_ygui_vbox_class_get().value, hr.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, nr, "rebuild: nav vbox");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(nr.value);
@@ -562,7 +572,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     }
     for (int i = 0; i < n; ++i) {
         struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_button_class_get(), nr.value);
+            yetty_ygui_add(yetty_ygui_button_class_get().value, nr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "rebuild: nav button");
         yetty_ycore_error_destroy_safe(
             yetty_ygui_button_set_label(br.value, tab_entry_label(tab_index, i)));
@@ -583,14 +593,14 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     switch (t->kind) {
     case TAB_KIND_PLOTS: {
         struct yetty_ygui_object_ptr_result pr =
-            yetty_ygui_add(yetty_ygui_yplot_class_get(), hr.value);
+            yetty_ygui_add(yetty_ygui_yplot_class_get().value, hr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "rebuild: yplot");
         content = pr.value;
         break;
     }
     case TAB_KIND_IMAGES: {
         struct yetty_ygui_object_ptr_result ir =
-            yetty_ygui_add(yetty_ygui_yimage_class_get(), hr.value);
+            yetty_ygui_add(yetty_ygui_yimage_class_get().value, hr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "rebuild: yimage");
         content = ir.value;
         break;
@@ -598,7 +608,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     case TAB_KIND_RICH:
     default: {
         struct yetty_ygui_object_ptr_result rr =
-            yetty_ygui_add(yetty_ygui_rich_class_get(), hr.value);
+            yetty_ygui_add(yetty_ygui_rich_class_get().value, hr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rebuild: rich");
         content = rr.value;
         break;
@@ -616,24 +626,28 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     switch (t->kind) {
     case TAB_KIND_PLOTS: {
         const struct nav_entry *e = &plot_nav_entries[t->active_entry];
-        yetty_ycore_error_destroy_safe(load_plot_entry(content, e));
+        yetty_ycore_error_destroy_safe(
+            load_plot_entry(NULL, (struct yetty_yclass_object *)content, e));
         break;
     }
     case TAB_KIND_IMAGES: {
         const char *path = g_image_path_count > 0 && t->active_entry < g_image_path_count
                                ? g_image_paths[t->active_entry]
                                : NULL;
-        yetty_ycore_error_destroy_safe(load_image_entry(content, path));
+        yetty_ycore_error_destroy_safe(
+            load_image_entry(NULL, (struct yetty_yclass_object *)content, path));
         break;
     }
     case TAB_KIND_RICH:
     default: {
         if (tab_index == 0) {
             const struct welcome_nav *e = &welcome_nav_entries[t->active_entry];
-            yetty_ycore_error_destroy_safe(write_welcome_spans(content, e->spans, e->n_spans));
+            yetty_ycore_error_destroy_safe(write_welcome_spans(
+                NULL, (struct yetty_yclass_object *)content, e->spans, e->n_spans));
         } else {
-            yetty_ycore_error_destroy_safe(
-                write_code_snippet(content, code_nav_entries[t->active_entry].payload));
+            yetty_ycore_error_destroy_safe(write_code_snippet(
+                NULL, (struct yetty_yclass_object *)content,
+                code_nav_entries[t->active_entry].payload));
         }
         break;
     }
@@ -643,8 +657,10 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result on_row_clicked(struct yetty_ygui_object *btn, void *userdata)
+static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *userdata)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *btn = (struct yetty_ygui_object *)_yc_obj;
     (void)btn;
     struct row_link *rl = (struct row_link *)userdata;
     if (!rl) return YETTY_OK_VOID();
@@ -655,10 +671,12 @@ static struct yetty_ycore_void_result on_row_clicked(struct yetty_ygui_object *b
     return rebuild_tab_content(rl->app, rl->tab);
 }
 
-static struct yetty_ycore_void_result on_tab_change(struct yetty_ygui_object *target,
+static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                     const struct yetty_ygui_event *event,
                                                     void *userdata)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *target = (struct yetty_ygui_object *)_yc_obj;
     (void)target;
     int idx = event->i0;
     if (idx < 0 || idx >= TAB_COUNT) return YETTY_OK_VOID();
@@ -669,7 +687,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
 {
     discover_logo_images();
 
-    struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get(), NULL);
+    struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root add");
     app->root = rr.value;
     {
@@ -684,7 +702,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
 
     /* Tabbar — Welcome / Plots / Images / Code. */
     struct yetty_ygui_object_ptr_result tbr =
-        yetty_ygui_add(yetty_ygui_tabbar_class_get(), app->root);
+        yetty_ygui_add(yetty_ygui_tabbar_class_get().value, app->root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "build_ui: tabbar add");
     app->tabbar = tbr.value;
     {
@@ -709,7 +727,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
 
     /* Body panel — vbox that the per-tab content rebuilds populate. */
     struct yetty_ygui_object_ptr_result bpr =
-        yetty_ygui_add(yetty_ygui_vbox_class_get(), app->root);
+        yetty_ygui_add(yetty_ygui_vbox_class_get().value, app->root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, bpr, "build_ui: body panel add");
     app->body_panel = bpr.value;
     {
@@ -725,7 +743,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
 
     /* Statusbar — small bottom strip. */
     struct yetty_ygui_object_ptr_result sbr =
-        yetty_ygui_add(yetty_ygui_statusbar_class_get(), app->root);
+        yetty_ygui_add(yetty_ygui_statusbar_class_get().value, app->root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sbr, "build_ui: statusbar add");
     app->statusbar = sbr.value;
     yetty_ycore_error_destroy_safe(
@@ -1216,7 +1234,7 @@ static int run_client_mode(void)
          * &cs, so get_or_spawn_handler_coro creates a separate coro. */
         struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
             cs.wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE,
-            client_mouse_handler, cs.app);
+            /*has_args=*/1, client_mouse_handler, cs.app);
         if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
     }
     /* Tell the host yetty to forward pointer events to our stdin. */
@@ -1540,7 +1558,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         struct yetty_ycore_rectangle root_rect = {
             .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
         struct yetty_yfigure_container_ptr_result cr =
-            yetty_yfigure_container_create(root_rect, &ctx, app->figure_registry);
+            yetty_yfigure_container_create_local(root_rect, &ctx, app->figure_registry);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "standalone: container_create");
         app->root_container = cr.value;
     }
@@ -1561,7 +1579,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "standalone: wire_sm_create");
         app->wire_sm = sr.value;
         struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-            app->wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN,
+            app->wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN, /*has_args=*/1,
             yetty_yfigure_container_process_input, app->root_container);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "standalone: wire_sm register");
     }

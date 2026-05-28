@@ -1,24 +1,21 @@
-/*
- * ygui-clickable.h — mixin: press → release → fire callback.
- *
- * Adds a "pressed" state machine to a regular widget class. Widgets that
- * want click semantics list this mixin in their YETTY_YGUI_DEFINE_CLASS
- * invocation; each instance carries a per-instance clickable_data slice.
- */
-#ifndef YETTY_YGUI_MIXINS_CLICKABLE_H
-#define YETTY_YGUI_MIXINS_CLICKABLE_H
+/* GENERATED — do not edit. */
+/* Public interface for mixin(es) `clickable` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_MIXINS_CLICKABLE_H
+#define YETTY_YCLASSGEN_YGUI_MIXINS_CLICKABLE_H
 
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
 
-const struct yetty_ygui_class *yetty_ygui_clickable_mixin_get(void);
-
-typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_ygui_object *obj,
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
                                                               void *userdata);
 
 /* Install the click callback on this object's clickable mixin slice.
@@ -30,9 +27,6 @@ struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_yg
 
 /* Read-only: is this widget currently in the "pressed" state? */
 int yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj);
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* YETTY_YGUI_MIXINS_CLICKABLE_H */

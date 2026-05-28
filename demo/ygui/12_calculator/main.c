@@ -30,7 +30,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     };
     for (int row = 0; row < 4; ++row) {
         struct yetty_ygui_object_ptr_result rr =
-            yetty_ygui_add(yetty_ygui_hbox_class_get(), root);
+            yetty_ygui_add(yetty_ygui_hbox_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "row");
         struct yetty_ygui_layout rl = *yetty_ygui_widget_layout_get(rr.value);
         rl.gap = 4;
@@ -38,7 +38,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_widget_layout_set(rr.value, &rl));
         for (int col = 0; col < 4; ++col) {
             struct yetty_ygui_object_ptr_result br =
-                yetty_ygui_add(yetty_ygui_button_class_get(), rr.value);
+                yetty_ygui_add(yetty_ygui_button_class_get().value, rr.value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "key");
             err_ok(yetty_ygui_button_set_label(br.value, keys[row * 4 + col]));
             struct yetty_ygui_layout bl = *yetty_ygui_widget_layout_get(br.value);

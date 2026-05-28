@@ -1,32 +1,19 @@
-/*
- * ygui-widget.h — base widget class.
- *
- * Every widget class inherits from yetty_ygui_widget_class_get(). The
- * base class owns geometry (x, y, w, h), flex layout config, the dirty
- * flag (already on the object), and the two virtual wire-emit methods
- * (emit_container / emit_body) with sensible defaults driven by
- * `figure_kind`.
- */
-#ifndef YETTY_YGUI_WIDGET_H
-#define YETTY_YGUI_WIDGET_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `widget` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGET_H
+#define YETTY_YCLASSGEN_YGUI_WIDGET_H
 
-#include <stdint.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/* Forward decl: emit context passed to the two emit methods. */
-struct yetty_ygui_emit_ctx;
-
-/* Base widget class accessor. */
-const struct yetty_ygui_class *yetty_ygui_widget_class_get(void);
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 /*-----------------------------------------------------------------------------
  * Flex / CSS layout — minimal field set that ports cleanly from
  * ygui-old's yetty_ygui_layout. The full algorithm will be added in a
@@ -134,35 +121,11 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_ygui_objec
  *     closes the group. If figure_kind != 0, the widget's own override
  *     writes figure-specific body bytes into the per-figure stream.
  *---------------------------------------------------------------------------*/
-YETTY_YGUI_DECLARE_METHOD(yetty_ygui_widget_emit_container, struct yetty_ycore_void_result,
-                          (struct yetty_ygui_object * obj, struct yetty_ygui_emit_ctx *ctx));
+/* Method public-stub declarations — emit_container, emit_body,
+ * widget_paint, widget_on_press, widget_on_release, widget_on_motion
+ * — come from the codegen-emitted module-wide methods.h pulled
+ * in by class.h's include chain. The yclass slot signature is
+ * `(struct yetty_yclass_ctx *, struct yetty_yclass_object *, …)`. */
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-YETTY_YGUI_DECLARE_METHOD(yetty_ygui_widget_emit_body, struct yetty_ycore_void_result,
-                          (struct yetty_ygui_object * obj, struct yetty_ygui_emit_ctx *ctx));
-
-/* Inner paint hook — chrome widgets (figure_kind == 0) override this to
- * write SDF / glyph prim records into the ygrid body. The base widget
- * provides a no-op default. The default emit_body wraps the call in a
- * CMD_GROUP open/close for the widget's id. */
-YETTY_YGUI_DECLARE_METHOD(yetty_ygui_widget_paint, struct yetty_ycore_void_result,
-                          (struct yetty_ygui_object * obj, struct yetty_ygui_emit_ctx *ctx));
-
-/*-----------------------------------------------------------------------------
- * Input — pointer and key events dispatched against the leaf widget the
- * engine hit-tests. Returns 1 = consumed (stop propagation), 0 = pass
- * through to parent.
- *---------------------------------------------------------------------------*/
-YETTY_YGUI_DECLARE_METHOD(yetty_ygui_widget_on_press, struct yetty_ycore_int_result,
-                          (struct yetty_ygui_object * obj, float x, float y, int button));
-
-YETTY_YGUI_DECLARE_METHOD(yetty_ygui_widget_on_release, struct yetty_ycore_int_result,
-                          (struct yetty_ygui_object * obj, float x, float y, int button));
-
-YETTY_YGUI_DECLARE_METHOD(yetty_ygui_widget_on_motion, struct yetty_ycore_int_result,
-                          (struct yetty_ygui_object * obj, float x, float y));
-
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* YETTY_YGUI_WIDGET_H */

@@ -49,144 +49,18 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yrender/types.h>
 #include <yetty/ytrace/ytrace.h>
+/* yclass types referenced by the override impls at the foot of this
+ * file. The codegen-generated grid.gen.c at the foot needs both the
+ * class machinery (yclass_ctx, yclass_object) and the per-class
+ * accessor/typedef declarations. */
+#include <yclass/class.h>
+#include <yetty/ygrid/grid.h>
 #include <yetty/yetty/yetty.h>
 
 /* GLYPH primitive type — matches ydraw-layer.wgsl's YDRAW_SDF_GLYPH. */
 #define YGRID_GLYPH_TYPE 200u
 
 /* Font dispatcher generation lives below the struct definition. */
-
-#if 0
-/*===========================================================================
- * (Retired) inline custom shader. Kept here as a doc reference only —
- * superseded by reading ydraw-layer.wgsl from disk so the new figure
- * uses the same proven SDF + glyph dispatch the existing layer uses.
- *
- * Shader-side data layout:
- *   storage_buffer holds the binder's flat merge of all buffers.
- *   `ygrid_grid_offset` and `ygrid_prims_offset` are u32 consts the
- *   binder emits, indexing the merged storage_buffer.
- *
- *   grid sub-buffer:
- *     words[0..num_cells)         — per-cell start offset in this buffer
- *     at each cell's offset:
- *       words[off]                — cell_count
- *       words[off+1..]            — global prim indices (prim_count)
- *
- *   prims sub-buffer:
- *     words[0..prim_count)        — offset table: each entry = offset
- *                                    (in u32 words) from end of table
- *                                    to that prim's first word
- *     after table:                — concatenated prim records.
- *                                    record layout matches ysdf wire:
- *                                    [type, z_order, fill, stroke,
- *                                     stroke_width, geom_floats...]
- *                                    evaluate_sdf_2d expects this exact
- *                                    layout starting from drawable_offset.
- *=========================================================================*/
-static const char *ygrid_layer_wgsl(void)
-{
-    static const char src[] =
-        "// ygrid layer shader — SDF primitives, spatial-bucketed dispatch.\n"
-        "\n"
-        "struct VertexInput {\n"
-        "    @location(0) position: vec2<f32>,\n"
-        "};\n"
-        "\n"
-        "struct VertexOutput {\n"
-        "    @builtin(position) position: vec4<f32>,\n"
-        "    @location(0) @interpolate(linear) local_pixel: vec2<f32>,\n"
-        "};\n"
-        "\n"
-        "@vertex\n"
-        "fn vs_main(input: VertexInput) -> VertexOutput {\n"
-        "    var output: VertexOutput;\n"
-        "    output.position = vec4<f32>(input.position, 0.0, 1.0);\n"
-        "    let grid_size = uniforms.ygrid_grid_size;\n"
-        "    let cell_size = uniforms.ygrid_cell_size;\n"
-        "    let local_w = grid_size.x * cell_size.x;\n"
-        "    let local_h = grid_size.y * cell_size.y;\n"
-        "    output.local_pixel = vec2<f32>(\n"
-        "        (input.position.x * 0.5 + 0.5) * local_w,\n"
-        "        (0.5 - input.position.y * 0.5) * local_h\n"
-        "    );\n"
-        "    return output;\n"
-        "}\n"
-        "\n"
-        "fn ygrid_read_type(off: u32) -> u32 {\n"
-        "    return storage_buffer[off + 0u];\n"
-        "}\n"
-        "\n"
-        "fn ygrid_read_fill_color(off: u32) -> u32 {\n"
-        "    return storage_buffer[off + 2u];\n"
-        "}\n"
-        "\n"
-        "@fragment\n"
-        "fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {\n"
-        "    let prim_count = uniforms.ygrid_prim_count;\n"
-        "    if (prim_count == 0u) { discard; }\n"
-        "\n"
-        "    let grid_size = uniforms.ygrid_grid_size;\n"
-        "    let cell_size = uniforms.ygrid_cell_size;\n"
-        "    let grid_w = u32(grid_size.x);\n"
-        "    let grid_h = u32(grid_size.y);\n"
-        "    if (grid_w == 0u || grid_h == 0u) { discard; }\n"
-        "\n"
-        "    let pixel_pos = input.local_pixel;\n"
-        "    let grid_pixel_w = grid_size.x * cell_size.x;\n"
-        "    let grid_pixel_h = grid_size.y * cell_size.y;\n"
-        "    if (pixel_pos.x < 0.0 || pixel_pos.y < 0.0 ||\n"
-        "        pixel_pos.x >= grid_pixel_w || pixel_pos.y >= grid_pixel_h) {\n"
-        "        discard;\n"
-        "    }\n"
-        "\n"
-        "    let cell_x = u32(clamp(pixel_pos.x / cell_size.x, 0.0, f32(grid_w - 1u)));\n"
-        "    let cell_y = u32(clamp(pixel_pos.y / cell_size.y, 0.0, f32(grid_h - 1u)));\n"
-        "    let cell_index = cell_y * grid_w + cell_x;\n"
-        "\n"
-        "    let grid_off = ygrid_grid_offset;\n"
-        "    let prims_off = ygrid_prims_offset;\n"
-        "\n"
-        "    let cell_start = storage_buffer[grid_off + cell_index];\n"
-        "    let cell_count = storage_buffer[grid_off + cell_start];\n"
-        "    let loop_count = min(cell_count, 64u);\n"
-        "\n"
-        "    var result_color = vec3<f32>(0.0);\n"
-        "    var result_alpha = 0.0;\n"
-        "\n"
-        "    for (var i = 0u; i < loop_count; i++) {\n"
-        "        let raw_idx = storage_buffer[grid_off + cell_start + 1u + i];\n"
-        "        let data_offset = storage_buffer[prims_off + raw_idx];\n"
-        "        let drawable_offset = prims_off + prim_count + data_offset;\n"
-        "\n"
-        "        let drawable_type = ygrid_read_type(drawable_offset);\n"
-        "        let d = evaluate_sdf_2d(drawable_offset, pixel_pos);\n"
-        "\n"
-        "        var fill_rgba: vec4<f32>;\n"
-        "        var has_fill: bool;\n"
-        "        if (yetty_ysdf_is_gradient_2d(drawable_type)) {\n"
-        "            fill_rgba = yetty_ysdf_eval_gradient_color_2d(drawable_offset, pixel_pos);\n"
-        "            has_fill = fill_rgba.a > 0.0;\n"
-        "        } else {\n"
-        "            let fill_packed = ygrid_read_fill_color(drawable_offset);\n"
-        "            fill_rgba = yetty_ysdf_unpack_color(fill_packed);\n"
-        "            has_fill = fill_packed != 0u;\n"
-        "        }\n"
-        "\n"
-        "        if (d < 0.0 && has_fill) {\n"
-        "            let edge_alpha = clamp(-d * 2.0, 0.0, 1.0);\n"
-        "            let alpha = edge_alpha * fill_rgba.a;\n"
-        "            result_color = mix(result_color, fill_rgba.rgb, alpha);\n"
-        "            result_alpha = max(result_alpha, alpha);\n"
-        "        }\n"
-        "    }\n"
-        "\n"
-        "    if (result_alpha < 0.001) { discard; }\n"
-        "    return vec4<f32>(result_color, result_alpha);\n"
-        "}\n";
-    return src;
-}
-#endif
 
 /*===========================================================================
  * Per-prim metadata (parsed once from wire bytes at add time)
@@ -286,7 +160,8 @@ struct ygrid_id_index_entry {
  * The figure
  *=========================================================================*/
 
-struct yetty_ygrid_grid {
+struct [[clang::annotate("class@ygrid:grid")]] [[clang::annotate("uses@yfigure:figure")]]
+yetty_ygrid_grid {
     struct yetty_yfigure_figure base;
 
     /* Owned. Built at create time. Used by process_input to walk the
@@ -1720,13 +1595,13 @@ static struct yetty_ycore_void_result process_add_record(struct yetty_ygrid_grid
     size_t padded = (rec_size + 3u) & ~(size_t)3u;
     struct yetty_ycore_void_result ar;
     if (padded == rec_size) {
-        ar = yetty_ygrid_add_record(g, bytes, rec_size);
+        ar = yetty_ygrid_add_record_local(g, bytes, rec_size);
     } else {
         uint8_t scratch[64];
         if (padded <= sizeof(scratch)) {
             memcpy(scratch, bytes, rec_size);
             memset(scratch + rec_size, 0, padded - rec_size);
-            ar = yetty_ygrid_add_record(g, scratch, padded);
+            ar = yetty_ygrid_add_record_local(g, scratch, padded);
         } else {
             uint8_t *heap = (uint8_t *)malloc(padded);
             if (!heap) {
@@ -1735,7 +1610,7 @@ static struct yetty_ycore_void_result process_add_record(struct yetty_ygrid_grid
             }
             memcpy(heap, bytes, rec_size);
             memset(heap + rec_size, 0, padded - rec_size);
-            ar = yetty_ygrid_add_record(g, heap, padded);
+            ar = yetty_ygrid_add_record_local(g, heap, padded);
             free(heap);
         }
     }
@@ -2486,9 +2361,9 @@ struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid
     return &grid->base;
 }
 
-struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_ygrid_grid *grid,
-                                                      const uint8_t *record_bytes,
-                                                      size_t record_len)
+struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_grid *grid,
+                                                            const uint8_t *record_bytes,
+                                                            size_t record_len)
 {
     if (!grid || !record_bytes) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_add_record: NULL arg");
@@ -2512,7 +2387,7 @@ struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_ygrid_grid *g
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_ygrid_grid *grid)
+struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *grid)
 {
     if (!grid) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_clear: NULL arg");
@@ -2547,3 +2422,82 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
     grid->base.dirty = 1;
     return YETTY_OK_VOID();
 }
+
+/*===========================================================================
+ * yclass slot overrides
+ *
+ * One wrapper impl per ygrid public/vtable method whose signature can
+ * survive RPC marshalling. The wrapper conforms to the yclass slot
+ * shape `(struct yetty_yclass_ctx *ctx, struct yetty_yclass_object
+ * *obj, …)`, then forwards to the existing C impl below. Keeping the
+ * old impls intact preserves the legacy callsites that still pass a
+ * raw `struct yetty_yfigure_figure *` while every figure-kind gets
+ * ported one at a time.
+ *
+ * Skipped (signature incompatible with the wire, see codegen
+ * validate_method):
+ *   - render(self, target*)         — `target*` is a per-frame GPU
+ *                                     pointer, not RPC-able.
+ *   - process_input(self, sm*)      — `sm*` is a wire-statemachine
+ *                                     coroutine pointer.
+ *   - dump(self, indent) → char*    — pointer return.
+ *   - set_font(grid, slot, font*)   — font isn't a yclass object yet.
+ *   - set_figure_factory(grid, f*)  — same; the factory pointer has no
+ *                                     yclass identity.
+ *   - as_figure(grid) → figure*     — pure cast helper, no dispatch.
+ *
+ * Recovery cast: today every figure is still calloc'd by the legacy
+ * factories so the user-data starts at offset 0 of the blob. Once the
+ * yclass-allocated layout takes over (yclass_object header at offset
+ * 0, user data at offset sizeof(yclass_object)), this cast becomes
+ *   container_of(obj, struct yetty_ygrid_grid, base) + 1
+ * — but no yclass-dispatched callsite exists yet, so the legacy cast
+ * is correct for every current caller.
+ *=========================================================================*/
+
+[[clang::annotate("override@ygrid:grid:add_record")]]
+static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ycore_buffer record)
+{
+    (void)ctx;
+    struct yetty_ygrid_grid *grid = (struct yetty_ygrid_grid *)obj;
+    return yetty_ygrid_add_record_local(grid, record.data, record.size);
+}
+
+[[clang::annotate("override@ygrid:grid:clear")]]
+static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    struct yetty_ygrid_grid *grid = (struct yetty_ygrid_grid *)obj;
+    return yetty_ygrid_clear_local(grid);
+}
+
+[[clang::annotate("override@ygrid:grid:destroy")]]
+static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    return ygrid_destroy((struct yetty_yfigure_figure *)obj);
+}
+
+[[clang::annotate("override@ygrid:grid:process_bytes")]]
+static struct yetty_ycore_void_result yetty_ygrid_grid_process_bytes_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ycore_buffer payload)
+{
+    (void)ctx;
+    return ygrid_process_bytes((struct yetty_yfigure_figure *)obj,
+                               payload.data, payload.size);
+}
+
+[[clang::annotate("override@ygrid:grid:reset_content")]]
+static struct yetty_ycore_void_result yetty_ygrid_grid_reset_content_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    return ygrid_reset_content((struct yetty_yfigure_figure *)obj);
+}
+
+#include "grid.gen.c"

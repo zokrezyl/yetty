@@ -3,7 +3,9 @@
 add_library(yetty_yclass STATIC
     class.c
     rpc.c
+    rpc-dcs-server.c
     transport-fd.c
+    transport-dcs.c
 )
 
 target_include_directories(yetty_yclass PUBLIC
@@ -12,4 +14,5 @@ target_include_directories(yetty_yclass PUBLIC
 
 target_link_libraries(yetty_yclass PUBLIC
     yetty_ycore
+    yetty_ywire
 )

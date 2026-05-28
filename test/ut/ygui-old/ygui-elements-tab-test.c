@@ -119,7 +119,7 @@ static struct receiver receiver_create(float w, float h)
     }
     struct yetty_ycore_rectangle rect = {{0, 0}, {w, h}};
     struct yetty_yfigure_container_ptr_result cr =
-        yetty_yfigure_container_create(rect, NULL, rr.value);
+        yetty_yfigure_container_create_local(rect, NULL, rr.value);
     if (YETTY_IS_ERR(cr)) {
         fprintf(stderr, "container_create failed\n");
         yetty_ycore_error_destroy(cr.error);

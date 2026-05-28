@@ -5,59 +5,91 @@
 # directly. Embedders that want to host the framework on top of their
 # own event loop pass an existing uv_loop_t into yetty_ygui_framework_create.
 
+include(${YETTY_ROOT}/build-tools/yetty/yclass-codegen.cmake)
+
+# Annotated sources processed by yclass codegen. Every widget under
+# widgets/ plus the framework base (widget, primitive-widget,
+# mixins/clickable) carries `[[clang::annotate("class@ygui:…")]]` on
+# its data struct and `override@ygui:<class>:<slot>` on each impl;
+# codegen emits the per-class `_class_get` accessor + module-wide
+# public headers (include/yetty/ygui/methods.h, rpc.h) plus internal
+# sources/headers next to the annotated .c files (methods.gen.h,
+# methods.gen.c, rpc.gen.c). The .c files include their per-class
+# `<stem>.gen.c` at the foot to pull in the accessor body.
+set(YGUI_ANNOTATED
+    ${CMAKE_CURRENT_SOURCE_DIR}/widget.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/primitive-widget.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/mixins/clickable.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/breadcrumbs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/button.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/checkbox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/chip.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/choicebox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/collapsing_header.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/colorpicker.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/combobox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/dialog.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/dropdown.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/hbox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/label.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/list.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/menubar.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/panel.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/popup_menu.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/progress.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/radio.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/rich.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/scrollarea.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/selectable.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/separator.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/slider.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/spinner.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/splitter.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/statusbar.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/stepper.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/tabbar.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/table.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/textarea.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/textinput.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/toggle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/tooltip.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/tree_node.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/vbox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ybrowser.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ydraw_embed.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yimage.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yjungle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ymarkdown.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ypdf.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yplot.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yvideo.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yzoo.c
+)
+set(YGUI_CLASSES
+    widget primitive-widget clickable
+    breadcrumbs button checkbox chip choicebox collapsing_header
+    colorpicker combobox dialog dropdown hbox label list menubar
+    panel popup_menu progress radio rich scrollarea selectable
+    separator slider spinner splitter statusbar stepper tabbar
+    table textarea textinput toggle tooltip tree_node vbox
+    ybrowser ydraw_embed yimage yjungle ymarkdown ypdf yplot
+    yvideo yzoo
+)
+yetty_yclass_codegen(
+    MODULE   ygui
+    SOURCES  ${YGUI_ANNOTATED}
+    CLASSES  ${YGUI_CLASSES}
+    GEN_SRC  YGUI_GEN_SRC
+)
+
 set(YGUI_SOURCES
     class.c
     object.c
-    widget.c
-    primitive-widget.c
     framework.c
     event.c
     layout.c
-    mixins/clickable.c
-    widgets/label.c
-    widgets/breadcrumbs.c
-    widgets/button.c
-    widgets/checkbox.c
-    widgets/chip.c
-    widgets/choicebox.c
-    widgets/collapsing_header.c
-    widgets/colorpicker.c
-    widgets/combobox.c
-    widgets/dialog.c
-    widgets/dropdown.c
-    widgets/hbox.c
-    widgets/list.c
-    widgets/menubar.c
-    widgets/popup_menu.c
-    widgets/progress.c
-    widgets/radio.c
-    widgets/rich.c
-    widgets/scrollarea.c
-    widgets/selectable.c
-    widgets/separator.c
-    widgets/slider.c
-    widgets/spinner.c
-    widgets/splitter.c
-    widgets/statusbar.c
-    widgets/stepper.c
-    widgets/tabbar.c
-    widgets/table.c
-    widgets/textarea.c
-    widgets/textinput.c
-    widgets/toggle.c
-    widgets/tooltip.c
-    widgets/tree_node.c
-    widgets/vbox.c
-    widgets/panel.c
-    widgets/ybrowser.c
-    widgets/ydraw_embed.c
-    widgets/yimage.c
-    widgets/yjungle.c
-    widgets/ymarkdown.c
-    widgets/ypdf.c
-    widgets/yplot.c
-    widgets/yvideo.c
-    widgets/yzoo.c
+    ${YGUI_ANNOTATED}
+    ${YGUI_GEN_SRC}
 )
 
 add_library(ygui STATIC ${YGUI_SOURCES})
@@ -66,9 +98,17 @@ target_include_directories(ygui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${YETTY_ROOT}/include
 )
+# Codegen-emitted internal headers (methods.gen.h, …) sit next to
+# their consuming .gen.c files under src/yetty/<module>/. The .gen.c
+# include them via `<yetty/<module>/methods.gen.h>`, so the src tree
+# must be a -I prefix for this target. PRIVATE — internal headers
+# must NOT leak to consumers; public callers go through the clean
+# public methods.h / rpc.h under include/yetty/ygui/.
+target_include_directories(ygui PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(ygui PUBLIC
     yetty_ycore
+    yetty_yclass
     yetty_ydraw_core
     yetty_yface
     yetty_yfigure
@@ -81,8 +121,10 @@ target_link_libraries(ygui PUBLIC
     yetty_ypdf
 )
 
+# C2x so `[[clang::annotate(...)]]` attribute syntax parses (yclass
+# codegen reads these annotations off the AST). Switched up from C11.
 set_target_properties(ygui PROPERTIES
-    C_STANDARD 11
+    C_STANDARD 23
     C_STANDARD_REQUIRED ON
 )
 

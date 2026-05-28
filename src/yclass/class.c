@@ -676,14 +676,82 @@ yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
             yetty_yclass_method_slot slot = YETTY_YCLASS_METHOD_SLOT_PACK(d, i);
             struct yetty_yclass_const_char_ptr_result nr =
                 yetty_yclass_method_slot_name(slot);
-            if (YETTY_IS_OK(nr) && nr.value) {
-                cb(nr.value, slot, userdata);
-            } else if (YETTY_IS_ERR(nr)) {
-                yetty_ycore_error_destroy(nr.error);
-            }
+            /* Bail on first slot-name lookup failure rather than
+             * silently skipping the slot. Previously, GET_CLASS
+             * could ship a class map missing entries and report
+             * success, leaving the client with no remote-id mapping
+             * for the dropped slots — only recoverable via per-slot
+             * RESOLVE_SLOT round-trips (slow) or never (silent). */
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, nr,
+                                "for_each_slot: method_slot_name failed mid-walk");
+            if (!nr.value)
+                return YETTY_ERR(yetty_ycore_void,
+                                 "for_each_slot: method_slot_name returned OK with NULL");
+            cb(nr.value, slot, userdata);
         }
     }
     return YETTY_OK_VOID();
+}
+
+struct yetty_yclass_ptr_result yetty_yclass_parent(const struct yetty_yclass *cls)
+{
+    if (!cls) {
+        return YETTY_ERR(yetty_yclass_ptr, "yclass_parent: NULL cls");
+    }
+    return YETTY_OK(yetty_yclass_ptr, cls->parent);
+}
+
+struct yetty_ycore_size_result yetty_yclass_mixin_count(const struct yetty_yclass *cls)
+{
+    if (!cls) {
+        return YETTY_ERR(yetty_ycore_size, "yclass_mixin_count: NULL cls");
+    }
+    return YETTY_OK(yetty_ycore_size, cls->mixin_count);
+}
+
+struct yetty_yclass_ptr_result yetty_yclass_mixin_at(const struct yetty_yclass *cls, size_t index)
+{
+    if (!cls) {
+        return YETTY_ERR(yetty_yclass_ptr, "yclass_mixin_at: NULL cls");
+    }
+    if (index >= cls->mixin_count) {
+        return YETTY_ERR(yetty_yclass_ptr, "yclass_mixin_at: index out of range");
+    }
+    return YETTY_OK(yetty_yclass_ptr, cls->mixins[index]);
+}
+
+struct yetty_ycore_size_result yetty_yclass_data_size(const struct yetty_yclass *cls)
+{
+    if (!cls) {
+        return YETTY_ERR(yetty_ycore_size, "yclass_data_size: NULL cls");
+    }
+    if (!cls->desc) {
+        return YETTY_ERR(yetty_ycore_size, "yclass_data_size: class has no descriptor");
+    }
+    return YETTY_OK(yetty_ycore_size, cls->desc->data_size);
+}
+
+struct yetty_yclass_const_char_ptr_result yetty_yclass_name(const struct yetty_yclass *cls)
+{
+    if (!cls) {
+        return YETTY_ERR(yetty_yclass_const_char_ptr, "yclass_name: NULL cls");
+    }
+    if (!cls->desc || !cls->desc->name) {
+        return YETTY_ERR(yetty_yclass_const_char_ptr, "yclass_name: missing name");
+    }
+    return YETTY_OK(yetty_yclass_const_char_ptr, cls->desc->name);
+}
+
+struct yetty_yclass_const_char_ptr_result yetty_yclass_type_str(const struct yetty_yclass *cls)
+{
+    if (!cls) {
+        return YETTY_ERR(yetty_yclass_const_char_ptr, "yclass_type_str: NULL cls");
+    }
+    if (!cls->desc) {
+        return YETTY_ERR(yetty_yclass_const_char_ptr, "yclass_type_str: NULL descriptor");
+    }
+    const char *s = (cls->desc->type == YETTY_YCLASS_TYPE_MIXIN) ? "mixin" : "regular";
+    return YETTY_OK(yetty_yclass_const_char_ptr, s);
 }
 
 struct yetty_yclass_object_ptr_result yetty_yclass_object_alloc(const struct yetty_yclass *cls)

@@ -590,7 +590,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             .max = {.x = (float)surface_w, .y = (float)surface_h},
         };
         struct yetty_yfigure_container_ptr_result cr =
-            yetty_yfigure_container_create(root_rect, context, yui->figure_registry);
+            yetty_yfigure_container_create_local(root_rect, context, yui->figure_registry);
         if (!YETTY_IS_OK(cr)) {
             yetty_yfigure_registry_destroy(yui->figure_registry);
             yui->font->ops->destroy(yui->font);

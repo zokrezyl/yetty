@@ -23,7 +23,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     struct yetty_ygui_object_ptr_result jr =
-        yetty_ygui_add(yetty_ygui_yjungle_class_get(), root);
+        yetty_ygui_add(yetty_ygui_yjungle_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, jr, "yjungle");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(jr.value);
     l.flex_grow = 1.0f;

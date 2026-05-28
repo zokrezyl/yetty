@@ -20,27 +20,35 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct button_data {
+struct [[clang::annotate("class@ygui:button")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]]
+       [[clang::annotate("uses@ygui:clickable")]] button_data {
     char *label;
 };
 
-static struct yetty_ycore_void_result button_constructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:button:constructor")]]
+static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_button_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_button_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "button_constructor: super");
-    struct button_data *d = yetty_ygui_data_get(obj, yetty_ygui_button_class_get());
+    struct button_data *d = yetty_ygui_data_get(obj, yetty_ygui_button_class_get().value);
     d->label = NULL;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result button_destructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:button:destructor")]]
+static struct yetty_ycore_void_result button_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct button_data *d = yetty_ygui_data_get(obj, yetty_ygui_button_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct button_data *d = yetty_ygui_data_get(obj, yetty_ygui_button_class_get().value);
     free(d->label);
     d->label = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_button_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_button_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 /* Brand colors as packed RGBA — R in low byte. Per rules/08-branding.md.
@@ -80,13 +88,16 @@ static uint32_t pack_darken(uint32_t c)
     return (a << 24) | (b << 16) | (g << 8) | r;
 }
 
-static struct yetty_ycore_void_result button_paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:button:widget_paint")]]
+static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "button_paint: NULL ctx");
     }
-    struct button_data *d = yetty_ygui_data_get(obj, yetty_ygui_button_class_get());
+    struct button_data *d = yetty_ygui_data_get(obj, yetty_ygui_button_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -179,7 +190,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_ygui_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_button_set_label: NULL obj");
     }
-    struct button_data *d = yetty_ygui_data_get(obj, yetty_ygui_button_class_get());
+    struct button_data *d = yetty_ygui_data_get(obj, yetty_ygui_button_class_get().value);
     free(d->label);
     if (!label) {
         d->label = NULL;
@@ -200,21 +211,8 @@ const char *yetty_ygui_button_get_label(const struct yetty_ygui_object *obj)
         return NULL;
     }
     struct button_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_button_class_get());
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_button_class_get().value);
     return d->label;
 }
 
-
-static const struct yetty_ygui_op button_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, button_constructor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, button_destructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, button_paint),
-};
-
-static const struct yetty_ygui_class_descriptor button_desc = {
-    .name = "yetty_ygui_button",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct button_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_button_class_get, &button_desc, button_ops, yetty_ygui_primitive_widget_class_get(), yetty_ygui_clickable_mixin_get(), NULL)
+#include "button.gen.c"

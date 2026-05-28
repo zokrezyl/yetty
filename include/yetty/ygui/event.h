@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 
+#include <yclass/class.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
@@ -41,7 +42,8 @@ struct yetty_ygui_event {
     const void *data;
 };
 
-typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_ygui_object *target,
+typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *target,
                                                               const struct yetty_ygui_event *event,
                                                               void *userdata);
 

@@ -1,0 +1,71 @@
+methods:
+  - slot: add_child
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: child
+        type: "struct yetty_yfigure_figure *"
+      - name: id
+        type: uint32_t
+  - slot: remove_child_by_id
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+  - slot: raise_child_by_id
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+  - slot: process_records
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: struct yetty_ycore_buffer
+classes:
+  - name: container
+    domain: yfigure
+    accessor: yetty_yfigure_container_class_get
+    type: regular
+    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/yfigure/container.c
+    parent: null
+    mixins:
+      - domain: yfigure
+        name: figure
+    data: struct yetty_yfigure_container
+    ops:
+      - slot: add_child
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_add_child_impl
+      - slot: remove_child_by_id
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_remove_child_by_id_impl
+      - slot: raise_child_by_id
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_raise_child_by_id_impl
+      - slot: process_records
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_process_records_impl

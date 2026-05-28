@@ -27,7 +27,9 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/yterm/dcs-codes.h>
 #include <yetty/yterm/osc-codes.h>
+#include <yclass/rpc-dcs-server.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ydraw-factory/figure-factory.h>
@@ -331,6 +333,31 @@ static struct yetty_ycore_void_result terminal_pty_write_callback(const char *da
     struct yetty_ycore_size_result r = terminal_pty_write_raw(terminal, data, len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_pty_write_callback: pty_write_raw failed");
     ydebug("terminal_pty_write_callback: wrote %zu bytes to PTY", len);
+    return YETTY_OK_VOID();
+}
+
+/* yetty_yclass_rpc_dcs_emit_fn impl — ships an already-encoded DCS
+ * envelope through the PTY master so the subprocess sees it on its
+ * stdin. Looping write because pty write ops are single-shot (one
+ * write(2) per call) and a short write would otherwise drop the
+ * tail. */
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result terminal_dcs_emit_response(const uint8_t *bytes, size_t n,
+                                                                  void *userdata)
+{
+    struct yetty_yterm_terminal *terminal = userdata;
+    size_t off = 0;
+    while (off < n) {
+        struct yetty_ycore_size_result wr =
+            terminal_pty_write_raw(terminal, (const char *)bytes + off, n - off);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr,
+                            "terminal_dcs_emit_response: pty_write_raw failed");
+        if (wr.value == 0) {
+            yetty_yplatform_ytime_sleep_ms(1);
+            continue;
+        }
+        off += wr.value;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -1282,17 +1309,17 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     ydebug("terminal_create: ydraw scrolling layer created and added");
 
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_CLEAR,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_CLEAR, /*has_args=*/1,
         yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_CLEAR failed");
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_BIN,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_BIN, /*has_args=*/1,
         yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_BIN failed");
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_OVERLAY,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_OVERLAY, /*has_args=*/1,
         yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_OVERLAY failed");
@@ -1445,7 +1472,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                 .y = (float)rows * text_layer->cell_size.height},
     };
     struct yetty_yfigure_container_ptr_result cont_res =
-        yetty_yfigure_container_create(root_rect, yetty_context, terminal->figure_registry);
+        yetty_yfigure_container_create_local(root_rect, yetty_context, terminal->figure_registry);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, cont_res,
                         "terminal_create: root_container create failed");
     terminal->root_container = cont_res.value;
@@ -1454,11 +1481,36 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     /* Register the root container directly with the wire SM —
      * userdata is the container itself; no terminal-local wrapper. */
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN, /*has_args=*/1,
         yetty_yfigure_container_process_input, terminal->root_container);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register compositor for YCOMPOSITOR_BIN");
     ydebug("terminal_create: ycompositor registered for OSC %d", YETTY_OSC_YCOMPOSITOR_BIN);
+
+    /* yclass RPC over DCS — subprocess clients (ygui, future widgets)
+     * make yclass calls into the in-terminal yfigure tree by shipping
+     * DCS envelopes on YETTY_DCS_YCLASS_RPC. The handler reads one
+     * request envelope, dispatches via yetty_yclass_rpc_dispatch_one,
+     * and ships the response back through the PTY master so the
+     * client sees it on its stdin (where its own SM decodes the DCS
+     * reply). One-line attach — the same wire_statemachine handles
+     * yface OSC envelopes and yclass DCS envelopes in parallel.
+     *
+     * compressed=0 keeps tiny calls fast (b64-only); large frames
+     * (process_records buffers with a full envelope's records inside)
+     * benefit from compressed=1 but the call-time pick lives at the
+     * client transport. The server agrees on a fixed setting for
+     * simplicity; switch to a per-envelope sniff if asymmetric
+     * compression turns out to matter. */
+    {
+        struct yetty_ycore_void_result dr = yetty_yclass_rpc_dcs_server_attach(
+            terminal->sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0, terminal_dcs_emit_response,
+            terminal);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, dr,
+                            "terminal_create: dcs_server_attach for YCLASS_RPC");
+    }
+    ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)",
+           YETTY_DCS_YCLASS_RPC);
 
     /* Shader-glyph figure — replaces the legacy shader-glyph layer. Added
      * as a child of the root container under a reserved high id (just

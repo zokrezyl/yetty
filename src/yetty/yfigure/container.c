@@ -47,7 +47,8 @@ struct child_entry {
     UT_hash_handle hh;
 };
 
-struct yetty_yfigure_container {
+struct [[clang::annotate("class@yfigure:container")]]
+       [[clang::annotate("uses@yfigure:figure")]] yetty_yfigure_container {
     struct yetty_yfigure_figure base;
     /* uthash head — id → entry. Iterating via HASH_ITER / e->hh.next
      * walks children in INSERTION ORDER (= z-order: back-to-front). */
@@ -645,7 +646,7 @@ static const struct yetty_yfigure_figure_ops *group_ops(void)
  * Public API
  *=========================================================================*/
 
-struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create(
+struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create_local(
     struct yetty_ycore_rectangle rect, const struct yetty_context *context,
     struct yetty_yfigure_registry *registry)
 {
@@ -989,3 +990,67 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
     yetty_yfigure_container_for_each(container, hit_visit, &st);
     return st.hit;
 }
+
+/*===========================================================================
+ * yclass slot overrides
+ *
+ * One wrapper impl per container public method whose signature can be
+ * wire-marshalled. Skipped (signature incompatible):
+ *   - consume_envelope, process_input       — wire-statemachine ptr
+ *   - find_child_by_id, as_figure           — pointer return
+ *   - hit_test                              — non-Result struct return
+ *   - for_each                              — function pointer arg
+ *   - set_viewport_offset                   — void return, not Result
+ *   - create_local                          — replaced by codegen
+ *                                             `yetty_yfigure_container_create(ctx)`
+ *
+ * Recovery cast: legacy-allocated container has the figure_ops pointer
+ * at offset 0; a yclass-allocated one would have yclass_object at
+ * offset 0 with the user data starting at sizeof(yclass_object).
+ * No yclass-dispatched callsite exists yet, so the direct cast is
+ * correct for every current caller. */
+
+#include <yclass/class.h>
+#include <yetty/yfigure/container.h>
+
+/* yclass instance layout: yclass_object header at offset 0, user data
+ * (the `struct yetty_yfigure_container` body) immediately after. Cast
+ * via (obj + 1) advances past the header in pointer arithmetic. */
+#define YCLASS_TO_CONTAINER(obj) \
+    ((struct yetty_yfigure_container *)((struct yetty_yclass_object *)(obj) + 1))
+
+[[clang::annotate("override@yfigure:container:add_child")]]
+static struct yetty_ycore_void_result yetty_yfigure_container_add_child_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_yfigure_figure *child, uint32_t id)
+{
+    (void)ctx;
+    return yetty_yfigure_container_add_child(YCLASS_TO_CONTAINER(obj), child, id);
+}
+
+[[clang::annotate("override@yfigure:container:remove_child_by_id")]]
+static struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, uint32_t id)
+{
+    (void)ctx;
+    return yetty_yfigure_container_remove_child_by_id(YCLASS_TO_CONTAINER(obj), id);
+}
+
+[[clang::annotate("override@yfigure:container:raise_child_by_id")]]
+static struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, uint32_t id)
+{
+    (void)ctx;
+    return yetty_yfigure_container_raise_child_by_id(YCLASS_TO_CONTAINER(obj), id);
+}
+
+[[clang::annotate("override@yfigure:container:process_records")]]
+static struct yetty_ycore_void_result yetty_yfigure_container_process_records_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ycore_buffer bytes)
+{
+    (void)ctx;
+    return yetty_yfigure_container_process_records(YCLASS_TO_CONTAINER(obj), bytes.data, bytes.size);
+}
+
+#include "container.gen.c"

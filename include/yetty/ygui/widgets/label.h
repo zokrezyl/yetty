@@ -1,24 +1,19 @@
-/*
- * ygui-label.h — static text widget.
- *
- * Chrome widget (figure_kind == 0). Carries a UTF-8 text string and
- * basic typography options (size, color). The paint hook emits a
- * GLYPH record per character into the engine's ygrid body.
- */
-#ifndef YETTY_YGUI_WIDGETS_LABEL_H
-#define YETTY_YGUI_WIDGETS_LABEL_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `label` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_LABEL_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_LABEL_H
 
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct yetty_yclass_ptr_result yetty_ygui_label_class_get(void);
 
-const struct yetty_ygui_class *yetty_ygui_label_class_get(void);
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 struct yetty_ycore_void_result yetty_ygui_label_set_text(struct yetty_ygui_object *obj,
                                                          const char *text);
 
@@ -29,9 +24,6 @@ struct yetty_ycore_void_result yetty_ygui_label_set_font_size(struct yetty_ygui_
 
 struct yetty_ycore_void_result yetty_ygui_label_set_color(struct yetty_ygui_object *obj,
                                                           struct yetty_ycore_rgba color);
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* YETTY_YGUI_WIDGETS_LABEL_H */

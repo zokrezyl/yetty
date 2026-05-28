@@ -12,20 +12,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct ymarkdown_data {
+struct [[clang::annotate("class@ygui:ymarkdown")]]
+       [[clang::annotate("parent@ygui:ydraw_embed")]] ymarkdown_data {
     char *source;
     size_t source_len;
     float rendered_w;
     float rendered_h;
 };
 
-static struct yetty_ycore_void_result ymd_constructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:ymarkdown:constructor")]]
+static struct yetty_ycore_void_result ymd_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj, yetty_ygui_ymarkdown_class_get(),
-                              (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        yetty_ygui_super_void(obj, yetty_ygui_ymarkdown_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymarkdown_ctor: super");
-    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get());
+    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get().value);
     d->source = NULL;
     d->source_len = 0;
     d->rendered_w = 0.0f;
@@ -33,18 +37,23 @@ static struct yetty_ycore_void_result ymd_constructor(struct yetty_ygui_object *
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ymd_destructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:ymarkdown:destructor")]]
+static struct yetty_ycore_void_result ymd_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get().value);
     free(d->source);
     d->source = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_ymarkdown_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_ymarkdown_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_void_result ymd_render(struct yetty_ygui_object *obj, float w, float h)
+static struct yetty_ycore_void_result ymd_render(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, float w, float h)
 {
-    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get().value);
     if (!d->source || d->source_len == 0) return YETTY_OK_VOID();
     if (w <= 0.0f || h <= 0.0f) return YETTY_OK_VOID();
     struct yetty_ymarkdown_render_config cfg = {.cell_width = 8,
@@ -61,33 +70,37 @@ static struct yetty_ycore_void_result ymd_render(struct yetty_ygui_object *obj, 
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ymd_emit_body(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:ymarkdown:widget_emit_body")]]
+static struct yetty_ycore_void_result ymd_emit_body(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
-    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (d->source && (w != d->rendered_w || h != d->rendered_h)) {
-        struct yetty_ycore_void_result rr = ymd_render(obj, w, h);
+        struct yetty_ycore_void_result rr = ymd_render(NULL, _yc_obj, w, h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymarkdown_emit_body: render");
     }
     /* Forward to super's emit_body (primitive_widget → paint → ydraw_embed). */
-    yetty_ygui_method_slot slot =
-        yetty_ygui_method_slot_get((yetty_ygui_method_id_t)yetty_ygui_widget_emit_body);
-    yetty_ygui_impl_t impl =
-        yetty_ygui_class_dispatch_lookup_super(yetty_ygui_ymarkdown_class_get(), slot);
+    yetty_yclass_method_slot slot =
+        yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
+    yetty_yclass_impl_t impl =
+        yetty_ygui_dispatch_lookup_super(yetty_ygui_ymarkdown_class_get().value, slot);
     if (!impl) return YETTY_OK_VOID();
-    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_ygui_object *,
+    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_ctx *,
+                                                   struct yetty_yclass_object *,
                                                    struct yetty_ygui_emit_ctx *);
-    return ((fn_t)impl)(obj, ctx);
+    return ((fn_t)impl)(NULL, _yc_obj, ctx);
 }
 
 struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_source(struct yetty_ygui_object *obj,
                                                                const char *src, size_t len)
 {
     if (!obj || !src) return YETTY_ERR(yetty_ycore_void, "ymarkdown_set_source: NULL");
-    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get());
+    struct ymarkdown_data *d = yetty_ygui_data_get(obj, yetty_ygui_ymarkdown_class_get().value);
     char *buf = malloc(len);
     if (len > 0 && !buf) return YETTY_ERR(yetty_ycore_void, "ymarkdown_set_source: malloc");
     if (len > 0) memcpy(buf, src, len);
@@ -125,17 +138,4 @@ struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_file(struct yetty_ygui_o
     return r;
 }
 
-
-static const struct yetty_ygui_op ymarkdown_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ymd_constructor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, ymd_destructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_emit_body, ymd_emit_body),
-};
-
-static const struct yetty_ygui_class_descriptor ymarkdown_desc = {
-    .name = "yetty_ygui_ymarkdown",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct ymarkdown_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_ymarkdown_class_get, &ymarkdown_desc, ymarkdown_ops, yetty_ygui_ydraw_embed_class_get(), NULL)
+#include "ymarkdown.gen.c"

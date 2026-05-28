@@ -46,7 +46,8 @@ struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_ygui_object *
         if (s->type != event->type) {
             continue;
         }
-        struct yetty_ycore_void_result r = s->cb(source, event, s->userdata);
+        struct yetty_ycore_void_result r =
+            s->cb(NULL, (struct yetty_yclass_object *)source, event, s->userdata);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_object_emit: callback failed", r);
         }

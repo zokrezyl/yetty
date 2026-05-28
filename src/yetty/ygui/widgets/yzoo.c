@@ -9,23 +9,21 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/widgets/yzoo.h>
 
-static struct yetty_ycore_void_result emit_container(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:yzoo:widget_emit_container")]]
+static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YZOO,
                                         r.min.x, r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
 
-static const struct yetty_ygui_op yzoo_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_widget_emit_container, emit_container),
+struct [[clang::annotate("class@ygui:yzoo")]]
+       [[clang::annotate("parent@ygui:widget")]] yzoo_data {
+    char _empty;
 };
 
-static const struct yetty_ygui_class_descriptor yzoo_desc = {
-    .name = "yetty_ygui_yzoo",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_yzoo_class_get, &yzoo_desc, yzoo_ops, yetty_ygui_widget_class_get(), NULL)
+#include "yzoo.gen.c"

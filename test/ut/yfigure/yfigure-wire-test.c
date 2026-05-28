@@ -189,7 +189,7 @@ static struct yetty_yfigure_container *make_root(struct yetty_yfigure_registry *
 {
     struct yetty_ycore_rectangle rect = {{0, 0}, {1000, 1000}};
     struct yetty_yfigure_container_ptr_result r =
-        yetty_yfigure_container_create(rect, NULL, registry);
+        yetty_yfigure_container_create_local(rect, NULL, registry);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "container_create failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);

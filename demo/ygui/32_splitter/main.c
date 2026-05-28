@@ -29,7 +29,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
     {
         struct yetty_ygui_object_ptr_result p =
-            yetty_ygui_add(yetty_ygui_panel_class_get(), root);
+            yetty_ygui_add(yetty_ygui_panel_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, p, "left");
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(p.value);
         l.flex_grow = 1.0f;
@@ -37,7 +37,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
     {
         struct yetty_ygui_object_ptr_result s =
-            yetty_ygui_add(yetty_ygui_splitter_class_get(), root);
+            yetty_ygui_add(yetty_ygui_splitter_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, s, "splitter");
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(s.value);
         l.width = 4;
@@ -45,7 +45,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
     {
         struct yetty_ygui_object_ptr_result p =
-            yetty_ygui_add(yetty_ygui_panel_class_get(), root);
+            yetty_ygui_add(yetty_ygui_panel_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, p, "right");
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(p.value);
         l.flex_grow = 1.0f;

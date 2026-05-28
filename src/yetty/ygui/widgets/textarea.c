@@ -8,33 +8,43 @@
 #define COLOR_BORDER 0xFF474A36u
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct textarea_data {
+struct [[clang::annotate("class@ygui:textarea")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] textarea_data {
     char *text;
 };
 
-static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:textarea:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_textarea_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_textarea_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "textarea: super");
-    struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get());
+    struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
     d->text = NULL;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result dtor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:textarea:destructor")]]
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
     free(d->text);
-    return yetty_ygui_super_void(obj, yetty_ygui_textarea_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_textarea_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:textarea:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "textarea paint: NULL ctx");
-    struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get());
+    struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) return YETTY_OK_VOID();
@@ -66,7 +76,7 @@ struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_ygui_ob
                                                             const char *text)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "textarea_set_text: NULL");
-    struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get());
+    struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
     free(d->text);
     d->text = NULL;
     if (text) {
@@ -82,21 +92,8 @@ const char *yetty_ygui_textarea_get_text(const struct yetty_ygui_object *obj)
 {
     if (!obj) return "";
     struct textarea_data *d = yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                                                  yetty_ygui_textarea_class_get());
+                                                  yetty_ygui_textarea_class_get().value);
     return d->text ? d->text : "";
 }
 
-
-static const struct yetty_ygui_op textarea_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ctor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, dtor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
-};
-
-static const struct yetty_ygui_class_descriptor textarea_desc = {
-    .name = "yetty_ygui_textarea",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct textarea_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_textarea_class_get, &textarea_desc, textarea_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "textarea.gen.c"

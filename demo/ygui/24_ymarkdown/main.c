@@ -23,7 +23,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     struct yetty_ygui_object_ptr_result mr =
-        yetty_ygui_add(yetty_ygui_ymarkdown_class_get(), root);
+        yetty_ygui_add(yetty_ygui_ymarkdown_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "ymarkdown");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(mr.value);
     l.flex_grow = 1.0f;

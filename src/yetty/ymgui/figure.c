@@ -26,6 +26,7 @@
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -39,7 +40,8 @@
  * Figure struct
  *=========================================================================*/
 
-struct yetty_ymgui_figure {
+struct [[clang::annotate("class@ymgui:figure")]]
+       [[clang::annotate("uses@yfigure:figure")]] yetty_ymgui_figure {
     struct yetty_yfigure_figure base;
 
     /* Borrowed — shared shader/pipeline/sampler. */
@@ -732,7 +734,7 @@ static const struct yetty_yfigure_figure_ops *ymgui_figure_ops(void)
     return &ops;
 }
 
-struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create(
+struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_ycore_rectangle rect, struct yetty_ymgui_pipeline *pipeline,
     const struct yetty_context *context)
 {
@@ -900,7 +902,7 @@ static struct yetty_yfigure_figure_ptr_result ymgui_factory(struct yetty_ycore_r
     }
 
     struct yetty_ymgui_figure_ptr_result fr =
-        yetty_ymgui_figure_create(rect, args->pipeline, context);
+        yetty_ymgui_figure_create_local(rect, args->pipeline, context);
     YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, fr, "ymgui_factory: figure create");
     return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ymgui_figure_as_figure(fr.value));
 }
@@ -928,3 +930,8 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
     }
     return YETTY_OK_VOID();
 }
+
+/* yclass class accessor + slot table — no override slots yet, the
+ * legacy figure_ops vtable still drives dispatch. The accessor exists
+ * so future per-slot ports have a registered class to attach to. */
+#include "figure.gen.c"

@@ -178,6 +178,26 @@ yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
                                       void *ud),
                            void *userdata);
 
+/* --- Inheritance / layout accessors ------------------------------- */
+/*
+ * Modules that allocate their own object headers (ygui's `struct
+ * yetty_ygui_object` carries parent/sibling/id state alongside the
+ * yclass identity) need to walk the class's parent + mixin chain
+ * themselves to compute per-instance data-slice offsets. These
+ * getters expose the bits previously hidden in the opaque
+ * `struct yetty_yclass`.
+ *
+ * Errors: every getter rejects NULL `cls`; `mixin_at` also rejects
+ * out-of-range `index`.
+ */
+struct yetty_yclass_ptr_result yetty_yclass_parent(const struct yetty_yclass *cls);
+struct yetty_ycore_size_result yetty_yclass_mixin_count(const struct yetty_yclass *cls);
+struct yetty_yclass_ptr_result yetty_yclass_mixin_at(const struct yetty_yclass *cls, size_t index);
+struct yetty_ycore_size_result yetty_yclass_data_size(const struct yetty_yclass *cls);
+struct yetty_yclass_const_char_ptr_result yetty_yclass_name(const struct yetty_yclass *cls);
+struct yetty_yclass_const_char_ptr_result
+yetty_yclass_type_str(const struct yetty_yclass *cls); /* "regular" or "mixin" */
+
 struct yetty_yclass_object_ptr_result yetty_yclass_object_alloc(const struct yetty_yclass *cls);
 struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_object *obj);
 

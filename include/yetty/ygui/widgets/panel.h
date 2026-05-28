@@ -1,33 +1,25 @@
-/*
- * ygui-panel.h — filled / outlined rectangle container.
- *
- * Chrome widget (figure_kind == 0). Mostly identical to the base
- * widget plus a background + border color. Subclasses or apps stack
- * widgets inside it via yetty_ygui_add(child_cls, panel_obj).
- */
-#ifndef YETTY_YGUI_WIDGETS_PANEL_H
-#define YETTY_YGUI_WIDGETS_PANEL_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `panel` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_PANEL_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_PANEL_H
 
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct yetty_yclass_ptr_result yetty_ygui_panel_class_get(void);
 
-const struct yetty_ygui_class *yetty_ygui_panel_class_get(void);
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_ygui_object *obj,
                                                        struct yetty_ycore_rgba color);
 
 struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_ygui_object *obj,
                                                            struct yetty_ycore_rgba color,
                                                            float width_px);
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* YETTY_YGUI_WIDGETS_PANEL_H */

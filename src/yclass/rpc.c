@@ -332,6 +332,43 @@ static size_t handle_create(const void *body, size_t body_len, void *resp, size_
     return sizeof(h);
 }
 
+/* -------- request dispatch (transport-agnostic) -------------------- */
+
+/* Dispatch one already-assembled yrpc request frame. Used by
+ * rpc_server_run (transport loop) and by the DCS-based server handler
+ * (terminal-side, wire_statemachine integration) — same per-request
+ * shape, just different transport plumbing. Returns resp_len. */
+size_t yetty_yclass_rpc_dispatch_one(uint32_t header, const void *body, size_t body_len,
+                                     void *resp, size_t resp_max)
+{
+    enum yetty_yclass_rpc_op op = YETTY_YCLASS_RPC_HDR_OP(header);
+    uint32_t id = YETTY_YCLASS_RPC_HDR_ID(header);
+
+    switch (op) {
+    case YETTY_YCLASS_RPC_OP_CALL: {
+        struct yetty_yclass_rpc_skel_fn_result sr =
+            yetty_yclass_rpc_skel_for((yetty_yclass_method_slot)id);
+        if (YETTY_IS_OK(sr)) {
+            ydebug("CALL slot=%u body_len=%zu", id, body_len);
+            return sr.value(body, body_len, resp, resp_max);
+        }
+        ywarn("CALL slot=%u — skel_for failed: %s", id,
+              sr.error.msg ? sr.error.msg : "(no msg)");
+        yetty_ycore_error_destroy(sr.error);
+        return 0;
+    }
+    case YETTY_YCLASS_RPC_OP_RESOLVE_SLOT:
+        return handle_resolve_slot(body, body_len, resp, resp_max);
+    case YETTY_YCLASS_RPC_OP_GET_CLASS:
+        return handle_get_class(body, body_len, resp, resp_max);
+    case YETTY_YCLASS_RPC_OP_CREATE:
+        return handle_create(body, body_len, resp, resp_max);
+    default:
+        ywarn("unknown op=%u", op);
+        return 0;
+    }
+}
+
 /* -------- server loop ---------------------------------------------- */
 
 struct yetty_ycore_void_result
@@ -357,37 +394,8 @@ yetty_yclass_rpc_server_run(struct yetty_yclass_transport *transport)
         if (body_len && read_full(transport, body, body_len) < 0)
             return YETTY_ERR(yetty_ycore_void, "rpc_server_run: short read on body");
 
-        enum yetty_yclass_rpc_op op = YETTY_YCLASS_RPC_HDR_OP(header);
-        uint32_t id = YETTY_YCLASS_RPC_HDR_ID(header);
-        uint32_t resp_len = 0;
-
-        switch (op) {
-        case YETTY_YCLASS_RPC_OP_CALL: {
-            struct yetty_yclass_rpc_skel_fn_result sr =
-                yetty_yclass_rpc_skel_for((yetty_yclass_method_slot)id);
-            if (YETTY_IS_OK(sr)) {
-                ydebug("CALL slot=%u body_len=%u", id, body_len);
-                resp_len = (uint32_t)sr.value(body, body_len, resp, BUF_MAX);
-            } else {
-                ywarn("CALL slot=%u — skel_for failed: %s", id,
-                      sr.error.msg ? sr.error.msg : "(no msg)");
-                yetty_ycore_error_destroy(sr.error);
-            }
-            break;
-        }
-        case YETTY_YCLASS_RPC_OP_RESOLVE_SLOT:
-            resp_len = (uint32_t)handle_resolve_slot(body, body_len, resp, BUF_MAX);
-            break;
-        case YETTY_YCLASS_RPC_OP_GET_CLASS:
-            resp_len = (uint32_t)handle_get_class(body, body_len, resp, BUF_MAX);
-            break;
-        case YETTY_YCLASS_RPC_OP_CREATE:
-            resp_len = (uint32_t)handle_create(body, body_len, resp, BUF_MAX);
-            break;
-        default:
-            ywarn("unknown op=%u", op);
-            break;
-        }
+        uint32_t resp_len =
+            (uint32_t)yetty_yclass_rpc_dispatch_one(header, body, body_len, resp, BUF_MAX);
 
         if (write_full(transport, &resp_len, 4) < 0)
             return YETTY_ERR(yetty_ycore_void, "rpc_server_run: short write on resp_len");

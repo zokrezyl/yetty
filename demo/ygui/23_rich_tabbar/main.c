@@ -23,7 +23,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     struct yetty_ygui_object_ptr_result rr =
-        yetty_ygui_add(yetty_ygui_rich_class_get(), root);
+        yetty_ygui_add(yetty_ygui_rich_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rich");
     err_ok(yetty_ygui_rich_add_line(rr.value));
     err_ok(yetty_ygui_rich_add_span(rr.value, "Bold",   16.0f, 0xFFFFFFFFu));

@@ -1,31 +1,19 @@
-/*
- * ygui-yimage.h — figure-shaped widget wrapping a raw image source.
- *
- * Figure widget (figure_kind == YETTY_YFIGURE_KIND_YIMAGE). On the wire,
- * the widget IS its own figure under the engine's container — the
- * engine emits CREATE_CHILD(kind=YIMAGE) in pass 1 and ships the
- * figure body (raw bytes) targeting obj->id in pass 2.
- *
- * The widget owns either a file path or an in-memory byte buffer; on
- * each emit the body bytes are sent verbatim to the receiver, where
- * the YIMAGE figure factory decodes them (stb_image) and renders.
- */
-#ifndef YETTY_YGUI_WIDGETS_YIMAGE_H
-#define YETTY_YGUI_WIDGETS_YIMAGE_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `yimage` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YIMAGE_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_YIMAGE_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+struct yetty_yclass_ptr_result yetty_ygui_yimage_class_get(void);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-const struct yetty_ygui_class *yetty_ygui_yimage_class_get(void);
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 /* Replace the widget's content with `bytes`. The widget makes its own
  * copy; the caller may free its buffer immediately after the call.
  * Passing NULL/0 clears the content. Marks the widget dirty so the
@@ -36,9 +24,6 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_ygui_obj
 /* Direct accessors — caller must not mutate the returned buffer. */
 const uint8_t *yetty_ygui_yimage_bytes(const struct yetty_ygui_object *obj);
 size_t yetty_ygui_yimage_bytes_len(const struct yetty_ygui_object *obj);
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* YETTY_YGUI_WIDGETS_YIMAGE_H */

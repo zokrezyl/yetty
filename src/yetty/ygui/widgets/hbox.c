@@ -13,10 +13,13 @@
 
 #include <yetty/ygui/widgets/hbox.h>
 
-static struct yetty_ycore_void_result hbox_constructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:hbox:constructor")]]
+static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_hbox_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_hbox_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "hbox_constructor: super");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
     l.direction = YETTY_YGUI_FLEX_ROW;
@@ -28,14 +31,9 @@ static struct yetty_ycore_void_result hbox_constructor(struct yetty_ygui_object 
 }
 
 
-static const struct yetty_ygui_op hbox_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, hbox_constructor),
+struct [[clang::annotate("class@ygui:hbox")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] hbox_data {
+    char _empty;
 };
 
-static const struct yetty_ygui_class_descriptor hbox_desc = {
-    .name = "yetty_ygui_hbox",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_hbox_class_get, &hbox_desc, hbox_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "hbox.gen.c"

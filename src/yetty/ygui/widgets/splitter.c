@@ -6,9 +6,12 @@
 #define COLOR_TRACK 0xFF2C261Eu
 #define COLOR_GRIP 0xFF92A86Bu
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:splitter:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "splitter paint: NULL ctx");
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
@@ -25,14 +28,9 @@ static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
 }
 
 
-static const struct yetty_ygui_op splitter_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
+struct [[clang::annotate("class@ygui:splitter")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] splitter_data {
+    char _empty;
 };
 
-static const struct yetty_ygui_class_descriptor splitter_desc = {
-    .name = "yetty_ygui_splitter",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_splitter_class_get, &splitter_desc, splitter_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "splitter.gen.c"

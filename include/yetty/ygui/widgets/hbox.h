@@ -1,24 +1,20 @@
-/*
- * ygui-hbox.h — horizontal flex container.
- *
- * Chrome widget (figure_kind == 0). Subclass of the base widget class
- * whose constructor overrides the layout struct to direction=ROW.
- * Apps configure justify / align / gap via yetty_ygui_widget_layout_set
- * the usual way; only the direction is bolted in.
- */
-#ifndef YETTY_YGUI_WIDGETS_HBOX_H
-#define YETTY_YGUI_WIDGETS_HBOX_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `hbox` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_HBOX_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_HBOX_H
 
-#include <yetty/ygui/class.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
+struct yetty_yclass_ptr_result yetty_ygui_hbox_class_get(void);
+
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
+
 #endif
-
-const struct yetty_ygui_class *yetty_ygui_hbox_class_get(void);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* YETTY_YGUI_WIDGETS_HBOX_H */

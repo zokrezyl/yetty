@@ -11,19 +11,23 @@
 #define COLOR_BAR 0xFF92A86Bu
 #define ROW_H 24.0f
 
-struct list_data {
+struct [[clang::annotate("class@ygui:list")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] list_data {
     char **rows;
     int n;
     int cap;
     int selected;
 };
 
-static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:list:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_list_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_list_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "list: super");
-    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get());
+    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get().value);
     d->rows = NULL;
     d->n = 0;
     d->cap = 0;
@@ -31,21 +35,27 @@ static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result dtor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:list:destructor")]]
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get().value);
     for (int i = 0; i < d->n; i++) free(d->rows[i]);
     free(d->rows);
-    return yetty_ygui_super_void(obj, yetty_ygui_list_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_list_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_int_result on_press(struct yetty_ygui_object *obj, float x, float y,
+[[clang::annotate("override@ygui:list:widget_on_press")]]
+static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, float x, float y,
                                               int btn)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     (void)x;
     (void)btn;
-    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get());
+    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     int idx = (int)((y - r.min.y) / ROW_H);
     if (idx < 0 || idx >= d->n) return YETTY_OK(yetty_ycore_int, 0);
@@ -59,11 +69,14 @@ static struct yetty_ycore_int_result on_press(struct yetty_ygui_object *obj, flo
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:list:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "list paint: NULL ctx");
-    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get());
+    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) return YETTY_OK_VOID();
@@ -106,7 +119,7 @@ struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_ygui_object *obj
                                                    const char *label)
 {
     if (!obj || !label) return YETTY_ERR(yetty_ycore_void, "list_add: NULL");
-    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get());
+    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get().value);
     if (!grow(d, d->n + 1)) return YETTY_ERR(yetty_ycore_void, "list_add: realloc");
     size_t n = strlen(label);
     d->rows[d->n] = malloc(n + 1);
@@ -119,7 +132,7 @@ struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_ygui_object *obj
 struct yetty_ycore_void_result yetty_ygui_list_set_selected(struct yetty_ygui_object *obj, int i)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "list_set_selected: NULL");
-    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get());
+    struct list_data *d = yetty_ygui_data_get(obj, yetty_ygui_list_class_get().value);
     d->selected = i;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -128,22 +141,8 @@ int yetty_ygui_list_get_selected(const struct yetty_ygui_object *obj)
 {
     if (!obj) return -1;
     return ((struct list_data *)yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                                                    yetty_ygui_list_class_get()))
+                                                    yetty_ygui_list_class_get().value))
         ->selected;
 }
 
-
-static const struct yetty_ygui_op list_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ctor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, dtor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
-    YETTY_YGUI_OP(yetty_ygui_widget_on_press, on_press),
-};
-
-static const struct yetty_ygui_class_descriptor list_desc = {
-    .name = "yetty_ygui_list",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct list_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_list_class_get, &list_desc, list_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "list.gen.c"

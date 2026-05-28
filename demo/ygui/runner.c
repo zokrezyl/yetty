@@ -325,7 +325,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_ycore_rectangle root_rect = {
             .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
         struct yetty_yfigure_container_ptr_result cr =
-            yetty_yfigure_container_create(root_rect, &ctx, r->figure_registry);
+            yetty_yfigure_container_create_local(root_rect, &ctx, r->figure_registry);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "demo_runner: container_create");
         r->root_container = cr.value;
     }
@@ -344,7 +344,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "demo_runner: wire_sm_create");
         r->wire_sm = sr.value;
         struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-            r->wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN,
+            r->wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN, /*has_args=*/1,
             yetty_yfigure_container_process_input, r->root_container);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "demo_runner: wire_sm register");
     }
@@ -367,7 +367,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
      * window with a black void below their widgets. */
     struct yetty_ygui_object *body = NULL;
     {
-        struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get(), NULL);
+        struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "demo_runner: root add");
         r->root = rr.value;
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(r->root);
@@ -378,7 +378,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "demo_runner: set_root");
 
         struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_panel_class_get(), r->root);
+            yetty_ygui_add(yetty_ygui_panel_class_get().value, r->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "demo_runner: body add");
         body = br.value;
         /* Panel defaults to ROW direction; flip to COLUMN so demos can
@@ -888,7 +888,7 @@ static int run_client_mode(const char *name, demo_build_fn build)
     struct yetty_ygui_object *body = NULL;
     {
         struct yetty_ygui_object_ptr_result rr =
-            yetty_ygui_add(yetty_ygui_vbox_class_get(), NULL);
+            yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_print(stderr, "demo_runner client: root add", rr.error);
             yetty_ycore_error_destroy(rr.error);
@@ -911,7 +911,7 @@ static int run_client_mode(const char *name, demo_build_fn build)
             return 1;
         }
         struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_panel_class_get(), r.root);
+            yetty_ygui_add(yetty_ygui_panel_class_get().value, r.root);
         if (YETTY_IS_ERR(br)) {
             yetty_ycore_error_print(stderr, "demo_runner client: body add", br.error);
             yetty_ycore_error_destroy(br.error);
@@ -962,7 +962,7 @@ static int run_client_mode(const char *name, demo_build_fn build)
          * value than &cs) so the mouse handler gets its own coro. */
         struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
             cs.wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE,
-            client_mouse_handler, cs.runner);
+            /*has_args=*/1, client_mouse_handler, cs.runner);
         if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
     }
     /* Tell the host yetty to forward pointer events to our stdin. */

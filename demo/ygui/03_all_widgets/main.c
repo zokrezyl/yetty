@@ -24,7 +24,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     (void)runner;
     struct yetty_ygui_object_ptr_result r;
 
-    r = yetty_ygui_add(yetty_ygui_label_class_get(), root);
+    r = yetty_ygui_add(yetty_ygui_label_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "label");
     err_ok(yetty_ygui_label_set_text(r.value, "Label"));
     { struct yetty_ygui_object *w = r.value;
@@ -34,7 +34,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_widget_layout_set(w, &l));
     } }
 
-    r = yetty_ygui_add(yetty_ygui_button_class_get(), root);
+    r = yetty_ygui_add(yetty_ygui_button_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "button");
     err_ok(yetty_ygui_button_set_label(r.value, "Button"));
     { struct yetty_ygui_object *w = r.value;
@@ -44,7 +44,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_widget_layout_set(w, &l));
     } }
 
-    r = yetty_ygui_add(yetty_ygui_checkbox_class_get(), root);
+    r = yetty_ygui_add(yetty_ygui_checkbox_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "checkbox");
     err_ok(yetty_ygui_checkbox_set_label(r.value, "Checkbox"));
     { struct yetty_ygui_object *w = r.value;
@@ -54,7 +54,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_widget_layout_set(w, &l));
     } }
 
-    r = yetty_ygui_add(yetty_ygui_slider_class_get(), root);
+    r = yetty_ygui_add(yetty_ygui_slider_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "slider");
     err_ok(yetty_ygui_slider_set_value(r.value, 0.5f));
     { struct yetty_ygui_object *w = r.value;
@@ -64,7 +64,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_widget_layout_set(w, &l));
     } }
 
-    r = yetty_ygui_add(yetty_ygui_progress_class_get(), root);
+    r = yetty_ygui_add(yetty_ygui_progress_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "progress");
     err_ok(yetty_ygui_progress_set_value(r.value, 0.6f));
     { struct yetty_ygui_object *w = r.value;

@@ -27,28 +27,35 @@
 
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
-struct embed_data {
+struct [[clang::annotate("class@ygui:ydraw_embed")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]] embed_data {
     struct yetty_ydraw_draw_list *buf;
 };
 
-static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:ydraw_embed:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get(),
-                              (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ydraw_embed: super");
-    struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get());
+    struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
     d->buf = NULL;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result dtor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:ydraw_embed:destructor")]]
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
     if (d->buf) yetty_ydraw_draw_list_destroy(d->buf);
     d->buf = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static size_t prim_size(const uint32_t *prim, size_t remaining)
@@ -105,11 +112,14 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
     }
 }
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:ydraw_embed:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: NULL ctx");
-    struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get());
+    struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
     if (!d->buf) return YETTY_OK_VOID();
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float dx = r.min.x, dy = r.min.y;
@@ -156,23 +166,10 @@ struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_yg
                                                                  struct yetty_ydraw_draw_list *buf)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "ydraw_embed_set_buffer: NULL");
-    struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get());
+    struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
     if (d->buf && d->buf != buf) yetty_ydraw_draw_list_destroy(d->buf);
     d->buf = buf;
     return yetty_ygui_object_set_dirty(obj);
 }
 
-
-static const struct yetty_ygui_op ydraw_embed_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ctor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, dtor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
-};
-
-static const struct yetty_ygui_class_descriptor ydraw_embed_desc = {
-    .name = "yetty_ygui_ydraw_embed",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct embed_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_ydraw_embed_class_get, &ydraw_embed_desc, ydraw_embed_ops, yetty_ygui_primitive_widget_class_get(), NULL)
+#include "ydraw_embed.gen.c"

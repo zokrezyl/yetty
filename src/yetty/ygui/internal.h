@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <yclass/class.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ygui/class.h>
@@ -30,41 +31,16 @@ extern "C" {
 #endif
 
 /*===========================================================================
- * Class — per-instance offset map + dispatch table.
+ * Classes — `struct yetty_yclass` (from <yclass/class.h>) is the only
+ * class type ygui knows about. Slot allocation, dispatch, and parent /
+ * mixin walks all go through the yclass runtime. ygui adds:
+ *   - the heavier `struct yetty_ygui_object` instance header
+ *     (parent/sibling/id state, see below) — yclass's bare
+ *     yclass_object isn't enough for the widget tree.
+ *   - data-slice offset computation inside that header (see
+ *     yetty_ygui_data_get), walking the yclass inheritance chain via
+ *     yetty_yclass_parent / _mixin_at.
  *=========================================================================*/
-
-/* Map entry: a class pointer (own / parent-chain / mixin) and the byte
- * offset from the object header where its data slice lives. Linear
- * scan; classes have at most a handful of slots so this stays cache-
- * friendly compared to a hash table. */
-struct yetty_ygui_data_slot {
-    const struct yetty_ygui_class *cls;
-    size_t offset;
-};
-
-struct yetty_ygui_class {
-    const struct yetty_ygui_class_descriptor *desc;
-    const struct yetty_ygui_class *parent;
-
-    /* Heap-allocated, owned by class. */
-    const struct yetty_ygui_class **mixins;
-    size_t mixin_count;
-
-    /* Per-class data slice offset map. Includes self, every class in the
-     * parent chain (including parent's mixins, transitively), and every
-     * mixin of this class. */
-    struct yetty_ygui_data_slot *slots;
-    size_t slot_count;
-
-    /* Total bytes for one instance of this class (object header + every
-     * reachable data slice). */
-    size_t instance_size;
-
-    /* Dispatch table: index = method_slot, value = implementation fn or
-     * NULL. Sized to the framework's slot count at registration time. */
-    yetty_ygui_impl_t *dispatch;
-    size_t dispatch_count;
-};
 
 /*===========================================================================
  * Object — runtime widget instance.
@@ -78,7 +54,12 @@ struct yetty_ygui_event_subscription {
 };
 
 struct yetty_ygui_object {
-    const struct yetty_ygui_class *klass;
+    /* The yclass this object was minted under. Field name `klass`
+     * matches the layout of `struct yetty_yclass_object` so an
+     * `yetty_ygui_object *` can be cast to `struct yetty_yclass_object *`
+     * for direct yclass dispatch (the first member is the same
+     * pointer-typed field). */
+    const struct yetty_yclass *klass;
     struct yetty_ygui_object *parent;
 
     /* Sibling links inside parent->first_child list. */
@@ -188,6 +169,29 @@ struct yetty_ygui_runtime {
      * feed_mouse_motion. Used to dispatch enter/leave + flip the
      * obj->hovered flag so widgets can paint a hover variant. */
     struct yetty_ygui_object *hovered_obj;
+
+    /* yclass-dispatch state for shipping the per-emit envelope to the
+     * receiver-side yfigure root container. When `container_obj` is
+     * set, framework_flush calls `yetty_yfigure_process_records(&ctx,
+     * obj, envelope)` instead of wrapping the bytes in a yface OSC
+     * and writing to output_pty. The slot dispatches locally
+     * (ctx.session == NULL → the impl runs directly on the in-process
+     * container, zero copy) or via yrpc (ctx.session set → the stub
+     * marshals the buffer over the session's transport).
+     *
+     * The runtime tracks ONLY the root container at the yclass level;
+     * every child figure is still addressed by parent-scoped uint32_t
+     * id inside the envelope's record stream (the container's
+     * `process_records` impl decodes those and routes each record to
+     * the right child). No per-child yclass proxy is kept here.
+     *
+     * Both pointers are caller-owned (borrowed) — the host (e.g. yui)
+     * wires them post-create via yetty_ygui_framework_set_container_obj
+     * / _set_session and keeps the underlying objects alive for as
+     * long as the framework. When `container_obj` is NULL the
+     * framework keeps using the legacy yface-over-pty path. */
+    struct yetty_yclass_ctx yclass_ctx;
+    struct yetty_yclass_object *container_obj;
 };
 
 /*===========================================================================

@@ -23,7 +23,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     struct yetty_ygui_object_ptr_result cr =
-        yetty_ygui_add(yetty_ygui_collapsing_header_class_get(), root);
+        yetty_ygui_add(yetty_ygui_collapsing_header_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "header");
     err_ok(yetty_ygui_collapsing_header_set_title(cr.value, "Details"));
     {
@@ -34,7 +34,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
     {
         struct yetty_ygui_object_ptr_result l =
-            yetty_ygui_add(yetty_ygui_label_class_get(), cr.value);
+            yetty_ygui_add(yetty_ygui_label_class_get().value, cr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, l, "child");
         err_ok(yetty_ygui_label_set_text(l.value, "Body row 1"));
         struct yetty_ygui_object *w = l.value;
@@ -46,7 +46,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
     {
         struct yetty_ygui_object_ptr_result l =
-            yetty_ygui_add(yetty_ygui_label_class_get(), cr.value);
+            yetty_ygui_add(yetty_ygui_label_class_get().value, cr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, l, "child");
         err_ok(yetty_ygui_label_set_text(l.value, "Body row 2"));
         struct yetty_ygui_object *w = l.value;

@@ -25,7 +25,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     float values[] = {0.1f, 0.4f, 0.75f, 1.0f};
     for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
         struct yetty_ygui_object_ptr_result r =
-            yetty_ygui_add(yetty_ygui_progress_class_get(), root);
+            yetty_ygui_add(yetty_ygui_progress_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "progress");
         err_ok(yetty_ygui_progress_set_value(r.value, values[i]));
         struct yetty_ygui_object *w = r.value;

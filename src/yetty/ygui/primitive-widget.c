@@ -28,21 +28,21 @@
 
 #include <yetty/ygui/primitive-widget.h>
 
-static struct yetty_ycore_void_result primitive_emit_body(struct yetty_ygui_object *obj,
+/* Marker data struct — primitive_widget adds no per-instance fields
+ * (it's a chrome-widget base), but yclass codegen needs a `class@`
+ * annotation to sit on something. The struct's size contributes 1
+ * byte to the instance layout, which is harmless. */
+struct [[clang::annotate("class@ygui:primitive_widget")]]
+       [[clang::annotate("parent@ygui:widget")]] primitive_widget_data {
+    char _empty;
+};
+
+[[clang::annotate("override@ygui:primitive_widget:widget_emit_body")]]
+static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                           struct yetty_ygui_emit_ctx *ctx)
 {
-    return yetty_ygui_widget_paint(obj, ctx);
+    (void)_yc_ctx;
+    return yetty_ygui_widget_paint(NULL, _yc_obj, ctx);
 }
 
-
-static const struct yetty_ygui_op primitive_widget_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_widget_emit_body, primitive_emit_body),
-};
-
-static const struct yetty_ygui_class_descriptor primitive_widget_desc = {
-    .name = "yetty_ygui_primitive_widget",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = 0,
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_primitive_widget_class_get, &primitive_widget_desc, primitive_widget_ops, yetty_ygui_widget_class_get(), NULL)
+#include "primitive-widget.gen.c"

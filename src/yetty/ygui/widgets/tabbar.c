@@ -60,7 +60,8 @@
  * Tabbar instance data.
  *---------------------------------------------------------------------------*/
 
-struct tabbar_data {
+struct [[clang::annotate("class@ygui:tabbar")]]
+       [[clang::annotate("parent@ygui:hbox")]] tabbar_data {
     int active_index;
 };
 
@@ -76,7 +77,7 @@ struct header_data {
     struct yetty_ygui_object *tabbar; /* back-pointer, not owned */
 };
 
-static const struct yetty_ygui_class *header_class_get(void);
+static struct yetty_yclass_ptr_result header_class_get(void);
 
 static int header_index_in_tabbar(struct yetty_ygui_object *header,
                                   struct yetty_ygui_object *tabbar)
@@ -92,10 +93,12 @@ static int header_index_in_tabbar(struct yetty_ygui_object *header,
     return -1;
 }
 
-static struct yetty_ycore_void_result header_on_click(struct yetty_ygui_object *obj, void *userdata)
+static struct yetty_ycore_void_result header_on_click(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *userdata)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     (void)userdata;
-    struct header_data *hd = yetty_ygui_data_get(obj, header_class_get());
+    struct header_data *hd = yetty_ygui_data_get(obj, header_class_get().value);
     if (!hd->tabbar) {
         return YETTY_OK_VOID();
     }
@@ -106,12 +109,14 @@ static struct yetty_ycore_void_result header_on_click(struct yetty_ygui_object *
     return yetty_ygui_tabbar_set_active(hd->tabbar, idx);
 }
 
-static struct yetty_ycore_void_result header_constructor(struct yetty_ygui_object *obj)
+static struct yetty_ycore_void_result header_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, header_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, header_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "header_constructor: super");
-    struct header_data *hd = yetty_ygui_data_get(obj, header_class_get());
+    struct header_data *hd = yetty_ygui_data_get(obj, header_class_get().value);
     hd->label = NULL;
     hd->tabbar = NULL;
     /* Each header gets a fixed preferred width so the row lays out
@@ -124,33 +129,60 @@ static struct yetty_ycore_void_result header_constructor(struct yetty_ygui_objec
     return yetty_ygui_clickable_on_click_set(obj, header_on_click, NULL);
 }
 
-static struct yetty_ycore_void_result header_destructor(struct yetty_ygui_object *obj)
+static struct yetty_ycore_void_result header_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct header_data *hd = yetty_ygui_data_get(obj, header_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct header_data *hd = yetty_ygui_data_get(obj, header_class_get().value);
     free(hd->label);
     hd->label = NULL;
-    return yetty_ygui_super_void(obj, header_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, header_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 
-static const struct yetty_ygui_op header_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, header_constructor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, header_destructor),
-    /* No paint override — the parent tabbar paints every pill. */
+static const struct yetty_yclass_op header_ops[] = {
+    {YETTY_YGUI_DOMAIN, "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor, (yetty_yclass_impl_t)header_constructor},
+    {YETTY_YGUI_DOMAIN, "destructor", (yetty_yclass_method_id_t)yetty_ygui_destructor, (yetty_yclass_impl_t)header_destructor}
 };
 
-static const struct yetty_ygui_class_descriptor header_desc = {
+static const struct yetty_yclass_descriptor header_desc = {
     .name = "yetty_ygui_tabbar_header",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
+    .type = YETTY_YCLASS_TYPE_REGULAR,
     .data_size = sizeof(struct header_data),
 };
 
-YETTY_YGUI_DEFINE_CLASS(header_class_get, &header_desc, header_ops, yetty_ygui_primitive_widget_class_get(), yetty_ygui_clickable_mixin_get(), NULL)
-static struct yetty_ycore_void_result header_set_label(struct yetty_ygui_object *obj,
+struct yetty_yclass_ptr_result header_class_get(void)
+{
+    static const struct yetty_yclass *cls = NULL;
+    if (cls) return YETTY_OK(yetty_yclass_ptr, cls);
+    struct yetty_yclass_ptr_result _pr = yetty_ygui_primitive_widget_class_get();
+    if (YETTY_IS_ERR(_pr)) {
+        return YETTY_ERR(yetty_yclass_ptr,
+                         "header_class_get: parent class failed", _pr);
+    }
+    const struct yetty_yclass *parent = _pr.value;
+    struct yetty_yclass_ptr_result _mxr0 = yetty_ygui_clickable_mixin_get();
+    if (YETTY_IS_ERR(_mxr0)) {
+        return YETTY_ERR(yetty_yclass_ptr,
+                         "header_class_get: mixin0 failed", _mxr0);
+    }
+    const struct yetty_yclass *_mixins[] = { _mxr0.value };
+    const struct yetty_yclass *const *mixins = _mixins;
+    size_t mixin_count = 1;
+    struct yetty_yclass_ptr_result _r = yetty_yclass_register(
+        &header_desc, header_ops, sizeof(header_ops) / sizeof(header_ops[0]),
+        parent, mixins, mixin_count);
+    if (YETTY_IS_OK(_r)) cls = _r.value;
+    return _r;
+}
+
+static struct yetty_ycore_void_result header_set_label(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                        const char *label)
 {
-    struct header_data *hd = yetty_ygui_data_get(obj, header_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct header_data *hd = yetty_ygui_data_get(obj, header_class_get().value);
     free(hd->label);
     if (!label) {
         hd->label = NULL;
@@ -169,12 +201,15 @@ static struct yetty_ycore_void_result header_set_label(struct yetty_ygui_object 
  * Tabbar — public API + paint.
  *---------------------------------------------------------------------------*/
 
-static struct yetty_ycore_void_result tabbar_constructor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:tabbar:constructor")]]
+static struct yetty_ycore_void_result tabbar_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_tabbar_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_tabbar_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "tabbar_constructor: super");
-    struct tabbar_data *td = yetty_ygui_data_get(obj, yetty_ygui_tabbar_class_get());
+    struct tabbar_data *td = yetty_ygui_data_get(obj, yetty_ygui_tabbar_class_get().value);
     td->active_index = -1;
     /* Default to the canonical 32-px tall strip; apps can override via
      * yetty_ygui_widget_layout_set before the first emit. */
@@ -238,9 +273,12 @@ static struct yetty_ycore_void_result paint_label(struct yetty_ygui_emit_ctx *ct
                                           /*layer=*/0, /*font_id=*/-1, /*rotation=*/0.0f);
 }
 
-static struct yetty_ycore_void_result tabbar_paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:tabbar:widget_paint")]]
+static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_paint: NULL ctx");
     }
@@ -256,7 +294,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_ygui_object *obj
         paint_pill(ctx, r.min.x, r.min.y, strip_w, strip_h, COLOR_STRIP_BG, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: strip bg");
 
-    struct tabbar_data *td = yetty_ygui_data_get(obj, yetty_ygui_tabbar_class_get());
+    struct tabbar_data *td = yetty_ygui_data_get(obj, yetty_ygui_tabbar_class_get().value);
     int active = td->active_index;
 
     int idx = 0;
@@ -295,7 +333,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_ygui_object *obj
         }
 
         /* Label — vertically centered, TABBAR_PILL_PAD_X from the left. */
-        struct header_data *hd = yetty_ygui_data_get(c, header_class_get());
+        struct header_data *hd = yetty_ygui_data_get(c, header_class_get().value);
         if (hd->label && hd->label[0]) {
             float font_size = 14.0f;
             float tx = pr.min.x + TABBAR_PILL_PAD_X;
@@ -317,20 +355,21 @@ struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ygui_
     if (!tabbar) {
         return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_tabbar_add_tab: NULL tabbar");
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(header_class_get(), tabbar);
+    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(header_class_get().value, tabbar);
     if (YETTY_IS_ERR(r)) {
         return r;
     }
     struct yetty_ygui_object *header = r.value;
-    struct header_data *hd = yetty_ygui_data_get(header, header_class_get());
+    struct header_data *hd = yetty_ygui_data_get(header, header_class_get().value);
     hd->tabbar = tabbar;
     if (label) {
-        struct yetty_ycore_void_result lr = header_set_label(header, label);
+        struct yetty_ycore_void_result lr =
+            header_set_label(NULL, (struct yetty_yclass_object *)header, label);
         if (YETTY_IS_ERR(lr)) {
             yetty_ycore_error_destroy(lr.error);
         }
     }
-    struct tabbar_data *td = yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get());
+    struct tabbar_data *td = yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get().value);
     if (td->active_index < 0) {
         td->active_index = 0;
         struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(tabbar);
@@ -355,7 +394,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_ygui_ob
             if (YETTY_IS_ERR(dr)) {
                 return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tabbar_remove_tab: del", dr);
             }
-            struct tabbar_data *td = yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get());
+            struct tabbar_data *td = yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get().value);
             int n = yetty_ygui_tabbar_count(tabbar);
             if (td->active_index >= n) {
                 td->active_index = n - 1;
@@ -388,7 +427,7 @@ int yetty_ygui_tabbar_active(const struct yetty_ygui_object *tabbar)
         return -1;
     }
     struct tabbar_data *td =
-        yetty_ygui_data_get((struct yetty_ygui_object *)tabbar, yetty_ygui_tabbar_class_get());
+        yetty_ygui_data_get((struct yetty_ygui_object *)tabbar, yetty_ygui_tabbar_class_get().value);
     return td->active_index;
 }
 
@@ -408,7 +447,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_ygui_ob
     if (index >= n) {
         index = n - 1;
     }
-    struct tabbar_data *td = yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get());
+    struct tabbar_data *td = yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get().value);
     if (td->active_index == index) {
         return YETTY_OK_VOID();
     }
@@ -429,16 +468,4 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_ygui_ob
  * overrides the constructor + paint.
  *---------------------------------------------------------------------------*/
 
-static const struct yetty_ygui_op tabbar_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, tabbar_constructor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, tabbar_paint),
-};
-
-static const struct yetty_ygui_class_descriptor tabbar_desc = {
-    .name = "yetty_ygui_tabbar",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct tabbar_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_tabbar_class_get, &tabbar_desc, tabbar_ops,
-                        yetty_ygui_hbox_class_get(), NULL)
+#include "tabbar.gen.c"

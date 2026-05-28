@@ -25,7 +25,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     const char *opts[] = {"Option A", "Option B", "Option C"};
     for (size_t i = 0; i < sizeof(opts) / sizeof(opts[0]); ++i) {
         struct yetty_ygui_object_ptr_result r =
-            yetty_ygui_add(yetty_ygui_radio_class_get(), root);
+            yetty_ygui_add(yetty_ygui_radio_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "radio");
         err_ok(yetty_ygui_radio_set_label(r.value, opts[i]));
         if (i == 0) err_ok(yetty_ygui_radio_set_selected(r.value, 1));

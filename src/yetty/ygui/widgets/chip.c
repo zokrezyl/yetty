@@ -8,35 +8,46 @@
 #define COLOR_BG 0xFF2C261Eu
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct chip_data {
+struct [[clang::annotate("class@ygui:chip")]]
+       [[clang::annotate("parent@ygui:primitive_widget")]]
+       [[clang::annotate("uses@ygui:clickable")]] chip_data {
     char *label;
     int closable;
 };
 
-static struct yetty_ycore_void_result ctor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:chip:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_chip_class_get(), (yetty_ygui_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_chip_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "chip: super");
-    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get());
+    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get().value);
     d->label = NULL;
     d->closable = 0;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result dtor(struct yetty_ygui_object *obj)
+[[clang::annotate("override@ygui:chip:destructor")]]
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
 {
-    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get());
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get().value);
     free(d->label);
-    return yetty_ygui_super_void(obj, yetty_ygui_chip_class_get(),
-                                 (yetty_ygui_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_chip_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_void_result paint(struct yetty_ygui_object *obj,
+[[clang::annotate("override@ygui:chip:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
+    (void)_yc_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     if (!ctx) return YETTY_ERR(yetty_ycore_void, "chip paint: NULL ctx");
-    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get());
+    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) return YETTY_OK_VOID();
@@ -64,7 +75,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_ygui_objec
                                                          const char *label)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "chip_set_label: NULL");
-    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get());
+    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get().value);
     free(d->label);
     d->label = NULL;
     if (label) {
@@ -79,22 +90,9 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_ygui_objec
 struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_ygui_object *obj, int c)
 {
     if (!obj) return YETTY_ERR(yetty_ycore_void, "chip_set_closable: NULL");
-    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get());
+    struct chip_data *d = yetty_ygui_data_get(obj, yetty_ygui_chip_class_get().value);
     d->closable = c ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
 
-
-static const struct yetty_ygui_op chip_ops[] = {
-    YETTY_YGUI_OP(yetty_ygui_constructor, ctor),
-    YETTY_YGUI_OP(yetty_ygui_destructor, dtor),
-    YETTY_YGUI_OP(yetty_ygui_widget_paint, paint),
-};
-
-static const struct yetty_ygui_class_descriptor chip_desc = {
-    .name = "yetty_ygui_chip",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
-    .data_size = sizeof(struct chip_data),
-};
-
-YETTY_YGUI_DEFINE_CLASS(yetty_ygui_chip_class_get, &chip_desc, chip_ops, yetty_ygui_primitive_widget_class_get(), yetty_ygui_clickable_mixin_get(), NULL)
+#include "chip.gen.c"

@@ -19,22 +19,25 @@ struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object
 }
 
 /* ypdf adds zero ops on top of ydraw_embed — the public class accessor
- * exists only so callers can `yetty_ygui_add(yetty_ygui_ypdf_class_get(), …)`
+ * exists only so callers can `yetty_ygui_add(yetty_ygui_ypdf_class_get().value, …)`
  * symbolically. Hand-written because YETTY_YGUI_DEFINE_CLASS computes the
  * ops count via sizeof and so requires at least one op entry. */
-static const struct yetty_ygui_class_descriptor ypdf_desc = {
+static const struct yetty_yclass_descriptor ypdf_desc = {
     .name = "yetty_ygui_ypdf",
-    .type = YETTY_YGUI_CLASS_TYPE_REGULAR,
+    .type = YETTY_YCLASS_TYPE_REGULAR,
     .data_size = 0,
 };
 
-const struct yetty_ygui_class *yetty_ygui_ypdf_class_get(void)
+struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void)
 {
-    static const struct yetty_ygui_class *cls = NULL;
-    if (cls) return cls;
-    struct yetty_ygui_class_ptr_result r = yetty_ygui_class_register(
-        &ypdf_desc, NULL, 0, yetty_ygui_ydraw_embed_class_get(), NULL, 0);
-    if (YETTY_IS_ERR(r)) return NULL;
-    cls = r.value;
-    return cls;
+    static const struct yetty_yclass *cls = NULL;
+    if (cls) return YETTY_OK(yetty_yclass_ptr, cls);
+    struct yetty_yclass_ptr_result _pr = yetty_ygui_ydraw_embed_class_get();
+    if (YETTY_IS_ERR(_pr)) {
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_ypdf_class_get: parent failed", _pr);
+    }
+    struct yetty_yclass_ptr_result r = yetty_yclass_register(
+        &ypdf_desc, NULL, 0, _pr.value, NULL, 0);
+    if (YETTY_IS_OK(r)) cls = r.value;
+    return r;
 }

@@ -1,31 +1,22 @@
-/*
- * ygui-popup_menu.h — floating menu with item rows + separators.
- *
- * Apps build a popup_menu once at startup, add items + separators, then
- * call open_at(x, y) to position and show. Clicking an item fires its
- * registered callback then auto-closes the menu. Clicking the same
- * trigger again toggles.
- *
- * Implementation note: popup_menus must be added as children of the
- * root widget with `layout.absolute = 1` so the layout pass leaves
- * their position alone. The widget's open_at helper sets pos_x/pos_y
- * + open flag for you; closed menus paint and hit-test as nothing.
- */
-#ifndef YETTY_YGUI_WIDGETS_POPUP_MENU_H
-#define YETTY_YGUI_WIDGETS_POPUP_MENU_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `popup_menu` (module: ygui).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_POPUP_MENU_H
+#define YETTY_YCLASSGEN_YGUI_WIDGETS_POPUP_MENU_H
 
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
-#include <yetty/ygui/object.h>
+#include <yclass/class.h>
+#include <yetty/ygui/methods.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void);
 
-typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_ygui_object *menu,
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
+                                                                  struct yetty_yclass_object *menu,
                                                                   int item_index, void *userdata);
-
-const struct yetty_ygui_class *yetty_ygui_popup_menu_class_get(void);
 
 /* Add a clickable item. `label` is copied. Returns the item index. */
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_ygui_object *obj,
@@ -49,9 +40,6 @@ int yetty_ygui_popup_menu_is_open(const struct yetty_ygui_object *obj);
  * the toggle source's (x, y). Switches open ↔ close. */
 struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_ygui_object *obj,
                                                                float x, float y);
-
-#ifdef __cplusplus
-}
-#endif
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

@@ -12,7 +12,25 @@
  *   u8  resp[resp_len]
  *
  * Admin and call live in different op-spaces — the slot id never
- * collides with a sentinel. */
+ * collides with a sentinel.
+ *
+ * Error preservation policy
+ * -------------------------
+ * On RPC failure, the generated skel logs the impl's Result error
+ * (file:line:func + msg + cause chain) via yetty_ycore_error_print to
+ * the SERVER stderr / ytrace, then encodes only a one-byte status=1
+ * in the wire response. The client stub maps that to a generic
+ * `"<slot>: remote impl returned error"` Result.
+ *
+ * The structured chain is NOT carried over the wire because
+ * yetty_ycore_error.msg must point to string-literal-lifetime
+ * memory (per <yetty/ycore/result.h>); reconstructing a chain from
+ * a runtime byte buffer would require a separate ownership model.
+ *
+ * Practical impact: when debugging a remote failure, correlate the
+ * client's "remote impl returned error" line with the server's
+ * yetty_ycore_error_print output (matching slot name + same ytrace
+ * stream when the server runs under YTRACE_DEFAULT_ON=yes). */
 
 #ifndef YCLASS_RPC_H
 #define YCLASS_RPC_H
@@ -105,6 +123,20 @@ yetty_yclass_rpc_add_skel_lookup(yetty_yclass_rpc_skel_lookup_fn fn);
  * for this slot, lookup-chain hook failure. */
 struct yetty_yclass_rpc_skel_fn_result
 yetty_yclass_rpc_skel_for(yetty_yclass_method_slot slot);
+
+/* Dispatch one already-assembled yrpc request frame. Used internally
+ * by `yetty_yclass_rpc_server_run` and by alternative server
+ * transports that assemble request frames themselves (e.g. the DCS
+ * envelope-driven server attached to a wire_statemachine on a PTY).
+ *
+ * `header` is the packed (op | id) word the client sent; `body` /
+ * `body_len` are the request payload; `resp` is a caller-owned buffer
+ * of size `resp_max` that receives the response payload. Returns the
+ * response length in bytes (0 on dispatch error — the error is logged
+ * via ytrace, callers send a zero-length response so the client maps
+ * it to "remote impl returned error"). */
+size_t yetty_yclass_rpc_dispatch_one(uint32_t header, const void *body, size_t body_len,
+                                     void *resp, size_t resp_max);
 
 /* ---- Client side -------------------------------------------------- */
 

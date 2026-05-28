@@ -24,6 +24,8 @@
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yfigure/container.h>
+#include <yetty/yfigure/methods.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yterm/osc-codes.h>
@@ -62,7 +64,34 @@ struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
     engine->viewport_w = 800.0f;
     engine->viewport_h = 600.0f;
     engine->dirty = 1;
+    /* yclass dispatch defaults: in-process (no remote session), no
+     * container wired yet. Host calls set_container_obj / set_session
+     * after framework_create to opt into yclass-slot shipping. Until
+     * then framework_flush falls back to the yface-over-pty path. */
+    engine->yclass_ctx.session = NULL;
+    engine->container_obj = NULL;
     return YETTY_OK(yetty_ygui_framework_ptr, engine);
+}
+
+struct yetty_ycore_void_result yetty_ygui_framework_set_container_obj(
+    struct yetty_ygui_runtime *engine, struct yetty_yclass_object *container)
+{
+    if (!engine) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_set_container_obj: NULL engine");
+    }
+    engine->container_obj = container;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_framework_set_session(
+    struct yetty_ygui_runtime *engine, struct yetty_yclass_rpc_session *session)
+{
+    if (!engine) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_session: NULL engine");
+    }
+    engine->yclass_ctx.session = session;
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_runtime *engine)
@@ -384,8 +413,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
     struct yetty_ygui_object *target = hit_test(engine->root, x, y);
     while (target) {
         struct yetty_ycore_int_result r =
-            pressed ? yetty_ygui_widget_on_press(target, x, y, button)
-                    : yetty_ygui_widget_on_release(target, x, y, button);
+            pressed ? yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)target, x, y, button)
+                    : yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)target, x, y, button);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_ygui_framework_feed_mouse_button: on_press/release", r);
@@ -425,7 +454,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
         engine->dirty = 1;
     }
     while (target) {
-        struct yetty_ycore_int_result r = yetty_ygui_widget_on_motion(target, x, y);
+        struct yetty_ycore_int_result r = yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)target, x, y);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_ygui_framework_feed_mouse_motion: on_motion", r);
@@ -746,7 +775,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
     if (should_skip_subtree(node)) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r = yetty_ygui_widget_emit_container(node, ctx);
+    struct yetty_ycore_void_result r = yetty_ygui_widget_emit_container(NULL, (struct yetty_yclass_object *)node, ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                         "yetty_ygui_framework_walk_emit_container: emit_container");
     for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
@@ -766,7 +795,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     if (should_skip_subtree(node)) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r = yetty_ygui_widget_emit_body(node, ctx);
+    struct yetty_ycore_void_result r = yetty_ygui_widget_emit_body(NULL, (struct yetty_yclass_object *)node, ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_walk_emit_body: emit_body");
     for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
         struct yetty_ycore_void_result rc = yetty_ygui_framework_walk_emit_body(c, ctx);
@@ -862,6 +891,28 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_runt
     if (envelope.size == 0) {
         /* Nothing to ship this tick. */
         yetty_ycore_buffer_destroy(&envelope);
+        return YETTY_OK_VOID();
+    }
+
+    /* If a receiver-side container is wired in, ship the envelope by
+     * calling the yfigure `process_records` slot directly. yclass
+     * dispatches it locally (in-process: impl runs straight away,
+     * zero copy) or via yrpc (when ctx.session is set: stub marshals
+     * the buffer over the session's transport). Either way, the
+     * receiver-side container's `process_records` does exactly what
+     * the consume_envelope coroutine would have done after PTY decode
+     * — same record format, no yface framing in between. */
+    if (engine->container_obj) {
+        struct yetty_ycore_buffer view = {
+            .data = envelope.data,
+            .capacity = envelope.capacity,
+            .size = envelope.size,
+        };
+        struct yetty_ycore_void_result pr =
+            yetty_yfigure_process_records(&engine->yclass_ctx, engine->container_obj, view);
+        yetty_ycore_buffer_destroy(&envelope);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
+                            "yetty_ygui_framework_flush: process_records slot");
         return YETTY_OK_VOID();
     }
 

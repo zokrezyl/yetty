@@ -100,8 +100,8 @@ push_sdf(struct yetty_ygrid_grid *g,
     buf[4] = f32_bits(stroke_w);
     for (size_t i = 0; i < geom_words; i++)
         memcpy(&buf[5 + i], &geom[i], sizeof(float));
-    return yetty_ygrid_add_record(g, (const uint8_t *)buf,
-                                  (5u + geom_words) * sizeof(uint32_t));
+    return yetty_ygrid_add_record_local(g, (const uint8_t *)buf,
+                                        (5u + geom_words) * sizeof(uint32_t));
 }
 
 /* Convenience wrappers — one per SDF kind we exercise. */
@@ -240,7 +240,7 @@ emit_text_span(struct yetty_ygrid_grid *grid, int32_t font_slot, const char *utf
         memcpy(payload + 40, utf8, text_len);
 
     struct yetty_ycore_void_result add_result =
-        yetty_ygrid_add_record(grid, record, record_size);
+        yetty_ygrid_add_record_local(grid, record, record_size);
     free(record);
     return add_result;
 }
@@ -493,7 +493,7 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
         .max = {.x = (float)app->surface_w, .y = (float)app->surface_h},
     };
     struct yetty_yfigure_container_ptr_result cr =
-        yetty_yfigure_container_create(root_rect, &app->ctx, /*registry=*/NULL);
+        yetty_yfigure_container_create_local(root_rect, &app->ctx, /*registry=*/NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "root container create failed");
     app->root = cr.value;
 

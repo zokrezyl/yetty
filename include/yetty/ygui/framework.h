@@ -31,6 +31,8 @@
 struct yetty_platform_pty;
 struct yetty_ydraw_draw_list;
 struct yetty_ycore_buffer;
+struct yetty_yclass_object;
+struct yetty_yclass_rpc_session;
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,6 +50,25 @@ struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
 /* Destroy the framework and its widget tree. Does NOT touch the
  * output_pty (borrowed). */
 struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_runtime *engine);
+
+/* Wire the framework to a receiver-side yfigure container through the
+ * yclass slot dispatch path. When set, framework_emit ships its
+ * envelope by calling `yetty_yfigure_process_records(&ctx, container,
+ * envelope)` instead of building a yface OSC and writing to output_pty.
+ *
+ * `container` is borrowed — caller owns its lifetime and must keep it
+ * alive until the framework is destroyed (or this setter is called
+ * again with a different pointer / NULL).
+ *
+ * `session` is borrowed too. NULL means in-process dispatch (the slot
+ * impl is invoked directly on the local container instance); non-NULL
+ * means the slot stub marshals the call over yrpc, and the same code
+ * path drives a remote yfigure tree on the far end of the session. */
+struct yetty_ycore_void_result yetty_ygui_framework_set_container_obj(
+    struct yetty_ygui_runtime *engine, struct yetty_yclass_object *container);
+
+struct yetty_ycore_void_result yetty_ygui_framework_set_session(
+    struct yetty_ygui_runtime *engine, struct yetty_yclass_rpc_session *session);
 
 /* Run one full emit cycle: layout pass against the current viewport,
  * walk the widget tree twice (containers then bodies), concatenate
