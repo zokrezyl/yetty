@@ -275,6 +275,16 @@ endif()
 
 if(YETTY_ENABLE_LIB_WEBGPU)
     include(${YETTY_ROOT}/build-tools/yetty/libs/webgpu.cmake)
+else()
+    # Headers-only fallback. Without WebGPU (e.g. the riscv64 cross),
+    # we still need <webgpu/webgpu.h> to resolve because <yetty/yetty/
+    # yetty.h> uses WGPU* types in struct declarations. The header
+    # comes from the committed yrdawn copy — same surface every
+    # platform sees. wgpu* function calls won't link; keep them gated
+    # on YETTY_ENABLE_LIB_WEBGPU at call sites.
+    add_library(webgpu INTERFACE)
+    target_include_directories(webgpu INTERFACE
+        ${YETTY_ROOT}/include/yetty/yrdawn)
 endif()
 
 if(YETTY_ENABLE_LIB_VTERM)

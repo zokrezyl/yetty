@@ -30,31 +30,38 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/rpc.h>
-#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
-#include <yetty/yframework/yframework.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ygrid/ygrid.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yimage/yimage-gen.h>
-#include <yetty/yinit/yinit.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/paths.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplot/yplot-gen.h>
-#include <yetty/yrender/render-target.h>
 #include <yetty/yterm/client-input.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplot/yplot.h>
+
+#ifdef YETTY_YGREETER_HAS_STANDALONE
+/* Headers below pull <yetty/yetty/yetty.h> (or <webgpu/webgpu.h> directly)
+ * via their public API surface. Standalone mode needs them; client mode
+ * doesn't, and on platforms without WebGPU (riscv64 cross) including
+ * them breaks the build. Keep gated. */
+#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/yframework/yframework.h>
+#include <yetty/ygrid/ygrid.h>
+#include <yetty/yinit/yinit.h>
+#include <yetty/yrender/render-target.h>
+#endif
 
 #ifdef YETTY_YGUI_HAS_UV
 #include <uv.h>
@@ -144,7 +151,11 @@ struct app {
      * NULL in standalone mode. */
     struct client_state *client;
 
-    /* Standalone-mode resources, NULL in client mode. */
+#ifdef YETTY_YGREETER_HAS_STANDALONE
+    /* Standalone-mode resources, NULL in client mode. The headers that
+     * define the by-value member types (memory_pty_pair, figure_args,
+     * event_listener) pull in webgpu transitively, so the whole block
+     * is gated. */
     struct yetty_yframework *yframework;
     struct yetty_yplatform_memory_pty_pair pty_pair;
     int has_pty_pair;
@@ -156,6 +167,7 @@ struct app {
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
     struct yetty_ydraw_target *render_target;
+#endif
 };
 
 /* Image-path scratch: filled from get_data_dir/logo-N.jpeg at startup,
@@ -1287,6 +1299,7 @@ static int run_client_mode(void)
 
 #endif /* YETTY_YGUI_HAS_UV */
 
+#ifdef YETTY_YGREETER_HAS_STANDALONE
 /*=============================================================================
  * STANDALONE MODE — yinit_run + yframework + local container + wire SM +
  * KEY→bytes encoder.
@@ -1682,6 +1695,8 @@ static int run_standalone_mode(int argc, char **argv)
     return yetty_yinit_run(argc, argv, &cfg, standalone_worker, &app);
 }
 
+#endif /* YETTY_YGREETER_HAS_STANDALONE */
+
 /*=============================================================================
  * Dispatcher.
  *===========================================================================*/
@@ -1703,5 +1718,14 @@ int main(int argc, char **argv)
         return 1;
 #endif
     }
+#ifdef YETTY_YGREETER_HAS_STANDALONE
     return run_standalone_mode(argc, argv);
+#else
+    (void)argc;
+    (void)argv;
+    fprintf(stderr,
+            "ygreeter: standalone mode unavailable — built without webgpu. "
+            "Run inside a yetty terminal (set TERM_PROGRAM=yetty).\n");
+    return 1;
+#endif
 }

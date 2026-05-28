@@ -1,38 +1,29 @@
 # ygreeter — first-contact tool. Dual-mode:
-#   - TERM_PROGRAM=yetty  → ships OSC envelopes over stdout to the host.
-#   - otherwise           → opens its own GPU window via yinit_run +
-#                           yframework_create, renders the figure tree
-#                           locally through an in-process wire SM →
-#                           yfigure_container → render_target chain.
+#   - TERM_PROGRAM=yetty  → CLIENT mode. Ships OSC envelopes over stdout
+#                           to the host yetty. libuv-driven, no GPU.
+#   - otherwise           → STANDALONE mode. Opens its own GPU window
+#                           via yinit_run + yframework_create, renders
+#                           the figure tree locally through an in-process
+#                           wire SM → yfigure_container → render_target.
 #
-# ygui itself has no knowledge of either mode; this file is the wiring.
-#
-# Linux + webgpu-only for v1, matching yaudio (the only other
-# standalone-window app using the same yinit/yframework bring-up).
+# Standalone mode requires WebGPU/Dawn and GLFW. When YETTY_ENABLE_LIB_WEBGPU
+# is OFF (e.g. the riscv64 cross-build — Dawn has no riscv64 prebuilt),
+# we still build ygreeter, but only the client path. main.c gates the
+# standalone block on YETTY_YGREETER_HAS_STANDALONE.
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     return()
 endif()
 
-if(NOT YETTY_ENABLE_LIB_WEBGPU)
-    return()
-endif()
-
-# Platform / yinit / yframework / yconfig sources — same set yaudio
-# inlines, because there isn't a single static lib for the yinit
-# layer (window, surface, event-pipes), so each standalone-window
-# binary pulls the sources directly.
-set(YGREETER_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
-    ${YETTY_ROOT}/src/yetty/yframework/yframework.c
+# Sources shared by both modes — libuv pieces, pty plumbing, config,
+# trace, notification, asset extraction. None of these pull in webgpu
+# or glfw, so they build fine on the riscv cross.
+set(YGREETER_SOURCES
+    main.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window-manager/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
@@ -44,10 +35,20 @@ set(YGREETER_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
 )
 
-add_executable(ygreeter
-    main.c
-    ${YGREETER_PLATFORM_SOURCES}
-)
+# Standalone-only sources: yinit (glfw bring-up), yframework, and the
+# webgpu/window/window-manager platform glue. Drop when webgpu is off.
+if(YETTY_ENABLE_LIB_WEBGPU)
+    list(APPEND YGREETER_SOURCES
+        ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+        ${YETTY_ROOT}/src/yetty/yframework/yframework.c
+        ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
+        ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
+        ${YETTY_ROOT}/src/yetty/yplatform/window-manager/default.c
+        ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
+    )
+endif()
+
+add_executable(ygreeter ${YGREETER_SOURCES})
 
 target_include_directories(ygreeter BEFORE PRIVATE
     ${YETTY_ROOT}/src
@@ -60,10 +61,18 @@ target_compile_definitions(ygreeter PRIVATE
     YETTY_USE_FORKPTY=1
     YETTY_YGUI_HAS_UV
 )
+if(YETTY_ENABLE_LIB_WEBGPU)
+    target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_STANDALONE)
+endif()
 
 find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
+# fontconfig is only used by the standalone-mode font lookup path. Skip
+# the pkg-config probe when standalone mode isn't being built — riscv64
+# cross-builds don't ship fontconfig.pc.
+if(YETTY_ENABLE_LIB_WEBGPU)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
+endif()
 
 target_link_libraries(ygreeter PRIVATE
     ygui
@@ -81,14 +90,17 @@ target_link_libraries(ygreeter PRIVATE
     yetty_telnet
     ${BROTLIDEC_LIBRARIES}
     Threads::Threads
-    ${FONTCONFIG_LIBRARIES}
     rt
     util
 )
-target_include_directories(ygreeter PRIVATE ${FONTCONFIG_INCLUDE_DIRS})
+if(YETTY_ENABLE_LIB_WEBGPU)
+    target_link_libraries(ygreeter PRIVATE ${FONTCONFIG_LIBRARIES})
+    target_include_directories(ygreeter PRIVATE ${FONTCONFIG_INCLUDE_DIRS})
+endif()
 
 # Dawn (libwebgpu_dawn) is C++ — needs C++ runtime even though our
-# sources are C. Same trick yaudio uses.
+# sources are C. Only relevant when webgpu is in the link line; harmless
+# to keep otherwise (CXX linker driver still works for pure C).
 set_target_properties(ygreeter PROPERTIES LINKER_LANGUAGE CXX)
 
 if(NOT MSVC)
