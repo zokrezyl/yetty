@@ -20,9 +20,7 @@ endif()
 # or glfw, so they build fine on the riscv cross.
 set(YGREETER_SOURCES
     main.c
-    ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
@@ -35,12 +33,16 @@ set(YGREETER_SOURCES
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
 )
 
-# Standalone-only sources: yinit (glfw bring-up), yframework, and the
-# webgpu/window/window-manager platform glue. Drop when webgpu is off.
+# Standalone-only sources: anything GLFW- or WebGPU-backed (the OS
+# event loop, clipboard, window glue, surface, device). Drop when
+# webgpu is off — client mode doesn't open a window or run a GPU
+# event loop.
 if(YETTY_ENABLE_LIB_WEBGPU)
     list(APPEND YGREETER_SOURCES
         ${YETTY_ROOT}/src/yetty/yinit/glfw.c
         ${YETTY_ROOT}/src/yetty/yframework/yframework.c
+        ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
+        ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/window-manager/default.c
@@ -74,27 +76,43 @@ if(YETTY_ENABLE_LIB_WEBGPU)
     pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 endif()
 
+# Client-mode link line — what's needed to build the OSC-emitting
+# binary that runs inside a hosting yetty. Pulls in ygui (which
+# transitively brings yfigure, the *_core helpers, ydraw-core,
+# ysdf, etc.), the wire SM, libuv glue, coroutines, telnet, and
+# the system libs. None of these reach for wgpu functions, so they
+# all link on the riscv64 cross (with the headers-only webgpu stub
+# defined in build-tools/yetty/platform/shared.cmake).
 target_link_libraries(ygreeter PRIVATE
     ygui
     yetty_ywire
-    yetty_yfigure
-    yetty_ygrid
-    yetty_yfont_core
-    yetty_ydraw_factory
-    yetty_yimage
-    yetty_yplot
-    ${YETTY_LIBS}
     yetty_yplatform_core
-    yetty_yplatform_move_resize
     yetty_yco
     yetty_telnet
+    uv_a
     ${BROTLIDEC_LIBRARIES}
     Threads::Threads
     rt
     util
 )
+
+# Standalone-mode link line — Dawn-bound libs (ygrid/yimage/yplot
+# call wgpu functions), the GLFW window helper, the full YETTY_LIBS
+# (yetty_yrender / yetty_ywebgpu / yetty_yterm are only declared
+# when webgpu is on), fontconfig for font discovery, ydraw-factory
+# for the figure factory. Only linked when webgpu is on.
 if(YETTY_ENABLE_LIB_WEBGPU)
-    target_link_libraries(ygreeter PRIVATE ${FONTCONFIG_LIBRARIES})
+    target_link_libraries(ygreeter PRIVATE
+        yetty_yfigure
+        yetty_ygrid
+        yetty_yfont_core
+        yetty_ydraw_factory
+        yetty_yimage
+        yetty_yplot
+        ${YETTY_LIBS}
+        yetty_yplatform_move_resize
+        ${FONTCONFIG_LIBRARIES}
+    )
     target_include_directories(ygreeter PRIVATE ${FONTCONFIG_INCLUDE_DIRS})
 endif()
 
