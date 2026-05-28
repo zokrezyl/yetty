@@ -40,6 +40,7 @@
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yterm/shader-glyph-figure.h>
@@ -1471,11 +1472,20 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         .max = {.x = (float)cols * text_layer->cell_size.width,
                 .y = (float)rows * text_layer->cell_size.height},
     };
-    struct yetty_yfigure_container_ptr_result cont_res =
-        yetty_yfigure_container_create_local(root_rect, yetty_context, terminal->figure_registry);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, cont_res,
+    /* yclass-uniform construction: same call shape on both sides of
+     * an RPC session. Local mint here (no session set) — the codegen
+     * factory allocates the yclass object and runs the constructor
+     * slot (sets the ops vtable). We then wire the per-instance
+     * runtime state (rect, context, registry) via the setters. */
+    struct yetty_yclass_ctx yclass_ctx = {0};
+    struct yetty_yclass_object_ptr_result obj_res =
+        yetty_yfigure_container_create(&yclass_ctx);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, obj_res,
                         "terminal_create: root_container create failed");
-    terminal->root_container = cont_res.value;
+    terminal->root_container = yetty_yfigure_container_from(obj_res.value);
+    yetty_yfigure_container_set_context(terminal->root_container, yetty_context);
+    yetty_yfigure_container_set_registry(terminal->root_container, terminal->figure_registry);
+    yetty_yfigure_container_set_rect(terminal->root_container, root_rect);
     ydebug("terminal_create: root container ready");
 
     /* Register the root container directly with the wire SM —

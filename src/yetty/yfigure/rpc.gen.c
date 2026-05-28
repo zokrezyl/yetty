@@ -11,6 +11,41 @@
 #include <stdlib.h>
 #include <string.h>
 
+static size_t yetty_yfigure_constructor_skel(const void *_body, size_t _body_len,
+                          void *_resp, size_t _resp_max)
+{
+    struct __attribute__((packed)) {
+        uint64_t obj_handle;
+    } _a;
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (_body_len != sizeof(_a)) return 0;
+    memcpy(&_a, _body, sizeof(_a));
+    struct yetty_yclass_ctx _local = {0};
+    struct yetty_yclass_void_ptr_result _hr_obj =
+        yetty_yclass_rpc_handle_resolve(_a.obj_handle);
+    if (YETTY_IS_ERR(_hr_obj)) {
+        yetty_ycore_error_print(stderr,
+            "[skel] yetty_yfigure_constructor: handle_resolve", _hr_obj.error);
+        yetty_ycore_error_destroy(_hr_obj.error);
+        if (_resp_max < 1) return 0;
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }
+    struct yetty_ycore_void_result _r = yetty_yfigure_constructor(&_local, (struct yetty_yclass_object *)_hr_obj.value);
+    if (_resp_max < 1) return 0;
+    if (YETTY_IS_ERR(_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_constructor", _r.error);
+        yetty_ycore_error_destroy(_r.error);
+        ((uint8_t *)_resp)[0] = 1;
+        return 1;
+    }
+    ((uint8_t *)_resp)[0] = 0;
+    return 1;
+}
+
 static size_t yetty_yfigure_add_child_skel(const void *_body, size_t _body_len,
                           void *_resp, size_t _resp_max)
 {
@@ -183,8 +218,21 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yett
                          "yetty_yfigure_container_create: class accessor failed", _kr);
     const struct yetty_yclass *_klass = _kr.value;
 
-    if (!ctx || !ctx->session)
-        return yetty_yclass_object_alloc(_klass);
+    if (!ctx || !ctx->session) {
+        struct yetty_yclass_object_ptr_result _alloc =
+            yetty_yclass_object_alloc(_klass);
+        if (YETTY_IS_ERR(_alloc)) return _alloc;
+        struct yetty_ycore_void_result _ct =
+            yetty_yfigure_constructor(ctx, _alloc.value);
+        if (YETTY_IS_ERR(_ct)) {
+            struct yetty_ycore_void_result _fr =
+                yetty_yclass_object_free(_alloc.value);
+            if (YETTY_IS_ERR(_fr)) yetty_ycore_error_destroy(_fr.error);
+            return YETTY_ERR(yetty_yclass_object_ptr,
+                             "yetty_yfigure_container_create: constructor failed", _ct);
+        }
+        return _alloc;
+    }
 
     /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
      * if it fails (the per-slot ensure_remote_id fallback can still
@@ -242,6 +290,7 @@ static struct yetty_yclass_ptr_result yetty_yfigure_accessor_lookup(const char *
 struct yetty_yfigure_skel_row { const char *name; yetty_yclass_rpc_skel_fn fn; };
 
 static const struct yetty_yfigure_skel_row yetty_yfigure_skel_rows[] = {
+    {"yetty_yfigure_constructor", yetty_yfigure_constructor_skel},
     {"yetty_yfigure_add_child", yetty_yfigure_add_child_skel},
     {"yetty_yfigure_remove_child_by_id", yetty_yfigure_remove_child_by_id_skel},
     {"yetty_yfigure_raise_child_by_id", yetty_yfigure_raise_child_by_id_skel},

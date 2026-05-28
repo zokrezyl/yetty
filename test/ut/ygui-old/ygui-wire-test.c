@@ -28,6 +28,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
@@ -118,14 +119,18 @@ static struct test_receiver receiver_create(float canvas_w, float canvas_h)
     }
 
     struct yetty_ycore_rectangle rect = {{0, 0}, {canvas_w, canvas_h}};
-    struct yetty_yfigure_container_ptr_result cr =
-        yetty_yfigure_container_create_local(rect, NULL, rr.value);
-    if (YETTY_IS_ERR(cr)) {
+    struct yetty_yclass_ctx yclass_ctx = {0};
+    struct yetty_yclass_object_ptr_result obj_res =
+        yetty_yfigure_container_create(&yclass_ctx);
+    if (YETTY_IS_ERR(obj_res)) {
         fprintf(stderr, "container_create failed\n");
-        yetty_ycore_error_destroy(cr.error);
+        yetty_ycore_error_destroy(obj_res.error);
         exit(2);
     }
-    struct test_receiver out = {.registry = rr.value, .root = cr.value};
+    struct yetty_yfigure_container *root = yetty_yfigure_container_from(obj_res.value);
+    yetty_yfigure_container_set_registry(root, rr.value);
+    yetty_yfigure_container_set_rect(root, rect);
+    struct test_receiver out = {.registry = rr.value, .root = root};
     return out;
 }
 

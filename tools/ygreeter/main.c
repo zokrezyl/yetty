@@ -35,6 +35,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yframework/yframework.h>
@@ -1557,10 +1558,14 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     {
         struct yetty_ycore_rectangle root_rect = {
             .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
-        struct yetty_yfigure_container_ptr_result cr =
-            yetty_yfigure_container_create_local(root_rect, &ctx, app->figure_registry);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "standalone: container_create");
-        app->root_container = cr.value;
+        struct yetty_yclass_ctx yclass_ctx = {0};
+        struct yetty_yclass_object_ptr_result obj_res =
+            yetty_yfigure_container_create(&yclass_ctx);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "standalone: container_create");
+        app->root_container = yetty_yfigure_container_from(obj_res.value);
+        yetty_yfigure_container_set_context(app->root_container, &ctx);
+        yetty_yfigure_container_set_registry(app->root_container, app->figure_registry);
+        yetty_yfigure_container_set_rect(app->root_container, root_rect);
     }
 
     /* Memory pty pair: producer.a = ygui output, consumer.b = wire SM. */

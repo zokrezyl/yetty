@@ -4,6 +4,7 @@
 
 #include <yetty/yfigure/methods.h>
 
+typedef struct yetty_ycore_void_result (*yetty_yfigure_constructor_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_add_child_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_yfigure_figure *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_remove_child_by_id_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_raise_child_by_id_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t);

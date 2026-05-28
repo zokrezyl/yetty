@@ -33,6 +33,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
@@ -492,10 +493,14 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
         .min = {.x = 0.0f, .y = 0.0f},
         .max = {.x = (float)app->surface_w, .y = (float)app->surface_h},
     };
-    struct yetty_yfigure_container_ptr_result cr =
-        yetty_yfigure_container_create_local(root_rect, &app->ctx, /*registry=*/NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "root container create failed");
-    app->root = cr.value;
+    struct yetty_yclass_ctx yclass_ctx = {0};
+    struct yetty_yclass_object_ptr_result obj_res =
+        yetty_yfigure_container_create(&yclass_ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "root container create failed");
+    app->root = yetty_yfigure_container_from(obj_res.value);
+    yetty_yfigure_container_set_context(app->root, &app->ctx);
+    /* registry stays NULL — this tool runs without a figure registry. */
+    yetty_yfigure_container_set_rect(app->root, root_rect);
 
     /* Load the default MSDF font once and pre-cache basic-latin glyphs
      * so populate_grid's text emission can resolve every codepoint

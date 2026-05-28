@@ -8,6 +8,48 @@
 #include <stdlib.h>  /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
+struct yetty_ycore_void_result yetty_yfigure_constructor(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj)
+{
+    static yetty_yclass_method_slot _slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result _sr =
+            yetty_yclass_method_slot_get("yetty_yfigure", (yetty_yclass_method_id_t)yetty_yfigure_constructor);
+        if (YETTY_IS_ERR(_sr))
+            return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_constructor: method_slot_get failed", _sr);
+        _slot = _sr.value;
+    }
+
+    if (!obj) return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_constructor: NULL object");
+
+    struct yetty_yclass_ctx *_s = ctx;
+    if (_s && _s->session) {
+        struct uint32_result _rr =
+            yetty_yclass_rpc_session_ensure_remote_id(_s->session, _slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, _rr, "yetty_yfigure_constructor: ensure_remote_id failed");
+        uint32_t _rid = _rr.value;
+        struct __attribute__((packed)) {
+            uint64_t obj_handle;
+        } _a = { container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)->handle };
+        uint8_t _wbuf[1];
+        struct yetty_ycore_size_result _wr = yetty_yclass_rpc_call(
+            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, &_a, sizeof(_a),
+            _wbuf, sizeof(_wbuf));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, _wr, "yetty_yfigure_constructor: RPC call failed");
+        size_t _wn = _wr.value;
+        if (_wn < 1) return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_constructor: short RPC response");
+        if (_wbuf[0] != 0) return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_constructor: remote impl returned error");
+        return YETTY_OK_VOID();
+    } else {
+        struct yetty_yclass_ptr_result _cr_local =
+            yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, _cr_local, "yetty_yfigure_constructor: object_class failed");
+        struct yetty_yclass_impl_t_result _ir =
+            yetty_yclass_dispatch_lookup(_cr_local.value, _slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, _ir, "yetty_yfigure_constructor: dispatch_lookup failed");
+        return ((yetty_yfigure_constructor_fn)_ir.value)(ctx, obj);
+    }
+}
+
 struct yetty_ycore_void_result yetty_yfigure_add_child(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yetty_yfigure_figure * child, uint32_t id)
 {
     static yetty_yclass_method_slot _slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;

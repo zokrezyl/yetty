@@ -1,4 +1,13 @@
 methods:
+  - slot: constructor
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
   - slot: add_child
     domain: yfigure
     owning_class: container
@@ -57,6 +66,9 @@ classes:
         name: figure
     data: struct yetty_yfigure_container
     ops:
+      - slot: constructor
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_constructor_impl
       - slot: add_child
         slot_domain: yfigure
         impl: yetty_yfigure_container_add_child_impl

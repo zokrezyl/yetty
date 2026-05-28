@@ -127,18 +127,41 @@ YETTY_YRESULT_DECLARE(yetty_yfigure_container_ptr, struct yetty_yfigure_containe
 struct yetty_context;
 struct yetty_yfigure_registry;
 
-/* Create an empty container with the given AABB.
+/* Construction goes through the codegen-emitted yclass factory
  *
- * `context` and `registry` are BORROWED pointers — the host owns
- * lifetime. They're used when an admin CREATE_CHILD record arrives:
- * the container calls `registry_mint(kind, child_rect, context)` and
- * `add_child` with the new figure. Sub-containers minted via CREATE_CHILD
- * inherit both pointers. Either may be NULL: a NULL registry causes
- * any CREATE_CHILD record to fail with a "no registry" error, useful
- * for containers that should never accept new children. */
-struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create_local(
-    struct yetty_ycore_rectangle rect, const struct yetty_context *context,
-    struct yetty_yfigure_registry *registry);
+ *     yetty_yfigure_container_create(struct yetty_yclass_ctx *ctx)
+ *
+ * declared in <yetty/yfigure/rpc.h>. Same call on both sides of an
+ * RPC session: ctx->session == NULL allocates a local instance and
+ * runs the `constructor` slot (sets ops); ctx->session != NULL mints
+ * a proxy whose method calls marshal over the session.
+ *
+ * Per-instance runtime state (rect, context, registry) is set by the
+ * owner — the side that hosts the actual container body — via the
+ * setters below right after _create. They take a body pointer
+ * obtained from `yetty_yfigure_container_from(obj)`. They are NOT
+ * yclass slots: the pointers (struct yetty_context *, registry *)
+ * are in-process state that doesn't translate across a wire. */
+
+/* Downcast from the yclass header to the typed body. Used by the
+ * owner to call the setters below right after _create. NULL in →
+ * NULL out. */
+struct yetty_yfigure_container *yetty_yfigure_container_from(struct yetty_yclass_object *obj);
+
+/* Owner-side setters for per-instance runtime state. `context` and
+ * `registry` are borrowed — the host owns their lifetime; both must
+ * outlive every figure they touch. A NULL registry makes any
+ * subsequent CREATE_CHILD record fail with "no registry"; that's the
+ * right shape for read-only containers. `rect` is the container's
+ * own AABB. */
+void yetty_yfigure_container_set_registry(struct yetty_yfigure_container *container,
+                                          struct yetty_yfigure_registry *registry);
+
+void yetty_yfigure_container_set_context(struct yetty_yfigure_container *container,
+                                         const struct yetty_context *context);
+
+void yetty_yfigure_container_set_rect(struct yetty_yfigure_container *container,
+                                      struct yetty_ycore_rectangle rect);
 
 /* Consume one full OSC envelope's body off the SM as a record stream
  * targeted at this (root) container. Loops until the SM signals

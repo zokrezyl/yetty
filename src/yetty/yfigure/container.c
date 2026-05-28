@@ -15,6 +15,8 @@
  * headers from the SM and dispatches `length` bytes to the child found
  * by id (or to the container itself when id=0 = admin/self-target).
  */
+#include <yclass/class.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
@@ -202,7 +204,20 @@ static struct yetty_ycore_void_result container_destroy(struct yetty_yfigure_fig
         HASH_DEL(container->children, e);
         entry_destroy(e, &first_err, &have_err);
     }
-    free(container);
+    /* The container was allocated by yclass — body sits behind a
+     * `yclass_object` header at `container - 1`. Free via the yclass
+     * helper so both the header and the body bytes are reclaimed,
+     * and the matching allocation contract is respected. */
+    struct yetty_yclass_object *header = (struct yetty_yclass_object *)container - 1;
+    struct yetty_ycore_void_result fr = yetty_yclass_object_free(header);
+    if (YETTY_IS_ERR(fr)) {
+        if (have_err) {
+            yetty_ycore_error_destroy(fr.error);
+        } else {
+            first_err = fr;
+            have_err = 1;
+        }
+    }
     if (have_err) {
         return YETTY_ERR(yetty_ycore_void, "yfigure container_destroy: child destroy failed",
                          first_err);
@@ -646,24 +661,46 @@ static const struct yetty_yfigure_figure_ops *container_ops(void)
  * Public API
  *=========================================================================*/
 
-struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create_local(
-    struct yetty_ycore_rectangle rect, const struct yetty_context *context,
-    struct yetty_yfigure_registry *registry)
+/* Downcast from the yclass header to the container body. Callers
+ * that hold a `yetty_yclass_object *` (e.g. from
+ * `yetty_yfigure_container_create`) use this to reach the typed body
+ * for setter calls. Layout invariant: body starts at `obj + 1` (see
+ * the yclass instance layout comment further up). */
+struct yetty_yfigure_container *yetty_yfigure_container_from(struct yetty_yclass_object *obj)
 {
-    struct yetty_yfigure_container *container =
-        (struct yetty_yfigure_container *)calloc(1, sizeof(struct yetty_yfigure_container));
+    return obj ? (struct yetty_yfigure_container *)(obj + 1) : NULL;
+}
+
+/* Setters for per-instance runtime state. These are owner-side
+ * helpers — they take a body pointer (not a proxy), so they're only
+ * meaningful on the side that hosts the actual container instance.
+ * That side knows its `context` and `registry` from local C state;
+ * neither pointer is meaningful across a wire. */
+void yetty_yfigure_container_set_registry(struct yetty_yfigure_container *container,
+                                          struct yetty_yfigure_registry *registry)
+{
     if (!container) {
-        return YETTY_ERR(yetty_yfigure_container_ptr, "yfigure_container_create: oom");
+        return;
     }
-    container->base.ops = container_ops();
-    container->base.rect = rect;
-    container->base.dirty = 0;
-    container->children = NULL;
-    container->context = context;
     container->registry = registry;
-    container->viewport_offset_x = 0.0f;
-    container->viewport_offset_y = 0.0f;
-    return YETTY_OK(yetty_yfigure_container_ptr, container);
+}
+
+void yetty_yfigure_container_set_context(struct yetty_yfigure_container *container,
+                                         const struct yetty_context *context)
+{
+    if (!container) {
+        return;
+    }
+    container->context = context;
+}
+
+void yetty_yfigure_container_set_rect(struct yetty_yfigure_container *container,
+                                      struct yetty_ycore_rectangle rect)
+{
+    if (!container) {
+        return;
+    }
+    container->base.rect = rect;
 }
 
 void yetty_yfigure_container_set_viewport_offset(struct yetty_yfigure_container *container,
@@ -994,30 +1031,41 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
 /*===========================================================================
  * yclass slot overrides
  *
- * One wrapper impl per container public method whose signature can be
- * wire-marshalled. Skipped (signature incompatible):
+ * One wrapper impl per container public method whose signature is
+ * wire-marshallable. Skipped (signature incompatible — these stay as
+ * direct C calls on the body pointer):
  *   - consume_envelope, process_input       — wire-statemachine ptr
  *   - find_child_by_id, as_figure           — pointer return
  *   - hit_test                              — non-Result struct return
  *   - for_each                              — function pointer arg
- *   - set_viewport_offset                   — void return, not Result
- *   - create_local                          — replaced by codegen
- *                                             `yetty_yfigure_container_create(ctx)`
+ *   - set_viewport_offset / _rect / etc.    — owner-side setters
  *
- * Recovery cast: legacy-allocated container has the figure_ops pointer
- * at offset 0; a yclass-allocated one would have yclass_object at
- * offset 0 with the user data starting at sizeof(yclass_object).
- * No yclass-dispatched callsite exists yet, so the direct cast is
- * correct for every current caller. */
-
-#include <yclass/class.h>
-#include <yetty/yfigure/container.h>
+ * Every container instance — local OR remote-proxy — has the yclass
+ * `struct yetty_yclass_object` header at offset 0 followed by the
+ * `struct yetty_yfigure_container` body. Allocation goes through
+ * `yetty_yclass_object_alloc`; the body is set up by the constructor
+ * slot below. */
 
 /* yclass instance layout: yclass_object header at offset 0, user data
  * (the `struct yetty_yfigure_container` body) immediately after. Cast
  * via (obj + 1) advances past the header in pointer arithmetic. */
 #define YCLASS_TO_CONTAINER(obj) \
     ((struct yetty_yfigure_container *)((struct yetty_yclass_object *)(obj) + 1))
+
+[[clang::annotate("override@yfigure:container:constructor")]]
+static struct yetty_ycore_void_result yetty_yfigure_container_constructor_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    /* Set up class-intrinsic state — ops vtable. Per-instance state
+     * (rect, context, registry, viewport_offset) is left zero-initialized
+     * here and is wired up by the owner via the public setters below.
+     * The yclass header sits in front of the body; YCLASS_TO_CONTAINER
+     * advances past it. */
+    struct yetty_yfigure_container *container = YCLASS_TO_CONTAINER(obj);
+    container->base.ops = container_ops();
+    return YETTY_OK_VOID();
+}
 
 [[clang::annotate("override@yfigure:container:add_child")]]
 static struct yetty_ycore_void_result yetty_yfigure_container_add_child_impl(

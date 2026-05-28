@@ -22,6 +22,7 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yplot/yplot-gen.h>
@@ -589,15 +590,19 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             .min = {.x = 0.0f, .y = 0.0f},
             .max = {.x = (float)surface_w, .y = (float)surface_h},
         };
-        struct yetty_yfigure_container_ptr_result cr =
-            yetty_yfigure_container_create_local(root_rect, context, yui->figure_registry);
-        if (!YETTY_IS_OK(cr)) {
+        struct yetty_yclass_ctx yclass_ctx = {0};
+        struct yetty_yclass_object_ptr_result obj_res =
+            yetty_yfigure_container_create(&yclass_ctx);
+        if (!YETTY_IS_OK(obj_res)) {
             yetty_yfigure_registry_destroy(yui->figure_registry);
             yui->font->ops->destroy(yui->font);
             free(yui);
-            return YETTY_ERR(yetty_yui_ptr, "yui_create: root_container", cr);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: root_container", obj_res);
         }
-        yui->root_container = cr.value;
+        yui->root_container = yetty_yfigure_container_from(obj_res.value);
+        yetty_yfigure_container_set_context(yui->root_container, context);
+        yetty_yfigure_container_set_registry(yui->root_container, yui->figure_registry);
+        yetty_yfigure_container_set_rect(yui->root_container, root_rect);
     }
 
     /* Producer engine. yui is in-process — no parent yetty over a pty,

@@ -1365,10 +1365,35 @@ static size_t {slot}_skel(const void *_body, size_t _body_len,
 """
 
 
-def emit_create_fn(cls: dict) -> str:
-    """Per-class factory. ctx decides; caller is location-agnostic."""
+def emit_create_fn(cls: dict, model: dict, module: str) -> str:
+    """Per-class factory. ctx decides; caller is location-agnostic.
+
+    If the module declares a `constructor` slot (any class in the
+    module overrides `<module>:<class>:constructor`), the factory's
+    local branch invokes that slot automatically after allocating —
+    so the returned object is fully constructed in one call. No
+    separate _init step; the caller-side flow is identical
+    regardless of whether the class has a constructor or not."""
     accessor = cls["accessor"]
     qname = qualified_class(cls)
+    has_constructor = any(
+        m["domain"] == module and m["slot"] == "constructor"
+        for m in model.get("methods", [])
+    )
+    if has_constructor:
+        ctor_call = f"""\
+
+        struct yetty_ycore_void_result _ct =
+            yetty_{module}_constructor(ctx, _alloc.value);
+        if (YETTY_IS_ERR(_ct)) {{
+            struct yetty_ycore_void_result _fr =
+                yetty_yclass_object_free(_alloc.value);
+            if (YETTY_IS_ERR(_fr)) yetty_ycore_error_destroy(_fr.error);
+            return YETTY_ERR(yetty_yclass_object_ptr,
+                             "{qname}_create: constructor failed", _ct);
+        }}"""
+    else:
+        ctor_call = ""
     return f"""\
 struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ctx)
 {{
@@ -1383,8 +1408,12 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
                          "{qname}_create: class accessor failed", _kr);
     const struct yetty_yclass *_klass = _kr.value;
 
-    if (!ctx || !ctx->session)
-        return yetty_yclass_object_alloc(_klass);
+    if (!ctx || !ctx->session) {{
+        struct yetty_yclass_object_ptr_result _alloc =
+            yetty_yclass_object_alloc(_klass);
+        if (YETTY_IS_ERR(_alloc)) return _alloc;{ctor_call}
+        return _alloc;
+    }}
 
     /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
      * if it fails (the per-slot ensure_remote_id fallback can still
@@ -1558,7 +1587,7 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
         parts.append(emit_skel(m))
         parts.append("\n")
     for c in regular_classes(model):
-        parts.append(emit_create_fn(c))
+        parts.append(emit_create_fn(c, model, module))
         parts.append("\n")
     parts.append(emit_lookup_tables(model, module))
     out_path.write_text("".join(parts))

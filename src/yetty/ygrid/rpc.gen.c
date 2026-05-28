@@ -209,8 +209,12 @@ struct yetty_yclass_object_ptr_result yetty_ygrid_grid_create(struct yetty_yclas
                          "yetty_ygrid_grid_create: class accessor failed", _kr);
     const struct yetty_yclass *_klass = _kr.value;
 
-    if (!ctx || !ctx->session)
-        return yetty_yclass_object_alloc(_klass);
+    if (!ctx || !ctx->session) {
+        struct yetty_yclass_object_ptr_result _alloc =
+            yetty_yclass_object_alloc(_klass);
+        if (YETTY_IS_ERR(_alloc)) return _alloc;
+        return _alloc;
+    }
 
     /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
      * if it fails (the per-slot ensure_remote_id fallback can still

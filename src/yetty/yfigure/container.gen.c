@@ -6,6 +6,8 @@
 #include <yetty/ytrace/ytrace.h>
 
 __attribute__((unused))
+static yetty_yfigure_constructor_fn _yetty_yfigure_container_yetty_yfigure_constructor_check = yetty_yfigure_container_constructor_impl;
+__attribute__((unused))
 static yetty_yfigure_add_child_fn _yetty_yfigure_container_yetty_yfigure_add_child_check = yetty_yfigure_container_add_child_impl;
 __attribute__((unused))
 static yetty_yfigure_remove_child_by_id_fn _yetty_yfigure_container_yetty_yfigure_remove_child_by_id_check = yetty_yfigure_container_remove_child_by_id_impl;
@@ -26,6 +28,7 @@ struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void)
         .data_size = sizeof(struct yetty_yfigure_container),
     };
     static const struct yetty_yclass_op ops[] = {
+        {"yetty_yfigure", "constructor", (yetty_yclass_method_id_t)yetty_yfigure_constructor, (yetty_yclass_impl_t)yetty_yfigure_container_constructor_impl},
         {"yetty_yfigure", "add_child", (yetty_yclass_method_id_t)yetty_yfigure_add_child, (yetty_yclass_impl_t)yetty_yfigure_container_add_child_impl},
         {"yetty_yfigure", "remove_child_by_id", (yetty_yclass_method_id_t)yetty_yfigure_remove_child_by_id, (yetty_yclass_impl_t)yetty_yfigure_container_remove_child_by_id_impl},
         {"yetty_yfigure", "raise_child_by_id", (yetty_yclass_method_id_t)yetty_yfigure_raise_child_by_id, (yetty_yclass_impl_t)yetty_yfigure_container_raise_child_by_id_impl},
