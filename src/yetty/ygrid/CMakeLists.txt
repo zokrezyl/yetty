@@ -1,15 +1,7 @@
-include(${YETTY_ROOT}/build-tools/yetty/yclass-codegen.cmake)
-
-yetty_yclass_codegen(
-    MODULE   ygrid
-    SOURCES  ${CMAKE_CURRENT_SOURCE_DIR}/grid.c
-    CLASSES  grid
-    GEN_SRC  YGRID_GEN_SRC
-)
-
 add_library(yetty_ygrid STATIC
     grid.c
-    ${YGRID_GEN_SRC}
+    methods.gen.c
+    rpc.gen.c
 )
 
 target_include_directories(yetty_ygrid PUBLIC

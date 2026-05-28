@@ -5,17 +5,18 @@
 # directly. Embedders that want to host the framework on top of their
 # own event loop pass an existing uv_loop_t into yetty_ygui_framework_create.
 
-include(${YETTY_ROOT}/build-tools/yetty/yclass-codegen.cmake)
-
 # Annotated sources processed by yclass codegen. Every widget under
 # widgets/ plus the framework base (widget, primitive-widget,
 # mixins/clickable) carries `[[clang::annotate("class@ygui:…")]]` on
-# its data struct and `override@ygui:<class>:<slot>` on each impl;
-# codegen emits the per-class `_class_get` accessor + module-wide
-# public headers (include/yetty/ygui/methods.h, rpc.h) plus internal
-# sources/headers next to the annotated .c files (methods.gen.h,
-# methods.gen.c, rpc.gen.c). The .c files include their per-class
-# `<stem>.gen.c` at the foot to pull in the accessor body.
+# its data struct and `override@ygui:<class>:<slot>` on each impl.
+# Codegen runs as a standalone `make codegen` target at the repo
+# root, NOT as part of any platform build. It emits the per-class
+# `_class_get` accessor + module-wide public headers
+# (include/yetty/ygui/methods.h, rpc.h) plus internal sources/headers
+# next to the annotated .c files (methods.gen.h, methods.gen.c,
+# rpc.gen.c). The .c files include their per-class `<stem>.gen.c` at
+# the foot to pull in the accessor body. All generated files are
+# committed to git; platform builds compile what is in the tree.
 set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widget.c
     ${CMAKE_CURRENT_SOURCE_DIR}/primitive-widget.c
@@ -65,23 +66,6 @@ set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yvideo.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yzoo.c
 )
-set(YGUI_CLASSES
-    widget primitive-widget clickable
-    breadcrumbs button checkbox chip choicebox collapsing_header
-    colorpicker combobox dialog dropdown hbox label list menubar
-    panel popup_menu progress radio rich scrollarea selectable
-    separator slider spinner splitter statusbar stepper tabbar
-    table textarea textinput toggle tooltip tree_node vbox
-    ybrowser ydraw_embed yimage yjungle ymarkdown ypdf yplot
-    yvideo yzoo
-)
-yetty_yclass_codegen(
-    MODULE   ygui
-    SOURCES  ${YGUI_ANNOTATED}
-    CLASSES  ${YGUI_CLASSES}
-    GEN_SRC  YGUI_GEN_SRC
-)
-
 set(YGUI_SOURCES
     class.c
     object.c
@@ -89,7 +73,8 @@ set(YGUI_SOURCES
     event.c
     layout.c
     ${YGUI_ANNOTATED}
-    ${YGUI_GEN_SRC}
+    methods.gen.c
+    rpc.gen.c
 )
 
 add_library(ygui STATIC ${YGUI_SOURCES})

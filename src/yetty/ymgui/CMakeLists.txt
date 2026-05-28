@@ -8,19 +8,11 @@
 # frontend/  — client-side library the app links against. Ships an
 #              ImGui renderer backend (imgui_impl_yetty.*) and the
 #              OSC/encode helpers.
-include(${YETTY_ROOT}/build-tools/yetty/yclass-codegen.cmake)
-
-yetty_yclass_codegen(
-    MODULE   ymgui
-    SOURCES  ${CMAKE_CURRENT_SOURCE_DIR}/figure.c
-    CLASSES  figure
-    GEN_SRC  YMGUI_GEN_SRC
-)
-
 add_library(yetty_ymgui STATIC
     figure.c
     pipeline.c
-    ${YMGUI_GEN_SRC}
+    methods.gen.c
+    rpc.gen.c
 )
 
 target_include_directories(yetty_ymgui PUBLIC
