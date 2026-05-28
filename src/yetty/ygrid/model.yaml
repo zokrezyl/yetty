@@ -53,7 +53,7 @@ classes:
     domain: ygrid
     accessor: yetty_ygrid_grid_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygrid/grid.c
+    source_file: src/yetty/ygrid/grid.c
     parent: null
     mixins:
       - domain: yfigure

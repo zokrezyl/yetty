@@ -59,7 +59,7 @@ classes:
     domain: yfigure
     accessor: yetty_yfigure_container_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/yfigure/container.c
+    source_file: src/yetty/yfigure/container.c
     parent: null
     mixins:
       - domain: yfigure

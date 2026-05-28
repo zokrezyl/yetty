@@ -4,8 +4,8 @@
 
 #include <yclass/rpc.h>
 
-struct yetty_yclass_object_ptr_result yetty_ygui_widget_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_ygui_widget_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_button_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_checkbox_create(struct yetty_yclass_ctx *ctx);

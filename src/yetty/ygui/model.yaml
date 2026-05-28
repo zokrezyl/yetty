@@ -1,4 +1,45 @@
 methods:
+  - slot: widget_on_press
+    domain: ygui
+    owning_class: clickable
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: _yc_ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: _yc_obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+  - slot: widget_on_release
+    domain: ygui
+    owning_class: clickable
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: _yc_ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: _yc_obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+  - slot: widget_emit_body
+    domain: ygui
+    owning_class: primitive_widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: _yc_ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: _yc_obj
+        type: "struct yetty_yclass_object *"
+      - name: ctx
+        type: "struct yetty_ygui_emit_ctx *"
   - slot: constructor
     domain: ygui
     owning_class: widget
@@ -17,36 +58,6 @@ methods:
         type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
-  - slot: widget_on_press
-    domain: ygui
-    owning_class: widget
-    return_type: struct yetty_ycore_int_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: x
-        type: float
-      - name: y
-        type: float
-      - name: button
-        type: int
-  - slot: widget_on_release
-    domain: ygui
-    owning_class: widget
-    return_type: struct yetty_ycore_int_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: x
-        type: float
-      - name: y
-        type: float
-      - name: button
-        type: int
   - slot: widget_on_motion
     domain: ygui
     owning_class: widget
@@ -82,23 +93,41 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: emit_ctx
         type: "struct yetty_ygui_emit_ctx *"
-  - slot: widget_emit_body
-    domain: ygui
-    owning_class: widget
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: emit_ctx
-        type: "struct yetty_ygui_emit_ctx *"
 classes:
+  - name: clickable
+    domain: ygui
+    accessor: yetty_ygui_clickable_mixin_get
+    type: mixin
+    source_file: src/yetty/ygui/mixins/clickable.c
+    parent: null
+    mixins: []
+    data: struct clickable_data
+    ops:
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: clickable_on_press
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: clickable_on_release
+  - name: primitive_widget
+    domain: ygui
+    accessor: yetty_ygui_primitive_widget_class_get
+    type: regular
+    source_file: src/yetty/ygui/primitive-widget.c
+    parent:
+      domain: ygui
+      name: widget
+    mixins: []
+    data: struct primitive_widget_data
+    ops:
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: primitive_emit_body
   - name: widget
     domain: ygui
     accessor: yetty_ygui_widget_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widget.c
+    source_file: src/yetty/ygui/widget.c
     parent: null
     mixins: []
     data: struct yetty_ygui_widget_data
@@ -127,40 +156,11 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: widget_default_emit_body
-  - name: primitive_widget
-    domain: ygui
-    accessor: yetty_ygui_primitive_widget_class_get
-    type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/primitive-widget.c
-    parent:
-      domain: ygui
-      name: widget
-    mixins: []
-    data: struct primitive_widget_data
-    ops:
-      - slot: widget_emit_body
-        slot_domain: ygui
-        impl: primitive_emit_body
-  - name: clickable
-    domain: ygui
-    accessor: yetty_ygui_clickable_mixin_get
-    type: mixin
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/mixins/clickable.c
-    parent: null
-    mixins: []
-    data: struct clickable_data
-    ops:
-      - slot: widget_on_press
-        slot_domain: ygui
-        impl: clickable_on_press
-      - slot: widget_on_release
-        slot_domain: ygui
-        impl: clickable_on_release
   - name: breadcrumbs
     domain: ygui
     accessor: yetty_ygui_breadcrumbs_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/breadcrumbs.c
+    source_file: src/yetty/ygui/widgets/breadcrumbs.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -180,7 +180,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_button_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/button.c
+    source_file: src/yetty/ygui/widgets/button.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -202,7 +202,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_checkbox_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/checkbox.c
+    source_file: src/yetty/ygui/widgets/checkbox.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -224,7 +224,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_chip_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/chip.c
+    source_file: src/yetty/ygui/widgets/chip.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -246,7 +246,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_choicebox_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/choicebox.c
+    source_file: src/yetty/ygui/widgets/choicebox.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -269,7 +269,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_collapsing_header_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/collapsing_header.c
+    source_file: src/yetty/ygui/widgets/collapsing_header.c
     parent:
       domain: ygui
       name: vbox
@@ -292,7 +292,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_colorpicker_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/colorpicker.c
+    source_file: src/yetty/ygui/widgets/colorpicker.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -309,7 +309,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_combobox_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/combobox.c
+    source_file: src/yetty/ygui/widgets/combobox.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -331,7 +331,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_dialog_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/dialog.c
+    source_file: src/yetty/ygui/widgets/dialog.c
     parent:
       domain: ygui
       name: vbox
@@ -351,7 +351,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_dropdown_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/dropdown.c
+    source_file: src/yetty/ygui/widgets/dropdown.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -373,7 +373,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_hbox_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/hbox.c
+    source_file: src/yetty/ygui/widgets/hbox.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -387,7 +387,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_label_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/label.c
+    source_file: src/yetty/ygui/widgets/label.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -407,7 +407,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_list_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/list.c
+    source_file: src/yetty/ygui/widgets/list.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -430,7 +430,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_menubar_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/menubar.c
+    source_file: src/yetty/ygui/widgets/menubar.c
     parent:
       domain: ygui
       name: hbox
@@ -444,7 +444,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_panel_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/panel.c
+    source_file: src/yetty/ygui/widgets/panel.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -461,7 +461,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_popup_menu_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/popup_menu.c
+    source_file: src/yetty/ygui/widgets/popup_menu.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -487,7 +487,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_progress_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/progress.c
+    source_file: src/yetty/ygui/widgets/progress.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -504,7 +504,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_radio_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/radio.c
+    source_file: src/yetty/ygui/widgets/radio.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -526,7 +526,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_rich_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/rich.c
+    source_file: src/yetty/ygui/widgets/rich.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -546,7 +546,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_scrollarea_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/scrollarea.c
+    source_file: src/yetty/ygui/widgets/scrollarea.c
     parent:
       domain: ygui
       name: vbox
@@ -563,7 +563,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_selectable_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/selectable.c
+    source_file: src/yetty/ygui/widgets/selectable.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -585,7 +585,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_separator_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/separator.c
+    source_file: src/yetty/ygui/widgets/separator.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -599,7 +599,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_slider_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/slider.c
+    source_file: src/yetty/ygui/widgets/slider.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -622,7 +622,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_spinner_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/spinner.c
+    source_file: src/yetty/ygui/widgets/spinner.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -642,7 +642,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_splitter_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/splitter.c
+    source_file: src/yetty/ygui/widgets/splitter.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -656,7 +656,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_statusbar_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/statusbar.c
+    source_file: src/yetty/ygui/widgets/statusbar.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -676,7 +676,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_stepper_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/stepper.c
+    source_file: src/yetty/ygui/widgets/stepper.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -696,7 +696,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_tabbar_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/tabbar.c
+    source_file: src/yetty/ygui/widgets/tabbar.c
     parent:
       domain: ygui
       name: hbox
@@ -713,7 +713,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_table_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/table.c
+    source_file: src/yetty/ygui/widgets/table.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -733,7 +733,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_textarea_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/textarea.c
+    source_file: src/yetty/ygui/widgets/textarea.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -753,7 +753,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_textinput_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/textinput.c
+    source_file: src/yetty/ygui/widgets/textinput.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -775,7 +775,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_toggle_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/toggle.c
+    source_file: src/yetty/ygui/widgets/toggle.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -797,7 +797,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_tooltip_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/tooltip.c
+    source_file: src/yetty/ygui/widgets/tooltip.c
     parent: null
     mixins: []
     data: struct tooltip_data
@@ -815,7 +815,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_tree_node_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/tree_node.c
+    source_file: src/yetty/ygui/widgets/tree_node.c
     parent:
       domain: ygui
       name: vbox
@@ -838,7 +838,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_vbox_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/vbox.c
+    source_file: src/yetty/ygui/widgets/vbox.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -852,7 +852,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_ybrowser_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/ybrowser.c
+    source_file: src/yetty/ygui/widgets/ybrowser.c
     parent:
       domain: ygui
       name: ydraw_embed
@@ -872,7 +872,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_ydraw_embed_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/ydraw_embed.c
+    source_file: src/yetty/ygui/widgets/ydraw_embed.c
     parent:
       domain: ygui
       name: primitive_widget
@@ -892,7 +892,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_yimage_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/yimage.c
+    source_file: src/yetty/ygui/widgets/yimage.c
     parent:
       domain: ygui
       name: widget
@@ -915,7 +915,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_yjungle_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/yjungle.c
+    source_file: src/yetty/ygui/widgets/yjungle.c
     parent:
       domain: ygui
       name: widget
@@ -929,7 +929,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_ymarkdown_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/ymarkdown.c
+    source_file: src/yetty/ygui/widgets/ymarkdown.c
     parent:
       domain: ygui
       name: ydraw_embed
@@ -949,7 +949,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_yplot_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/yplot.c
+    source_file: src/yetty/ygui/widgets/yplot.c
     parent:
       domain: ygui
       name: widget
@@ -972,7 +972,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_yvideo_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/yvideo.c
+    source_file: src/yetty/ygui/widgets/yvideo.c
     parent:
       domain: ygui
       name: widget
@@ -995,7 +995,7 @@ classes:
     domain: ygui
     accessor: yetty_ygui_yzoo_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-optimize-ygui/src/yetty/ygui/widgets/yzoo.c
+    source_file: src/yetty/ygui/widgets/yzoo.c
     parent:
       domain: ygui
       name: widget
