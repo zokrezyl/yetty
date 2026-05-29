@@ -941,7 +941,8 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
      * Then registry. Then font. */
     if (yui->root_container) {
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container);
-        struct yetty_ycore_void_result r = rf->ops->destroy(rf);
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
         if (!YETTY_IS_OK(r)) {
             ywarn("yui_destroy: root_container destroy: %s", r.error.msg);
             yetty_ycore_error_destroy(r.error);
@@ -1462,7 +1463,8 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
      * yui's chrome figures paint on top. */
     {
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container);
-        struct yetty_ycore_void_result rr = rf->ops->render(rf, target);
+        struct yetty_ycore_void_result rr =
+            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui root_container render");
         rf->dirty = 0;
     }

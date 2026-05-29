@@ -1832,7 +1832,8 @@ static struct yetty_ycore_int_result standalone_event_handler(
         if (app->root_container) {
             struct yetty_yfigure_figure *rf =
                 yetty_yfigure_container_as_figure(app->root_container);
-            struct yetty_ycore_void_result rr = rf->ops->render(rf, app->render_target);
+            struct yetty_ycore_void_result rr =
+                yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, app->render_target);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
             rf->dirty = 0;
         }
@@ -2103,7 +2104,8 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     }
     if (app->root_container) {
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root_container);
-        struct yetty_ycore_void_result dr = rf->ops->destroy(rf);
+        struct yetty_ycore_void_result dr =
+            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
         if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
         app->root_container = NULL;
     }

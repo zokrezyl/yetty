@@ -155,7 +155,8 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         if (YETTY_IS_ERR(cl)) yetty_ycore_error_destroy(cl.error);
         if (r->root_container) {
             struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
-            struct yetty_ycore_void_result rr = rf->ops->render(rf, r->render_target);
+            struct yetty_ycore_void_result rr =
+                yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, r->render_target);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
             rf->dirty = 0;
         }
@@ -456,7 +457,8 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
     }
     if (r->root_container) {
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
-        struct yetty_ycore_void_result dr = rf->ops->destroy(rf);
+        struct yetty_ycore_void_result dr =
+            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
         if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
         r->root_container = NULL;
     }

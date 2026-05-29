@@ -754,7 +754,8 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
             yerror("ycompositor-ygui: clear failed: %s", cl.error.msg);
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_void_result rr = rrf->ops->render(rrf, target);
+        struct yetty_ycore_void_result rr =
+            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rrf - 1, target);
         if (YETTY_IS_ERR(rr)) {
             yerror("ycompositor-ygui: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
@@ -774,7 +775,8 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     {
         struct yetty_yfigure_figure *rrf =
             yetty_yfigure_container_as_figure(app->root);
-        struct yetty_ycore_void_result dr = rrf->ops->destroy(rrf);
+        struct yetty_ycore_void_result dr =
+            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rrf - 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
     }
     app->root = NULL;
