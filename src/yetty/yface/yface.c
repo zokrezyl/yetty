@@ -268,8 +268,8 @@ static struct yetty_ycore_void_result attach_handlers(struct yetty_yface *y)
     }
     {
         struct yetty_ycore_void_result r =
-            yetty_ywire_wire_statemachine_set_envelope_default_buffered(
-                y->sm, /*has_args=*/1, yface_on_envelope, y);
+            yetty_ywire_wire_statemachine_set_envelope_default_buffered(y->sm, /*has_args=*/1,
+                                                                        yface_on_envelope, y);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yface: attach: envelope_default");
     }
     {
@@ -313,8 +313,8 @@ struct yetty_ycore_void_result yetty_yface_emit_to_fd(int fd, int osc_code, int 
                                                       const void *args, size_t args_len,
                                                       const void *body, size_t body_len)
 {
-    return yetty_ywire_emit_to_fd(fd, YETTY_YWIRE_ENVELOPE_OSC, osc_code, /*has_args=*/1, compressed,
-                                  args, args_len, body, body_len);
+    return yetty_ywire_emit_to_fd(fd, YETTY_YWIRE_ENVELOPE_OSC, osc_code, /*has_args=*/1,
+                                  compressed, args, args_len, body, body_len);
 }
 
 struct yetty_ycore_void_result yetty_yface_decode(const char *b64, size_t n, int compressed,

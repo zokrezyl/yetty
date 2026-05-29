@@ -15,8 +15,7 @@ struct yetty_yclass_ptr_result yetty_ygui_table_class_get(void);
 
 /* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_ygui_object *obj,
-                                                            int n_cols,
-                                                            const char *const *headers);
+                                                            int n_cols, const char *const *headers);
 struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_ygui_object *obj,
                                                         const char *const *cells, int n_cells);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */

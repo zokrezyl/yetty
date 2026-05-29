@@ -26,8 +26,9 @@ struct [[clang::annotate("mixin@ygui:clickable")]] clickable_data {
 };
 
 [[clang::annotate("override@ygui:clickable:widget_on_press")]]
-static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, float x,
-                                                        float y, int button)
+static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx *_yc_ctx,
+                                                        struct yetty_yclass_object *_yc_obj,
+                                                        float x, float y, int button)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -44,8 +45,9 @@ static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@ygui:clickable:widget_on_release")]]
-static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, float x,
-                                                          float y, int button)
+static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ctx *_yc_ctx,
+                                                          struct yetty_yclass_object *_yc_obj,
+                                                          float x, float y, int button)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -70,7 +72,8 @@ static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ct
         return YETTY_ERR(yetty_ycore_int, "clickable_on_release: set_dirty", dr);
     }
     if (was_pressed && cd->on_click) {
-        struct yetty_ycore_void_result r = cd->on_click(NULL, (struct yetty_yclass_object *)obj, cd->userdata);
+        struct yetty_ycore_void_result r =
+            cd->on_click(NULL, (struct yetty_yclass_object *)obj, cd->userdata);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_int, "clickable_on_release: on_click", r);
         }
@@ -96,11 +99,9 @@ int yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj)
     if (!obj) {
         return 0;
     }
-    struct clickable_data *cd =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_clickable_mixin_get().value);
+    struct clickable_data *cd = yetty_ygui_data_get((struct yetty_ygui_object *)obj,
+                                                    yetty_ygui_clickable_mixin_get().value);
     return cd->pressed;
 }
 
-
 #include "clickable.gen.c"
-

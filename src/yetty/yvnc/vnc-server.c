@@ -23,7 +23,8 @@
 
 #ifdef YETTY_HAS_YVCODEC
 #include <yetty/yvcodec/encoder.h>
-#define MINIMP4_IMPLEMENTATION
+/* minimp4 implementation lives in the dedicated minimp4 static lib —
+ * see build-tools/yetty/minimp4.cmake. Just pull the header here. */
 #include <minimp4.h>
 #endif
 

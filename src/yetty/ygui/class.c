@@ -21,8 +21,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-yetty_yclass_method_slot
-yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id)
+yetty_yclass_method_slot yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id)
 {
     if (!method_id) {
         return YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -39,8 +38,8 @@ yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id)
     return r.value;
 }
 
-yetty_yclass_impl_t
-yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls, yetty_yclass_method_slot slot)
+yetty_yclass_impl_t yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls,
+                                               yetty_yclass_method_slot slot)
 {
     if (!cls || slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
         return NULL;
@@ -55,9 +54,8 @@ yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls, yetty_yclass_method_s
     return r.value;
 }
 
-yetty_yclass_impl_t
-yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
-                                 yetty_yclass_method_slot slot)
+yetty_yclass_impl_t yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
+                                                     yetty_yclass_method_slot slot)
 {
     if (!self_class) {
         return NULL;

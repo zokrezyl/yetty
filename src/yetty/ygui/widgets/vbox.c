@@ -10,7 +10,8 @@
 #include <yetty/ygui/widgets/vbox.h>
 
 [[clang::annotate("override@ygui:vbox:constructor")]]
-static struct yetty_ycore_void_result vbox_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result vbox_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -25,9 +26,8 @@ static struct yetty_ycore_void_result vbox_constructor(struct yetty_yclass_ctx *
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-
-struct [[clang::annotate("class@ygui:vbox")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]] vbox_data {
+struct [[clang::annotate("class@ygui:vbox")]] [[clang::annotate("parent@ygui:primitive_widget")]]
+vbox_data {
     char _empty;
 };
 

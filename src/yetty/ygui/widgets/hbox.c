@@ -14,7 +14,8 @@
 #include <yetty/ygui/widgets/hbox.h>
 
 [[clang::annotate("override@ygui:hbox:constructor")]]
-static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -30,9 +31,8 @@ static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_ctx *
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-
-struct [[clang::annotate("class@ygui:hbox")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]] hbox_data {
+struct [[clang::annotate("class@ygui:hbox")]] [[clang::annotate("parent@ygui:primitive_widget")]]
+hbox_data {
     char _empty;
 };
 

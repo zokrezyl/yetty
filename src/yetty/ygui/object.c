@@ -253,8 +253,7 @@ static struct yetty_ycore_size_result instance_size_of(const struct yetty_yclass
                 break;
             }
             if (chain_len >= sizeof(chain) / sizeof(chain[0])) {
-                return YETTY_ERR(yetty_ycore_size,
-                                 "instance_size_of: parent chain too deep");
+                return YETTY_ERR(yetty_ycore_size, "instance_size_of: parent chain too deep");
             }
             chain[chain_len++] = pr.value;
             cur = pr.value;
@@ -327,8 +326,7 @@ struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cl
 
     struct yetty_ycore_size_result szr = instance_size_of(cls);
     if (YETTY_IS_ERR(szr)) {
-        return YETTY_ERR(yetty_ygui_object_ptr,
-                         "yetty_ygui_add: instance_size_of failed", szr);
+        return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_add: instance_size_of failed", szr);
     }
     struct yetty_ygui_object *obj = calloc(1, szr.value);
     if (!obj) {
@@ -348,7 +346,8 @@ struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cl
         obj->id = idr.value;
     }
 
-    struct yetty_ycore_void_result cr = yetty_ygui_constructor(NULL, (struct yetty_yclass_object *)obj);
+    struct yetty_ycore_void_result cr =
+        yetty_ygui_constructor(NULL, (struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(cr)) {
         if (engine && obj->id) {
             struct yetty_ycore_void_result fr = yetty_ygui_framework_free_id(engine, obj->id);
@@ -382,7 +381,8 @@ struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj)
         sub = next;
     }
     obj->subscriptions = NULL;
-    struct yetty_ycore_void_result dr = yetty_ygui_destructor(NULL, (struct yetty_yclass_object *)obj);
+    struct yetty_ycore_void_result dr =
+        yetty_ygui_destructor(NULL, (struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }

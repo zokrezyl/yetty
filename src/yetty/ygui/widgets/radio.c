@@ -10,14 +10,14 @@
 #define COLOR_INNER_ON 0xFF92A86Bu
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:radio")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]]
-       [[clang::annotate("uses@ygui:clickable")]] radio_data {
+struct [[clang::annotate("class@ygui:radio")]] [[clang::annotate(
+    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] radio_data {
     char *label;
     int selected;
 };
 
-static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *ud)
+static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *_yc_ctx,
+                                               struct yetty_yclass_object *_yc_obj, void *ud)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -25,13 +25,16 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *_yc_ctx,
     struct radio_data *d = yetty_ygui_data_get(obj, yetty_ygui_radio_class_get().value);
     d->selected = 1;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
-    if (YETTY_IS_ERR(dr)) return dr;
+    if (YETTY_IS_ERR(dr)) {
+        return dr;
+    }
     struct yetty_ygui_event ev = {.type = YETTY_YGUI_EVENT_VALUE_CHANGED, .source = obj, .i0 = 1};
     return yetty_ygui_object_emit(obj, &ev);
 }
 
 [[clang::annotate("override@ygui:radio:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx,
+                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -45,7 +48,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, str
 }
 
 [[clang::annotate("override@ygui:radio:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx,
+                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -56,35 +60,41 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, str
 }
 
 [[clang::annotate("override@ygui:radio:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx,
+                                            struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    if (!ctx) return YETTY_ERR(yetty_ycore_void, "radio paint: NULL ctx");
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "radio paint: NULL ctx");
+    }
     struct radio_data *d = yetty_ygui_data_get(obj, yetty_ygui_radio_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float h = r.max.y - r.min.y;
     float cy = r.min.y + h * 0.5f;
     float radius = (h - 6.0f) * 0.5f;
-    if (radius < 7.0f) radius = 7.0f;
+    if (radius < 7.0f) {
+        radius = 7.0f;
+    }
     YETTY_RETURN_IF_ERR(yetty_ycore_void,
                         yguix_circle(ctx, r.min.x + radius + 2, cy, radius, COLOR_OUTER),
                         "radio: outer");
     YETTY_RETURN_IF_ERR(yetty_ycore_void,
                         yguix_circle(ctx, r.min.x + radius + 2, cy, radius - 2, COLOR_INNER_OFF),
                         "radio: inner_bg");
-    if (d->selected)
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_circle(ctx, r.min.x + radius + 2, cy, radius * 0.5f,
-                                         COLOR_INNER_ON),
-                            "radio: dot");
+    if (d->selected) {
+        YETTY_RETURN_IF_ERR(
+            yetty_ycore_void,
+            yguix_circle(ctx, r.min.x + radius + 2, cy, radius * 0.5f, COLOR_INNER_ON),
+            "radio: dot");
+    }
     if (d->label) {
         float fs = 14.0f;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, d->label, r.min.x + 2 * radius + 12,
-                                       cy + fs * 0.4f, fs, COLOR_TEXT),
-                            "radio: label");
+        YETTY_RETURN_IF_ERR(
+            yetty_ycore_void,
+            yguix_text(ctx, d->label, r.min.x + 2 * radius + 12, cy + fs * 0.4f, fs, COLOR_TEXT),
+            "radio: label");
     }
     return YETTY_OK_VOID();
 }
@@ -92,23 +102,28 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, st
 struct yetty_ycore_void_result yetty_ygui_radio_set_label(struct yetty_ygui_object *obj,
                                                           const char *label)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "radio_set_label: NULL");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "radio_set_label: NULL");
+    }
     struct radio_data *d = yetty_ygui_data_get(obj, yetty_ygui_radio_class_get().value);
     free(d->label);
     d->label = NULL;
     if (label) {
         size_t n = strlen(label);
         d->label = malloc(n + 1);
-        if (!d->label) return YETTY_ERR(yetty_ycore_void, "radio_set_label: malloc");
+        if (!d->label) {
+            return YETTY_ERR(yetty_ycore_void, "radio_set_label: malloc");
+        }
         memcpy(d->label, label, n + 1);
     }
     return yetty_ygui_object_set_dirty(obj);
 }
 
-struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_ygui_object *obj,
-                                                             int s)
+struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_ygui_object *obj, int s)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "radio_set_selected: NULL");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "radio_set_selected: NULL");
+    }
     struct radio_data *d = yetty_ygui_data_get(obj, yetty_ygui_radio_class_get().value);
     d->selected = s ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
@@ -116,7 +131,9 @@ struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_ygui_o
 
 int yetty_ygui_radio_is_selected(const struct yetty_ygui_object *obj)
 {
-    if (!obj) return 0;
+    if (!obj) {
+        return 0;
+    }
     return ((struct radio_data *)yetty_ygui_data_get((struct yetty_ygui_object *)obj,
                                                      yetty_ygui_radio_class_get().value))
         ->selected;

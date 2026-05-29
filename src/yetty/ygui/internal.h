@@ -209,7 +209,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
 
 /* Walk the tree invoking emit_body on every widget (pre-order). */
 struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_ygui_object *node,
-                                                                struct yetty_ygui_emit_ctx *ctx);
+                                                                   struct yetty_ygui_emit_ctx *ctx);
 
 /* Flush the three streams into the output pty as one yface envelope.
  * The envelope body is a sequence of {length, id, payload} records:

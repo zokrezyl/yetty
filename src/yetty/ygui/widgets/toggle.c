@@ -21,14 +21,15 @@
 #define COLOR_KNOB 0xFFE4E5E0u
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:toggle")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]]
-       [[clang::annotate("uses@ygui:clickable")]] toggle_data {
+struct [[clang::annotate("class@ygui:toggle")]] [[clang::annotate(
+    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] toggle_data {
     char *label;
     int on;
 };
 
-static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *userdata)
+static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *_yc_ctx,
+                                                    struct yetty_yclass_object *_yc_obj,
+                                                    void *userdata)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -36,7 +37,9 @@ static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *_yc
     struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
     d->on = !d->on;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
-    if (YETTY_IS_ERR(dr)) return dr;
+    if (YETTY_IS_ERR(dr)) {
+        return dr;
+    }
     struct yetty_ygui_event ev = {0};
     ev.type = YETTY_YGUI_EVENT_VALUE_CHANGED;
     ev.source = obj;
@@ -45,7 +48,8 @@ static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *_yc
 }
 
 [[clang::annotate("override@ygui:toggle:constructor")]]
-static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                         struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -59,7 +63,8 @@ static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:toggle:destructor")]]
-static struct yetty_ycore_void_result toggle_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result toggle_destructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                        struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -74,14 +79,24 @@ static struct yetty_ycore_void_result paint_rounded(struct yetty_ygui_emit_ctx *
                                                     float y, float w, float h, uint32_t fill,
                                                     float radius)
 {
-    if (w <= 0.0f || h <= 0.0f) return YETTY_OK_VOID();
-    if (radius > w * 0.5f) radius = w * 0.5f;
-    if (radius > h * 0.5f) radius = h * 0.5f;
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    if (radius > w * 0.5f) {
+        radius = w * 0.5f;
+    }
+    if (radius > h * 0.5f) {
+        radius = h * 0.5f;
+    }
     struct yetty_ysdf_rounded_box geom = {
-        .center_x = x + w * 0.5f, .center_y = y + h * 0.5f,
-        .half_width = w * 0.5f, .half_height = h * 0.5f,
-        .radius_top_right = radius, .radius_bottom_right = radius,
-        .radius_top_left = radius, .radius_bottom_left = radius,
+        .center_x = x + w * 0.5f,
+        .center_y = y + h * 0.5f,
+        .half_width = w * 0.5f,
+        .half_height = h * 0.5f,
+        .radius_top_right = radius,
+        .radius_bottom_right = radius,
+        .radius_top_left = radius,
+        .radius_bottom_left = radius,
     };
     return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u,
                                                          0.0f, &geom);
@@ -91,14 +106,17 @@ static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *c
                                                    float cy, float radius, uint32_t fill)
 {
     struct yetty_ysdf_circle geom = {
-        .center_x = cx, .center_y = cy, .radius = radius,
+        .center_x = cx,
+        .center_y = cy,
+        .radius = radius,
     };
     return yetty_ydraw_draw_list_add_cmd_add_circle(ctx->ygrid_draw_list, 0u, 0u, fill, 0u, 0.0f,
                                                     &geom);
 }
 
 [[clang::annotate("override@ygui:toggle:widget_paint")]]
-static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *_yc_ctx,
+                                                   struct yetty_yclass_object *_yc_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -110,7 +128,9 @@ static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *_yc_
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float h = r.max.y - r.min.y;
     float pill_h = h - 4.0f;
-    if (pill_h < 14.0f) pill_h = 14.0f;
+    if (pill_h < 14.0f) {
+        pill_h = 14.0f;
+    }
     float pill_w = pill_h * 1.9f;
     float pill_y = r.min.y + (h - pill_h) * 0.5f;
     uint32_t track = d->on ? COLOR_TRACK_ON : COLOR_TRACK_OFF;
@@ -125,9 +145,8 @@ static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *_yc_
         float font_size = 14.0f;
         float tx = r.min.x + pill_w + 8.0f;
         float ty = r.min.y + (h + font_size) * 0.5f - 2.0f;
-        struct yetty_ycore_buffer tb = {.data = (uint8_t *)d->label,
-                                        .capacity = strlen(d->label),
-                                        .size = strlen(d->label)};
+        struct yetty_ycore_buffer tb = {
+            .data = (uint8_t *)d->label, .capacity = strlen(d->label), .size = strlen(d->label)};
         rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, tx, ty, &tb, font_size,
                                             COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "toggle_paint: label");
@@ -138,7 +157,9 @@ static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *_yc_
 struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_ygui_object *obj,
                                                            const char *label)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "toggle_set_label: NULL obj");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "toggle_set_label: NULL obj");
+    }
     struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
     free(d->label);
     if (!label) {
@@ -146,7 +167,9 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_ygui_obj
     } else {
         size_t n = strlen(label);
         d->label = malloc(n + 1);
-        if (!d->label) return YETTY_ERR(yetty_ycore_void, "toggle_set_label: malloc");
+        if (!d->label) {
+            return YETTY_ERR(yetty_ycore_void, "toggle_set_label: malloc");
+        }
         memcpy(d->label, label, n + 1);
     }
     return yetty_ygui_object_set_dirty(obj);
@@ -154,7 +177,9 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_ygui_obj
 
 struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_ygui_object *obj, int on)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "toggle_set_on: NULL obj");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "toggle_set_on: NULL obj");
+    }
     struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
     d->on = on ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
@@ -162,7 +187,9 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_ygui_object
 
 int yetty_ygui_toggle_get_on(const struct yetty_ygui_object *obj)
 {
-    if (!obj) return 0;
+    if (!obj) {
+        return 0;
+    }
     struct toggle_data *d =
         yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_toggle_class_get().value);
     return d->on;

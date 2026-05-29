@@ -16,12 +16,14 @@
 #include <stdlib.h>
 
 [[clang::annotate("override@ygui:menubar:constructor")]]
-static struct yetty_ycore_void_result menubar_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result menubar_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                          struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_menubar_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_menubar_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "menubar_constructor: super");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
     l.height = 30.0f;
@@ -29,12 +31,16 @@ static struct yetty_ycore_void_result menubar_constructor(struct yetty_yclass_ct
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-static struct yetty_ycore_void_result on_trigger_click(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *userdata)
+static struct yetty_ycore_void_result on_trigger_click(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj,
+                                                       void *userdata)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct yetty_ygui_object *menu = (struct yetty_ygui_object *)userdata;
-    if (!menu) return YETTY_OK_VOID();
+    if (!menu) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_popup_menu_toggle_at(menu, r.min.x, r.max.y + 2.0f);
 }
@@ -43,8 +49,11 @@ struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_ygui_object *
                                                       const char *label,
                                                       struct yetty_ygui_object *menu)
 {
-    if (!bar || !label) return YETTY_ERR(yetty_ycore_void, "menubar_add: NULL arg");
-    struct yetty_ygui_object_ptr_result br = yetty_ygui_add(yetty_ygui_button_class_get().value, bar);
+    if (!bar || !label) {
+        return YETTY_ERR(yetty_ycore_void, "menubar_add: NULL arg");
+    }
+    struct yetty_ygui_object_ptr_result br =
+        yetty_ygui_add(yetty_ygui_button_class_get().value, bar);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "menubar_add: button");
     struct yetty_ygui_object *btn = br.value;
     struct yetty_ycore_void_result lr = yetty_ygui_button_set_label(btn, label);
@@ -58,9 +67,8 @@ struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_ygui_object *
     return yetty_ygui_clickable_on_click_set(btn, on_trigger_click, menu);
 }
 
-
-struct [[clang::annotate("class@ygui:menubar")]]
-       [[clang::annotate("parent@ygui:hbox")]] menubar_data {
+struct [[clang::annotate("class@ygui:menubar")]] [[clang::annotate("parent@ygui:hbox")]]
+menubar_data {
     char _empty;
 };
 

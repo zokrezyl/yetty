@@ -1,5 +1,6 @@
 /* GENERATED — do not edit. */
 #include "yetty/ygui/methods.gen.h"
+#include "yetty/ygui/primitive-widget.h"
 #include "yetty/ygui/widgets/tooltip.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
@@ -27,9 +28,12 @@ struct yetty_yclass_ptr_result yetty_ygui_tooltip_class_get(void)
         {"yetty_ygui", "destructor", (yetty_yclass_method_id_t)yetty_ygui_destructor, (yetty_yclass_impl_t)tooltip_destructor},
         {"yetty_ygui", "widget_paint", (yetty_yclass_method_id_t)yetty_ygui_widget_paint, (yetty_yclass_impl_t)tooltip_paint},
     };
+    struct yetty_yclass_ptr_result _parent_r = yetty_ygui_primitive_widget_class_get();
+    if (YETTY_IS_ERR(_parent_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_tooltip_class_get: parent accessor failed", _parent_r);
     struct yetty_yclass_ptr_result _r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                              NULL, NULL, 0);
+                              _parent_r.value, NULL, 0);
     if (YETTY_IS_ERR(_r))
         return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_tooltip_class_get: class_register failed", _r);
     cls = _r.value;

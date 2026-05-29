@@ -17,15 +17,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:label")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]] label_data {
+struct [[clang::annotate("class@ygui:label")]] [[clang::annotate("parent@ygui:primitive_widget")]]
+label_data {
     char *text;
     float font_size;
     struct yetty_ycore_rgba color;
 };
 
 [[clang::annotate("override@ygui:label:constructor")]]
-static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                        struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -40,7 +41,8 @@ static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@ygui:label:destructor")]]
-static struct yetty_ycore_void_result label_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result label_destructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -57,7 +59,8 @@ static uint32_t pack_rgba(struct yetty_ycore_rgba c)
 }
 
 [[clang::annotate("override@ygui:label:widget_paint")]]
-static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *_yc_ctx,
+                                                  struct yetty_yclass_object *_yc_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;

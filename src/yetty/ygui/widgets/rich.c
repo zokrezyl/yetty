@@ -29,15 +29,16 @@ struct rich_line {
     int cap;
 };
 
-struct [[clang::annotate("class@ygui:rich")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]] rich_data {
+struct [[clang::annotate("class@ygui:rich")]] [[clang::annotate("parent@ygui:primitive_widget")]]
+rich_data {
     struct rich_line *lines;
     int n_lines;
     int cap;
 };
 
 [[clang::annotate("override@ygui:rich:constructor")]]
-static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -53,7 +54,9 @@ static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *
 
 static void free_line(struct rich_line *line)
 {
-    for (int i = 0; i < line->n_spans; ++i) free(line->spans[i].text);
+    for (int i = 0; i < line->n_spans; ++i) {
+        free(line->spans[i].text);
+    }
     free(line->spans);
     line->spans = NULL;
     line->n_spans = 0;
@@ -61,12 +64,15 @@ static void free_line(struct rich_line *line)
 }
 
 [[clang::annotate("override@ygui:rich:destructor")]]
-static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                      struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
-    for (int i = 0; i < d->n_lines; ++i) free_line(&d->lines[i]);
+    for (int i = 0; i < d->n_lines; ++i) {
+        free_line(&d->lines[i]);
+    }
     free(d->lines);
     d->lines = NULL;
     return yetty_ygui_super_void(obj, yetty_ygui_rich_class_get().value,
@@ -74,7 +80,8 @@ static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *_
 }
 
 [[clang::annotate("override@ygui:rich:widget_paint")]]
-static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *_yc_ctx,
+                                                 struct yetty_yclass_object *_yc_obj,
                                                  struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -86,43 +93,59 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *_yc_ct
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
-    if (w <= 0.0f || h <= 0.0f) return YETTY_OK_VOID();
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
     float cursor_y = r.min.y;
     for (int i = 0; i < d->n_lines; ++i) {
         struct rich_line *line = &d->lines[i];
         /* Row advance = largest font size in the line, +25 % leading. */
         float row_fs = 0.0f;
         for (int s = 0; s < line->n_spans; ++s) {
-            if (line->spans[s].font_size > row_fs) row_fs = line->spans[s].font_size;
+            if (line->spans[s].font_size > row_fs) {
+                row_fs = line->spans[s].font_size;
+            }
         }
-        if (row_fs <= 0.0f) row_fs = 14.0f;
+        if (row_fs <= 0.0f) {
+            row_fs = 14.0f;
+        }
         float row_advance = row_fs * 1.25f;
         float baseline = cursor_y + row_fs;
         float cursor_x = r.min.x;
         for (int s = 0; s < line->n_spans; ++s) {
             struct rich_span *sp = &line->spans[s];
-            if (!sp->text || !sp->text[0]) continue;
+            if (!sp->text || !sp->text[0]) {
+                continue;
+            }
             size_t n = strlen(sp->text);
             struct yetty_ycore_buffer tb = {.data = (uint8_t *)sp->text, .capacity = n, .size = n};
-            struct yetty_ycore_void_result tr = yetty_ydraw_draw_list_add_text(
-                ctx->ygrid_draw_list, cursor_x, baseline, &tb, sp->font_size, sp->color, 0, -1,
-                0.0f);
+            struct yetty_ycore_void_result tr =
+                yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, cursor_x, baseline, &tb,
+                                               sp->font_size, sp->color, 0, -1, 0.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "rich_paint: text");
             cursor_x += (float)n * sp->font_size * 0.55f;
         }
         cursor_y += row_advance;
-        if (cursor_y > r.max.y) break;
+        if (cursor_y > r.max.y) {
+            break;
+        }
     }
     return YETTY_OK_VOID();
 }
 
 static int lines_grow(struct rich_data *d, int need)
 {
-    if (need <= d->cap) return 1;
+    if (need <= d->cap) {
+        return 1;
+    }
     int cap = d->cap ? d->cap * 2 : 8;
-    while (cap < need) cap *= 2;
+    while (cap < need) {
+        cap *= 2;
+    }
     struct rich_line *nl = realloc(d->lines, (size_t)cap * sizeof(*nl));
-    if (!nl) return 0;
+    if (!nl) {
+        return 0;
+    }
     /* Zero the newly-grown slots. */
     for (int i = d->cap; i < cap; ++i) {
         nl[i].spans = NULL;
@@ -136,11 +159,17 @@ static int lines_grow(struct rich_data *d, int need)
 
 static int spans_grow(struct rich_line *l, int need)
 {
-    if (need <= l->cap) return 1;
+    if (need <= l->cap) {
+        return 1;
+    }
     int cap = l->cap ? l->cap * 2 : 4;
-    while (cap < need) cap *= 2;
+    while (cap < need) {
+        cap *= 2;
+    }
     struct rich_span *ns = realloc(l->spans, (size_t)cap * sizeof(*ns));
-    if (!ns) return 0;
+    if (!ns) {
+        return 0;
+    }
     l->spans = ns;
     l->cap = cap;
     return 1;
@@ -148,16 +177,22 @@ static int spans_grow(struct rich_line *l, int need)
 
 struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *obj)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "rich_clear: NULL obj");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "rich_clear: NULL obj");
+    }
     struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
-    for (int i = 0; i < d->n_lines; ++i) free_line(&d->lines[i]);
+    for (int i = 0; i < d->n_lines; ++i) {
+        free_line(&d->lines[i]);
+    }
     d->n_lines = 0;
     return yetty_ygui_object_set_dirty(obj);
 }
 
 struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object *obj)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "rich_add_line: NULL obj");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "rich_add_line: NULL obj");
+    }
     struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
     if (!lines_grow(d, d->n_lines + 1)) {
         return YETTY_ERR(yetty_ycore_void, "rich_add_line: realloc");
@@ -173,7 +208,9 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object
                                                         const char *text, float font_size,
                                                         uint32_t color_rgba)
 {
-    if (!obj || !text) return YETTY_ERR(yetty_ycore_void, "rich_add_span: NULL arg");
+    if (!obj || !text) {
+        return YETTY_ERR(yetty_ycore_void, "rich_add_span: NULL arg");
+    }
     struct rich_data *d = yetty_ygui_data_get(obj, yetty_ygui_rich_class_get().value);
     if (d->n_lines == 0) {
         struct yetty_ycore_void_result lr = yetty_ygui_rich_add_line(obj);
@@ -185,7 +222,9 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object
     }
     size_t n = strlen(text);
     char *copy = malloc(n + 1);
-    if (!copy) return YETTY_ERR(yetty_ycore_void, "rich_add_span: malloc");
+    if (!copy) {
+        return YETTY_ERR(yetty_ycore_void, "rich_add_span: malloc");
+    }
     memcpy(copy, text, n + 1);
     line->spans[line->n_spans].text = copy;
     line->spans[line->n_spans].font_size = font_size > 0.0f ? font_size : 14.0f;

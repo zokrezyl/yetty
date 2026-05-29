@@ -21,19 +21,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:tooltip")]] tooltip_data {
+struct [[clang::annotate("class@ygui:tooltip")]] [[clang::annotate(
+    "parent@ygui:primitive_widget")]] tooltip_data {
     char *text;
 };
 
 [[clang::annotate("override@ygui:tooltip:constructor")]]
-static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                          struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     /* Chain to parent first so the widget data slice is initialised
      * before we touch our own. */
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_tooltip_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_tooltip_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "tooltip_constructor: super");
 
     struct tooltip_data *td = yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
@@ -42,7 +45,8 @@ static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ct
 }
 
 [[clang::annotate("override@ygui:tooltip:destructor")]]
-static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                         struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -54,7 +58,8 @@ static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:tooltip:widget_paint")]]
-static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *_yc_ctx,
+                                                    struct yetty_yclass_object *_yc_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;

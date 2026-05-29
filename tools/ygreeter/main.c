@@ -23,6 +23,7 @@
 
 #include <fcntl.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,7 +41,6 @@
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yimage/yimage-gen.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/paths.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -50,6 +50,8 @@
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplot/yplot.h>
+
+#include "embedded-assets.h"
 
 #ifdef YETTY_YGREETER_HAS_STANDALONE
 /* Headers below pull <yetty/yetty/yetty.h> (or <webgpu/webgpu.h> directly)
@@ -85,14 +87,19 @@
  *===========================================================================*/
 
 enum tab_kind {
-    TAB_KIND_RICH = 0,
-    TAB_KIND_PLOTS,
-    TAB_KIND_IMAGES,
+    TAB_KIND_RICH = 0,    /* per-row span list, rendered by `rich` widget */
+    TAB_KIND_PLOTS,       /* per-row yplot source, rendered by `yplot` figure */
+    TAB_KIND_IMAGES,      /* per-row logo path, rendered by `yimage` figure */
+    TAB_KIND_VIDEO,       /* per-row mp4 path, rendered by `yvideo` figure */
+    TAB_KIND_ELEMENTS,    /* showcase of ygui widgets in a scrollarea */
+    TAB_KIND_YREADME,     /* extracted README.md, rendered by `ymarkdown` */
+    TAB_KIND_YBROWSER,    /* inline HTML, rendered by `ybrowser` */
 };
 
-#define TAB_COUNT 4
+#define TAB_COUNT 8
 
-static const char *TAB_LABELS[TAB_COUNT] = {"Welcome", "Plots", "Images", "Code"};
+static const char *TAB_LABELS[TAB_COUNT] = {"Welcome",  "Plots",    "Images",  "Code",
+                                            "Video",    "Elements", "YReadme", "YBrowser"};
 
 /* Brand palette — packed RGBA, R in low byte. Per rules/08-branding.md. */
 #define BRAND_TEXT 0xFFE4E5E0u
@@ -154,6 +161,16 @@ struct app {
      * freed at shutdown. */
     char **image_paths;
     int image_path_count;
+
+    /* Video-path scratch: filled with `<data_dir>/yetty-unchained-2.mp4`
+     * at startup by discover_video_files, referenced from the Video
+     * nav entries. Same lifetime / shape as image_paths. */
+    char **video_paths;
+    int video_path_count;
+
+    /* Extracted README.md absolute path inside data_dir, or NULL when
+     * the YREADME tab should fall back to its inline placeholder. */
+    char *readme_path;
 
     /* Client mode back-pointer for the key-handler's stop_cb path.
      * NULL in standalone mode. */
@@ -376,6 +393,60 @@ static void discover_logo_images(struct app *app)
     ydebug("ygreeter: discover_logo_images count=%d", count);
 }
 
+/* Same probe loop as discover_logo_images, but for the demo MP4 that
+ * rides along with the logos in the same incbin "data/" section.
+ * Single entry on disk today (yetty-unchained-2.mp4) — kept as a
+ * `paths` + `count` pair so the Video tab can grow more clips later
+ * without a callsite refactor. */
+static void discover_video_files(struct app *app)
+{
+    if (app->video_paths) return;
+    const char *data_dir = yetty_yplatform_get_data_dir();
+    ydebug("ygreeter: discover_video_files data_dir=%s", data_dir ? data_dir : "(null)");
+    if (!data_dir || !*data_dir) return;
+    char path_buf[1024];
+    char **paths = NULL;
+    int count = 0;
+    int cap = 0;
+    static const char *const candidates[] = {"yetty-unchained-2.mp4"};
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+        snprintf(path_buf, sizeof(path_buf), "%s/%s", data_dir, candidates[i]);
+        int ok = access(path_buf, R_OK) == 0;
+        ydebug("ygreeter: discover_video_files probe=%s status=%s", path_buf,
+               ok ? "found" : "missing");
+        if (!ok) continue;
+        if (count == cap) {
+            int ncap = cap ? cap * 2 : 4;
+            char **np = realloc(paths, (size_t)ncap * sizeof(*np));
+            if (!np) break;
+            paths = np;
+            cap = ncap;
+        }
+        paths[count] = strdup(path_buf);
+        if (!paths[count]) break;
+        count++;
+    }
+    app->video_paths = paths;
+    app->video_path_count = count;
+    ydebug("ygreeter: discover_video_files count=%d", count);
+}
+
+/* Locate the extracted README.md (incbin manifest above ships
+ * <data_dir>/README.md). Failure leaves app->readme_path NULL — the
+ * YReadme tab then falls back to a small inline markdown blurb. */
+static void discover_readme(struct app *app)
+{
+    if (app->readme_path) return;
+    const char *data_dir = yetty_yplatform_get_data_dir();
+    if (!data_dir || !*data_dir) return;
+    char path_buf[1024];
+    snprintf(path_buf, sizeof(path_buf), "%s/README.md", data_dir);
+    int ok = access(path_buf, R_OK) == 0;
+    ydebug("ygreeter: discover_readme probe=%s status=%s", path_buf, ok ? "found" : "missing");
+    if (!ok) return;
+    app->readme_path = strdup(path_buf);
+}
+
 /*-----------------------------------------------------------------------------
  * Loaders — populate the per-tab content widget from a given entry.
  *---------------------------------------------------------------------------*/
@@ -402,6 +473,34 @@ static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_
     return yetty_ygui_yplot_set_source(plot, entry->payload);
 }
 
+/* Read the entire file at `path` into a heap buffer. Caller owns the
+ * returned pointer and must free it. On failure returns NULL and
+ * leaves `*out_len` untouched. Shared by load_image_entry,
+ * load_video_entry, load_readme_entry — same idiom three times wasn't
+ * worth keeping. */
+static uint8_t *slurp_file(const char *path, size_t *out_len)
+{
+    if (!path) return NULL;
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n <= 0) {
+        fclose(f);
+        return NULL;
+    }
+    uint8_t *buf = malloc((size_t)n);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t got = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+    *out_len = got;
+    return buf;
+}
+
 static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                        const char *path)
 {
@@ -410,25 +509,98 @@ static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_ctx *
     if (!path) {
         return yetty_ygui_yimage_set_bytes(image, NULL, 0);
     }
-    FILE *f = fopen(path, "rb");
-    if (!f) return YETTY_ERR(yetty_ycore_void, "load_image_entry: fopen");
-    fseek(f, 0, SEEK_END);
-    long n = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (n <= 0) {
-        fclose(f);
-        return YETTY_ERR(yetty_ycore_void, "load_image_entry: empty");
-    }
-    uint8_t *buf = malloc((size_t)n);
-    if (!buf) {
-        fclose(f);
-        return YETTY_ERR(yetty_ycore_void, "load_image_entry: malloc");
-    }
-    size_t got = fread(buf, 1, (size_t)n, f);
-    fclose(f);
+    size_t got = 0;
+    uint8_t *buf = slurp_file(path, &got);
+    if (!buf) return YETTY_ERR(yetty_ycore_void, "load_image_entry: slurp failed");
     struct yetty_ycore_void_result r = yetty_ygui_yimage_set_bytes(image, buf, got);
     free(buf);
     return r;
+}
+
+static struct yetty_ycore_void_result load_video_entry(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj,
+                                                       const char *path)
+{
+    (void)_yc_ctx;
+    struct yetty_ygui_object *video = (struct yetty_ygui_object *)_yc_obj;
+    if (!path) {
+        return yetty_ygui_yvideo_set_bytes(video, NULL, 0);
+    }
+    size_t got = 0;
+    uint8_t *buf = slurp_file(path, &got);
+    if (!buf) return YETTY_ERR(yetty_ycore_void, "load_video_entry: slurp failed");
+    struct yetty_ycore_void_result r = yetty_ygui_yvideo_set_bytes(video, buf, got);
+    free(buf);
+    return r;
+}
+
+/* Inline placeholder used when no <data_dir>/README.md was extracted
+ * (dev builds without YETTY_ENABLE_LIB_INCBIN, or a stale data dir
+ * from before the assets manifest was wired up). Small enough to
+ * answer "is this tab broken?" at a glance. */
+static const char YREADME_FALLBACK_MD[] =
+    "# YReadme\n"
+    "\n"
+    "This tab embeds **README.md** from the repo via incbin and renders\n"
+    "it through the `ymarkdown` widget.\n"
+    "\n"
+    "No file was extracted into `<data_dir>/README.md` — the build was\n"
+    "configured without `YETTY_ENABLE_LIB_INCBIN`, or the marker was\n"
+    "left over from a previous version that didn't ship this asset.\n";
+
+static struct yetty_ycore_void_result load_readme_entry(struct yetty_yclass_ctx *_yc_ctx,
+                                                        struct yetty_yclass_object *_yc_obj,
+                                                        const char *path)
+{
+    (void)_yc_ctx;
+    struct yetty_ygui_object *md = (struct yetty_ygui_object *)_yc_obj;
+    if (path) {
+        size_t got = 0;
+        uint8_t *buf = slurp_file(path, &got);
+        if (buf) {
+            struct yetty_ycore_void_result r =
+                yetty_ygui_ymarkdown_set_source(md, (const char *)buf, got);
+            free(buf);
+            return r;
+        }
+        /* Fall through to the fallback when the file slurp failed —
+         * prefer rendering *something* over leaving the tab blank. */
+    }
+    return yetty_ygui_ymarkdown_set_source(md, YREADME_FALLBACK_MD,
+                                           sizeof(YREADME_FALLBACK_MD) - 1);
+}
+
+/* Tiny self-contained HTML page exercising headings, lists, links,
+ * inline styles, and a code block. Lives inline (no incbin) — the
+ * point of the tab is to show ybrowser working, not to ship a real
+ * website. */
+static const char YBROWSER_SAMPLE_HTML[] =
+    "<html>"
+    "<body style=\"font-family: sans-serif; margin: 24px; color: #E4E5E0;\">"
+    "<h1 style=\"color: #92A86B;\">yetty &mdash; YBrowser tab</h1>"
+    "<p>Rendered by the <code>ybrowser</code> widget on top of "
+    "<a href=\"https://lexbor.com\">lexbor</a>.</p>"
+    "<h2>Features</h2>"
+    "<ul>"
+    "<li>HTML 5 parser via lexbor</li>"
+    "<li>CSS via libcss</li>"
+    "<li>Pixels via yetty's MSDF font + SDF primitives</li>"
+    "</ul>"
+    "<h2>Code sample</h2>"
+    "<pre style=\"background:#1F1A14;color:#E4E5E0;padding:8px;border-radius:4px;\">"
+    "yetty_ygui_add(\n"
+    "    yetty_ygui_ybrowser_class_get().value,\n"
+    "    parent);"
+    "</pre>"
+    "</body></html>";
+
+static struct yetty_ycore_void_result load_browser_entry(struct yetty_yclass_ctx *_yc_ctx,
+                                                         struct yetty_yclass_object *_yc_obj)
+{
+    (void)_yc_ctx;
+    struct yetty_ygui_object *browser = (struct yetty_ygui_object *)_yc_obj;
+    return yetty_ygui_ybrowser_set_html(browser, YBROWSER_SAMPLE_HTML,
+                                        sizeof(YBROWSER_SAMPLE_HTML) - 1);
 }
 
 static struct yetty_ycore_void_result write_code_snippet(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
@@ -522,6 +694,11 @@ static int tab_entry_count(const struct app *app, int tab_index)
     case 1: return (int)(sizeof(plot_nav_entries) / sizeof(plot_nav_entries[0]));
     case 2: return app->image_path_count > 0 ? app->image_path_count : 1;
     case 3: return (int)(sizeof(code_nav_entries) / sizeof(code_nav_entries[0]));
+    case 4: return app->video_path_count > 0 ? app->video_path_count : 1;
+    case 5: /* Elements — chrome-only, the single nav row is a label hook. */
+    case 6: /* YReadme  — single piece of content (README.md). */
+    case 7: /* YBrowser — single inline HTML sample. */
+        return 1;
     default: return 0;
     }
 }
@@ -538,6 +715,15 @@ static const char *tab_entry_label(const struct app *app, int tab_index, int ent
         return buf;
     }
     case 3: return code_nav_entries[entry_index].label;
+    case 4: {
+        if (app->video_path_count <= 0) return "(no videos found)";
+        static char buf[64];
+        snprintf(buf, sizeof(buf), "clip-%d", entry_index + 1);
+        return buf;
+    }
+    case 5: return "Showcase";
+    case 6: return app->readme_path ? "README.md" : "(no README)";
+    case 7: return "Sample";
     default: return "";
     }
 }
@@ -547,11 +733,349 @@ static enum tab_kind tab_kind_for(int tab_index)
     switch (tab_index) {
     case 1: return TAB_KIND_PLOTS;
     case 2: return TAB_KIND_IMAGES;
+    case 4: return TAB_KIND_VIDEO;
+    case 5: return TAB_KIND_ELEMENTS;
+    case 6: return TAB_KIND_YREADME;
+    case 7: return TAB_KIND_YBROWSER;
     case 0:
     case 3:
     default:
         return TAB_KIND_RICH;
     }
+}
+
+/* Fill the Elements scrollarea with one collapsing-header per widget
+ * family. The section list and the per-section widget mix mirror the
+ * main-branch ygreeter's Elements tab exactly: Inputs, Selectors,
+ * Display, Plot, Image, Lists & Trees, Layout & Containers, Overlays.
+ * Each section is a collapsing_header that hosts a vbox of widgets;
+ * the parent scrollarea wheel-scrolls the whole surface when sections
+ * overflow.
+ *
+ * Per-widget calls swallow the Result error so a single misconfigured
+ * widget can't take the entire tab build down. */
+static struct yetty_ycore_void_result build_elements_content(struct app *app,
+                                                              struct yetty_ygui_object *root)
+{
+    (void)app;
+
+#define EL_OK(x) yetty_ycore_error_destroy_safe(x)
+#define EL_ADD(cls, parent_obj, out_var)                                                           \
+    struct yetty_ygui_object_ptr_result out_var##_r =                                              \
+        yetty_ygui_add((cls), (parent_obj));                                                       \
+    struct yetty_ygui_object *out_var = YETTY_IS_OK(out_var##_r) ? out_var##_r.value : NULL;       \
+    if (YETTY_IS_ERR(out_var##_r)) yetty_ycore_error_destroy(out_var##_r.error)
+#define EL_HEADER(title, parent_obj, out)                                                          \
+    do {                                                                                           \
+        struct yetty_ygui_object_ptr_result _hr_ =                                                 \
+            yetty_ygui_add(yetty_ygui_collapsing_header_class_get().value, (parent_obj));          \
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, _hr_, "elements: header " title);                    \
+        EL_OK(yetty_ygui_collapsing_header_set_title(_hr_.value, title));                          \
+        EL_OK(yetty_ygui_collapsing_header_set_open(_hr_.value, 0));                               \
+        struct yetty_ygui_layout _l_ = *yetty_ygui_widget_layout_get(_hr_.value);                  \
+        _l_.gap = 6.0f;                                                                            \
+        _l_.padding_top = _l_.padding_bottom = 4.0f;                                               \
+        EL_OK(yetty_ygui_widget_layout_set(_hr_.value, &_l_));                                     \
+        (out) = _hr_.value;                                                                        \
+    } while (0)
+
+    struct yetty_ygui_object *sec = NULL;
+
+    /* ---- Inputs ---- */
+    EL_HEADER("Inputs", root, sec);
+    {
+        EL_ADD(yetty_ygui_button_class_get().value, sec, btn);
+        if (btn) EL_OK(yetty_ygui_button_set_label(btn, "Button"));
+
+        EL_ADD(yetty_ygui_textinput_class_get().value, sec, ti);
+        if (ti) EL_OK(yetty_ygui_textinput_set_placeholder(ti, "type here…"));
+
+        EL_ADD(yetty_ygui_slider_class_get().value, sec, sl);
+        if (sl) {
+            EL_OK(yetty_ygui_slider_set_range(sl, 0.0f, 1.0f));
+            EL_OK(yetty_ygui_slider_set_value(sl, 0.4f));
+        }
+
+        EL_ADD(yetty_ygui_spinner_class_get().value, sec, spin_i);
+        if (spin_i) {
+            EL_OK(yetty_ygui_spinner_set_range(spin_i, 1.0f, 100.0f, 1.0f));
+            EL_OK(yetty_ygui_spinner_set_value(spin_i, 42.0f));
+        }
+
+        EL_ADD(yetty_ygui_spinner_class_get().value, sec, spin_f);
+        if (spin_f) {
+            EL_OK(yetty_ygui_spinner_set_range(spin_f, 0.0f, 10.0f, 0.25f));
+            EL_OK(yetty_ygui_spinner_set_value(spin_f, 2.5f));
+        }
+
+        EL_ADD(yetty_ygui_checkbox_class_get().value, sec, cb);
+        if (cb) {
+            EL_OK(yetty_ygui_checkbox_set_label(cb, "Enabled"));
+            EL_OK(yetty_ygui_checkbox_set_checked(cb, 1));
+        }
+
+        EL_ADD(yetty_ygui_toggle_class_get().value, sec, tg);
+        if (tg) {
+            EL_OK(yetty_ygui_toggle_set_label(tg, "Notifications"));
+            EL_OK(yetty_ygui_toggle_set_on(tg, 1));
+        }
+
+        EL_ADD(yetty_ygui_progress_class_get().value, sec, pg);
+        if (pg) EL_OK(yetty_ygui_progress_set_value(pg, 0.65f));
+
+        EL_ADD(yetty_ygui_textarea_class_get().value, sec, ta);
+        if (ta)
+            EL_OK(yetty_ygui_textarea_set_text(
+                ta, "Multi-line text area.\nClick to focus, then type.\n"));
+    }
+
+    /* ---- Selectors ---- */
+    EL_HEADER("Selectors", root, sec);
+    {
+        EL_ADD(yetty_ygui_radio_class_get().value, sec, r0);
+        if (r0) {
+            EL_OK(yetty_ygui_radio_set_label(r0, "Apple"));
+            EL_OK(yetty_ygui_radio_set_selected(r0, 1));
+        }
+        EL_ADD(yetty_ygui_radio_class_get().value, sec, r1);
+        if (r1) EL_OK(yetty_ygui_radio_set_label(r1, "Banana"));
+        EL_ADD(yetty_ygui_radio_class_get().value, sec, r2);
+        if (r2) EL_OK(yetty_ygui_radio_set_label(r2, "Cherry"));
+
+        EL_ADD(yetty_ygui_dropdown_class_get().value, sec, dd);
+        if (dd) {
+            EL_OK(yetty_ygui_dropdown_add_option(dd, "Option A"));
+            EL_OK(yetty_ygui_dropdown_add_option(dd, "Option B"));
+            EL_OK(yetty_ygui_dropdown_add_option(dd, "Option C"));
+            EL_OK(yetty_ygui_dropdown_set_selected(dd, 0));
+        }
+
+        EL_ADD(yetty_ygui_combobox_class_get().value, sec, cmb);
+        if (cmb) {
+            EL_OK(yetty_ygui_combobox_set_text(cmb, "red"));
+            EL_OK(yetty_ygui_combobox_add_suggestion(cmb, "red"));
+            EL_OK(yetty_ygui_combobox_add_suggestion(cmb, "green"));
+            EL_OK(yetty_ygui_combobox_add_suggestion(cmb, "blue"));
+            EL_OK(yetty_ygui_combobox_add_suggestion(cmb, "magenta"));
+        }
+
+        EL_ADD(yetty_ygui_choicebox_class_get().value, sec, ch);
+        if (ch) {
+            EL_OK(yetty_ygui_choicebox_add(ch, "Small"));
+            EL_OK(yetty_ygui_choicebox_add(ch, "Medium"));
+            EL_OK(yetty_ygui_choicebox_add(ch, "Large"));
+            EL_OK(yetty_ygui_choicebox_add(ch, "Huge"));
+        }
+
+        EL_ADD(yetty_ygui_colorpicker_class_get().value, sec, cp);
+        if (cp) EL_OK(yetty_ygui_colorpicker_set_color(cp, 0xFF6BA892));
+    }
+
+    /* ---- Display ---- */
+    EL_HEADER("Display", root, sec);
+    {
+        EL_ADD(yetty_ygui_label_class_get().value, sec, lb);
+        if (lb) EL_OK(yetty_ygui_label_set_text(lb, "Plain label"));
+
+        EL_ADD(yetty_ygui_separator_class_get().value, sec, sp);
+        (void)sp;
+
+        EL_ADD(yetty_ygui_progress_class_get().value, sec, pg);
+        if (pg) EL_OK(yetty_ygui_progress_set_value(pg, 0.25f));
+
+        EL_ADD(yetty_ygui_table_class_get().value, sec, tbl);
+        if (tbl) {
+            static const char *cols[] = {"PID", "USER", "%CPU", "COMMAND"};
+            EL_OK(yetty_ygui_table_set_columns(tbl, 4, cols));
+            static const char *row1[] = {"1", "root", "0.0", "/sbin/init"};
+            static const char *row2[] = {"42", "misi", "1.3", "/usr/bin/yetty"};
+            static const char *row3[] = {"1337", "misi", "0.2", "/usr/bin/ygreeter"};
+            EL_OK(yetty_ygui_table_add_row(tbl, row1, 4));
+            EL_OK(yetty_ygui_table_add_row(tbl, row2, 4));
+            EL_OK(yetty_ygui_table_add_row(tbl, row3, 4));
+        }
+
+        EL_ADD(yetty_ygui_breadcrumbs_class_get().value, sec, bc);
+        if (bc) {
+            EL_OK(yetty_ygui_breadcrumbs_add(bc, "Home"));
+            EL_OK(yetty_ygui_breadcrumbs_add(bc, "Projects"));
+            EL_OK(yetty_ygui_breadcrumbs_add(bc, "yetty"));
+            EL_OK(yetty_ygui_breadcrumbs_add(bc, "ygui"));
+        }
+
+        EL_ADD(yetty_ygui_hbox_class_get().value, sec, chip_row);
+        if (chip_row) {
+            struct yetty_ygui_layout chl = *yetty_ygui_widget_layout_get(chip_row);
+            chl.gap = 6.0f;
+            EL_OK(yetty_ygui_widget_layout_set(chip_row, &chl));
+            EL_ADD(yetty_ygui_chip_class_get().value, chip_row, c1);
+            if (c1) {
+                EL_OK(yetty_ygui_chip_set_label(c1, "linux"));
+                EL_OK(yetty_ygui_chip_set_closable(c1, 1));
+            }
+            EL_ADD(yetty_ygui_chip_class_get().value, chip_row, c2);
+            if (c2) {
+                EL_OK(yetty_ygui_chip_set_label(c2, "gpu"));
+                EL_OK(yetty_ygui_chip_set_closable(c2, 1));
+            }
+            EL_ADD(yetty_ygui_chip_class_get().value, chip_row, c3);
+            if (c3) {
+                EL_OK(yetty_ygui_chip_set_label(c3, "rust-free"));
+                EL_OK(yetty_ygui_chip_set_closable(c3, 0));
+            }
+        }
+
+        EL_ADD(yetty_ygui_stepper_class_get().value, sec, stp);
+        if (stp) {
+            EL_OK(yetty_ygui_stepper_add_step(stp, "Setup"));
+            EL_OK(yetty_ygui_stepper_add_step(stp, "Install"));
+            EL_OK(yetty_ygui_stepper_add_step(stp, "Done"));
+            EL_OK(yetty_ygui_stepper_set_current(stp, 1));
+        }
+    }
+
+    /* ---- Plot ---- */
+    EL_HEADER("Plot", root, sec);
+    {
+        EL_ADD(yetty_ygui_yplot_class_get().value, sec, pl);
+        if (pl) {
+            struct yetty_ygui_yplot_config cfg = {
+                .x_min = -6.2832f, .x_max = 6.2832f,
+                .y_min = -1.5f,    .y_max = 1.5f,
+                .flags = 0,
+            };
+            EL_OK(yetty_ygui_yplot_set_config(pl, &cfg));
+            EL_OK(yetty_ygui_yplot_set_source(
+                pl, "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4"));
+            struct yetty_ygui_layout pll = *yetty_ygui_widget_layout_get(pl);
+            pll.width = 460.0f;
+            pll.height = 200.0f;
+            EL_OK(yetty_ygui_widget_layout_set(pl, &pll));
+        }
+    }
+
+    /* ---- Image ---- */
+    EL_HEADER("Image", root, sec);
+    {
+        const char *path = (app && app->image_path_count > 0 && app->image_paths)
+                               ? app->image_paths[0]
+                               : NULL;
+        if (path) {
+            EL_ADD(yetty_ygui_yimage_class_get().value, sec, img);
+            if (img) {
+                size_t got = 0;
+                uint8_t *buf = slurp_file(path, &got);
+                if (buf) {
+                    EL_OK(yetty_ygui_yimage_set_bytes(img, buf, got));
+                    free(buf);
+                }
+                struct yetty_ygui_layout il = *yetty_ygui_widget_layout_get(img);
+                il.width = 320.0f;
+                il.height = 320.0f;
+                EL_OK(yetty_ygui_widget_layout_set(img, &il));
+            }
+        } else {
+            EL_ADD(yetty_ygui_label_class_get().value, sec, ph);
+            if (ph) EL_OK(yetty_ygui_label_set_text(ph, "(no logo image available)"));
+        }
+    }
+
+    /* ---- Lists & Trees ---- */
+    EL_HEADER("Lists & Trees", root, sec);
+    {
+        EL_ADD(yetty_ygui_list_class_get().value, sec, lst);
+        if (lst) {
+            EL_OK(yetty_ygui_list_add(lst, "Apple"));
+            EL_OK(yetty_ygui_list_add(lst, "Banana"));
+            EL_OK(yetty_ygui_list_add(lst, "Cherry"));
+            EL_OK(yetty_ygui_list_add(lst, "Date"));
+            EL_OK(yetty_ygui_list_set_selected(lst, 0));
+        }
+
+        EL_ADD(yetty_ygui_tree_node_class_get().value, sec, tn);
+        if (tn) {
+            EL_OK(yetty_ygui_tree_node_set_label(tn, "Tree root"));
+            EL_OK(yetty_ygui_tree_node_set_open(tn, 1));
+            EL_ADD(yetty_ygui_label_class_get().value, tn, k1);
+            if (k1) EL_OK(yetty_ygui_label_set_text(k1, "  child 1"));
+            EL_ADD(yetty_ygui_label_class_get().value, tn, k2);
+            if (k2) EL_OK(yetty_ygui_label_set_text(k2, "  child 2"));
+        }
+
+        EL_ADD(yetty_ygui_selectable_class_get().value, sec, sl);
+        if (sl) {
+            EL_OK(yetty_ygui_selectable_set_text(sl, "Selectable row"));
+            EL_OK(yetty_ygui_selectable_set_selected(sl, 0));
+        }
+    }
+
+    /* ---- Layout & Containers ---- */
+    EL_HEADER("Layout & Containers", root, sec);
+    {
+        EL_ADD(yetty_ygui_hbox_class_get().value, sec, split_row);
+        if (split_row) {
+            struct yetty_ygui_layout srl = *yetty_ygui_widget_layout_get(split_row);
+            srl.height = 80.0f;
+            EL_OK(yetty_ygui_widget_layout_set(split_row, &srl));
+
+            EL_ADD(yetty_ygui_panel_class_get().value, split_row, lp);
+            if (lp) {
+                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(lp);
+                l.width = 220.0f;
+                l.flex_grow = 0.0f;
+                EL_OK(yetty_ygui_widget_layout_set(lp, &l));
+                EL_OK(yetty_ygui_panel_set_bg(lp, (struct yetty_ycore_rgba){30, 38, 44, 255}));
+            }
+            EL_ADD(yetty_ygui_splitter_class_get().value, split_row, div);
+            if (div) {
+                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(div);
+                l.width = 6.0f;
+                EL_OK(yetty_ygui_widget_layout_set(div, &l));
+            }
+            EL_ADD(yetty_ygui_panel_class_get().value, split_row, rp);
+            if (rp) {
+                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(rp);
+                l.flex_grow = 1.0f;
+                EL_OK(yetty_ygui_widget_layout_set(rp, &l));
+                EL_OK(yetty_ygui_panel_set_bg(rp, (struct yetty_ycore_rgba){20, 26, 31, 255}));
+            }
+        }
+
+        EL_ADD(yetty_ygui_statusbar_class_get().value, sec, sb);
+        (void)sb;
+    }
+
+    /* ---- Overlays ---- */
+    EL_HEADER("Overlays", root, sec);
+    {
+        EL_ADD(yetty_ygui_tooltip_class_get().value, sec, tp);
+        if (tp) EL_OK(yetty_ygui_tooltip_set_text(tp, "Tooltip example"));
+
+        EL_ADD(yetty_ygui_selectable_class_get().value, sec, srow);
+        if (srow) EL_OK(yetty_ygui_selectable_set_text(srow, "Selectable row"));
+
+        EL_ADD(yetty_ygui_button_class_get().value, sec, open_dlg);
+        if (open_dlg) EL_OK(yetty_ygui_button_set_label(open_dlg, "Open dialog…"));
+
+        EL_ADD(yetty_ygui_button_class_get().value, sec, open_pop);
+        if (open_pop) EL_OK(yetty_ygui_button_set_label(open_pop, "Open popup…"));
+
+        EL_ADD(yetty_ygui_button_class_get().value, sec, open_menu);
+        if (open_menu) EL_OK(yetty_ygui_button_set_label(open_menu, "Open menu…"));
+
+        EL_ADD(yetty_ygui_popup_menu_class_get().value, sec, pmenu);
+        if (pmenu) {
+            EL_OK(yetty_ygui_popup_menu_add_item(pmenu, "First action", NULL, NULL));
+            EL_OK(yetty_ygui_popup_menu_add_item(pmenu, "Second action", NULL, NULL));
+            EL_OK(yetty_ygui_popup_menu_add_separator(pmenu));
+            EL_OK(yetty_ygui_popup_menu_add_item(pmenu, "Third action", NULL, NULL));
+        }
+    }
+
+#undef EL_HEADER
+#undef EL_ADD
+#undef EL_OK
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int tab_index)
@@ -569,43 +1093,62 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     t->n_entries = n;
     if (t->active_entry < 0 || t->active_entry >= n) t->active_entry = 0;
 
-    /* Outer hbox: nav + content side-by-side. */
+    /* Tabs whose body is a single self-contained content widget skip
+     * the nav vbox entirely — listing a single "Showcase" / "clip-1"
+     * button on its own column is just visual noise. The content
+     * widget then fills the whole body. */
+    bool has_nav;
+    switch (t->kind) {
+    case TAB_KIND_VIDEO:
+    case TAB_KIND_ELEMENTS:
+    case TAB_KIND_YREADME:
+    case TAB_KIND_YBROWSER:
+        has_nav = false;
+        break;
+    default:
+        has_nav = true;
+        break;
+    }
+
+    /* Outer hbox: nav + content side-by-side (or just content). */
     struct yetty_ygui_object_ptr_result hr =
         yetty_ygui_add(yetty_ygui_hbox_class_get().value, app->body_panel);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "rebuild: hbox");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(hr.value);
         l.flex_grow = 1.0f;
-        l.gap = 12.0f;
+        l.gap = has_nav ? 12.0f : 0.0f;
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(hr.value, &l));
     }
 
-    /* Nav vbox — fixed 220-px wide column of clickable rows. */
-    struct yetty_ygui_object_ptr_result nr =
-        yetty_ygui_add(yetty_ygui_vbox_class_get().value, hr.value);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, nr, "rebuild: nav vbox");
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(nr.value);
-        l.width = 220.0f;
-        l.gap = 4.0f;
-        l.padding_top = l.padding_bottom = 4.0f;
-        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(nr.value, &l));
-    }
-    for (int i = 0; i < n; ++i) {
-        struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_button_class_get().value, nr.value);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "rebuild: nav button");
-        yetty_ycore_error_destroy_safe(
-            yetty_ygui_button_set_label(br.value, tab_entry_label(app, tab_index, i)));
+    if (has_nav) {
+        /* Nav vbox — fixed 220-px wide column of clickable rows. */
+        struct yetty_ygui_object_ptr_result nr =
+            yetty_ygui_add(yetty_ygui_vbox_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, nr, "rebuild: nav vbox");
         {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(br.value);
-            l.height = 28.0f;
-            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(br.value, &l));
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(nr.value);
+            l.width = 220.0f;
+            l.gap = 4.0f;
+            l.padding_top = l.padding_bottom = 4.0f;
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(nr.value, &l));
         }
-        struct row_link *rl = new_row_link(app, tab_index, i);
-        if (rl) {
+        for (int i = 0; i < n; ++i) {
+            struct yetty_ygui_object_ptr_result br =
+                yetty_ygui_add(yetty_ygui_button_class_get().value, nr.value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "rebuild: nav button");
             yetty_ycore_error_destroy_safe(
-                yetty_ygui_clickable_on_click_set(br.value, on_row_clicked, rl));
+                yetty_ygui_button_set_label(br.value, tab_entry_label(app, tab_index, i)));
+            {
+                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(br.value);
+                l.height = 28.0f;
+                yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(br.value, &l));
+            }
+            struct row_link *rl = new_row_link(app, tab_index, i);
+            if (rl) {
+                yetty_ycore_error_destroy_safe(
+                    yetty_ygui_clickable_on_click_set(br.value, on_row_clicked, rl));
+            }
         }
     }
 
@@ -624,6 +1167,34 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
             yetty_ygui_add(yetty_ygui_yimage_class_get().value, hr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "rebuild: yimage");
         content = ir.value;
+        break;
+    }
+    case TAB_KIND_VIDEO: {
+        struct yetty_ygui_object_ptr_result vr =
+            yetty_ygui_add(yetty_ygui_yvideo_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "rebuild: yvideo");
+        content = vr.value;
+        break;
+    }
+    case TAB_KIND_ELEMENTS: {
+        struct yetty_ygui_object_ptr_result sr =
+            yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rebuild: scrollarea");
+        content = sr.value;
+        break;
+    }
+    case TAB_KIND_YREADME: {
+        struct yetty_ygui_object_ptr_result mr =
+            yetty_ygui_add(yetty_ygui_ymarkdown_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "rebuild: ymarkdown");
+        content = mr.value;
+        break;
+    }
+    case TAB_KIND_YBROWSER: {
+        struct yetty_ygui_object_ptr_result br =
+            yetty_ygui_add(yetty_ygui_ybrowser_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "rebuild: ybrowser");
+        content = br.value;
         break;
     }
     case TAB_KIND_RICH:
@@ -659,6 +1230,25 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
             load_image_entry(NULL, (struct yetty_yclass_object *)content, path));
         break;
     }
+    case TAB_KIND_VIDEO: {
+        const char *path = app->video_path_count > 0 && t->active_entry < app->video_path_count
+                               ? app->video_paths[t->active_entry]
+                               : NULL;
+        yetty_ycore_error_destroy_safe(
+            load_video_entry(NULL, (struct yetty_yclass_object *)content, path));
+        break;
+    }
+    case TAB_KIND_ELEMENTS:
+        yetty_ycore_error_destroy_safe(build_elements_content(app, content));
+        break;
+    case TAB_KIND_YREADME:
+        yetty_ycore_error_destroy_safe(
+            load_readme_entry(NULL, (struct yetty_yclass_object *)content, app->readme_path));
+        break;
+    case TAB_KIND_YBROWSER:
+        yetty_ycore_error_destroy_safe(
+            load_browser_entry(NULL, (struct yetty_yclass_object *)content));
+        break;
     case TAB_KIND_RICH:
     default: {
         if (tab_index == 0) {
@@ -706,7 +1296,14 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
 
 static struct yetty_ycore_void_result build_ui(struct app *app)
 {
+    /* yinit already ran ygreeter_extract_assets_cb early in startup, so
+     * <data_dir>/logo-*.jpeg, yetty-unchained-2.mp4 and README.md are
+     * on disk by the time we get here. The three discover_* probes
+     * record absolute paths into the app struct for later use by the
+     * Images / Video / YReadme tabs. */
     discover_logo_images(app);
+    discover_video_files(app);
+    discover_readme(app);
 
     struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root add");
@@ -1590,7 +2187,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             yetty_ygrid_register_factory(app->figure_registry, &app->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "standalone: ygrid_register_factory");
         static const uint32_t producer_kinds[] = {
-            YETTY_YFIGURE_KIND_YPLOT, YETTY_YFIGURE_KIND_YIMAGE,
+            YETTY_YFIGURE_KIND_YPLOT, YETTY_YFIGURE_KIND_YIMAGE, YETTY_YFIGURE_KIND_YVIDEO,
         };
         for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
@@ -1719,13 +2316,43 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         yetty_yframework_destroy(app->yframework);
         app->yframework = NULL;
     }
+    /* Discovered-paths arrays — allocated by discover_logo_images /
+     * discover_video_files / discover_readme at build_ui time. */
+    if (app->image_paths) {
+        for (int i = 0; i < app->image_path_count; ++i) free(app->image_paths[i]);
+        free(app->image_paths);
+        app->image_paths = NULL;
+        app->image_path_count = 0;
+    }
+    if (app->video_paths) {
+        for (int i = 0; i < app->video_path_count; ++i) free(app->video_paths[i]);
+        free(app->video_paths);
+        app->video_paths = NULL;
+        app->video_path_count = 0;
+    }
+    free(app->readme_path);
+    app->readme_path = NULL;
+    return YETTY_OK_VOID();
+}
+
+/* yinit-shaped wrapper for ygreeter's own incbin extractor (logos +
+ * demo video). We don't reuse yetty's larger
+ * `yetty_platform_extract_assets` here because that one drives off the
+ * `yetty_data_manifest.h` generated for the main yetty binary, which
+ * doesn't exist when only ygreeter is being built. */
+static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
+{
+    const char *data_dir = yetty_yplatform_get_data_dir();
+    if (data_dir && ygreeter_embedded_assets_extract(data_dir) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "ygreeter: embedded asset extraction failed");
+    }
     return YETTY_OK_VOID();
 }
 
 static int run_standalone_mode(int argc, char **argv)
 {
     struct app app = {0};
-    struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
+    struct yetty_yinit_app_config cfg = {.extract_assets_fn = ygreeter_extract_assets_cb};
     return yetty_yinit_run(argc, argv, &cfg, standalone_worker, &app);
 }
 

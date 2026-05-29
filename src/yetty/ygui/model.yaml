@@ -806,7 +806,9 @@ classes:
     accessor: yetty_ygui_tooltip_class_get
     type: regular
     source_file: src/yetty/ygui/widgets/tooltip.c
-    parent: null
+    parent:
+      domain: ygui
+      name: primitive_widget
     mixins: []
     data: struct tooltip_data
     ops:

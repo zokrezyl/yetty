@@ -11,8 +11,8 @@
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_NUM 0xFF14100Bu
 
-struct [[clang::annotate("class@ygui:stepper")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]] stepper_data {
+struct [[clang::annotate("class@ygui:stepper")]] [[clang::annotate("parent@ygui:primitive_widget")]]
+stepper_data {
     char **labels;
     int n;
     int cap;
@@ -20,12 +20,14 @@ struct [[clang::annotate("class@ygui:stepper")]]
 };
 
 [[clang::annotate("override@ygui:stepper:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx,
+                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_stepper_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_stepper_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "stepper: super");
     struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     d->labels = NULL;
@@ -36,33 +38,45 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, str
 }
 
 [[clang::annotate("override@ygui:stepper:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx,
+                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
-    for (int i = 0; i < d->n; i++) free(d->labels[i]);
+    for (int i = 0; i < d->n; i++) {
+        free(d->labels[i]);
+    }
     free(d->labels);
     return yetty_ygui_super_void(obj, yetty_ygui_stepper_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:stepper:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx,
+                                            struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    if (!ctx) return YETTY_ERR(yetty_ycore_void, "stepper paint: NULL ctx");
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "stepper paint: NULL ctx");
+    }
     struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
-    if (d->n <= 0) return YETTY_OK_VOID();
+    if (d->n <= 0) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
-    if (w <= 0 || h <= 0) return YETTY_OK_VOID();
+    if (w <= 0 || h <= 0) {
+        return YETTY_OK_VOID();
+    }
     float cr = 14.0f;
     float cy = r.min.y + cr + 2;
     float gap = (w - 2 * cr * d->n) / (float)(d->n > 1 ? d->n - 1 : 1);
-    if (gap < 0) gap = 0;
+    if (gap < 0) {
+        gap = 0;
+    }
     float cx = r.min.x + cr;
     /* Lines first */
     for (int i = 0; i < d->n - 1; i++) {
@@ -80,13 +94,13 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, st
         char buf[8];
         snprintf(buf, sizeof(buf), "%d", i + 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, buf, cx - 4, cy + 5, 13.0f, COLOR_NUM),
-                            "stepper: num");
-        if (d->labels[i])
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                yguix_text(ctx, d->labels[i], cx - 24, cy + cr + 14, 12.0f,
-                                           COLOR_TEXT),
-                                "stepper: label");
+                            yguix_text(ctx, buf, cx - 4, cy + 5, 13.0f, COLOR_NUM), "stepper: num");
+        if (d->labels[i]) {
+            YETTY_RETURN_IF_ERR(
+                yetty_ycore_void,
+                yguix_text(ctx, d->labels[i], cx - 24, cy + cr + 14, 12.0f, COLOR_TEXT),
+                "stepper: label");
+        }
         cx += 2 * cr + gap;
     }
     return YETTY_OK_VOID();
@@ -94,11 +108,17 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, st
 
 static int grow(struct stepper_data *d, int n)
 {
-    if (n <= d->cap) return 1;
+    if (n <= d->cap) {
+        return 1;
+    }
     int c = d->cap ? d->cap * 2 : 4;
-    while (c < n) c *= 2;
+    while (c < n) {
+        c *= 2;
+    }
     char **nl = realloc(d->labels, (size_t)c * sizeof(*nl));
-    if (!nl) return 0;
+    if (!nl) {
+        return 0;
+    }
     d->labels = nl;
     d->cap = c;
     return 1;
@@ -107,13 +127,19 @@ static int grow(struct stepper_data *d, int n)
 struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_object *obj,
                                                            const char *label)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "stepper_add_step: NULL");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "stepper_add_step: NULL");
+    }
     struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
-    if (!grow(d, d->n + 1)) return YETTY_ERR(yetty_ycore_void, "stepper_add_step: realloc");
+    if (!grow(d, d->n + 1)) {
+        return YETTY_ERR(yetty_ycore_void, "stepper_add_step: realloc");
+    }
     if (label) {
         size_t n = strlen(label);
         d->labels[d->n] = malloc(n + 1);
-        if (!d->labels[d->n]) return YETTY_ERR(yetty_ycore_void, "stepper_add_step: malloc");
+        if (!d->labels[d->n]) {
+            return YETTY_ERR(yetty_ycore_void, "stepper_add_step: malloc");
+        }
         memcpy(d->labels[d->n], label, n + 1);
     } else {
         d->labels[d->n] = NULL;
@@ -122,10 +148,11 @@ struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_obj
     return yetty_ygui_object_set_dirty(obj);
 }
 
-struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_ygui_object *obj,
-                                                              int i)
+struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_ygui_object *obj, int i)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "stepper_set_current: NULL");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "stepper_set_current: NULL");
+    }
     struct stepper_data *d = yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     d->current = i;
     return yetty_ygui_object_set_dirty(obj);

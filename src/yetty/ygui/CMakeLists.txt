@@ -104,6 +104,7 @@ target_link_libraries(ygui PUBLIC
     yetty_ymarkdown
     yetty_ybrowser
     yetty_ypdf
+    yetty_yvideo_core
 )
 
 # C2x so `[[clang::annotate(...)]]` attribute syntax parses (yclass

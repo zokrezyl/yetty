@@ -10,7 +10,8 @@
 #include <yetty/ygui/widgets/yzoo.h>
 
 [[clang::annotate("override@ygui:yzoo:widget_emit_container")]]
-static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *_yc_ctx,
+                                                     struct yetty_yclass_object *_yc_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -20,9 +21,7 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *_y
                                         r.min.x, r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
-
-struct [[clang::annotate("class@ygui:yzoo")]]
-       [[clang::annotate("parent@ygui:widget")]] yzoo_data {
+struct [[clang::annotate("class@ygui:yzoo")]] [[clang::annotate("parent@ygui:widget")]] yzoo_data {
     char _empty;
 };
 

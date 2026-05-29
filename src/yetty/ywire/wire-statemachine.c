@@ -1237,11 +1237,9 @@ static void sm_coro_entry(void *arg)
                     if (!sm->current_handler && sm->envelope_default_fn) {
                         sm->envelope_default_handler_slot.kind = sm->current_kind;
                         sm->envelope_default_handler_slot.code = sm->current_code;
-                        sm->envelope_default_handler_slot.has_args =
-                            sm->envelope_default_has_args;
+                        sm->envelope_default_handler_slot.has_args = sm->envelope_default_has_args;
                         sm->envelope_default_handler_slot.fn = sm->envelope_default_fn;
-                        sm->envelope_default_handler_slot.userdata =
-                            sm->envelope_default_userdata;
+                        sm->envelope_default_handler_slot.userdata = sm->envelope_default_userdata;
                         sm->current_handler = &sm->envelope_default_handler_slot;
                     }
                     /* Test hook: OSC 99099 synthesises a multi-frame
@@ -1249,14 +1247,13 @@ static void sm_coro_entry(void *arg)
                      * path can be exercised end-to-end from a child
                      * process. Same intent as the old SCAN_OSC_ARGS
                      * hook; fires earlier now. */
-                    if (sm->current_kind == YETTY_YWIRE_ENVELOPE_OSC &&
-                        sm->current_code == 99099) {
+                    if (sm->current_kind == YETTY_YWIRE_ENVELOPE_OSC && sm->current_code == 99099) {
                         struct yetty_ycore_void_result inner =
                             YETTY_ERR(yetty_ycore_void, "test trigger: inner cause");
                         struct yetty_ycore_void_result mid =
                             YETTY_ERR(yetty_ycore_void, "test trigger: middle wrap", inner);
-                        sm->sm_result = YETTY_ERR(
-                            yetty_ycore_void, "test trigger: synthetic OSC 99099 error", mid);
+                        sm->sm_result = YETTY_ERR(yetty_ycore_void,
+                                                  "test trigger: synthetic OSC 99099 error", mid);
                         return;
                     }
                     if (sm->current_handler && sm->current_handler->has_args) {
@@ -1644,8 +1641,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
     }
     if (has_args) {
         if (args && args_len > 0) {
-            struct yetty_ycore_void_result r =
-                b64_encode_push(sm, (const uint8_t *)args, args_len);
+            struct yetty_ycore_void_result r = b64_encode_push(sm, (const uint8_t *)args, args_len);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args push");
             r = b64_encode_flush(sm);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args flush");

@@ -80,13 +80,15 @@ struct yetty_yframework_factory_state {
 
 struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter)
 {
-    if (!adapter)
+    if (!adapter) {
         return YETTY_ERR(yetty_ycore_void, "log_gpu_info: adapter is NULL");
+    }
 
     char *desc = yetty_ywebgpu_get_webgpu_description(adapter);
-    if (!desc)
+    if (!desc) {
         return YETTY_ERR(yetty_ycore_void,
                          "log_gpu_info: yetty_ywebgpu_get_webgpu_description failed");
+    }
     yinfo("WebGPU adapter description:\n%s", desc);
     free(desc);
     return YETTY_OK_VOID();
@@ -134,11 +136,9 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
      * GPUs may not surface a description string but the rest of init
      * can still proceed. */
     {
-        struct yetty_ycore_void_result _gi =
-            yetty_yframework_log_gpu_info(rt->gpu.adapter);
+        struct yetty_ycore_void_result _gi = yetty_yframework_log_gpu_info(rt->gpu.adapter);
         if (YETTY_IS_ERR(_gi)) {
-            ywarn("yframework: log_gpu_info: %s",
-                  _gi.error.msg ? _gi.error.msg : "(no msg)");
+            ywarn("yframework: log_gpu_info: %s", _gi.error.msg ? _gi.error.msg : "(no msg)");
             yetty_ycore_error_destroy(_gi.error);
         }
     }
@@ -643,16 +643,17 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
     return YETTY_OK_VOID();
 }
 
-struct yetty_yrdawn_factory_args_ptr_result
-yetty_yframework_factory_args_yrdawn(struct yetty_yframework *framework)
+struct yetty_yrdawn_factory_args_ptr_result yetty_yframework_factory_args_yrdawn(
+    struct yetty_yframework *framework)
 {
 #ifdef YETTY_HAS_YRDAWN_SERVER
-    if (!framework)
-        return YETTY_ERR(yetty_yrdawn_factory_args_ptr,
-                         "factory_args_yrdawn: NULL framework");
-    if (!framework->factory_state)
+    if (!framework) {
+        return YETTY_ERR(yetty_yrdawn_factory_args_ptr, "factory_args_yrdawn: NULL framework");
+    }
+    if (!framework->factory_state) {
         return YETTY_ERR(yetty_yrdawn_factory_args_ptr,
                          "factory_args_yrdawn: framework has no factory_state");
+    }
     return YETTY_OK(yetty_yrdawn_factory_args_ptr, &framework->factory_state->yrdawn_args);
 #else
     (void)framework;

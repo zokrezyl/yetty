@@ -13,8 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:ybrowser")]]
-       [[clang::annotate("parent@ygui:ydraw_embed")]] ybrowser_data {
+struct [[clang::annotate("class@ygui:ybrowser")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
+ybrowser_data {
     char *html;
     size_t html_len;
     float rendered_w;
@@ -22,7 +22,8 @@ struct [[clang::annotate("class@ygui:ybrowser")]]
 };
 
 [[clang::annotate("override@ygui:ybrowser:constructor")]]
-static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                      struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -39,7 +40,8 @@ static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *_
 }
 
 [[clang::annotate("override@ygui:ybrowser:destructor")]]
-static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                     struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -50,18 +52,25 @@ static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *_y
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, float w, float h)
+static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *_yc_ctx,
+                                                 struct yetty_yclass_object *_yc_obj, float w,
+                                                 float h)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct ybrowser_data *d = yetty_ygui_data_get(obj, yetty_ygui_ybrowser_class_get().value);
-    if (!d->html || d->html_len == 0) return YETTY_OK_VOID();
-    if (w <= 0.0f || h <= 0.0f) return YETTY_OK_VOID();
-    struct yetty_ylexbor_config cfg = {.viewport_width = (int)w,
-                                       .viewport_height = (int)h,
-                                       .default_font_size = 14.0f};
+    if (!d->html || d->html_len == 0) {
+        return YETTY_OK_VOID();
+    }
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ylexbor_config cfg = {
+        .viewport_width = (int)w, .viewport_height = (int)h, .default_font_size = 14.0f};
     struct yetty_ylexbor_ptr_result lr = yetty_ylexbor_create(&cfg);
-    if (YETTY_IS_ERR(lr)) return YETTY_ERR(yetty_ycore_void, "ybrowser_render: create", lr);
+    if (YETTY_IS_ERR(lr)) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_render: create", lr);
+    }
     struct yetty_ylexbor *lx = lr.value;
     struct yetty_ycore_void_result hr = yetty_ylexbor_load_html(lx, d->html, d->html_len);
     if (YETTY_IS_ERR(hr)) {
@@ -87,7 +96,8 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *_yc_ct
 }
 
 [[clang::annotate("override@ygui:ybrowser:widget_emit_body")]]
-static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *_yc_ctx,
+                                                    struct yetty_yclass_object *_yc_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -104,21 +114,28 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *_yc
         yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
     yetty_yclass_impl_t impl =
         yetty_ygui_dispatch_lookup_super(yetty_ygui_ybrowser_class_get().value, slot);
-    if (!impl) return YETTY_OK_VOID();
-    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_ctx *,
-                                                   struct yetty_yclass_object *,
-                                                   struct yetty_ygui_emit_ctx *);
+    if (!impl) {
+        return YETTY_OK_VOID();
+    }
+    typedef struct yetty_ycore_void_result (*fn_t)(
+        struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
     return ((fn_t)impl)(NULL, _yc_obj, ctx);
 }
 
 struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_ygui_object *obj,
                                                             const char *html, size_t len)
 {
-    if (!obj || !html) return YETTY_ERR(yetty_ycore_void, "ybrowser_set_html: NULL");
+    if (!obj || !html) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_set_html: NULL");
+    }
     struct ybrowser_data *d = yetty_ygui_data_get(obj, yetty_ygui_ybrowser_class_get().value);
     char *buf = malloc(len);
-    if (len > 0 && !buf) return YETTY_ERR(yetty_ycore_void, "ybrowser_set_html: malloc");
-    if (len > 0) memcpy(buf, html, len);
+    if (len > 0 && !buf) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_set_html: malloc");
+    }
+    if (len > 0) {
+        memcpy(buf, html, len);
+    }
     free(d->html);
     d->html = buf;
     d->html_len = len;

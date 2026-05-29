@@ -344,7 +344,7 @@ static struct yetty_ycore_void_result terminal_pty_write_callback(const char *da
  * tail. */
 YETTY_EXTERNAL_CALLBACK
 static struct yetty_ycore_void_result terminal_dcs_emit_response(const uint8_t *bytes, size_t n,
-                                                                  void *userdata)
+                                                                 void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
     size_t off = 0;
@@ -1478,8 +1478,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * slot (sets the ops vtable). We then wire the per-instance
      * runtime state (rect, context, registry) via the setters. */
     struct yetty_yclass_ctx yclass_ctx = {0};
-    struct yetty_yclass_object_ptr_result obj_res =
-        yetty_yfigure_container_create(&yclass_ctx);
+    struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, obj_res,
                         "terminal_create: root_container create failed");
     terminal->root_container = yetty_yfigure_container_from(obj_res.value);
@@ -1513,14 +1512,13 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * simplicity; switch to a per-envelope sniff if asymmetric
      * compression turns out to matter. */
     {
-        struct yetty_ycore_void_result dr = yetty_yclass_rpc_dcs_server_attach(
-            terminal->sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0, terminal_dcs_emit_response,
-            terminal);
+        struct yetty_ycore_void_result dr =
+            yetty_yclass_rpc_dcs_server_attach(terminal->sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0,
+                                               terminal_dcs_emit_response, terminal);
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, dr,
                             "terminal_create: dcs_server_attach for YCLASS_RPC");
     }
-    ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)",
-           YETTY_DCS_YCLASS_RPC);
+    ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)", YETTY_DCS_YCLASS_RPC);
 
     /* Shader-glyph figure — replaces the legacy shader-glyph layer. Added
      * as a child of the root container under a reserved high id (just

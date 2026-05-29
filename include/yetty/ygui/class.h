@@ -39,21 +39,19 @@ YETTY_YRESULT_DECLARE(yetty_ygui_framework_ptr, struct yetty_ygui_runtime *);
 /* Convenience: look up the slot owned by `method_id` in ygui's domain.
  * Returns UINT32_MAX (== YETTY_YCLASS_METHOD_SLOT_UNDEFINED) when the
  * id isn't registered. */
-yetty_yclass_method_slot
-yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id);
+yetty_yclass_method_slot yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id);
 
 /* Resolve `slot` against `cls`'s dispatch table. Returns NULL on miss
  * (matches the existing ygui call-site convention that a missing
  * override is a no-op, not an error). */
-yetty_yclass_impl_t
-yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls, yetty_yclass_method_slot slot);
+yetty_yclass_impl_t yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls,
+                                               yetty_yclass_method_slot slot);
 
 /* Walk up the parent chain (skipping the leaf) and return the first
  * non-NULL dispatch entry for `slot`. ygui's super invokers use this
  * to chain into the inherited impl. */
-yetty_yclass_impl_t
-yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
-                                 yetty_yclass_method_slot slot);
+yetty_yclass_impl_t yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
+                                                     yetty_yclass_method_slot slot);
 
 /* Unwrap a `yetty_yclass_ptr_result` returned by a `<class>_class_get()`
  * accessor at sites that treat class-registration failure as
@@ -70,8 +68,8 @@ yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
  * setters that already return a Result) should propagate the error
  * via YETTY_RETURN_IF_ERR instead — call this helper only where the
  * caller's signature offers no error channel. */
-static inline const struct yetty_yclass *
-yetty_ygui_class_expect(struct yetty_yclass_ptr_result r, const char *site)
+static inline const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_result r,
+                                                                 const char *site)
 {
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_print(stderr, site ? site : "ygui_class_expect", r.error);

@@ -113,7 +113,7 @@ static struct flex_summary summarize_children(struct yetty_ygui_object *parent,
     for (struct yetty_ygui_object *c = parent->first_child; c; c = c->next_sibling) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->absolute) {
-            continue;  /* absolutely-positioned children skip flex */
+            continue; /* absolutely-positioned children skip flex */
         }
         struct child_axes a = resolve_child_axes(parent_layout, cl);
         s.child_count++;
@@ -201,7 +201,9 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
             crect.max.x = crect.min.x + aw;
             crect.max.y = crect.min.y + ah;
             loop_r = layout_node(c, crect);
-            if (YETTY_IS_ERR(loop_r)) goto cleanup;
+            if (YETTY_IS_ERR(loop_r)) {
+                goto cleanup;
+            }
             continue;
         }
         struct child_axes a = resolve_child_axes(pl, cl);
@@ -264,7 +266,7 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
          c = c->next_sibling) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->absolute) {
-            continue;  /* already placed in the sizing pass above */
+            continue; /* already placed in the sizing pass above */
         }
         float ms = main_sizes[idx];
         float cs = cross_sizes[idx];
@@ -302,7 +304,9 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
         }
 
         loop_r = layout_node(c, crect);
-        if (YETTY_IS_ERR(loop_r)) goto cleanup;
+        if (YETTY_IS_ERR(loop_r)) {
+            goto cleanup;
+        }
 
         cursor_main += ms + gap_between;
         idx++;

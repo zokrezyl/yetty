@@ -132,8 +132,8 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
  * error msg). */
 struct yetty_yrdawn_factory_args;
 YETTY_YRESULT_DECLARE(yetty_yrdawn_factory_args_ptr, struct yetty_yrdawn_factory_args *);
-struct yetty_yrdawn_factory_args_ptr_result
-yetty_yframework_factory_args_yrdawn(struct yetty_yframework *framework);
+struct yetty_yrdawn_factory_args_ptr_result yetty_yframework_factory_args_yrdawn(
+    struct yetty_yframework *framework);
 
 #ifdef __cplusplus
 }

@@ -27,13 +27,14 @@
 
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
-struct [[clang::annotate("class@ygui:ydraw_embed")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]] embed_data {
+struct [[clang::annotate("class@ygui:ydraw_embed")]] [[clang::annotate(
+    "parent@ygui:primitive_widget")]] embed_data {
     struct yetty_ydraw_draw_list *buf;
 };
 
 [[clang::annotate("override@ygui:ydraw_embed:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx,
+                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -47,12 +48,15 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, str
 }
 
 [[clang::annotate("override@ygui:ydraw_embed:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx,
+                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
     struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
-    if (d->buf) yetty_ydraw_draw_list_destroy(d->buf);
+    if (d->buf) {
+        yetty_ydraw_draw_list_destroy(d->buf);
+    }
     d->buf = NULL;
     return yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
@@ -60,7 +64,9 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, str
 
 static size_t prim_size(const uint32_t *prim, size_t remaining)
 {
-    if (remaining < sizeof(uint32_t)) return 0;
+    if (remaining < sizeof(uint32_t)) {
+        return 0;
+    }
     uint32_t type = prim[0];
     uint32_t base = RICH_TYPE_BASE(type);
     size_t sdf_bytes = yetty_ysdf_primitive_size(base);
@@ -68,7 +74,9 @@ static size_t prim_size(const uint32_t *prim, size_t remaining)
         size_t s = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
         return s <= remaining ? s : 0;
     }
-    if (remaining < 2 * sizeof(uint32_t)) return 0;
+    if (remaining < 2 * sizeof(uint32_t)) {
+        return 0;
+    }
     uint32_t payload_size = prim[1];
     size_t s = 2 * sizeof(uint32_t) + payload_size;
     return s <= remaining ? s : 0;
@@ -76,14 +84,20 @@ static size_t prim_size(const uint32_t *prim, size_t remaining)
 
 static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
 {
-    if (bytes < sizeof(uint32_t)) return;
+    if (bytes < sizeof(uint32_t)) {
+        return;
+    }
     uint32_t type = prim[0];
     size_t words = bytes / sizeof(uint32_t);
-    if (type < 0x00010000u) return;
+    if (type < 0x00010000u) {
+        return;
+    }
     if (yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) > 0u) {
         size_t shift = (type & YETTY_YDRAW_HAS_ID_FLAG) ? 1u : 0u;
         size_t geom = 5u + shift;
-        if (words < geom + 2u) return;
+        if (words < geom + 2u) {
+            return;
+        }
         float *fprim = (float *)prim;
         fprim[geom + 0] += dx;
         fprim[geom + 1] += dy;
@@ -113,19 +127,26 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
 }
 
 [[clang::annotate("override@ygui:ydraw_embed:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx,
+                                            struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    if (!ctx) return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: NULL ctx");
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: NULL ctx");
+    }
     struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
-    if (!d->buf) return YETTY_OK_VOID();
+    if (!d->buf) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float dx = r.min.x, dy = r.min.y;
     const uint8_t *src = (const uint8_t *)yetty_ydraw_draw_list_data(d->buf);
     size_t src_size = yetty_ydraw_draw_list_size(d->buf);
-    if (!src || src_size == 0) return YETTY_OK_VOID();
+    if (!src || src_size == 0) {
+        return YETTY_OK_VOID();
+    }
     uint8_t stack[4096];
     uint8_t *heap = NULL;
     size_t heap_cap = 0;
@@ -135,9 +156,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, st
         size_t s = prim_size((const uint32_t *)p, remaining);
         if (s == 0 || s > remaining) {
             free(heap);
-            return YETTY_ERR(yetty_ycore_void,
-                             "ydraw_embed paint: malformed primitive stream "
-                             "(unknown type or size overruns buffer)");
+            return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: malformed primitive stream "
+                                               "(unknown type or size overruns buffer)");
         }
         uint8_t *work = stack;
         if (s > sizeof(stack)) {
@@ -175,9 +195,13 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, st
 struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_ygui_object *obj,
                                                                  struct yetty_ydraw_draw_list *buf)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "ydraw_embed_set_buffer: NULL");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "ydraw_embed_set_buffer: NULL");
+    }
     struct embed_data *d = yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
-    if (d->buf && d->buf != buf) yetty_ydraw_draw_list_destroy(d->buf);
+    if (d->buf && d->buf != buf) {
+        yetty_ydraw_draw_list_destroy(d->buf);
+    }
     d->buf = buf;
     return yetty_ygui_object_set_dirty(obj);
 }

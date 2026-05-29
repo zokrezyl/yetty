@@ -27,7 +27,11 @@
 #include <string.h>
 
 #ifdef YETTY_HAVE_MINIMP4
-#define MINIMP4_IMPLEMENTATION
+/* Implementation is compiled exactly once into the minimp4 static lib
+ * (see build-tools/yetty/minimp4.cmake). Don't `#define
+ * MINIMP4_IMPLEMENTATION` here — it would emit MP4E_* / MP4D_*
+ * duplicates whenever this TU and yvnc/vnc-server.c end up in the
+ * same link. */
 #include <minimp4.h>
 #endif
 

@@ -29,8 +29,8 @@ struct yetty_ygui_yplot_config {
     float y_max;
     uint32_t flags;
 };
-struct yetty_ycore_void_result yetty_ygui_yplot_set_config(struct yetty_ygui_object *obj,
-                                                           const struct yetty_ygui_yplot_config *cfg);
+struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
+    struct yetty_ygui_object *obj, const struct yetty_ygui_yplot_config *cfg);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

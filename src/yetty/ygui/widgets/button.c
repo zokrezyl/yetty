@@ -20,14 +20,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:button")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]]
-       [[clang::annotate("uses@ygui:clickable")]] button_data {
+struct [[clang::annotate("class@ygui:button")]] [[clang::annotate(
+    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] button_data {
     char *label;
 };
 
 [[clang::annotate("override@ygui:button:constructor")]]
-static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                         struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -40,7 +40,8 @@ static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:button:destructor")]]
-static struct yetty_ycore_void_result button_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result button_destructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                        struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -58,10 +59,10 @@ static struct yetty_ycore_void_result button_destructor(struct yetty_yclass_ctx 
  *   BRAND_ACCENT_BRIGHT  #74C5A5 → 0xFFA5C574  hover outline
  *   BRAND_TEXT_PRI       #E0E5E4 → 0xFFE4E5E0  label colour
  */
-#define BTN_BG_IDLE 0xFF2C261Eu          /* BRAND_BG_ROW */
-#define BTN_BG_PRESSED 0xFF92A86Bu       /* BRAND_ACCENT */
-#define BTN_HOVER_OUTLINE 0xFFA5C574u    /* BRAND_ACCENT_BRIGHT */
-#define BTN_FG 0xFFE4E5E0u               /* BRAND_TEXT_PRIMARY */
+#define BTN_BG_IDLE 0xFF2C261Eu       /* BRAND_BG_ROW */
+#define BTN_BG_PRESSED 0xFF92A86Bu    /* BRAND_ACCENT */
+#define BTN_HOVER_OUTLINE 0xFFA5C574u /* BRAND_ACCENT_BRIGHT */
+#define BTN_FG 0xFFE4E5E0u            /* BRAND_TEXT_PRIMARY */
 
 /* Lighten / darken a packed RGBA by ~+10% / -10% per channel — used to
  * build the convex gradient top / bottom colours. Alpha preserved. */
@@ -89,7 +90,8 @@ static uint32_t pack_darken(uint32_t c)
 }
 
 [[clang::annotate("override@ygui:button:widget_paint")]]
-static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *_yc_ctx,
+                                                   struct yetty_yclass_object *_yc_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -111,14 +113,18 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *_yc_
      * (matching ygui-old/widgets.c:button_render). Hover replaces the idle
      * row-grey with the slightly lighter BG_LIFTED so the cursor's button
      * stands out before commit. */
-    uint32_t surface = pressed ? BTN_BG_PRESSED
+    uint32_t surface = pressed   ? BTN_BG_PRESSED
                        : hovered ? 0xFF1F1A14u /* BRAND_BG_LIFTED */
                                  : BTN_BG_IDLE;
     float press_offset = pressed ? 1.0f : 0.0f;
 
     float radius = 6.0f;
-    if (radius > w * 0.5f) radius = w * 0.5f;
-    if (radius > h * 0.5f) radius = h * 0.5f;
+    if (radius > w * 0.5f) {
+        radius = w * 0.5f;
+    }
+    if (radius > h * 0.5f) {
+        radius = h * 0.5f;
+    }
 
     /* Surface paint:
      *  - idle:     convex gradient (top lighter, bottom darker)
@@ -175,10 +181,9 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *_yc_
             .capacity = strlen(d->label),
             .size = strlen(d->label),
         };
-        struct yetty_ycore_void_result rr =
-            yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, x, y, &text_buf, font_size,
-                                           BTN_FG, /*layer=*/0, /*font_id=*/-1,
-                                           /*rotation=*/0.0f);
+        struct yetty_ycore_void_result rr = yetty_ydraw_draw_list_add_text(
+            ctx->ygrid_draw_list, x, y, &text_buf, font_size, BTN_FG, /*layer=*/0, /*font_id=*/-1,
+            /*rotation=*/0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: label");
     }
     return YETTY_OK_VOID();

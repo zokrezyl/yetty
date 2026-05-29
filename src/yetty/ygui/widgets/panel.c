@@ -17,15 +17,16 @@
 #include <yetty/ysdf/funcs.gen.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:panel")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]] panel_data {
+struct [[clang::annotate("class@ygui:panel")]] [[clang::annotate("parent@ygui:primitive_widget")]]
+panel_data {
     struct yetty_ycore_rgba bg;
     struct yetty_ycore_rgba border;
     float border_width;
 };
 
 [[clang::annotate("override@ygui:panel:constructor")]]
-static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                        struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -46,7 +47,8 @@ static uint32_t pack_rgba(struct yetty_ycore_rgba c)
 }
 
 [[clang::annotate("override@ygui:panel:widget_paint")]]
-static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *_yc_ctx,
+                                                  struct yetty_yclass_object *_yc_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;

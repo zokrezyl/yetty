@@ -591,8 +591,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             .max = {.x = (float)surface_w, .y = (float)surface_h},
         };
         struct yetty_yclass_ctx yclass_ctx = {0};
-        struct yetty_yclass_object_ptr_result obj_res =
-            yetty_yfigure_container_create(&yclass_ctx);
+        struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         if (!YETTY_IS_OK(obj_res)) {
             yetty_yfigure_registry_destroy(yui->figure_registry);
             yui->font->ops->destroy(yui->font);

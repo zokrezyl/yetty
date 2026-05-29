@@ -49,8 +49,8 @@ struct child_entry {
     UT_hash_handle hh;
 };
 
-struct [[clang::annotate("class@yfigure:container")]]
-       [[clang::annotate("parent@yfigure:figure")]] yetty_yfigure_container {
+struct [[clang::annotate("class@yfigure:container")]] [[clang::annotate("parent@yfigure:figure")]]
+yetty_yfigure_container {
     struct yetty_yfigure_figure base;
     /* uthash head — id → entry. Iterating via HASH_ITER / e->hh.next
      * walks children in INSERTION ORDER (= z-order: back-to-front). */
@@ -226,7 +226,7 @@ static struct yetty_ycore_void_result container_destroy(struct yetty_yfigure_fig
 }
 
 static struct yetty_ycore_void_result container_render(struct yetty_yfigure_figure *self,
-                                                   struct yetty_ydraw_target *target)
+                                                       struct yetty_ydraw_target *target)
 {
     struct yetty_yfigure_container *container = (struct yetty_yfigure_container *)self;
     /* uthash insertion order = z-order; walk back-to-front. */
@@ -234,8 +234,8 @@ static struct yetty_ycore_void_result container_render(struct yetty_yfigure_figu
     HASH_ITER(hh, container->children, e, tmp)
     {
         struct yetty_yfigure_figure *c = e->figure;
-        ydebug("yfigure container_render: rect=(%.1f,%.1f)-(%.1f,%.1f) child id=%u", self->rect.min.x,
-               self->rect.min.y, self->rect.max.x, self->rect.max.y, e->id);
+        ydebug("yfigure container_render: rect=(%.1f,%.1f)-(%.1f,%.1f) child id=%u",
+               self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y, e->id);
         struct yetty_ycore_void_result r = c->ops->render(c, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yfigure container_render: child render failed");
         c->dirty = 0;
@@ -481,7 +481,8 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
         }
         uint32_t child_id;
         memcpy(&child_id, body, 4);
-        struct yetty_ycore_void_result r = yetty_yfigure_container_remove_child_by_id(container, child_id);
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_container_remove_child_by_id(container, child_id);
         container->base.dirty = 1;
         return r;
     }
@@ -494,7 +495,8 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
         float rect_floats[4];
         memcpy(&child_id, body + 0, 4);
         memcpy(rect_floats, body + 4, 16);
-        struct yetty_yfigure_figure *child = yetty_yfigure_container_find_child_by_id(container, child_id);
+        struct yetty_yfigure_figure *child =
+            yetty_yfigure_container_find_child_by_id(container, child_id);
         if (!child) {
             ydebug("container admin SET_CHILD_RECT: id=%u not bound", child_id);
             return YETTY_OK_VOID();
@@ -896,7 +898,8 @@ struct yetty_ycore_void_result yetty_yfigure_container_add_child(
      * before it enters the container. After this point internal code may
      * assume child->ops + ops->destroy + ops->render are non-NULL. */
     if (!child->ops || !child->ops->destroy || !child->ops->render) {
-        return YETTY_ERR(yetty_ycore_void, "yfigure_container_add_child: child ops vtable incomplete");
+        return YETTY_ERR(yetty_ycore_void,
+                         "yfigure_container_add_child: child ops vtable incomplete");
     }
     struct child_entry *existing;
     HASH_FIND_INT(container->children, &id, existing);
@@ -944,8 +947,8 @@ struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id(
     int have_err = 0;
     entry_destroy(e, &first_err, &have_err);
     if (have_err) {
-        return YETTY_ERR(yetty_ycore_void, "yfigure_container_remove_child_by_id: child destroy failed",
-                         first_err);
+        return YETTY_ERR(yetty_ycore_void,
+                         "yfigure_container_remove_child_by_id: child destroy failed", first_err);
     }
     return YETTY_OK_VOID();
 }
@@ -1051,7 +1054,7 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
 /* yclass instance layout: yclass_object header at offset 0, user data
  * (the `struct yetty_yfigure_container` body) immediately after. Cast
  * via (obj + 1) advances past the header in pointer arithmetic. */
-#define YCLASS_TO_CONTAINER(obj) \
+#define YCLASS_TO_CONTAINER(obj)                                                                   \
     ((struct yetty_yfigure_container *)((struct yetty_yclass_object *)(obj) + 1))
 
 [[clang::annotate("override@yfigure:container:constructor")]]
@@ -1096,11 +1099,11 @@ static struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id_
 
 [[clang::annotate("override@yfigure:container:process_records")]]
 static struct yetty_ycore_void_result yetty_yfigure_container_process_records_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ycore_buffer bytes)
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, struct yetty_ycore_buffer bytes)
 {
     (void)ctx;
-    return yetty_yfigure_container_process_records(YCLASS_TO_CONTAINER(obj), bytes.data, bytes.size);
+    return yetty_yfigure_container_process_records(YCLASS_TO_CONTAINER(obj), bytes.data,
+                                                   bytes.size);
 }
 
 #include "container.gen.c"

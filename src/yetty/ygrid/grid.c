@@ -2457,8 +2457,7 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
 
 [[clang::annotate("override@ygrid:grid:add_record")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ycore_buffer record)
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, struct yetty_ycore_buffer record)
 {
     (void)ctx;
     struct yetty_ygrid_grid *grid = (struct yetty_ygrid_grid *)obj;
@@ -2466,8 +2465,8 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
 }
 
 [[clang::annotate("override@ygrid:grid:clear")]]
-static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_yclass_ctx *ctx,
+                                                                  struct yetty_yclass_object *obj)
 {
     (void)ctx;
     struct yetty_ygrid_grid *grid = (struct yetty_ygrid_grid *)obj;
@@ -2475,8 +2474,8 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(
 }
 
 [[clang::annotate("override@ygrid:grid:destroy")]]
-static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(struct yetty_yclass_ctx *ctx,
+                                                                    struct yetty_yclass_object *obj)
 {
     (void)ctx;
     return ygrid_destroy((struct yetty_yfigure_figure *)obj);
@@ -2488,8 +2487,7 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_process_bytes_impl(
     struct yetty_ycore_buffer payload)
 {
     (void)ctx;
-    return ygrid_process_bytes((struct yetty_yfigure_figure *)obj,
-                               payload.data, payload.size);
+    return ygrid_process_bytes((struct yetty_yfigure_figure *)obj, payload.data, payload.size);
 }
 
 [[clang::annotate("override@ygrid:grid:reset_content")]]

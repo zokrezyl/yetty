@@ -22,14 +22,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:yimage")]]
-       [[clang::annotate("parent@ygui:widget")]] yimage_data {
+struct [[clang::annotate("class@ygui:yimage")]] [[clang::annotate("parent@ygui:widget")]]
+yimage_data {
     uint8_t *bytes;
     size_t len;
 };
 
 [[clang::annotate("override@ygui:yimage:constructor")]]
-static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                         struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -43,7 +44,8 @@ static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:yimage:destructor")]]
-static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                        struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -60,7 +62,8 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx 
  * stays warm. The kind is hardcoded here — the framework class
  * system doesn't know about figure kinds. */
 [[clang::annotate("override@ygui:yimage:widget_emit_container")]]
-static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_ctx *_yc_ctx,
+                                                            struct yetty_yclass_object *_yc_obj,
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -72,7 +75,8 @@ static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_
 }
 
 [[clang::annotate("override@ygui:yimage:widget_emit_body")]]
-static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj,
                                                        struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -118,8 +122,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
          * instance/prim/cell state before consuming the fresh yimage
          * record. (The chrome ygrid's stream already starts with
          * CMD_ZERO via framework_emit; figure bodies need the same.) */
-        struct yetty_ydraw_draw_list_result zlr =
-            yetty_ydraw_draw_list_config_buffer_create(NULL);
+        struct yetty_ydraw_draw_list_result zlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(zlr)) {
             yetty_ydraw_draw_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: prefix list create", zlr);
@@ -146,10 +149,11 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
             yetty_ydraw_draw_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: combined oom");
         }
-        if (zbytes && zsize > 0) memcpy(combined, zbytes, zsize);
+        if (zbytes && zsize > 0) {
+            memcpy(combined, zbytes, zsize);
+        }
         memcpy(combined + zsize, bytes, size);
-        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined,
-                                         (uint32_t)total);
+        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_draw_list_destroy(zl);
     }

@@ -18,8 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:yplot")]]
-       [[clang::annotate("parent@ygui:widget")]] yplot_data {
+struct [[clang::annotate("class@ygui:yplot")]] [[clang::annotate("parent@ygui:widget")]]
+yplot_data {
     char *source;
     size_t source_len;
     struct yetty_ygui_yplot_config cfg;
@@ -27,7 +27,8 @@ struct [[clang::annotate("class@ygui:yplot")]]
 };
 
 [[clang::annotate("override@ygui:yplot:constructor")]]
-static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                        struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -42,7 +43,8 @@ static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@ygui:yplot:destructor")]]
-static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -54,7 +56,8 @@ static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("override@ygui:yplot:widget_emit_container")]]
-static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_ctx *_yc_ctx,
+                                                           struct yetty_yclass_object *_yc_obj,
                                                            struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -66,7 +69,8 @@ static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@ygui:yplot:widget_emit_body")]]
-static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_yc_ctx,
+                                                      struct yetty_yclass_object *_yc_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
@@ -78,7 +82,9 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
-    if (w <= 0.0f || h <= 0.0f) return YETTY_OK_VOID();
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_yplot_render_config cfg = {
         .bounds_x = 0.0f,
         .bounds_y = 0.0f,
@@ -88,12 +94,11 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_
         .x_max = d->has_cfg ? d->cfg.x_max : 3.14159f,
         .y_min = d->has_cfg ? d->cfg.y_min : -1.5f,
         .y_max = d->has_cfg ? d->cfg.y_max : 1.5f,
-        .flags = d->has_cfg ? d->cfg.flags
-                            : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES |
-                               YETTY_YPLOT_FLAG_LABELS),
+        .flags = d->has_cfg
+                     ? d->cfg.flags
+                     : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS),
     };
-    struct yetty_ydraw_draw_list_result dlr =
-        yetty_yplot_render(d->source, d->source_len, &cfg);
+    struct yetty_ydraw_draw_list_result dlr = yetty_yplot_render(d->source, d->source_len, &cfg);
     if (YETTY_IS_ERR(dlr)) {
         return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: yplot_render", dlr);
     }
@@ -111,8 +116,7 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_
          * accumulation bug as yimage. Prefix CMD_ZERO so the figure's
          * ygrid resets before consuming the fresh yplot record. See
          * yimage.c for the full rationale. */
-        struct yetty_ydraw_draw_list_result zlr =
-            yetty_ydraw_draw_list_config_buffer_create(NULL);
+        struct yetty_ydraw_draw_list_result zlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(zlr)) {
             yetty_ydraw_draw_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: prefix list create", zlr);
@@ -129,8 +133,7 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_
         if (zsize > 0xFFFFFFFFu - size) {
             yetty_ydraw_draw_list_destroy(zl);
             yetty_ydraw_draw_list_destroy(dl);
-            return YETTY_ERR(yetty_ycore_void,
-                             "yplot_emit_body: prefixed body would overflow u32");
+            return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: prefixed body would overflow u32");
         }
         size_t total = zsize + size;
         uint8_t *combined = malloc(total);
@@ -139,10 +142,11 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_
             yetty_ydraw_draw_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: combined oom");
         }
-        if (zbytes && zsize > 0) memcpy(combined, zbytes, zsize);
+        if (zbytes && zsize > 0) {
+            memcpy(combined, zbytes, zsize);
+        }
         memcpy(combined + zsize, bytes, size);
-        fr = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined,
-                                         (uint32_t)total);
+        fr = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_draw_list_destroy(zl);
     }
@@ -153,7 +157,9 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_
 struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_object *obj,
                                                            const char *source)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "yplot_set_source: NULL obj");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yplot_set_source: NULL obj");
+    }
     struct yplot_data *d = yetty_ygui_data_get(obj, yetty_ygui_yplot_class_get().value);
     free(d->source);
     d->source = NULL;
@@ -161,17 +167,21 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_obj
     if (source) {
         size_t n = strlen(source);
         d->source = malloc(n + 1);
-        if (!d->source) return YETTY_ERR(yetty_ycore_void, "yplot_set_source: malloc");
+        if (!d->source) {
+            return YETTY_ERR(yetty_ycore_void, "yplot_set_source: malloc");
+        }
         memcpy(d->source, source, n + 1);
         d->source_len = n;
     }
     return yetty_ygui_object_set_dirty(obj);
 }
 
-struct yetty_ycore_void_result yetty_ygui_yplot_set_config(struct yetty_ygui_object *obj,
-                                                           const struct yetty_ygui_yplot_config *cfg)
+struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
+    struct yetty_ygui_object *obj, const struct yetty_ygui_yplot_config *cfg)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "yplot_set_config: NULL obj");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yplot_set_config: NULL obj");
+    }
     struct yplot_data *d = yetty_ygui_data_get(obj, yetty_ygui_yplot_class_get().value);
     if (cfg) {
         d->cfg = *cfg;

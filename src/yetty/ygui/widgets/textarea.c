@@ -8,18 +8,20 @@
 #define COLOR_BORDER 0xFF474A36u
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:textarea")]]
-       [[clang::annotate("parent@ygui:primitive_widget")]] textarea_data {
+struct [[clang::annotate("class@ygui:textarea")]] [[clang::annotate(
+    "parent@ygui:primitive_widget")]] textarea_data {
     char *text;
 };
 
 [[clang::annotate("override@ygui:textarea:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx,
+                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_textarea_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_textarea_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "textarea: super");
     struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
     d->text = NULL;
@@ -27,7 +29,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx, str
 }
 
 [[clang::annotate("override@ygui:textarea:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx,
+                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -38,35 +41,47 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx, str
 }
 
 [[clang::annotate("override@ygui:textarea:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx,
+                                            struct yetty_yclass_object *_yc_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    if (!ctx) return YETTY_ERR(yetty_ycore_void, "textarea paint: NULL ctx");
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "textarea paint: NULL ctx");
+    }
     struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
-    if (w <= 0 || h <= 0) return YETTY_OK_VOID();
+    if (w <= 0 || h <= 0) {
+        return YETTY_OK_VOID();
+    }
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4),
                         "textarea: bg");
-    if (!d->text || !d->text[0]) return YETTY_OK_VOID();
+    if (!d->text || !d->text[0]) {
+        return YETTY_OK_VOID();
+    }
     float fs = 13.0f;
     float ly = r.min.y + 8 + fs;
     const char *p = d->text;
     while (*p && ly < r.max.y) {
         const char *eol = p;
-        while (*eol && *eol != '\n') eol++;
+        while (*eol && *eol != '\n') {
+            eol++;
+        }
         size_t n = eol - p;
         char tmp[512];
-        if (n >= sizeof(tmp)) n = sizeof(tmp) - 1;
+        if (n >= sizeof(tmp)) {
+            n = sizeof(tmp) - 1;
+        }
         memcpy(tmp, p, n);
         tmp[n] = 0;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, tmp, r.min.x + 8, ly, fs, COLOR_TEXT),
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_text(ctx, tmp, r.min.x + 8, ly, fs, COLOR_TEXT),
                             "textarea: line");
         ly += fs * 1.3f;
-        if (*eol == '\n') eol++;
+        if (*eol == '\n') {
+            eol++;
+        }
         p = eol;
     }
     return YETTY_OK_VOID();
@@ -75,14 +90,18 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, st
 struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_ygui_object *obj,
                                                             const char *text)
 {
-    if (!obj) return YETTY_ERR(yetty_ycore_void, "textarea_set_text: NULL");
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "textarea_set_text: NULL");
+    }
     struct textarea_data *d = yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
     free(d->text);
     d->text = NULL;
     if (text) {
         size_t n = strlen(text);
         d->text = malloc(n + 1);
-        if (!d->text) return YETTY_ERR(yetty_ycore_void, "textarea_set_text: malloc");
+        if (!d->text) {
+            return YETTY_ERR(yetty_ycore_void, "textarea_set_text: malloc");
+        }
         memcpy(d->text, text, n + 1);
     }
     return yetty_ygui_object_set_dirty(obj);
@@ -90,9 +109,11 @@ struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_ygui_ob
 
 const char *yetty_ygui_textarea_get_text(const struct yetty_ygui_object *obj)
 {
-    if (!obj) return "";
-    struct textarea_data *d = yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                                                  yetty_ygui_textarea_class_get().value);
+    if (!obj) {
+        return "";
+    }
+    struct textarea_data *d =
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_textarea_class_get().value);
     return d->text ? d->text : "";
 }
 
