@@ -16,6 +16,7 @@
 #include "internal.h"
 
 #include <yetty/yfigure/wire.h>
+#include <stdlib.h>
 #include <string.h>
 
 /*===========================================================================
@@ -227,6 +228,184 @@ const struct yetty_ygui_layout *yetty_ygui_widget_layout_get(const struct yetty_
     struct yetty_ygui_widget_data *wd =
         yetty_ygui_data_get((struct yetty_ygui_object *)obj, widget_class());
     return &wd->layout;
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_visible(struct yetty_ygui_object *obj,
+                                                             int visible)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_visible: NULL obj");
+    }
+    struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
+    wd->layout.hidden = visible ? 0 : 1;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+int yetty_ygui_widget_is_visible(const struct yetty_ygui_object *obj)
+{
+    if (!obj) {
+        return 0;
+    }
+    struct yetty_ygui_widget_data *wd =
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, widget_class());
+    return wd->layout.hidden ? 0 : 1;
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_object *obj, float w,
+                                                          float h)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_size: NULL obj");
+    }
+    struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
+    wd->layout.width = w;
+    wd->layout.height = h;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
+                                                              float y)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_position: NULL obj");
+    }
+    struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
+    wd->layout.absolute = 1;
+    wd->layout.pos_x = x;
+    wd->layout.pos_y = y;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+/* --- minimal CSS shim for the yui port --- */
+
+static int css_token_is(const char *s, size_t n, const char *kw)
+{
+    return strlen(kw) == n && strncmp(s, kw, n) == 0;
+}
+
+/* Trim ASCII spaces/tabs from both ends, returning the new [start,len). */
+static const char *css_trim(const char *s, size_t *len)
+{
+    while (*len > 0 && (s[0] == ' ' || s[0] == '\t')) {
+        s++;
+        (*len)--;
+    }
+    while (*len > 0 && (s[*len - 1] == ' ' || s[*len - 1] == '\t')) {
+        (*len)--;
+    }
+    return s;
+}
+
+/* Parse a leading float from a NUL-terminated value slice (ignores a
+ * trailing "px" / units). */
+static float css_num(const char *v)
+{
+    return (float)strtod(v, NULL);
+}
+
+static void css_apply_decl(struct yetty_ygui_layout *l, const char *prop, size_t plen,
+                           const char *val, size_t vlen)
+{
+    prop = css_trim(prop, &plen);
+    val = css_trim(val, &vlen);
+    if (plen == 0 || vlen == 0) {
+        return;
+    }
+    char vbuf[64];
+    if (vlen >= sizeof(vbuf)) {
+        vlen = sizeof(vbuf) - 1;
+    }
+    memcpy(vbuf, val, vlen);
+    vbuf[vlen] = '\0';
+
+    if (css_token_is(prop, plen, "width")) {
+        l->width = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "height")) {
+        l->height = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "gap")) {
+        l->gap = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "flex-grow")) {
+        l->flex_grow = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "flex-shrink")) {
+        l->flex_shrink = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "flex")) {
+        /* "<grow> [<shrink> [<basis>]]" */
+        char *end = NULL;
+        l->flex_grow = (float)strtod(vbuf, &end);
+        if (end && *end) {
+            l->flex_shrink = (float)strtod(end, &end);
+        }
+    } else if (css_token_is(prop, plen, "padding")) {
+        float p = css_num(vbuf);
+        l->padding_top = l->padding_right = l->padding_bottom = l->padding_left = p;
+    } else if (css_token_is(prop, plen, "padding-top")) {
+        l->padding_top = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "padding-bottom")) {
+        l->padding_bottom = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "padding-left")) {
+        l->padding_left = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "padding-right")) {
+        l->padding_right = css_num(vbuf);
+    } else if (css_token_is(prop, plen, "align-items")) {
+        if (strcmp(vbuf, "center") == 0) {
+            l->align = YETTY_YGUI_ALIGN_CENTER;
+        } else if (strcmp(vbuf, "end") == 0 || strcmp(vbuf, "flex-end") == 0) {
+            l->align = YETTY_YGUI_ALIGN_END;
+        } else if (strcmp(vbuf, "stretch") == 0) {
+            l->align = YETTY_YGUI_ALIGN_STRETCH;
+        } else {
+            l->align = YETTY_YGUI_ALIGN_START;
+        }
+    } else if (css_token_is(prop, plen, "justify-content")) {
+        if (strcmp(vbuf, "center") == 0) {
+            l->justify = YETTY_YGUI_JUSTIFY_CENTER;
+        } else if (strcmp(vbuf, "end") == 0 || strcmp(vbuf, "flex-end") == 0) {
+            l->justify = YETTY_YGUI_JUSTIFY_END;
+        } else if (strcmp(vbuf, "space-between") == 0) {
+            l->justify = YETTY_YGUI_JUSTIFY_SPACE_BETWEEN;
+        } else {
+            l->justify = YETTY_YGUI_JUSTIFY_START;
+        }
+    } else if (css_token_is(prop, plen, "direction") ||
+               css_token_is(prop, plen, "flex-direction")) {
+        l->direction =
+            strcmp(vbuf, "column") == 0 ? YETTY_YGUI_FLEX_COLUMN : YETTY_YGUI_FLEX_ROW;
+    }
+    /* align-self: per-child cross-align isn't modelled in the new flex
+     * pass (the parent's align governs); accepted and ignored so yui's
+     * `align-self: stretch;` is a harmless no-op. */
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_ygui_object *obj,
+                                                           const char *css)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_apply_css: NULL obj");
+    }
+    if (!css) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
+    struct yetty_ygui_layout l = wd->layout;
+
+    const char *p = css;
+    while (*p) {
+        const char *semi = strchr(p, ';');
+        size_t decl_len = semi ? (size_t)(semi - p) : strlen(p);
+        const char *colon = memchr(p, ':', decl_len);
+        if (colon) {
+            size_t plen = (size_t)(colon - p);
+            const char *val = colon + 1;
+            size_t vlen = decl_len - plen - 1;
+            css_apply_decl(&l, p, plen, val, vlen);
+        }
+        if (!semi) {
+            break;
+        }
+        p = semi + 1;
+    }
+    wd->layout = l;
+    return yetty_ygui_object_set_dirty(obj);
 }
 
 /*===========================================================================

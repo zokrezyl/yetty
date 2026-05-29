@@ -117,6 +117,14 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_obje
 struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
                                                               float y);
 
+/* Apply a small CSS-like declaration string to the widget's layout.
+ * Supported properties (others ignored): width, height, flex,
+ * flex-grow, flex-shrink, gap, padding, align-items, justify-content,
+ * (flex-)direction, align-self. Values may carry a trailing "px".
+ * Eases the yui port, which authored layout via CSS strings. */
+struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_ygui_object *obj,
+                                                           const char *css);
+
 /*-----------------------------------------------------------------------------
  * Flex layout pass.
  *
