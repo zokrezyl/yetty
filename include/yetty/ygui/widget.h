@@ -98,6 +98,26 @@ struct yetty_ycore_void_result yetty_ygui_widget_layout_set(struct yetty_ygui_ob
 const struct yetty_ygui_layout *yetty_ygui_widget_layout_get(const struct yetty_ygui_object *obj);
 
 /*-----------------------------------------------------------------------------
+ * Convenience geometry / visibility setters — thin wrappers over the
+ * layout struct, added to ease the yui port off ygui-old (which exposed
+ * these as first-class widget calls). Each marks the widget dirty.
+ *---------------------------------------------------------------------------*/
+/* Toggle the widget (and its subtree) in/out of layout + paint via the
+ * layout `hidden` flag. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_visible(struct yetty_ygui_object *obj,
+                                                             int visible);
+int yetty_ygui_widget_is_visible(const struct yetty_ygui_object *obj);
+
+/* Author the widget's main/cross size (width, height). */
+struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_object *obj, float w,
+                                                          float h);
+
+/* Place the widget at an absolute (pos_x, pos_y) inside its parent's
+ * content box (sets layout.absolute). */
+struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
+                                                              float y);
+
+/*-----------------------------------------------------------------------------
  * Flex layout pass.
  *
  * Walks the widget tree top-down assigning rects according to each
