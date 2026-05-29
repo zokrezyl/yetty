@@ -1,10 +1,22 @@
-/* ygui-splitter.c — divider strip. */
+/* ygui-splitter.c — draggable divider strip.
+ *
+ * Sits between two siblings in a flex row/column. Dragging it resizes the
+ * preceding sibling (the following one absorbs the change via flex_grow).
+ * Relies on the framework's pointer capture so the drag tracks the cursor
+ * even when it leaves the thin strip.
+ */
 #include "paint-helpers.h"
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/splitter.h>
 
 #define COLOR_TRACK 0xFF2C261Eu
 #define COLOR_GRIP 0xFF92A86Bu
+#define SPLITTER_MIN 40.0f
+
+struct [[clang::annotate("class@ygui:splitter")]] [[clang::annotate(
+    "parent@ygui:primitive_widget")]] splitter_data {
+    char placeholder;
+};
 
 [[clang::annotate("override@ygui:splitter:widget_paint")]]
 static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
@@ -33,9 +45,87 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     return YETTY_OK_VOID();
 }
 
-struct [[clang::annotate("class@ygui:splitter")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] splitter_data {
-    char _empty;
-};
+/* The immediately preceding in-flow sibling (skips absolute / hidden). */
+static struct yetty_ygui_object *splitter_prev_sibling(struct yetty_ygui_object *obj)
+{
+    struct yetty_ygui_object *parent = yetty_ygui_object_parent(obj);
+    if (!parent) {
+        return NULL;
+    }
+    struct yetty_ygui_object *prev = NULL;
+    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(parent); c && c != obj;
+         c = yetty_ygui_object_next_sibling(c)) {
+        const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
+        if (cl->absolute || cl->hidden) {
+            continue;
+        }
+        prev = c;
+    }
+    return prev;
+}
+
+[[clang::annotate("override@ygui:splitter:widget_on_press")]]
+static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ctx,
+                                              struct yetty_yclass_object *yclass_obj, float x,
+                                              float y, int btn)
+{
+    (void)yclass_ctx;
+    (void)yclass_obj;
+    (void)x;
+    (void)y;
+    (void)btn;
+    /* Consume so the framework captures the pointer for the drag. */
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+[[clang::annotate("override@ygui:splitter:widget_on_motion")]]
+static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_ctx,
+                                               struct yetty_yclass_object *yclass_obj, float x,
+                                               float y)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_ygui_object *parent = yetty_ygui_object_parent(obj);
+    struct yetty_ygui_object *prev = splitter_prev_sibling(obj);
+    if (!parent || !prev) {
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+    const struct yetty_ygui_layout *pl = yetty_ygui_widget_layout_get(parent);
+    struct yetty_ycore_rectangle prect = yetty_ygui_widget_rect(prev);
+    struct yetty_ycore_rectangle parect = yetty_ygui_widget_rect(parent);
+    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(prev);
+
+    if (pl->direction == YETTY_YGUI_FLEX_COLUMN) {
+        float nh = y - prect.min.y;
+        float max_h = parect.max.y - prect.min.y - SPLITTER_MIN;
+        if (nh < SPLITTER_MIN) {
+            nh = SPLITTER_MIN;
+        }
+        if (max_h > SPLITTER_MIN && nh > max_h) {
+            nh = max_h;
+        }
+        l.height = nh;
+    } else {
+        float nw = x - prect.min.x;
+        float max_w = parect.max.x - prect.min.x - SPLITTER_MIN;
+        if (nw < SPLITTER_MIN) {
+            nw = SPLITTER_MIN;
+        }
+        if (max_w > SPLITTER_MIN && nw > max_w) {
+            nw = max_w;
+        }
+        l.width = nw;
+    }
+    struct yetty_ycore_void_result sr = yetty_ygui_widget_layout_set(prev, &l);
+    if (YETTY_IS_ERR(sr)) {
+        return YETTY_ERR(yetty_ycore_int, "splitter: resize", sr);
+    }
+    /* Mark dirty so the next frame re-runs the layout pass + repaints. */
+    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(prev);
+    if (YETTY_IS_ERR(dr)) {
+        return YETTY_ERR(yetty_ycore_int, "splitter: dirty", dr);
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
 
 #include "splitter.gen.c"

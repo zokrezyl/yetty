@@ -396,6 +396,9 @@ struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj)
     if (engine && engine->hovered_obj == obj) {
         engine->hovered_obj = NULL;
     }
+    if (engine && engine->pressed_obj == obj) {
+        engine->pressed_obj = NULL;
+    }
     object_unlink_from_parent(obj);
     free(obj);
     return YETTY_OK_VOID();

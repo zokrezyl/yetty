@@ -170,6 +170,13 @@ struct yetty_ygui_runtime {
      * obj->hovered flag so widgets can paint a hover variant. */
     struct yetty_ygui_object *hovered_obj;
 
+    /* Pointer-capture target. Set to the widget that consumed the last
+     * press; subsequent motion + the matching release are routed here
+     * regardless of hit-test, so click-and-drag (slider, splitter)
+     * keeps working when the cursor leaves the widget's rect. Cleared
+     * on release and on destroy of the captured object. */
+    struct yetty_ygui_object *pressed_obj;
+
     /* yclass-dispatch state for shipping the per-emit envelope to the
      * receiver-side yfigure root container. When `container_obj` is
      * set, framework_flush calls `yetty_yfigure_process_records(&ctx,

@@ -29,8 +29,10 @@ set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/collapsing_header.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/colorpicker.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/combobox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/datepicker.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/dialog.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/dropdown.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/filepicker.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/hbox.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/label.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/list.c

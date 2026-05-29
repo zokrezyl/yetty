@@ -25,8 +25,10 @@
 #include <yetty/ygui/widgets/collapsing_header.h>
 #include <yetty/ygui/widgets/colorpicker.h>
 #include <yetty/ygui/widgets/combobox.h>
+#include <yetty/ygui/widgets/datepicker.h>
 #include <yetty/ygui/widgets/dialog.h>
 #include <yetty/ygui/widgets/dropdown.h>
+#include <yetty/ygui/widgets/filepicker.h>
 #include <yetty/ygui/widgets/hbox.h>
 #include <yetty/ygui/widgets/label.h>
 #include <yetty/ygui/widgets/list.h>

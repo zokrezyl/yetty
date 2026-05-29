@@ -335,6 +335,26 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+  - name: datepicker
+    domain: ygui
+    accessor: yetty_ygui_datepicker_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/datepicker.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct dp_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
   - name: dialog
     domain: ygui
     accessor: yetty_ygui_dialog_class_get
@@ -377,6 +397,29 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: dropdown_paint
+  - name: filepicker
+    domain: ygui
+    accessor: yetty_ygui_filepicker_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/filepicker.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct fp_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
   - name: hbox
     domain: ygui
     accessor: yetty_ygui_hbox_class_get
@@ -660,6 +703,12 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: on_motion
   - name: statusbar
     domain: ygui
     accessor: yetty_ygui_statusbar_class_get

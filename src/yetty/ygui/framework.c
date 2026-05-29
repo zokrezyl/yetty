@@ -446,7 +446,15 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
     if (!engine->root) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ygui_object *target = hit_test(engine->root, x, y);
+    struct yetty_ygui_object *target;
+    if (pressed) {
+        target = hit_test(engine->root, x, y);
+    } else {
+        /* Release goes to the capture target (if any) so the widget that
+         * began a drag also sees its end, even off-rect. */
+        target = engine->pressed_obj ? engine->pressed_obj : hit_test(engine->root, x, y);
+        engine->pressed_obj = NULL;
+    }
     while (target) {
         struct yetty_ycore_int_result r =
             pressed ? yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)target, x, y,
@@ -458,6 +466,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
                              "yetty_ygui_framework_feed_mouse_button: on_press/release", r);
         }
         if (r.value) {
+            if (pressed) {
+                engine->pressed_obj = target; /* capture for the drag */
+            }
             engine->dirty = 1;
             return YETTY_OK_VOID();
         }
@@ -473,6 +484,25 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_motion: NULL engine");
     }
     if (!engine->root) {
+        return YETTY_OK_VOID();
+    }
+    /* During a drag, route motion to the capture target regardless of
+     * where the cursor is — that's what makes slider / splitter drags
+     * track past the widget's own rect. */
+    if (engine->pressed_obj) {
+        struct yetty_ygui_object *cap = engine->pressed_obj;
+        while (cap) {
+            struct yetty_ycore_int_result r =
+                yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)cap, x, y);
+            if (YETTY_IS_ERR(r)) {
+                return YETTY_ERR(yetty_ycore_void,
+                                 "yetty_ygui_framework_feed_mouse_motion: capture on_motion", r);
+            }
+            if (r.value) {
+                return YETTY_OK_VOID();
+            }
+            cap = cap->parent;
+        }
         return YETTY_OK_VOID();
     }
     struct yetty_ygui_object *target = hit_test(engine->root, x, y);
