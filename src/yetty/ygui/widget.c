@@ -180,6 +180,7 @@ struct yetty_ygui_layout yetty_ygui_layout_default(void)
     l.absolute = 0;
     l.pos_x = 0.0f;
     l.pos_y = 0.0f;
+    l.hidden = 0;
     return l;
 }
 

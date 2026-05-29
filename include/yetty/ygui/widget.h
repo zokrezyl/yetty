@@ -70,6 +70,13 @@ struct yetty_ygui_layout {
     int absolute;
     float pos_x;
     float pos_y;
+    /* When non-zero, this widget and its subtree are excluded from both
+     * the layout pass (consumes no main-axis space, contributes no flex
+     * sum) and the emit walk (no container record, no body prims). Used
+     * by collapsible containers (collapsing_header, tree_node) to fold
+     * away their children when closed without disturbing the children's
+     * authored sizes — restoring visibility is a single flag flip. */
+    int hidden;
 };
 
 /* Initial layout — all enums zeroed (row / start / start), no gap, no

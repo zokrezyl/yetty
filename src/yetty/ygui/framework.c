@@ -803,7 +803,17 @@ fail:
 static int should_skip_subtree(const struct yetty_ygui_object *node)
 {
     const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(node);
-    if (!l || !l->absolute) {
+    if (!l) {
+        return 0;
+    }
+    /* Explicitly folded-away subtree (collapsed collapsing_header /
+     * tree_node child). Omitting the CMD_GROUP body bytes for the tick
+     * removes the prims on the receiver — same mechanism the closed-popup
+     * skip below relies on. */
+    if (l->hidden) {
+        return 1;
+    }
+    if (!l->absolute) {
         return 0;
     }
     return l->width <= 0.0f || l->height <= 0.0f;

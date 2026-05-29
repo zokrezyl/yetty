@@ -112,6 +112,9 @@ static struct flex_summary summarize_children(struct yetty_ygui_object *parent,
     struct flex_summary s = {0};
     for (struct yetty_ygui_object *c = parent->first_child; c; c = c->next_sibling) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
+        if (cl->hidden) {
+            continue; /* folded-away subtree consumes no space */
+        }
         if (cl->absolute) {
             continue; /* absolutely-positioned children skip flex */
         }
@@ -190,6 +193,9 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
     struct yetty_ycore_void_result loop_r = YETTY_OK_VOID();
     for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
+        if (cl->hidden) {
+            continue; /* folded away — no rect, no recurse */
+        }
         if (cl->absolute) {
             /* Place absolute children directly at (pos_x, pos_y) inside
              * parent content box. Skip flex bookkeeping. */
@@ -265,6 +271,9 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
     for (struct yetty_ygui_object *c = node->first_child; c && idx < placed_count;
          c = c->next_sibling) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
+        if (cl->hidden) {
+            continue; /* skipped in the sizing pass — no idx consumed */
+        }
         if (cl->absolute) {
             continue; /* already placed in the sizing pass above */
         }
