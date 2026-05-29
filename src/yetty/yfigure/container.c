@@ -50,7 +50,7 @@ struct child_entry {
 };
 
 struct [[clang::annotate("class@yfigure:container")]]
-       [[clang::annotate("uses@yfigure:figure")]] yetty_yfigure_container {
+       [[clang::annotate("parent@yfigure:figure")]] yetty_yfigure_container {
     struct yetty_yfigure_figure base;
     /* uthash head — id → entry. Iterating via HASH_ITER / e->hh.next
      * walks children in INSERTION ORDER (= z-order: back-to-front). */
@@ -373,6 +373,7 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
     }
 
     case YETTY_YFIGURE_ADMIN_CREATE_CHILD: {
+        ydebug("container admin CREATE_CHILD: body_len=%zu", body_len);
         /* Layout: u32 child_id | u32 kind | f32 rect[4] | u32 init_bytes_size | init... */
         if (body_len < 4 + 4 + 16 + 4) {
             return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: header too small");
@@ -754,6 +755,7 @@ struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
             /* Clean end of envelope — all body bytes delivered. */
             break;
         }
+        ydebug("consume_envelope: record id=%u length=%u", hdr.id, hdr.length);
         struct yetty_ycore_void_result dr = YETTY_OK_VOID();
         struct yetty_yfigure_figure *child =
             (hdr.id == 0) ? NULL : yetty_yfigure_container_find_child_by_id(container, hdr.id);

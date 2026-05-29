@@ -1,5 +1,5 @@
 /* GENERATED — do not edit. */
-/* Public interface for mixin(es) `figure` (module: yfigure).
+/* Public interface for regular class(es) `figure` (module: yfigure).
  * Codegen regenerates the section above the MANUAL markers;
  * hand-written content between the markers is preserved
  * across runs. Edit annotated source for accessor + slot
@@ -11,7 +11,7 @@
 #include <yclass/class.h>
 #include <yetty/yfigure/methods.h>
 
-struct yetty_yclass_ptr_result yetty_yfigure_figure_mixin_get(void);
+struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void);
 
 /* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 struct yetty_yfigure_figure;
@@ -89,6 +89,15 @@ struct yetty_yfigure_figure_ops {
     char *(*dump)(const struct yetty_yfigure_figure *self, int indent);
 };
 
+/* figure is a concrete yclass base class — concrete kinds (container,
+ * ygrid, ymgui, …) inherit via `parent@yfigure:figure`, not via
+ * `uses@`. The yclass annotation lives on the forward declaration in
+ * `src/yetty/yfigure/figure.c` so the figure module's codegen pass
+ * groups the class under figure.c (its natural host TU) rather than
+ * the first .c that transitively includes this header. The struct
+ * still carries the legacy `yetty_yfigure_figure_ops` vtable head
+ * member; that vtable remains intentionally transitional until every
+ * concrete figure kind speaks yclass dispatch end-to-end. */
 struct yetty_yfigure_figure {
     const struct yetty_yfigure_figure_ops *ops;
     /* AABB in target pixel space. Set at construction by the concrete

@@ -14,6 +14,7 @@ methods:
         type: float
       - name: button
         type: int
+    local: false
   - slot: widget_on_release
     domain: ygui
     owning_class: clickable
@@ -29,6 +30,7 @@ methods:
         type: float
       - name: button
         type: int
+    local: false
   - slot: widget_emit_body
     domain: ygui
     owning_class: primitive_widget
@@ -40,6 +42,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: ctx
         type: "struct yetty_ygui_emit_ctx *"
+    local: true
   - slot: constructor
     domain: ygui
     owning_class: widget
@@ -49,6 +52,7 @@ methods:
         type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
+    local: false
   - slot: destructor
     domain: ygui
     owning_class: widget
@@ -58,6 +62,7 @@ methods:
         type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
+    local: false
   - slot: widget_on_motion
     domain: ygui
     owning_class: widget
@@ -71,6 +76,7 @@ methods:
         type: float
       - name: y
         type: float
+    local: false
   - slot: widget_paint
     domain: ygui
     owning_class: widget
@@ -82,6 +88,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: emit_ctx
         type: "struct yetty_ygui_emit_ctx *"
+    local: true
   - slot: widget_emit_container
     domain: ygui
     owning_class: widget
@@ -93,6 +100,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: emit_ctx
         type: "struct yetty_ygui_emit_ctx *"
+    local: true
 classes:
   - name: clickable
     domain: ygui

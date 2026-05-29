@@ -5,9 +5,9 @@ classes:
     accessor: yetty_ymgui_figure_class_get
     type: regular
     source_file: src/yetty/ymgui/figure.c
-    parent: null
-    mixins:
-      - domain: yfigure
-        name: figure
+    parent:
+      domain: yfigure
+      name: figure
+    mixins: []
     data: struct yetty_ymgui_figure
     ops: []

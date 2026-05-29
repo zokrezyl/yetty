@@ -210,11 +210,36 @@ void *yetty_ygui_data_get(struct yetty_ygui_object *obj, const struct yetty_ycla
     return (char *)obj + off;
 }
 
+/* Add `cls`'s own data_size + every mixin's data_size to `*total`.
+ * Any failure on the yclass side is propagated — a partial sum would
+ * under-allocate the instance, which surfaces later as an assert in
+ * data_get or worse (silent slice overlap), so we bail at the first
+ * unreadable size. */
+static struct yetty_ycore_void_result instance_size_add_level(const struct yetty_yclass *cls,
+                                                              size_t *total)
+{
+    struct yetty_ycore_size_result ds = yetty_yclass_data_size(cls);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ds, "instance_size_add_level: data_size");
+    *total += ds.value;
+    struct yetty_ycore_size_result mc = yetty_yclass_mixin_count(cls);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mc, "instance_size_add_level: mixin_count");
+    for (size_t j = 0; j < mc.value; ++j) {
+        struct yetty_yclass_ptr_result mxr = yetty_yclass_mixin_at(cls, j);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mxr, "instance_size_add_level: mixin_at");
+        struct yetty_ycore_size_result mds = yetty_yclass_data_size(mxr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mds, "instance_size_add_level: mixin data_size");
+        *total += mds.value;
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Total per-instance size (object header + every data slice) for a
  * class. Used by yetty_ygui_add to size the calloc. Sums via the
  * same walk data_offset does — root-down through parent + parent
- * mixins, then leaf own + leaf mixins. */
-static size_t instance_size_of(const struct yetty_yclass *leaf)
+ * mixins, then leaf own + leaf mixins. Returns a Result so callers
+ * propagate yclass failures instead of allocating a partial body
+ * that data_get can't honestly satisfy. */
+static struct yetty_ycore_size_result instance_size_of(const struct yetty_yclass *leaf)
 {
     size_t total = sizeof(struct yetty_ygui_object);
     const struct yetty_yclass *chain[64];
@@ -223,73 +248,26 @@ static size_t instance_size_of(const struct yetty_yclass *leaf)
         const struct yetty_yclass *cur = leaf;
         for (;;) {
             struct yetty_yclass_ptr_result pr = yetty_yclass_parent(cur);
-            if (YETTY_IS_ERR(pr)) {
-                yetty_ycore_error_destroy(pr.error);
-                break;
-            }
+            YETTY_RETURN_IF_ERR(yetty_ycore_size, pr, "instance_size_of: parent walk");
             if (!pr.value) {
                 break;
             }
             if (chain_len >= sizeof(chain) / sizeof(chain[0])) {
-                return total;
+                return YETTY_ERR(yetty_ycore_size,
+                                 "instance_size_of: parent chain too deep");
             }
             chain[chain_len++] = pr.value;
             cur = pr.value;
         }
     }
     for (size_t i = chain_len; i > 0; --i) {
-        const struct yetty_yclass *p = chain[i - 1];
-        struct yetty_ycore_size_result ds = yetty_yclass_data_size(p);
-        if (YETTY_IS_OK(ds)) {
-            total += ds.value;
-        } else {
-            yetty_ycore_error_destroy(ds.error);
-        }
-        struct yetty_ycore_size_result mc = yetty_yclass_mixin_count(p);
-        if (YETTY_IS_OK(mc)) {
-            for (size_t j = 0; j < mc.value; ++j) {
-                struct yetty_yclass_ptr_result mxr = yetty_yclass_mixin_at(p, j);
-                if (YETTY_IS_OK(mxr)) {
-                    struct yetty_ycore_size_result mds = yetty_yclass_data_size(mxr.value);
-                    if (YETTY_IS_OK(mds)) {
-                        total += mds.value;
-                    } else {
-                        yetty_ycore_error_destroy(mds.error);
-                    }
-                } else {
-                    yetty_ycore_error_destroy(mxr.error);
-                }
-            }
-        } else {
-            yetty_ycore_error_destroy(mc.error);
-        }
+        struct yetty_ycore_void_result lr = instance_size_add_level(chain[i - 1], &total);
+        YETTY_RETURN_IF_ERR(yetty_ycore_size, lr, "instance_size_of: parent level");
     }
-    /* Leaf own. */
-    struct yetty_ycore_size_result ds = yetty_yclass_data_size(leaf);
-    if (YETTY_IS_OK(ds)) {
-        total += ds.value;
-    } else {
-        yetty_ycore_error_destroy(ds.error);
-    }
-    struct yetty_ycore_size_result mc = yetty_yclass_mixin_count(leaf);
-    if (YETTY_IS_OK(mc)) {
-        for (size_t j = 0; j < mc.value; ++j) {
-            struct yetty_yclass_ptr_result mxr = yetty_yclass_mixin_at(leaf, j);
-            if (YETTY_IS_OK(mxr)) {
-                struct yetty_ycore_size_result mds = yetty_yclass_data_size(mxr.value);
-                if (YETTY_IS_OK(mds)) {
-                    total += mds.value;
-                } else {
-                    yetty_ycore_error_destroy(mds.error);
-                }
-            } else {
-                yetty_ycore_error_destroy(mxr.error);
-            }
-        }
-    } else {
-        yetty_ycore_error_destroy(mc.error);
-    }
-    return total;
+    /* Leaf own + leaf mixins. */
+    struct yetty_ycore_void_result lr = instance_size_add_level(leaf, &total);
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, lr, "instance_size_of: leaf level");
+    return YETTY_OK(yetty_ycore_size, total);
 }
 
 /*===========================================================================
@@ -347,8 +325,12 @@ struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cl
         yetty_ycore_error_destroy(tr.error);
     }
 
-    size_t inst_size = instance_size_of(cls);
-    struct yetty_ygui_object *obj = calloc(1, inst_size);
+    struct yetty_ycore_size_result szr = instance_size_of(cls);
+    if (YETTY_IS_ERR(szr)) {
+        return YETTY_ERR(yetty_ygui_object_ptr,
+                         "yetty_ygui_add: instance_size_of failed", szr);
+    }
+    struct yetty_ygui_object *obj = calloc(1, szr.value);
     if (!obj) {
         return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_add: calloc instance failed");
     }

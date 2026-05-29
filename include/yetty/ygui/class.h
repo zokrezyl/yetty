@@ -17,6 +17,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include <yclass/class.h>
 #include <yetty/ycore/result.h>
@@ -52,6 +54,32 @@ yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls, yetty_yclass_method_s
 yetty_yclass_impl_t
 yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
                                  yetty_yclass_method_slot slot);
+
+/* Unwrap a `yetty_yclass_ptr_result` returned by a `<class>_class_get()`
+ * accessor at sites that treat class-registration failure as
+ * unrecoverable. yclass classes register at the first accessor call and
+ * the result is cached for the life of the process — outside of OOM
+ * during startup, registration cannot fail after the first successful
+ * call. Anywhere a widget's `data_get` / `super_void` / `add` call needs
+ * the class pointer mid-frame and has nowhere meaningful to thread a
+ * Result, use this helper instead of reading `.value` blindly. On
+ * failure it prints the cause chain to stderr and aborts — a corrupted
+ * Result union read as a pointer is far worse.
+ *
+ * Sites that DO have a Result-returning return path (constructors,
+ * setters that already return a Result) should propagate the error
+ * via YETTY_RETURN_IF_ERR instead — call this helper only where the
+ * caller's signature offers no error channel. */
+static inline const struct yetty_yclass *
+yetty_ygui_class_expect(struct yetty_yclass_ptr_result r, const char *site)
+{
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_print(stderr, site ? site : "ygui_class_expect", r.error);
+        yetty_ycore_error_destroy(r.error);
+        abort();
+    }
+    return r.value;
+}
 
 #ifdef __cplusplus
 }

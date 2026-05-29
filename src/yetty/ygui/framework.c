@@ -29,6 +29,7 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yterm/osc-codes.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -130,18 +131,34 @@ static int figure_is_minted(const struct yetty_ygui_runtime *engine, uint32_t id
     return 0;
 }
 
-static struct yetty_ycore_void_result figure_mark_minted(struct yetty_ygui_runtime *engine,
-                                                         uint32_t id)
+/* Variant that also consults the in-flight emit's staged set. Used by
+ * emit-time callers so a child minted earlier in the same tick isn't
+ * re-CREATEd within that tick (and so a flush failure doesn't leave a
+ * staged child "remembered" on the sender that the receiver never saw). */
+static int figure_is_minted_or_staged(const struct yetty_ygui_emit_ctx *ctx, uint32_t id)
 {
-    if (figure_is_minted(engine, id)) return YETTY_OK_VOID();
-    if (engine->minted_figure_count == engine->minted_figure_cap) {
-        size_t ncap = engine->minted_figure_cap ? engine->minted_figure_cap * 2 : 8;
-        uint32_t *na = realloc(engine->minted_figures, ncap * sizeof(*na));
-        if (!na) return YETTY_ERR(yetty_ycore_void, "figure_mark_minted: realloc");
-        engine->minted_figures = na;
-        engine->minted_figure_cap = ncap;
+    if (!ctx) return 0;
+    if (figure_is_minted(ctx->engine, id)) return 1;
+    for (size_t i = 0; i < ctx->staged_mint_count; ++i) {
+        if (ctx->staged_mints[i] == id) return 1;
     }
-    engine->minted_figures[engine->minted_figure_count++] = id;
+    return 0;
+}
+
+/* Append `id` to the per-tick staged set. Pushed onto engine->minted_figures
+ * by framework_emit only after framework_flush returns OK. */
+static struct yetty_ycore_void_result figure_stage_mint(struct yetty_ygui_emit_ctx *ctx,
+                                                        uint32_t id)
+{
+    if (!ctx) return YETTY_ERR(yetty_ycore_void, "figure_stage_mint: NULL ctx");
+    if (ctx->staged_mint_count == ctx->staged_mint_cap) {
+        size_t ncap = ctx->staged_mint_cap ? ctx->staged_mint_cap * 2 : 8;
+        uint32_t *na = realloc(ctx->staged_mints, ncap * sizeof(*na));
+        if (!na) return YETTY_ERR(yetty_ycore_void, "figure_stage_mint: realloc");
+        ctx->staged_mints = na;
+        ctx->staged_mint_cap = ncap;
+    }
+    ctx->staged_mints[ctx->staged_mint_count++] = id;
     return YETTY_OK_VOID();
 }
 
@@ -160,16 +177,25 @@ struct yetty_ycore_void_result yetty_ygui_emit_ensure_child(
     struct yetty_ygui_emit_ctx *ctx, uint32_t child_id, uint32_t kind, float min_x, float min_y,
     float max_x, float max_y, const uint8_t *init_payload, uint32_t init_payload_bytes)
 {
+    ydebug("ensure_child id=%u kind=%u rect=(%.1f,%.1f)-(%.1f,%.1f) minted=%d staged=%d", child_id,
+           kind, min_x, min_y, max_x, max_y,
+           ctx && ctx->engine ? figure_is_minted(ctx->engine, child_id) : -1,
+           ctx ? (int)ctx->staged_mint_count : -1);
     if (!ctx || !ctx->engine) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_ensure_child: NULL ctx");
     }
-    if (figure_is_minted(ctx->engine, child_id)) {
+    /* Consult both engine state (prior ticks) and the staged set
+     * (this tick): if a CREATE_CHILD for `child_id` was already
+     * appended this tick, fall through to SET_CHILD_RECT just like we
+     * would for a previously committed mint — the receiver will see
+     * both records in order. */
+    if (figure_is_minted_or_staged(ctx, child_id)) {
         return yetty_ygui_emit_set_child_rect(ctx, child_id, min_x, min_y, max_x, max_y);
     }
     struct yetty_ycore_void_result r = yetty_ygui_emit_create_child(
         ctx, child_id, kind, min_x, min_y, max_x, max_y, init_payload, init_payload_bytes);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_emit_ensure_child: create");
-    return figure_mark_minted(ctx->engine, child_id);
+    return figure_stage_mint(ctx, child_id);
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(struct yetty_ygui_runtime *engine,
@@ -773,8 +799,12 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
         return YETTY_OK_VOID();
     }
     if (should_skip_subtree(node)) {
+        ydebug("walk_container: SKIP node=%p id=%u", (void *)node,
+               yetty_ygui_object_id(node));
         return YETTY_OK_VOID();
     }
+    ydebug("walk_container: node=%p id=%u klass=%p", (void *)node, yetty_ygui_object_id(node),
+           (void *)node->klass);
     struct yetty_ycore_void_result r = yetty_ygui_widget_emit_container(NULL, (struct yetty_yclass_object *)node, ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                         "yetty_ygui_framework_walk_emit_container: emit_container");
@@ -822,7 +852,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_ensure_chrome(struct yetty_y
             engine->viewport_h, NULL, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                             "yetty_ygui_framework_ensure_chrome: ygrid CREATE_CHILD");
-        engine->ygrid_created = 1;
+        /* Staged — engine->ygrid_created flips only after flush succeeds. */
+        ctx->staged_ygrid_created = 1;
     } else {
         /* Keep the ygrid's rect in sync with the viewport. */
         struct yetty_ycore_void_result r = yetty_ygui_emit_set_child_rect(
@@ -844,8 +875,12 @@ static struct yetty_ycore_void_result flush_pending_deletes(struct yetty_ygui_ru
         struct yetty_ycore_void_result r =
             yetty_ygui_emit_delete_child(ctx, engine->pending_deletes[i]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "flush_pending_deletes: DELETE_CHILD");
+        /* Track how far we got. The queue is shifted only after flush
+         * succeeds; on partial failure the unsent prefix stays queued
+         * and is retried next tick (drop succeeds-so-far so retries
+         * don't double-emit). */
+        ctx->staged_deletes_consumed = i + 1;
     }
-    engine->pending_delete_count = 0;
     return YETTY_OK_VOID();
 }
 
@@ -994,7 +1029,14 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
         .ygrid_draw_list = engine->ygrid_draw_list,
         .figure_bodies = &engine->figure_bodies,
         .current_figure_id = 0,
+        .staged_mints = NULL,
+        .staged_mint_count = 0,
+        .staged_mint_cap = 0,
+        .staged_ygrid_created = 0,
+        .staged_deletes_consumed = 0,
     };
+
+    struct yetty_ycore_void_result r = YETTY_OK_VOID();
 
     /* Run the layout pass — without this every widget's rect stays
      * (0,0)-(0,0) and paint emits zero-sized geometry. The root rect
@@ -1002,8 +1044,12 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
     if (engine->root) {
         struct yetty_ycore_rectangle root_rect = {
             .min = {0.0f, 0.0f}, .max = {engine->viewport_w, engine->viewport_h}};
-        struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(engine->root, root_rect);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yetty_ygui_framework_emit: layout_compute");
+        r = yetty_ygui_layout_compute(engine->root, root_rect);
+        if (YETTY_IS_ERR(r)) {
+            free(ctx.staged_mints);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_ygui_framework_emit: layout_compute", r);
+        }
     }
 
     /* Pending deletes go through the container records stream first. The
@@ -1011,27 +1057,82 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
      * between two emits can be assigned the id of a widget destroyed in
      * the same window. Emitting DELETE_CHILD ahead of any CREATE_CHILD
      * for that id keeps the receiver's view ordered: old gone, new in. */
-    struct yetty_ycore_void_result r = flush_pending_deletes(engine, &ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: flush_pending_deletes");
+    r = flush_pending_deletes(engine, &ctx);
+    if (YETTY_IS_ERR(r)) {
+        free(ctx.staged_mints);
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_emit: flush_pending_deletes", r);
+    }
 
     r = yetty_ygui_framework_ensure_chrome(engine, &ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: ensure_chrome");
+    if (YETTY_IS_ERR(r)) {
+        free(ctx.staged_mints);
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: ensure_chrome", r);
+    }
 
     /* Pass 1: container records. */
     if (engine->root) {
         r = yetty_ygui_framework_walk_emit_container(engine->root, &ctx);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: walk pass 1");
+        if (YETTY_IS_ERR(r)) {
+            free(ctx.staged_mints);
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: walk pass 1", r);
+        }
     }
 
     /* Pass 2: body records. */
     if (engine->root) {
         r = yetty_ygui_framework_walk_emit_body(engine->root, &ctx);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: walk pass 2");
+        if (YETTY_IS_ERR(r)) {
+            free(ctx.staged_mints);
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: walk pass 2", r);
+        }
     }
 
     /* Concatenate streams and ship. */
     r = yetty_ygui_framework_flush(engine);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_emit: flush");
+    if (YETTY_IS_ERR(r)) {
+        /* Flush failure: leave engine state untouched so the next
+         * emit replays CREATE/DELETE for everything staged this tick. */
+        free(ctx.staged_mints);
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: flush", r);
+    }
+
+    /* Commit staged sender-side bookkeeping now that the receiver has
+     * the envelope. The staged_mints become permanent minted_figures
+     * entries; ygrid_created flips iff a CREATE_CHILD for the ygrid
+     * was actually sent; the consumed prefix of pending_deletes is
+     * dropped from the queue. */
+    if (ctx.staged_mint_count > 0) {
+        size_t want = engine->minted_figure_count + ctx.staged_mint_count;
+        if (want > engine->minted_figure_cap) {
+            size_t ncap = engine->minted_figure_cap ? engine->minted_figure_cap : 8;
+            while (ncap < want) ncap *= 2;
+            uint32_t *na = realloc(engine->minted_figures, ncap * sizeof(*na));
+            if (!na) {
+                free(ctx.staged_mints);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "yetty_ygui_framework_emit: commit mints: realloc");
+            }
+            engine->minted_figures = na;
+            engine->minted_figure_cap = ncap;
+        }
+        memcpy(engine->minted_figures + engine->minted_figure_count, ctx.staged_mints,
+               ctx.staged_mint_count * sizeof(uint32_t));
+        engine->minted_figure_count += ctx.staged_mint_count;
+    }
+    if (ctx.staged_ygrid_created) {
+        engine->ygrid_created = 1;
+    }
+    if (ctx.staged_deletes_consumed > 0) {
+        size_t remaining = engine->pending_delete_count - ctx.staged_deletes_consumed;
+        if (remaining > 0) {
+            memmove(engine->pending_deletes,
+                    engine->pending_deletes + ctx.staged_deletes_consumed,
+                    remaining * sizeof(uint32_t));
+        }
+        engine->pending_delete_count = remaining;
+    }
+    free(ctx.staged_mints);
 
     /* Mark the engine clean — every per-frame full re-emit is still the
      * model; per-widget dirty tracking will gate the incremental emit

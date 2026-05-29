@@ -1,9 +1,10 @@
 /* GENERATED — do not edit. */
 #include "yetty/yfigure/figure.h"
+#include "yetty/yfigure/methods.gen.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-struct yetty_yclass_ptr_result yetty_yfigure_figure_mixin_get(void)
+struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
 {
     static const struct yetty_yclass *cls = NULL;
     if (cls) return YETTY_OK(yetty_yclass_ptr, cls);
@@ -11,7 +12,7 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_mixin_get(void)
 
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_yfigure_figure",
-        .type = YETTY_YCLASS_TYPE_MIXIN,
+        .type = YETTY_YCLASS_TYPE_REGULAR,
         .data_size = sizeof(struct yetty_yfigure_figure),
     };
     static const struct yetty_yclass_op ops[] = {

@@ -160,7 +160,7 @@ struct ygrid_id_index_entry {
  * The figure
  *=========================================================================*/
 
-struct [[clang::annotate("class@ygrid:grid")]] [[clang::annotate("uses@yfigure:figure")]]
+struct [[clang::annotate("class@ygrid:grid")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_ygrid_grid {
     struct yetty_yfigure_figure base;
 

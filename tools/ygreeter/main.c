@@ -21,6 +21,7 @@
  * no knowledge of which mode it's in.
  */
 
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,6 +148,13 @@ struct app {
 
     struct tab_state tabs[TAB_COUNT];
 
+    /* Image-path scratch: filled from get_data_dir/logo-N.jpeg at
+     * startup by discover_logo_images, referenced from the Images
+     * nav entries. Heap so the count can grow. Owned by the app —
+     * freed at shutdown. */
+    char **image_paths;
+    int image_path_count;
+
     /* Client mode back-pointer for the key-handler's stop_cb path.
      * NULL in standalone mode. */
     struct client_state *client;
@@ -169,11 +177,6 @@ struct app {
     struct yetty_ydraw_target *render_target;
 #endif
 };
-
-/* Image-path scratch: filled from get_data_dir/logo-N.jpeg at startup,
- * referenced from the Images nav entries. Heap so the count can grow. */
-static char **g_image_paths = NULL;
-static int g_image_path_count = 0;
 
 /*=============================================================================
  * UI build + tab navigation.
@@ -341,10 +344,11 @@ static const struct nav_entry code_nav_entries[] = {
  * Image discovery — populate g_image_paths[] with absolute paths to
  * logo-N.jpeg files under the platform's data dir, matching the
  * main-branch behaviour. */
-static void discover_logo_images(void)
+static void discover_logo_images(struct app *app)
 {
-    if (g_image_paths) return;
+    if (app->image_paths) return;
     const char *data_dir = yetty_yplatform_get_data_dir();
+    ydebug("ygreeter: discover_logo_images data_dir=%s", data_dir ? data_dir : "(null)");
     if (!data_dir || !*data_dir) return;
     char path_buf[1024];
     char **paths = NULL;
@@ -352,7 +356,10 @@ static void discover_logo_images(void)
     int cap = 0;
     for (int i = 1; i <= 8; ++i) {
         snprintf(path_buf, sizeof(path_buf), "%s/logo-%d.jpeg", data_dir, i);
-        if (access(path_buf, R_OK) != 0) continue;
+        int ok = access(path_buf, R_OK) == 0;
+        ydebug("ygreeter: discover_logo_images probe=%s status=%s", path_buf,
+               ok ? "found" : "missing");
+        if (!ok) continue;
         if (count == cap) {
             int ncap = cap ? cap * 2 : 4;
             char **np = realloc(paths, (size_t)ncap * sizeof(*np));
@@ -364,8 +371,9 @@ static void discover_logo_images(void)
         if (!paths[count]) break;
         count++;
     }
-    g_image_paths = paths;
-    g_image_path_count = count;
+    app->image_paths = paths;
+    app->image_path_count = count;
+    ydebug("ygreeter: discover_logo_images count=%d", count);
 }
 
 /*-----------------------------------------------------------------------------
@@ -507,24 +515,24 @@ static struct row_link *new_row_link(struct app *app, int tab, int entry)
     return rl;
 }
 
-static int tab_entry_count(int tab_index)
+static int tab_entry_count(const struct app *app, int tab_index)
 {
     switch (tab_index) {
     case 0: return (int)(sizeof(welcome_nav_entries) / sizeof(welcome_nav_entries[0]));
     case 1: return (int)(sizeof(plot_nav_entries) / sizeof(plot_nav_entries[0]));
-    case 2: return g_image_path_count > 0 ? g_image_path_count : 1;
+    case 2: return app->image_path_count > 0 ? app->image_path_count : 1;
     case 3: return (int)(sizeof(code_nav_entries) / sizeof(code_nav_entries[0]));
     default: return 0;
     }
 }
 
-static const char *tab_entry_label(int tab_index, int entry_index)
+static const char *tab_entry_label(const struct app *app, int tab_index, int entry_index)
 {
     switch (tab_index) {
     case 0: return welcome_nav_entries[entry_index].label;
     case 1: return plot_nav_entries[entry_index].label;
     case 2: {
-        if (g_image_path_count <= 0) return "(no images found)";
+        if (app->image_path_count <= 0) return "(no images found)";
         static char buf[64];
         snprintf(buf, sizeof(buf), "logo-%d", entry_index + 1);
         return buf;
@@ -557,7 +565,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
 
     struct tab_state *t = &app->tabs[tab_index];
     t->kind = tab_kind_for(tab_index);
-    int n = tab_entry_count(tab_index);
+    int n = tab_entry_count(app, tab_index);
     t->n_entries = n;
     if (t->active_entry < 0 || t->active_entry >= n) t->active_entry = 0;
 
@@ -588,7 +596,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
             yetty_ygui_add(yetty_ygui_button_class_get().value, nr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "rebuild: nav button");
         yetty_ycore_error_destroy_safe(
-            yetty_ygui_button_set_label(br.value, tab_entry_label(tab_index, i)));
+            yetty_ygui_button_set_label(br.value, tab_entry_label(app, tab_index, i)));
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(br.value);
             l.height = 28.0f;
@@ -644,8 +652,8 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
         break;
     }
     case TAB_KIND_IMAGES: {
-        const char *path = g_image_path_count > 0 && t->active_entry < g_image_path_count
-                               ? g_image_paths[t->active_entry]
+        const char *path = app->image_path_count > 0 && t->active_entry < app->image_path_count
+                               ? app->image_paths[t->active_entry]
                                : NULL;
         yetty_ycore_error_destroy_safe(
             load_image_entry(NULL, (struct yetty_yclass_object *)content, path));
@@ -698,7 +706,7 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
 
 static struct yetty_ycore_void_result build_ui(struct app *app)
 {
-    discover_logo_images();
+    discover_logo_images(app);
 
     struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root add");
@@ -943,28 +951,54 @@ struct client_state {
  * and renders the garbage as visible text. cfmakeraw turns ECHO off.
  *---------------------------------------------------------------------------*/
 static struct termios ygreeter_saved_tty;
-static int ygreeter_tty_active = 0;
+static int ygreeter_tty_fd = -1;       /* fd whose termios we mutated */
+static int ygreeter_tty_owned_fd = -1; /* fd we opened ourselves (close on restore) */
 
 static void ygreeter_tty_restore(void)
 {
-    if (ygreeter_tty_active) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &ygreeter_saved_tty);
-        ygreeter_tty_active = 0;
+    if (ygreeter_tty_fd >= 0) {
+        tcsetattr(ygreeter_tty_fd, TCSANOW, &ygreeter_saved_tty);
+        ygreeter_tty_fd = -1;
+    }
+    if (ygreeter_tty_owned_fd >= 0) {
+        close(ygreeter_tty_owned_fd);
+        ygreeter_tty_owned_fd = -1;
     }
 }
 
+/* Disable ECHO+ICANON on the controlling terminal. Critical for any
+ * yetty-hosted client: the host writes OSC mouse envelopes to the PTY
+ * master, and a cooked-mode slave tty echoes the ESC bytes back as
+ * "^[" (ECHOCTL caret notation). The echoed bytes loop into yetty's
+ * own master read, and libvterm displays the OSC payload as visible
+ * "^[]700000;;<base64>^[\" garbage at the prompt.
+ *
+ * STDIN may not be the controlling tty in every launch path (login(1)
+ * variants, su, redirected stdin). Fall back to /dev/tty so the raw-
+ * mode setup still applies even when stdin is a pipe/socket. */
 static int ygreeter_tty_raw(void)
 {
-    if (!isatty(STDIN_FILENO)) return 0;
-    if (tcgetattr(STDIN_FILENO, &ygreeter_saved_tty) < 0) return -1;
+    int fd = STDIN_FILENO;
+    if (!isatty(fd)) {
+        fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+        if (fd < 0) return -1;
+        ygreeter_tty_owned_fd = fd;
+    }
+    if (tcgetattr(fd, &ygreeter_saved_tty) < 0) goto fail;
     struct termios raw = ygreeter_saved_tty;
     cfmakeraw(&raw);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0) return -1;
-    ygreeter_tty_active = 1;
+    if (tcsetattr(fd, TCSANOW, &raw) < 0) goto fail;
+    ygreeter_tty_fd = fd;
     atexit(ygreeter_tty_restore);
     return 0;
+fail:
+    if (ygreeter_tty_owned_fd >= 0) {
+        close(ygreeter_tty_owned_fd);
+        ygreeter_tty_owned_fd = -1;
+    }
+    return -1;
 }
 
 /*-----------------------------------------------------------------------------

@@ -172,6 +172,18 @@ def ret_value_type(rid: str):
 #                                                                       the slot is owned by
 #                                                                       <SLOT_DOMAIN> (a
 #                                                                       different module).
+#   local@<DOMAIN>:<SLOT>                             on any fn       — mark the named slot
+#                                                                       as local-only; the
+#                                                                       public stub is built
+#                                                                       without an RPC branch
+#                                                                       and the slot is not
+#                                                                       added to the skel
+#                                                                       table. Use for slots
+#                                                                       whose arguments cannot
+#                                                                       be wire-marshalled
+#                                                                       (raw producer pointers
+#                                                                       to local-only carriers
+#                                                                       such as emit contexts).
 #
 # Methods are inferred — every distinct SLOT whose owning domain equals
 # the current module becomes a public method. Its C signature is taken
@@ -326,6 +338,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     typedef assignment per override that the compiler type-checks."""
     methods: dict = {}
     classes: dict = {}
+    local_slots: set = set()
 
     def bucket(name: str) -> dict:
         if name not in classes:
@@ -370,6 +383,23 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             if kind == "FunctionDecl":
                 for ann in anns:
                     role, args = _split_ann(ann)
+                    if role == "local":
+                        # `local@<DOMAIN>:<SLOT>` — every public stub
+                        # built for <SLOT> drops its RPC branch and
+                        # the skel table excludes it. The function the
+                        # annotation rides on is irrelevant; we just
+                        # use it as an anchor for the slot-attribute.
+                        require_segments(role, args, 2, "local@<DOMAIN>:<SLOT>")
+                        slot_dom, slot_name = args[0], args[1]
+                        if slot_dom != module:
+                            # Foreign-module slot attribute — that
+                            # module's own codegen owns the slot's
+                            # locality; ignore here so a header
+                            # inclusion can't silently flip a remote
+                            # module's wire contract.
+                            continue
+                        local_slots.add(slot_name)
+                        continue
                     if role == "override":
                         # Two shapes accepted:
                         #   3 segs — slot lives in the impl class's domain
@@ -476,6 +506,23 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             f"{orphans} — every override@<DOMAIN>:<CLASS>:<SLOT> needs a "
             f"matching class@<DOMAIN>:<CLASS> or mixin@<DOMAIN>:<CLASS> "
             f"record on the data struct.\n")
+        sys.exit(1)
+    # Slots flagged via `local@` are not wire-marshalled — every public
+    # stub for them is emitted without an RPC branch and the skel table
+    # excludes them. Tag each method here so downstream emitters
+    # (emit_dispatch_body, emit_lookup_tables) can read off `m["local"]`.
+    for m in methods.values():
+        m["local"] = m["slot"] in local_slots
+    # A `local@` annotation that names a slot we have no impl for is a
+    # programmer mistake — without an impl the slot also produces no
+    # public stub, so the annotation is dead weight. Surface it loudly.
+    impl_slots = {m["slot"] for m in methods.values()}
+    dangling = [s for s in local_slots if s not in impl_slots]
+    if dangling:
+        sys.stderr.write(
+            f"error: local@{module}:<slot> annotations name slots with no "
+            f"impl in this module: {dangling}. Each local-marked slot must "
+            f"have at least one override@ in the same module.\n")
         sys.exit(1)
     return {
         "methods": list(methods.values()),
@@ -619,6 +666,12 @@ def validate_method(m: dict):
             f"error: method {m['slot']}: second arg must be 'struct yetty_yclass_object *' "
             f"(got '{args[1]['type']}')\n")
         sys.exit(1)
+    # Local-only slots are never marshalled, so the wire-shape rules
+    # below don't apply: they may freely take raw pointers to producer-
+    # owned carriers (emit context, draw list, …) that have no wire
+    # representation. Skip the pointer/return shape checks entirely.
+    if m.get("local"):
+        return
     # Pointer args after obj are accepted ONLY when they have the
     # shape `struct X *` — those are wire-marshalled as yclass object
     # handles, same way obj itself is. Every other pointer flavour
@@ -771,6 +824,33 @@ def emit_dispatch_body(m: dict) -> str:
     ctx_name = args[0]["name"]
     obj_name = args[1]["name"]
     call_args = ", ".join(a["name"] for a in args)
+    qs = qualified_slot(m)
+
+    # Local-only slot: the public stub is dispatch + NULL-check, no
+    # session/RPC branch. Args that don't survive marshalling (raw
+    # producer pointers to local carriers) stay in-process by
+    # construction.
+    if m.get("local"):
+        return f"""\
+    static yetty_yclass_method_slot _slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {{
+        struct yetty_yclass_method_slot_result _sr =
+            yetty_yclass_method_slot_get("yetty_{m['domain']}", (yetty_yclass_method_id_t){qs});
+        if (YETTY_IS_ERR(_sr))
+            return YETTY_ERR({rid}, "{qs}: method_slot_get failed", _sr);
+        _slot = _sr.value;
+    }}
+
+    if (!{obj_name}) return YETTY_ERR({rid}, "{qs}: NULL object");
+
+    struct yetty_yclass_ptr_result _cr_local =
+        yetty_yclass_object_class({obj_name});
+    YETTY_RETURN_IF_ERR({rid}, _cr_local, "{qs}: object_class failed");
+    struct yetty_yclass_impl_t_result _ir =
+        yetty_yclass_dispatch_lookup(_cr_local.value, _slot);
+    YETTY_RETURN_IF_ERR({rid}, _ir, "{qs}: dispatch_lookup failed");
+    return (({slot_fn})_ir.value)({call_args});
+"""
 
     wargs = wire_args(m)
     init_parts = []
@@ -797,8 +877,6 @@ def emit_dispatch_body(m: dict) -> str:
     init = ", ".join(init_parts)
     fields = args_struct_body(wargs, indent="            ")
     buf_args = [a for a in wargs if is_buffer(a["type"])]
-
-    qs = qualified_slot(m)
 
     # Build the wire body. No buffer args = fast path, body is &_a /
     # sizeof(_a). With buffer args we heap-allocate `sizeof(_a) +
@@ -1488,13 +1566,16 @@ static struct yetty_yclass_ptr_result yetty_{module}_accessor_lookup(const char 
     # targets a foreign-owned slot) has nothing to dispatch on the wire.
     # Skip the skel table and the rpc_add_skel_lookup install — the
     # foreign module's skel_lookup already covers those slots.
-    if not methods:
+    # Local-only slots have no skel either (no wire surface), so filter
+    # them out before building the row table.
+    wire_methods = [m for m in methods if not m.get("local")]
+    if not wire_methods:
         skel_install = ""
         skel_section = ""
     else:
         skel_rows = ",\n".join(
             f'    {{"{qualified_slot(m)}", {qualified_slot(m)}_skel}}'
-            for m in methods
+            for m in wire_methods
         )
         skel_section = f"""\
 
@@ -1584,6 +1665,11 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
              '#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'
              '#include <string.h>\n\n']
     for m in model["methods"]:
+        # Local-only slots never cross the wire and have no skel — the
+        # public stub is dispatch-only, and emit_lookup_tables omits
+        # them from skel_rows.
+        if m.get("local"):
+            continue
         parts.append(emit_skel(m))
         parts.append("\n")
     for c in regular_classes(model):

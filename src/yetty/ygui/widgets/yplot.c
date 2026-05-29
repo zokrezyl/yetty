@@ -9,6 +9,7 @@
 
 #include "../internal.h"
 
+#include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/widgets/yplot.h>
@@ -100,9 +101,50 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *_
     const void *bytes = yetty_ydraw_draw_list_data(dl);
     size_t size = yetty_ydraw_draw_list_size(dl);
     struct yetty_ycore_void_result fr = YETTY_OK_VOID();
-    if (bytes && size > 0 && size <= 0xFFFFFFFFu) {
-        fr = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), (const uint8_t *)bytes,
-                                         (uint32_t)size);
+    if (bytes && size > 0) {
+        if (size > 0xFFFFFFFFu) {
+            yetty_ydraw_draw_list_destroy(dl);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yplot_emit_body: rendered draw_list exceeds wire u32 length");
+        }
+        /* Receiver-side ygrid APPENDS instances/prims per body — same
+         * accumulation bug as yimage. Prefix CMD_ZERO so the figure's
+         * ygrid resets before consuming the fresh yplot record. See
+         * yimage.c for the full rationale. */
+        struct yetty_ydraw_draw_list_result zlr =
+            yetty_ydraw_draw_list_config_buffer_create(NULL);
+        if (YETTY_IS_ERR(zlr)) {
+            yetty_ydraw_draw_list_destroy(dl);
+            return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: prefix list create", zlr);
+        }
+        struct yetty_ydraw_draw_list *zl = zlr.value;
+        struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(zl);
+        if (YETTY_IS_ERR(zr)) {
+            yetty_ydraw_draw_list_destroy(zl);
+            yetty_ydraw_draw_list_destroy(dl);
+            return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: CMD_ZERO append", zr);
+        }
+        const void *zbytes = yetty_ydraw_draw_list_data(zl);
+        size_t zsize = yetty_ydraw_draw_list_size(zl);
+        if (zsize > 0xFFFFFFFFu - size) {
+            yetty_ydraw_draw_list_destroy(zl);
+            yetty_ydraw_draw_list_destroy(dl);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yplot_emit_body: prefixed body would overflow u32");
+        }
+        size_t total = zsize + size;
+        uint8_t *combined = malloc(total);
+        if (!combined) {
+            yetty_ydraw_draw_list_destroy(zl);
+            yetty_ydraw_draw_list_destroy(dl);
+            return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: combined oom");
+        }
+        if (zbytes && zsize > 0) memcpy(combined, zbytes, zsize);
+        memcpy(combined + zsize, bytes, size);
+        fr = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined,
+                                         (uint32_t)total);
+        free(combined);
+        yetty_ydraw_draw_list_destroy(zl);
     }
     yetty_ydraw_draw_list_destroy(dl);
     return fr;

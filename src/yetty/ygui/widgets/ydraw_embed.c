@@ -133,7 +133,12 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, st
     size_t remaining = src_size;
     while (remaining >= sizeof(uint32_t)) {
         size_t s = prim_size((const uint32_t *)p, remaining);
-        if (s == 0 || s > remaining) break;
+        if (s == 0 || s > remaining) {
+            free(heap);
+            return YETTY_ERR(yetty_ycore_void,
+                             "ydraw_embed paint: malformed primitive stream "
+                             "(unknown type or size overruns buffer)");
+        }
         uint8_t *work = stack;
         if (s > sizeof(stack)) {
             if (s > heap_cap) {
@@ -157,6 +162,11 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx, st
         }
         p += s;
         remaining -= s;
+    }
+    if (remaining != 0) {
+        free(heap);
+        return YETTY_ERR(yetty_ycore_void,
+                         "ydraw_embed paint: trailing bytes shorter than a primitive header");
     }
     free(heap);
     return YETTY_OK_VOID();

@@ -1,21 +1,28 @@
 /*
- * yfigure:figure mixin host TU.
+ * yfigure:figure base-class host TU.
  *
- * The mixin's annotation lives on `struct yetty_yfigure_figure` in
- * `<yetty/yfigure/figure.h>` — embedded by every figure-kind class
- * verbatim. This TU exists so codegen has a `.c` source to walk for
- * the figure module's annotated declarations; it carries no impl of
- * its own.
+ * `struct yetty_yfigure_figure` is the yclass base class for every
+ * concrete figure kind (container, ygrid, ymgui, …). The struct is
+ * defined in `<yetty/yfigure/figure.h>` and embedded as the first
+ * member by every concrete class; the `parent@yfigure:figure`
+ * annotation on each concrete class wires the inheritance to yclass.
  *
- * The mixin owns no yclass slots at this stage. Per-figure-kind
- * lifecycle is expressed through:
- *   - the kind's own class slots (process_bytes, clear, set_font, …)
- *   - the existing `struct yetty_yfigure_figure_ops` vtable, kept in
- *     parallel until every caller switches to yclass dispatch.
+ * This TU owns no yclass slots at this stage. Per-figure-kind
+ * lifecycle still flows through `struct yetty_yfigure_figure_ops` —
+ * an intentionally transitional vtable kept until every concrete kind
+ * routes render/destroy/process via yclass dispatch directly.
  *
- * Both axes coexist so the cutover can happen one kind at a time
- * without breaking the build mid-flight.
+ * The codegen-generated accessor for the base class
+ * (`yetty_yfigure_figure_class_get`) is included from `figure.gen.c`
+ * at the foot.
  */
+/* yclass annotation host. The forward declaration must precede the
+ * definition (which figure.h brings in) for clang to honour the
+ * attribute. Codegen reads the annotation off this decl and attributes
+ * the figure class to figure.c — its natural host TU — rather than
+ * the first foreign .c that transitively includes the public header. */
+struct [[clang::annotate("class@yfigure:figure")]] yetty_yfigure_figure;
+
 #include <yetty/yfigure/figure.h>
 
 #include "figure.gen.c"

@@ -162,6 +162,25 @@ struct yetty_ygui_emit_ctx {
     struct yetty_ydraw_draw_list *ygrid_draw_list;
     struct yetty_ycore_buffer *figure_bodies;
     uint32_t current_figure_id;
+
+    /* Sender-side bookkeeping that the receiver only learns about after
+     * flush actually delivers the envelope. We stage the deltas here
+     * during emit; framework_emit copies them onto `engine` after
+     * flush returns OK and discards them on failure so the next tick
+     * retries CREATE/DELETE rather than skipping them.
+     *
+     *  - staged_mints: figure ids whose CREATE_CHILD admin record was
+     *    appended this tick. Committed onto engine->minted_figures.
+     *  - staged_ygrid_created: ygrid CREATE_CHILD was appended this
+     *    tick (was not previously minted). Commits engine->ygrid_created.
+     *  - staged_deletes_consumed: prefix of engine->pending_deletes
+     *    that has been turned into DELETE_CHILD records. On commit
+     *    that prefix is dropped from the queue. */
+    uint32_t *staged_mints;
+    size_t staged_mint_count;
+    size_t staged_mint_cap;
+    int staged_ygrid_created;
+    size_t staged_deletes_consumed;
 };
 
 struct yetty_ycore_void_result yetty_ygui_emit_create_child(

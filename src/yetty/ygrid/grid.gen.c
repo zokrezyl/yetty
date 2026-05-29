@@ -34,13 +34,12 @@ struct yetty_yclass_ptr_result yetty_ygrid_grid_class_get(void)
         {"yetty_ygrid", "process_bytes", (yetty_yclass_method_id_t)yetty_ygrid_process_bytes, (yetty_yclass_impl_t)yetty_ygrid_grid_process_bytes_impl},
         {"yetty_ygrid", "reset_content", (yetty_yclass_method_id_t)yetty_ygrid_reset_content, (yetty_yclass_impl_t)yetty_ygrid_grid_reset_content_impl},
     };
-    struct yetty_yclass_ptr_result _mixin0_r = yetty_yfigure_figure_mixin_get();
-    if (YETTY_IS_ERR(_mixin0_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygrid_grid_class_get: mixin0 accessor failed", _mixin0_r);
-    const struct yetty_yclass *mixins[] = { _mixin0_r.value };
+    struct yetty_yclass_ptr_result _parent_r = yetty_yfigure_figure_class_get();
+    if (YETTY_IS_ERR(_parent_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygrid_grid_class_get: parent accessor failed", _parent_r);
     struct yetty_yclass_ptr_result _r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                              NULL, mixins, 1);
+                              _parent_r.value, NULL, 0);
     if (YETTY_IS_ERR(_r))
         return YETTY_ERR(yetty_yclass_ptr, "yetty_ygrid_grid_class_get: class_register failed", _r);
     cls = _r.value;

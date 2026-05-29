@@ -5,5 +5,6 @@
 #include <yclass/rpc.h>
 
 struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *ctx);
 
 #endif

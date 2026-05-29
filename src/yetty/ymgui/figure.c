@@ -41,7 +41,7 @@
  *=========================================================================*/
 
 struct [[clang::annotate("class@ymgui:figure")]]
-       [[clang::annotate("uses@yfigure:figure")]] yetty_ymgui_figure {
+       [[clang::annotate("parent@yfigure:figure")]] yetty_ymgui_figure {
     struct yetty_yfigure_figure base;
 
     /* Borrowed — shared shader/pipeline/sampler. */

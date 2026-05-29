@@ -29,12 +29,15 @@ struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget_data {
 
 /* Convenience accessor — every internal helper that needs the widget
  * class pointer goes through this. The codegen-shaped accessor returns
- * a Result; this unwraps to the plain pointer for callers that treat
- * registration failure as fatal (which it is — class registration
- * happens at startup or never). */
+ * a Result; this delegates to yetty_ygui_class_expect so a registration
+ * failure aborts loudly with the chained cause rather than silently
+ * casting the error union to a pointer. Registration only happens at
+ * the first call and the result is cached — after that this is a
+ * one-instruction Result unwrap. */
 static const struct yetty_yclass *widget_class(void)
 {
-    return yetty_ygui_widget_class_get().value;
+    return yetty_ygui_class_expect(yetty_ygui_widget_class_get(),
+                                   "yetty_ygui_widget_class_get");
 }
 
 /*===========================================================================
@@ -121,6 +124,7 @@ widget_default_on_motion(struct yetty_yclass_ctx *ctx, struct yetty_yclass_objec
 }
 
 [[clang::annotate("override@ygui:widget:widget_paint")]]
+[[clang::annotate("local@ygui:widget_paint")]]
 static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_ctx *ctx,
                                                            struct yetty_yclass_object *obj,
                                                            struct yetty_ygui_emit_ctx *emit_ctx)
@@ -132,6 +136,7 @@ static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@ygui:widget:widget_emit_container")]]
+[[clang::annotate("local@ygui:widget_emit_container")]]
 static struct yetty_ycore_void_result
 widget_default_emit_container(struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
                               struct yetty_ygui_emit_ctx *emit_ctx)
@@ -143,6 +148,7 @@ widget_default_emit_container(struct yetty_yclass_ctx *ctx, struct yetty_yclass_
 }
 
 [[clang::annotate("override@ygui:widget:widget_emit_body")]]
+[[clang::annotate("local@ygui:widget_emit_body")]]
 static struct yetty_ycore_void_result widget_default_emit_body(struct yetty_yclass_ctx *ctx,
                                                                struct yetty_yclass_object *obj,
                                                                struct yetty_ygui_emit_ctx *emit_ctx)
