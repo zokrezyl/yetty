@@ -744,337 +744,144 @@ static enum tab_kind tab_kind_for(int tab_index)
     }
 }
 
-/* Fill the Elements scrollarea with one collapsing-header per widget
- * family. The section list and the per-section widget mix mirror the
- * main-branch ygreeter's Elements tab exactly: Inputs, Selectors,
- * Display, Plot, Image, Lists & Trees, Layout & Containers, Overlays.
- * Each section is a collapsing_header that hosts a vbox of widgets;
- * the parent scrollarea wheel-scrolls the whole surface when sections
- * overflow.
+/* Elements scrollarea — minimal first cut mirroring
+ * demo/ygui/35_collapsing_header_open: a small set of
+ * collapsing_header sections each holding a handful of plain widgets.
  *
- * Per-widget calls swallow the Result error so a single misconfigured
- * widget can't take the entire tab build down. */
+ * Sizing caveat documented in layout.c: the flex pass treats
+ * `height = -1` as `main_pref = 0`, so children with no authored
+ * height collapse to zero rect and stack at y=0. Every leaf widget
+ * AND every section container therefore needs an explicit `height`.
+ * yimage / yplot / chrome-heavy widgets are intentionally left out of
+ * this initial shape — once headers + simple widgets render correctly
+ * we add them back one section at a time. */
+
+#define EL_ROW_H 28.0f
+#define EL_HEADER_H 28.0f
+#define EL_GAP 4.0f
+
+static float el_section_height(int n_rows)
+{
+    if (n_rows < 0) n_rows = 0;
+    float content = (float)n_rows * EL_ROW_H;
+    if (n_rows > 1) content += (float)(n_rows - 1) * EL_GAP;
+    return (EL_HEADER_H + 4.0f) + content + 4.0f;
+}
+
+static struct yetty_ycore_void_result el_set_height(struct yetty_ygui_object *w, float h)
+{
+    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+    l.height = h;
+    return yetty_ygui_widget_layout_set(w, &l);
+}
+
+static struct yetty_ygui_object_ptr_result el_add_section(struct yetty_ygui_object *parent,
+                                                          const char *title, int n_rows)
+{
+    struct yetty_ygui_object_ptr_result hr =
+        yetty_ygui_add(yetty_ygui_collapsing_header_class_get().value, parent);
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, hr, "el_add_section: header");
+    struct yetty_ycore_void_result tr =
+        yetty_ygui_collapsing_header_set_title(hr.value, title);
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, tr, "el_add_section: set_title");
+    struct yetty_ycore_void_result or = yetty_ygui_collapsing_header_set_open(hr.value, 1);
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, or, "el_add_section: set_open");
+    struct yetty_ycore_void_result hh = el_set_height(hr.value, el_section_height(n_rows));
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, hh, "el_add_section: set_height");
+    return hr;
+}
+
 static struct yetty_ycore_void_result build_elements_content(struct app *app,
                                                               struct yetty_ygui_object *root)
 {
     (void)app;
 
-#define EL_OK(x) yetty_ycore_error_destroy_safe(x)
-#define EL_ADD(cls, parent_obj, out_var)                                                           \
-    struct yetty_ygui_object_ptr_result out_var##_r =                                              \
-        yetty_ygui_add((cls), (parent_obj));                                                       \
-    struct yetty_ygui_object *out_var = YETTY_IS_OK(out_var##_r) ? out_var##_r.value : NULL;       \
-    if (YETTY_IS_ERR(out_var##_r)) yetty_ycore_error_destroy(out_var##_r.error)
-#define EL_HEADER(title, parent_obj, out)                                                          \
-    do {                                                                                           \
-        struct yetty_ygui_object_ptr_result _hr_ =                                                 \
-            yetty_ygui_add(yetty_ygui_collapsing_header_class_get().value, (parent_obj));          \
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, _hr_, "elements: header " title);                    \
-        EL_OK(yetty_ygui_collapsing_header_set_title(_hr_.value, title));                          \
-        EL_OK(yetty_ygui_collapsing_header_set_open(_hr_.value, 0));                               \
-        struct yetty_ygui_layout _l_ = *yetty_ygui_widget_layout_get(_hr_.value);                  \
-        _l_.gap = 6.0f;                                                                            \
-        _l_.padding_top = _l_.padding_bottom = 4.0f;                                               \
-        EL_OK(yetty_ygui_widget_layout_set(_hr_.value, &_l_));                                     \
-        (out) = _hr_.value;                                                                        \
-    } while (0)
-
-    struct yetty_ygui_object *sec = NULL;
-
-    /* ---- Inputs ---- */
-    EL_HEADER("Inputs", root, sec);
+    /* ---- Inputs (4 rows) ---- */
     {
-        EL_ADD(yetty_ygui_button_class_get().value, sec, btn);
-        if (btn) EL_OK(yetty_ygui_button_set_label(btn, "Button"));
+        struct yetty_ygui_object_ptr_result hr = el_add_section(root, "Inputs", 4);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "elements: Inputs section");
+        struct yetty_ygui_object *sec = hr.value;
 
-        EL_ADD(yetty_ygui_textinput_class_get().value, sec, ti);
-        if (ti) EL_OK(yetty_ygui_textinput_set_placeholder(ti, "type here…"));
+        struct yetty_ygui_object_ptr_result br =
+            yetty_ygui_add(yetty_ygui_button_class_get().value, sec);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "elements: Inputs button");
+        struct yetty_ycore_void_result bl = yetty_ygui_button_set_label(br.value, "Button");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, bl, "elements: Inputs button label");
+        struct yetty_ycore_void_result bh = el_set_height(br.value, EL_ROW_H);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, bh, "elements: Inputs button height");
 
-        EL_ADD(yetty_ygui_slider_class_get().value, sec, sl);
-        if (sl) {
-            EL_OK(yetty_ygui_slider_set_range(sl, 0.0f, 1.0f));
-            EL_OK(yetty_ygui_slider_set_value(sl, 0.4f));
-        }
+        struct yetty_ygui_object_ptr_result tr =
+            yetty_ygui_add(yetty_ygui_textinput_class_get().value, sec);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "elements: Inputs textinput");
+        struct yetty_ycore_void_result tp =
+            yetty_ygui_textinput_set_placeholder(tr.value, "type here…");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, tp, "elements: Inputs textinput placeholder");
+        struct yetty_ycore_void_result th = el_set_height(tr.value, EL_ROW_H);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, th, "elements: Inputs textinput height");
 
-        EL_ADD(yetty_ygui_spinner_class_get().value, sec, spin_i);
-        if (spin_i) {
-            EL_OK(yetty_ygui_spinner_set_range(spin_i, 1.0f, 100.0f, 1.0f));
-            EL_OK(yetty_ygui_spinner_set_value(spin_i, 42.0f));
-        }
+        struct yetty_ygui_object_ptr_result cr =
+            yetty_ygui_add(yetty_ygui_checkbox_class_get().value, sec);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "elements: Inputs checkbox");
+        struct yetty_ycore_void_result cl = yetty_ygui_checkbox_set_label(cr.value, "Enabled");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cl, "elements: Inputs checkbox label");
+        struct yetty_ycore_void_result cc = yetty_ygui_checkbox_set_checked(cr.value, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cc, "elements: Inputs checkbox checked");
+        struct yetty_ycore_void_result ch = el_set_height(cr.value, EL_ROW_H);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ch, "elements: Inputs checkbox height");
 
-        EL_ADD(yetty_ygui_spinner_class_get().value, sec, spin_f);
-        if (spin_f) {
-            EL_OK(yetty_ygui_spinner_set_range(spin_f, 0.0f, 10.0f, 0.25f));
-            EL_OK(yetty_ygui_spinner_set_value(spin_f, 2.5f));
-        }
-
-        EL_ADD(yetty_ygui_checkbox_class_get().value, sec, cb);
-        if (cb) {
-            EL_OK(yetty_ygui_checkbox_set_label(cb, "Enabled"));
-            EL_OK(yetty_ygui_checkbox_set_checked(cb, 1));
-        }
-
-        EL_ADD(yetty_ygui_toggle_class_get().value, sec, tg);
-        if (tg) {
-            EL_OK(yetty_ygui_toggle_set_label(tg, "Notifications"));
-            EL_OK(yetty_ygui_toggle_set_on(tg, 1));
-        }
-
-        EL_ADD(yetty_ygui_progress_class_get().value, sec, pg);
-        if (pg) EL_OK(yetty_ygui_progress_set_value(pg, 0.65f));
-
-        EL_ADD(yetty_ygui_textarea_class_get().value, sec, ta);
-        if (ta)
-            EL_OK(yetty_ygui_textarea_set_text(
-                ta, "Multi-line text area.\nClick to focus, then type.\n"));
+        struct yetty_ygui_object_ptr_result sr =
+            yetty_ygui_add(yetty_ygui_slider_class_get().value, sec);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "elements: Inputs slider");
+        struct yetty_ycore_void_result sa = yetty_ygui_slider_set_range(sr.value, 0.0f, 1.0f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sa, "elements: Inputs slider range");
+        struct yetty_ycore_void_result sv = yetty_ygui_slider_set_value(sr.value, 0.4f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sv, "elements: Inputs slider value");
+        struct yetty_ycore_void_result sh = el_set_height(sr.value, EL_ROW_H);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sh, "elements: Inputs slider height");
     }
 
-    /* ---- Selectors ---- */
-    EL_HEADER("Selectors", root, sec);
+    /* ---- Display (2 rows) ---- */
     {
-        EL_ADD(yetty_ygui_radio_class_get().value, sec, r0);
-        if (r0) {
-            EL_OK(yetty_ygui_radio_set_label(r0, "Apple"));
-            EL_OK(yetty_ygui_radio_set_selected(r0, 1));
-        }
-        EL_ADD(yetty_ygui_radio_class_get().value, sec, r1);
-        if (r1) EL_OK(yetty_ygui_radio_set_label(r1, "Banana"));
-        EL_ADD(yetty_ygui_radio_class_get().value, sec, r2);
-        if (r2) EL_OK(yetty_ygui_radio_set_label(r2, "Cherry"));
+        struct yetty_ygui_object_ptr_result hr = el_add_section(root, "Display", 2);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "elements: Display section");
+        struct yetty_ygui_object *sec = hr.value;
 
-        EL_ADD(yetty_ygui_dropdown_class_get().value, sec, dd);
-        if (dd) {
-            EL_OK(yetty_ygui_dropdown_add_option(dd, "Option A"));
-            EL_OK(yetty_ygui_dropdown_add_option(dd, "Option B"));
-            EL_OK(yetty_ygui_dropdown_add_option(dd, "Option C"));
-            EL_OK(yetty_ygui_dropdown_set_selected(dd, 0));
-        }
+        struct yetty_ygui_object_ptr_result lr =
+            yetty_ygui_add(yetty_ygui_label_class_get().value, sec);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "elements: Display label");
+        struct yetty_ycore_void_result lt = yetty_ygui_label_set_text(lr.value, "Plain label");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, lt, "elements: Display label text");
+        struct yetty_ycore_void_result lh = el_set_height(lr.value, EL_ROW_H);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, lh, "elements: Display label height");
 
-        EL_ADD(yetty_ygui_combobox_class_get().value, sec, cmb);
-        if (cmb) {
-            EL_OK(yetty_ygui_combobox_set_text(cmb, "red"));
-            EL_OK(yetty_ygui_combobox_add_suggestion(cmb, "red"));
-            EL_OK(yetty_ygui_combobox_add_suggestion(cmb, "green"));
-            EL_OK(yetty_ygui_combobox_add_suggestion(cmb, "blue"));
-            EL_OK(yetty_ygui_combobox_add_suggestion(cmb, "magenta"));
-        }
-
-        EL_ADD(yetty_ygui_choicebox_class_get().value, sec, ch);
-        if (ch) {
-            EL_OK(yetty_ygui_choicebox_add(ch, "Small"));
-            EL_OK(yetty_ygui_choicebox_add(ch, "Medium"));
-            EL_OK(yetty_ygui_choicebox_add(ch, "Large"));
-            EL_OK(yetty_ygui_choicebox_add(ch, "Huge"));
-        }
-
-        EL_ADD(yetty_ygui_colorpicker_class_get().value, sec, cp);
-        if (cp) EL_OK(yetty_ygui_colorpicker_set_color(cp, 0xFF6BA892));
+        struct yetty_ygui_object_ptr_result pr =
+            yetty_ygui_add(yetty_ygui_progress_class_get().value, sec);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "elements: Display progress");
+        struct yetty_ycore_void_result pv = yetty_ygui_progress_set_value(pr.value, 0.65f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pv, "elements: Display progress value");
+        struct yetty_ycore_void_result ph = el_set_height(pr.value, EL_ROW_H);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ph, "elements: Display progress height");
     }
 
-    /* ---- Display ---- */
-    EL_HEADER("Display", root, sec);
+    /* ---- Chrome (2 rows) ---- */
     {
-        EL_ADD(yetty_ygui_label_class_get().value, sec, lb);
-        if (lb) EL_OK(yetty_ygui_label_set_text(lb, "Plain label"));
+        struct yetty_ygui_object_ptr_result hr = el_add_section(root, "Chrome", 2);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "elements: Chrome section");
+        struct yetty_ygui_object *sec = hr.value;
 
-        EL_ADD(yetty_ygui_separator_class_get().value, sec, sp);
-        (void)sp;
+        struct yetty_ygui_object_ptr_result spr =
+            yetty_ygui_add(yetty_ygui_separator_class_get().value, sec);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, spr, "elements: Chrome separator");
+        struct yetty_ycore_void_result sph = el_set_height(spr.value, EL_ROW_H);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sph, "elements: Chrome separator height");
 
-        EL_ADD(yetty_ygui_progress_class_get().value, sec, pg);
-        if (pg) EL_OK(yetty_ygui_progress_set_value(pg, 0.25f));
-
-        EL_ADD(yetty_ygui_table_class_get().value, sec, tbl);
-        if (tbl) {
-            static const char *cols[] = {"PID", "USER", "%CPU", "COMMAND"};
-            EL_OK(yetty_ygui_table_set_columns(tbl, 4, cols));
-            static const char *row1[] = {"1", "root", "0.0", "/sbin/init"};
-            static const char *row2[] = {"42", "misi", "1.3", "/usr/bin/yetty"};
-            static const char *row3[] = {"1337", "misi", "0.2", "/usr/bin/ygreeter"};
-            EL_OK(yetty_ygui_table_add_row(tbl, row1, 4));
-            EL_OK(yetty_ygui_table_add_row(tbl, row2, 4));
-            EL_OK(yetty_ygui_table_add_row(tbl, row3, 4));
-        }
-
-        EL_ADD(yetty_ygui_breadcrumbs_class_get().value, sec, bc);
-        if (bc) {
-            EL_OK(yetty_ygui_breadcrumbs_add(bc, "Home"));
-            EL_OK(yetty_ygui_breadcrumbs_add(bc, "Projects"));
-            EL_OK(yetty_ygui_breadcrumbs_add(bc, "yetty"));
-            EL_OK(yetty_ygui_breadcrumbs_add(bc, "ygui"));
-        }
-
-        EL_ADD(yetty_ygui_hbox_class_get().value, sec, chip_row);
-        if (chip_row) {
-            struct yetty_ygui_layout chl = *yetty_ygui_widget_layout_get(chip_row);
-            chl.gap = 6.0f;
-            EL_OK(yetty_ygui_widget_layout_set(chip_row, &chl));
-            EL_ADD(yetty_ygui_chip_class_get().value, chip_row, c1);
-            if (c1) {
-                EL_OK(yetty_ygui_chip_set_label(c1, "linux"));
-                EL_OK(yetty_ygui_chip_set_closable(c1, 1));
-            }
-            EL_ADD(yetty_ygui_chip_class_get().value, chip_row, c2);
-            if (c2) {
-                EL_OK(yetty_ygui_chip_set_label(c2, "gpu"));
-                EL_OK(yetty_ygui_chip_set_closable(c2, 1));
-            }
-            EL_ADD(yetty_ygui_chip_class_get().value, chip_row, c3);
-            if (c3) {
-                EL_OK(yetty_ygui_chip_set_label(c3, "rust-free"));
-                EL_OK(yetty_ygui_chip_set_closable(c3, 0));
-            }
-        }
-
-        EL_ADD(yetty_ygui_stepper_class_get().value, sec, stp);
-        if (stp) {
-            EL_OK(yetty_ygui_stepper_add_step(stp, "Setup"));
-            EL_OK(yetty_ygui_stepper_add_step(stp, "Install"));
-            EL_OK(yetty_ygui_stepper_add_step(stp, "Done"));
-            EL_OK(yetty_ygui_stepper_set_current(stp, 1));
-        }
+        struct yetty_ygui_object_ptr_result sbr =
+            yetty_ygui_add(yetty_ygui_statusbar_class_get().value, sec);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sbr, "elements: Chrome statusbar");
+        struct yetty_ycore_void_result sbh = el_set_height(sbr.value, EL_ROW_H);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sbh, "elements: Chrome statusbar height");
     }
 
-    /* ---- Plot ---- */
-    EL_HEADER("Plot", root, sec);
-    {
-        EL_ADD(yetty_ygui_yplot_class_get().value, sec, pl);
-        if (pl) {
-            struct yetty_ygui_yplot_config cfg = {
-                .x_min = -6.2832f, .x_max = 6.2832f,
-                .y_min = -1.5f,    .y_max = 1.5f,
-                .flags = 0,
-            };
-            EL_OK(yetty_ygui_yplot_set_config(pl, &cfg));
-            EL_OK(yetty_ygui_yplot_set_source(
-                pl, "f=sin(x+t); g=cos(x+t); @f.color=#ff6b6b; @g.color=#4ecdc4"));
-            struct yetty_ygui_layout pll = *yetty_ygui_widget_layout_get(pl);
-            pll.width = 460.0f;
-            pll.height = 200.0f;
-            EL_OK(yetty_ygui_widget_layout_set(pl, &pll));
-        }
-    }
-
-    /* ---- Image ---- */
-    EL_HEADER("Image", root, sec);
-    {
-        const char *path = (app && app->image_path_count > 0 && app->image_paths)
-                               ? app->image_paths[0]
-                               : NULL;
-        if (path) {
-            EL_ADD(yetty_ygui_yimage_class_get().value, sec, img);
-            if (img) {
-                size_t got = 0;
-                uint8_t *buf = slurp_file(path, &got);
-                if (buf) {
-                    EL_OK(yetty_ygui_yimage_set_bytes(img, buf, got));
-                    free(buf);
-                }
-                struct yetty_ygui_layout il = *yetty_ygui_widget_layout_get(img);
-                il.width = 320.0f;
-                il.height = 320.0f;
-                EL_OK(yetty_ygui_widget_layout_set(img, &il));
-            }
-        } else {
-            EL_ADD(yetty_ygui_label_class_get().value, sec, ph);
-            if (ph) EL_OK(yetty_ygui_label_set_text(ph, "(no logo image available)"));
-        }
-    }
-
-    /* ---- Lists & Trees ---- */
-    EL_HEADER("Lists & Trees", root, sec);
-    {
-        EL_ADD(yetty_ygui_list_class_get().value, sec, lst);
-        if (lst) {
-            EL_OK(yetty_ygui_list_add(lst, "Apple"));
-            EL_OK(yetty_ygui_list_add(lst, "Banana"));
-            EL_OK(yetty_ygui_list_add(lst, "Cherry"));
-            EL_OK(yetty_ygui_list_add(lst, "Date"));
-            EL_OK(yetty_ygui_list_set_selected(lst, 0));
-        }
-
-        EL_ADD(yetty_ygui_tree_node_class_get().value, sec, tn);
-        if (tn) {
-            EL_OK(yetty_ygui_tree_node_set_label(tn, "Tree root"));
-            EL_OK(yetty_ygui_tree_node_set_open(tn, 1));
-            EL_ADD(yetty_ygui_label_class_get().value, tn, k1);
-            if (k1) EL_OK(yetty_ygui_label_set_text(k1, "  child 1"));
-            EL_ADD(yetty_ygui_label_class_get().value, tn, k2);
-            if (k2) EL_OK(yetty_ygui_label_set_text(k2, "  child 2"));
-        }
-
-        EL_ADD(yetty_ygui_selectable_class_get().value, sec, sl);
-        if (sl) {
-            EL_OK(yetty_ygui_selectable_set_text(sl, "Selectable row"));
-            EL_OK(yetty_ygui_selectable_set_selected(sl, 0));
-        }
-    }
-
-    /* ---- Layout & Containers ---- */
-    EL_HEADER("Layout & Containers", root, sec);
-    {
-        EL_ADD(yetty_ygui_hbox_class_get().value, sec, split_row);
-        if (split_row) {
-            struct yetty_ygui_layout srl = *yetty_ygui_widget_layout_get(split_row);
-            srl.height = 80.0f;
-            EL_OK(yetty_ygui_widget_layout_set(split_row, &srl));
-
-            EL_ADD(yetty_ygui_panel_class_get().value, split_row, lp);
-            if (lp) {
-                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(lp);
-                l.width = 220.0f;
-                l.flex_grow = 0.0f;
-                EL_OK(yetty_ygui_widget_layout_set(lp, &l));
-                EL_OK(yetty_ygui_panel_set_bg(lp, (struct yetty_ycore_rgba){30, 38, 44, 255}));
-            }
-            EL_ADD(yetty_ygui_splitter_class_get().value, split_row, div);
-            if (div) {
-                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(div);
-                l.width = 6.0f;
-                EL_OK(yetty_ygui_widget_layout_set(div, &l));
-            }
-            EL_ADD(yetty_ygui_panel_class_get().value, split_row, rp);
-            if (rp) {
-                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(rp);
-                l.flex_grow = 1.0f;
-                EL_OK(yetty_ygui_widget_layout_set(rp, &l));
-                EL_OK(yetty_ygui_panel_set_bg(rp, (struct yetty_ycore_rgba){20, 26, 31, 255}));
-            }
-        }
-
-        EL_ADD(yetty_ygui_statusbar_class_get().value, sec, sb);
-        (void)sb;
-    }
-
-    /* ---- Overlays ---- */
-    EL_HEADER("Overlays", root, sec);
-    {
-        EL_ADD(yetty_ygui_tooltip_class_get().value, sec, tp);
-        if (tp) EL_OK(yetty_ygui_tooltip_set_text(tp, "Tooltip example"));
-
-        EL_ADD(yetty_ygui_selectable_class_get().value, sec, srow);
-        if (srow) EL_OK(yetty_ygui_selectable_set_text(srow, "Selectable row"));
-
-        EL_ADD(yetty_ygui_button_class_get().value, sec, open_dlg);
-        if (open_dlg) EL_OK(yetty_ygui_button_set_label(open_dlg, "Open dialog…"));
-
-        EL_ADD(yetty_ygui_button_class_get().value, sec, open_pop);
-        if (open_pop) EL_OK(yetty_ygui_button_set_label(open_pop, "Open popup…"));
-
-        EL_ADD(yetty_ygui_button_class_get().value, sec, open_menu);
-        if (open_menu) EL_OK(yetty_ygui_button_set_label(open_menu, "Open menu…"));
-
-        EL_ADD(yetty_ygui_popup_menu_class_get().value, sec, pmenu);
-        if (pmenu) {
-            EL_OK(yetty_ygui_popup_menu_add_item(pmenu, "First action", NULL, NULL));
-            EL_OK(yetty_ygui_popup_menu_add_item(pmenu, "Second action", NULL, NULL));
-            EL_OK(yetty_ygui_popup_menu_add_separator(pmenu));
-            EL_OK(yetty_ygui_popup_menu_add_item(pmenu, "Third action", NULL, NULL));
-        }
-    }
-
-#undef EL_HEADER
-#undef EL_ADD
-#undef EL_OK
     return YETTY_OK_VOID();
 }
 
