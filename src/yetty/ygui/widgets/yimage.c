@@ -29,32 +29,36 @@ yimage_data {
 };
 
 [[clang::annotate("override@ygui:yimage:constructor")]]
-static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                         struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                         struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_yimage_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_class_expect(yetty_ygui_yimage_class_get(), "yetty_ygui_yimage_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yimage_constructor: super");
-    struct yimage_data *d = yetty_ygui_data_get(obj, yetty_ygui_yimage_class_get().value);
+    struct yimage_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_yimage_class_get(), "yetty_ygui_yimage_class_get"));
     d->bytes = NULL;
     d->len = 0;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@ygui:yimage:destructor")]]
-static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                        struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                        struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct yimage_data *d = yetty_ygui_data_get(obj, yetty_ygui_yimage_class_get().value);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yimage_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_yimage_class_get(), "yetty_ygui_yimage_class_get"));
     free(d->bytes);
     d->bytes = NULL;
     d->len = 0;
-    return yetty_ygui_super_void(obj, yetty_ygui_yimage_class_get().value,
-                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(
+        obj, yetty_ygui_class_expect(yetty_ygui_yimage_class_get(), "yetty_ygui_yimage_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 /* Mint the receiver-side YIMAGE figure on first emit; on subsequent
@@ -62,12 +66,12 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx 
  * stays warm. The kind is hardcoded here — the framework class
  * system doesn't know about figure kinds. */
 [[clang::annotate("override@ygui:yimage:widget_emit_container")]]
-static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_ctx *_yc_ctx,
-                                                            struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_ctx *yclass_ctx,
+                                                            struct yetty_yclass_object *yclass_obj,
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YIMAGE,
                                         r.min.x, r.min.y, r.max.x, r.max.y,
@@ -75,13 +79,14 @@ static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_
 }
 
 [[clang::annotate("override@ygui:yimage:widget_emit_body")]]
-static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *_yc_ctx,
-                                                       struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *yclass_ctx,
+                                                       struct yetty_yclass_object *yclass_obj,
                                                        struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct yimage_data *d = yetty_ygui_data_get(obj, yetty_ygui_yimage_class_get().value);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yimage_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_yimage_class_get(), "yetty_ygui_yimage_class_get"));
     if (!d->bytes || d->len == 0) {
         /* Nothing to ship — figure stays alive at its current rect
          * with empty content. */
@@ -167,7 +172,8 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_ygui_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_yimage_set_bytes: NULL obj");
     }
-    struct yimage_data *d = yetty_ygui_data_get(obj, yetty_ygui_yimage_class_get().value);
+    struct yimage_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_yimage_class_get(), "yetty_ygui_yimage_class_get"));
     free(d->bytes);
     d->bytes = NULL;
     d->len = 0;
@@ -187,8 +193,9 @@ const uint8_t *yetty_ygui_yimage_bytes(const struct yetty_ygui_object *obj)
     if (!obj) {
         return NULL;
     }
-    struct yimage_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
+    struct yimage_data *d = yetty_ygui_data_get(
+        (struct yetty_ygui_object *)obj,
+        yetty_ygui_class_expect(yetty_ygui_yimage_class_get(), "yetty_ygui_yimage_class_get"));
     return d->bytes;
 }
 
@@ -197,8 +204,9 @@ size_t yetty_ygui_yimage_bytes_len(const struct yetty_ygui_object *obj)
     if (!obj) {
         return 0;
     }
-    struct yimage_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
+    struct yimage_data *d = yetty_ygui_data_get(
+        (struct yetty_ygui_object *)obj,
+        yetty_ygui_class_expect(yetty_ygui_yimage_class_get(), "yetty_ygui_yimage_class_get"));
     return d->len;
 }
 

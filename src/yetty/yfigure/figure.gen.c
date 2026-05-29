@@ -4,6 +4,11 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
+__attribute__((unused))
+static yetty_yfigure_render_fn yetty_yfigure_figure_yetty_yfigure_render_check = yetty_yfigure_figure_default_render;
+__attribute__((unused))
+static yetty_yfigure_destroy_fn yetty_yfigure_figure_yetty_yfigure_destroy_check = yetty_yfigure_figure_default_destroy;
+
 struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
 {
     static const struct yetty_yclass *cls = NULL;
@@ -16,7 +21,8 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
         .data_size = sizeof(struct yetty_yfigure_figure),
     };
     static const struct yetty_yclass_op ops[] = {
-
+        {"yetty_yfigure", "render", (yetty_yclass_method_id_t)yetty_yfigure_render, (yetty_yclass_impl_t)yetty_yfigure_figure_default_render},
+        {"yetty_yfigure", "destroy", (yetty_yclass_method_id_t)yetty_yfigure_destroy, (yetty_yclass_impl_t)yetty_yfigure_figure_default_destroy},
     };
     struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),

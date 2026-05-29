@@ -1367,8 +1367,9 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
         free(g->figure_instances);
     }
 
-    free(g);
-    return YETTY_OK_VOID();
+    /* Free the yclass allocation (header + body); the body began at
+     * obj + 1, so recover the object header by stepping back one. */
+    return yetty_yclass_object_free((struct yetty_yclass_object *)self - 1);
 }
 
 void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
@@ -1945,11 +1946,30 @@ static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
     return buf;
 }
 
+/* yclass cross-domain override of the yfigure:render slot. Recovers the
+ * typed body from the object header (body begins at obj + 1) and forwards
+ * to the existing render impl. */
+[[clang::annotate("override@ygrid:grid:yfigure:render")]]
+static struct yetty_ycore_void_result ygrid_render_slot(struct yetty_yclass_ctx *ctx,
+                                                        struct yetty_yclass_object *obj,
+                                                        struct yetty_ydraw_target *target)
+{
+    (void)ctx;
+    return ygrid_render((struct yetty_yfigure_figure *)(obj + 1), target);
+}
+
+/* yclass cross-domain override of yfigure:destroy. Body sits at obj + 1. */
+[[clang::annotate("override@ygrid:grid:yfigure:destroy")]]
+static struct yetty_ycore_void_result ygrid_destroy_slot(struct yetty_yclass_ctx *ctx,
+                                                         struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
+}
+
 static const struct yetty_yfigure_figure_ops *ygrid_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
-        .destroy = ygrid_destroy,
-        .render = ygrid_render,
         .process_bytes = ygrid_process_bytes,
         .reset_content = ygrid_reset_content,
         .dump = ygrid_dump,
@@ -2176,13 +2196,18 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
      * later; tests never call it. */
     int headless = (context == NULL) || (context->runtime == NULL);
 
-    struct yetty_ygrid_grid *g =
-        (struct yetty_ygrid_grid *)calloc(1, sizeof(struct yetty_ygrid_grid));
-    if (!g) {
-        return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: oom");
-    }
+    /* Allocate as a yclass object so the figure carries a class header
+     * (enables yclass dispatch). The typed body lives at obj + 1; the
+     * embedded `base` is its first member. */
+    struct yetty_yclass_ptr_result grid_class_r = yetty_ygrid_grid_class_get();
+    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, grid_class_r, "ygrid_create: grid class");
+    struct yetty_yclass_object_ptr_result grid_obj_r =
+        yetty_yclass_object_alloc(grid_class_r.value);
+    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, grid_obj_r, "ygrid_create: object_alloc");
+    struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)(grid_obj_r.value + 1);
 
     g->base.ops = ygrid_ops();
+    g->base.self_obj = grid_obj_r.value;
     g->base.rect = rect;
     g->base.dirty = 1;
     g->grid_cols = grid_cols;

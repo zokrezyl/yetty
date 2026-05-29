@@ -87,7 +87,7 @@ static char *dump_grid(struct yetty_ygrid_grid *grid)
 static void destroy_grid(struct yetty_ygrid_grid *grid)
 {
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(grid);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
 }
 
 /* Append a small SDF box record to buf. Coordinates are figure-local. */

@@ -1,3 +1,19 @@
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `figure` (module: yrdawn).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YRDAWN_FIGURE_H
+#define YETTY_YCLASSGEN_YRDAWN_FIGURE_H
+
+#include <yclass/class.h>
+#include <yetty/yrdawn/methods.h>
+
+struct yetty_yclass_ptr_result yetty_yrdawn_figure_class_get(void);
+
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 /*
  * yetty_yrdawn_figure — one remote yrdawn canvas as a compositor figure.
  *
@@ -7,37 +23,17 @@
  * the client-chosen session_id (one session per wasm process).
  *
  * The figure owns:
- *   - a small textured-quad pipeline that samples its frame texture
- *     (per-canvas — building it twice is cheap and keeps each figure
- *     self-contained);
+ *   - a small textured-quad pipeline that samples its frame texture;
  *   - the WGPUTexture / view / bind group that holds the most recent
  *     presented frame;
  *   - its `figure_id` (== record id on the wire == canvas address);
- *   - a borrowed pointer to its session (shared WGPU handle table,
- *     BULK reassembly slots);
- *   - a borrowed pointer to factory_args (outbound emit_osc and
- *     request_render callbacks installed by the host).
+ *   - a borrowed pointer to its session;
+ *   - a borrowed pointer to factory_args.
  *
- * Wire:
- *   - CREATE_CHILD admin record arrives at the root container with
- *     kind=YRDAWN, child_id, rect, and init_payload = {u32
- *     SUB_HELLO} + struct yetty_yrdawn_wire_hello. The factory
- *     mints the figure (no session yet); the container calls
- *     process_bytes(init_payload) which reads SUB_HELLO, looks up /
- *     creates the session, binds figure↔session, sends HELLO_ACK.
- *   - Subsequent records arrive on the SM and reach the figure's
- *     process_input coroutine. Each begins with u32 SUB_OP discriminator
- *     (CMD / BULK / BYE). The figure decodes the matching wire struct,
- *     runs the codegen dispatcher (CMD) or feeds the session's BULK
- *     reassembler.
- *
- * Outbound:
- *   - HELLO_ACK / REPLY / EVENT / SC_KEY / SC_RESIZE go out via the
- *     factory_args' emit_osc callback. Every outbound struct carries
- *     this figure's figure_id so the client demuxes correctly.
+ * Construction goes through the codegen yclass factory
+ * (yetty_yrdawn_figure_create); the registry factory wrapper
+ * yetty_yrdawn_factory mints one and binds its per-instance state.
  */
-#ifndef YETTY_YRDAWN_FIGURE_H
-#define YETTY_YRDAWN_FIGURE_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -76,9 +72,7 @@ typedef struct yetty_ycore_void_result (*yetty_yrdawn_request_render_fn)(void *u
  * The host (terminal, yui, …) builds one yetty_yrdawn_factory_args
  * bundle, registers it under YETTY_YFIGURE_KIND_YRDAWN, and the
  * yframework's register_figure_factories propagates the registration
- * to each host's registry. The args hold the per-host outbound
- * callbacks and the session table; both are shared across every
- * yrdawn canvas this host serves.
+ * to each host's registry.
  *=========================================================================*/
 
 struct yetty_yrdawn_factory_state; /* opaque — defined in figure.c */
@@ -115,12 +109,12 @@ struct yetty_ycore_void_result yetty_yrdawn_factory_args_release(
 /* Upcast. Stable pointer. */
 struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_figure *figure);
 
-/* Downcast helper. Returns NULL when `base` isn't a yrdawn figure
- * (identified by ops vtable identity). */
+/* Downcast helper. Returns NULL when `base` isn't a yrdawn figure. */
 struct yetty_yrdawn_figure *yetty_yrdawn_figure_from_base(struct yetty_yfigure_figure *base);
 
 #ifdef __cplusplus
 }
 #endif
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#endif /* YETTY_YRDAWN_FIGURE_H */
+#endif

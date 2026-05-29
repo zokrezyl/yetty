@@ -65,6 +65,12 @@ classes:
     mixins: []
     data: struct yetty_ygrid_grid
     ops:
+      - slot: render
+        slot_domain: yfigure
+        impl: ygrid_render_slot
+      - slot: destroy
+        slot_domain: yfigure
+        impl: ygrid_destroy_slot
       - slot: add_record
         slot_domain: ygrid
         impl: yetty_ygrid_grid_add_record_impl

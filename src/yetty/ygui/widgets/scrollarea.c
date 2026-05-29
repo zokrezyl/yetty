@@ -8,13 +8,15 @@
 #define SCROLLBAR_W 6.0f
 
 [[clang::annotate("override@ygui:scrollarea:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx,
-                                           struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
+                                           struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj, yetty_ygui_scrollarea_class_get().value,
+        yetty_ygui_super_void(obj,
+                              yetty_ygui_class_expect(yetty_ygui_scrollarea_class_get(),
+                                                      "yetty_ygui_scrollarea_class_get"),
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "scrollarea: super");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -27,12 +29,12 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx,
 }
 
 [[clang::annotate("override@ygui:scrollarea:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx,
-                                            struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
+                                            struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "scrollarea paint: NULL ctx");
     }

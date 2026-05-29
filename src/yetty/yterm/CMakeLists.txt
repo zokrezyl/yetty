@@ -5,6 +5,8 @@ add_library(yetty_yterm
     shader-glyph-figure.c
     background-layer.c
     osc-args.c
+    methods.gen.c
+    rpc.gen.c
 )
 
 target_include_directories(yetty_yterm BEFORE PUBLIC
@@ -17,10 +19,13 @@ target_include_directories(yetty_yterm BEFORE PUBLIC
 target_include_directories(yetty_yterm PUBLIC
     ${YETTY_ROOT}/include
 )
+# Internal yclass codegen headers (methods.gen.h) sit under src/.
+target_include_directories(yetty_yterm PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yterm
     vterm
     webgpu
+    yetty_yclass
     yetty_ydraw_core
     yetty_ydraw_factory
     yetty_yfont_core

@@ -1,6 +1,19 @@
-#ifndef YETTY_YTERM_SHADER_GLYPH_FIGURE_H
-#define YETTY_YTERM_SHADER_GLYPH_FIGURE_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `shader_glyph` (module: yterm).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YTERM_SHADER_GLYPH_FIGURE_H
+#define YETTY_YCLASSGEN_YTERM_SHADER_GLYPH_FIGURE_H
 
+#include <yclass/class.h>
+#include <yetty/yterm/methods.h>
+
+struct yetty_yclass_ptr_result yetty_yterm_shader_glyph_class_get(void);
+
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
@@ -106,5 +119,6 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_set_visual_zoom(
 #ifdef __cplusplus
 }
 #endif
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#endif /* YETTY_YTERM_SHADER_GLYPH_FIGURE_H */
+#endif

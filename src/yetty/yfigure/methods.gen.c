@@ -8,6 +8,50 @@
 #include <stdlib.h>  /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
+struct yetty_ycore_void_result yetty_yfigure_destroy(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r =
+            yetty_yclass_method_slot_get("yetty_yfigure", (yetty_yclass_method_id_t)yetty_yfigure_destroy);
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_destroy: method_slot_get failed", method_slot_r);
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_destroy: NULL object");
+
+    struct yetty_yclass_ptr_result object_class_r =
+        yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r, "yetty_yfigure_destroy: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yfigure_destroy: dispatch_lookup failed");
+    return ((yetty_yfigure_destroy_fn)dispatch_impl_r.value)(ctx, obj);
+}
+
+struct yetty_ycore_void_result yetty_yfigure_render(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yetty_ydraw_target * target)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r =
+            yetty_yclass_method_slot_get("yetty_yfigure", (yetty_yclass_method_id_t)yetty_yfigure_render);
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_render: method_slot_get failed", method_slot_r);
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_render: NULL object");
+
+    struct yetty_yclass_ptr_result object_class_r =
+        yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r, "yetty_yfigure_render: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yfigure_render: dispatch_lookup failed");
+    return ((yetty_yfigure_render_fn)dispatch_impl_r.value)(ctx, obj, target);
+}
+
 struct yetty_ycore_void_result yetty_yfigure_constructor(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;

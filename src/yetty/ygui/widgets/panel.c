@@ -25,15 +25,17 @@ panel_data {
 };
 
 [[clang::annotate("override@ygui:panel:constructor")]]
-static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                        struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                        struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_panel_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_class_expect(yetty_ygui_panel_class_get(), "yetty_ygui_panel_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "panel_constructor: super");
-    struct panel_data *d = yetty_ygui_data_get(obj, yetty_ygui_panel_class_get().value);
+    struct panel_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_panel_class_get(), "yetty_ygui_panel_class_get"));
     /* Defaults: BRAND_BG_LIFTED background, BRAND_BORDER border, 1px. */
     d->bg = (struct yetty_ycore_rgba){20, 26, 31, 255};
     d->border = (struct yetty_ycore_rgba){54, 74, 71, 255};
@@ -47,16 +49,17 @@ static uint32_t pack_rgba(struct yetty_ycore_rgba c)
 }
 
 [[clang::annotate("override@ygui:panel:widget_paint")]]
-static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *_yc_ctx,
-                                                  struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *yclass_ctx,
+                                                  struct yetty_yclass_object *yclass_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "panel_paint: NULL ctx");
     }
-    struct panel_data *d = yetty_ygui_data_get(obj, yetty_ygui_panel_class_get().value);
+    struct panel_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_panel_class_get(), "yetty_ygui_panel_class_get"));
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -81,7 +84,8 @@ struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_ygui_object 
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_panel_set_bg: NULL obj");
     }
-    struct panel_data *d = yetty_ygui_data_get(obj, yetty_ygui_panel_class_get().value);
+    struct panel_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_panel_class_get(), "yetty_ygui_panel_class_get"));
     d->bg = color;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -93,7 +97,8 @@ struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_ygui_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_panel_set_border: NULL obj");
     }
-    struct panel_data *d = yetty_ygui_data_get(obj, yetty_ygui_panel_class_get().value);
+    struct panel_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_panel_class_get(), "yetty_ygui_panel_class_get"));
     d->border = color;
     d->border_width = width_px;
     return yetty_ygui_object_set_dirty(obj);

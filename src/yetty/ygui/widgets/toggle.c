@@ -27,14 +27,15 @@ struct [[clang::annotate("class@ygui:toggle")]] [[clang::annotate(
     int on;
 };
 
-static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *_yc_ctx,
-                                                    struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *yclass_ctx,
+                                                    struct yetty_yclass_object *yclass_obj,
                                                     void *userdata)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)userdata;
-    struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
+    struct toggle_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"));
     d->on = !d->on;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
@@ -48,31 +49,35 @@ static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *_yc
 }
 
 [[clang::annotate("override@ygui:toggle:constructor")]]
-static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                         struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                         struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_toggle_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "toggle_constructor: super");
-    struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
+    struct toggle_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"));
     d->label = NULL;
     d->on = 0;
     return yetty_ygui_clickable_on_click_set(obj, on_click_flip, NULL);
 }
 
 [[clang::annotate("override@ygui:toggle:destructor")]]
-static struct yetty_ycore_void_result toggle_destructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                        struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result toggle_destructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                        struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct toggle_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"));
     free(d->label);
     d->label = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_toggle_class_get().value,
-                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(
+        obj, yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static struct yetty_ycore_void_result paint_rounded(struct yetty_ygui_emit_ctx *ctx, float x,
@@ -115,16 +120,17 @@ static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *c
 }
 
 [[clang::annotate("override@ygui:toggle:widget_paint")]]
-static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *_yc_ctx,
-                                                   struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *yclass_ctx,
+                                                   struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "toggle_paint: NULL ctx");
     }
-    struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
+    struct toggle_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"));
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float h = r.max.y - r.min.y;
     float pill_h = h - 4.0f;
@@ -160,7 +166,8 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_ygui_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "toggle_set_label: NULL obj");
     }
-    struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
+    struct toggle_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"));
     free(d->label);
     if (!label) {
         d->label = NULL;
@@ -180,7 +187,8 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_ygui_object
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "toggle_set_on: NULL obj");
     }
-    struct toggle_data *d = yetty_ygui_data_get(obj, yetty_ygui_toggle_class_get().value);
+    struct toggle_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"));
     d->on = on ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -190,8 +198,9 @@ int yetty_ygui_toggle_get_on(const struct yetty_ygui_object *obj)
     if (!obj) {
         return 0;
     }
-    struct toggle_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_toggle_class_get().value);
+    struct toggle_data *d = yetty_ygui_data_get(
+        (struct yetty_ygui_object *)obj,
+        yetty_ygui_class_expect(yetty_ygui_toggle_class_get(), "yetty_ygui_toggle_class_get"));
     return d->on;
 }
 

@@ -21,53 +21,62 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:tooltip")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] tooltip_data {
+struct [[clang::annotate("class@ygui:tooltip")]] [[clang::annotate("parent@ygui:primitive_widget")]]
+tooltip_data {
     char *text;
 };
 
 [[clang::annotate("override@ygui:tooltip:constructor")]]
-static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                          struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                          struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     /* Chain to parent first so the widget data slice is initialised
      * before we touch our own. */
-    struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj, yetty_ygui_tooltip_class_get().value,
-                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
+        obj,
+        yetty_ygui_class_expect(yetty_ygui_tooltip_class_get(), "yetty_ygui_tooltip_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "tooltip_constructor: super");
 
-    struct tooltip_data *td = yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
+    struct tooltip_data *td =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tooltip_class_get(),
+                                                         "yetty_ygui_tooltip_class_get"));
     td->text = NULL;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@ygui:tooltip:destructor")]]
-static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                         struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                         struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct tooltip_data *td = yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct tooltip_data *td =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tooltip_class_get(),
+                                                         "yetty_ygui_tooltip_class_get"));
     free(td->text);
     td->text = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_tooltip_class_get().value,
-                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(
+        obj,
+        yetty_ygui_class_expect(yetty_ygui_tooltip_class_get(), "yetty_ygui_tooltip_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:tooltip:widget_paint")]]
-static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *_yc_ctx,
-                                                    struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *yclass_ctx,
+                                                    struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "tooltip_paint: NULL ctx");
     }
-    struct tooltip_data *td = yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
+    struct tooltip_data *td =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tooltip_class_get(),
+                                                         "yetty_ygui_tooltip_class_get"));
     if (!td->text || td->text[0] == '\0') {
         return YETTY_OK_VOID();
     }
@@ -90,7 +99,9 @@ struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_ygui_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tooltip_set_text: NULL obj");
     }
-    struct tooltip_data *td = yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
+    struct tooltip_data *td =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tooltip_class_get(),
+                                                         "yetty_ygui_tooltip_class_get"));
     free(td->text);
     if (!text) {
         td->text = NULL;
@@ -110,8 +121,9 @@ const char *yetty_ygui_tooltip_get_text(const struct yetty_ygui_object *obj)
     if (!obj) {
         return NULL;
     }
-    struct tooltip_data *td =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_tooltip_class_get().value);
+    struct tooltip_data *td = yetty_ygui_data_get(
+        (struct yetty_ygui_object *)obj,
+        yetty_ygui_class_expect(yetty_ygui_tooltip_class_get(), "yetty_ygui_tooltip_class_get"));
     return td->text;
 }
 

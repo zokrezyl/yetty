@@ -100,6 +100,15 @@ struct yetty_yfigure_figure_ops {
  * concrete figure kind speaks yclass dispatch end-to-end. */
 struct yetty_yfigure_figure {
     const struct yetty_yfigure_figure_ops *ops;
+    /* The owning yclass object header, set by every yclass-allocated
+     * figure right after object_alloc (body sits at object + 1, so this
+     * equals `(struct yetty_yclass_object *)figure - 1`). NULL for
+     * figures not allocated through yclass (e.g. unit-test mocks that
+     * still ride the transitional ops vtable). The container uses this
+     * to route render/destroy through yclass dispatch when present and
+     * the ops vtable otherwise — the bridge that lets migrated and
+     * not-yet-migrated figure kinds coexist. */
+    struct yetty_yclass_object *self_obj;
     /* AABB in target pixel space. Set at construction by the concrete
      * figure; subsequent moves go through the parent's set_rect so
      * damage tracking stays correct.

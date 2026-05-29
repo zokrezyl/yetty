@@ -59,7 +59,8 @@ struct shader_glyph_instance {
     uint32_t local_id;   /* index into the generated render_shader_glyph dispatcher */
 };
 
-struct yetty_yterm_shader_glyph_figure {
+struct [[clang::annotate("class@yterm:shader_glyph")]] [[clang::annotate("parent@yfigure:figure")]]
+yetty_yterm_shader_glyph_figure {
     struct yetty_yfigure_figure base;
 
     /* Borrowed — text-layer owns the cell buffer; we just point at it. */
@@ -599,8 +600,8 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yfigure_figure
     }
     free(f->shader_source);
     free(f->instances);
-    free(f);
-    return YETTY_OK_VOID();
+    /* Free the yclass allocation (header + body); body began at obj + 1. */
+    return yetty_yclass_object_free((struct yetty_yclass_object *)self - 1);
 }
 
 /* ===========================================================================
@@ -736,11 +737,28 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
  * Ops vtable
  * ========================================================================= */
 
+/* yclass cross-domain override of yfigure:render. Body sits at obj + 1. */
+[[clang::annotate("override@yterm:shader_glyph:yfigure:render")]]
+static struct yetty_ycore_void_result figure_render_slot(struct yetty_yclass_ctx *ctx,
+                                                         struct yetty_yclass_object *obj,
+                                                         struct yetty_ydraw_target *target)
+{
+    (void)ctx;
+    return figure_render((struct yetty_yfigure_figure *)(obj + 1), target);
+}
+
+/* yclass cross-domain override of yfigure:destroy. Body sits at obj + 1. */
+[[clang::annotate("override@yterm:shader_glyph:yfigure:destroy")]]
+static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_ctx *ctx,
+                                                          struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    return figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
+}
+
 static const struct yetty_yfigure_figure_ops *figure_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
-        .destroy = figure_destroy,
-        .render = figure_render,
         /* No process_input / process_bytes — purely visual, not wire-driven. */
         .process_input = NULL,
         .process_bytes = NULL,
@@ -801,14 +819,27 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
         return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: splice failed");
     }
 
-    struct yetty_yterm_shader_glyph_figure *f =
-        calloc(1, sizeof(struct yetty_yterm_shader_glyph_figure));
-    if (!f) {
+    /* Allocate as a yclass object so the figure carries a class header
+     * (enables yclass dispatch). Typed body lives at obj + 1; the
+     * embedded `base` is its first member. */
+    struct yetty_yclass_ptr_result glyph_class_r = yetty_yterm_shader_glyph_class_get();
+    if (YETTY_IS_ERR(glyph_class_r)) {
         free(spliced);
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: alloc failed");
+        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: class",
+                         glyph_class_r);
     }
+    struct yetty_yclass_object_ptr_result glyph_obj_r =
+        yetty_yclass_object_alloc(glyph_class_r.value);
+    if (YETTY_IS_ERR(glyph_obj_r)) {
+        free(spliced);
+        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: object_alloc",
+                         glyph_obj_r);
+    }
+    struct yetty_yterm_shader_glyph_figure *f =
+        (struct yetty_yterm_shader_glyph_figure *)(glyph_obj_r.value + 1);
 
     f->base.ops = figure_ops();
+    f->base.self_obj = glyph_obj_r.value;
     f->base.rect = rect;
     /* Start dirty so the first frame uploads the buffer pointer + uniforms. */
     f->base.dirty = 1;
@@ -931,3 +962,6 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_set_visual_zoom(
     f->base.dirty = 1;
     return YETTY_OK_VOID();
 }
+
+/* yclass class accessor (yetty_yterm_shader_glyph_class_get) + registration. */
+#include "shader-glyph-figure.gen.c"

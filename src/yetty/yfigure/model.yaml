@@ -1,4 +1,26 @@
 methods:
+  - slot: destroy
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: render
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: target
+        type: "struct yetty_ydraw_target *"
+    local: true
   - slot: constructor
     domain: yfigure
     owning_class: container
@@ -71,6 +93,12 @@ classes:
     mixins: []
     data: struct yetty_yfigure_container
     ops:
+      - slot: destroy
+        slot_domain: yfigure
+        impl: container_destroy
+      - slot: render
+        slot_domain: yfigure
+        impl: container_render
       - slot: constructor
         slot_domain: yfigure
         impl: yetty_yfigure_container_constructor_impl
@@ -94,4 +122,10 @@ classes:
     parent: null
     mixins: []
     data: struct yetty_yfigure_figure
-    ops: []
+    ops:
+      - slot: render
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_render
+      - slot: destroy
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_destroy

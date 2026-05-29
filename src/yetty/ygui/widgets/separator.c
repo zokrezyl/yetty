@@ -12,12 +12,12 @@
 #define COLOR_BORDER 0xFF474A36u
 
 [[clang::annotate("override@ygui:separator:widget_paint")]]
-static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *_yc_ctx,
-                                                      struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *yclass_ctx,
+                                                      struct yetty_yclass_object *yclass_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "separator_paint: NULL ctx");
     }

@@ -4,9 +4,9 @@ methods:
     owning_class: clickable
     return_type: struct yetty_ycore_int_result
     args:
-      - name: _yc_ctx
+      - name: yclass_ctx
         type: "struct yetty_yclass_ctx *"
-      - name: _yc_obj
+      - name: yclass_obj
         type: "struct yetty_yclass_object *"
       - name: x
         type: float
@@ -20,9 +20,9 @@ methods:
     owning_class: clickable
     return_type: struct yetty_ycore_int_result
     args:
-      - name: _yc_ctx
+      - name: yclass_ctx
         type: "struct yetty_yclass_ctx *"
-      - name: _yc_obj
+      - name: yclass_obj
         type: "struct yetty_yclass_object *"
       - name: x
         type: float
@@ -36,9 +36,9 @@ methods:
     owning_class: primitive_widget
     return_type: struct yetty_ycore_void_result
     args:
-      - name: _yc_ctx
+      - name: yclass_ctx
         type: "struct yetty_yclass_ctx *"
-      - name: _yc_obj
+      - name: yclass_obj
         type: "struct yetty_yclass_object *"
       - name: ctx
         type: "struct yetty_ygui_emit_ctx *"

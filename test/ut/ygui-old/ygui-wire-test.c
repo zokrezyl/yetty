@@ -138,7 +138,7 @@ static void receiver_destroy(struct test_receiver *r)
 {
     if (r->root) {
         struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(r->root);
-        fig->ops->destroy(fig);
+        yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
         r->root = NULL;
     }
     if (r->registry) {

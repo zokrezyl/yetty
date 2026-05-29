@@ -252,7 +252,7 @@ static void test_empty_container(void)
     free(dump);
 
     struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -288,7 +288,7 @@ static void test_one_create_child(void)
     free(dump);
 
     struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -330,7 +330,7 @@ static void test_two_create_child(void)
     free(dump);
 
     struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -367,7 +367,7 @@ static void test_create_then_delete(void)
     free(dump);
 
     struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -409,7 +409,7 @@ static void test_create_with_init_payload(void)
     free(dump);
 
     struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -449,7 +449,7 @@ static void test_routed_to_child(void)
     free(dump);
 
     struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -481,7 +481,7 @@ static void test_clear_all(void)
     free(dump);
 
     struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -519,7 +519,7 @@ static void test_stale_delete_is_noop(void)
     free(dump);
 
     struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    fig->ops->destroy(fig);
+    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
     yetty_yfigure_registry_destroy(reg);
 }
 

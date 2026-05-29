@@ -25,15 +25,17 @@ label_data {
 };
 
 [[clang::annotate("override@ygui:label:constructor")]]
-static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                        struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                        struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_label_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "label_constructor: super");
-    struct label_data *d = yetty_ygui_data_get(obj, yetty_ygui_label_class_get().value);
+    struct label_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"));
     d->text = NULL;
     d->font_size = 14.0f;
     d->color = (struct yetty_ycore_rgba){224, 229, 228, 255}; /* BRAND_TEXT_PRIMARY */
@@ -41,16 +43,18 @@ static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@ygui:label:destructor")]]
-static struct yetty_ycore_void_result label_destructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                       struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result label_destructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                       struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct label_data *d = yetty_ygui_data_get(obj, yetty_ygui_label_class_get().value);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct label_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"));
     free(d->text);
     d->text = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_label_class_get().value,
-                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(
+        obj, yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static uint32_t pack_rgba(struct yetty_ycore_rgba c)
@@ -59,16 +63,17 @@ static uint32_t pack_rgba(struct yetty_ycore_rgba c)
 }
 
 [[clang::annotate("override@ygui:label:widget_paint")]]
-static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *_yc_ctx,
-                                                  struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *yclass_ctx,
+                                                  struct yetty_yclass_object *yclass_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "label_paint: NULL ctx");
     }
-    struct label_data *d = yetty_ygui_data_get(obj, yetty_ygui_label_class_get().value);
+    struct label_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"));
     if (!d->text || d->text[0] == '\0') {
         return YETTY_OK_VOID();
     }
@@ -96,7 +101,8 @@ struct yetty_ycore_void_result yetty_ygui_label_set_text(struct yetty_ygui_objec
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_label_set_text: NULL obj");
     }
-    struct label_data *d = yetty_ygui_data_get(obj, yetty_ygui_label_class_get().value);
+    struct label_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"));
     free(d->text);
     if (!text) {
         d->text = NULL;
@@ -116,8 +122,9 @@ const char *yetty_ygui_label_get_text(const struct yetty_ygui_object *obj)
     if (!obj) {
         return NULL;
     }
-    struct label_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_label_class_get().value);
+    struct label_data *d = yetty_ygui_data_get(
+        (struct yetty_ygui_object *)obj,
+        yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"));
     return d->text;
 }
 
@@ -127,7 +134,8 @@ struct yetty_ycore_void_result yetty_ygui_label_set_font_size(struct yetty_ygui_
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_label_set_font_size: NULL obj");
     }
-    struct label_data *d = yetty_ygui_data_get(obj, yetty_ygui_label_class_get().value);
+    struct label_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"));
     d->font_size = size_px;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -138,7 +146,8 @@ struct yetty_ycore_void_result yetty_ygui_label_set_color(struct yetty_ygui_obje
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_label_set_color: NULL obj");
     }
-    struct label_data *d = yetty_ygui_data_get(obj, yetty_ygui_label_class_get().value);
+    struct label_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"));
     d->color = color;
     return yetty_ygui_object_set_dirty(obj);
 }

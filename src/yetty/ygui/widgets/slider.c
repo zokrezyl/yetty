@@ -25,15 +25,17 @@ slider_data {
 };
 
 [[clang::annotate("override@ygui:slider:constructor")]]
-static struct yetty_ycore_void_result slider_constructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                         struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result slider_constructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                         struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_slider_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_class_expect(yetty_ygui_slider_class_get(), "yetty_ygui_slider_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "slider_constructor: super");
-    struct slider_data *d = yetty_ygui_data_get(obj, yetty_ygui_slider_class_get().value);
+    struct slider_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_slider_class_get(), "yetty_ygui_slider_class_get"));
     d->min_val = 0.0f;
     d->max_val = 1.0f;
     d->value = 0.0f;
@@ -91,16 +93,17 @@ static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *c
 }
 
 [[clang::annotate("override@ygui:slider:widget_paint")]]
-static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_ctx *_yc_ctx,
-                                                   struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_ctx *yclass_ctx,
+                                                   struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "slider_paint: NULL ctx");
     }
-    struct slider_data *d = yetty_ygui_data_get(obj, yetty_ygui_slider_class_get().value);
+    struct slider_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_slider_class_get(), "yetty_ygui_slider_class_get"));
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -135,15 +138,16 @@ static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_ctx *_yc_
 }
 
 [[clang::annotate("override@ygui:slider:widget_on_press")]]
-static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_ctx *_yc_ctx,
-                                                     struct yetty_yclass_object *_yc_obj, float x,
-                                                     float y, int button)
+static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_ctx *yclass_ctx,
+                                                     struct yetty_yclass_object *yclass_obj,
+                                                     float x, float y, int button)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)y;
     (void)button;
-    struct slider_data *d = yetty_ygui_data_get(obj, yetty_ygui_slider_class_get().value);
+    struct slider_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_slider_class_get(), "yetty_ygui_slider_class_get"));
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     if (w <= 0.0f) {
@@ -173,12 +177,12 @@ static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_ctx *_y
 }
 
 [[clang::annotate("override@ygui:slider:widget_on_motion")]]
-static struct yetty_ycore_int_result slider_on_motion(struct yetty_yclass_ctx *_yc_ctx,
-                                                      struct yetty_yclass_object *_yc_obj, float x,
-                                                      float y)
+static struct yetty_ycore_int_result slider_on_motion(struct yetty_yclass_ctx *yclass_ctx,
+                                                      struct yetty_yclass_object *yclass_obj,
+                                                      float x, float y)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     /* Without explicit pointer capture the framework only delivers
      * motion while the cursor is inside the slider's rect. That's
      * good enough for click+drag inside the track — we route motion
@@ -192,7 +196,8 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_ygui_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "slider_set_range: NULL obj");
     }
-    struct slider_data *d = yetty_ygui_data_get(obj, yetty_ygui_slider_class_get().value);
+    struct slider_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_slider_class_get(), "yetty_ygui_slider_class_get"));
     d->min_val = min;
     d->max_val = max;
     d->value = clampf(d->value, min, max);
@@ -205,7 +210,8 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_ygui_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "slider_set_value: NULL obj");
     }
-    struct slider_data *d = yetty_ygui_data_get(obj, yetty_ygui_slider_class_get().value);
+    struct slider_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_slider_class_get(), "yetty_ygui_slider_class_get"));
     d->value = clampf(value, d->min_val, d->max_val);
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -215,8 +221,9 @@ float yetty_ygui_slider_get_value(const struct yetty_ygui_object *obj)
     if (!obj) {
         return 0.0f;
     }
-    struct slider_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yetty_ygui_slider_class_get().value);
+    struct slider_data *d = yetty_ygui_data_get(
+        (struct yetty_ygui_object *)obj,
+        yetty_ygui_class_expect(yetty_ygui_slider_class_get(), "yetty_ygui_slider_class_get"));
     return d->value;
 }
 

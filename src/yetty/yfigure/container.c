@@ -71,10 +71,32 @@ yetty_yfigure_container {
  * Internal helpers
  *=========================================================================*/
 
+/* Transitional render/destroy dispatch bridge. A migrated figure carries
+ * its yclass object (`self_obj`) and dispatches through yclass; a figure
+ * that still rides the ops vtable (e.g. a unit-test mock) has self_obj ==
+ * NULL and dispatches through ops. Goes away once every figure kind is a
+ * yclass object. */
+static struct yetty_ycore_void_result figure_dispatch_render(struct yetty_yfigure_figure *fig,
+                                                             struct yetty_ydraw_target *target)
+{
+    if (fig->self_obj) {
+        return yetty_yfigure_render(NULL, fig->self_obj, target);
+    }
+    return fig->ops->render(fig, target);
+}
+
+static struct yetty_ycore_void_result figure_dispatch_destroy(struct yetty_yfigure_figure *fig)
+{
+    if (fig->self_obj) {
+        return yetty_yfigure_destroy(NULL, fig->self_obj);
+    }
+    return fig->ops->destroy(fig);
+}
+
 static void entry_destroy(struct child_entry *e, struct yetty_ycore_void_result *first_err,
                           int *have_err)
 {
-    struct yetty_ycore_void_result r = e->figure->ops->destroy(e->figure);
+    struct yetty_ycore_void_result r = figure_dispatch_destroy(e->figure);
     if (YETTY_IS_ERR(r)) {
         if (!*have_err) {
             *first_err = r;
@@ -193,9 +215,12 @@ char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent)
  * Group ops
  *=========================================================================*/
 
-static struct yetty_ycore_void_result container_destroy(struct yetty_yfigure_figure *self)
+[[clang::annotate("override@yfigure:container:destroy")]]
+static struct yetty_ycore_void_result container_destroy(struct yetty_yclass_ctx *ctx,
+                                                        struct yetty_yclass_object *obj)
 {
-    struct yetty_yfigure_container *container = (struct yetty_yfigure_container *)self;
+    (void)ctx;
+    struct yetty_yfigure_container *container = (struct yetty_yfigure_container *)(obj + 1);
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     int have_err = 0;
     struct child_entry *e, *tmp;
@@ -225,10 +250,14 @@ static struct yetty_ycore_void_result container_destroy(struct yetty_yfigure_fig
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result container_render(struct yetty_yfigure_figure *self,
+[[clang::annotate("override@yfigure:container:render")]]
+static struct yetty_ycore_void_result container_render(struct yetty_yclass_ctx *ctx,
+                                                       struct yetty_yclass_object *obj,
                                                        struct yetty_ydraw_target *target)
 {
-    struct yetty_yfigure_container *container = (struct yetty_yfigure_container *)self;
+    (void)ctx;
+    struct yetty_yfigure_container *container = (struct yetty_yfigure_container *)(obj + 1);
+    struct yetty_yfigure_figure *self = &container->base;
     /* uthash insertion order = z-order; walk back-to-front. */
     struct child_entry *e, *tmp;
     HASH_ITER(hh, container->children, e, tmp)
@@ -236,7 +265,7 @@ static struct yetty_ycore_void_result container_render(struct yetty_yfigure_figu
         struct yetty_yfigure_figure *c = e->figure;
         ydebug("yfigure container_render: rect=(%.1f,%.1f)-(%.1f,%.1f) child id=%u",
                self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y, e->id);
-        struct yetty_ycore_void_result r = c->ops->render(c, target);
+        struct yetty_ycore_void_result r = figure_dispatch_render(c, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yfigure container_render: child render failed");
         c->dirty = 0;
     }
@@ -437,7 +466,7 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
          * old figure's GPU resources are released. This path is the
          * slow fallback — kind changes on the same id are rare. */
         if (existing) {
-            struct yetty_ycore_void_result dr = existing->figure->ops->destroy(existing->figure);
+            struct yetty_ycore_void_result dr = figure_dispatch_destroy(existing->figure);
             if (YETTY_IS_ERR(dr)) {
                 yetty_ycore_error_destroy(dr.error);
             }
@@ -448,7 +477,7 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
             struct yetty_ycore_void_result ar =
                 yetty_yfigure_container_add_child(container, child, child_id);
             if (YETTY_IS_ERR(ar)) {
-                struct yetty_ycore_void_result dr = child->ops->destroy(child);
+                struct yetty_ycore_void_result dr = figure_dispatch_destroy(child);
                 if (YETTY_IS_ERR(dr)) {
                     yetty_ycore_error_destroy(dr.error);
                 }
@@ -651,8 +680,6 @@ static char *container_dump(const struct yetty_yfigure_figure *self, int indent)
 static const struct yetty_yfigure_figure_ops *container_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
-        .destroy = container_destroy,
-        .render = container_render,
         .process_input = container_process_input,
         .process_bytes = container_process_bytes,
         .dump = container_dump,
@@ -894,10 +921,11 @@ struct yetty_ycore_void_result yetty_yfigure_container_add_child(
     if (id == 0) {
         return YETTY_ERR(yetty_ycore_void, "yfigure_container_add_child: id=0 is reserved");
     }
-    /* Boundary check — verify the concrete figure was fully constructed
-     * before it enters the container. After this point internal code may
-     * assume child->ops + ops->destroy + ops->render are non-NULL. */
-    if (!child->ops || !child->ops->destroy || !child->ops->render) {
+    /* Boundary check — verify the concrete figure carries an ops vtable.
+     * `render` and `destroy` now dispatch through yclass; the remaining
+     * ops (process_input/process_bytes/…) still use the transitional
+     * vtable, so it must be present. */
+    if (!child->ops) {
         return YETTY_ERR(yetty_ycore_void,
                          "yfigure_container_add_child: child ops vtable incomplete");
     }
@@ -1069,6 +1097,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_constructor_impl(
      * advances past it. */
     struct yetty_yfigure_container *container = YCLASS_TO_CONTAINER(obj);
     container->base.ops = container_ops();
+    container->base.self_obj = obj;
     return YETTY_OK_VOID();
 }
 

@@ -24,16 +24,19 @@ struct [[clang::annotate("class@ygui:choicebox")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@ygui:choicebox:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx,
-                                           struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
+                                           struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj, yetty_ygui_choicebox_class_get().value,
-                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
+        obj,
+        yetty_ygui_class_expect(yetty_ygui_choicebox_class_get(), "yetty_ygui_choicebox_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "choicebox: super");
-    struct cb_data *d = yetty_ygui_data_get(obj, yetty_ygui_choicebox_class_get().value);
+    struct cb_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_choicebox_class_get(),
+                                                         "yetty_ygui_choicebox_class_get"));
     d->rows = NULL;
     d->n = 0;
     d->cap = 0;
@@ -41,30 +44,36 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *_yc_ctx,
 }
 
 [[clang::annotate("override@ygui:choicebox:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *_yc_ctx,
-                                           struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
+                                           struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct cb_data *d = yetty_ygui_data_get(obj, yetty_ygui_choicebox_class_get().value);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct cb_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_choicebox_class_get(),
+                                                         "yetty_ygui_choicebox_class_get"));
     for (int i = 0; i < d->n; i++) {
         free(d->rows[i].label);
     }
     free(d->rows);
-    return yetty_ygui_super_void(obj, yetty_ygui_choicebox_class_get().value,
-                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(
+        obj,
+        yetty_ygui_class_expect(yetty_ygui_choicebox_class_get(), "yetty_ygui_choicebox_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:choicebox:widget_on_press")]]
-static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *_yc_ctx,
-                                              struct yetty_yclass_object *_yc_obj, float x, float y,
-                                              int btn)
+static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ctx,
+                                              struct yetty_yclass_object *yclass_obj, float x,
+                                              float y, int btn)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)x;
     (void)btn;
-    struct cb_data *d = yetty_ygui_data_get(obj, yetty_ygui_choicebox_class_get().value);
+    struct cb_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_choicebox_class_get(),
+                                                         "yetty_ygui_choicebox_class_get"));
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     int idx = (int)((y - r.min.y) / ROW_H);
     if (idx < 0 || idx >= d->n) {
@@ -89,16 +98,18 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *_yc_ctx,
 }
 
 [[clang::annotate("override@ygui:choicebox:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx,
-                                            struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
+                                            struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "choicebox paint: NULL ctx");
     }
-    struct cb_data *d = yetty_ygui_data_get(obj, yetty_ygui_choicebox_class_get().value);
+    struct cb_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_choicebox_class_get(),
+                                                         "yetty_ygui_choicebox_class_get"));
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -152,7 +163,9 @@ struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_ygui_object
     if (!obj || !label) {
         return YETTY_ERR(yetty_ycore_void, "choicebox_add: NULL");
     }
-    struct cb_data *d = yetty_ygui_data_get(obj, yetty_ygui_choicebox_class_get().value);
+    struct cb_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_choicebox_class_get(),
+                                                         "yetty_ygui_choicebox_class_get"));
     if (!grow(d, d->n + 1)) {
         return YETTY_ERR(yetty_ycore_void, "choicebox_add: realloc");
     }
@@ -172,8 +185,9 @@ int yetty_ygui_choicebox_is_selected(const struct yetty_ygui_object *obj, int id
     if (!obj) {
         return 0;
     }
-    struct cb_data *d = yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                                            yetty_ygui_choicebox_class_get().value);
+    struct cb_data *d = yetty_ygui_data_get(
+        (struct yetty_ygui_object *)obj, yetty_ygui_class_expect(yetty_ygui_choicebox_class_get(),
+                                                                 "yetty_ygui_choicebox_class_get"));
     if (idx < 0 || idx >= d->n) {
         return 0;
     }

@@ -7,12 +7,12 @@
 #define COLOR_GRIP 0xFF92A86Bu
 
 [[clang::annotate("override@ygui:splitter:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *_yc_ctx,
-                                            struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
+                                            struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "splitter paint: NULL ctx");
     }

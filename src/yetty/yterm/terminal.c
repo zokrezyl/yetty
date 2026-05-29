@@ -1123,7 +1123,8 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     if (terminal->root_container) {
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container);
-        struct yetty_ycore_void_result rr = rf->ops->render(rf, target);
+        struct yetty_ycore_void_result rr =
+            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "terminal_render_frame: root container render");
         rf->dirty = 0;
     }
@@ -1537,7 +1538,8 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         struct yetty_ycore_void_result ar =
             yetty_yfigure_container_add_child(terminal->root_container, sgf_base, 0xFFFFFFFEu);
         if (YETTY_IS_ERR(ar)) {
-            struct yetty_ycore_void_result dr = sgf_base->ops->destroy(sgf_base);
+            struct yetty_ycore_void_result dr =
+                yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)sgf_base - 1);
             if (YETTY_IS_ERR(dr)) {
                 yetty_ycore_error_destroy(dr.error);
             }
@@ -1616,7 +1618,8 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
     if (terminal->root_container) {
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container);
-        struct yetty_ycore_void_result r = rf->ops->destroy(rf);
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
         if (YETTY_IS_ERR(r)) {
             yerror("terminal_destroy: root_container destroy failed: %s", r.error.msg);
             if (!have_err) {

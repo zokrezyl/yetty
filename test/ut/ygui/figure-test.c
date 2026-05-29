@@ -6,10 +6,13 @@
  * verify:
  *   - Pass 1 emits CREATE_CHILD for the chrome (container + ygrid) and
  *     a CREATE_CHILD(kind=YIMAGE) for the yimage widget.
- *   - Pass 2 emits a record with id = yimage's obj id whose payload
- *     equals the bytes we handed to set_bytes.
+ *   - Pass 2 emits a record with id = yimage's obj id whose body is the
+ *     rendered draw_list for the image we handed to set_bytes (the wire
+ *     body is the rendered draw_list, not the encoded image bytes).
  *   - Second emit doesn't re-emit chrome.
  *   - Destroying a widget queues DELETE_CHILD for the next envelope.
+ *   - Malformed image bytes surface as a Result error from emit rather
+ *     than being silently dropped.
  *
  * The yface envelope encoding (b64 + LZ4F) is opaque here; the test
  * looks at the per-pass buffers directly. NDEBUG release builds elide
@@ -108,16 +111,41 @@ static uint32_t read_u32_le(const uint8_t *p)
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-static void test_yimage_emit(void)
-{
-    /* Stub pty lives on the stack of this function. */
-    struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
+/* Minimal valid 2x2 24-bit BMP. stb_image (used by yetty_yimage_render)
+ * decodes this into RGBA8, so the emit path produces a real draw_list —
+ * handcrafted inline so the headless test needs no on-disk asset. */
+static const uint8_t k_bmp_2x2[] = {
+    /* BITMAPFILEHEADER (14) */
+    0x42, 0x4D,             /* "BM"                       */
+    0x46, 0x00, 0x00, 0x00, /* file size = 70             */
+    0x00, 0x00, 0x00, 0x00, /* reserved                   */
+    0x36, 0x00, 0x00, 0x00, /* pixel data offset = 54     */
+    /* BITMAPINFOHEADER (40) */
+    0x28, 0x00, 0x00, 0x00, /* header size = 40           */
+    0x02, 0x00, 0x00, 0x00, /* width = 2                  */
+    0x02, 0x00, 0x00, 0x00, /* height = 2                 */
+    0x01, 0x00,             /* planes = 1                 */
+    0x18, 0x00,             /* bpp = 24                   */
+    0x00, 0x00, 0x00, 0x00, /* compression = BI_RGB       */
+    0x10, 0x00, 0x00, 0x00, /* image size = 16            */
+    0x13, 0x0B, 0x00, 0x00, /* x ppm                      */
+    0x13, 0x0B, 0x00, 0x00, /* y ppm                      */
+    0x00, 0x00, 0x00, 0x00, /* colors used                */
+    0x00, 0x00, 0x00, 0x00, /* colors important           */
+    /* pixel data: bottom-up, BGR, rows padded to 4 bytes */
+    0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, /* row0: blue, green + pad */
+    0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, /* row1: red,  white + pad */
+};
 
-    struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(&stub);
+/* Build a headless engine whose root panel holds one 100x100 yimage.
+ * The stub pty must outlive the returned engine — the caller owns it. */
+static struct yetty_ygui_runtime *make_engine_with_yimage(struct yetty_platform_pty *stub,
+                                                          struct yetty_ygui_object **out_img)
+{
+    struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(stub);
     CHECK(YETTY_IS_OK(er), "engine_create");
     struct yetty_ygui_runtime *engine = er.value;
 
-    /* Build root = panel containing one yimage. */
     struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
     CHECK(YETTY_IS_OK(rr), "add panel");
     struct yetty_ygui_object *root = rr.value;
@@ -130,29 +158,40 @@ static void test_yimage_emit(void)
 
     /* Give yimage an explicit width/height so the layout pass produces
      * a non-empty rect for emit_container to ship. */
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(img);
-        l.width = 100.0f;
-        l.height = 100.0f;
-        yetty_ygui_widget_layout_set(img, &l);
-    }
+    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(img);
+    l.width = 100.0f;
+    l.height = 100.0f;
+    yetty_ygui_widget_layout_set(img, &l);
 
-    uint8_t payload[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};
-    struct yetty_ycore_void_result br = yetty_ygui_yimage_set_bytes(img, payload, sizeof(payload));
+    *out_img = img;
+    return engine;
+}
+
+static void test_yimage_emit(void)
+{
+    /* Stub pty lives on the stack of this function. */
+    struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
+    struct yetty_ygui_object *img = NULL;
+    struct yetty_ygui_runtime *engine = make_engine_with_yimage(&stub, &img);
+
+    struct yetty_ycore_void_result br =
+        yetty_ygui_yimage_set_bytes(img, k_bmp_2x2, sizeof(k_bmp_2x2));
     CHECK(YETTY_IS_OK(br), "yimage_set_bytes");
 
     /* Emit and inspect the per-pass buffers. */
     struct yetty_ycore_void_result rer = yetty_ygui_framework_emit(engine);
     CHECK(YETTY_IS_OK(rer), "engine_emit #1");
 
-    /* figure_bodies should contain one record: {len, id, payload}. */
-    CHECK(engine->figure_bodies.size == 8 + sizeof(payload), "figure_bodies size");
+    /* figure_bodies holds one record: {u32 len, u32 id, body[len]}. The
+     * body is the rendered draw_list (CMD_ZERO + one yimage prim), not
+     * the encoded image bytes — so we assert the record framing and id
+     * rather than an exact byte match. */
+    CHECK(engine->figure_bodies.size > 8, "figure_bodies has one record");
     uint32_t rec_len = read_u32_le(engine->figure_bodies.data);
     uint32_t rec_id = read_u32_le(engine->figure_bodies.data + 4);
-    CHECK(rec_len == sizeof(payload), "figure record length");
+    CHECK(rec_len > 0, "figure record body non-empty");
+    CHECK(engine->figure_bodies.size == 8 + (size_t)rec_len, "figure record framing");
     CHECK(rec_id == yetty_ygui_object_id(img), "figure record id");
-    CHECK(memcmp(engine->figure_bodies.data + 8, payload, sizeof(payload)) == 0,
-          "figure record payload");
 
     /* container_records should contain admin records for YGRID and
      * YIMAGE CREATE_CHILDs (the receiver IS the root container — no
@@ -234,9 +273,31 @@ static void test_yimage_emit(void)
     yetty_ygui_framework_destroy(engine);
 }
 
+/* Malformed image bytes must surface as a Result error from emit — not
+ * be silently dropped or truncated. Exercises the strict-rejection path
+ * in yimage_emit_body / yetty_yimage_render (issue #243 findings 4/5). */
+static void test_yimage_emit_rejects_malformed(void)
+{
+    struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
+    struct yetty_ygui_object *img = NULL;
+    struct yetty_ygui_runtime *engine = make_engine_with_yimage(&stub, &img);
+
+    uint8_t garbage[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};
+    struct yetty_ycore_void_result br =
+        yetty_ygui_yimage_set_bytes(img, garbage, sizeof(garbage));
+    CHECK(YETTY_IS_OK(br), "yimage_set_bytes (garbage)");
+
+    struct yetty_ycore_void_result rer = yetty_ygui_framework_emit(engine);
+    CHECK(YETTY_IS_ERR(rer), "engine_emit rejects malformed image payload");
+    yetty_ycore_error_destroy(rer.error);
+
+    yetty_ygui_framework_destroy(engine);
+}
+
 int main(void)
 {
     test_yimage_emit();
+    test_yimage_emit_rejects_malformed();
     puts("ygui-figure-test: OK");
     return 0;
 }

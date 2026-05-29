@@ -38,12 +38,12 @@ primitive_widget_data {
 };
 
 [[clang::annotate("override@ygui:primitive_widget:widget_emit_body")]]
-static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ctx *_yc_ctx,
-                                                          struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ctx *yclass_ctx,
+                                                          struct yetty_yclass_object *yclass_obj,
                                                           struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    return yetty_ygui_widget_paint(NULL, _yc_obj, ctx);
+    (void)yclass_ctx;
+    return yetty_ygui_widget_paint(NULL, yclass_obj, ctx);
 }
 
 #include "primitive-widget.gen.c"

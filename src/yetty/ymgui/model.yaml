@@ -10,4 +10,10 @@ classes:
       name: figure
     mixins: []
     data: struct yetty_ymgui_figure
-    ops: []
+    ops:
+      - slot: render
+        slot_domain: yfigure
+        impl: ymgui_figure_render_slot
+      - slot: destroy
+        slot_domain: yfigure
+        impl: ymgui_figure_destroy_slot

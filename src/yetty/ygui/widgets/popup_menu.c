@@ -52,16 +52,20 @@ struct [[clang::annotate("class@ygui:popup_menu")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@ygui:popup_menu:constructor")]]
-static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                             struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                             struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj, yetty_ygui_popup_menu_class_get().value,
+        yetty_ygui_super_void(obj,
+                              yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                      "yetty_ygui_popup_menu_class_get"),
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "popup_menu_constructor: super");
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     d->items = NULL;
     d->n_items = 0;
     d->cap = 0;
@@ -77,18 +81,22 @@ static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass
 }
 
 [[clang::annotate("override@ygui:popup_menu:destructor")]]
-static struct yetty_ycore_void_result popup_menu_destructor(struct yetty_yclass_ctx *_yc_ctx,
-                                                            struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result popup_menu_destructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                            struct yetty_yclass_object *yclass_obj)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     for (int i = 0; i < d->n_items; ++i) {
         free(d->items[i].label);
     }
     free(d->items);
     d->items = NULL;
-    return yetty_ygui_super_void(obj, yetty_ygui_popup_menu_class_get().value,
+    return yetty_ygui_super_void(obj,
+                                 yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"),
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -186,13 +194,15 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
 }
 
 [[clang::annotate("override@ygui:popup_menu:widget_paint")]]
-static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_ctx *_yc_ctx,
-                                                       struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_ctx *yclass_ctx,
+                                                       struct yetty_yclass_object *yclass_obj,
                                                        struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     if (!d->open) {
         return YETTY_OK_VOID();
     }
@@ -234,14 +244,16 @@ static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("override@ygui:popup_menu:widget_on_press")]]
-static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_ctx *_yc_ctx,
-                                                         struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_ctx *yclass_ctx,
+                                                         struct yetty_yclass_object *yclass_obj,
                                                          float x, float y, int button)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)button;
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     if (!d->open) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -269,14 +281,16 @@ static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:popup_menu:widget_on_motion")]]
-static struct yetty_ycore_int_result popup_menu_on_motion(struct yetty_yclass_ctx *_yc_ctx,
-                                                          struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_int_result popup_menu_on_motion(struct yetty_yclass_ctx *yclass_ctx,
+                                                          struct yetty_yclass_object *yclass_obj,
                                                           float x, float y)
 {
-    (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)x;
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     if (!d->open) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -300,7 +314,9 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_ygui_
     if (!obj || !label) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_add_item: NULL arg");
     }
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     if (!items_grow(d, d->n_items + 1)) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_add_item: realloc");
     }
@@ -322,7 +338,9 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_separator(struct yetty_
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_add_separator: NULL obj");
     }
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     if (!items_grow(d, d->n_items + 1)) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_add_separator: realloc");
     }
@@ -339,7 +357,9 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_ygui_o
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_open_at: NULL obj");
     }
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     d->open = 1;
     d->hover_index = -1;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -358,7 +378,9 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_ygui_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_close: NULL obj");
     }
-    struct popup_menu_data *d = yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
     if (!d->open) {
         return YETTY_OK_VOID();
     }
@@ -377,8 +399,10 @@ int yetty_ygui_popup_menu_is_open(const struct yetty_ygui_object *obj)
     if (!obj) {
         return 0;
     }
-    struct popup_menu_data *d = yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                                                    yetty_ygui_popup_menu_class_get().value);
+    struct popup_menu_data *d =
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj,
+                            yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                    "yetty_ygui_popup_menu_class_get"));
     return d->open;
 }
 

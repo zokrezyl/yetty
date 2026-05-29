@@ -1,10 +1,15 @@
 /* GENERATED — do not edit. */
 #include "yetty/yfigure/figure.h"
+#include "yetty/yfigure/methods.gen.h"
 #include "yetty/ygrid/grid.h"
 #include "yetty/ygrid/methods.gen.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
+__attribute__((unused))
+static yetty_yfigure_render_fn yetty_ygrid_grid_yetty_yfigure_render_check = ygrid_render_slot;
+__attribute__((unused))
+static yetty_yfigure_destroy_fn yetty_ygrid_grid_yetty_yfigure_destroy_check = ygrid_destroy_slot;
 __attribute__((unused))
 static yetty_ygrid_add_record_fn yetty_ygrid_grid_yetty_ygrid_add_record_check = yetty_ygrid_grid_add_record_impl;
 __attribute__((unused))
@@ -28,6 +33,8 @@ struct yetty_yclass_ptr_result yetty_ygrid_grid_class_get(void)
         .data_size = sizeof(struct yetty_ygrid_grid),
     };
     static const struct yetty_yclass_op ops[] = {
+        {"yetty_yfigure", "render", (yetty_yclass_method_id_t)yetty_yfigure_render, (yetty_yclass_impl_t)ygrid_render_slot},
+        {"yetty_yfigure", "destroy", (yetty_yclass_method_id_t)yetty_yfigure_destroy, (yetty_yclass_impl_t)ygrid_destroy_slot},
         {"yetty_ygrid", "add_record", (yetty_yclass_method_id_t)yetty_ygrid_add_record, (yetty_yclass_impl_t)yetty_ygrid_grid_add_record_impl},
         {"yetty_ygrid", "clear", (yetty_yclass_method_id_t)yetty_ygrid_clear, (yetty_yclass_impl_t)yetty_ygrid_grid_clear_impl},
         {"yetty_ygrid", "destroy", (yetty_yclass_method_id_t)yetty_ygrid_destroy, (yetty_yclass_impl_t)yetty_ygrid_grid_destroy_impl},
