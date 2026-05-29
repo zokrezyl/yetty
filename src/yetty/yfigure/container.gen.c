@@ -6,15 +6,15 @@
 #include <yetty/ytrace/ytrace.h>
 
 __attribute__((unused))
-static yetty_yfigure_constructor_fn _yetty_yfigure_container_yetty_yfigure_constructor_check = yetty_yfigure_container_constructor_impl;
+static yetty_yfigure_constructor_fn yetty_yfigure_container_yetty_yfigure_constructor_check = yetty_yfigure_container_constructor_impl;
 __attribute__((unused))
-static yetty_yfigure_add_child_fn _yetty_yfigure_container_yetty_yfigure_add_child_check = yetty_yfigure_container_add_child_impl;
+static yetty_yfigure_add_child_fn yetty_yfigure_container_yetty_yfigure_add_child_check = yetty_yfigure_container_add_child_impl;
 __attribute__((unused))
-static yetty_yfigure_remove_child_by_id_fn _yetty_yfigure_container_yetty_yfigure_remove_child_by_id_check = yetty_yfigure_container_remove_child_by_id_impl;
+static yetty_yfigure_remove_child_by_id_fn yetty_yfigure_container_yetty_yfigure_remove_child_by_id_check = yetty_yfigure_container_remove_child_by_id_impl;
 __attribute__((unused))
-static yetty_yfigure_raise_child_by_id_fn _yetty_yfigure_container_yetty_yfigure_raise_child_by_id_check = yetty_yfigure_container_raise_child_by_id_impl;
+static yetty_yfigure_raise_child_by_id_fn yetty_yfigure_container_yetty_yfigure_raise_child_by_id_check = yetty_yfigure_container_raise_child_by_id_impl;
 __attribute__((unused))
-static yetty_yfigure_process_records_fn _yetty_yfigure_container_yetty_yfigure_process_records_check = yetty_yfigure_container_process_records_impl;
+static yetty_yfigure_process_records_fn yetty_yfigure_container_yetty_yfigure_process_records_check = yetty_yfigure_container_process_records_impl;
 
 struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void)
 {
@@ -34,14 +34,14 @@ struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void)
         {"yetty_yfigure", "raise_child_by_id", (yetty_yclass_method_id_t)yetty_yfigure_raise_child_by_id, (yetty_yclass_impl_t)yetty_yfigure_container_raise_child_by_id_impl},
         {"yetty_yfigure", "process_records", (yetty_yclass_method_id_t)yetty_yfigure_process_records, (yetty_yclass_impl_t)yetty_yfigure_container_process_records_impl},
     };
-    struct yetty_yclass_ptr_result _parent_r = yetty_yfigure_figure_class_get();
-    if (YETTY_IS_ERR(_parent_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_yfigure_container_class_get: parent accessor failed", _parent_r);
-    struct yetty_yclass_ptr_result _r =
+    struct yetty_yclass_ptr_result parent_class_r = yetty_yfigure_figure_class_get();
+    if (YETTY_IS_ERR(parent_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_yfigure_container_class_get: parent accessor failed", parent_class_r);
+    struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                              _parent_r.value, NULL, 0);
-    if (YETTY_IS_ERR(_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_yfigure_container_class_get: class_register failed", _r);
-    cls = _r.value;
-    return _r;
+                              parent_class_r.value, NULL, 0);
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_yfigure_container_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
 }

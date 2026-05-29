@@ -5,21 +5,21 @@
 #include <yetty/ytrace/ytrace.h>
 
 __attribute__((unused))
-static yetty_ygui_constructor_fn _yetty_ygui_widget_yetty_ygui_constructor_check = widget_default_constructor;
+static yetty_ygui_constructor_fn yetty_ygui_widget_yetty_ygui_constructor_check = widget_default_constructor;
 __attribute__((unused))
-static yetty_ygui_destructor_fn _yetty_ygui_widget_yetty_ygui_destructor_check = widget_default_destructor;
+static yetty_ygui_destructor_fn yetty_ygui_widget_yetty_ygui_destructor_check = widget_default_destructor;
 __attribute__((unused))
-static yetty_ygui_widget_on_press_fn _yetty_ygui_widget_yetty_ygui_widget_on_press_check = widget_default_on_press;
+static yetty_ygui_widget_on_press_fn yetty_ygui_widget_yetty_ygui_widget_on_press_check = widget_default_on_press;
 __attribute__((unused))
-static yetty_ygui_widget_on_release_fn _yetty_ygui_widget_yetty_ygui_widget_on_release_check = widget_default_on_release;
+static yetty_ygui_widget_on_release_fn yetty_ygui_widget_yetty_ygui_widget_on_release_check = widget_default_on_release;
 __attribute__((unused))
-static yetty_ygui_widget_on_motion_fn _yetty_ygui_widget_yetty_ygui_widget_on_motion_check = widget_default_on_motion;
+static yetty_ygui_widget_on_motion_fn yetty_ygui_widget_yetty_ygui_widget_on_motion_check = widget_default_on_motion;
 __attribute__((unused))
-static yetty_ygui_widget_paint_fn _yetty_ygui_widget_yetty_ygui_widget_paint_check = widget_default_paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_widget_yetty_ygui_widget_paint_check = widget_default_paint;
 __attribute__((unused))
-static yetty_ygui_widget_emit_container_fn _yetty_ygui_widget_yetty_ygui_widget_emit_container_check = widget_default_emit_container;
+static yetty_ygui_widget_emit_container_fn yetty_ygui_widget_yetty_ygui_widget_emit_container_check = widget_default_emit_container;
 __attribute__((unused))
-static yetty_ygui_widget_emit_body_fn _yetty_ygui_widget_yetty_ygui_widget_emit_body_check = widget_default_emit_body;
+static yetty_ygui_widget_emit_body_fn yetty_ygui_widget_yetty_ygui_widget_emit_body_check = widget_default_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void)
 {
@@ -42,11 +42,11 @@ struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void)
         {"yetty_ygui", "widget_emit_container", (yetty_yclass_method_id_t)yetty_ygui_widget_emit_container, (yetty_yclass_impl_t)widget_default_emit_container},
         {"yetty_ygui", "widget_emit_body", (yetty_yclass_method_id_t)yetty_ygui_widget_emit_body, (yetty_yclass_impl_t)widget_default_emit_body},
     };
-    struct yetty_yclass_ptr_result _r =
+    struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                               NULL, NULL, 0);
-    if (YETTY_IS_ERR(_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_widget_class_get: class_register failed", _r);
-    cls = _r.value;
-    return _r;
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_widget_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
 }

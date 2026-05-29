@@ -7,11 +7,11 @@
 #include <yetty/ytrace/ytrace.h>
 
 __attribute__((unused))
-static yetty_ygui_constructor_fn _yetty_ygui_checkbox_yetty_ygui_constructor_check = checkbox_constructor;
+static yetty_ygui_constructor_fn yetty_ygui_checkbox_yetty_ygui_constructor_check = checkbox_constructor;
 __attribute__((unused))
-static yetty_ygui_destructor_fn _yetty_ygui_checkbox_yetty_ygui_destructor_check = checkbox_destructor;
+static yetty_ygui_destructor_fn yetty_ygui_checkbox_yetty_ygui_destructor_check = checkbox_destructor;
 __attribute__((unused))
-static yetty_ygui_widget_paint_fn _yetty_ygui_checkbox_yetty_ygui_widget_paint_check = checkbox_paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_checkbox_yetty_ygui_widget_paint_check = checkbox_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_checkbox_class_get(void)
 {
@@ -29,18 +29,18 @@ struct yetty_yclass_ptr_result yetty_ygui_checkbox_class_get(void)
         {"yetty_ygui", "destructor", (yetty_yclass_method_id_t)yetty_ygui_destructor, (yetty_yclass_impl_t)checkbox_destructor},
         {"yetty_ygui", "widget_paint", (yetty_yclass_method_id_t)yetty_ygui_widget_paint, (yetty_yclass_impl_t)checkbox_paint},
     };
-    struct yetty_yclass_ptr_result _parent_r = yetty_ygui_primitive_widget_class_get();
-    if (YETTY_IS_ERR(_parent_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_checkbox_class_get: parent accessor failed", _parent_r);
-    struct yetty_yclass_ptr_result _mixin0_r = yetty_ygui_clickable_mixin_get();
-    if (YETTY_IS_ERR(_mixin0_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_checkbox_class_get: mixin0 accessor failed", _mixin0_r);
-    const struct yetty_yclass *mixins[] = { _mixin0_r.value };
-    struct yetty_yclass_ptr_result _r =
+    struct yetty_yclass_ptr_result parent_class_r = yetty_ygui_primitive_widget_class_get();
+    if (YETTY_IS_ERR(parent_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_checkbox_class_get: parent accessor failed", parent_class_r);
+    struct yetty_yclass_ptr_result mixin_class_r_0 = yetty_ygui_clickable_mixin_get();
+    if (YETTY_IS_ERR(mixin_class_r_0))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_checkbox_class_get: mixin0 accessor failed", mixin_class_r_0);
+    const struct yetty_yclass *mixins[] = { mixin_class_r_0.value };
+    struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                              _parent_r.value, mixins, 1);
-    if (YETTY_IS_ERR(_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_checkbox_class_get: class_register failed", _r);
-    cls = _r.value;
-    return _r;
+                              parent_class_r.value, mixins, 1);
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_checkbox_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
 }

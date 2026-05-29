@@ -6,13 +6,13 @@
 #include <yetty/ytrace/ytrace.h>
 
 __attribute__((unused))
-static yetty_ygui_constructor_fn _yetty_ygui_slider_yetty_ygui_constructor_check = slider_constructor;
+static yetty_ygui_constructor_fn yetty_ygui_slider_yetty_ygui_constructor_check = slider_constructor;
 __attribute__((unused))
-static yetty_ygui_widget_paint_fn _yetty_ygui_slider_yetty_ygui_widget_paint_check = slider_paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_slider_yetty_ygui_widget_paint_check = slider_paint;
 __attribute__((unused))
-static yetty_ygui_widget_on_press_fn _yetty_ygui_slider_yetty_ygui_widget_on_press_check = slider_on_press;
+static yetty_ygui_widget_on_press_fn yetty_ygui_slider_yetty_ygui_widget_on_press_check = slider_on_press;
 __attribute__((unused))
-static yetty_ygui_widget_on_motion_fn _yetty_ygui_slider_yetty_ygui_widget_on_motion_check = slider_on_motion;
+static yetty_ygui_widget_on_motion_fn yetty_ygui_slider_yetty_ygui_widget_on_motion_check = slider_on_motion;
 
 struct yetty_yclass_ptr_result yetty_ygui_slider_class_get(void)
 {
@@ -31,14 +31,14 @@ struct yetty_yclass_ptr_result yetty_ygui_slider_class_get(void)
         {"yetty_ygui", "widget_on_press", (yetty_yclass_method_id_t)yetty_ygui_widget_on_press, (yetty_yclass_impl_t)slider_on_press},
         {"yetty_ygui", "widget_on_motion", (yetty_yclass_method_id_t)yetty_ygui_widget_on_motion, (yetty_yclass_impl_t)slider_on_motion},
     };
-    struct yetty_yclass_ptr_result _parent_r = yetty_ygui_primitive_widget_class_get();
-    if (YETTY_IS_ERR(_parent_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_slider_class_get: parent accessor failed", _parent_r);
-    struct yetty_yclass_ptr_result _r =
+    struct yetty_yclass_ptr_result parent_class_r = yetty_ygui_primitive_widget_class_get();
+    if (YETTY_IS_ERR(parent_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_slider_class_get: parent accessor failed", parent_class_r);
+    struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                              _parent_r.value, NULL, 0);
-    if (YETTY_IS_ERR(_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_slider_class_get: class_register failed", _r);
-    cls = _r.value;
-    return _r;
+                              parent_class_r.value, NULL, 0);
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_slider_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
 }

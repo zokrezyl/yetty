@@ -18,11 +18,11 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
     static const struct yetty_yclass_op ops[] = {
 
     };
-    struct yetty_yclass_ptr_result _r =
+    struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                               NULL, NULL, 0);
-    if (YETTY_IS_ERR(_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_yfigure_figure_class_get: class_register failed", _r);
-    cls = _r.value;
-    return _r;
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_yfigure_figure_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
 }

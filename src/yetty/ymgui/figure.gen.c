@@ -19,14 +19,14 @@ struct yetty_yclass_ptr_result yetty_ymgui_figure_class_get(void)
     static const struct yetty_yclass_op ops[] = {
 
     };
-    struct yetty_yclass_ptr_result _parent_r = yetty_yfigure_figure_class_get();
-    if (YETTY_IS_ERR(_parent_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ymgui_figure_class_get: parent accessor failed", _parent_r);
-    struct yetty_yclass_ptr_result _r =
+    struct yetty_yclass_ptr_result parent_class_r = yetty_yfigure_figure_class_get();
+    if (YETTY_IS_ERR(parent_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ymgui_figure_class_get: parent accessor failed", parent_class_r);
+    struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                              _parent_r.value, NULL, 0);
-    if (YETTY_IS_ERR(_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ymgui_figure_class_get: class_register failed", _r);
-    cls = _r.value;
-    return _r;
+                              parent_class_r.value, NULL, 0);
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ymgui_figure_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
 }

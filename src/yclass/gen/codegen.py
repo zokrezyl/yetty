@@ -832,24 +832,24 @@ def emit_dispatch_body(m: dict) -> str:
     # construction.
     if m.get("local"):
         return f"""\
-    static yetty_yclass_method_slot _slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
-    if (_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {{
-        struct yetty_yclass_method_slot_result _sr =
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {{
+        struct yetty_yclass_method_slot_result method_slot_r =
             yetty_yclass_method_slot_get("yetty_{m['domain']}", (yetty_yclass_method_id_t){qs});
-        if (YETTY_IS_ERR(_sr))
-            return YETTY_ERR({rid}, "{qs}: method_slot_get failed", _sr);
-        _slot = _sr.value;
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR({rid}, "{qs}: method_slot_get failed", method_slot_r);
+        method_slot = method_slot_r.value;
     }}
 
     if (!{obj_name}) return YETTY_ERR({rid}, "{qs}: NULL object");
 
-    struct yetty_yclass_ptr_result _cr_local =
+    struct yetty_yclass_ptr_result object_class_r =
         yetty_yclass_object_class({obj_name});
-    YETTY_RETURN_IF_ERR({rid}, _cr_local, "{qs}: object_class failed");
-    struct yetty_yclass_impl_t_result _ir =
-        yetty_yclass_dispatch_lookup(_cr_local.value, _slot);
-    YETTY_RETURN_IF_ERR({rid}, _ir, "{qs}: dispatch_lookup failed");
-    return (({slot_fn})_ir.value)({call_args});
+    YETTY_RETURN_IF_ERR({rid}, object_class_r, "{qs}: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR({rid}, dispatch_impl_r, "{qs}: dispatch_lookup failed");
+    return (({slot_fn})dispatch_impl_r.value)({call_args});
 """
 
     wargs = wire_args(m)
@@ -878,32 +878,33 @@ def emit_dispatch_body(m: dict) -> str:
     fields = args_struct_body(wargs, indent="            ")
     buf_args = [a for a in wargs if is_buffer(a["type"])]
 
-    # Build the wire body. No buffer args = fast path, body is &_a /
-    # sizeof(_a). With buffer args we heap-allocate `sizeof(_a) +
+    # Build the wire body. No buffer args = fast path, body is
+    # &wire_args / sizeof(wire_args). With buffer args we heap-allocate
+    # `sizeof(wire_args) +
     # Σ size_i`, copy the packed scalars, then concatenate every blob's
     # bytes in declared order; the skel decodes by reading the same
     # lengths back out of the packed header.
     if buf_args:
         buf_total_terms = " + ".join(
-            [f"sizeof(_a)"] + [f"(size_t){a['name']}.size" for a in buf_args])
+            [f"sizeof(wire_args)"] + [f"(size_t){a['name']}.size" for a in buf_args])
         buf_copies = "".join(
-            f"        memcpy(_body_buf + _bo, {a['name']}.data, {a['name']}.size);\n"
-            f"        _bo += {a['name']}.size;\n"
+            f"        memcpy(body_buf + body_offset, {a['name']}.data, {a['name']}.size);\n"
+            f"        body_offset += {a['name']}.size;\n"
             for a in buf_args
         )
         body_setup = f"""\
-        size_t _body_total = {buf_total_terms};
-        uint8_t *_body_buf = (uint8_t *)malloc(_body_total ? _body_total : 1);
-        if (!_body_buf) return YETTY_ERR({rid}, "{qs}: body buf oom");
-        memcpy(_body_buf, &_a, sizeof(_a));
-        size_t _bo = sizeof(_a);
+        size_t body_total = {buf_total_terms};
+        uint8_t *body_buf = (uint8_t *)malloc(body_total ? body_total : 1);
+        if (!body_buf) return YETTY_ERR({rid}, "{qs}: body buf oom");
+        memcpy(body_buf, &wire_args, sizeof(wire_args));
+        size_t body_offset = sizeof(wire_args);
 {buf_copies}\
 """
-        body_arg = "_body_buf, _body_total"
-        body_cleanup = "        free(_body_buf);\n"
+        body_arg = "body_buf, body_total"
+        body_cleanup = "        free(body_buf);\n"
     else:
         body_setup = ""
-        body_arg = "&_a, sizeof(_a)"
+        body_arg = "&wire_args, sizeof(wire_args)"
         body_cleanup = ""
 
     # Wire response: status byte (0=OK, 1=ERR) + optional payload.
@@ -912,65 +913,65 @@ def emit_dispatch_body(m: dict) -> str:
     if vt is None:
         remote_call = f"""\
 {body_setup}\
-        uint8_t _wbuf[1];
-        struct yetty_ycore_size_result _wr = yetty_yclass_rpc_call(
-            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, {body_arg},
-            _wbuf, sizeof(_wbuf));
+        uint8_t resp_buf[1];
+        struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
+            rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
+            resp_buf, sizeof(resp_buf));
 {body_cleanup}\
-        YETTY_RETURN_IF_ERR({rid}, _wr, "{qs}: RPC call failed");
-        size_t _wn = _wr.value;
-        if (_wn < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
-        if (_wbuf[0] != 0) return YETTY_ERR({rid}, "{qs}: remote impl returned error");
+        YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: RPC call failed");
+        size_t response_len = rpc_call_r.value;
+        if (response_len < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
+        if (resp_buf[0] != 0) return YETTY_ERR({rid}, "{qs}: remote impl returned error");
         return YETTY_OK_VOID();
 """
     else:
         remote_call = f"""\
 {body_setup}\
-        uint8_t _wbuf[1 + sizeof({vt})];
-        struct yetty_ycore_size_result _wr = yetty_yclass_rpc_call(
-            _s->session, YETTY_YCLASS_RPC_OP_CALL, _rid, {body_arg},
-            _wbuf, sizeof(_wbuf));
+        uint8_t resp_buf[1 + sizeof({vt})];
+        struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
+            rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
+            resp_buf, sizeof(resp_buf));
 {body_cleanup}\
-        YETTY_RETURN_IF_ERR({rid}, _wr, "{qs}: RPC call failed");
-        size_t _wn = _wr.value;
-        if (_wn < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
-        if (_wbuf[0] != 0) return YETTY_ERR({rid}, "{qs}: remote impl returned error");
-        if (_wn != sizeof(_wbuf)) return YETTY_ERR({rid}, "{qs}: truncated RPC payload");
-        {vt} _v;
-        memcpy(&_v, _wbuf + 1, sizeof(_v));
-        return YETTY_OK({rid}, _v);
+        YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: RPC call failed");
+        size_t response_len = rpc_call_r.value;
+        if (response_len < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
+        if (resp_buf[0] != 0) return YETTY_ERR({rid}, "{qs}: remote impl returned error");
+        if (response_len != sizeof(resp_buf)) return YETTY_ERR({rid}, "{qs}: truncated RPC payload");
+        {vt} return_value;
+        memcpy(&return_value, resp_buf + 1, sizeof(return_value));
+        return YETTY_OK({rid}, return_value);
 """
 
     return f"""\
-    static yetty_yclass_method_slot _slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
-    if (_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {{
-        struct yetty_yclass_method_slot_result _sr =
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {{
+        struct yetty_yclass_method_slot_result method_slot_r =
             yetty_yclass_method_slot_get("yetty_{m['domain']}", (yetty_yclass_method_id_t){qs});
-        if (YETTY_IS_ERR(_sr))
-            return YETTY_ERR({rid}, "{qs}: method_slot_get failed", _sr);
-        _slot = _sr.value;
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR({rid}, "{qs}: method_slot_get failed", method_slot_r);
+        method_slot = method_slot_r.value;
     }}
 
     if (!{obj_name}) return YETTY_ERR({rid}, "{qs}: NULL object");
 
-    struct yetty_yclass_ctx *_s = {ctx_name};
-    if (_s && _s->session) {{
-        struct uint32_result _rr =
-            yetty_yclass_rpc_session_ensure_remote_id(_s->session, _slot);
-        YETTY_RETURN_IF_ERR({rid}, _rr, "{qs}: ensure_remote_id failed");
-        uint32_t _rid = _rr.value;
+    struct yetty_yclass_ctx *rpc_ctx = {ctx_name};
+    if (rpc_ctx && rpc_ctx->session) {{
+        struct uint32_result remote_id_r =
+            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+        YETTY_RETURN_IF_ERR({rid}, remote_id_r, "{qs}: ensure_remote_id failed");
+        uint32_t remote_id = remote_id_r.value;
         struct __attribute__((packed)) {{
 {fields}\
-        }} _a = {{ {init} }};
+        }} wire_args = {{ {init} }};
 {remote_call}\
     }} else {{
-        struct yetty_yclass_ptr_result _cr_local =
+        struct yetty_yclass_ptr_result object_class_r =
             yetty_yclass_object_class({obj_name});
-        YETTY_RETURN_IF_ERR({rid}, _cr_local, "{qs}: object_class failed");
-        struct yetty_yclass_impl_t_result _ir =
-            yetty_yclass_dispatch_lookup(_cr_local.value, _slot);
-        YETTY_RETURN_IF_ERR({rid}, _ir, "{qs}: dispatch_lookup failed");
-        return (({slot_fn})_ir.value)({call_args});
+        YETTY_RETURN_IF_ERR({rid}, object_class_r, "{qs}: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR({rid}, dispatch_impl_r, "{qs}: dispatch_lookup failed");
+        return (({slot_fn})dispatch_impl_r.value)({call_args});
     }}
 """
 
@@ -1019,7 +1020,7 @@ def emit_class_accessor(cls: dict) -> str:
     qcls = qualified_class(cls)
     typecheck_lines = [
         f"__attribute__((unused))\n"
-        f"static {op_c_name(op)}_fn _{qcls}_{op_c_name(op)}_check = {op['impl']};"
+        f"static {op_c_name(op)}_fn {qcls}_{op_c_name(op)}_check = {op['impl']};"
         for op in cls["ops"]
     ]
     typecheck_block = "\n".join(typecheck_lines)
@@ -1051,12 +1052,12 @@ def emit_class_accessor(cls: dict) -> str:
     if parent:
         parent_accessor = f"yetty_{parent['domain']}_{parent['name']}_class_get"
         parent_block = (
-            f"    struct yetty_yclass_ptr_result _parent_r = {parent_accessor}();\n"
-            f"    if (YETTY_IS_ERR(_parent_r))\n"
+            f"    struct yetty_yclass_ptr_result parent_class_r = {parent_accessor}();\n"
+            f"    if (YETTY_IS_ERR(parent_class_r))\n"
             f"        return YETTY_ERR(yetty_yclass_ptr, "
-            f"\"{qname}_class_get: parent accessor failed\", _parent_r);\n"
+            f"\"{qname}_class_get: parent accessor failed\", parent_class_r);\n"
         )
-        parent_expr = "_parent_r.value"
+        parent_expr = "parent_class_r.value"
     else:
         parent_block = ""
         parent_expr = "NULL"
@@ -1068,12 +1069,12 @@ def emit_class_accessor(cls: dict) -> str:
         for i, m in enumerate(mixins):
             mixin_accessor = f"yetty_{m['domain']}_{m['name']}_mixin_get"
             mixin_lines.append(
-                f"    struct yetty_yclass_ptr_result _mixin{i}_r = {mixin_accessor}();\n"
-                f"    if (YETTY_IS_ERR(_mixin{i}_r))\n"
+                f"    struct yetty_yclass_ptr_result mixin_class_r_{i} = {mixin_accessor}();\n"
+                f"    if (YETTY_IS_ERR(mixin_class_r_{i}))\n"
                 f"        return YETTY_ERR(yetty_yclass_ptr, "
-                f"\"{qname}_class_get: mixin{i} accessor failed\", _mixin{i}_r);\n"
+                f"\"{qname}_class_get: mixin{i} accessor failed\", mixin_class_r_{i});\n"
             )
-            mixin_values.append(f"_mixin{i}_r.value")
+            mixin_values.append(f"mixin_class_r_{i}.value")
         mixin_block = "".join(mixin_lines)
         mixin_block += (
             f"    const struct yetty_yclass *mixins[] = "
@@ -1104,13 +1105,13 @@ struct yetty_yclass_ptr_result {accessor}(void)
     }};
 {parent_block}\
 {mixin_block}\
-    struct yetty_yclass_ptr_result _r =
+    struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                               {parent_expr}, {mixin_arg}, {mixin_count});
-    if (YETTY_IS_ERR(_r))
-        return YETTY_ERR(yetty_yclass_ptr, "{qname}_class_get: class_register failed", _r);
-    cls = _r.value;
-    return _r;
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "{qname}_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
 }}
 """
 
@@ -1338,29 +1339,29 @@ def emit_skel(m: dict) -> str:
     # server side — the impl sees the bytes for the duration of the
     # call, and is forbidden from holding onto `.data` past return).
     resolves = []
-    call_parts = ["&_local"]
+    call_parts = ["&local_ctx"]
     buf_args = [a for a in args if is_buffer(a["type"])]
     for a in args:
         if is_struct_ptr(a["type"]):
-            var = f"_hr_{a['name']}"
+            var = f"{a['name']}_resolve_r"
             resolves.append(
                 f"""\
     struct yetty_yclass_void_ptr_result {var} =
-        yetty_yclass_rpc_handle_resolve(_a.{wire_name(a)});
+        yetty_yclass_rpc_handle_resolve(wire_args.{wire_name(a)});
     if (YETTY_IS_ERR({var})) {{
         yetty_ycore_error_print(stderr,
             "[skel] {slot}: handle_resolve", {var}.error);
         yetty_ycore_error_destroy({var}.error);
-        if (_resp_max < 1) return 0;
-        ((uint8_t *)_resp)[0] = 1;
+        if (resp_max < 1) return 0;
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }}
 """)
             call_parts.append(f"({a['type'].strip()}){var}.value")
         elif is_buffer(a["type"]):
-            call_parts.append(f"_buf_{a['name']}")
+            call_parts.append(f"{a['name']}_buf")
         else:
-            call_parts.append(f"_a.{a['name']}")
+            call_parts.append(f"wire_args.{a['name']}")
     resolve_block = "".join(resolves)
     call = ", ".join(call_parts)
 
@@ -1371,22 +1372,22 @@ def emit_skel(m: dict) -> str:
         # the total length matches exactly — leftover bytes mean signature
         # drift between the two sides.
         len_terms = " + ".join(
-            ["sizeof(_a)"] + [f"(size_t)_a.{wire_name(a)}" for a in buf_args])
+            ["sizeof(wire_args)"] + [f"(size_t)wire_args.{wire_name(a)}" for a in buf_args])
         buf_block_lines = [
-            f"    if (_body_len < sizeof(_a)) return 0;",
-            f"    memcpy(&_a, _body, sizeof(_a));",
-            f"    if (_body_len != {len_terms}) return 0;",
-            f"    size_t _bo = sizeof(_a);",
+            f"    if (body_len < sizeof(wire_args)) return 0;",
+            f"    memcpy(&wire_args, body, sizeof(wire_args));",
+            f"    if (body_len != {len_terms}) return 0;",
+            f"    size_t body_offset = sizeof(wire_args);",
         ]
         for a in buf_args:
             wn = wire_name(a)
             buf_block_lines += [
-                f"    struct yetty_ycore_buffer _buf_{a['name']} = {{",
-                f"        .data = (uint8_t *)((const uint8_t *)_body + _bo),",
-                f"        .size = (size_t)_a.{wn},",
-                f"        .capacity = (size_t)_a.{wn},",
+                f"    struct yetty_ycore_buffer {a['name']}_buf = {{",
+                f"        .data = (uint8_t *)((const uint8_t *)body + body_offset),",
+                f"        .size = (size_t)wire_args.{wn},",
+                f"        .capacity = (size_t)wire_args.{wn},",
                 f"    }};",
-                f"    _bo += (size_t)_a.{wn};",
+                f"    body_offset += (size_t)wire_args.{wn};",
             ]
         unpack_block = "\n".join(buf_block_lines) + "\n"
     else:
@@ -1395,49 +1396,49 @@ def emit_skel(m: dict) -> str:
             "     * annotated source; a size mismatch means signature drift, and\n"
             "     * silently truncating to the local prefix would let the server\n"
             "     * execute against a misaligned struct. */\n"
-            "    if (_body_len != sizeof(_a)) return 0;\n"
-            "    memcpy(&_a, _body, sizeof(_a));\n"
+            "    if (body_len != sizeof(wire_args)) return 0;\n"
+            "    memcpy(&wire_args, body, sizeof(wire_args));\n"
         )
 
     rt = f"struct {rid}_result"
     if vt is None:
         body = f"""\
-    {rt} _r = {slot}({call});
-    if (_resp_max < 1) return 0;
-    if (YETTY_IS_ERR(_r)) {{
-        yetty_ycore_error_print(stderr, "[skel] {slot}", _r.error);
-        yetty_ycore_error_destroy(_r.error);
-        ((uint8_t *)_resp)[0] = 1;
+    {rt} call_r = {slot}({call});
+    if (resp_max < 1) return 0;
+    if (YETTY_IS_ERR(call_r)) {{
+        yetty_ycore_error_print(stderr, "[skel] {slot}", call_r.error);
+        yetty_ycore_error_destroy(call_r.error);
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }}
-    ((uint8_t *)_resp)[0] = 0;
+    ((uint8_t *)resp)[0] = 0;
     return 1;
 """
     else:
         body = f"""\
-    {rt} _r = {slot}({call});
-    if (_resp_max < 1) return 0;
-    if (YETTY_IS_ERR(_r)) {{
-        yetty_ycore_error_print(stderr, "[skel] {slot}", _r.error);
-        yetty_ycore_error_destroy(_r.error);
-        ((uint8_t *)_resp)[0] = 1;
+    {rt} call_r = {slot}({call});
+    if (resp_max < 1) return 0;
+    if (YETTY_IS_ERR(call_r)) {{
+        yetty_ycore_error_print(stderr, "[skel] {slot}", call_r.error);
+        yetty_ycore_error_destroy(call_r.error);
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }}
-    if (_resp_max < 1 + sizeof(_r.value)) return 0;
-    ((uint8_t *)_resp)[0] = 0;
-    memcpy((uint8_t *)_resp + 1, &_r.value, sizeof(_r.value));
-    return 1 + sizeof(_r.value);
+    if (resp_max < 1 + sizeof(call_r.value)) return 0;
+    ((uint8_t *)resp)[0] = 0;
+    memcpy((uint8_t *)resp + 1, &call_r.value, sizeof(call_r.value));
+    return 1 + sizeof(call_r.value);
 """
 
     return f"""\
-static size_t {slot}_skel(const void *_body, size_t _body_len,
-                          void *_resp, size_t _resp_max)
+static size_t {slot}_skel(const void *body, size_t body_len,
+                          void *resp, size_t resp_max)
 {{
     struct __attribute__((packed)) {{
 {fields}\
-    }} _a;
+    }} wire_args;
 {unpack_block}\
-    struct yetty_yclass_ctx _local = {{0}};
+    struct yetty_yclass_ctx local_ctx = {{0}};
 {resolve_block}\
 {body}}}
 """
@@ -1461,14 +1462,14 @@ def emit_create_fn(cls: dict, model: dict, module: str) -> str:
     if has_constructor:
         ctor_call = f"""\
 
-        struct yetty_ycore_void_result _ct =
-            yetty_{module}_constructor(ctx, _alloc.value);
-        if (YETTY_IS_ERR(_ct)) {{
-            struct yetty_ycore_void_result _fr =
-                yetty_yclass_object_free(_alloc.value);
-            if (YETTY_IS_ERR(_fr)) yetty_ycore_error_destroy(_fr.error);
+        struct yetty_ycore_void_result ctor_r =
+            yetty_{module}_constructor(ctx, alloc_r.value);
+        if (YETTY_IS_ERR(ctor_r)) {{
+            struct yetty_ycore_void_result free_r =
+                yetty_yclass_object_free(alloc_r.value);
+            if (YETTY_IS_ERR(free_r)) yetty_ycore_error_destroy(free_r.error);
             return YETTY_ERR(yetty_yclass_object_ptr,
-                             "{qname}_create: constructor failed", _ct);
+                             "{qname}_create: constructor failed", ctor_r);
         }}"""
     else:
         ctor_call = ""
@@ -1480,17 +1481,17 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    struct yetty_yclass_ptr_result _kr = {accessor}();
-    if (YETTY_IS_ERR(_kr))
+    struct yetty_yclass_ptr_result class_accessor_r = {accessor}();
+    if (YETTY_IS_ERR(class_accessor_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "{qname}_create: class accessor failed", _kr);
-    const struct yetty_yclass *_klass = _kr.value;
+                         "{qname}_create: class accessor failed", class_accessor_r);
+    const struct yetty_yclass *klass = class_accessor_r.value;
 
     if (!ctx || !ctx->session) {{
-        struct yetty_yclass_object_ptr_result _alloc =
-            yetty_yclass_object_alloc(_klass);
-        if (YETTY_IS_ERR(_alloc)) return _alloc;{ctor_call}
-        return _alloc;
+        struct yetty_yclass_object_ptr_result alloc_r =
+            yetty_yclass_object_alloc(klass);
+        if (YETTY_IS_ERR(alloc_r)) return alloc_r;{ctor_call}
+        return alloc_r;
     }}
 
     /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
@@ -1498,25 +1499,25 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
      * resolve ids on demand), but log so a malformed GET_CLASS
      * response isn't silently swallowed. */
     {{
-        struct yetty_ycore_void_result _tr =
+        struct yetty_ycore_void_result translate_class_r =
             yetty_yclass_rpc_session_translate_class(ctx->session, "{qname}");
-        if (YETTY_IS_ERR(_tr)) {{
+        if (YETTY_IS_ERR(translate_class_r)) {{
             yetty_ycore_error_print(stderr,
                 "{qname}_create: translate_class (degraded — will lazy-resolve)",
-                _tr.error);
-            yetty_ycore_error_destroy(_tr.error);
+                translate_class_r.error);
+            yetty_ycore_error_destroy(translate_class_r.error);
         }}
     }}
 
-    uint64_t _h = 0;
-    const char *_name = "{qname}";
-    struct yetty_ycore_size_result _cr = yetty_yclass_rpc_call(
-        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, _name, strlen(_name), &_h,
-        sizeof(_h));
-    if (YETTY_IS_ERR(_cr))
+    uint64_t handle = 0;
+    const char *class_name = "{qname}";
+    struct yetty_ycore_size_result create_call_r = yetty_yclass_rpc_call(
+        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name, strlen(class_name), &handle,
+        sizeof(handle));
+    if (YETTY_IS_ERR(create_call_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "{qname}_create: CREATE call failed", _cr);
-    if (_cr.value != sizeof(_h) || !_h)
+                         "{qname}_create: CREATE call failed", create_call_r);
+    if (create_call_r.value != sizeof(handle) || !handle)
         return YETTY_ERR(yetty_yclass_object_ptr,
                          "{qname}_create: CREATE returned no/invalid handle");
 
@@ -1527,12 +1528,12 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
      * fields. The class accessor is the same on both sides — proxies
      * never local-dispatch, so the class's data_size contract isn't
      * honoured for this allocation. */
-    struct yetty_yclass_proxy *_proxy = calloc(1, sizeof(*_proxy));
-    if (!_proxy)
+    struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
+    if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "{qname}_create: calloc(proxy) failed");
-    _proxy->header.klass = _klass;
-    _proxy->handle = _h;
-    return YETTY_OK(yetty_yclass_object_ptr, &_proxy->header);
+    proxy->header.klass = klass;
+    proxy->handle = handle;
+    return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }}
 """
 
@@ -1589,9 +1590,9 @@ static const struct yetty_{module}_skel_row yetty_{module}_skel_rows[] = {{
 
 static yetty_yclass_rpc_skel_fn yetty_{module}_skel_lookup(yetty_yclass_method_slot slot)
 {{
-    struct yetty_yclass_const_char_ptr_result nr = yetty_yclass_method_slot_name(slot);
-    if (YETTY_IS_ERR(nr)) {{ yetty_ycore_error_destroy(nr.error); return NULL; }}
-    const char *name = nr.value;
+    struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);
+    if (YETTY_IS_ERR(slot_name_r)) {{ yetty_ycore_error_destroy(slot_name_r.error); return NULL; }}
+    const char *name = slot_name_r.value;
     for (size_t i = 0;
          i < sizeof(yetty_{module}_skel_rows) / sizeof(yetty_{module}_skel_rows[0]); ++i)
         if (strcmp(yetty_{module}_skel_rows[i].name, name) == 0)
@@ -1601,12 +1602,12 @@ static yetty_yclass_rpc_skel_fn yetty_{module}_skel_lookup(yetty_yclass_method_s
 """
         skel_install = (
             f"    {{\n"
-            f"        struct yetty_ycore_void_result _sr =\n"
+            f"        struct yetty_ycore_void_result add_skel_r =\n"
             f"            yetty_yclass_rpc_add_skel_lookup(yetty_{module}_skel_lookup);\n"
-            f"        if (YETTY_IS_ERR(_sr)) {{\n"
+            f"        if (YETTY_IS_ERR(add_skel_r)) {{\n"
             f"            yetty_ycore_error_print(stderr,\n"
-            f'                "yetty_{module}_install_hooks: rpc_add_skel_lookup", _sr.error);\n'
-            f"            yetty_ycore_error_destroy(_sr.error);\n"
+            f'                "yetty_{module}_install_hooks: rpc_add_skel_lookup", add_skel_r.error);\n'
+            f"            yetty_ycore_error_destroy(add_skel_r.error);\n"
             f"            abort();\n"
             f"        }}\n"
             f"    }}\n"
@@ -1621,11 +1622,11 @@ static yetty_yclass_rpc_skel_fn yetty_{module}_skel_lookup(yetty_yclass_method_s
 __attribute__((constructor))
 static void yetty_{module}_install_hooks(void)
 {{
-    struct yetty_ycore_void_result _ar =
+    struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_{module}_accessor_lookup);
-    if (YETTY_IS_ERR(_ar)) {{
-        yetty_ycore_error_print(stderr, "yetty_{module}_install_hooks", _ar.error);
-        yetty_ycore_error_destroy(_ar.error);
+    if (YETTY_IS_ERR(add_accessor_r)) {{
+        yetty_ycore_error_print(stderr, "yetty_{module}_install_hooks", add_accessor_r.error);
+        yetty_ycore_error_destroy(add_accessor_r.error);
         abort();
     }}
 {skel_install}\

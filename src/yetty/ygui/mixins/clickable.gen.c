@@ -5,9 +5,9 @@
 #include <yetty/ytrace/ytrace.h>
 
 __attribute__((unused))
-static yetty_ygui_widget_on_press_fn _yetty_ygui_clickable_yetty_ygui_widget_on_press_check = clickable_on_press;
+static yetty_ygui_widget_on_press_fn yetty_ygui_clickable_yetty_ygui_widget_on_press_check = clickable_on_press;
 __attribute__((unused))
-static yetty_ygui_widget_on_release_fn _yetty_ygui_clickable_yetty_ygui_widget_on_release_check = clickable_on_release;
+static yetty_ygui_widget_on_release_fn yetty_ygui_clickable_yetty_ygui_widget_on_release_check = clickable_on_release;
 
 struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void)
 {
@@ -24,11 +24,11 @@ struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void)
         {"yetty_ygui", "widget_on_press", (yetty_yclass_method_id_t)yetty_ygui_widget_on_press, (yetty_yclass_impl_t)clickable_on_press},
         {"yetty_ygui", "widget_on_release", (yetty_yclass_method_id_t)yetty_ygui_widget_on_release, (yetty_yclass_impl_t)clickable_on_release},
     };
-    struct yetty_yclass_ptr_result _r =
+    struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                               NULL, NULL, 0);
-    if (YETTY_IS_ERR(_r))
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_clickable_class_get: class_register failed", _r);
-    cls = _r.value;
-    return _r;
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_clickable_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
 }

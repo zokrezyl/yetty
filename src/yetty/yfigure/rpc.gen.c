@@ -12,197 +12,197 @@
 #include <stdlib.h>
 #include <string.h>
 
-static size_t yetty_yfigure_constructor_skel(const void *_body, size_t _body_len,
-                          void *_resp, size_t _resp_max)
+static size_t yetty_yfigure_constructor_skel(const void *body, size_t body_len,
+                          void *resp, size_t resp_max)
 {
     struct __attribute__((packed)) {
         uint64_t obj_handle;
-    } _a;
+    } wire_args;
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
      * execute against a misaligned struct. */
-    if (_body_len != sizeof(_a)) return 0;
-    memcpy(&_a, _body, sizeof(_a));
-    struct yetty_yclass_ctx _local = {0};
-    struct yetty_yclass_void_ptr_result _hr_obj =
-        yetty_yclass_rpc_handle_resolve(_a.obj_handle);
-    if (YETTY_IS_ERR(_hr_obj)) {
+    if (body_len != sizeof(wire_args)) return 0;
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_ctx local_ctx = {0};
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr,
-            "[skel] yetty_yfigure_constructor: handle_resolve", _hr_obj.error);
-        yetty_ycore_error_destroy(_hr_obj.error);
-        if (_resp_max < 1) return 0;
-        ((uint8_t *)_resp)[0] = 1;
+            "[skel] yetty_yfigure_constructor: handle_resolve", obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        if (resp_max < 1) return 0;
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result _r = yetty_yfigure_constructor(&_local, (struct yetty_yclass_object *)_hr_obj.value);
-    if (_resp_max < 1) return 0;
-    if (YETTY_IS_ERR(_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_constructor", _r.error);
-        yetty_ycore_error_destroy(_r.error);
-        ((uint8_t *)_resp)[0] = 1;
+    struct yetty_ycore_void_result call_r = yetty_yfigure_constructor(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+    if (resp_max < 1) return 0;
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_constructor", call_r.error);
+        yetty_ycore_error_destroy(call_r.error);
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    ((uint8_t *)_resp)[0] = 0;
+    ((uint8_t *)resp)[0] = 0;
     return 1;
 }
 
-static size_t yetty_yfigure_add_child_skel(const void *_body, size_t _body_len,
-                          void *_resp, size_t _resp_max)
+static size_t yetty_yfigure_add_child_skel(const void *body, size_t body_len,
+                          void *resp, size_t resp_max)
 {
     struct __attribute__((packed)) {
         uint64_t obj_handle;
         uint64_t child_handle;
         uint32_t id;
-    } _a;
+    } wire_args;
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
      * execute against a misaligned struct. */
-    if (_body_len != sizeof(_a)) return 0;
-    memcpy(&_a, _body, sizeof(_a));
-    struct yetty_yclass_ctx _local = {0};
-    struct yetty_yclass_void_ptr_result _hr_obj =
-        yetty_yclass_rpc_handle_resolve(_a.obj_handle);
-    if (YETTY_IS_ERR(_hr_obj)) {
+    if (body_len != sizeof(wire_args)) return 0;
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_ctx local_ctx = {0};
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr,
-            "[skel] yetty_yfigure_add_child: handle_resolve", _hr_obj.error);
-        yetty_ycore_error_destroy(_hr_obj.error);
-        if (_resp_max < 1) return 0;
-        ((uint8_t *)_resp)[0] = 1;
+            "[skel] yetty_yfigure_add_child: handle_resolve", obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        if (resp_max < 1) return 0;
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_yclass_void_ptr_result _hr_child =
-        yetty_yclass_rpc_handle_resolve(_a.child_handle);
-    if (YETTY_IS_ERR(_hr_child)) {
+    struct yetty_yclass_void_ptr_result child_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.child_handle);
+    if (YETTY_IS_ERR(child_resolve_r)) {
         yetty_ycore_error_print(stderr,
-            "[skel] yetty_yfigure_add_child: handle_resolve", _hr_child.error);
-        yetty_ycore_error_destroy(_hr_child.error);
-        if (_resp_max < 1) return 0;
-        ((uint8_t *)_resp)[0] = 1;
+            "[skel] yetty_yfigure_add_child: handle_resolve", child_resolve_r.error);
+        yetty_ycore_error_destroy(child_resolve_r.error);
+        if (resp_max < 1) return 0;
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result _r = yetty_yfigure_add_child(&_local, (struct yetty_yclass_object *)_hr_obj.value, (struct yetty_yfigure_figure *)_hr_child.value, _a.id);
-    if (_resp_max < 1) return 0;
-    if (YETTY_IS_ERR(_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_add_child", _r.error);
-        yetty_ycore_error_destroy(_r.error);
-        ((uint8_t *)_resp)[0] = 1;
+    struct yetty_ycore_void_result call_r = yetty_yfigure_add_child(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, (struct yetty_yfigure_figure *)child_resolve_r.value, wire_args.id);
+    if (resp_max < 1) return 0;
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_add_child", call_r.error);
+        yetty_ycore_error_destroy(call_r.error);
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    ((uint8_t *)_resp)[0] = 0;
+    ((uint8_t *)resp)[0] = 0;
     return 1;
 }
 
-static size_t yetty_yfigure_remove_child_by_id_skel(const void *_body, size_t _body_len,
-                          void *_resp, size_t _resp_max)
+static size_t yetty_yfigure_remove_child_by_id_skel(const void *body, size_t body_len,
+                          void *resp, size_t resp_max)
 {
     struct __attribute__((packed)) {
         uint64_t obj_handle;
         uint32_t id;
-    } _a;
+    } wire_args;
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
      * execute against a misaligned struct. */
-    if (_body_len != sizeof(_a)) return 0;
-    memcpy(&_a, _body, sizeof(_a));
-    struct yetty_yclass_ctx _local = {0};
-    struct yetty_yclass_void_ptr_result _hr_obj =
-        yetty_yclass_rpc_handle_resolve(_a.obj_handle);
-    if (YETTY_IS_ERR(_hr_obj)) {
+    if (body_len != sizeof(wire_args)) return 0;
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_ctx local_ctx = {0};
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr,
-            "[skel] yetty_yfigure_remove_child_by_id: handle_resolve", _hr_obj.error);
-        yetty_ycore_error_destroy(_hr_obj.error);
-        if (_resp_max < 1) return 0;
-        ((uint8_t *)_resp)[0] = 1;
+            "[skel] yetty_yfigure_remove_child_by_id: handle_resolve", obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        if (resp_max < 1) return 0;
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result _r = yetty_yfigure_remove_child_by_id(&_local, (struct yetty_yclass_object *)_hr_obj.value, _a.id);
-    if (_resp_max < 1) return 0;
-    if (YETTY_IS_ERR(_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_remove_child_by_id", _r.error);
-        yetty_ycore_error_destroy(_r.error);
-        ((uint8_t *)_resp)[0] = 1;
+    struct yetty_ycore_void_result call_r = yetty_yfigure_remove_child_by_id(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.id);
+    if (resp_max < 1) return 0;
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_remove_child_by_id", call_r.error);
+        yetty_ycore_error_destroy(call_r.error);
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    ((uint8_t *)_resp)[0] = 0;
+    ((uint8_t *)resp)[0] = 0;
     return 1;
 }
 
-static size_t yetty_yfigure_raise_child_by_id_skel(const void *_body, size_t _body_len,
-                          void *_resp, size_t _resp_max)
+static size_t yetty_yfigure_raise_child_by_id_skel(const void *body, size_t body_len,
+                          void *resp, size_t resp_max)
 {
     struct __attribute__((packed)) {
         uint64_t obj_handle;
         uint32_t id;
-    } _a;
+    } wire_args;
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
      * execute against a misaligned struct. */
-    if (_body_len != sizeof(_a)) return 0;
-    memcpy(&_a, _body, sizeof(_a));
-    struct yetty_yclass_ctx _local = {0};
-    struct yetty_yclass_void_ptr_result _hr_obj =
-        yetty_yclass_rpc_handle_resolve(_a.obj_handle);
-    if (YETTY_IS_ERR(_hr_obj)) {
+    if (body_len != sizeof(wire_args)) return 0;
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_ctx local_ctx = {0};
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr,
-            "[skel] yetty_yfigure_raise_child_by_id: handle_resolve", _hr_obj.error);
-        yetty_ycore_error_destroy(_hr_obj.error);
-        if (_resp_max < 1) return 0;
-        ((uint8_t *)_resp)[0] = 1;
+            "[skel] yetty_yfigure_raise_child_by_id: handle_resolve", obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        if (resp_max < 1) return 0;
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result _r = yetty_yfigure_raise_child_by_id(&_local, (struct yetty_yclass_object *)_hr_obj.value, _a.id);
-    if (_resp_max < 1) return 0;
-    if (YETTY_IS_ERR(_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_raise_child_by_id", _r.error);
-        yetty_ycore_error_destroy(_r.error);
-        ((uint8_t *)_resp)[0] = 1;
+    struct yetty_ycore_void_result call_r = yetty_yfigure_raise_child_by_id(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.id);
+    if (resp_max < 1) return 0;
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_raise_child_by_id", call_r.error);
+        yetty_ycore_error_destroy(call_r.error);
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    ((uint8_t *)_resp)[0] = 0;
+    ((uint8_t *)resp)[0] = 0;
     return 1;
 }
 
-static size_t yetty_yfigure_process_records_skel(const void *_body, size_t _body_len,
-                          void *_resp, size_t _resp_max)
+static size_t yetty_yfigure_process_records_skel(const void *body, size_t body_len,
+                          void *resp, size_t resp_max)
 {
     struct __attribute__((packed)) {
         uint64_t obj_handle;
         uint32_t bytes_len;
-    } _a;
-    if (_body_len < sizeof(_a)) return 0;
-    memcpy(&_a, _body, sizeof(_a));
-    if (_body_len != sizeof(_a) + (size_t)_a.bytes_len) return 0;
-    size_t _bo = sizeof(_a);
-    struct yetty_ycore_buffer _buf_bytes = {
-        .data = (uint8_t *)((const uint8_t *)_body + _bo),
-        .size = (size_t)_a.bytes_len,
-        .capacity = (size_t)_a.bytes_len,
+    } wire_args;
+    if (body_len < sizeof(wire_args)) return 0;
+    memcpy(&wire_args, body, sizeof(wire_args));
+    if (body_len != sizeof(wire_args) + (size_t)wire_args.bytes_len) return 0;
+    size_t body_offset = sizeof(wire_args);
+    struct yetty_ycore_buffer bytes_buf = {
+        .data = (uint8_t *)((const uint8_t *)body + body_offset),
+        .size = (size_t)wire_args.bytes_len,
+        .capacity = (size_t)wire_args.bytes_len,
     };
-    _bo += (size_t)_a.bytes_len;
-    struct yetty_yclass_ctx _local = {0};
-    struct yetty_yclass_void_ptr_result _hr_obj =
-        yetty_yclass_rpc_handle_resolve(_a.obj_handle);
-    if (YETTY_IS_ERR(_hr_obj)) {
+    body_offset += (size_t)wire_args.bytes_len;
+    struct yetty_yclass_ctx local_ctx = {0};
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr,
-            "[skel] yetty_yfigure_process_records: handle_resolve", _hr_obj.error);
-        yetty_ycore_error_destroy(_hr_obj.error);
-        if (_resp_max < 1) return 0;
-        ((uint8_t *)_resp)[0] = 1;
+            "[skel] yetty_yfigure_process_records: handle_resolve", obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        if (resp_max < 1) return 0;
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result _r = yetty_yfigure_process_records(&_local, (struct yetty_yclass_object *)_hr_obj.value, _buf_bytes);
-    if (_resp_max < 1) return 0;
-    if (YETTY_IS_ERR(_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_process_records", _r.error);
-        yetty_ycore_error_destroy(_r.error);
-        ((uint8_t *)_resp)[0] = 1;
+    struct yetty_ycore_void_result call_r = yetty_yfigure_process_records(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, bytes_buf);
+    if (resp_max < 1) return 0;
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_process_records", call_r.error);
+        yetty_ycore_error_destroy(call_r.error);
+        ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    ((uint8_t *)_resp)[0] = 0;
+    ((uint8_t *)resp)[0] = 0;
     return 1;
 }
 
@@ -213,26 +213,26 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yett
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    struct yetty_yclass_ptr_result _kr = yetty_yfigure_container_class_get();
-    if (YETTY_IS_ERR(_kr))
+    struct yetty_yclass_ptr_result class_accessor_r = yetty_yfigure_container_class_get();
+    if (YETTY_IS_ERR(class_accessor_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yfigure_container_create: class accessor failed", _kr);
-    const struct yetty_yclass *_klass = _kr.value;
+                         "yetty_yfigure_container_create: class accessor failed", class_accessor_r);
+    const struct yetty_yclass *klass = class_accessor_r.value;
 
     if (!ctx || !ctx->session) {
-        struct yetty_yclass_object_ptr_result _alloc =
-            yetty_yclass_object_alloc(_klass);
-        if (YETTY_IS_ERR(_alloc)) return _alloc;
-        struct yetty_ycore_void_result _ct =
-            yetty_yfigure_constructor(ctx, _alloc.value);
-        if (YETTY_IS_ERR(_ct)) {
-            struct yetty_ycore_void_result _fr =
-                yetty_yclass_object_free(_alloc.value);
-            if (YETTY_IS_ERR(_fr)) yetty_ycore_error_destroy(_fr.error);
+        struct yetty_yclass_object_ptr_result alloc_r =
+            yetty_yclass_object_alloc(klass);
+        if (YETTY_IS_ERR(alloc_r)) return alloc_r;
+        struct yetty_ycore_void_result ctor_r =
+            yetty_yfigure_constructor(ctx, alloc_r.value);
+        if (YETTY_IS_ERR(ctor_r)) {
+            struct yetty_ycore_void_result free_r =
+                yetty_yclass_object_free(alloc_r.value);
+            if (YETTY_IS_ERR(free_r)) yetty_ycore_error_destroy(free_r.error);
             return YETTY_ERR(yetty_yclass_object_ptr,
-                             "yetty_yfigure_container_create: constructor failed", _ct);
+                             "yetty_yfigure_container_create: constructor failed", ctor_r);
         }
-        return _alloc;
+        return alloc_r;
     }
 
     /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
@@ -240,25 +240,25 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yett
      * resolve ids on demand), but log so a malformed GET_CLASS
      * response isn't silently swallowed. */
     {
-        struct yetty_ycore_void_result _tr =
+        struct yetty_ycore_void_result translate_class_r =
             yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_yfigure_container");
-        if (YETTY_IS_ERR(_tr)) {
+        if (YETTY_IS_ERR(translate_class_r)) {
             yetty_ycore_error_print(stderr,
                 "yetty_yfigure_container_create: translate_class (degraded — will lazy-resolve)",
-                _tr.error);
-            yetty_ycore_error_destroy(_tr.error);
+                translate_class_r.error);
+            yetty_ycore_error_destroy(translate_class_r.error);
         }
     }
 
-    uint64_t _h = 0;
-    const char *_name = "yetty_yfigure_container";
-    struct yetty_ycore_size_result _cr = yetty_yclass_rpc_call(
-        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, _name, strlen(_name), &_h,
-        sizeof(_h));
-    if (YETTY_IS_ERR(_cr))
+    uint64_t handle = 0;
+    const char *class_name = "yetty_yfigure_container";
+    struct yetty_ycore_size_result create_call_r = yetty_yclass_rpc_call(
+        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name, strlen(class_name), &handle,
+        sizeof(handle));
+    if (YETTY_IS_ERR(create_call_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yfigure_container_create: CREATE call failed", _cr);
-    if (_cr.value != sizeof(_h) || !_h)
+                         "yetty_yfigure_container_create: CREATE call failed", create_call_r);
+    if (create_call_r.value != sizeof(handle) || !handle)
         return YETTY_ERR(yetty_yclass_object_ptr,
                          "yetty_yfigure_container_create: CREATE returned no/invalid handle");
 
@@ -269,12 +269,12 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yett
      * fields. The class accessor is the same on both sides — proxies
      * never local-dispatch, so the class's data_size contract isn't
      * honoured for this allocation. */
-    struct yetty_yclass_proxy *_proxy = calloc(1, sizeof(*_proxy));
-    if (!_proxy)
+    struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
+    if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yfigure_container_create: calloc(proxy) failed");
-    _proxy->header.klass = _klass;
-    _proxy->handle = _h;
-    return YETTY_OK(yetty_yclass_object_ptr, &_proxy->header);
+    proxy->header.klass = klass;
+    proxy->handle = handle;
+    return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
 
 struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *ctx)
@@ -284,26 +284,26 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_y
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    struct yetty_yclass_ptr_result _kr = yetty_yfigure_figure_class_get();
-    if (YETTY_IS_ERR(_kr))
+    struct yetty_yclass_ptr_result class_accessor_r = yetty_yfigure_figure_class_get();
+    if (YETTY_IS_ERR(class_accessor_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yfigure_figure_create: class accessor failed", _kr);
-    const struct yetty_yclass *_klass = _kr.value;
+                         "yetty_yfigure_figure_create: class accessor failed", class_accessor_r);
+    const struct yetty_yclass *klass = class_accessor_r.value;
 
     if (!ctx || !ctx->session) {
-        struct yetty_yclass_object_ptr_result _alloc =
-            yetty_yclass_object_alloc(_klass);
-        if (YETTY_IS_ERR(_alloc)) return _alloc;
-        struct yetty_ycore_void_result _ct =
-            yetty_yfigure_constructor(ctx, _alloc.value);
-        if (YETTY_IS_ERR(_ct)) {
-            struct yetty_ycore_void_result _fr =
-                yetty_yclass_object_free(_alloc.value);
-            if (YETTY_IS_ERR(_fr)) yetty_ycore_error_destroy(_fr.error);
+        struct yetty_yclass_object_ptr_result alloc_r =
+            yetty_yclass_object_alloc(klass);
+        if (YETTY_IS_ERR(alloc_r)) return alloc_r;
+        struct yetty_ycore_void_result ctor_r =
+            yetty_yfigure_constructor(ctx, alloc_r.value);
+        if (YETTY_IS_ERR(ctor_r)) {
+            struct yetty_ycore_void_result free_r =
+                yetty_yclass_object_free(alloc_r.value);
+            if (YETTY_IS_ERR(free_r)) yetty_ycore_error_destroy(free_r.error);
             return YETTY_ERR(yetty_yclass_object_ptr,
-                             "yetty_yfigure_figure_create: constructor failed", _ct);
+                             "yetty_yfigure_figure_create: constructor failed", ctor_r);
         }
-        return _alloc;
+        return alloc_r;
     }
 
     /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
@@ -311,25 +311,25 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_y
      * resolve ids on demand), but log so a malformed GET_CLASS
      * response isn't silently swallowed. */
     {
-        struct yetty_ycore_void_result _tr =
+        struct yetty_ycore_void_result translate_class_r =
             yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_yfigure_figure");
-        if (YETTY_IS_ERR(_tr)) {
+        if (YETTY_IS_ERR(translate_class_r)) {
             yetty_ycore_error_print(stderr,
                 "yetty_yfigure_figure_create: translate_class (degraded — will lazy-resolve)",
-                _tr.error);
-            yetty_ycore_error_destroy(_tr.error);
+                translate_class_r.error);
+            yetty_ycore_error_destroy(translate_class_r.error);
         }
     }
 
-    uint64_t _h = 0;
-    const char *_name = "yetty_yfigure_figure";
-    struct yetty_ycore_size_result _cr = yetty_yclass_rpc_call(
-        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, _name, strlen(_name), &_h,
-        sizeof(_h));
-    if (YETTY_IS_ERR(_cr))
+    uint64_t handle = 0;
+    const char *class_name = "yetty_yfigure_figure";
+    struct yetty_ycore_size_result create_call_r = yetty_yclass_rpc_call(
+        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name, strlen(class_name), &handle,
+        sizeof(handle));
+    if (YETTY_IS_ERR(create_call_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yfigure_figure_create: CREATE call failed", _cr);
-    if (_cr.value != sizeof(_h) || !_h)
+                         "yetty_yfigure_figure_create: CREATE call failed", create_call_r);
+    if (create_call_r.value != sizeof(handle) || !handle)
         return YETTY_ERR(yetty_yclass_object_ptr,
                          "yetty_yfigure_figure_create: CREATE returned no/invalid handle");
 
@@ -340,12 +340,12 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_y
      * fields. The class accessor is the same on both sides — proxies
      * never local-dispatch, so the class's data_size contract isn't
      * honoured for this allocation. */
-    struct yetty_yclass_proxy *_proxy = calloc(1, sizeof(*_proxy));
-    if (!_proxy)
+    struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
+    if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yfigure_figure_create: calloc(proxy) failed");
-    _proxy->header.klass = _klass;
-    _proxy->handle = _h;
-    return YETTY_OK(yetty_yclass_object_ptr, &_proxy->header);
+    proxy->header.klass = klass;
+    proxy->handle = handle;
+    return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
 
 /* ---- yfigure: class name → accessor (lazy) ---------------------- */
@@ -372,9 +372,9 @@ static const struct yetty_yfigure_skel_row yetty_yfigure_skel_rows[] = {
 
 static yetty_yclass_rpc_skel_fn yetty_yfigure_skel_lookup(yetty_yclass_method_slot slot)
 {
-    struct yetty_yclass_const_char_ptr_result nr = yetty_yclass_method_slot_name(slot);
-    if (YETTY_IS_ERR(nr)) { yetty_ycore_error_destroy(nr.error); return NULL; }
-    const char *name = nr.value;
+    struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);
+    if (YETTY_IS_ERR(slot_name_r)) { yetty_ycore_error_destroy(slot_name_r.error); return NULL; }
+    const char *name = slot_name_r.value;
     for (size_t i = 0;
          i < sizeof(yetty_yfigure_skel_rows) / sizeof(yetty_yfigure_skel_rows[0]); ++i)
         if (strcmp(yetty_yfigure_skel_rows[i].name, name) == 0)
@@ -387,20 +387,20 @@ static yetty_yclass_rpc_skel_fn yetty_yfigure_skel_lookup(yetty_yclass_method_sl
 __attribute__((constructor))
 static void yetty_yfigure_install_hooks(void)
 {
-    struct yetty_ycore_void_result _ar =
+    struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_yfigure_accessor_lookup);
-    if (YETTY_IS_ERR(_ar)) {
-        yetty_ycore_error_print(stderr, "yetty_yfigure_install_hooks", _ar.error);
-        yetty_ycore_error_destroy(_ar.error);
+    if (YETTY_IS_ERR(add_accessor_r)) {
+        yetty_ycore_error_print(stderr, "yetty_yfigure_install_hooks", add_accessor_r.error);
+        yetty_ycore_error_destroy(add_accessor_r.error);
         abort();
     }
     {
-        struct yetty_ycore_void_result _sr =
+        struct yetty_ycore_void_result add_skel_r =
             yetty_yclass_rpc_add_skel_lookup(yetty_yfigure_skel_lookup);
-        if (YETTY_IS_ERR(_sr)) {
+        if (YETTY_IS_ERR(add_skel_r)) {
             yetty_ycore_error_print(stderr,
-                "yetty_yfigure_install_hooks: rpc_add_skel_lookup", _sr.error);
-            yetty_ycore_error_destroy(_sr.error);
+                "yetty_yfigure_install_hooks: rpc_add_skel_lookup", add_skel_r.error);
+            yetty_ycore_error_destroy(add_skel_r.error);
             abort();
         }
     }
