@@ -17,7 +17,7 @@
 # and tarball naming.
 #
 # Optional env:
-#   WORK_DIR          default /tmp/yetty-3rdparty-openssl-new-$TARGET_PLATFORM
+#   WORK_DIR          default /tmp/yetty-3rdparty-openssl-$TARGET_PLATFORM
 #   CACHE_DIR         default $HOME/.cache/yetty-3rdparty
 #   ANDROID_API       default 26
 #   IOS_MIN           default 15.0
@@ -37,7 +37,7 @@ VERSION_FILE="$SCRIPT_DIR/version"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 
-WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-openssl-new-$TARGET_PLATFORM}"
+WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-openssl-$TARGET_PLATFORM}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
 NCPU="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
@@ -48,7 +48,7 @@ OPENSSL_TARBALL="$CACHE_DIR/openssl-${VERSION}.tar.gz"
 SRC_DIR="$WORK_DIR/openssl-${VERSION}-${TARGET_PLATFORM}"
 INSTALL_DIR="$WORK_DIR/install-${TARGET_PLATFORM}"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
-TARBALL="$OUTPUT_DIR/openssl-new-${TARGET_PLATFORM}-${VERSION}.tar.gz"
+TARBALL="$OUTPUT_DIR/openssl-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 

@@ -3,7 +3,7 @@
 # CMake. Same per-platform handling pattern as libuv.
 #
 # OpenSSL backend: we link against the upstream openssl 4.x prebuilt
-# tarball published by build-3rdparty-openssl-new.yml. To keep the
+# tarball published by build-3rdparty-openssl.yml. To keep the
 # producer self-contained, this script downloads that tarball at build
 # time (instead of requiring the consumer-side fetch to have run first).
 # Same model the consumer libssh2.cmake uses at yetty-build time —
@@ -24,7 +24,7 @@
 #   YETTY_3RDPARTY_URL_BASE  default https://github.com/zokrezyl/yetty/releases/download
 #   OPENSSL_VERSION_OVERRIDE  pin a different openssl version
 #                              (default: read from
-#                               build-tools/3rdparty/openssl-new/version)
+#                               build-tools/3rdparty/openssl/version)
 #
 # Output tarball layout (consumed by build-tools/cmake/libs/libssh2.cmake):
 #   lib/libssh2.a
@@ -45,10 +45,10 @@ VERSION_FILE="$SCRIPT_DIR/version"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 
-# OpenSSL version to link against. Read from the openssl-new 3rdparty
+# OpenSSL version to link against. Read from the openssl 3rdparty
 # dir unless overridden — that pins libssh2's TLS backend to the same
 # version yetty itself uses.
-OSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl-new/version"
+OSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl/version"
 : "${OPENSSL_VERSION_OVERRIDE:=}"
 if [ -n "$OPENSSL_VERSION_OVERRIDE" ]; then
     OSSL_VERSION="$OPENSSL_VERSION_OVERRIDE"
@@ -72,10 +72,10 @@ INSTALL_DIR="$WORK_DIR/install-${TARGET_PLATFORM}"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
 TARBALL="$OUTPUT_DIR/libssh2-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
-# Where we'll extract the prebuilt openssl-new for cmake to find.
-OSSL_TAR_URL="$URL_BASE/lib-openssl-new-${OSSL_VERSION}/openssl-new-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
-OSSL_TARBALL="$CACHE_DIR/openssl-new-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
-OSSL_PREFIX="$WORK_DIR/openssl-new-${TARGET_PLATFORM}-${OSSL_VERSION}"
+# Where we'll extract the prebuilt openssl for cmake to find.
+OSSL_TAR_URL="$URL_BASE/lib-openssl-${OSSL_VERSION}/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
+OSSL_TARBALL="$CACHE_DIR/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
+OSSL_PREFIX="$WORK_DIR/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
@@ -103,18 +103,18 @@ fetch() {
 # Fetch libssh2 source + prebuilt openssl tarball.
 #-----------------------------------------------------------------------------
 fetch "$LIBSSH2_URL" "$LIBSSH2_TARBALL" "libssh2 ${VERSION}"               libssh2-source
-fetch "$OSSL_TAR_URL" "$OSSL_TARBALL"   "openssl-new ${OSSL_VERSION} (${TARGET_PLATFORM}) — libssh2 TLS backend" libssh2-openssl
+fetch "$OSSL_TAR_URL" "$OSSL_TARBALL"   "openssl ${OSSL_VERSION} (${TARGET_PLATFORM}) — libssh2 TLS backend" libssh2-openssl
 
 if [ ! -d "$SRC_DIR" ]; then
     echo "==> extracting libssh2 -> $SRC_DIR"
     tar -C "$WORK_DIR" -xzf "$LIBSSH2_TARBALL"
 fi
-echo "==> extracting prebuilt openssl-new -> $OSSL_PREFIX"
+echo "==> extracting prebuilt openssl -> $OSSL_PREFIX"
 rm -rf "$OSSL_PREFIX"
 mkdir -p "$OSSL_PREFIX"
 tar -C "$OSSL_PREFIX" -xzf "$OSSL_TARBALL"
 
-# Sanity-check the prebuilt openssl-new tarball — Unix ships libssl.a /
+# Sanity-check the prebuilt openssl tarball — Unix ships libssl.a /
 # libcrypto.a, MSVC ships libssl.lib / libcrypto.lib.
 OSSL_SSL=""; OSSL_CRYPTO=""
 for _candidate in libssl.a libssl.lib; do
@@ -129,8 +129,8 @@ for _candidate in libcrypto.a libcrypto.lib; do
         break
     fi
 done
-[ -n "$OSSL_SSL" ]    || { echo "missing libssl in $OSSL_PREFIX/lib/ — openssl-new tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
-[ -n "$OSSL_CRYPTO" ] || { echo "missing libcrypto in $OSSL_PREFIX/lib/ — openssl-new tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
+[ -n "$OSSL_SSL" ]    || { echo "missing libssl in $OSSL_PREFIX/lib/ — openssl tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
+[ -n "$OSSL_CRYPTO" ] || { echo "missing libcrypto in $OSSL_PREFIX/lib/ — openssl tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
 [ -d "$OSSL_PREFIX/include/openssl" ] || { echo "missing $OSSL_PREFIX/include/openssl/" >&2; exit 1; }
 
 rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$STAGE"
@@ -148,7 +148,7 @@ CMAKE_ARGS=(
     -DBUILD_TESTING=OFF
     # libssh2 1.11.x cmake var name is CRYPTO_BACKEND.
     -DCRYPTO_BACKEND=OpenSSL
-    # Point cmake at our prebuilt openssl-new (find_package(OpenSSL) honors
+    # Point cmake at our prebuilt openssl (find_package(OpenSSL) honors
     # OPENSSL_ROOT_DIR + the *_LIBRARY / *_INCLUDE_DIR cache vars).
     -DOPENSSL_ROOT_DIR="$OSSL_PREFIX"
     -DOPENSSL_USE_STATIC_LIBS=ON
@@ -264,7 +264,7 @@ esac
 #-----------------------------------------------------------------------------
 # Configure + build + install
 #-----------------------------------------------------------------------------
-echo "==> configuring libssh2 ${VERSION} for $TARGET_PLATFORM (openssl-new ${OSSL_VERSION})"
+echo "==> configuring libssh2 ${VERSION} for $TARGET_PLATFORM (openssl ${OSSL_VERSION})"
 $EMCMAKE_PREFIX cmake -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja "${CMAKE_ARGS[@]}"
 
 echo "==> building (-j${NCPU})"
@@ -299,7 +299,7 @@ echo "==> packaging -> $TARBALL"
 tar -C "$STAGE" -czf "$TARBALL" .
 
 echo ""
-echo "libssh2 $VERSION ($TARGET_PLATFORM, openssl-new $OSSL_VERSION) ready:"
+echo "libssh2 $VERSION ($TARGET_PLATFORM, openssl $OSSL_VERSION) ready:"
 ls -lh "$TARBALL"
 ENTRIES="$(tar -tzf "$TARBALL" | wc -l)"
 echo "contents ($ENTRIES files):"

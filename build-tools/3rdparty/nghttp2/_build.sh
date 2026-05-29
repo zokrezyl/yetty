@@ -59,7 +59,7 @@ if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
     # libcurl/_build.sh. nghttp2 ships a CMakeLists.txt; using it avoids
     # the libtool/autoconf-on-MSYS2 mess that doesn't ABI-match yetty's
     # MSVC link. Output lib gets the `lib` prefix (CMAKE_STATIC_LIBRARY_-
-    # PREFIX=lib) to match the openssl-new / yetty convention of
+    # PREFIX=lib) to match the openssl / yetty convention of
     # lib<name>.lib on Windows.
     BUILD_DIR="$WORK_DIR/build-${TARGET_PLATFORM}"
     rm -rf "$BUILD_DIR"

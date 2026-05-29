@@ -5,9 +5,9 @@
 #
 # Native build (no cross-compile, no Nix) — see nghttp2/_build.sh header.
 #
-# Depends on the openssl-new prebuilt tarball (fetched at build time from
+# Depends on the openssl prebuilt tarball (fetched at build time from
 # GitHub releases — same pattern as libcurl/_build.sh's openssl fetch).
-# The version pin is read from build-tools/3rdparty/openssl-new/version,
+# The version pin is read from build-tools/3rdparty/openssl/version,
 # so bumping that file is enough to migrate both libs together.
 #
 # Required env:
@@ -35,7 +35,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/version")"
 
-OPENSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl-new/version"
+OPENSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl/version"
 [ -f "$OPENSSL_VERSION_FILE" ] || { echo "missing $OPENSSL_VERSION_FILE" >&2; exit 1; }
 OPENSSL_NEW_VERSION="$(tr -d '[:space:]' < "$OPENSSL_VERSION_FILE")"
 [ -n "$OPENSSL_NEW_VERSION" ] || { echo "$OPENSSL_VERSION_FILE is empty" >&2; exit 1; }
@@ -52,29 +52,29 @@ INSTALL_DIR="$WORK_DIR/install-${TARGET_PLATFORM}"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
 TARBALL="$OUTPUT_DIR/ngtcp2-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
-OSSL_FILENAME="openssl-new-${TARGET_PLATFORM}-${OPENSSL_NEW_VERSION}.tar.gz"
+OSSL_FILENAME="openssl-${TARGET_PLATFORM}-${OPENSSL_NEW_VERSION}.tar.gz"
 OSSL_TARBALL="$CACHE_DIR/$OSSL_FILENAME"
-OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-new-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
-OSSL_DIR="$WORK_DIR/openssl-new-${OPENSSL_NEW_VERSION}"
+OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
+OSSL_DIR="$WORK_DIR/openssl-${OPENSSL_NEW_VERSION}"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
-# Fetch openssl-new prebuilt — same release tag the libcurl build pulls.
+# Fetch openssl prebuilt — same release tag the libcurl build pulls.
 if [ ! -f "$OSSL_TARBALL" ]; then
-    echo "==> downloading openssl-new ${OPENSSL_NEW_VERSION} for ${TARGET_PLATFORM}"
+    echo "==> downloading openssl ${OPENSSL_NEW_VERSION} for ${TARGET_PLATFORM}"
     echo "    $OSSL_URL"
     _part="$OSSL_TARBALL.part.$$"
     curl -fL --retry 8 --retry-delay 5 --retry-all-errors -o "$_part" "$OSSL_URL"
     mv "$_part" "$OSSL_TARBALL"
 fi
 if [ ! -d "$OSSL_DIR" ]; then
-    echo "==> extracting openssl-new -> $OSSL_DIR"
+    echo "==> extracting openssl -> $OSSL_DIR"
     mkdir -p "$OSSL_DIR"
     tar -C "$OSSL_DIR" -xzf "$OSSL_TARBALL"
 fi
-[ -f "$OSSL_DIR/lib/libssl.a"    ] || { echo "openssl-new: missing libssl.a in $OSSL_DIR/lib" >&2; ls -la "$OSSL_DIR/lib" >&2 || true; exit 1; }
-[ -f "$OSSL_DIR/lib/libcrypto.a" ] || { echo "openssl-new: missing libcrypto.a in $OSSL_DIR/lib" >&2; exit 1; }
-[ -f "$OSSL_DIR/include/openssl/ssl.h" ] || { echo "openssl-new: missing ssl.h" >&2; exit 1; }
+[ -f "$OSSL_DIR/lib/libssl.a"    ] || { echo "openssl: missing libssl.a in $OSSL_DIR/lib" >&2; ls -la "$OSSL_DIR/lib" >&2 || true; exit 1; }
+[ -f "$OSSL_DIR/lib/libcrypto.a" ] || { echo "openssl: missing libcrypto.a in $OSSL_DIR/lib" >&2; exit 1; }
+[ -f "$OSSL_DIR/include/openssl/ssl.h" ] || { echo "openssl: missing ssl.h" >&2; exit 1; }
 
 # Rewrite absolute prefix= in OpenSSL's .pc files. OpenSSL's Configure
 # bakes the build-machine's INSTALL_DIR path into prefix=, which is dead
@@ -107,7 +107,7 @@ mkdir -p "$INSTALL_DIR" "$STAGE"
 # to locate OpenSSL, then AC_LINK_IFELSE-tests for SSL_set_quic_tls_cbs
 # (the OpenSSL 3.5+ QUIC TLS API). On have_ossl=yes, the build adds the
 # crypto/ossl subdir and produces libngtcp2_crypto_ossl.a. We point
-# PKG_CONFIG_PATH at the openssl-new tarball's .pc files and let configure
+# PKG_CONFIG_PATH at the openssl tarball's .pc files and let configure
 # discover everything. NOT passing --enable-lib-only because in 1.15.0
 # the "examples" subdir requires app-only deps (libev/picotls) that we
 # don't ship — but the apps + examples are gated by ENABLE_EXAMPLE_*
@@ -120,13 +120,13 @@ for _d in "$OSSL_DIR/lib/pkgconfig" "$OSSL_DIR/lib64/pkgconfig"; do
         PKGCFG_PATH="${PKGCFG_PATH:+$PKGCFG_PATH:}$_d"
     fi
 done
-[ -n "$PKGCFG_PATH" ] || { echo "openssl-new tarball has no pkgconfig/ dir; cannot locate openssl.pc" >&2; exit 1; }
+[ -n "$PKGCFG_PATH" ] || { echo "openssl tarball has no pkgconfig/ dir; cannot locate openssl.pc" >&2; exit 1; }
 
 if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
     # Windows MSVC via vcvarsall'd cmd shell. ngtcp2 has a CMakeLists.txt
     # that picks the OpenSSL crypto backend via -DENABLE_OPENSSL=ON. We
-    # point CMake at the openssl-new prebuilt tarball via OPENSSL_ROOT_DIR.
-    # CMAKE_STATIC_LIBRARY_PREFIX=lib matches openssl-new's lib<name>.lib
+    # point CMake at the openssl prebuilt tarball via OPENSSL_ROOT_DIR.
+    # CMAKE_STATIC_LIBRARY_PREFIX=lib matches openssl's lib<name>.lib
     # convention on Windows.
     BUILD_DIR="$WORK_DIR/build-${TARGET_PLATFORM}"
     rm -rf "$BUILD_DIR"
@@ -181,6 +181,6 @@ for _F in "$STAGE/lib/libngtcp2.$_LIBEXT" \
 done
 
 tar -C "$STAGE" -czf "$TARBALL" .
-echo "ngtcp2 $VERSION ($TARGET_PLATFORM) ready (openssl-new ${OPENSSL_NEW_VERSION}):"
+echo "ngtcp2 $VERSION ($TARGET_PLATFORM) ready (openssl ${OPENSSL_NEW_VERSION}):"
 ls -lh "$TARBALL"
 tar -tzf "$TARBALL"

@@ -1,15 +1,9 @@
-# OpenSSL — consumes the openssl-new prebuilt (upstream OpenSSL 4.x).
+# OpenSSL — consumes the openssl prebuilt (upstream OpenSSL 4.x).
 #
 # Static lib + headers come from the 3rdparty release tarball published
-# by build-3rdparty-openssl-new.yml; the from-source build (Configure +
+# by build-3rdparty-openssl.yml; the from-source build (Configure +
 # make, per-platform handling) lives in
-# build-tools/3rdparty/openssl-new/_build.sh.
-#
-# Legacy: build-tools/3rdparty/openssl/ + build-3rdparty-openssl.yml
-# held a janbar/openssl-cmake 1.1.1w build that this file used to fetch.
-# All consumers (libcurl, libssh2) now expect the 3.x/4.x API, so this
-# file fetches openssl-new and the legacy `openssl` 3rdparty dir is
-# scheduled for removal.
+# build-tools/3rdparty/openssl/_build.sh.
 #
 # Exposed targets (matched to what libcurl / libssh2 expect):
 #   OpenSSL::SSL        interface lib that links libssl.a + libcrypto.a
@@ -18,7 +12,7 @@
 #
 # Opt-out: -DYETTY_OPENSSL_USE_SYSTEM=ON falls back to find_package(OpenSSL).
 # This is escape-hatch territory; the prebuilt is the default to keep
-# every cross target on the same OpenSSL version (see openssl-new/version).
+# every cross target on the same OpenSSL version (see openssl/version).
 
 include_guard(GLOBAL)
 include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
@@ -38,7 +32,7 @@ endif()
 #-----------------------------------------------------------------------------
 # Fetch + import static targets
 #-----------------------------------------------------------------------------
-yetty_3rdparty_fetch(openssl-new _OPENSSL_DIR)
+yetty_3rdparty_fetch(openssl _OPENSSL_DIR)
 
 # Tarball layout: lib/libssl.a + lib/libcrypto.a + include/openssl/*.h
 # (Windows: lib/libssl.lib + lib/libcrypto.lib)
@@ -58,7 +52,7 @@ foreach(_F "${_SSL_LIB_PATH}" "${_CRYPTO_LIB_PATH}")
     if(NOT EXISTS "${_F}")
         message(FATAL_ERROR
             "openssl: prebuilt library not found: ${_F} — \
-tarball layout changed? (check build-tools/3rdparty/openssl-new/_build.sh)")
+tarball layout changed? (check build-tools/3rdparty/openssl/_build.sh)")
     endif()
 endforeach()
 if(NOT EXISTS "${_OPENSSL_INC_DIR}/openssl/ssl.h")
@@ -104,10 +98,10 @@ set(OPENSSL_INCLUDE_DIR     "${_OPENSSL_INC_DIR}"             CACHE PATH    "" F
 set(OPENSSL_CRYPTO_LIBRARY  "${_CRYPTO_LIB_PATH}"             CACHE FILEPATH "" FORCE)
 set(OPENSSL_SSL_LIBRARY     "${_SSL_LIB_PATH}"                CACHE FILEPATH "" FORCE)
 set(OPENSSL_LIBRARIES       "OpenSSL::SSL;OpenSSL::Crypto"    CACHE STRING  "" FORCE)
-# Surface the actual upstream openssl version (read from the openssl-new
+# Surface the actual upstream openssl version (read from the openssl
 # prebuilt's version file). Downstream cmake that branches on
 # OPENSSL_VERSION sees the real number, not a frozen string.
-set(OPENSSL_VERSION         "${YETTY_3RDPARTY_openssl-new_VERSION}" CACHE STRING "" FORCE)
+set(OPENSSL_VERSION         "${YETTY_3RDPARTY_openssl_VERSION}" CACHE STRING "" FORCE)
 
-message(STATUS "openssl: prebuilt v${YETTY_3RDPARTY_openssl-new_VERSION} "
+message(STATUS "openssl: prebuilt v${YETTY_3RDPARTY_openssl_VERSION} "
                "(${_SSL_LIB_PATH}, ${_CRYPTO_LIB_PATH})")

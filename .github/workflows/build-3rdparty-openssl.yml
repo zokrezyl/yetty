@@ -1,17 +1,17 @@
-name: Build 3rdparty — openssl-new
+name: Build 3rdparty — openssl
 
-# Triggered on `lib-openssl-new-<version>` tags. Builds upstream OpenSSL
+# Triggered on `lib-openssl-<version>` tags. Builds upstream OpenSSL
 # (openssl/openssl, native ./Configure + make) across every target
 # platform and attaches the tarballs to a release of the same name.
 #
-# Version source of truth: build-tools/3rdparty/openssl-new/version. The tag
+# Version source of truth: build-tools/3rdparty/openssl/version. The tag
 # version must match that file's content; the workflow reads the file at
 # build time so the tarballs are always self-consistent.
 
 on:
   push:
     tags:
-      - 'lib-openssl-new-*'
+      - 'lib-openssl-*'
   workflow_dispatch: {}
 
 permissions:
@@ -28,18 +28,18 @@ jobs:
       - id: read
         run: |
           set -euo pipefail
-          V="$(tr -d '[:space:]' < build-tools/3rdparty/openssl-new/version)"
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/openssl/version)"
           [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
           if [[ "${{ github.event_name }}" == "push" ]]; then
             REF="${GITHUB_REF#refs/tags/}"
-            EXPECT="lib-openssl-new-$V"
+            EXPECT="lib-openssl-$V"
             if [ "$REF" != "$EXPECT" ]; then
               echo "tag $REF does not match version file ($EXPECT)" >&2
               exit 1
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "tag=lib-openssl-new-$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-openssl-$V" >> "$GITHUB_OUTPUT"
 
   #===========================================================================
   # Linux/Android/webasm — Ubuntu cross.
@@ -68,11 +68,11 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/openssl-new/build.sh
+          ./build-tools/3rdparty/openssl/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssl-new-${{ matrix.target }}-*.tar.gz
+          files: out/openssl-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   build-darwin-arm64:
@@ -95,11 +95,11 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/openssl-new/build.sh
+          ./build-tools/3rdparty/openssl/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssl-new-${{ matrix.target }}-*.tar.gz
+          files: out/openssl-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   build-darwin-x86_64:
@@ -122,11 +122,11 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/openssl-new/build.sh
+          ./build-tools/3rdparty/openssl/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssl-new-${{ matrix.target }}-*.tar.gz
+          files: out/openssl-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   # Windows: native MSVC under vcvarsall x64. Every lib that links into
@@ -143,7 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build openssl-new for ${{ matrix.target }}
+      - name: Build openssl for ${{ matrix.target }}
         shell: cmd
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
@@ -152,10 +152,10 @@ jobs:
           if errorlevel 1 exit /b 1
           mkdir out 2>nul
 
-          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/openssl-new/build.sh"
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/openssl/build.sh"
 
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssl-new-${{ matrix.target }}-*.tar.gz
+          files: out/openssl-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true

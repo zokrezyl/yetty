@@ -4,7 +4,7 @@
 # (same pattern as libuv / qemu).
 #
 # libcurl is the first 3rdparty lib with a transitive prebuilt dep —
-# _build.sh fetches the openssl-new tarball from GitHub at build time
+# _build.sh fetches the openssl tarball from GitHub at build time
 # and links curl statically against it.
 #
 # Required env:

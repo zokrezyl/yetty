@@ -48,4 +48,4 @@ if [ "${USE_NIX:-1}" = "0" ]; then
 fi
 
 cd "$(dirname "$0")/../../.."
-exec nix develop ".#$SHELL_NAME" --command bash build-tools/3rdparty/openssl-new/_build.sh "$@"
+exec nix develop ".#$SHELL_NAME" --command bash build-tools/3rdparty/openssl/_build.sh "$@"
