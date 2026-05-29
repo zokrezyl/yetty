@@ -1,25 +1,17 @@
-name: Build 3rdparty — openssl
+name: Build 3rdparty — openssl-new
 
-# Triggered on `lib-openssl-<version>` tags. Builds OpenSSL 1.1.1w via
-# the janbar/openssl-cmake wrapper across every target platform and
-# attaches the tarballs to a release of the same name.
+# Triggered on `lib-openssl-new-<version>` tags. Builds upstream OpenSSL
+# (openssl/openssl, native ./Configure + make) across every target
+# platform and attaches the tarballs to a release of the same name.
 #
-# Kept alive while downstream deps (cpr / libcurl / libssh2 pins) are
-# still on OpenSSL 1.1.1 APIs. The newer upstream openssl/openssl 4.x
-# build lives at build-tools/3rdparty/openssl-new/ + the matching
-# build-3rdparty-openssl-new.yml workflow. Once all downstream deps are
-# bumped to versions that compile against OpenSSL 4, this workflow + dir
-# go away and `lib-openssl-*` tags become free.
-#
-# Version source of truth: build-tools/3rdparty/openssl/version. The tag
+# Version source of truth: build-tools/3rdparty/openssl-new/version. The tag
 # version must match that file's content; the workflow reads the file at
 # build time so the tarballs are always self-consistent.
 
 on:
   push:
     tags:
-      - 'lib-openssl-*'
-      - '!lib-openssl-new-*'   # the openssl-new workflow handles those
+      - 'lib-openssl-new-*'
   workflow_dispatch: {}
 
 permissions:
@@ -36,18 +28,18 @@ jobs:
       - id: read
         run: |
           set -euo pipefail
-          V="$(tr -d '[:space:]' < build-tools/3rdparty/openssl/version)"
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/openssl-new/version)"
           [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
           if [[ "${{ github.event_name }}" == "push" ]]; then
             REF="${GITHUB_REF#refs/tags/}"
-            EXPECT="lib-openssl-$V"
+            EXPECT="lib-openssl-new-$V"
             if [ "$REF" != "$EXPECT" ]; then
               echo "tag $REF does not match version file ($EXPECT)" >&2
               exit 1
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "tag=lib-openssl-$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-openssl-new-$V" >> "$GITHUB_OUTPUT"
 
   #===========================================================================
   # Linux/Android/webasm — Ubuntu cross.
@@ -76,11 +68,11 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/openssl/build.sh
+          ./build-tools/3rdparty/openssl-new/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssl-${{ matrix.target }}-*.tar.gz
+          files: out/openssl-new-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   build-darwin-arm64:
@@ -103,11 +95,11 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/openssl/build.sh
+          ./build-tools/3rdparty/openssl-new/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssl-${{ matrix.target }}-*.tar.gz
+          files: out/openssl-new-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   build-darwin-x86_64:
@@ -130,11 +122,11 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/openssl/build.sh
+          ./build-tools/3rdparty/openssl-new/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssl-${{ matrix.target }}-*.tar.gz
+          files: out/openssl-new-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   # Windows: native MSVC under vcvarsall x64. Every lib that links into
@@ -151,7 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build openssl for ${{ matrix.target }}
+      - name: Build openssl-new for ${{ matrix.target }}
         shell: cmd
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
@@ -160,10 +152,10 @@ jobs:
           if errorlevel 1 exit /b 1
           mkdir out 2>nul
 
-          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/openssl/build.sh"
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/openssl-new/build.sh"
 
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssl-${{ matrix.target }}-*.tar.gz
+          files: out/openssl-new-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true

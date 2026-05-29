@@ -28,9 +28,9 @@ case "$TARGET_PLATFORM" in
         SHELL_NAME="3rdparty-${TARGET_PLATFORM}"
         ;;
     windows-x86_64)
-        # Native MSVC: caller must have vcvarsall'd the shell so cl.exe
-        # is on PATH. qemu is the lone mingw build — every lib that links
-        # into yetty.exe needs MSVC ABI.
+        # Native MSVC: caller must have vcvarsall'd the shell so cl.exe +
+        # nmake are on PATH. qemu is the lone mingw build — every lib
+        # that links into yetty.exe needs MSVC ABI.
         if ! command -v cl >/dev/null 2>&1 && ! command -v cl.exe >/dev/null 2>&1; then
             echo "error: windows-x86_64 requires MSVC cl on PATH (vcvarsall x64)" >&2
             exit 1
@@ -48,4 +48,4 @@ if [ "${USE_NIX:-1}" = "0" ]; then
 fi
 
 cd "$(dirname "$0")/../../.."
-exec nix develop ".#$SHELL_NAME" --command bash build-tools/3rdparty/openssl/_build.sh "$@"
+exec nix develop ".#$SHELL_NAME" --command bash build-tools/3rdparty/openssl-new/_build.sh "$@"
