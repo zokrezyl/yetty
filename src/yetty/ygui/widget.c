@@ -26,6 +26,10 @@
 struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget_data {
     struct yetty_ycore_rectangle rect;
     struct yetty_ygui_layout layout;
+    /* Optional background fill (packed 0xAABBGGRR). 0 = transparent, so
+     * widgets that never call set_bg_color are unaffected. Painted by
+     * primitive_widget's emit_body before the widget's own paint. */
+    uint32_t bg;
 };
 
 /* Convenience accessor — every internal helper that needs the widget
@@ -73,6 +77,7 @@ static struct yetty_ycore_void_result widget_default_constructor(struct yetty_yc
     wd->rect.max.x = 0;
     wd->rect.max.y = 0;
     wd->layout = yetty_ygui_layout_default();
+    wd->bg = 0;
     return YETTY_OK_VOID();
 }
 
@@ -274,6 +279,27 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_
     wd->layout.pos_x = x;
     wd->layout.pos_y = y;
     return yetty_ygui_object_set_dirty(obj);
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_ygui_object *obj,
+                                                              uint32_t color)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_bg_color: NULL obj");
+    }
+    struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
+    wd->bg = color;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+uint32_t yetty_ygui_widget_bg(const struct yetty_ygui_object *obj)
+{
+    if (!obj) {
+        return 0;
+    }
+    struct yetty_ygui_widget_data *wd =
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, widget_class());
+    return wd->bg;
 }
 
 /* --- minimal CSS shim for the yui port --- */

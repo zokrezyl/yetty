@@ -907,6 +907,29 @@ classes:
       - slot: constructor
         slot_domain: ygui
         impl: vbox_constructor
+  - name: window
+    domain: ygui
+    accessor: yetty_ygui_window_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/window.c
+    parent:
+      domain: ygui
+      name: vbox
+    mixins: []
+    data: struct window_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
   - name: ybrowser
     domain: ygui
     accessor: yetty_ygui_ybrowser_class_get

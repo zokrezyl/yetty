@@ -125,6 +125,14 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_
 struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_ygui_object *obj,
                                                            const char *css);
 
+/* Background fill (packed 0xAABBGGRR; 0 = transparent). Painted by the
+ * primitive_widget base before the widget's own paint. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_ygui_object *obj,
+                                                              uint32_t color);
+
+/* Current background fill (0 = transparent). Used by primitive_widget. */
+uint32_t yetty_ygui_widget_bg(const struct yetty_ygui_object *obj);
+
 /*-----------------------------------------------------------------------------
  * Flex layout pass.
  *

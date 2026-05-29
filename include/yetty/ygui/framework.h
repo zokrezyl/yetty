@@ -114,6 +114,19 @@ void yetty_ygui_framework_mark_dirty(struct yetty_ygui_runtime *engine);
 
 int yetty_ygui_framework_is_dirty(const struct yetty_ygui_runtime *engine);
 
+/* Non-zero while a widget holds the pointer capture (between a consumed
+ * press and its release) — lets the host suppress other press routing
+ * mid-drag. */
+int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_runtime *engine);
+
+/* Transient notification ("toast"). The new toolkit has no overlay
+ * surface yet, so these record the message to the trace log; the
+ * signatures exist so the host (yui) can call them. `severity` is a
+ * caller-defined level (0 = info … higher = more severe). */
+void yetty_ygui_framework_notify(struct yetty_ygui_runtime *engine, int severity, const char *msg);
+void yetty_ygui_framework_notify_ttl(struct yetty_ygui_runtime *engine, int severity,
+                                     const char *msg, float ttl_seconds);
+
 /*-----------------------------------------------------------------------------
  * App-level key callback. Fires after the byte-stream decoder produces
  * a key event; apps that want to consume input outside the widget

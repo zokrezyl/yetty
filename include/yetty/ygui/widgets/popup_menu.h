@@ -40,6 +40,21 @@ int yetty_ygui_popup_menu_is_open(const struct yetty_ygui_object *obj);
  * the toggle source's (x, y). Switches open ↔ close. */
 struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_ygui_object *obj,
                                                                float x, float y);
+
+/* Drill-down menu support (yui rebuilds the item list in place). */
+struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_ygui_object *obj);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_ygui_object *obj,
+                                                               const char *title);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_ygui_object *obj,
+                                                              const char *label,
+                                                              yetty_ygui_menu_item_cb cb,
+                                                              void *userdata);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty_ygui_object *obj,
+                                                                    const char *label,
+                                                                    yetty_ygui_menu_item_cb cb,
+                                                                    void *userdata);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_ygui_object *obj,
+                                                               int modal);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

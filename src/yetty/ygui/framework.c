@@ -252,6 +252,25 @@ int yetty_ygui_framework_is_dirty(const struct yetty_ygui_runtime *engine)
     return engine ? engine->dirty : 0;
 }
 
+int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_runtime *engine)
+{
+    return engine && engine->pressed_obj ? 1 : 0;
+}
+
+void yetty_ygui_framework_notify(struct yetty_ygui_runtime *engine, int severity, const char *msg)
+{
+    (void)engine;
+    ydebug("ygui notify[%d]: %s", severity, msg ? msg : "");
+}
+
+void yetty_ygui_framework_notify_ttl(struct yetty_ygui_runtime *engine, int severity,
+                                     const char *msg, float ttl_seconds)
+{
+    (void)engine;
+    (void)ttl_seconds;
+    ydebug("ygui notify[%d]: %s", severity, msg ? msg : "");
+}
+
 void yetty_ygui_framework_set_key_cb(struct yetty_ygui_runtime *engine, yetty_ygui_key_cb cb,
                                      void *userdata)
 {

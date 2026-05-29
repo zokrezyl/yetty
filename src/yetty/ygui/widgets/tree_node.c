@@ -1,6 +1,7 @@
 /* ygui-tree_node.c — collapsible nested node (same pattern as
  * collapsing_header but with smaller header strip + indent). */
 #include "paint-helpers.h"
+#include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/widgets/tree_node.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <stdlib.h>
@@ -13,6 +14,8 @@
 struct [[clang::annotate("class@ygui:tree_node")]] [[clang::annotate("parent@ygui:vbox")]] tn_data {
     char *label;
     int open;
+    yetty_ygui_click_cb on_toggle;
+    void *on_toggle_ud;
 };
 
 [[clang::annotate("override@ygui:tree_node:constructor")]]
@@ -31,6 +34,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                                          "yetty_ygui_tree_node_class_get"));
     d->label = NULL;
     d->open = 1;
+    d->on_toggle = NULL;
+    d->on_toggle_ud = NULL;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
     l.padding_top = HEADER_H;
     l.padding_left = INDENT;
@@ -80,6 +85,12 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
     if (YETTY_IS_ERR(lr)) {
         return YETTY_ERR(yetty_ycore_int, "tree_node: layout", lr);
+    }
+    if (d->on_toggle) {
+        struct yetty_ycore_void_result cr = d->on_toggle(NULL, yclass_obj, d->on_toggle_ud);
+        if (YETTY_IS_ERR(cr)) {
+            return YETTY_ERR(yetty_ycore_int, "tree_node: on_toggle", cr);
+        }
     }
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -155,6 +166,20 @@ int yetty_ygui_tree_node_is_open(const struct yetty_ygui_object *obj)
                 yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
                                         "yetty_ygui_tree_node_class_get")))
         ->open;
+}
+
+struct yetty_ycore_void_result yetty_ygui_tree_node_on_toggle(struct yetty_ygui_object *obj,
+                                                              yetty_ygui_click_cb cb, void *userdata)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "tn_on_toggle: NULL");
+    }
+    struct tn_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
+                                                         "yetty_ygui_tree_node_class_get"));
+    d->on_toggle = cb;
+    d->on_toggle_ud = userdata;
+    return YETTY_OK_VOID();
 }
 
 #include "tree_node.gen.c"

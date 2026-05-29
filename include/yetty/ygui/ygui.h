@@ -54,6 +54,7 @@
 #include <yetty/ygui/widgets/tooltip.h>
 #include <yetty/ygui/widgets/tree_node.h>
 #include <yetty/ygui/widgets/vbox.h>
+#include <yetty/ygui/widgets/window.h>
 #include <yetty/ygui/widgets/ybrowser.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/yimage.h>

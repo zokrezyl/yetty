@@ -49,6 +49,8 @@ struct [[clang::annotate("class@ygui:popup_menu")]] [[clang::annotate(
     int open;
     int hover_index; /* -1 = none */
     float width;     /* fixed when set via open_at */
+    char *title;     /* optional drill-menu header (set_title); may be NULL */
+    int modal;       /* stored for parity; doesn't affect layout */
 };
 
 [[clang::annotate("override@ygui:popup_menu:constructor")]]
@@ -72,6 +74,8 @@ static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass
     d->open = 0;
     d->hover_index = -1;
     d->width = 200.0f;
+    d->title = NULL;
+    d->modal = 0;
     /* popup_menus are absolutely positioned. */
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
     l.absolute = 1;
@@ -94,6 +98,8 @@ static struct yetty_ycore_void_result popup_menu_destructor(struct yetty_yclass_
     }
     free(d->items);
     d->items = NULL;
+    free(d->title);
+    d->title = NULL;
     return yetty_ygui_super_void(obj,
                                  yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
                                                          "yetty_ygui_popup_menu_class_get"),
@@ -416,6 +422,81 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_ygui
         return yetty_ygui_popup_menu_close(obj);
     }
     return yetty_ygui_popup_menu_open_at(obj, x, y);
+}
+
+/* Drill-down menu support (ported from ygui-old for yui). The new menu
+ * has no separate submenu objects — yui rebuilds the item list in place
+ * (clear → set_title → set_back → add_drill_item…), so a "drill item" is
+ * just a normal item whose callback repopulates the menu. */
+struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_ygui_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "popup_menu_clear: NULL obj");
+    }
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
+    for (int i = 0; i < d->n_items; ++i) {
+        free(d->items[i].label);
+    }
+    d->n_items = 0;
+    d->hover_index = -1;
+    free(d->title);
+    d->title = NULL;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_ygui_object *obj,
+                                                               const char *title)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "popup_menu_set_title: NULL obj");
+    }
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
+    free(d->title);
+    d->title = NULL;
+    if (title) {
+        size_t n = strlen(title);
+        d->title = malloc(n + 1);
+        if (!d->title) {
+            return YETTY_ERR(yetty_ycore_void, "popup_menu_set_title: malloc");
+        }
+        memcpy(d->title, title, n + 1);
+    }
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_ygui_object *obj,
+                                                              const char *label,
+                                                              yetty_ygui_menu_item_cb cb,
+                                                              void *userdata)
+{
+    /* A back row is just the first item; yui adds it before the drill
+     * items. */
+    return yetty_ygui_popup_menu_add_item(obj, label ? label : "‹ Back", cb, userdata);
+}
+
+struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty_ygui_object *obj,
+                                                                    const char *label,
+                                                                    yetty_ygui_menu_item_cb cb,
+                                                                    void *userdata)
+{
+    return yetty_ygui_popup_menu_add_item(obj, label, cb, userdata);
+}
+
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_ygui_object *obj,
+                                                               int modal)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "popup_menu_set_modal: NULL obj");
+    }
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
+    d->modal = modal ? 1 : 0;
+    return YETTY_OK_VOID();
 }
 
 #include "popup_menu.gen.c"

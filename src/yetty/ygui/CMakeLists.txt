@@ -58,6 +58,7 @@ set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/tooltip.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/tree_node.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/vbox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/window.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ybrowser.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ydraw_embed.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yimage.c

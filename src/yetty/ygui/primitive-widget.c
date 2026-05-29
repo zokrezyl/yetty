@@ -26,7 +26,9 @@
 
 #include "internal.h"
 
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ygui/primitive-widget.h>
+#include <yetty/ysdf/funcs.gen.h>
 
 /* Marker data struct — primitive_widget adds no per-instance fields
  * (it's a chrome-widget base), but yclass codegen needs a `class@`
@@ -34,7 +36,7 @@
  * byte to the instance layout, which is harmless. */
 struct [[clang::annotate("class@ygui:primitive_widget")]] [[clang::annotate("parent@ygui:widget")]]
 primitive_widget_data {
-    char _empty;
+    char unused;
 };
 
 [[clang::annotate("override@ygui:primitive_widget:widget_emit_body")]]
@@ -43,6 +45,25 @@ static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ct
                                                           struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    /* Optional background fill (set via yetty_ygui_widget_set_bg_color),
+     * painted under the widget's own paint. Skipped when transparent so
+     * widgets that never set a bg are unchanged. */
+    uint32_t bg = yetty_ygui_widget_bg(obj);
+    if (ctx && ctx->ygrid_draw_list && (bg >> 24) != 0u) {
+        struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+        float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
+        if (w > 0.0f && h > 0.0f) {
+            struct yetty_ysdf_box geom = {.center_x = r.min.x + w * 0.5f,
+                                          .center_y = r.min.y + h * 0.5f,
+                                          .half_width = w * 0.5f,
+                                          .half_height = h * 0.5f,
+                                          .corner_radius = 0.0f};
+            struct yetty_ycore_void_result br = yetty_ydraw_draw_list_add_cmd_add_box(
+                ctx->ygrid_draw_list, 0, 0, bg, 0, 0.0f, &geom);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "primitive_emit_body: bg");
+        }
+    }
     return yetty_ygui_widget_paint(NULL, yclass_obj, ctx);
 }
 
