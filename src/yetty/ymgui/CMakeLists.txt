@@ -36,6 +36,19 @@ target_link_libraries(yetty_ymgui PUBLIC
     webgpu
 )
 
+# figure.c carries `[[clang::annotate(...)]]` on its data struct (yclass
+# codegen reads it off the AST). The C2x attribute syntax needs C23 to
+# parse — host clang/gcc accept it by default, but NDK clang 17 does not,
+# so set it explicitly. Off-MSVC only, mirroring ygui: MSVC can't express
+# C23 via CMake's C_STANDARD, and the Windows build's global /std:clatest
+# already parses the attributes.
+if(NOT MSVC)
+    set_target_properties(yetty_ymgui PROPERTIES
+        C_STANDARD 23
+        C_STANDARD_REQUIRED ON
+    )
+endif()
+
 include(${YETTY_ROOT}/build-tools/yetty/libs/imgui.cmake)
 
 if(TARGET imgui_core)
