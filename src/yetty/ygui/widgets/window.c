@@ -8,6 +8,9 @@
  */
 #include "paint-helpers.h"
 #include <yetty/ygui/event.h>
+#include <yetty/ygui/framework.h>
+#include <yetty/ygui/object.h>
+#include <yetty/ygui/widget.h>
 #include <yetty/ygui/widgets/popup_menu.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ygui/widgets/window.h>

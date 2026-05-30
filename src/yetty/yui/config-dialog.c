@@ -31,6 +31,7 @@
 
 #include <yetty/yconfig/config.h>
 #include <yetty/ygui/ygui.h>
+#include <yetty/yfigure/wire.h>
 
 #define YUI_CFG_DLG_MAX_DEPTH 8
 #define YUI_CFG_DLG_PATH_MAX 256
@@ -271,6 +272,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(win, 720.0f, 460.0f));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(win, 140.0f, 90.0f));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(win, 0));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_floating(win, 1));
 
     struct yetty_ygui_object *body = yetty_ygui_window_body(win);
     if (!body) {

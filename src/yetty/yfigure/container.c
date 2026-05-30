@@ -46,15 +46,28 @@ struct child_entry {
      * (same kind → reset_content + process_bytes, reuse GPU state)
      * and the destroy + mint fallback (different kind). */
     uint32_t kind;
+    /* Monotonic insertion sequence, assigned at add_child. The z-order
+     * comparator breaks ties on (figure->z) with this, giving a total
+     * order so the sort is deterministic regardless of uthash sort
+     * stability and equal-z children keep insertion order. */
+    uint64_t seq;
     UT_hash_handle hh;
 };
 
 struct [[clang::annotate("class@yfigure:container")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_yfigure_container {
     struct yetty_yfigure_figure base;
-    /* uthash head — id → entry. Iterating via HASH_ITER / e->hh.next
-     * walks children in INSERTION ORDER (= z-order: back-to-front). */
+    /* uthash head — id → entry. The list is kept sorted by
+     * (figure->z, seq) via container_ensure_sorted, so HASH_ITER walks
+     * children back-to-front in true z-order (render order; hit-test
+     * keeps the last match = front-most). */
     struct child_entry *children;
+    /* Next insertion sequence handed to a child_entry. Monotonic. */
+    uint64_t next_seq;
+    /* Set whenever the child set or any child's z changes; cleared by
+     * container_ensure_sorted after it re-sorts the list. Avoids
+     * re-sorting on every render when nothing moved. */
+    int z_order_dirty;
     /* Borrowed — used for minting children from admin CREATE_CHILD
      * records. Sub-containers minted via that path inherit the same
      * pointers. */
@@ -250,6 +263,34 @@ static struct yetty_ycore_void_result container_destroy(struct yetty_yclass_ctx 
     return YETTY_OK_VOID();
 }
 
+/* Total order on children: ascending figure->z, ties broken by
+ * insertion sequence. A total order means the result is independent of
+ * uthash's sort stability, and equal-z children keep insertion order
+ * (so a single-z tree sorts to its original order — no behaviour change
+ * until something sets a non-zero z). */
+static int child_z_cmp(struct child_entry *a, struct child_entry *b)
+{
+    if (a->figure->z != b->figure->z) {
+        return a->figure->z < b->figure->z ? -1 : 1;
+    }
+    if (a->seq != b->seq) {
+        return a->seq < b->seq ? -1 : 1;
+    }
+    return 0;
+}
+
+/* Re-sort the child list in place when a child was added/removed or a
+ * z changed. Cheap no-op when nothing moved. After this, every HASH_ITER
+ * walk (render, hit-test, dump, serialize) is in z-order. */
+static void container_ensure_sorted(struct yetty_yfigure_container *container)
+{
+    if (!container->z_order_dirty) {
+        return;
+    }
+    HASH_SRT(hh, container->children, child_z_cmp);
+    container->z_order_dirty = 0;
+}
+
 [[clang::annotate("override@yfigure:container:render")]]
 static struct yetty_ycore_void_result container_render(struct yetty_yclass_ctx *ctx,
                                                        struct yetty_yclass_object *obj,
@@ -258,13 +299,17 @@ static struct yetty_ycore_void_result container_render(struct yetty_yclass_ctx *
     (void)ctx;
     struct yetty_yfigure_container *container = (struct yetty_yfigure_container *)(obj + 1);
     struct yetty_yfigure_figure *self = &container->base;
-    /* uthash insertion order = z-order; walk back-to-front. */
+    container_ensure_sorted(container);
+    /* List is z-sorted; HASH_ITER walks back-to-front. */
     struct child_entry *e, *tmp;
     HASH_ITER(hh, container->children, e, tmp)
     {
         struct yetty_yfigure_figure *c = e->figure;
-        ydebug("yfigure container_render: rect=(%.1f,%.1f)-(%.1f,%.1f) child id=%u",
-               self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y, e->id);
+        if (c->hidden) {
+            continue;
+        }
+        ydebug("yfigure container_render: child id=%u z=%d rect=(%.0f,%.0f)-(%.0f,%.0f)", e->id, c->z,
+               c->rect.min.x, c->rect.min.y, c->rect.max.x, c->rect.max.y);
         struct yetty_ycore_void_result r = figure_dispatch_render(c, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yfigure container_render: child render failed");
         c->dirty = 0;
@@ -466,12 +511,16 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
          * old figure's GPU resources are released. This path is the
          * slow fallback — kind changes on the same id are rare. */
         if (existing) {
+            /* Carry the stacking order across the swap — a re-mint must
+             * not silently drop the child's z back to 0. */
+            child->z = existing->figure->z;
             struct yetty_ycore_void_result dr = figure_dispatch_destroy(existing->figure);
             if (YETTY_IS_ERR(dr)) {
                 yetty_ycore_error_destroy(dr.error);
             }
             existing->figure = child;
             existing->kind = kind;
+            container->z_order_dirty = 1;
             child->dirty = 1;
         } else {
             struct yetty_ycore_void_result ar =
@@ -552,6 +601,50 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
             .max = {.x = rect_floats[2], .y = rect_floats[3]},
         };
         container->base.dirty = 1;
+        return YETTY_OK_VOID();
+    }
+
+    case YETTY_YFIGURE_ADMIN_SET_CHILD_Z: {
+        if (body_len != 4 + 4) {
+            return YETTY_ERR(yetty_ycore_void, "container admin SET_CHILD_Z: bad payload size");
+        }
+        uint32_t child_id;
+        int32_t z;
+        memcpy(&child_id, body + 0, 4);
+        memcpy(&z, body + 4, 4);
+        struct yetty_yfigure_figure *child =
+            yetty_yfigure_container_find_child_by_id(container, child_id);
+        if (!child) {
+            ydebug("container admin SET_CHILD_Z: id=%u not bound", child_id);
+            return YETTY_OK_VOID();
+        }
+        if (child->z != z) {
+            child->z = z;
+            container->z_order_dirty = 1;
+            container->base.dirty = 1;
+        }
+        return YETTY_OK_VOID();
+    }
+
+    case YETTY_YFIGURE_ADMIN_SET_CHILD_HIDDEN: {
+        if (body_len != 4 + 4) {
+            return YETTY_ERR(yetty_ycore_void, "container admin SET_CHILD_HIDDEN: bad payload size");
+        }
+        uint32_t child_id;
+        uint32_t hidden;
+        memcpy(&child_id, body + 0, 4);
+        memcpy(&hidden, body + 4, 4);
+        struct yetty_yfigure_figure *child =
+            yetty_yfigure_container_find_child_by_id(container, child_id);
+        if (!child) {
+            ydebug("container admin SET_CHILD_HIDDEN: id=%u not bound", child_id);
+            return YETTY_OK_VOID();
+        }
+        int want = hidden ? 1 : 0;
+        if (child->hidden != want) {
+            child->hidden = want;
+            container->base.dirty = 1;
+        }
         return YETTY_OK_VOID();
     }
 
@@ -645,9 +738,12 @@ static char *container_dump(const struct yetty_yfigure_figure *self, int indent)
     if (!buf) {
         return NULL;
     }
-    /* Children section. uthash iter walks insertion order = z-order
-     * (back-to-front), which matches the render order. Tests can assert
-     * z-order from the line order in the dump. Empty when no children. */
+    /* Children section. The list is sorted by (z, insertion-seq) so the
+     * dump lines come out back-to-front in true z-order, matching render
+     * order — tests assert z-order from the line order. dump is
+     * logically const, but re-sorting for deterministic output is a
+     * benign internal reordering, so cast away const for the sort. */
+    container_ensure_sorted((struct yetty_yfigure_container *)container);
     if (!container->children) {
         buf = dump_appendf(buf, &len, &cap, "%schildren: {}\n", pad);
         return buf;
@@ -940,7 +1036,9 @@ struct yetty_ycore_void_result yetty_yfigure_container_add_child(
     }
     e->id = id;
     e->figure = child;
+    e->seq = container->next_seq++;
     HASH_ADD_INT(container->children, id, e);
+    container->z_order_dirty = 1;
     child->dirty = 1;
     return YETTY_OK_VOID();
 }
@@ -987,6 +1085,7 @@ int yetty_yfigure_container_for_each(struct yetty_yfigure_container *container,
     if (!container || !fn) {
         return 0;
     }
+    container_ensure_sorted(container);
     struct child_entry *e, *tmp;
     HASH_ITER(hh, container->children, e, tmp)
     {
@@ -1037,6 +1136,9 @@ struct hit_visitor_state {
 static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user)
 {
     struct hit_visitor_state *st = user;
+    if (child->hidden) {
+        return 0;
+    }
     if (st->x < child->rect.min.x || st->x >= child->rect.max.x || st->y < child->rect.min.y ||
         st->y >= child->rect.max.y) {
         return 0;

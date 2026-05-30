@@ -507,6 +507,7 @@ static void yui_build_gpu_dialog(struct yetty_yui *yui, const struct yetty_conte
     yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(gpu_dlg, "GPU info"));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(gpu_dlg, 560.0f, 360.0f));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(gpu_dlg, 120.0f, 80.0f));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_floating(gpu_dlg, 1));
     yetty_ycore_error_destroy_safe(
         yetty_ygui_widget_set_visible(gpu_dlg, getenv("YUI_DEBUG_OPEN_GPU_DIALOG") ? 1 : 0));
 

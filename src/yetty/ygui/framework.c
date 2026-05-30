@@ -63,6 +63,7 @@ struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
     engine->output_pty = output_pty;
     /* Widget ids start at 1; the receiver uses 0 to mean "admin". */
     engine->next_id = 1;
+    engine->next_raise_z = YETTY_YGUI_Z_FLOATING_BASE;
     engine->ygrid_id = YGUI_ENGINE_YGRID_ID_BASE;
     engine->ygrid_created = 0;
     engine->viewport_w = 800.0f;
@@ -490,6 +491,20 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
     struct yetty_ygui_object *target;
     if (pressed) {
         target = hit_test(engine->root, x, y);
+        /* Click-to-front: a press anywhere inside a floating overlay
+         * (dialog / debug window) moves that overlay to the end of its
+         * parent's child list, so it paints last (front) within the
+         * shared chrome ygrid AND wins the next overlap hit-test. Walk up
+         * to the nearest floating ancestor — independent of which inner
+         * widget ends up handling the press. */
+        for (struct yetty_ygui_object *a = target; a; a = a->parent) {
+            if (a->floating) {
+                yetty_ygui_object_raise(a);
+                a->dirty = 1;
+                engine->dirty = 1;
+                break;
+            }
+        }
     } else {
         /* Release goes to the capture target (if any) so the widget that
          * began a drag also sees its end, even off-rect. */
@@ -857,6 +872,74 @@ fail:
     return YETTY_OK_VOID();
 }
 
+int32_t yetty_ygui_runtime_next_raise_z(struct yetty_ygui_runtime *engine)
+{
+    if (!engine) {
+        return YETTY_YGUI_Z_FLOATING_BASE;
+    }
+    /* Pre-increment so the result is strictly above the previous raise.
+     * Clamp below the menu band so a long-lived session that raises many
+     * times can never climb on top of an open menu. */
+    if (engine->next_raise_z < YETTY_YGUI_Z_MENU - 1) {
+        engine->next_raise_z++;
+    }
+    return engine->next_raise_z;
+}
+
+struct yetty_ycore_void_result yetty_ygui_emit_set_child_z(struct yetty_ygui_emit_ctx *ctx,
+                                                           uint32_t child_id, int32_t z)
+{
+    if (!ctx || !ctx->container_records) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_z: NULL ctx");
+    }
+    struct yetty_ycore_buffer tmp = {0};
+    struct yetty_ycore_void_result r;
+    r = write_u32_le(&tmp, child_id);
+    if (YETTY_IS_ERR(r)) {
+        goto fail;
+    }
+    /* z is signed; its two's-complement bit pattern rides the u32 writer
+     * and the receiver memcpy's it straight back into an int32_t. */
+    r = write_u32_le(&tmp, (uint32_t)z);
+    if (YETTY_IS_ERR(r)) {
+        goto fail;
+    }
+    r = append_admin_record(ctx->container_records, YETTY_YFIGURE_ADMIN_SET_CHILD_Z, tmp.data,
+                            (uint32_t)tmp.size);
+fail:
+    yetty_ycore_buffer_destroy(&tmp);
+    if (YETTY_IS_ERR(r)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_z: write failed", r);
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_emit_set_child_hidden(struct yetty_ygui_emit_ctx *ctx,
+                                                                uint32_t child_id, int hidden)
+{
+    if (!ctx || !ctx->container_records) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_hidden: NULL ctx");
+    }
+    struct yetty_ycore_buffer tmp = {0};
+    struct yetty_ycore_void_result r;
+    r = write_u32_le(&tmp, child_id);
+    if (YETTY_IS_ERR(r)) {
+        goto fail;
+    }
+    r = write_u32_le(&tmp, hidden ? 1u : 0u);
+    if (YETTY_IS_ERR(r)) {
+        goto fail;
+    }
+    r = append_admin_record(ctx->container_records, YETTY_YFIGURE_ADMIN_SET_CHILD_HIDDEN, tmp.data,
+                            (uint32_t)tmp.size);
+fail:
+    yetty_ycore_buffer_destroy(&tmp);
+    if (YETTY_IS_ERR(r)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_hidden: write failed", r);
+    }
+    return YETTY_OK_VOID();
+}
+
 /*===========================================================================
  * Tree walkers.
  *=========================================================================*/
@@ -896,7 +979,40 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
     if (!node) {
         return YETTY_OK_VOID();
     }
-    if (should_skip_subtree(node)) {
+    uint32_t fkind = yetty_ygui_widget_figure_kind(node);
+    int skip = should_skip_subtree(node);
+
+    /* Figure-boundary node (floating window / menu): it lives as its own
+     * receiver-side child figure rather than inlining into the chrome
+     * ygrid. We mark the figure hidden instead of deleting it on close —
+     * re-showing then costs one record, not a CREATE + full-body re-ship.
+     * A boundary that has never been shown is simply not created yet. */
+    if (fkind != 0) {
+        uint32_t fid = yetty_ygui_object_id(node);
+        if (skip) {
+            /* Hidden/zero-size: only flag it if it already exists. */
+            if (ctx->engine && figure_is_minted(ctx->engine, fid)) {
+                struct yetty_ycore_void_result hr =
+                    yetty_ygui_emit_set_child_hidden(ctx, fid, 1);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, hr,
+                                    "yetty_ygui_framework_walk_emit_container: figure hide");
+            }
+            ydebug("walk_container: SKIP(hidden figure) id=%u", fid);
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ycore_rectangle fr = yetty_ygui_widget_rect(node);
+        struct yetty_ycore_void_result er = yetty_ygui_emit_ensure_child(
+            ctx, fid, fkind, fr.min.x, fr.min.y, fr.max.x, fr.max.y, NULL, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, er,
+                            "yetty_ygui_framework_walk_emit_container: figure ensure_child");
+        struct yetty_ycore_void_result zr =
+            yetty_ygui_emit_set_child_z(ctx, fid, yetty_ygui_widget_figure_z(node));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, zr,
+                            "yetty_ygui_framework_walk_emit_container: figure set_z");
+        struct yetty_ycore_void_result hr = yetty_ygui_emit_set_child_hidden(ctx, fid, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, hr,
+                            "yetty_ygui_framework_walk_emit_container: figure show");
+    } else if (skip) {
         ydebug("walk_container: SKIP node=%p id=%u", (void *)node, yetty_ygui_object_id(node));
         return YETTY_OK_VOID();
     }
@@ -914,6 +1030,23 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
     return YETTY_OK_VOID();
 }
 
+/* Emit `node` and its subtree's prims into the currently-active draw
+ * list (ctx->ygrid_draw_list). Shared by the normal path and the
+ * figure-boundary path below. */
+static struct yetty_ycore_void_result walk_emit_body_inline(struct yetty_ygui_object *node,
+                                                            struct yetty_ygui_emit_ctx *ctx)
+{
+    struct yetty_ycore_void_result r =
+        yetty_ygui_widget_emit_body(NULL, (struct yetty_yclass_object *)node, ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_walk_emit_body: emit_body");
+    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+        struct yetty_ycore_void_result rc = yetty_ygui_framework_walk_emit_body(c, ctx);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rc,
+                            "yetty_ygui_framework_walk_emit_body: child walk");
+    }
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_ygui_object *node,
                                                                    struct yetty_ygui_emit_ctx *ctx)
 {
@@ -923,14 +1056,54 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     if (should_skip_subtree(node)) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r =
-        yetty_ygui_widget_emit_body(NULL, (struct yetty_yclass_object *)node, ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_walk_emit_body: emit_body");
-    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
-        struct yetty_ycore_void_result rc = yetty_ygui_framework_walk_emit_body(c, ctx);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rc,
-                            "yetty_ygui_framework_walk_emit_body: child walk");
+    /* Non-boundary node: paint into whatever draw list is active. */
+    if (yetty_ygui_widget_figure_kind(node) == 0) {
+        return walk_emit_body_inline(node, ctx);
     }
+
+    /* Figure boundary: swap in a fresh draw list, paint the whole
+     * subtree into it, ship it as the figure's body, then restore. The
+     * leading CMD_ZERO wipes this figure's prims on the receiver each
+     * frame (full-redraw model, same as the chrome ygrid). */
+    struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dlr,
+                        "yetty_ygui_framework_walk_emit_body: figure draw_list create");
+    struct yetty_ydraw_draw_list *figure_dl = dlr.value;
+    struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(figure_dl);
+    if (YETTY_IS_ERR(zr)) {
+        yetty_ydraw_draw_list_destroy(figure_dl);
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_walk_emit_body: figure CMD_ZERO",
+                         zr);
+    }
+
+    struct yetty_ydraw_draw_list *saved_dl = ctx->ygrid_draw_list;
+    uint32_t saved_fid = ctx->current_figure_id;
+    ctx->ygrid_draw_list = figure_dl;
+    ctx->current_figure_id = node->id;
+
+    struct yetty_ycore_void_result br = walk_emit_body_inline(node, ctx);
+
+    ctx->ygrid_draw_list = saved_dl;
+    ctx->current_figure_id = saved_fid;
+
+    if (YETTY_IS_ERR(br)) {
+        yetty_ydraw_draw_list_destroy(figure_dl);
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_walk_emit_body: figure subtree",
+                         br);
+    }
+
+    size_t body_size = yetty_ydraw_draw_list_size(figure_dl);
+    if (body_size > 0) {
+        const void *body_data = yetty_ydraw_draw_list_data(figure_dl);
+        struct yetty_ycore_void_result fr = yetty_ygui_emit_figure_body(
+            ctx, node->id, (const uint8_t *)body_data, (uint32_t)body_size);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ydraw_draw_list_destroy(figure_dl);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_ygui_framework_walk_emit_body: figure body emit", fr);
+        }
+    }
+    yetty_ydraw_draw_list_destroy(figure_dl);
     return YETTY_OK_VOID();
 }
 

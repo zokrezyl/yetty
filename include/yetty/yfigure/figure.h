@@ -117,6 +117,19 @@ struct yetty_yfigure_figure {
      * the parent group uses to address its children, not a property of
      * the child itself. See yetty_yfigure_container_add_child. */
     struct yetty_ycore_rectangle rect;
+    /* Stacking order within the parent container. Higher z renders
+     * later (in front) and wins hit-tests. Default 0. The parent sorts
+     * its children by (z, insertion-seq) — equal z falls back to
+     * insertion order, so single-z trees behave exactly as before.
+     * Set over the wire via the SET_CHILD_Z admin record; coarse bands
+     * (chrome < floating windows < menus) keep layers from interleaving. */
+    int32_t z;
+    /* When set, the parent container skips this child entirely — no
+     * render, no hit. Lets a producer hide a figure (e.g. a closed
+     * dialog) without deleting it and re-shipping its whole body on the
+     * next show. Toggled over the wire via the SET_CHILD_HIDDEN admin
+     * record. Default 0 (visible). */
+    int hidden;
     /* Set by the figure when its contents change without geometry
      * moving. The parent ORs this into its damage region during the
      * next render pass and clears it after. */

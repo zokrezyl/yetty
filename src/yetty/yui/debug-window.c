@@ -1,6 +1,7 @@
 #include <yetty/yui/debug-window.h>
 
 #include <yetty/ygui/ygui.h>
+#include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/wire-statemachine.h>
 
@@ -87,6 +88,7 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(dw->window, "Debug"));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_bg_color(dw->window, DEBUG_WIN_BG));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(dw->window, DEBUG_WIN_W, DEBUG_WIN_H));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_floating(dw->window, 1));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dw->window, 1));
 
     /* Attach a placeholder popup menu so the title-bar hamburger has

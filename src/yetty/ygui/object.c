@@ -423,6 +423,20 @@ struct yetty_ygui_object *yetty_ygui_object_next_sibling(struct yetty_ygui_objec
     return obj ? obj->next_sibling : NULL;
 }
 
+void yetty_ygui_object_raise(struct yetty_ygui_object *obj)
+{
+    if (!obj || !obj->parent) {
+        return;
+    }
+    /* Move to the end of the sibling list so the framework's widget
+     * hit-test (last-match-wins) prefers this widget over earlier
+     * siblings it overlaps. The render side is ordered by figure z
+     * separately; raising bumps both so they agree. */
+    struct yetty_ygui_object *parent = obj->parent;
+    object_unlink_from_parent(obj);
+    object_link_to_parent(obj, parent);
+}
+
 struct yetty_ygui_runtime *yetty_ygui_object_engine(struct yetty_ygui_object *obj)
 {
     while (obj) {

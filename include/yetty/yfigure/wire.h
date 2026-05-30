@@ -64,6 +64,22 @@ enum yetty_yfigure_wire_admin_op {
      *   f32   rect_min_x, rect_min_y, rect_max_x, rect_max_y
      */
     YETTY_YFIGURE_ADMIN_SET_RECT = 5,
+
+    /* Set a child's stacking order (z). Payload after admin_op:
+     *   u32   child_id
+     *   i32   z                (signed; higher renders in front)
+     * Additive to CREATE_CHILD: a child is created at z=0 and the
+     * producer follows up with SET_CHILD_Z only when z != 0 / changes.
+     * The container re-sorts its children by (z, insertion-seq). */
+    YETTY_YFIGURE_ADMIN_SET_CHILD_Z = 6,
+
+    /* Show/hide a child without destroying it. Payload after admin_op:
+     *   u32   child_id
+     *   u32   hidden           (0 = visible, non-zero = hidden)
+     * A hidden child is skipped for render and hit but keeps its figure
+     * and last body — re-showing it costs one record, not a re-CREATE +
+     * full-body re-ship. Used for dialogs that open/close repeatedly. */
+    YETTY_YFIGURE_ADMIN_SET_CHILD_HIDDEN = 7,
 };
 
 /* Figure-kind codes — registered with yetty_yfigure_registry by each

@@ -115,6 +115,29 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_obje
 struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
                                                               float y);
 
+/* Promote this widget to its own receiver-side child figure of `kind`
+ * (e.g. YETTY_YFIGURE_KIND_YGRID) stacked at `z`. The whole subtree
+ * then paints into that figure's own draw list instead of the shared
+ * chrome ygrid — giving floating windows / menus an independent z and
+ * damage region. kind=0 reverts to inline. */
+struct yetty_ycore_void_result yetty_ygui_widget_make_figure(struct yetty_ygui_object *obj,
+                                                             uint32_t kind, int32_t z);
+
+/* Update only the figure z (for raise-on-click). No-op if unchanged. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_ygui_object *obj,
+                                                              int32_t z);
+
+uint32_t yetty_ygui_widget_figure_kind(const struct yetty_ygui_object *obj);
+int32_t yetty_ygui_widget_figure_z(const struct yetty_ygui_object *obj);
+
+/* Mark this widget a floating overlay (dialog / debug window): a press
+ * anywhere inside it moves it to the end of its parent's child list, so
+ * it paints last (front) and wins the hit-test — click-to-front, no
+ * figures involved. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_ygui_object *obj,
+                                                             int floating);
+int yetty_ygui_widget_is_floating(const struct yetty_ygui_object *obj);
+
 /* Apply a small CSS-like declaration string to the widget's layout.
  * Supported properties (others ignored): width, height, flex,
  * flex-grow, flex-shrink, gap, padding, align-items, justify-content,

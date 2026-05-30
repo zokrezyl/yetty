@@ -216,6 +216,31 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_rect(struct yetty_ygui_
                                                               float min_y, float max_x,
                                                               float max_y);
 
+/* Set a child figure's stacking order (z). Additive to CREATE_CHILD —
+ * the child exists at z=0; the producer calls this only when its z is
+ * non-zero or changes. The receiver re-sorts children by (z, seq). */
+struct yetty_ycore_void_result yetty_ygui_emit_set_child_z(struct yetty_ygui_emit_ctx *ctx,
+                                                           uint32_t child_id, int32_t z);
+
+/* Show/hide a child figure without destroying it (SET_CHILD_HIDDEN).
+ * Keeps the figure + its last body so re-showing is one record, not a
+ * CREATE + full-body re-ship. */
+struct yetty_ycore_void_result yetty_ygui_emit_set_child_hidden(struct yetty_ygui_emit_ctx *ctx,
+                                                                uint32_t child_id, int hidden);
+
+/* Coarse z bands for figure-boundary widgets. Chrome (the shared ygrid:
+ * titlebar, statusbar, splitters) sits at 0; floating windows stack in
+ * [FLOATING_BASE, MENU) and raise within that band; menus stay on top.
+ * Bands keep layers from interleaving regardless of creation order. */
+#define YETTY_YGUI_Z_CHROME 0
+#define YETTY_YGUI_Z_FLOATING_BASE 100
+#define YETTY_YGUI_Z_MENU 1000000
+
+/* Monotonic "bring to front" allocator: returns an ever-increasing z in
+ * the floating band so the most recently raised window sorts above its
+ * peers (but still below YETTY_YGUI_Z_MENU). */
+int32_t yetty_ygui_runtime_next_raise_z(struct yetty_ygui_runtime *engine);
+
 /* Idempotent helper for figure widgets: on first call for `child_id`
  * emits CREATE_CHILD; on subsequent calls emits SET_CHILD_RECT.
  * Tracks per-engine state so the receiver's binder cache is preserved

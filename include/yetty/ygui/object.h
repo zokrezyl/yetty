@@ -41,6 +41,12 @@ struct yetty_ygui_object *yetty_ygui_object_parent(struct yetty_ygui_object *obj
 struct yetty_ygui_object *yetty_ygui_object_first_child(struct yetty_ygui_object *obj);
 struct yetty_ygui_object *yetty_ygui_object_next_sibling(struct yetty_ygui_object *obj);
 
+/* Move `obj` to the end of its parent's child list so the framework's
+ * widget hit-test (last sibling wins) prefers it over overlapping
+ * earlier siblings. Paired with a figure-z bump for floating windows so
+ * render order and hit order agree. No-op for a root / parentless obj. */
+void yetty_ygui_object_raise(struct yetty_ygui_object *obj);
+
 /* The engine that owns this widget tree. Resolves up the parent chain
  * to the root object, then returns the engine pointer associated with
  * the root. Returns NULL if the root has no engine attached. */

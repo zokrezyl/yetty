@@ -91,11 +91,19 @@ linux-aarch64)
     AR="${CROSS_PREFIX}ar"
     ;;
 linux-riscv64)
-    # libco has no riscv64 inline-asm backend — falls through to its
-    # ucontext fallback in libco.c, which is fine on glibc Linux.
+    # libco has no riscv64 inline-asm backend, so it falls through to its
+    # generic setjmp/longjmp (sjlj) backend. A coroutine switch there
+    # longjmp()s onto a *separate* coroutine stack; glibc's _FORTIFY_SOURCE
+    # replaces longjmp with __longjmp_chk, which treats that legitimate
+    # cross-stack jump as corruption and aborts the process with
+    # "*** longjmp causes uninitialized stack frame ***". (The nix cross
+    # toolchain injects -D_FORTIFY_SOURCE by default, so this fires even
+    # though we don't ask for it.) Undefine fortify for this single .c so
+    # the plain longjmp is used and coroutine switches work.
     : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
     CC="${CROSS_PREFIX}gcc"
     AR="${CROSS_PREFIX}ar"
+    CFLAGS_EXTRA="-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0"
     ;;
 macos-x86_64)
     CC=clang

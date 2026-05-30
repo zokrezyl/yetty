@@ -281,6 +281,55 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_
     return yetty_ygui_object_set_dirty(obj);
 }
 
+struct yetty_ycore_void_result yetty_ygui_widget_make_figure(struct yetty_ygui_object *obj,
+                                                             uint32_t kind, int32_t z)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_make_figure: NULL obj");
+    }
+    obj->figure_kind = kind;
+    obj->figure_z = z;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_ygui_object *obj,
+                                                              int32_t z)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_figure_z: NULL obj");
+    }
+    if (obj->figure_z != z) {
+        obj->figure_z = z;
+        return yetty_ygui_object_set_dirty(obj);
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_ygui_object *obj,
+                                                             int floating)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_floating: NULL obj");
+    }
+    obj->floating = floating ? 1 : 0;
+    return YETTY_OK_VOID();
+}
+
+int yetty_ygui_widget_is_floating(const struct yetty_ygui_object *obj)
+{
+    return obj ? obj->floating : 0;
+}
+
+uint32_t yetty_ygui_widget_figure_kind(const struct yetty_ygui_object *obj)
+{
+    return obj ? obj->figure_kind : 0;
+}
+
+int32_t yetty_ygui_widget_figure_z(const struct yetty_ygui_object *obj)
+{
+    return obj ? obj->figure_z : 0;
+}
+
 struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_ygui_object *obj,
                                                               uint32_t color)
 {

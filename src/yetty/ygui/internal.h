@@ -69,6 +69,26 @@ struct yetty_ygui_object {
     /* Wire id allocated by the engine at construction. 0 = unassigned. */
     uint32_t id;
 
+    /* Figure-boundary marker. When non-zero this widget is emitted as
+     * its OWN receiver-side child figure of this kind (a separate
+     * yfigure container child), instead of inlining its prims into the
+     * shared chrome ygrid. The whole subtree paints into that figure's
+     * own draw list, giving the window an independent z + damage region.
+     * 0 = inline (the default — most widgets). Floating windows / menus
+     * set this via yetty_ygui_widget_make_figure. */
+    uint32_t figure_kind;
+    /* Stacking order for this widget's figure (only meaningful when
+     * figure_kind != 0). Emitted as SET_CHILD_Z; the receiver sorts
+     * sibling figures by it. */
+    int32_t figure_z;
+
+    /* Floating overlay (dialog / debug window). A press anywhere inside
+     * a floating widget moves it to the end of its parent's child list,
+     * so it both paints last (front, within the shared chrome ygrid) and
+     * wins the hit-test against overlapping siblings — i.e. click-to-
+     * front. No figures needed; it's pure sibling reordering. */
+    int floating;
+
     /* Dirty flag — content changed without geometry move. */
     int dirty;
 
@@ -116,6 +136,10 @@ struct yetty_ygui_runtime {
     uint32_t *free_ids;
     size_t free_id_count;
     size_t free_id_cap;
+
+    /* Monotonic floating-window raise allocator (see
+     * yetty_ygui_runtime_next_raise_z). Sits in the floating z band. */
+    int32_t next_raise_z;
 
     /* Pending deletes — ids whose receiver-side figures need to go
      * away on the next envelope. */
