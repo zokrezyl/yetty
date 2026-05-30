@@ -5,10 +5,12 @@
  * bytes; the next emit triggers a render and feeds the buffer into the
  * ydraw_embed base. Cached (w, h) gates re-renders. */
 #include "../internal.h"
-#include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ygui/widgets/ybrowser.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
+#if YETTY_YGUI_HAVE_YBROWSER
+#include <yetty/ybrowser/ybrowser.h>
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -63,6 +65,15 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
                                                  struct yetty_yclass_object *yclass_obj, float w,
                                                  float h)
 {
+#if !YETTY_YGUI_HAVE_YBROWSER
+    /* No HTML backend on this platform — render nothing, leave the embed
+     * empty. set_html still stashes the bytes; they're simply never laid out. */
+    (void)yclass_ctx;
+    (void)yclass_obj;
+    (void)w;
+    (void)h;
+    return YETTY_OK_VOID();
+#else
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct ybrowser_data *d =
@@ -102,6 +113,7 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
     d->rendered_w = w;
     d->rendered_h = h;
     return YETTY_OK_VOID();
+#endif
 }
 
 [[clang::annotate("override@ygui:ybrowser:widget_emit_body")]]

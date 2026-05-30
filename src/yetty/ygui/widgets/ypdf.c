@@ -1,10 +1,12 @@
 /* ygui-ypdf.c — opens a PDF via pdfio, renders to draw_list. */
 #include "../internal.h"
-#include <pdfio.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/ypdf.h>
+#if YETTY_YGUI_HAVE_YPDF
+#include <pdfio.h>
 #include <yetty/ypdf/ypdf.h>
+#endif
 
 struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object *obj,
                                                         const char *path)
@@ -12,6 +14,7 @@ struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object
     if (!obj || !path) {
         return YETTY_ERR(yetty_ycore_void, "ypdf_set_file: NULL");
     }
+#if YETTY_YGUI_HAVE_YPDF
     pdfio_file_t *pdf = pdfioFileOpen(path, NULL, NULL, NULL, NULL);
     if (!pdf) {
         return YETTY_ERR(yetty_ycore_void, "ypdf_set_file: open");
@@ -22,6 +25,9 @@ struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object
         return YETTY_ERR(yetty_ycore_void, "ypdf_set_file: render", rr);
     }
     return yetty_ygui_ydraw_embed_set_buffer(obj, rr.value.buffer);
+#else
+    return YETTY_ERR(yetty_ycore_void, "ypdf_set_file: PDF support not built on this platform");
+#endif
 }
 
 /* ypdf adds zero ops on top of ydraw_embed — the public class accessor

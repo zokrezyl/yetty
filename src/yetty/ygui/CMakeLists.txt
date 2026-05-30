@@ -105,10 +105,24 @@ target_link_libraries(ygui PUBLIC
     yetty_yplot_core
     yetty_yimage_core
     yetty_ymarkdown
-    yetty_ybrowser
-    yetty_ypdf
     yetty_yvideo_core
 )
+
+# The ypdf and ybrowser widgets wrap optional backends (pdfio, lexbor) that
+# aren't available on every platform — webasm, for instance, has no
+# pdfio/lexbor prebuilts. The widget sources compile unconditionally so the
+# codegen-emitted class accessors (referenced from rpc.gen.c / methods.gen.c)
+# resolve on every platform; their rendering paths are guarded by these
+# definitions, and the backend libraries are only linked where the feature
+# is actually enabled.
+if(YETTY_ENABLE_FEATURE_YPDF)
+    target_link_libraries(ygui PUBLIC yetty_ypdf)
+    target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YPDF=1)
+endif()
+if(YETTY_ENABLE_FEATURE_YBROWSER)
+    target_link_libraries(ygui PUBLIC yetty_ybrowser)
+    target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YBROWSER=1)
+endif()
 
 # C2x so `[[clang::annotate(...)]]` attribute syntax parses (yclass
 # codegen reads these annotations off the AST). Switched up from C11.
