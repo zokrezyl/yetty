@@ -35,8 +35,19 @@
 #define TABBAR_PILL_RADIUS 6.0f
 #define TABBAR_ACCENT_BAR_H 3.0f
 #define TABBAR_PILL_PREF_W 160.0f
-#define TABBAR_SEPARATOR_W 1.0f
+/* 2px so the SDF box renders as a solid line — a 1px-wide box is nearly
+ * erased by the shader's edge anti-aliasing, which is why the old hairline
+ * was effectively invisible. */
+#define TABBAR_SEPARATOR_W 2.0f
 #define TABBAR_SEPARATOR_INSET_Y 6.0f
+
+/* The new-tab "+" affordance sits immediately right of the rightmost tab
+ * (not glued to the far edge). It is painted + hit-tested by the tabbar
+ * itself rather than being a separate sibling button, so it always tracks
+ * the last tab's trailing edge. Enabled only when a new-tab callback is
+ * installed via yetty_ygui_tabbar_set_on_new_tab. */
+#define TABBAR_PLUS_GAP 4.0f
+#define TABBAR_PLUS_W 30.0f
 
 /* Packed RGBA (R in low byte). Matches the old theme constants:
  *   bg_strip   = BRAND_BG_ROW   (#1E262C) — flat band under the pills
@@ -60,6 +71,7 @@
  *---------------------------------------------------------------------------*/
 
 struct [[clang::annotate("class@ygui:tabbar")]] [[clang::annotate("parent@ygui:hbox")]]
+    [[clang::annotate("uses@ygui:clickable")]]
 tabbar_data {
     int active_index;
     /* When set, each pill paints a close-x in its right band and a
@@ -67,6 +79,12 @@ tabbar_data {
      * instead of activating the tab. */
     yetty_ygui_tab_close_cb close_cb;
     void *close_userdata;
+    /* When set, a "+" affordance is painted right of the last tab and a
+     * click landing on it fires this callback. The tabbar's own clickable
+     * slice receives clicks in the strip's empty region (tab headers
+     * consume their own clicks before the parent sees them). */
+    yetty_ygui_tab_new_cb new_tab_cb;
+    void *new_tab_userdata;
 };
 
 /* Width of the close-x hit band at the right edge of each pill. */
@@ -235,6 +253,60 @@ static struct yetty_ycore_void_result header_set_label(struct yetty_yclass_ctx *
  * Tabbar — public API + paint.
  *---------------------------------------------------------------------------*/
 
+/* Trailing edge (in viewport coords) of the rightmost tab header, or
+ * `fallback` when the tabbar has no tabs yet. The "+" affordance and the
+ * divider in front of it both anchor to this x. */
+static float tabbar_tabs_right_edge(struct yetty_ygui_object *tabbar, float fallback)
+{
+    struct yetty_ygui_object *last = NULL;
+    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(tabbar); c;
+         c = yetty_ygui_object_next_sibling(c)) {
+        last = c;
+    }
+    if (!last) {
+        return fallback;
+    }
+    return yetty_ygui_widget_rect(last).max.x;
+}
+
+/* Rect of the "+" pill given the strip rect and the tabs' right edge. */
+static struct yetty_ycore_rectangle tabbar_plus_rect(struct yetty_ycore_rectangle strip,
+                                                     float tabs_right)
+{
+    struct yetty_ycore_rectangle pr;
+    pr.min.x = tabs_right + TABBAR_PLUS_GAP;
+    pr.max.x = pr.min.x + TABBAR_PLUS_W;
+    pr.min.y = strip.min.y;
+    pr.max.y = strip.max.y;
+    return pr;
+}
+
+/* The tabbar's own clickable slice fires on presses that land in the
+ * strip but not on a tab header (headers consume their own clicks). The
+ * only such region we act on is the "+" affordance. */
+static struct yetty_ycore_void_result tabbar_on_click(struct yetty_yclass_ctx *yclass_ctx,
+                                                      struct yetty_yclass_object *yclass_obj,
+                                                      void *userdata)
+{
+    (void)yclass_ctx;
+    (void)userdata;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct tabbar_data *td = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_tabbar_class_get(), "yetty_ygui_tabbar_class_get"));
+    if (!td->new_tab_cb) {
+        return YETTY_OK_VOID();
+    }
+    float px = 0.0f, py = 0.0f;
+    yetty_ygui_clickable_press_pos(obj, &px, &py);
+    struct yetty_ycore_rectangle strip = yetty_ygui_widget_rect(obj);
+    float tabs_right = tabbar_tabs_right_edge(obj, strip.min.x);
+    struct yetty_ycore_rectangle pr = tabbar_plus_rect(strip, tabs_right);
+    if (px >= pr.min.x && px < pr.max.x && py >= pr.min.y && py < pr.max.y) {
+        td->new_tab_cb(obj, td->new_tab_userdata);
+    }
+    return YETTY_OK_VOID();
+}
+
 [[clang::annotate("override@ygui:tabbar:constructor")]]
 static struct yetty_ycore_void_result tabbar_constructor(struct yetty_yclass_ctx *yclass_ctx,
                                                          struct yetty_yclass_object *yclass_obj)
@@ -256,7 +328,8 @@ static struct yetty_ycore_void_result tabbar_constructor(struct yetty_yclass_ctx
         struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "tabbar_constructor: layout_set");
     }
-    return YETTY_OK_VOID();
+    /* Clicks on the strip's empty region (notably the "+") route here. */
+    return yetty_ygui_clickable_on_click_set(obj, tabbar_on_click, NULL);
 }
 
 static struct yetty_ycore_void_result paint_pill(struct yetty_ygui_emit_ctx *ctx, float x, float y,
@@ -394,6 +467,36 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
         prev_header = c;
         prev_active = is_active;
         idx++;
+    }
+
+    /* New-tab "+" affordance, immediately right of the rightmost tab.
+     * A divider in front of it marks the last tab's trailing edge (unless
+     * that tab is active — the active tab keeps breathing room on both
+     * sides, matching the between-tab separators above). */
+    if (td->new_tab_cb) {
+        float tabs_right = prev_header ? yetty_ygui_widget_rect(prev_header).max.x : r.min.x;
+
+        if (prev_header && !prev_active) {
+            float sep_x = tabs_right + TABBAR_PLUS_GAP * 0.5f - TABBAR_SEPARATOR_W * 0.5f;
+            float sep_y = r.min.y + TABBAR_SEPARATOR_INSET_Y;
+            float sep_h = strip_h - 2.0f * TABBAR_SEPARATOR_INSET_Y;
+            if (sep_h > 0.0f) {
+                rr = paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, COLOR_SEPARATOR, 0.0f);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: plus separator");
+            }
+        }
+
+        struct yetty_ycore_rectangle plus = tabbar_plus_rect(r, tabs_right);
+        /* "+" glyph, centered in the plus rect. Muted like an inactive
+         * tab — Chrome-style minimal affordance, no persistent pill. */
+        if (plus.min.x < r.max.x) {
+            float font_size = 17.0f;
+            float glyph_w = font_size * 0.45f;
+            float tx = plus.min.x + (TABBAR_PLUS_W - glyph_w) * 0.5f;
+            float ty = r.min.y + (strip_h + font_size) * 0.5f - 2.0f;
+            rr = paint_label(ctx, "+", tx, ty, COLOR_TEXT_MUTED, font_size);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: plus glyph");
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -533,6 +636,21 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_ygui_
                                                             "yetty_ygui_tabbar_class_get"));
     td->close_cb = cb;
     td->close_userdata = userdata;
+    return yetty_ygui_object_set_dirty(tabbar);
+}
+
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_ygui_object *tabbar,
+                                                                yetty_ygui_tab_new_cb cb,
+                                                                void *userdata)
+{
+    if (!tabbar) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tabbar_set_on_new_tab: NULL tabbar");
+    }
+    struct tabbar_data *td =
+        yetty_ygui_data_get(tabbar, yetty_ygui_class_expect(yetty_ygui_tabbar_class_get(),
+                                                            "yetty_ygui_tabbar_class_get"));
+    td->new_tab_cb = cb;
+    td->new_tab_userdata = userdata;
     return yetty_ygui_object_set_dirty(tabbar);
 }
 

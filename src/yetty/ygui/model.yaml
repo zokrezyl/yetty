@@ -757,7 +757,9 @@ classes:
     parent:
       domain: ygui
       name: hbox
-    mixins: []
+    mixins:
+      - domain: ygui
+        name: clickable
     data: struct tabbar_data
     ops:
       - slot: constructor

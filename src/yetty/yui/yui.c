@@ -115,11 +115,10 @@ struct yetty_yui {
     struct yetty_yui_tabbar *tabbar_model;
 
     /* Engine titlebar — flex-row hbox holding:
-     *   [≡ hamburger][native TABBAR widget (flex:1)][+][_][□][×] */
+     *   [≡ hamburger][native TABBAR widget (flex:1, owns its own "+")][_][□][×] */
     struct yetty_ygui_object *titlebar;
     struct yetty_ygui_object *titlebar_hamburger;
     struct yetty_ygui_object *titlebar_tabbar; /* native ygui tabbar widget */
-    struct yetty_ygui_object *titlebar_newtab; /* "+" button */
     struct yetty_ygui_object *titlebar_min;
     struct yetty_ygui_object *titlebar_max;
     struct yetty_ygui_object *titlebar_close;
@@ -384,9 +383,7 @@ static void yui_titlebar_sync(struct yetty_yui *yui);
 static struct yetty_ycore_void_result yui_titlebar_on_hamburger(struct yetty_yclass_ctx *ctx,
                                                                 struct yetty_yclass_object *btn,
                                                                 void *userdata);
-static struct yetty_ycore_void_result yui_titlebar_on_new_tab(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *btn,
-                                                              void *userdata);
+static void yui_titlebar_on_new_tab(struct yetty_ygui_object *tabbar, void *userdata);
 static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_ctx *ctx,
                                                           struct yetty_yclass_object *btn,
                                                           void *userdata);
@@ -1758,11 +1755,12 @@ static void yui_titlebar_build(struct yetty_yui *yui)
             yui->titlebar_tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, yui_titlebar_on_tab_change, yui));
         yetty_ycore_error_destroy_safe(
             yetty_ygui_tabbar_set_on_close(yui->titlebar_tabbar, yui_titlebar_on_tab_close, yui));
+        /* "+" new-tab affordance is a built-in feature of the tabbar; it
+         * paints right of the rightmost tab and routes clicks here. */
+        yetty_ycore_error_destroy_safe(
+            yetty_ygui_tabbar_set_on_new_tab(yui->titlebar_tabbar, yui_titlebar_on_new_tab, yui));
     }
 
-    /* "+" new-tab pill — separate button (the new tabbar has no built-in
-     * new-tab affordance). */
-    yui->titlebar_newtab = yui_titlebar_button(yui, "+", yui_titlebar_on_new_tab);
     yui->titlebar_min = yui_titlebar_button(yui, "\xE2\x88\x92" /* − */, yui_titlebar_on_min);
     yui->titlebar_max = yui_titlebar_button(yui, "\xE2\x96\xA1" /* □ */, yui_titlebar_on_max);
     yui->titlebar_close = yui_titlebar_button(yui, "\xC3\x97" /* × */, yui_titlebar_on_close_window);
@@ -1815,18 +1813,14 @@ static struct yetty_ycore_void_result yui_titlebar_on_hamburger(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_titlebar_on_new_tab(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *btn,
-                                                              void *userdata)
+static void yui_titlebar_on_new_tab(struct yetty_ygui_object *tabbar, void *userdata)
 {
-    (void)ctx;
-    (void)btn;
+    (void)tabbar;
     struct yetty_yui *yui = userdata;
     if (!yui || !yui->tabbar_model) {
-        return YETTY_OK_VOID();
+        return;
     }
     yetty_yui_tabbar_add_workspace_of_kind(yui->tabbar_model, YETTY_YUI_TAB_SHELL);
-    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_ctx *ctx,
