@@ -47,6 +47,7 @@
 #include "yetty/ygui/widgets/vbox.h"
 #include "yetty/ygui/widgets/window.h"
 #include "yetty/ygui/widgets/ybrowser.h"
+#include "yetty/ygui/widgets/ydiagram.h"
 #include "yetty/ygui/widgets/ydraw_embed.h"
 #include "yetty/ygui/widgets/yimage.h"
 #include "yetty/ygui/widgets/yjungle.h"
@@ -3159,6 +3160,77 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ybrowser_create(struct yetty_yc
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
 
+struct yetty_yclass_object_ptr_result yetty_ygui_ydiagram_create(struct yetty_yclass_ctx *ctx)
+{
+    ydebug("class=yetty_ygui_ydiagram");
+    /* Touch the local accessor first — registers the class's slots in
+     * slot_table so subsequent name→local-slot lookups succeed.
+     * Without this, translate_class on a fresh remote-only session
+     * would have no local slots to map remote ids onto. */
+    struct yetty_yclass_ptr_result class_accessor_r = yetty_ygui_ydiagram_class_get();
+    if (YETTY_IS_ERR(class_accessor_r))
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "yetty_ygui_ydiagram_create: class accessor failed", class_accessor_r);
+    const struct yetty_yclass *klass = class_accessor_r.value;
+
+    if (!ctx || !ctx->session) {
+        struct yetty_yclass_object_ptr_result alloc_r =
+            yetty_yclass_object_alloc(klass);
+        if (YETTY_IS_ERR(alloc_r)) return alloc_r;
+        struct yetty_ycore_void_result ctor_r =
+            yetty_ygui_constructor(ctx, alloc_r.value);
+        if (YETTY_IS_ERR(ctor_r)) {
+            struct yetty_ycore_void_result free_r =
+                yetty_yclass_object_free(alloc_r.value);
+            if (YETTY_IS_ERR(free_r)) yetty_ycore_error_destroy(free_r.error);
+            return YETTY_ERR(yetty_yclass_object_ptr,
+                             "yetty_ygui_ydiagram_create: constructor failed", ctor_r);
+        }
+        return alloc_r;
+    }
+
+    /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
+     * if it fails (the per-slot ensure_remote_id fallback can still
+     * resolve ids on demand), but log so a malformed GET_CLASS
+     * response isn't silently swallowed. */
+    {
+        struct yetty_ycore_void_result translate_class_r =
+            yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_ygui_ydiagram");
+        if (YETTY_IS_ERR(translate_class_r)) {
+            yetty_ycore_error_print(stderr,
+                "yetty_ygui_ydiagram_create: translate_class (degraded — will lazy-resolve)",
+                translate_class_r.error);
+            yetty_ycore_error_destroy(translate_class_r.error);
+        }
+    }
+
+    uint64_t handle = 0;
+    const char *class_name = "yetty_ygui_ydiagram";
+    struct yetty_ycore_size_result create_call_r = yetty_yclass_rpc_call(
+        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name, strlen(class_name), &handle,
+        sizeof(handle));
+    if (YETTY_IS_ERR(create_call_r))
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "yetty_ygui_ydiagram_create: CREATE call failed", create_call_r);
+    if (create_call_r.value != sizeof(handle) || !handle)
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "yetty_ygui_ydiagram_create: CREATE returned no/invalid handle");
+
+    /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
+     * and writing the handle past the header was misaligned on 32-bit
+     * ABIs where sizeof(struct yetty_yclass_object) == 4. The proxy
+     * struct in <yclass/class.h> uses natural alignment for both
+     * fields. The class accessor is the same on both sides — proxies
+     * never local-dispatch, so the class's data_size contract isn't
+     * honoured for this allocation. */
+    struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
+    if (!proxy)
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_ydiagram_create: calloc(proxy) failed");
+    proxy->header.klass = klass;
+    proxy->handle = handle;
+    return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
+}
+
 struct yetty_yclass_object_ptr_result yetty_ygui_ydraw_embed_create(struct yetty_yclass_ctx *ctx)
 {
     ydebug("class=yetty_ygui_ydraw_embed");
@@ -3702,6 +3774,7 @@ static struct yetty_yclass_ptr_result yetty_ygui_accessor_lookup(const char *nam
     if (strcmp(name, "yetty_ygui_vbox") == 0) return yetty_ygui_vbox_class_get();
     if (strcmp(name, "yetty_ygui_window") == 0) return yetty_ygui_window_class_get();
     if (strcmp(name, "yetty_ygui_ybrowser") == 0) return yetty_ygui_ybrowser_class_get();
+    if (strcmp(name, "yetty_ygui_ydiagram") == 0) return yetty_ygui_ydiagram_class_get();
     if (strcmp(name, "yetty_ygui_ydraw_embed") == 0) return yetty_ygui_ydraw_embed_class_get();
     if (strcmp(name, "yetty_ygui_yimage") == 0) return yetty_ygui_yimage_class_get();
     if (strcmp(name, "yetty_ygui_yjungle") == 0) return yetty_ygui_yjungle_class_get();

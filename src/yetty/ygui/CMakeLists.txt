@@ -60,6 +60,7 @@ set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/vbox.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/window.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ybrowser.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ydiagram.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ydraw_embed.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yimage.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yjungle.c
@@ -122,6 +123,15 @@ endif()
 if(YETTY_ENABLE_FEATURE_YBROWSER)
     target_link_libraries(ygui PUBLIC yetty_ybrowser)
     target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YBROWSER=1)
+endif()
+
+# The ydiagram widget wraps the Mermaid → ydraw renderer. The widget source
+# compiles unconditionally so its codegen-emitted class accessor resolves on
+# every platform; the render path is guarded by this definition and the
+# library is only linked where the feature is enabled.
+if(YETTY_ENABLE_FEATURE_YDIAGRAM)
+    target_link_libraries(ygui PUBLIC yetty_ydiagram)
+    target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YDIAGRAM=1)
 endif()
 
 # C2x so `[[clang::annotate(...)]]` attribute syntax parses (yclass

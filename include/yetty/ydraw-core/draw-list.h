@@ -46,6 +46,8 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_create_from_bytes(
 void yetty_ydraw_draw_list_destroy(struct yetty_ydraw_draw_list *buf YETTY_ANNOT_CALLEE_OWNED);
 
 // Scene bounds accessors (populated from config at create time, 0s otherwise)
+float yetty_ydraw_draw_list_scene_min_x(const struct yetty_ydraw_draw_list *buf);
+float yetty_ydraw_draw_list_scene_min_y(const struct yetty_ydraw_draw_list *buf);
 float yetty_ydraw_draw_list_scene_max_x(const struct yetty_ydraw_draw_list *buf);
 float yetty_ydraw_draw_list_scene_max_y(const struct yetty_ydraw_draw_list *buf);
 

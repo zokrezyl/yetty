@@ -179,6 +179,10 @@ if(YETTY_ENABLE_FEATURE_YIMAGE)
     demo_ygui_add(29-yimage 29_yimage)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YDIAGRAM)
+    demo_ygui_add(36-ydiagram 36_ydiagram)
+endif()
+
 demo_ygui_add(30-radio 30_radio)
 demo_ygui_add(31-spinner 31_spinner)
 demo_ygui_add(32-splitter 32_splitter)

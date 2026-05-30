@@ -950,6 +950,23 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: ybr_emit_body
+  - name: ydiagram
+    domain: ygui
+    accessor: yetty_ygui_ydiagram_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/ydiagram.c
+    parent:
+      domain: ygui
+      name: ydraw_embed
+    mixins: []
+    data: struct ydiagram_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ydiagram_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: ydiagram_destructor
   - name: ydraw_embed
     domain: ygui
     accessor: yetty_ygui_ydraw_embed_class_get

@@ -56,6 +56,7 @@
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ygui/widgets/window.h>
 #include <yetty/ygui/widgets/ybrowser.h>
+#include <yetty/ygui/widgets/ydiagram.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/yimage.h>
 #include <yetty/ygui/widgets/yjungle.h>
