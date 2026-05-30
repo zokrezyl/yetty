@@ -94,12 +94,14 @@ enum tab_kind {
     TAB_KIND_ELEMENTS,    /* showcase of ygui widgets in a scrollarea */
     TAB_KIND_YREADME,     /* extracted README.md, rendered by `ymarkdown` */
     TAB_KIND_YBROWSER,    /* inline HTML, rendered by `ybrowser` */
+    TAB_KIND_DIAGRAMS,    /* Mermaid diagrams in collapsing headers (ydiagram) */
 };
 
-#define TAB_COUNT 8
+#define TAB_COUNT 9
 
-static const char *TAB_LABELS[TAB_COUNT] = {"Welcome",  "Plots",    "Images",  "Code",
-                                            "Video",    "Elements", "Markdown", "HTML/Browser"};
+static const char *TAB_LABELS[TAB_COUNT] = {"Welcome",  "Plots",        "Images",
+                                            "Code",     "Video",        "Elements",
+                                            "Markdown", "HTML/Browser", "Diagrams"};
 
 /* Brand palette — packed RGBA, R in low byte. Per rules/08-branding.md. */
 #define BRAND_TEXT 0xFFE4E5E0u
@@ -665,6 +667,7 @@ static int tab_entry_count(const struct app *app, int tab_index)
     case 5: /* Elements — chrome-only, the single nav row is a label hook. */
     case 6: /* YReadme  — single piece of content (README.md). */
     case 7: /* YBrowser — single inline HTML sample. */
+    case 8: /* Diagrams — single self-contained scrollarea. */
         return 1;
     default: return 0;
     }
@@ -691,6 +694,7 @@ static const char *tab_entry_label(const struct app *app, int tab_index, int ent
     case 5: return "Showcase";
     case 6: return app->readme_path ? "README.md" : "(no README)";
     case 7: return "Sample";
+    case 8: return "Showcase";
     default: return "";
     }
 }
@@ -704,6 +708,7 @@ static enum tab_kind tab_kind_for(int tab_index)
     case 5: return TAB_KIND_ELEMENTS;
     case 6: return TAB_KIND_YREADME;
     case 7: return TAB_KIND_YBROWSER;
+    case 8: return TAB_KIND_DIAGRAMS;
     case 0:
     case 3:
     default:
@@ -1439,6 +1444,93 @@ static struct yetty_ycore_void_result build_yreadme_content(struct app *app,
     return YETTY_OK_VOID();
 }
 
+/* Add one ydiagram leaf under `sec`, fed `mermaid`. The widget self-sizes
+ * its layout box to the diagram's intrinsic extent in set_source, so no
+ * height is authored here. */
+static void diag_add(struct yetty_ygui_object *sec, const char *mermaid)
+{
+    if (!sec) {
+        return;
+    }
+    struct yetty_ygui_object_ptr_result r =
+        yetty_ygui_add(yetty_ygui_ydiagram_class_get().value, sec);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+        return;
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_ydiagram_set_source(r.value, mermaid));
+}
+
+/* Diagrams scrollarea — mirrors demo/ygui/36_ydiagram: one collapsing_header
+ * per diagram kind, each holding a single ydiagram fed a different bit of
+ * Mermaid source. el_finalize_section reserves the section height from the
+ * widget's self-negotiated extent, so each diagram fits its header. */
+static struct yetty_ycore_void_result build_diagrams_content(struct app *app,
+                                                             struct yetty_ygui_object *root)
+{
+    (void)app;
+    const struct {
+        const char *title;
+        const char *src;
+    } sections[] = {
+        {"Flowchart (top-down)", "graph TD\n"
+                                 "  A[Start] --> B{Decision}\n"
+                                 "  B -->|Yes| C(Process)\n"
+                                 "  B -->|No|  D((Done))\n"
+                                 "  C --> D\n"},
+        {"Pipeline (left-to-right)", "graph LR\n"
+                                     "  A[node a] --> B[node b]\n"
+                                     "  B --> C[node c]\n"
+                                     "  C --> D[node d]\n"
+                                     "  A --> D\n"},
+        {"Node shapes", "graph TD\n"
+                        "  R[rectangle]\n"
+                        "  RR(rounded)\n"
+                        "  C((circle))\n"
+                        "  D{diamond}\n"
+                        "  H{{hexagon}}\n"
+                        "  CY[(cylinder)]\n"
+                        "  S([stadium])\n"
+                        "  PR[/parallelogram/]\n"
+                        "  R  --> RR\n"
+                        "  RR --> C\n"
+                        "  C  --> D\n"
+                        "  D  --> H\n"
+                        "  H  --> CY\n"
+                        "  CY --> S\n"
+                        "  S  --> PR\n"},
+        {"Subgraphs / clusters", "graph TD\n"
+                                 "  subgraph frontend [Frontend]\n"
+                                 "    UI[UI layer]\n"
+                                 "    API[API client]\n"
+                                 "    UI --> API\n"
+                                 "  end\n"
+                                 "  subgraph backend [Backend services]\n"
+                                 "    Gateway[Gateway]\n"
+                                 "    Auth[Auth]\n"
+                                 "    Store[(Store)]\n"
+                                 "    Gateway --> Auth\n"
+                                 "    Auth    --> Store\n"
+                                 "  end\n"
+                                 "  API --> Gateway\n"},
+        {"State machine", "flowchart TD\n"
+                          "  Start((start)) --> Idle[Idle]\n"
+                          "  Idle -->|connect|     Connecting{{Connecting}}\n"
+                          "  Connecting -->|ok|    Ready(Ready)\n"
+                          "  Connecting -->|fail|  Failed[/Failed/]\n"
+                          "  Ready  -->|disconnect| Idle\n"
+                          "  Ready  -->|crash|      Failed\n"
+                          "  Failed -->|retry|      Connecting\n"
+                          "  Failed -->|abort|      Done((done))\n"},
+    };
+    for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); i++) {
+        struct yetty_ygui_object *sec = el_section(root, sections[i].title);
+        diag_add(sec, sections[i].src);
+        el_finalize_section(sec);
+    }
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int tab_index)
 {
     /* Wipe + reseed app->body_panel: nav on left + fresh content widget on right. */
@@ -1464,6 +1556,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     case TAB_KIND_ELEMENTS:
     case TAB_KIND_YREADME:
     case TAB_KIND_YBROWSER:
+    case TAB_KIND_DIAGRAMS:
         has_nav = false;
         break;
     default:
@@ -1537,7 +1630,8 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
         content = vr.value;
         break;
     }
-    case TAB_KIND_ELEMENTS: {
+    case TAB_KIND_ELEMENTS:
+    case TAB_KIND_DIAGRAMS: {
         struct yetty_ygui_object_ptr_result sr =
             yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, hr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rebuild: scrollarea");
@@ -1605,6 +1699,9 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     }
     case TAB_KIND_ELEMENTS:
         yetty_ycore_error_destroy_safe(build_elements_content(app, content));
+        break;
+    case TAB_KIND_DIAGRAMS:
+        yetty_ycore_error_destroy_safe(build_diagrams_content(app, content));
         break;
     case TAB_KIND_YREADME:
         yetty_ycore_error_destroy_safe(build_yreadme_content(app, content));

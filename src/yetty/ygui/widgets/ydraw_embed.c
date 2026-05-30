@@ -146,8 +146,14 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!d->buf) {
         return YETTY_OK_VOID();
     }
+    /* Map the buffer's scene origin to the widget's top-left. A buffer
+     * laid out around a non-zero origin (e.g. ydiagram, whose layout pads
+     * the scene bounds and can start slightly negative) would otherwise be
+     * offset from the widget rect. Buffers authored from (0,0) — ymarkdown,
+     * ypdf — have scene_min == 0, so this is a no-op for them. */
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    float dx = r.min.x, dy = r.min.y;
+    float dx = r.min.x - yetty_ydraw_draw_list_scene_min_x(d->buf);
+    float dy = r.min.y - yetty_ydraw_draw_list_scene_min_y(d->buf);
     const uint8_t *src = (const uint8_t *)yetty_ydraw_draw_list_data(d->buf);
     size_t src_size = yetty_ydraw_draw_list_size(d->buf);
     if (!src || src_size == 0) {
@@ -164,6 +170,16 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
             free(heap);
             return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: malformed primitive stream "
                                                "(unknown type or size overruns buffer)");
+        }
+        /* A CMD_ZERO (clear-canvas) embedded in a hosted buffer would wipe
+         * the parent ygrid and any sibling widgets already painted into it.
+         * Embedding inlines content; it never owns the canvas. Skip it.
+         * (ydiagram's renderer prepends one for its standalone-pane use;
+         * other producers carry none, so this is a no-op for them.) */
+        if (((const uint32_t *)p)[0] == YETTY_YDRAW_CMD_ZERO) {
+            p += s;
+            remaining -= s;
+            continue;
         }
         uint8_t *work = stack;
         if (s > sizeof(stack)) {
