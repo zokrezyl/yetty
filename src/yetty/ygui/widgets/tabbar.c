@@ -71,7 +71,6 @@
  *---------------------------------------------------------------------------*/
 
 struct [[clang::annotate("class@ygui:tabbar")]] [[clang::annotate("parent@ygui:hbox")]]
-    [[clang::annotate("uses@ygui:clickable")]]
 tabbar_data {
     int active_index;
     /* When set, each pill paints a close-x in its right band and a
@@ -79,12 +78,16 @@ tabbar_data {
      * instead of activating the tab. */
     yetty_ygui_tab_close_cb close_cb;
     void *close_userdata;
-    /* When set, a "+" affordance is painted right of the last tab and a
-     * click landing on it fires this callback. The tabbar's own clickable
-     * slice receives clicks in the strip's empty region (tab headers
-     * consume their own clicks before the parent sees them). */
+    /* When set, a "+" affordance is painted right of the last tab; a
+     * press+release landing on it fires this callback. The tabbar
+     * overrides press/release itself (rather than using the clickable
+     * mixin) so that it consumes ONLY presses on the "+": a press on the
+     * empty strip stays unconsumed and falls through to the host's
+     * window drag-to-move handler. Tab headers consume their own clicks
+     * before the tabbar ever sees them. */
     yetty_ygui_tab_new_cb new_tab_cb;
     void *new_tab_userdata;
+    int plus_pressed; /* a press landed on the "+"; fire on matching release */
 };
 
 /* Width of the close-x hit band at the right edge of each pill. */
@@ -281,30 +284,61 @@ static struct yetty_ycore_rectangle tabbar_plus_rect(struct yetty_ycore_rectangl
     return pr;
 }
 
-/* The tabbar's own clickable slice fires on presses that land in the
- * strip but not on a tab header (headers consume their own clicks). The
- * only such region we act on is the "+" affordance. */
-static struct yetty_ycore_void_result tabbar_on_click(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
-                                                      void *userdata)
+static int tabbar_pt_in_plus(struct yetty_ygui_object *obj, float x, float y)
 {
-    (void)yclass_ctx;
-    (void)userdata;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct tabbar_data *td = yetty_ygui_data_get(
         obj, yetty_ygui_class_expect(yetty_ygui_tabbar_class_get(), "yetty_ygui_tabbar_class_get"));
     if (!td->new_tab_cb) {
-        return YETTY_OK_VOID();
+        return 0;
     }
-    float px = 0.0f, py = 0.0f;
-    yetty_ygui_clickable_press_pos(obj, &px, &py);
     struct yetty_ycore_rectangle strip = yetty_ygui_widget_rect(obj);
     float tabs_right = tabbar_tabs_right_edge(obj, strip.min.x);
     struct yetty_ycore_rectangle pr = tabbar_plus_rect(strip, tabs_right);
-    if (px >= pr.min.x && px < pr.max.x && py >= pr.min.y && py < pr.max.y) {
+    return x >= pr.min.x && x < pr.max.x && y >= pr.min.y && y < pr.max.y;
+}
+
+/* A press reaches the tabbar only when it missed every tab header (headers
+ * consume their own clicks). We consume it ONLY when it lands on the "+";
+ * a press anywhere else on the strip stays unconsumed so it falls through
+ * to the host's window drag-to-move handler. */
+[[clang::annotate("override@ygui:tabbar:widget_on_press")]]
+static struct yetty_ycore_int_result tabbar_on_press(struct yetty_yclass_ctx *yclass_ctx,
+                                                     struct yetty_yclass_object *yclass_obj, float x,
+                                                     float y, int button)
+{
+    (void)yclass_ctx;
+    (void)button;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct tabbar_data *td = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_tabbar_class_get(), "yetty_ygui_tabbar_class_get"));
+    if (!tabbar_pt_in_plus(obj, x, y)) {
+        td->plus_pressed = 0;
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    td->plus_pressed = 1;
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+[[clang::annotate("override@ygui:tabbar:widget_on_release")]]
+static struct yetty_ycore_int_result tabbar_on_release(struct yetty_yclass_ctx *yclass_ctx,
+                                                       struct yetty_yclass_object *yclass_obj,
+                                                       float x, float y, int button)
+{
+    (void)yclass_ctx;
+    (void)button;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct tabbar_data *td = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_tabbar_class_get(), "yetty_ygui_tabbar_class_get"));
+    int was_pressed = td->plus_pressed;
+    td->plus_pressed = 0;
+    if (!was_pressed) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    /* Fire only if the release lands back on the "+", like a button. */
+    if (td->new_tab_cb && tabbar_pt_in_plus(obj, x, y)) {
         td->new_tab_cb(obj, td->new_tab_userdata);
     }
-    return YETTY_OK_VOID();
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 [[clang::annotate("override@ygui:tabbar:constructor")]]
@@ -328,8 +362,7 @@ static struct yetty_ycore_void_result tabbar_constructor(struct yetty_yclass_ctx
         struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "tabbar_constructor: layout_set");
     }
-    /* Clicks on the strip's empty region (notably the "+") route here. */
-    return yetty_ygui_clickable_on_click_set(obj, tabbar_on_click, NULL);
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result paint_pill(struct yetty_ygui_emit_ctx *ctx, float x, float y,

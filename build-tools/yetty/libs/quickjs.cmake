@@ -41,7 +41,25 @@ if(NOT EXISTS "${_QJS_STAMP}" AND NOT EXISTS "${_QJS_TARBALL}")
     message(STATUS "quickjs: probing prebuilt ${_QJS_FILE}")
     file(DOWNLOAD "${_QJS_URL}" "${_QJS_TARBALL}" STATUS _QJS_DL TLS_VERIFY ON)
     list(GET _QJS_DL 0 _QJS_DL_CODE)
+
+    # Two ways a missing release shows up: a non-zero curl status, OR a
+    # "successful" transfer that actually fetched GitHub's 404 page into
+    # the file (cmake does not set CURLOPT_FAILONERROR, so HTTP errors can
+    # land as status 0). Gate on BOTH — only a real gzip (magic 1f 8b) is
+    # treated as a published prebuilt.
+    set(_QJS_OK TRUE)
     if(NOT _QJS_DL_CODE EQUAL 0)
+        set(_QJS_OK FALSE)
+    elseif(EXISTS "${_QJS_TARBALL}")
+        file(READ "${_QJS_TARBALL}" _QJS_MAGIC LIMIT 2 HEX)
+        if(NOT _QJS_MAGIC STREQUAL "1f8b")
+            set(_QJS_OK FALSE)
+        endif()
+    else()
+        set(_QJS_OK FALSE)
+    endif()
+
+    if(NOT _QJS_OK)
         file(REMOVE "${_QJS_TARBALL}")
         message(STATUS
             "quickjs: prebuilt not available yet for ${_QJS_PLAT} "
@@ -81,11 +99,19 @@ set_target_properties(qjs PROPERTIES
 # quickjs-ng's `qjs` target links libm + (on POSIX) dl + pthread. Those
 # INTERFACE links are lost when importing the bare static archive, so
 # replay them here — otherwise final links fail with undefined pow /
-# dlopen / pthread_* references. Threads::Threads comes from the
-# top-level find_package(Threads) already used across yetty.
+# dlopen / pthread_* references. find_package(Threads) here makes the
+# import self-sufficient: Threads::Threads resolves to the right thing
+# per platform (pthread on linux/macos, nothing on android where it's in
+# libc) instead of a bare -lpthread the NDK has no archive for.
 if(NOT WIN32)
+    find_package(Threads QUIET)
+    if(TARGET Threads::Threads)
+        set(_QJS_THREADS "Threads::Threads")
+    else()
+        set(_QJS_THREADS "")
+    endif()
     set_target_properties(qjs PROPERTIES
-        INTERFACE_LINK_LIBRARIES "m;${CMAKE_DL_LIBS};Threads::Threads")
+        INTERFACE_LINK_LIBRARIES "m;${CMAKE_DL_LIBS};${_QJS_THREADS}")
 endif()
 
 message(STATUS "quickjs: prebuilt v${YETTY_3RDPARTY_quickjs_VERSION}")
