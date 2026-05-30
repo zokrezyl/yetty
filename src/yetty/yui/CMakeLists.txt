@@ -24,7 +24,7 @@ target_link_libraries(yetty_yui
         yetty_ygrid
         yetty_yui_core
         yetty_yterm
-        ygui_core
+        ygui
 )
 
 if(YETTY_ENABLE_FEATURE_YMGUI)

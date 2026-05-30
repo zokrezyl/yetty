@@ -2,11 +2,11 @@
 # Builds libcurl (curl/curl) for $TARGET_PLATFORM using the upstream
 # CMake project, statically linked against three prebuilt yetty 3rdparty
 # tarballs fetched from GitHub releases at build time:
-#   - openssl-new   (TLS backend; lib-openssl-new-<ver>)
+#   - openssl   (TLS backend; lib-openssl-<ver>)
 #   - zlib          (gzip Content-Encoding;  lib-zlib-<ver>)
 #   - brotli        (br   Content-Encoding;  lib-brotli-<ver>)
 # All three are *also* consumed independently by yetty's main build
-# (build-tools/cmake/libs/{openssl-new,zlib,brotli}.cmake) — same
+# (build-tools/cmake/libs/{openssl,zlib,brotli}.cmake) — same
 # tarballs, single source of truth via each subdir's `version` file.
 #
 # The output tarball ships ONLY `lib/libcurl.a` + headers; the static
@@ -53,7 +53,7 @@ VERSION_FILE="$SCRIPT_DIR/version"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 
-OPENSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl-new/version"
+OPENSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl/version"
 [ -f "$OPENSSL_VERSION_FILE" ] || { echo "missing $OPENSSL_VERSION_FILE" >&2; exit 1; }
 OPENSSL_NEW_VERSION="$(tr -d '[:space:]' < "$OPENSSL_VERSION_FILE")"
 [ -n "$OPENSSL_NEW_VERSION" ] || { echo "$OPENSSL_VERSION_FILE is empty" >&2; exit 1; }
@@ -90,11 +90,11 @@ INSTALL_DIR="$WORK_DIR/install-${TARGET_PLATFORM}"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
 TARBALL="$OUTPUT_DIR/libcurl-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
-# OpenSSL prebuilt fetch — from the lib-openssl-new-<ver> release.
-OSSL_FILENAME="openssl-new-${TARGET_PLATFORM}-${OPENSSL_NEW_VERSION}.tar.gz"
+# OpenSSL prebuilt fetch — from the lib-openssl-<ver> release.
+OSSL_FILENAME="openssl-${TARGET_PLATFORM}-${OPENSSL_NEW_VERSION}.tar.gz"
 OSSL_TARBALL="$CACHE_DIR/$OSSL_FILENAME"
-OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-new-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
-OSSL_DIR="$WORK_DIR/openssl-new-${OPENSSL_NEW_VERSION}"
+OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
+OSSL_DIR="$WORK_DIR/openssl-${OPENSSL_NEW_VERSION}"
 
 ZLIB_FILENAME="zlib-${TARGET_PLATFORM}-${ZLIB_VERSION}.tar.gz"
 ZLIB_TARBALL="$CACHE_DIR/$ZLIB_FILENAME"
@@ -116,7 +116,7 @@ mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 #   - linux-{x86_64,aarch64,riscv64}, macos-{x86_64,arm64}
 # Other platforms (android/ios/tvos/webasm/windows) skip QUIC; libcurl on
 # those stays at HTTP/1.1. HTTP/3 needs OpenSSL ≥ 3.5 for its QUIC API —
-# openssl-new 4.0+ has it via the ossl crypto backend in ngtcp2.
+# openssl 4.0+ has it via the ossl crypto backend in ngtcp2.
 #
 # Pin versions are read from the per-lib `version` files (single source
 # of truth — bumping a file is enough to migrate libcurl too).
@@ -143,7 +143,7 @@ case "$TARGET_PLATFORM" in
 esac
 
 # Static-library file extension for the prebuilt QUIC tarballs. Windows
-# MSVC uses lib<name>.lib (same convention as openssl-new on Windows);
+# MSVC uses lib<name>.lib (same convention as openssl on Windows);
 # unix uses lib<name>.a.
 if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
     _QLIB_EXT="lib"
@@ -181,7 +181,7 @@ fetch_3rdparty() {
 #-----------------------------------------------------------------------------
 # Fetch prebuilt deps (OpenSSL TLS, zlib for gzip, brotli for br)
 #-----------------------------------------------------------------------------
-fetch_3rdparty openssl-new "$OSSL_TARBALL"   "$OSSL_URL"   "$OSSL_DIR"
+fetch_3rdparty openssl "$OSSL_TARBALL"   "$OSSL_URL"   "$OSSL_DIR"
 fetch_3rdparty zlib        "$ZLIB_TARBALL"   "$ZLIB_URL"   "$ZLIB_DIR"
 fetch_3rdparty brotli      "$BROTLI_TARBALL" "$BROTLI_URL" "$BROTLI_DIR"
 
@@ -227,7 +227,7 @@ if [ "$BUILD_QUIC" = "1" ]; then
     done
 fi
 
-# Windows MSVC build of openssl-new ships libssl.lib + libcrypto.lib;
+# Windows MSVC build of openssl ships libssl.lib + libcrypto.lib;
 # everywhere else the convention is libssl.a + libcrypto.a.
 if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
     _OSSL_SSL="$OSSL_DIR/lib/libssl.lib"
@@ -242,9 +242,9 @@ else
     _BROTLI_DEC="$BROTLI_DIR/lib/libbrotlidec.a"
     _BROTLI_COMMON="$BROTLI_DIR/lib/libbrotlicommon.a"
 fi
-[ -f "$_OSSL_SSL"      ] || { echo "openssl-new: missing $(basename "$_OSSL_SSL")"     >&2; exit 1; }
-[ -f "$_OSSL_CRYPTO"   ] || { echo "openssl-new: missing $(basename "$_OSSL_CRYPTO")"  >&2; exit 1; }
-[ -f "$OSSL_DIR/include/openssl/ssl.h"   ] || { echo "openssl-new: missing ssl.h"     >&2; exit 1; }
+[ -f "$_OSSL_SSL"      ] || { echo "openssl: missing $(basename "$_OSSL_SSL")"     >&2; exit 1; }
+[ -f "$_OSSL_CRYPTO"   ] || { echo "openssl: missing $(basename "$_OSSL_CRYPTO")"  >&2; exit 1; }
+[ -f "$OSSL_DIR/include/openssl/ssl.h"   ] || { echo "openssl: missing ssl.h"     >&2; exit 1; }
 [ -f "$_ZLIB_LIB"      ] || { echo "zlib: missing $(basename "$_ZLIB_LIB")"            >&2; exit 1; }
 [ -f "$ZLIB_DIR/include/zlib.h"          ] || { echo "zlib: missing zlib.h"            >&2; exit 1; }
 [ -f "$_BROTLI_DEC"    ] || { echo "brotli: missing $(basename "$_BROTLI_DEC")"        >&2; exit 1; }
@@ -487,7 +487,7 @@ esac
 #-----------------------------------------------------------------------------
 # Configure + build + install
 #-----------------------------------------------------------------------------
-echo "==> configuring libcurl ${VERSION} (TLS: openssl-new ${OPENSSL_NEW_VERSION}) for $TARGET_PLATFORM"
+echo "==> configuring libcurl ${VERSION} (TLS: openssl ${OPENSSL_NEW_VERSION}) for $TARGET_PLATFORM"
 $EMCMAKE_PREFIX cmake -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja "${CMAKE_ARGS[@]}"
 
 echo "==> building (-j${NCPU})"
@@ -553,7 +553,7 @@ echo "==> packaging -> $TARBALL"
 tar -C "$STAGE" -czf "$TARBALL" .
 
 echo ""
-echo "libcurl $VERSION + openssl-new ${OPENSSL_NEW_VERSION} ($TARGET_PLATFORM) ready:"
+echo "libcurl $VERSION + openssl ${OPENSSL_NEW_VERSION} ($TARGET_PLATFORM) ready:"
 ls -lh "$TARBALL"
 ENTRIES="$(tar -tzf "$TARBALL" | wc -l)"
 echo "contents (first 25 of $ENTRIES):"

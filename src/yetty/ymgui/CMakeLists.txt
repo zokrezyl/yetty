@@ -11,6 +11,8 @@
 add_library(yetty_ymgui STATIC
     figure.c
     pipeline.c
+    methods.gen.c
+    rpc.gen.c
 )
 
 target_include_directories(yetty_ymgui PUBLIC
@@ -18,10 +20,15 @@ target_include_directories(yetty_ymgui PUBLIC
 )
 target_include_directories(yetty_ymgui PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    # Internal codegen headers (methods.gen.h) sit under
+    # src/yetty/ymgui/. PRIVATE so the path does not leak to
+    # consumers — they go through include/yetty/ymgui/methods.h.
+    ${YETTY_ROOT}/src
 )
 
 target_link_libraries(yetty_ymgui PUBLIC
     yetty_ycore
+    yetty_yclass
     yetty_yfigure
     yetty_ydraw_core
     yetty_yrender

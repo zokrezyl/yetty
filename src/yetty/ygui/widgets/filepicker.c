@@ -1,0 +1,306 @@
+/* filepicker.c — directory browser. Lists the entries of a directory;
+ * click a folder (trailing "/") to descend, ".." to go up, a file to
+ * select it. */
+#include "paint-helpers.h"
+#include <yetty/ygui/primitive-widget.h>
+#include <yetty/ygui/widgets/filepicker.h>
+#include <yetty/yplatform/fs.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define FP_HEADER_H 24.0f
+#define FP_ROW_H 22.0f
+#define FP_PAD 8.0f
+
+/* Brand palette, packed 0xAABBGGRR. */
+#define FP_BG 0xFF14100Bu       /* BRAND_BG            (11,16,20)  */
+#define FP_HEADER_BG 0xFF2C261Eu /* BRAND_BG_ROW       (30,38,44)  */
+#define FP_BORDER 0xFF474A36u   /* BRAND_BORDER        (54,74,71)  */
+#define FP_TEXT 0xFFE4E5E0u     /* BRAND_TEXT_PRIMARY  (224,229,228) */
+#define FP_DIR 0xFF92A86Bu      /* BRAND_ACCENT        (107,168,146) */
+#define FP_SEL_BG 0xFF1F1A14u   /* BRAND_BG_LIFTED     (20,26,31)  */
+
+struct [[clang::annotate("class@ygui:filepicker")]] [[clang::annotate(
+    "parent@ygui:primitive_widget")]] fp_data {
+    char *cwd;
+    char **entries;
+    int entry_count;
+    int selected;
+    int scroll;
+};
+
+static const struct yetty_yclass *fp_class(void)
+{
+    return yetty_ygui_class_expect(yetty_ygui_filepicker_class_get(),
+                                   "yetty_ygui_filepicker_class_get");
+}
+
+static char *fp_strdup(const char *s)
+{
+    size_t n = strlen(s);
+    char *p = malloc(n + 1);
+    if (p) {
+        memcpy(p, s, n + 1);
+    }
+    return p;
+}
+
+static void fp_free_entries(struct fp_data *d)
+{
+    for (int i = 0; i < d->entry_count; i++) {
+        free(d->entries[i]);
+    }
+    free(d->entries);
+    d->entries = NULL;
+    d->entry_count = 0;
+}
+
+static int fp_entry_cmp(const void *a, const void *b)
+{
+    return strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
+/* Reload `cwd`'s entries into the sorted `entries` array. Directories
+ * keep a trailing "/" so the user (and the click handler) can tell them
+ * apart. "." is dropped; ".." is kept for navigation. */
+static void fp_load_dir(struct fp_data *d)
+{
+    fp_free_entries(d);
+    d->selected = -1;
+    d->scroll = 0;
+    if (!d->cwd) {
+        return;
+    }
+    struct yetty_yplatform_dir *dir = yetty_yplatform_dir_open(d->cwd);
+    if (!dir) {
+        return;
+    }
+    int cap = 16, n = 0;
+    char **list = malloc((size_t)cap * sizeof(char *));
+    if (!list) {
+        yetty_yplatform_dir_close(dir);
+        return;
+    }
+    struct yetty_yplatform_dir_entry e;
+    while (yetty_yplatform_dir_next(dir, &e)) {
+        if (strcmp(e.name, ".") == 0) {
+            continue;
+        }
+        if (n == cap) {
+            int nc = cap * 2;
+            char **grown = realloc(list, (size_t)nc * sizeof(char *));
+            if (!grown) {
+                break;
+            }
+            list = grown;
+            cap = nc;
+        }
+        size_t name_len = strlen(e.name);
+        char *entry = malloc(name_len + 2);
+        if (!entry) {
+            continue;
+        }
+        memcpy(entry, e.name, name_len);
+        if (e.is_dir) {
+            entry[name_len] = '/';
+            entry[name_len + 1] = '\0';
+        } else {
+            entry[name_len] = '\0';
+        }
+        list[n++] = entry;
+    }
+    yetty_yplatform_dir_close(dir);
+    qsort(list, (size_t)n, sizeof(char *), fp_entry_cmp);
+    d->entries = list;
+    d->entry_count = n;
+}
+
+[[clang::annotate("override@ygui:filepicker:constructor")]]
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
+                                           struct yetty_yclass_object *yclass_obj)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, fp_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "filepicker: super");
+    struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
+    d->cwd = NULL;
+    d->entries = NULL;
+    d->entry_count = 0;
+    d->selected = -1;
+    d->scroll = 0;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@ygui:filepicker:destructor")]]
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
+                                           struct yetty_yclass_object *yclass_obj)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
+    fp_free_entries(d);
+    free(d->cwd);
+    return yetty_ygui_super_void(obj, fp_class(),
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
+}
+
+[[clang::annotate("override@ygui:filepicker:widget_paint")]]
+static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
+                                            struct yetty_yclass_object *yclass_obj,
+                                            struct yetty_ygui_emit_ctx *ctx)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    if (!ctx || !ctx->ygrid_draw_list) {
+        return YETTY_ERR(yetty_ycore_void, "filepicker paint: NULL ctx");
+    }
+    struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    float fs = 13.0f;
+
+    /* Frame + header bar with the current path. */
+    struct yetty_ysdf_box frame = {.center_x = r.min.x + w * 0.5f,
+                                   .center_y = r.min.y + h * 0.5f,
+                                   .half_width = w * 0.5f,
+                                   .half_height = h * 0.5f,
+                                   .corner_radius = 0.0f};
+    YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                        yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0, 0, FP_BG,
+                                                              FP_BORDER, 1.0f, &frame),
+                        "fp: frame");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                        yguix_box(ctx, r.min.x, r.min.y, w, FP_HEADER_H, FP_HEADER_BG, 0.0f),
+                        "fp: header");
+    if (d->cwd) {
+        YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                            yguix_text(ctx, d->cwd, r.min.x + FP_PAD,
+                                       r.min.y + (FP_HEADER_H + fs) * 0.5f - 3.0f, fs, FP_TEXT),
+                            "fp: cwd");
+    }
+
+    float list_y = r.min.y + FP_HEADER_H + 2.0f;
+    float list_h = h - FP_HEADER_H - 4.0f;
+    int visible = (int)(list_h / FP_ROW_H);
+    if (visible < 1) {
+        visible = 1;
+    }
+    int first = d->scroll;
+    int last = first + visible;
+    if (last > d->entry_count) {
+        last = d->entry_count;
+    }
+    for (int i = first; i < last; i++) {
+        float ry = list_y + (float)(i - first) * FP_ROW_H;
+        if (i == d->selected) {
+            YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                                yguix_box(ctx, r.min.x + 2.0f, ry, w - 4.0f, FP_ROW_H, FP_SEL_BG, 0.0f),
+                                "fp: sel");
+        }
+        const char *e = d->entries[i];
+        uint32_t col = (e && strchr(e, '/')) ? FP_DIR : FP_TEXT;
+        YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                            yguix_text(ctx, e ? e : "", r.min.x + FP_PAD,
+                                       ry + (FP_ROW_H + fs) * 0.5f - 3.0f, fs, col),
+                            "fp: row");
+    }
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@ygui:filepicker:widget_on_press")]]
+static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ctx,
+                                              struct yetty_yclass_object *yclass_obj, float x,
+                                              float y, int btn)
+{
+    (void)yclass_ctx;
+    (void)x;
+    (void)btn;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    float ly = y - r.min.y;
+    if (ly < FP_HEADER_H + 2.0f) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    int row = (int)((ly - FP_HEADER_H - 2.0f) / FP_ROW_H) + d->scroll;
+    if (row < 0 || row >= d->entry_count) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    const char *name = d->entries[row];
+    if (!name) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+
+    if (strchr(name, '/')) {
+        /* Directory — navigate. */
+        char newcwd[4096];
+        if (strcmp(name, "../") == 0) {
+            strncpy(newcwd, d->cwd ? d->cwd : "/", sizeof(newcwd) - 1);
+            newcwd[sizeof(newcwd) - 1] = '\0';
+            char *slash = strrchr(newcwd, '/');
+            if (slash && slash != newcwd) {
+                *slash = '\0';
+            } else if (slash == newcwd) {
+                newcwd[1] = '\0'; /* keep "/" root */
+            }
+        } else {
+            const char *base = d->cwd ? d->cwd : "/";
+            if (strcmp(base, "/") == 0) {
+                snprintf(newcwd, sizeof(newcwd), "/%s", name);
+            } else {
+                snprintf(newcwd, sizeof(newcwd), "%s/%s", base, name);
+            }
+            size_t len = strlen(newcwd);
+            if (len > 1 && newcwd[len - 1] == '/') {
+                newcwd[len - 1] = '\0';
+            }
+        }
+        char *dup = fp_strdup(newcwd);
+        if (!dup) {
+            return YETTY_ERR(yetty_ycore_int, "fp: strdup cwd");
+        }
+        free(d->cwd);
+        d->cwd = dup;
+        fp_load_dir(d);
+    } else {
+        /* File — select. */
+        d->selected = row;
+    }
+    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    if (YETTY_IS_ERR(dr)) {
+        return YETTY_ERR(yetty_ycore_int, "fp: dirty", dr);
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_ygui_object *obj,
+                                                             const char *path)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "filepicker_set_dir: NULL");
+    }
+    struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
+    char *dup = fp_strdup(path && *path ? path : "/");
+    if (!dup) {
+        return YETTY_ERR(yetty_ycore_void, "filepicker_set_dir: strdup");
+    }
+    free(d->cwd);
+    d->cwd = dup;
+    fp_load_dir(d);
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+const char *yetty_ygui_filepicker_get_dir(const struct yetty_ygui_object *obj)
+{
+    if (!obj) {
+        return NULL;
+    }
+    return ((struct fp_data *)yetty_ygui_data_get((struct yetty_ygui_object *)obj, fp_class()))->cwd;
+}
+
+#include "filepicker.gen.c"

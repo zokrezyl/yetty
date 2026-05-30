@@ -91,11 +91,19 @@ linux-aarch64)
     AR="${CROSS_PREFIX}ar"
     ;;
 linux-riscv64)
-    # libco has no riscv64 inline-asm backend — falls through to its
-    # ucontext fallback in libco.c, which is fine on glibc Linux.
+    # libco has no riscv64 inline-asm backend, so it falls through to its
+    # generic setjmp/longjmp (sjlj) backend. A coroutine switch there
+    # longjmp()s onto a *separate* coroutine stack; glibc's _FORTIFY_SOURCE
+    # replaces longjmp with __longjmp_chk, which treats that legitimate
+    # cross-stack jump as corruption and aborts the process with
+    # "*** longjmp causes uninitialized stack frame ***". (The nix cross
+    # toolchain injects -D_FORTIFY_SOURCE by default, so this fires even
+    # though we don't ask for it.) Undefine fortify for this single .c so
+    # the plain longjmp is used and coroutine switches work.
     : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
     CC="${CROSS_PREFIX}gcc"
     AR="${CROSS_PREFIX}ar"
+    CFLAGS_EXTRA="-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0"
     ;;
 macos-x86_64)
     CC=clang
@@ -154,6 +162,31 @@ windows-x86_64)
 esac
 
 CFLAGS="$CFLAGS_BASE $CFLAGS_EXTRA"
+
+# Coroutine stack switching is fundamentally incompatible with
+# _FORTIFY_SOURCE. On archs with no inline-asm backend (riscv64) libco
+# falls through to its sjlj backend, whose co_switch siglongjmp()s onto a
+# *separate* coroutine stack; glibc's fortified __longjmp_chk treats that
+# legitimate cross-stack jump as corruption and abort()s the process
+# ("*** longjmp causes uninitialized stack frame ***"). The asm backends
+# (x86_64/aarch64/...) don't call longjmp at all, so dropping fortify here
+# is a no-op for them and the correctness fix for riscv64.
+#
+# The `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0` in CFLAGS_EXTRA handles a plain
+# gcc invocation, but the nix cross toolchains inject fortify through the
+# cc-wrapper's NIX_HARDENING_ENABLE list, which is applied in a position a
+# command-line -D cannot override — so strip fortify from that list too.
+if [ -n "${NIX_HARDENING_ENABLE:-}" ]; then
+    filtered_hardening=""
+    for hardening in $NIX_HARDENING_ENABLE; do
+        case "$hardening" in
+            fortify | fortify3) ;;
+            *) filtered_hardening="$filtered_hardening $hardening" ;;
+        esac
+    done
+    export NIX_HARDENING_ENABLE="${filtered_hardening# }"
+    echo "==> NIX_HARDENING_ENABLE without fortify: '${NIX_HARDENING_ENABLE}'"
+fi
 
 #-----------------------------------------------------------------------------
 # Compile + archive

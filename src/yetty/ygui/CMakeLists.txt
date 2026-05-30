@@ -1,286 +1,137 @@
-# ygui — pure-C widget library.
+# ygui — pure-C widget toolkit, object-system based.
 #
-# Split into two libraries following the established XXX-core pattern:
-#
-#   ygui_core
-#     Widget tree, layout, rendering, OSC emit, theme — all libuv-free.
-#     Linkable into any target including emscripten / cross-builds where
-#     libuv isn't a fit.
-#
-#   ygui
-#     ygui_core + the libuv-driven event-loop integration
-#     (ygui_engine_uv.c — yetty_ygui_engine_attach / _run / _poll /
-#     _get_loop). Used by standalone interactive tools (ygreeter, ytop).
-#     Builds only when libuv is available (NOT EMSCRIPTEN).
-#
-# Public header (ygui.h) stays unified; the libuv-typed forward decl is
-# guarded so consumers don't need <uv.h>.
+# Single static library. The framework is libuv-driven by design — no
+# libuv-free variant. Standalone tools (ygreeter, ytop) link `ygui`
+# directly. Embedders that want to host the framework on top of their
+# own event loop pass an existing uv_loop_t into yetty_ygui_framework_create.
 
-# ygui_core sources: libuv-free.
-set(YGUI_CORE_SOURCES
-    ygui_engine.c
-    ygui_grid.c
-    ygui_widgets.c
-    ygui_rich.c
-    ygui_tabbar.c
-    ygui_window.c
-    ygui_popup_menu.c
-    ygui_render.c
-    ygui_theme.c
-    ygui_osc.c
-    ygui_layout.c
-    ygui_css.c
-    ygui_notify.c
-    ygui_yimage.c
-    ygui_yplot.c
-    ygui_yvideo.c
+# Annotated sources processed by yclass codegen. Every widget under
+# widgets/ plus the framework base (widget, primitive-widget,
+# mixins/clickable) carries `[[clang::annotate("class@ygui:…")]]` on
+# its data struct and `override@ygui:<class>:<slot>` on each impl.
+# Codegen runs as a standalone `make codegen` target at the repo
+# root, NOT as part of any platform build. It emits the per-class
+# `_class_get` accessor + module-wide public headers
+# (include/yetty/ygui/methods.h, rpc.h) plus internal sources/headers
+# next to the annotated .c files (methods.gen.h, methods.gen.c,
+# rpc.gen.c). The .c files include their per-class `<stem>.gen.c` at
+# the foot to pull in the accessor body. All generated files are
+# committed to git; platform builds compile what is in the tree.
+set(YGUI_ANNOTATED
+    ${CMAKE_CURRENT_SOURCE_DIR}/widget.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/primitive-widget.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/mixins/clickable.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/breadcrumbs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/button.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/checkbox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/chip.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/choicebox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/collapsing_header.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/colorpicker.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/combobox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/datepicker.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/dialog.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/dropdown.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/filepicker.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/hbox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/label.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/list.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/menubar.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/panel.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/popup_menu.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/progress.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/radio.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/rich.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/scrollarea.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/selectable.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/separator.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/slider.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/spinner.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/splitter.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/statusbar.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/stepper.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/tabbar.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/table.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/textarea.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/textinput.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/toggle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/tooltip.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/tree_node.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/vbox.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/window.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ybrowser.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ydraw_embed.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yimage.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yjungle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ymarkdown.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ypdf.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yplot.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yvideo.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yzoo.c
+)
+set(YGUI_SOURCES
+    class.c
+    object.c
+    framework.c
+    event.c
+    layout.c
+    ${YGUI_ANNOTATED}
+    methods.gen.c
+    rpc.gen.c
 )
 
-# Static-only YAML convenience layer for the RICH widget — same gating
-# as before: brings in yetty_ydraw_yaml (fontconfig + libyaml), which
-# the shared FFI variant deliberately omits.
-set(YGUI_STATIC_ONLY_SOURCES
-    ygui_rich_yaml.c
-)
+add_library(ygui STATIC ${YGUI_SOURCES})
 
-# ---------------------------------------------------------------------
-# ygui_core — libuv-free widget runtime.
-# ---------------------------------------------------------------------
-
-add_library(ygui_core STATIC ${YGUI_CORE_SOURCES} ${YGUI_STATIC_ONLY_SOURCES})
-
-target_include_directories(ygui_core PUBLIC
+target_include_directories(ygui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${YETTY_ROOT}/include
 )
+# Codegen-emitted internal headers (methods.gen.h, …) sit next to
+# their consuming .gen.c files under src/yetty/<module>/. The .gen.c
+# include them via `<yetty/<module>/methods.gen.h>`, so the src tree
+# must be a -I prefix for this target. PRIVATE — internal headers
+# must NOT leak to consumers; public callers go through the clean
+# public methods.h / rpc.h under include/yetty/ygui/.
+target_include_directories(ygui PRIVATE ${YETTY_ROOT}/src)
 
-target_link_libraries(ygui_core PUBLIC
-    yetty_ydraw_core
-    yetty_ysdf
+target_link_libraries(ygui PUBLIC
     yetty_ycore
-    yetty_yface     # OSC envelope + LZ4F + base64 streamer
-    yetty_yfont_core  # raster-font-from-file for text measurement
-    yetty_ydraw_yaml # rich widget's create_from_yaml -> ydraw_yaml_parse
-    yetty_yplatform_core # ytime monotonic clock for notification TTL
-    yetty_yimage_core # ygui_yimage widget — stb_image decode + yimage prim
-    yetty_yplot_core  # ygui_yplot widget — yplot prim serializer
-    yetty_yvideo_core # ygui_yvideo widget — yvideo prim serializer (+ MP4 helper)
+    yetty_yclass
+    yetty_ydraw_core
+    yetty_yface
+    yetty_yfigure
+    yetty_yplatform_core
+    yetty_ysdf
+    yetty_yplot_core
+    yetty_yimage_core
+    yetty_ymarkdown
+    yetty_yvideo_core
 )
 
-set_target_properties(ygui_core PROPERTIES
-    C_STANDARD 11
+# The ypdf and ybrowser widgets wrap optional backends (pdfio, lexbor) that
+# aren't available on every platform — webasm, for instance, has no
+# pdfio/lexbor prebuilts. The widget sources compile unconditionally so the
+# codegen-emitted class accessors (referenced from rpc.gen.c / methods.gen.c)
+# resolve on every platform; their rendering paths are guarded by these
+# definitions, and the backend libraries are only linked where the feature
+# is actually enabled.
+if(YETTY_ENABLE_FEATURE_YPDF)
+    target_link_libraries(ygui PUBLIC yetty_ypdf)
+    target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YPDF=1)
+endif()
+if(YETTY_ENABLE_FEATURE_YBROWSER)
+    target_link_libraries(ygui PUBLIC yetty_ybrowser)
+    target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YBROWSER=1)
+endif()
+
+# C2x so `[[clang::annotate(...)]]` attribute syntax parses (yclass
+# codegen reads these annotations off the AST). Switched up from C11.
+set_target_properties(ygui PROPERTIES
+    C_STANDARD 23
     C_STANDARD_REQUIRED ON
 )
 
-# ---------------------------------------------------------------------
-# ygui — libuv-coupled full runtime. Only built when libuv is available
-# (NOT EMSCRIPTEN). Standalone tools that drive their own event loop
-# (ygreeter, ytop) link this; webasm consumers link ygui_core directly.
-# ---------------------------------------------------------------------
-
-if(NOT EMSCRIPTEN)
-    add_library(ygui STATIC ygui_engine_uv.c)
-
-    target_include_directories(ygui PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${YETTY_ROOT}/include
-    )
-
-    target_link_libraries(ygui PUBLIC
-        ygui_core
-        uv_a
-    )
-
-    set_target_properties(ygui PROPERTIES
-        C_STANDARD 11
-        C_STANDARD_REQUIRED ON
-    )
-
-    install(TARGETS ygui ARCHIVE DESTINATION lib)
-endif()
-
-install(FILES ygui.h DESTINATION include)
-install(TARGETS ygui_core ARCHIVE DESTINATION lib)
-
-# ---------------------------------------------------------------------
-# Per-producer widget libs.
-#
-# Each widget below wraps one producer module (ypdf, ymarkdown,
-# ybrowser, yjungle, yzoo) and exposes it as a ygui widget by
-# building a draw_list at construction time and handing it to the
-# generic RICH widget. Each lives in its own static library so callers
-# only link the producer dependencies they actually use; ygui_core stays
-# free of pdfio / lexbor / libcurl / etc.
-#
-# Two of the wrappers (yjungle, yzoo) share a small flatten helper that
-# turns the producer's command stream (CMD_ZERO + CMD_GROUPs) into a
-# flat paint list compatible with the RICH widget's render path.
-# ---------------------------------------------------------------------
-
-# Stage a single asset file under a per-library embed dir and feed it
-# through the shared incbin_add_directory pipeline. Same mechanism the
-# main yetty target uses for its shaders / fonts / images and ygreeter
-# uses for its data assets — so it's portable across every backend
-# (gcc/clang via .incbin, MSVC via RCDATA). The asset rides inside the
-# .a/.lib; consumers calling yetty_ygui_engine_<NAME>_default() get
-# bytes without shipping the file alongside the binary.
-function(ygui_embed_default_asset LIB_TARGET NAME ASSET_PATH)
-    if(NOT EXISTS "${ASSET_PATH}")
-        message(FATAL_ERROR
-            "ygui_embed_default_asset(${NAME}): asset not found at "
-            "${ASSET_PATH}")
-    endif()
-    set(_EMBED_DIR "${CMAKE_CURRENT_BINARY_DIR}/${LIB_TARGET}-embed-default")
-    file(REMOVE_RECURSE "${_EMBED_DIR}")
-    file(MAKE_DIRECTORY "${_EMBED_DIR}")
-    get_filename_component(_NAME "${ASSET_PATH}" NAME)
-    configure_file("${ASSET_PATH}" "${_EMBED_DIR}/${_NAME}" COPYONLY)
-    # COMPRESS=FALSE: assets are tiny (≤16 kB) — brotli framing would
-    # cost more than it saves and would force every widget lib to link
-    # brotlidec for the runtime decode. The generated manifest exposes
-    # register_<NAME>_default_assets_c(cb) which we call once at first
-    # _default() invocation to cache the pointer.
-    incbin_add_directory(${LIB_TARGET} "${NAME}_default" "${_EMBED_DIR}" "*" FALSE)
-    # The manifest header lands in CMAKE_CURRENT_BINARY_DIR (per
-    # incbin.cmake convention). Add it to the lib's include path so the
-    # widget's .c can `#include "<libtarget>_<name>_default_manifest.h"`.
-    target_include_directories(${LIB_TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-endfunction()
-
-if(YETTY_ENABLE_FEATURE_YMARKDOWN)
-    add_library(ygui_ymarkdown STATIC ygui_ymarkdown.c)
-    target_include_directories(ygui_ymarkdown PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${YETTY_ROOT}/include
-    )
-    target_link_libraries(ygui_ymarkdown PUBLIC ygui_core yetty_ymarkdown)
-    set_target_properties(ygui_ymarkdown PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    # Bundle the repo README as the markdown widget's default sample.
-    ygui_embed_default_asset(ygui_ymarkdown ymarkdown "${YETTY_ROOT}/README.md")
-    install(TARGETS ygui_ymarkdown ARCHIVE DESTINATION lib)
-endif()
-
-if(YETTY_ENABLE_FEATURE_YPDF)
-    add_library(ygui_ypdf STATIC ygui_ypdf.c)
-    target_include_directories(ygui_ypdf PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${YETTY_ROOT}/include
-    )
-    target_link_libraries(ygui_ypdf PUBLIC ygui_core yetty_ypdf)
-    set_target_properties(ygui_ypdf PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    ygui_embed_default_asset(ygui_ypdf ypdf
-        "${YETTY_ROOT}/test/ut/ypdf/test-comprehensive.pdf")
-    install(TARGETS ygui_ypdf ARCHIVE DESTINATION lib)
-endif()
-
-if(YETTY_ENABLE_FEATURE_YBROWSER)
-    add_library(ygui_ybrowser STATIC ygui_ybrowser.c)
-    target_include_directories(ygui_ybrowser PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${YETTY_ROOT}/include
-    )
-    target_link_libraries(ygui_ybrowser PUBLIC ygui_core yetty_ybrowser)
-    set_target_properties(ygui_ybrowser PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    ygui_embed_default_asset(ygui_ybrowser ybrowser
-        "${YETTY_ROOT}/demo/ygui/26_ybrowser/sample.html")
-    install(TARGETS ygui_ybrowser ARCHIVE DESTINATION lib)
-endif()
-
-if(YETTY_ENABLE_FEATURE_YJUNGLE)
-    add_library(ygui_yjungle STATIC ygui_yjungle.c ygui_flatten.c)
-    target_include_directories(ygui_yjungle PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${YETTY_ROOT}/include
-    )
-    target_link_libraries(ygui_yjungle PUBLIC ygui_core yetty_yjungle)
-    set_target_properties(ygui_yjungle PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    install(TARGETS ygui_yjungle ARCHIVE DESTINATION lib)
-endif()
-
-if(YETTY_ENABLE_FEATURE_YZOO)
-    add_library(ygui_yzoo STATIC ygui_yzoo.c ygui_flatten.c)
-    target_include_directories(ygui_yzoo PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${YETTY_ROOT}/include
-    )
-    target_link_libraries(ygui_yzoo PUBLIC ygui_core yetty_yzoo)
-    set_target_properties(ygui_yzoo PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    install(TARGETS ygui_yzoo ARCHIVE DESTINATION lib)
-endif()
-
-install(FILES
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_ypdf.h
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_ybrowser.h
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_ymarkdown.h
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_yimage.h
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_yplot.h
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_yvideo.h
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_yjungle.h
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_yzoo.h
-    DESTINATION include/yetty/ygui
-)
-
-# ---------------------------------------------------------------------
-# Shared variant for FFI consumers. Standalone .so/.dll built from the
-# same core sources + ygui_engine_uv.c (FFI consumers want the full
-# runtime). Not produced for emscripten.
-# ---------------------------------------------------------------------
-
-option(YETTY_BUILD_YGUI_SHARED "Build a libygui.so for FFI consumers" ON)
-
-if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
-    if(WIN32)
-        set(_YGUI_PLATFORM_SOURCES
-            ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
-            ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
-            ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
-            ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
-        )
-    else()
-        set(_YGUI_PLATFORM_SOURCES
-            ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
-            ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-            ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-            ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
-        )
-    endif()
-
-    add_library(ygui_shared SHARED
-        ${YGUI_CORE_SOURCES}
-        ygui_engine_uv.c
-        ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-        ${_YGUI_PLATFORM_SOURCES}
-    )
-
-    target_include_directories(ygui_shared PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${YETTY_ROOT}/include
-    )
-
-    target_link_libraries(ygui_shared PRIVATE
-        yetty_ydraw_core
-        yetty_ysdf
-        yetty_ycore
-        yetty_yface
-        yetty_yfont_core
-        yetty_yimage_core
-        yetty_yplot_core
-        yetty_yvideo_core
-        uv_a
-    )
-
-    set_target_properties(ygui_shared PROPERTIES
-        C_STANDARD 11
-        C_STANDARD_REQUIRED ON
-        OUTPUT_NAME ygui
-        POSITION_INDEPENDENT_CODE ON
-    )
-
-    if(WIN32)
-        set_target_properties(ygui_shared PROPERTIES
-            ARCHIVE_OUTPUT_NAME ygui_import
-        )
-    endif()
-
-    install(TARGETS ygui_shared LIBRARY DESTINATION lib)
-endif()
+install(TARGETS ygui ARCHIVE DESTINATION lib)
+install(DIRECTORY ${YETTY_ROOT}/include/yetty/ygui/
+        DESTINATION include/yetty/ygui
+        FILES_MATCHING PATTERN "*.h")

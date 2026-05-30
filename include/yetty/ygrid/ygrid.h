@@ -108,15 +108,25 @@ struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid
  *
  * Storage is opaque at this layer: the bytes are copied verbatim and
  * parsed lazily by the render path via the ydraw-core flyweight
- * registry. */
-struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_ygrid_grid *grid,
-                                                      const uint8_t *record_bytes,
-                                                      size_t record_len);
+ * registry.
+ *
+ * NAMING: this is the in-process, raw-bytes entry point — the legacy
+ * surface tools and tests still drive directly. The canonical yclass
+ * slot is `yetty_ygrid_add_record(ctx, obj, struct yetty_ycore_buffer)`
+ * (emitted by codegen in `<yetty/ygrid/methods.h>`); it dispatches
+ * via the registered class and works for local AND remote callers.
+ * This `_local` variant exists only until every caller migrates. */
+struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_grid *grid,
+                                                            const uint8_t *record_bytes,
+                                                            size_t record_len);
 
 /* Drop every record. The figure stays alive at its current rect with
  * an empty payload (renders nothing). Marks the figure dirty so the
- * compositor exposes the previously-covered region. */
-struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_ygrid_grid *grid);
+ * compositor exposes the previously-covered region.
+ *
+ * NAMING: see `yetty_ygrid_add_record_local` — the unsuffixed name is
+ * the yclass slot stub; this is the in-process variant. */
+struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *grid);
 
 /* Attach a font at the given slot. Slot 0 is the default font (the slot
  * a GLYPH record addresses when its packed `font_id` field is 0); higher

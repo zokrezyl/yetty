@@ -89,6 +89,8 @@ if(NOT EMSCRIPTEN)
     add_library(yetty_yrdawn_server STATIC
         figure.c
         session.c
+        methods.gen.c
+        rpc.gen.c
         ${_yrdawn_server_dispatch}
     )
 
@@ -98,9 +100,12 @@ if(NOT EMSCRIPTEN)
     target_include_directories(yetty_yrdawn_server PUBLIC
         ${YETTY_ROOT}/include
     )
+    # Internal yclass codegen headers (methods.gen.h) sit under src/.
+    target_include_directories(yetty_yrdawn_server PRIVATE ${YETTY_ROOT}/src)
 
     target_link_libraries(yetty_yrdawn_server PUBLIC
         yetty_ycore
+        yetty_yclass
         yetty_yfigure
         yetty_yframework
         yetty_yrender

@@ -17,7 +17,22 @@ if(NOT EXISTS "${_MINIMP4_DIR}/include/minimp4.h")
         "minimp4: minimp4.h not found in ${_MINIMP4_DIR}/include/ — tarball layout changed?")
 endif()
 
-add_library(minimp4 INTERFACE)
-target_include_directories(minimp4 INTERFACE "${_MINIMP4_DIR}/include")
+# Compile the minimp4 implementation EXACTLY ONCE into a real static
+# library. Previously this target was INTERFACE, leaving each consumer
+# (vnc-server.c + yvideo-mp4.c) to `#define MINIMP4_IMPLEMENTATION`
+# and inline-instantiate the implementation. That works as long as
+# only one of them ends up in a given link, but as soon as both libs
+# (libyetty_vnc.a + libyetty_yvideo_core.a) appear in the same binary
+# the linker hits MP4E_open / MP4D_open / … duplicates.
+#
+# Generate one impl.c, build a STATIC lib, and have consumers PUBLIC
+# include the header — no more in-TU implementation defines.
+set(_MINIMP4_IMPL_C "${CMAKE_BINARY_DIR}/minimp4-impl.c")
+file(WRITE "${_MINIMP4_IMPL_C}"
+     "#define MINIMP4_IMPLEMENTATION\n"
+     "#include <minimp4.h>\n")
+
+add_library(minimp4 STATIC "${_MINIMP4_IMPL_C}")
+target_include_directories(minimp4 PUBLIC "${_MINIMP4_DIR}/include")
 
 message(STATUS "minimp4: prebuilt @${YETTY_3RDPARTY_minimp4_VERSION} (${_MINIMP4_DIR}/include/minimp4.h)")

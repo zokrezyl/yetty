@@ -46,7 +46,8 @@
  * Figure struct
  *=========================================================================*/
 
-struct yetty_yrdawn_figure {
+struct [[clang::annotate("class@yrdawn:figure")]] [[clang::annotate("parent@yfigure:figure")]]
+yetty_yrdawn_figure {
     struct yetty_yfigure_figure base;
 
     /* Set by SUB_HELLO. Until then the figure rejects CMD/BULK/BYE. */
@@ -756,19 +757,36 @@ static struct yetty_ycore_void_result yrdawn_figure_destroy(struct yetty_yfigure
         }
         f->session = NULL;
     }
-    free(f);
-    return YETTY_OK_VOID();
+    /* Free the yclass allocation (header + body); body began at obj + 1. */
+    return yetty_yclass_object_free((struct yetty_yclass_object *)self - 1);
 }
 
 /*===========================================================================
  * Ops + factory
  *=========================================================================*/
 
+/* yclass cross-domain override of yfigure:render. Body sits at obj + 1. */
+[[clang::annotate("override@yrdawn:figure:yfigure:render")]]
+static struct yetty_ycore_void_result yrdawn_figure_render_slot(struct yetty_yclass_ctx *ctx,
+                                                                struct yetty_yclass_object *obj,
+                                                                struct yetty_ydraw_target *target)
+{
+    (void)ctx;
+    return yrdawn_figure_render((struct yetty_yfigure_figure *)(obj + 1), target);
+}
+
+/* yclass cross-domain override of yfigure:destroy. Body sits at obj + 1. */
+[[clang::annotate("override@yrdawn:figure:yfigure:destroy")]]
+static struct yetty_ycore_void_result yrdawn_figure_destroy_slot(struct yetty_yclass_ctx *ctx,
+                                                                 struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    return yrdawn_figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
+}
+
 static const struct yetty_yfigure_figure_ops *yrdawn_figure_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
-        .destroy = yrdawn_figure_destroy,
-        .render = yrdawn_figure_render,
         .process_input = yrdawn_figure_process_input,
         .process_bytes = yrdawn_figure_process_bytes,
     };
@@ -811,11 +829,17 @@ static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_
         args->context = context;
     }
 
-    struct yetty_yrdawn_figure *f = calloc(1, sizeof(*f));
-    if (!f) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: figure oom");
-    }
+    /* Allocate as a yclass object so the figure carries a class header
+     * (enables yclass dispatch). Typed body lives at obj + 1; the
+     * embedded `base` is its first member. */
+    struct yetty_yclass_ptr_result figure_class_r = yetty_yrdawn_figure_class_get();
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_class_r, "yrdawn_factory: figure class");
+    struct yetty_yclass_object_ptr_result figure_obj_r =
+        yetty_yclass_object_alloc(figure_class_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_obj_r, "yrdawn_factory: object_alloc");
+    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)(figure_obj_r.value + 1);
     f->base.ops = yrdawn_figure_ops();
+    f->base.self_obj = figure_obj_r.value;
     f->base.rect = rect;
     f->base.dirty = 1;
     f->args = args;
@@ -1019,3 +1043,6 @@ void yrdawn_arena_free(struct yrdawn_arena *a)
     a->count = 0;
     a->cap = 0;
 }
+
+/* yclass class accessor (yetty_yrdawn_figure_class_get) + registration. */
+#include "figure.gen.c"

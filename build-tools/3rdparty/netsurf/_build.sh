@@ -171,7 +171,7 @@ esac
 # Only needed for real-build platforms; placeholder branches exit above.
 #
 # We pull:
-#   openssl-new (4.0.0)  → -lssl -lcrypto for NetSurf's content/fetchers/
+#   openssl (4.0.0)  → -lssl -lcrypto for NetSurf's content/fetchers/
 #                          about/certificate.c + content/fetchers/curl.c
 #                          (ASN1_*, BIO_*, EVP_PKEY_*, X509_*)
 #   libpng      (1.6.43) → -lpng for content/handlers/image/png.c
@@ -189,7 +189,7 @@ GH_RELEASE_BASE="${GH_RELEASE_BASE:-https://github.com/zokrezyl/yetty/releases/d
 
 # fetch_prebuilt <lib_name> <version_file_subdir>
 # Sets <UPPER>_DIR variable, downloads if missing, sed-patches .pc files.
-# Usage: fetch_prebuilt openssl-new openssl-new
+# Usage: fetch_prebuilt openssl openssl
 #        → OSSL_NEW_DIR (sans hyphens, uppercased)
 fetch_prebuilt() {
     local _lib="$1" _verdir="$2"
@@ -233,13 +233,13 @@ fetch_prebuilt() {
     export "$_var"
 }
 
-fetch_prebuilt openssl-new   openssl-new
+fetch_prebuilt openssl   openssl
 fetch_prebuilt libpng        libpng
 fetch_prebuilt libjpeg-turbo libjpeg-turbo
 
-[ -f "$OPENSSL_NEW_DIR/lib/libssl.a"          ] || { echo "openssl-new: missing libssl.a"   >&2; exit 1; }
-[ -f "$OPENSSL_NEW_DIR/lib/libcrypto.a"       ] || { echo "openssl-new: missing libcrypto.a">&2; exit 1; }
-[ -f "$OPENSSL_NEW_DIR/include/openssl/ssl.h" ] || { echo "openssl-new: missing ssl.h"      >&2; exit 1; }
+[ -f "$OPENSSL_NEW_DIR/lib/libssl.a"          ] || { echo "openssl: missing libssl.a"   >&2; exit 1; }
+[ -f "$OPENSSL_NEW_DIR/lib/libcrypto.a"       ] || { echo "openssl: missing libcrypto.a">&2; exit 1; }
+[ -f "$OPENSSL_NEW_DIR/include/openssl/ssl.h" ] || { echo "openssl: missing ssl.h"      >&2; exit 1; }
 [ -f "$LIBPNG_DIR/lib/libpng.a"               ] || { echo "libpng: missing libpng.a"        >&2; exit 1; }
 [ -f "$LIBJPEG_TURBO_DIR/lib/libjpeg.a"       ] || { echo "libjpeg-turbo: missing libjpeg.a">&2; exit 1; }
 

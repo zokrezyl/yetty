@@ -27,7 +27,9 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/yterm/dcs-codes.h>
 #include <yetty/yterm/osc-codes.h>
+#include <yclass/rpc-dcs-server.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ydraw-factory/figure-factory.h>
@@ -38,6 +40,7 @@
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yterm/shader-glyph-figure.h>
@@ -78,6 +81,12 @@ struct yetty_yterm_terminal {
     struct yetty_yterm_terminal_context context;
     uint32_t cols;
     uint32_t rows;
+    /* Pixel size this terminal was last actually resized to. The generic
+     * view wrapper (yetty_yui_view_set_bounds) writes view->bounds before
+     * dispatching to our set_bounds, so view->bounds can't be used to
+     * detect a real change — track the applied size here instead. */
+    float applied_w;
+    float applied_h;
     /* Set by workspace_set_active via SET_FOCUS — true means this terminal
      * is the foreground view in its workspace AND the workspace is the
      * tabbar's active one. Layers can read this to switch cursor style
@@ -96,10 +105,11 @@ struct yetty_yterm_terminal {
      * Lazily allocated on the first read; freed in destroy. */
     char *pty_read_buf;
 
-    /* Pixel-precise mouse forwarding (DEC ?1500/?1501; OSC 777777/777778).
+    /* Pixel-precise mouse forwarding (DEC ?1500/?1501).
    * The text-layer's libvterm settermprop hook flips these and reports
-   * via terminal_mouse_sub_callback, which also emits OSC 777780 with
-   * the current pixel size on the rising edge so the client can layout. */
+   * via terminal_mouse_sub_callback, which also emits
+   * YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE with the current pixel size on
+   * the rising edge so the client can lay out. */
     int mouse_click_subscribed;
     int mouse_move_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
@@ -334,6 +344,31 @@ static struct yetty_ycore_void_result terminal_pty_write_callback(const char *da
     return YETTY_OK_VOID();
 }
 
+/* yetty_yclass_rpc_dcs_emit_fn impl — ships an already-encoded DCS
+ * envelope through the PTY master so the subprocess sees it on its
+ * stdin. Looping write because pty write ops are single-shot (one
+ * write(2) per call) and a short write would otherwise drop the
+ * tail. */
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result terminal_dcs_emit_response(const uint8_t *bytes, size_t n,
+                                                                 void *userdata)
+{
+    struct yetty_yterm_terminal *terminal = userdata;
+    size_t off = 0;
+    while (off < n) {
+        struct yetty_ycore_size_result wr =
+            terminal_pty_write_raw(terminal, (const char *)bytes + off, n - off);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr,
+                            "terminal_dcs_emit_response: pty_write_raw failed");
+        if (wr.value == 0) {
+            yetty_yplatform_ytime_sleep_ms(1);
+            continue;
+        }
+        off += wr.value;
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Build one yface envelope around `payload` and ship it to the inferior.
  * compressed=0 because input events are short — LZ4 framing would dominate.
  *
@@ -428,6 +463,27 @@ static struct yetty_ycore_void_result terminal_emit_card_focus(
     struct yetty_ycore_void_result r =
         terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS, &msg, sizeof(msg));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_focus: yface_emit failed");
+    return YETTY_OK_VOID();
+}
+
+/* Tell a windowed/figure client its pixel size so it can lay out. This is
+ * the only size signal a client gets over transports that don't carry
+ * pixels in TIOCGWINSZ — telnet NAWS (the --temu/--qemu guest path) ships
+ * character cols/rows only, so ws_xpixel/ws_ypixel arrive as 0. Emitted on
+ * the mouse-subscribe rising edge (initial size) and on every pane resize. */
+static struct yetty_ycore_void_result terminal_emit_card_resize(
+    struct yetty_yterm_terminal *terminal, uint32_t figure_id, float width, float height)
+{
+    struct yetty_client_input_resize msg = {
+        .magic = YETTY_CLIENT_INPUT_RESIZE_MAGIC,
+        .version = YMGUI_WIRE_VERSION,
+        .figure_id = figure_id,
+        .width = width,
+        .height = height,
+    };
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_resize: yface_emit failed");
     return YETTY_OK_VOID();
 }
 
@@ -655,16 +711,26 @@ static struct yetty_ycore_void_result terminal_scrollback_exit(
 }
 
 /* yetty_yterm_mouse_sub_fn impl — fired by the text-layer when libvterm
- * flips DEC mode 1500/1501. Latch state on the terminal. (No pane-size
- * emission on the rising edge — under the card model, each CARD_PLACE
- * confirms the card's pixel size via YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE individually.) */
+ * flips DEC mode 1500/1501. Latch state on the terminal, and on the
+ * rising edge ship the current pane pixel size to the client via
+ * YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE — over telnet/guest transports
+ * TIOCGWINSZ carries no pixels, so this OSC is the client's only size cue
+ * (without it a ygui client renders at its 800x600 default). */
 static struct yetty_ycore_void_result terminal_mouse_sub_callback(int click_enabled,
                                                                   int move_enabled, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
+    int was_subscribed = terminal->mouse_click_subscribed || terminal->mouse_move_subscribed;
     terminal->mouse_click_subscribed = click_enabled;
     terminal->mouse_move_subscribed = move_enabled;
     ydebug("terminal: mouse_sub click=%d move=%d", click_enabled, move_enabled);
+
+    if (!was_subscribed && (click_enabled || move_enabled) && terminal->applied_w > 0.0f &&
+        terminal->applied_h > 0.0f) {
+        struct yetty_ycore_void_result rr = terminal_emit_card_resize(
+            terminal, terminal->focused_figure_id, terminal->applied_w, terminal->applied_h);
+        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+    }
     /* Subscription drop = the figure no longer wants client input. The
      * figure itself may persist in the compositor (apps that exit with
      * keep_visible=true), but routing keystrokes to it after this point
@@ -1095,7 +1161,8 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     if (terminal->root_container) {
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container);
-        struct yetty_ycore_void_result rr = rf->ops->render(rf, target);
+        struct yetty_ycore_void_result rr =
+            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "terminal_render_frame: root container render");
         rf->dirty = 0;
     }
@@ -1282,17 +1349,17 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     ydebug("terminal_create: ydraw scrolling layer created and added");
 
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_CLEAR,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_CLEAR, /*has_args=*/1,
         yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_CLEAR failed");
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_BIN,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_BIN, /*has_args=*/1,
         yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_BIN failed");
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_OVERLAY,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_OVERLAY, /*has_args=*/1,
         yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_OVERLAY failed");
@@ -1417,13 +1484,20 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
          * terminal-scoped — install them on the framework's per-kind
          * bundle before registration so the freshly-minted yrdawn
          * factory captures them. */
-        struct yetty_yrdawn_factory_args *yrdawn_args =
+        /* Best-effort: yrdawn factory args are absent on builds
+         * compiled without the yrdawn server (webasm). The error
+         * carries the reason (NULL framework vs feature disabled);
+         * we just skip the callback install in that case. */
+        struct yetty_yrdawn_factory_args_ptr_result yr =
             yetty_yframework_factory_args_yrdawn(yetty_context->runtime);
-        if (yrdawn_args) {
+        if (YETTY_IS_OK(yr)) {
+            struct yetty_yrdawn_factory_args *yrdawn_args = yr.value;
             yrdawn_args->emit_osc_fn = terminal_layer_emit_osc;
             yrdawn_args->emit_osc_user = terminal;
             yrdawn_args->request_render_fn = terminal_request_render_callback;
             yrdawn_args->request_render_user = terminal;
+        } else {
+            yetty_ycore_error_destroy(yr.error);
         }
 
         struct yetty_ycore_void_result fr = yetty_yframework_register_figure_factories(
@@ -1437,21 +1511,53 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         .max = {.x = (float)cols * text_layer->cell_size.width,
                 .y = (float)rows * text_layer->cell_size.height},
     };
-    struct yetty_yfigure_container_ptr_result cont_res =
-        yetty_yfigure_container_create(root_rect, yetty_context, terminal->figure_registry);
-    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, cont_res,
+    /* yclass-uniform construction: same call shape on both sides of
+     * an RPC session. Local mint here (no session set) — the codegen
+     * factory allocates the yclass object and runs the constructor
+     * slot (sets the ops vtable). We then wire the per-instance
+     * runtime state (rect, context, registry) via the setters. */
+    struct yetty_yclass_ctx yclass_ctx = {0};
+    struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, obj_res,
                         "terminal_create: root_container create failed");
-    terminal->root_container = cont_res.value;
+    terminal->root_container = yetty_yfigure_container_from(obj_res.value);
+    yetty_yfigure_container_set_context(terminal->root_container, yetty_context);
+    yetty_yfigure_container_set_registry(terminal->root_container, terminal->figure_registry);
+    yetty_yfigure_container_set_rect(terminal->root_container, root_rect);
     ydebug("terminal_create: root container ready");
 
     /* Register the root container directly with the wire SM —
      * userdata is the container itself; no terminal-local wrapper. */
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN, /*has_args=*/1,
         yetty_yfigure_container_process_input, terminal->root_container);
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register compositor for YCOMPOSITOR_BIN");
     ydebug("terminal_create: ycompositor registered for OSC %d", YETTY_OSC_YCOMPOSITOR_BIN);
+
+    /* yclass RPC over DCS — subprocess clients (ygui, future widgets)
+     * make yclass calls into the in-terminal yfigure tree by shipping
+     * DCS envelopes on YETTY_DCS_YCLASS_RPC. The handler reads one
+     * request envelope, dispatches via yetty_yclass_rpc_dispatch_one,
+     * and ships the response back through the PTY master so the
+     * client sees it on its stdin (where its own SM decodes the DCS
+     * reply). One-line attach — the same wire_statemachine handles
+     * yface OSC envelopes and yclass DCS envelopes in parallel.
+     *
+     * compressed=0 keeps tiny calls fast (b64-only); large frames
+     * (process_records buffers with a full envelope's records inside)
+     * benefit from compressed=1 but the call-time pick lives at the
+     * client transport. The server agrees on a fixed setting for
+     * simplicity; switch to a per-envelope sniff if asymmetric
+     * compression turns out to matter. */
+    {
+        struct yetty_ycore_void_result dr =
+            yetty_yclass_rpc_dcs_server_attach(terminal->sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0,
+                                               terminal_dcs_emit_response, terminal);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, dr,
+                            "terminal_create: dcs_server_attach for YCLASS_RPC");
+    }
+    ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)", YETTY_DCS_YCLASS_RPC);
 
     /* Shader-glyph figure — replaces the legacy shader-glyph layer. Added
      * as a child of the root container under a reserved high id (just
@@ -1459,20 +1565,19 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * which start at 1 and count up. The container cascades destroy. */
     {
         struct yetty_yterm_shader_glyph_figure_ptr_result sgf_res =
-            yetty_yterm_shader_glyph_figure_create(root_rect, cols, rows,
-                                                   text_layer->cell_size.width,
-                                                   text_layer->cell_size.height, text_layer,
-                                                   yetty_context, terminal_request_render_callback,
-                                                   terminal);
+            yetty_yterm_shader_glyph_figure_create(
+                root_rect, cols, rows, text_layer->cell_size.width, text_layer->cell_size.height,
+                text_layer, yetty_context, terminal_request_render_callback, terminal);
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, sgf_res,
                             "terminal_create: shader_glyph figure create failed");
         terminal->shader_glyph_figure = sgf_res.value;
         struct yetty_yfigure_figure *sgf_base =
             yetty_yterm_shader_glyph_figure_as_figure(terminal->shader_glyph_figure);
-        struct yetty_ycore_void_result ar = yetty_yfigure_container_add_child(
-            terminal->root_container, sgf_base, 0xFFFFFFFEu);
+        struct yetty_ycore_void_result ar =
+            yetty_yfigure_container_add_child(terminal->root_container, sgf_base, 0xFFFFFFFEu);
         if (YETTY_IS_ERR(ar)) {
-            struct yetty_ycore_void_result dr = sgf_base->ops->destroy(sgf_base);
+            struct yetty_ycore_void_result dr =
+                yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)sgf_base - 1);
             if (YETTY_IS_ERR(dr)) {
                 yetty_ycore_error_destroy(dr.error);
             }
@@ -1551,7 +1656,8 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
     if (terminal->root_container) {
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container);
-        struct yetty_ycore_void_result r = rf->ops->destroy(rf);
+        struct yetty_ycore_void_result r =
+            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
         if (YETTY_IS_ERR(r)) {
             yerror("terminal_destroy: root_container destroy failed: %s", r.error.msg);
             if (!have_err) {
@@ -1807,12 +1913,12 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 
-    /* Store bounds in view */
-    int changed = (view->bounds.w != bounds.w) || (view->bounds.h != bounds.h);
+    /* Detect a real pixel-size change against the size we last resized to.
+     * view->bounds is already overwritten with the new bounds by the
+     * generic wrapper before we run, so compare against applied_w/h. */
+    int changed = (terminal->applied_w != bounds.w) || (terminal->applied_h != bounds.h);
     view->bounds = bounds;
 
-    /* Terminal handles resize via YETTY_EVENT_RESIZE from event loop */
-    /* For now, just log - the actual resize happens through the event system */
     ydebug("terminal_view_set_bounds: %.0fx%.0f at (%.0f,%.0f)", bounds.w, bounds.h, bounds.x,
            bounds.y);
 
@@ -1825,7 +1931,23 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
         yetty_yfigure_container_set_viewport_offset(terminal->root_container, bounds.x, bounds.y);
     }
 
-    (void)changed;
+    /* Actually resize the terminal when the pixel size changes. The
+     * split-drag path reaches a pane through set_bounds (only the full-
+     * window resize goes through a RESIZE event), so this used to just
+     * store the bounds and resize nothing — a pane shrunk/grown by a
+     * splitter kept its old grid + cell metrics, rendering glyphs
+     * squashed until a full-window repaint snapped them back, and a
+     * client program (ygreeter, nvim) never saw the new size. Drive the
+     * exact same resize the event path performs. */
+    if (changed && bounds.w > 0.0f && bounds.h > 0.0f) {
+        terminal->applied_w = bounds.w;
+        terminal->applied_h = bounds.h;
+        struct yetty_yui_event re = {.type = YETTY_YCORE_RESIZE};
+        re.resize.width = bounds.w;
+        re.resize.height = bounds.h;
+        struct yetty_ycore_int_result rr = terminal_view_on_event(view, &re);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "terminal_view_set_bounds: resize");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -2012,9 +2134,14 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                                     "terminal_view_on_event: pty resize failed");
             }
         }
-        /* Cards self-announce their pixel size via per-card YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE
-     * fired from the layer (see ymgui-layer.c::ymgui_resize_grid). No
-     * pane-size emission needed here. */
+        /* Push the new pane pixel size to a subscribed figure client so it
+         * relays out. Telnet/guest clients have no TIOCGWINSZ pixels, so
+         * this OSC is their only resize signal. */
+        if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed) {
+            struct yetty_ycore_void_result er =
+                terminal_emit_card_resize(terminal, terminal->focused_figure_id, width, height);
+            if (YETTY_IS_ERR(er)) yetty_ycore_error_destroy(er.error);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 

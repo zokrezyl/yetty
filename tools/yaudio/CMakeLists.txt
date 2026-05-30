@@ -65,6 +65,7 @@ pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 
 target_link_libraries(yaudio PRIVATE
     yetty_yaudio
+    ygui
     ${YETTY_LIBS}
     yetty_yplatform_core
     yetty_yplatform_move_resize

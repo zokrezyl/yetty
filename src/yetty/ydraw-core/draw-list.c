@@ -220,15 +220,14 @@ size_t yetty_ydraw_draw_list_size(const struct yetty_ydraw_draw_list *buf)
     return buf ? buf->primitives.buf.size : 0;
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_truncate(
-    struct yetty_ydraw_draw_list *buf, size_t size)
+struct yetty_ycore_void_result yetty_ydraw_draw_list_truncate(struct yetty_ydraw_draw_list *buf,
+                                                              size_t size)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ycore_void, "draw_list_truncate: NULL buf");
     }
     if (size > buf->primitives.buf.size) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "draw_list_truncate: size beyond current buffer size");
+        return YETTY_ERR(yetty_ycore_void, "draw_list_truncate: size beyond current buffer size");
     }
     buf->primitives.buf.size = size;
     return YETTY_OK_VOID();

@@ -29,7 +29,7 @@
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/ymsdf/generator.h>
 #include <yetty/yvnc/vnc-server.h>
-#include <yetty/yrpc/rpc-server.h>
+#include <yetty/yctl/rpc-server.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yfigure/registry.h>
@@ -78,20 +78,20 @@ struct yetty_yframework_factory_state {
     int _unused; /* keep the struct non-empty when no kinds compile in */
 };
 
-void yetty_yframework_log_gpu_info(WGPUAdapter adapter)
+struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter)
 {
     if (!adapter) {
-        ywarn("yetty_yframework_log_gpu_info: adapter is NULL");
-        return;
+        return YETTY_ERR(yetty_ycore_void, "log_gpu_info: adapter is NULL");
     }
 
     char *desc = yetty_ywebgpu_get_webgpu_description(adapter);
     if (!desc) {
-        ywarn("yetty_yframework_log_gpu_info: failed to get WebGPU description");
-        return;
+        return YETTY_ERR(yetty_ycore_void,
+                         "log_gpu_info: yetty_ywebgpu_get_webgpu_description failed");
     }
     yinfo("WebGPU adapter description:\n%s", desc);
     free(desc);
+    return YETTY_OK_VOID();
 }
 
 /* Lifted verbatim from yetty/yetty.c init_webgpu(): request adapter +
@@ -132,7 +132,16 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
         return YETTY_ERR(yetty_ycore_void, "yframework: adapter request failed");
     }
 
-    yetty_yframework_log_gpu_info(rt->gpu.adapter);
+    /* Best-effort: GPU info logging is diagnostic-only — degraded
+     * GPUs may not surface a description string but the rest of init
+     * can still proceed. */
+    {
+        struct yetty_ycore_void_result _gi = yetty_yframework_log_gpu_info(rt->gpu.adapter);
+        if (YETTY_IS_ERR(_gi)) {
+            ywarn("yframework: log_gpu_info: %s", _gi.error.msg ? _gi.error.msg : "(no msg)");
+            yetty_ycore_error_destroy(_gi.error);
+        }
+    }
 
     /* Device + queue. */
     WGPULimits limits;
@@ -442,24 +451,24 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
     /* RPC server (optional). Created here so any app that wants the
      * generic key/mouse/resize/shutdown injection just toggles
      * `rpc/port` in its config. Apps can register more handlers on
-     * rt->rpc_server with yetty_yrpc_server_register_handler. */
+     * rt->rpc_server with yetty_yctl_server_register_handler. */
     const char *rpc_port_str =
         rt->config->ops->get_string(rt->config, YETTY_YCONFIG_KEY_RPC_PORT, NULL);
     if (rpc_port_str) {
         const char *rpc_host =
             rt->config->ops->get_string(rt->config, YETTY_YCONFIG_KEY_RPC_HOST, "127.0.0.1");
         int rpc_port = atoi(rpc_port_str);
-        struct yetty_rpc_server_ptr_result rpc_res = yetty_yrpc_server_create(rt->event_loop);
+        struct yetty_rpc_server_ptr_result rpc_res = yetty_yctl_server_create(rt->event_loop);
         if (YETTY_IS_OK(rpc_res)) {
             rt->rpc_server = rpc_res.value;
             struct yetty_ycore_void_result sr =
-                yetty_yrpc_server_start(rt->rpc_server, rpc_host, rpc_port);
+                yetty_yctl_server_start(rt->rpc_server, rpc_host, rpc_port);
             if (YETTY_IS_OK(sr)) {
                 yinfo("yetty: RPC server listening on %s:%d", rpc_host, rpc_port);
             } else {
                 yerror("yframework: rpc_server_start failed: %s", sr.error.msg);
                 yetty_ycore_error_destroy(sr.error);
-                yetty_yrpc_server_destroy(rt->rpc_server);
+                yetty_yctl_server_destroy(rt->rpc_server);
                 rt->rpc_server = NULL;
             }
         } else {
@@ -480,7 +489,7 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
     }
 
     if (rt->rpc_server) {
-        struct yetty_ycore_void_result r = yetty_yrpc_server_destroy(rt->rpc_server);
+        struct yetty_ycore_void_result r = yetty_yctl_server_destroy(rt->rpc_server);
         if (YETTY_IS_ERR(r)) {
             first_err = r;
         }
@@ -634,17 +643,22 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
     return YETTY_OK_VOID();
 }
 
-struct yetty_yrdawn_factory_args *yetty_yframework_factory_args_yrdawn(
+struct yetty_yrdawn_factory_args_ptr_result yetty_yframework_factory_args_yrdawn(
     struct yetty_yframework *framework)
 {
 #ifdef YETTY_HAS_YRDAWN_SERVER
-    if (!framework || !framework->factory_state) {
-        return NULL;
+    if (!framework) {
+        return YETTY_ERR(yetty_yrdawn_factory_args_ptr, "factory_args_yrdawn: NULL framework");
     }
-    return &framework->factory_state->yrdawn_args;
+    if (!framework->factory_state) {
+        return YETTY_ERR(yetty_yrdawn_factory_args_ptr,
+                         "factory_args_yrdawn: framework has no factory_state");
+    }
+    return YETTY_OK(yetty_yrdawn_factory_args_ptr, &framework->factory_state->yrdawn_args);
 #else
     (void)framework;
-    return NULL;
+    return YETTY_ERR(yetty_yrdawn_factory_args_ptr,
+                     "factory_args_yrdawn: yrdawn server not compiled into this build");
 #endif
 }
 

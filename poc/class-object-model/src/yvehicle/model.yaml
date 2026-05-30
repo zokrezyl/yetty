@@ -1,0 +1,148 @@
+methods:
+  - slot: vehicle_ctor
+    domain: yvehicle
+    owning_class: vehicle
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: vehicle_dtor
+    domain: yvehicle
+    owning_class: vehicle
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: vehicle_start
+    domain: yvehicle
+    owning_class: vehicle
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+  - slot: vehicle_accelerate
+    domain: yvehicle
+    owning_class: vehicle
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+      - name: speed
+        type: float
+  - slot: vehicle_brake
+    domain: yvehicle
+    owning_class: vehicle
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+      - name: intensity
+        type: float
+  - slot: vehicle_describe
+    domain: yvehicle
+    owning_class: vehicle
+    return_type: struct str_result
+    args:
+      - name: ctx
+        type: "struct ctx *"
+      - name: obj
+        type: "struct object *"
+      - name: distance
+        type: float
+classes:
+  - name: vehicle
+    domain: yvehicle
+    accessor: yvehicle_vehicle_class_get
+    type: regular
+    source_file: src/yvehicle/vehicle.c
+    parent: null
+    mixins: []
+    data: struct vehicle_data
+    ops:
+      - slot: vehicle_ctor
+        slot_domain: yvehicle
+        impl: vehicle_default_ctor
+      - slot: vehicle_dtor
+        slot_domain: yvehicle
+        impl: vehicle_default_dtor
+      - slot: vehicle_start
+        slot_domain: yvehicle
+        impl: vehicle_default_start
+      - slot: vehicle_accelerate
+        slot_domain: yvehicle
+        impl: vehicle_default_accelerate
+      - slot: vehicle_brake
+        slot_domain: yvehicle
+        impl: vehicle_default_brake
+      - slot: vehicle_describe
+        slot_domain: yvehicle
+        impl: vehicle_default_describe
+  - name: motorbike
+    domain: yvehicle
+    accessor: yvehicle_motorbike_class_get
+    type: regular
+    source_file: src/yvehicle/motorbike.c
+    parent:
+      domain: yvehicle
+      name: vehicle
+    mixins: []
+    data: struct motorbike_data
+    ops:
+      - slot: vehicle_describe
+        slot_domain: yvehicle
+        impl: motorbike_describe
+  - name: car
+    domain: yvehicle
+    accessor: yvehicle_car_class_get
+    type: regular
+    source_file: src/yvehicle/car.c
+    parent:
+      domain: yvehicle
+      name: vehicle
+    mixins: []
+    data: struct car_data
+    ops:
+      - slot: vehicle_describe
+        slot_domain: yvehicle
+        impl: car_describe
+  - name: sportscar
+    domain: yvehicle
+    accessor: yvehicle_sportscar_class_get
+    type: regular
+    source_file: src/yvehicle/sportscar.c
+    parent:
+      domain: yvehicle
+      name: car
+    mixins:
+      - domain: yvehicle
+        name: electric
+    data: struct sportscar_data
+    ops:
+      - slot: vehicle_describe
+        slot_domain: yvehicle
+        impl: sportscar_describe
+      - slot: vehicle_accelerate
+        slot_domain: yvehicle
+        impl: sportscar_accelerate
+  - name: electric
+    domain: yvehicle
+    accessor: yvehicle_electric_mixin_get
+    type: mixin
+    source_file: src/yvehicle/electric.c
+    parent: null
+    mixins: []
+    data: struct electric_data
+    ops:
+      - slot: vehicle_brake
+        slot_domain: yvehicle
+        impl: electric_brake

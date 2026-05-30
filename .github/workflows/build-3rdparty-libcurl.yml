@@ -1,11 +1,11 @@
 name: Build 3rdparty — libcurl
 
 # Triggered on `lib-libcurl-<version>` tags. Builds libcurl statically
-# against OpenSSL 4 (lib-openssl-new-<ver> tarball, fetched at build
+# against OpenSSL 4 (lib-openssl-<ver> tarball, fetched at build
 # time by _build.sh). 10-target matrix incl. Windows MSYS2 CLANG64.
 #
 # Version source of truth: build-tools/3rdparty/libcurl/version.
-# OpenSSL pin source of truth: build-tools/3rdparty/openssl-new/version.
+# OpenSSL pin source of truth: build-tools/3rdparty/openssl/version.
 # Both must agree before pushing this workflow's tag.
 
 on:

@@ -1,6 +1,6 @@
 # msgpack — MessagePack serialization (C only).
 #
-# yetty's only consumer is src/yetty/yrpc/rpc-message.c which uses the C
+# yetty's only consumer is src/yetty/yctl/rpc-message.c which uses the C
 # API (`msgpack_unpacked`, `msgpack_unpack_next`, `msgpack_object`). The
 # C++ branch (msgpack-cxx) was dropped to avoid a no-value C++ dep.
 #

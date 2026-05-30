@@ -1,0 +1,15 @@
+# Minimal yctl script — types one line and presses Enter.
+# Useful as a smoke test that yctl.py can talk to a running yetty.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 8
+      speed-deviation: 0.2
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.5
+  - type: "echo hello from yctl"
+  - special-char: ENTER
+  - sleep: 0.5

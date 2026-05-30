@@ -135,6 +135,44 @@ GRADLE_OPTS_X86_64_YTRACE_RELEASE := --project-cache-dir=../../$(BUILD_DIR_ANDRO
 all: help
 
 #=============================================================================
+# yclass codegen — standalone, NOT part of any platform build
+#=============================================================================
+#
+# Generates per-module model.yaml, methods.gen.{h,c}, rpc.gen.c,
+# per-class <name>.gen.c, public include/yetty/<module>/{methods,rpc,
+# <name>}.h from annotated .c sources.
+#
+# Output is committed to git. Platform builds compile what is in the
+# tree — they NEVER invoke this. Re-run when annotated sources change.
+#
+# Module discovery: every .c under src/yetty/<module>/ (excluding
+# *.gen.c) that contains a `class@<module>:` or `mixin@<module>:`
+# clang annotation is included as a source for that module.
+#
+# Include hints (YCLASS_CODEGEN_INCLUDES): only project-local paths.
+# Codegen's clang -fsyntax-only step tolerates missing third-party
+# headers — it needs the annotation AST nodes, not a clean compile.
+
+YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yterm
+
+.PHONY: codegen
+codegen: ## Run yclass codegen for all annotated modules (output committed to git)
+	@for mod in $(YCLASS_MODULES); do \
+		src_dir="src/yetty/$$mod"; \
+		sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
+		if [ -z "$$sources" ]; then \
+			echo "ERROR: no annotated sources found under $$src_dir"; \
+			exit 1; \
+		fi; \
+		echo "==> yclass codegen: $$mod"; \
+		YCLASS_CODEGEN_INCLUDES="$(CURDIR)/include:$(CURDIR)/src" \
+			uv run src/yclass/gen/codegen.py "$$mod" \
+				"$(CURDIR)/include/yetty" \
+				"$(CURDIR)/$$src_dir" \
+				$$sources || exit $$?; \
+	done
+
+#=============================================================================
 # Desktop - ytrace (full logging)
 #=============================================================================
 

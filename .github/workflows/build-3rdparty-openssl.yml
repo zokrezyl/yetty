@@ -1,15 +1,8 @@
 name: Build 3rdparty — openssl
 
-# Triggered on `lib-openssl-<version>` tags. Builds OpenSSL 1.1.1w via
-# the janbar/openssl-cmake wrapper across every target platform and
-# attaches the tarballs to a release of the same name.
-#
-# Kept alive while downstream deps (cpr / libcurl / libssh2 pins) are
-# still on OpenSSL 1.1.1 APIs. The newer upstream openssl/openssl 4.x
-# build lives at build-tools/3rdparty/openssl-new/ + the matching
-# build-3rdparty-openssl-new.yml workflow. Once all downstream deps are
-# bumped to versions that compile against OpenSSL 4, this workflow + dir
-# go away and `lib-openssl-*` tags become free.
+# Triggered on `lib-openssl-<version>` tags. Builds upstream OpenSSL
+# (openssl/openssl, native ./Configure + make) across every target
+# platform and attaches the tarballs to a release of the same name.
 #
 # Version source of truth: build-tools/3rdparty/openssl/version. The tag
 # version must match that file's content; the workflow reads the file at
@@ -19,7 +12,6 @@ on:
   push:
     tags:
       - 'lib-openssl-*'
-      - '!lib-openssl-new-*'   # the openssl-new workflow handles those
   workflow_dispatch: {}
 
 permissions:

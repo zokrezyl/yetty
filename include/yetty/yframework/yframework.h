@@ -38,7 +38,7 @@ struct yetty_yplatform_window_manager;
 struct yetty_yevent_event_loop;
 struct yetty_yplatform_wgpu;
 struct yetty_yvnc_server;
-struct yetty_yrpc_server;
+struct yetty_yctl_server;
 struct yetty_ydraw_target;
 struct yetty_yfigure_registry;
 struct yetty_context;
@@ -69,7 +69,7 @@ struct yetty_yframework {
     struct yetty_yevent_event_loop *event_loop;
     struct yetty_yplatform_wgpu *wgpu;    /* coroutine-aware wgpu await */
     struct yetty_yvnc_server *vnc_server; /* NULL when vnc config off */
-    struct yetty_yrpc_server *rpc_server; /* NULL when rpc/port unset */
+    struct yetty_yctl_server *rpc_server; /* NULL when rpc/port unset */
     struct yetty_ydraw_target *render_target;
 
     /* Per-kind factory args bundles (e.g. ymgui's lazy-pipeline cache).
@@ -97,8 +97,9 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
 struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework *rt);
 
 /* Dump adapter info (vendor, backend, type, IDs, key limits) via yinfo.
- * Safe to call any time after the adapter is up. */
-void yetty_yframework_log_gpu_info(WGPUAdapter adapter);
+ * Safe to call any time after the adapter is up. Errors: NULL adapter,
+ * adapter-info-fetch failure (the WebGPU call surface). */
+struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter);
 
 /* Reconfigure surface after a window resize. Called from the app's RESIZE
  * handler — yframework keeps the present_mode the initial capability scan
@@ -125,10 +126,13 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
 
 /* Per-host accessor for the yrdawn factory args. Host installs its
  * own emit_osc / request_render before calling
- * register_figure_factories. Returns NULL when the build has no yrdawn
- * server (webasm). The pointer is owned by `framework`; do not free. */
+ * register_figure_factories. The pointer is owned by `framework`; do
+ * not free. Errors: NULL framework, this build has no yrdawn server
+ * compiled in (webasm — distinguishable from a runtime failure by the
+ * error msg). */
 struct yetty_yrdawn_factory_args;
-struct yetty_yrdawn_factory_args *yetty_yframework_factory_args_yrdawn(
+YETTY_YRESULT_DECLARE(yetty_yrdawn_factory_args_ptr, struct yetty_yrdawn_factory_args *);
+struct yetty_yrdawn_factory_args_ptr_result yetty_yframework_factory_args_yrdawn(
     struct yetty_yframework *framework);
 
 #ifdef __cplusplus

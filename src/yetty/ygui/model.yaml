@@ -1,0 +1,1089 @@
+methods:
+  - slot: widget_on_press
+    domain: ygui
+    owning_class: clickable
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: yclass_ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: yclass_obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+    local: false
+  - slot: widget_on_release
+    domain: ygui
+    owning_class: clickable
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: yclass_ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: yclass_obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+    local: false
+  - slot: widget_emit_body
+    domain: ygui
+    owning_class: primitive_widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: yclass_ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: yclass_obj
+        type: "struct yetty_yclass_object *"
+      - name: ctx
+        type: "struct yetty_ygui_emit_ctx *"
+    local: true
+  - slot: constructor
+    domain: ygui
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: destructor
+    domain: ygui
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: widget_on_motion
+    domain: ygui
+    owning_class: widget
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    local: false
+  - slot: widget_paint
+    domain: ygui
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: emit_ctx
+        type: "struct yetty_ygui_emit_ctx *"
+    local: true
+  - slot: widget_emit_container
+    domain: ygui
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: emit_ctx
+        type: "struct yetty_ygui_emit_ctx *"
+    local: true
+classes:
+  - name: clickable
+    domain: ygui
+    accessor: yetty_ygui_clickable_mixin_get
+    type: mixin
+    source_file: src/yetty/ygui/mixins/clickable.c
+    parent: null
+    mixins: []
+    data: struct clickable_data
+    ops:
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: clickable_on_press
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: clickable_on_release
+  - name: primitive_widget
+    domain: ygui
+    accessor: yetty_ygui_primitive_widget_class_get
+    type: regular
+    source_file: src/yetty/ygui/primitive-widget.c
+    parent:
+      domain: ygui
+      name: widget
+    mixins: []
+    data: struct primitive_widget_data
+    ops:
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: primitive_emit_body
+  - name: widget
+    domain: ygui
+    accessor: yetty_ygui_widget_class_get
+    type: regular
+    source_file: src/yetty/ygui/widget.c
+    parent: null
+    mixins: []
+    data: struct yetty_ygui_widget_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: widget_default_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: widget_default_destructor
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: widget_default_on_press
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: widget_default_on_release
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: widget_default_on_motion
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: widget_default_paint
+      - slot: widget_emit_container
+        slot_domain: ygui
+        impl: widget_default_emit_container
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: widget_default_emit_body
+  - name: breadcrumbs
+    domain: ygui
+    accessor: yetty_ygui_breadcrumbs_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/breadcrumbs.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct bc_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: button
+    domain: ygui
+    accessor: yetty_ygui_button_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/button.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct button_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: button_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: button_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: button_paint
+  - name: checkbox
+    domain: ygui
+    accessor: yetty_ygui_checkbox_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/checkbox.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct checkbox_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: checkbox_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: checkbox_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: checkbox_paint
+  - name: chip
+    domain: ygui
+    accessor: yetty_ygui_chip_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/chip.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct chip_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: choicebox
+    domain: ygui
+    accessor: yetty_ygui_choicebox_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/choicebox.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct cb_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: collapsing_header
+    domain: ygui
+    accessor: yetty_ygui_collapsing_header_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/collapsing_header.c
+    parent:
+      domain: ygui
+      name: vbox
+    mixins: []
+    data: struct ch_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: colorpicker
+    domain: ygui
+    accessor: yetty_ygui_colorpicker_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/colorpicker.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct cp_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: combobox
+    domain: ygui
+    accessor: yetty_ygui_combobox_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/combobox.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct combo_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: datepicker
+    domain: ygui
+    accessor: yetty_ygui_datepicker_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/datepicker.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct dp_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+  - name: dialog
+    domain: ygui
+    accessor: yetty_ygui_dialog_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/dialog.c
+    parent:
+      domain: ygui
+      name: vbox
+    mixins: []
+    data: struct dialog_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: dialog_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dialog_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: dialog_paint
+  - name: dropdown
+    domain: ygui
+    accessor: yetty_ygui_dropdown_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/dropdown.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct dropdown_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: dropdown_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dropdown_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: dropdown_paint
+  - name: filepicker
+    domain: ygui
+    accessor: yetty_ygui_filepicker_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/filepicker.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct fp_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+  - name: hbox
+    domain: ygui
+    accessor: yetty_ygui_hbox_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/hbox.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct hbox_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: hbox_constructor
+  - name: label
+    domain: ygui
+    accessor: yetty_ygui_label_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/label.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct label_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: label_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: label_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: label_paint
+  - name: list
+    domain: ygui
+    accessor: yetty_ygui_list_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/list.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct list_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: menubar
+    domain: ygui
+    accessor: yetty_ygui_menubar_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/menubar.c
+    parent:
+      domain: ygui
+      name: hbox
+    mixins: []
+    data: struct menubar_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: menubar_constructor
+  - name: panel
+    domain: ygui
+    accessor: yetty_ygui_panel_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/panel.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct panel_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: panel_constructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: panel_paint
+  - name: popup_menu
+    domain: ygui
+    accessor: yetty_ygui_popup_menu_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/popup_menu.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct popup_menu_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: popup_menu_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: popup_menu_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: popup_menu_paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: popup_menu_on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: popup_menu_on_motion
+  - name: progress
+    domain: ygui
+    accessor: yetty_ygui_progress_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/progress.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct progress_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: progress_constructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: progress_paint
+  - name: radio
+    domain: ygui
+    accessor: yetty_ygui_radio_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/radio.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct radio_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: rich
+    domain: ygui
+    accessor: yetty_ygui_rich_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/rich.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct rich_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: rich_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: rich_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: rich_paint
+  - name: scrollarea
+    domain: ygui
+    accessor: yetty_ygui_scrollarea_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/scrollarea.c
+    parent:
+      domain: ygui
+      name: vbox
+    mixins: []
+    data: struct scrollarea_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: selectable
+    domain: ygui
+    accessor: yetty_ygui_selectable_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/selectable.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct sel_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: separator
+    domain: ygui
+    accessor: yetty_ygui_separator_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/separator.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct separator_data
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: separator_paint
+  - name: slider
+    domain: ygui
+    accessor: yetty_ygui_slider_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/slider.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct slider_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: slider_constructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: slider_paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: slider_on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: slider_on_motion
+  - name: spinner
+    domain: ygui
+    accessor: yetty_ygui_spinner_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/spinner.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct spinner_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: spinner_constructor
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: spinner_on_press
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: spinner_paint
+  - name: splitter
+    domain: ygui
+    accessor: yetty_ygui_splitter_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/splitter.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct splitter_data
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: on_motion
+  - name: statusbar
+    domain: ygui
+    accessor: yetty_ygui_statusbar_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/statusbar.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct statusbar_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: statusbar_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: statusbar_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: statusbar_paint
+  - name: stepper
+    domain: ygui
+    accessor: yetty_ygui_stepper_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/stepper.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct stepper_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: tabbar
+    domain: ygui
+    accessor: yetty_ygui_tabbar_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/tabbar.c
+    parent:
+      domain: ygui
+      name: hbox
+    mixins: []
+    data: struct tabbar_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: tabbar_constructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: tabbar_paint
+  - name: table
+    domain: ygui
+    accessor: yetty_ygui_table_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/table.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct table_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: textarea
+    domain: ygui
+    accessor: yetty_ygui_textarea_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/textarea.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct textarea_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: textinput
+    domain: ygui
+    accessor: yetty_ygui_textinput_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/textinput.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct textinput_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: textinput_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: textinput_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: textinput_paint
+  - name: toggle
+    domain: ygui
+    accessor: yetty_ygui_toggle_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/toggle.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins:
+      - domain: ygui
+        name: clickable
+    data: struct toggle_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: toggle_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: toggle_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: toggle_paint
+  - name: tooltip
+    domain: ygui
+    accessor: yetty_ygui_tooltip_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/tooltip.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct tooltip_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: tooltip_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: tooltip_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: tooltip_paint
+  - name: tree_node
+    domain: ygui
+    accessor: yetty_ygui_tree_node_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/tree_node.c
+    parent:
+      domain: ygui
+      name: vbox
+    mixins: []
+    data: struct tn_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: vbox
+    domain: ygui
+    accessor: yetty_ygui_vbox_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/vbox.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct vbox_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: vbox_constructor
+  - name: window
+    domain: ygui
+    accessor: yetty_ygui_window_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/window.c
+    parent:
+      domain: ygui
+      name: vbox
+    mixins: []
+    data: struct window_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: on_press
+  - name: ybrowser
+    domain: ygui
+    accessor: yetty_ygui_ybrowser_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/ybrowser.c
+    parent:
+      domain: ygui
+      name: ydraw_embed
+    mixins: []
+    data: struct ybrowser_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ybr_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: ybr_destructor
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: ybr_emit_body
+  - name: ydraw_embed
+    domain: ygui
+    accessor: yetty_ygui_ydraw_embed_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/ydraw_embed.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct embed_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: paint
+  - name: yimage
+    domain: ygui
+    accessor: yetty_ygui_yimage_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/yimage.c
+    parent:
+      domain: ygui
+      name: widget
+    mixins: []
+    data: struct yimage_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: yimage_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: yimage_destructor
+      - slot: widget_emit_container
+        slot_domain: ygui
+        impl: yimage_emit_container
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: yimage_emit_body
+  - name: yjungle
+    domain: ygui
+    accessor: yetty_ygui_yjungle_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/yjungle.c
+    parent:
+      domain: ygui
+      name: widget
+    mixins: []
+    data: struct yjungle_data
+    ops:
+      - slot: widget_emit_container
+        slot_domain: ygui
+        impl: emit_container
+  - name: ymarkdown
+    domain: ygui
+    accessor: yetty_ygui_ymarkdown_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/ymarkdown.c
+    parent:
+      domain: ygui
+      name: ydraw_embed
+    mixins: []
+    data: struct ymarkdown_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ymd_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: ymd_destructor
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: ymd_emit_body
+  - name: yplot
+    domain: ygui
+    accessor: yetty_ygui_yplot_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/yplot.c
+    parent:
+      domain: ygui
+      name: widget
+    mixins: []
+    data: struct yplot_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: yplot_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: yplot_destructor
+      - slot: widget_emit_container
+        slot_domain: ygui
+        impl: yplot_emit_container
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: yplot_emit_body
+  - name: yvideo
+    domain: ygui
+    accessor: yetty_ygui_yvideo_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/yvideo.c
+    parent:
+      domain: ygui
+      name: widget
+    mixins: []
+    data: struct yvideo_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: dtor
+      - slot: widget_emit_container
+        slot_domain: ygui
+        impl: emit_container
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: emit_body
+  - name: yzoo
+    domain: ygui
+    accessor: yetty_ygui_yzoo_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/yzoo.c
+    parent:
+      domain: ygui
+      name: widget
+    mixins: []
+    data: struct yzoo_data
+    ops:
+      - slot: widget_emit_container
+        slot_domain: ygui
+        impl: emit_container

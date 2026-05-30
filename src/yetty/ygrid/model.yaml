@@ -1,0 +1,88 @@
+methods:
+  - slot: add_record
+    domain: ygrid
+    owning_class: grid
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: record
+        type: struct yetty_ycore_buffer
+    local: false
+  - slot: clear
+    domain: ygrid
+    owning_class: grid
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: destroy
+    domain: ygrid
+    owning_class: grid
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: process_bytes
+    domain: ygrid
+    owning_class: grid
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: payload
+        type: struct yetty_ycore_buffer
+    local: false
+  - slot: reset_content
+    domain: ygrid
+    owning_class: grid
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+classes:
+  - name: grid
+    domain: ygrid
+    accessor: yetty_ygrid_grid_class_get
+    type: regular
+    source_file: src/yetty/ygrid/grid.c
+    parent:
+      domain: yfigure
+      name: figure
+    mixins: []
+    data: struct yetty_ygrid_grid
+    ops:
+      - slot: render
+        slot_domain: yfigure
+        impl: ygrid_render_slot
+      - slot: destroy
+        slot_domain: yfigure
+        impl: ygrid_destroy_slot
+      - slot: add_record
+        slot_domain: ygrid
+        impl: yetty_ygrid_grid_add_record_impl
+      - slot: clear
+        slot_domain: ygrid
+        impl: yetty_ygrid_grid_clear_impl
+      - slot: destroy
+        slot_domain: ygrid
+        impl: yetty_ygrid_grid_destroy_impl
+      - slot: process_bytes
+        slot_domain: ygrid
+        impl: yetty_ygrid_grid_process_bytes_impl
+      - slot: reset_content
+        slot_domain: ygrid
+        impl: yetty_ygrid_grid_reset_content_impl

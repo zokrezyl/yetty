@@ -1,0 +1,16 @@
+methods: []
+classes:
+  - name: tuned_sportscar
+    domain: ytuning
+    accessor: ytuning_tuned_sportscar_class_get
+    type: regular
+    source_file: src/ytuning/tuned_sportscar.c
+    parent:
+      domain: yvehicle
+      name: sportscar
+    mixins: []
+    data: struct tuned_sportscar_data
+    ops:
+      - slot: vehicle_describe
+        slot_domain: yvehicle
+        impl: tuned_sportscar_describe

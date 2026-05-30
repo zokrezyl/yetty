@@ -5,6 +5,8 @@
 #-----------------------------------------------------------------------------
 
 if(YETTY_ENABLE_FEATURE_YGUI)
+    # Object-system-based widget toolkit (yclass). The sole ygui
+    # implementation now that the legacy toolkit has been removed.
     add_subdirectory(ygui)
 endif()
 
@@ -32,8 +34,8 @@ if(YETTY_ENABLE_FEATURE_MSDF_GEN)
     add_subdirectory(msdf-gen)
 endif()
 
-if(YETTY_ENABLE_FEATURE_YRPC)
-    add_subdirectory(yrpc)
+if(YETTY_ENABLE_FEATURE_YCTL)
+    add_subdirectory(yctl)
 endif()
 
 # The yetty module — INTERFACE wrapper for <yetty/yetty/yetty.h>, exposes

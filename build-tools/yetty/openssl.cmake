@@ -1,26 +1,18 @@
-# OpenSSL — pinned to 1.1.1w via the janbar/openssl-cmake wrapper.
+# OpenSSL — consumes the openssl prebuilt (upstream OpenSSL 4.x).
 #
-# Consumes a prebuilt static lib + headers from the 3rdparty release
-# tarball published by build-3rdparty-openssl.yml. The from-source build
-# (CMake driver, per-platform handling) lives in
+# Static lib + headers come from the 3rdparty release tarball published
+# by build-3rdparty-openssl.yml; the from-source build (Configure +
+# make, per-platform handling) lives in
 # build-tools/3rdparty/openssl/_build.sh.
 #
-# A parallel build of upstream OpenSSL 4.x lives at
-# build-tools/3rdparty/openssl-new/ + build-3rdparty-openssl-new.yml,
-# attached to `lib-openssl-new-*` releases. Yetty currently consumes the
-# 1.1.1w build because cpr / libcurl / libssh2 pinned versions still
-# expect the 1.1.1 API. When those are bumped, this file flips to
-# `yetty_3rdparty_fetch(openssl-new ...)` and the openssl-new dir
-# becomes the canonical openssl.
-#
-# Exposed targets (matched to what cpr / libcurl / libssh2 expect):
+# Exposed targets (matched to what libcurl / libssh2 expect):
 #   OpenSSL::SSL        interface lib that links libssl.a + libcrypto.a
 #   OpenSSL::Crypto     interface lib that links libcrypto.a
 # Plus the standard find_package(OpenSSL) compat variables.
 #
 # Opt-out: -DYETTY_OPENSSL_USE_SYSTEM=ON falls back to find_package(OpenSSL).
 # This is escape-hatch territory; the prebuilt is the default to keep
-# every cross target on the same OpenSSL version (see version file).
+# every cross target on the same OpenSSL version (see openssl/version).
 
 include_guard(GLOBAL)
 include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
@@ -106,10 +98,10 @@ set(OPENSSL_INCLUDE_DIR     "${_OPENSSL_INC_DIR}"             CACHE PATH    "" F
 set(OPENSSL_CRYPTO_LIBRARY  "${_CRYPTO_LIB_PATH}"             CACHE FILEPATH "" FORCE)
 set(OPENSSL_SSL_LIBRARY     "${_SSL_LIB_PATH}"                CACHE FILEPATH "" FORCE)
 set(OPENSSL_LIBRARIES       "OpenSSL::SSL;OpenSSL::Crypto"    CACHE STRING  "" FORCE)
-# Hardcode the semantic openssl version. cpr / libcurl / libssh2 read
-# this and decide which API to use; they expect a clean "1.1.1" prefix,
-# not the janbar release tag (which carries a date suffix).
-set(OPENSSL_VERSION         "1.1.1w"                          CACHE STRING  "" FORCE)
+# Surface the actual upstream openssl version (read from the openssl
+# prebuilt's version file). Downstream cmake that branches on
+# OPENSSL_VERSION sees the real number, not a frozen string.
+set(OPENSSL_VERSION         "${YETTY_3RDPARTY_openssl_VERSION}" CACHE STRING "" FORCE)
 
 message(STATUS "openssl: prebuilt v${YETTY_3RDPARTY_openssl_VERSION} "
                "(${_SSL_LIB_PATH}, ${_CRYPTO_LIB_PATH})")

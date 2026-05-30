@@ -2,13 +2,13 @@
 # Builds libssh2 (libssh2/libssh2) for $TARGET_PLATFORM via its upstream
 # CMake. Same per-platform handling pattern as libuv.
 #
-# OpenSSL backend: we link against the prebuilt openssl 1.1.1w-style
-# tarball published by build-3rdparty-openssl.yml. To keep the producer
-# self-contained, this script downloads that tarball at build time
-# (instead of requiring the consumer-side fetch to have run first).
+# OpenSSL backend: we link against the upstream openssl 4.x prebuilt
+# tarball published by build-3rdparty-openssl.yml. To keep the
+# producer self-contained, this script downloads that tarball at build
+# time (instead of requiring the consumer-side fetch to have run first).
 # Same model the consumer libssh2.cmake uses at yetty-build time —
-# the difference is we resolve openssl HERE so the resulting
-# libssh2 archive carries no external configure-time path baked in.
+# the difference is we resolve openssl HERE so the resulting libssh2
+# archive carries no external configure-time path baked in.
 #
 # windows-x86_64 is intentionally absent — see build.sh for the why.
 #
@@ -45,9 +45,9 @@ VERSION_FILE="$SCRIPT_DIR/version"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 
-# OpenSSL version to link against. Read from the openssl 3rdparty dir
-# unless overridden — that pins libssh2's TLS backend to the same version
-# yetty itself uses.
+# OpenSSL version to link against. Read from the openssl 3rdparty
+# dir unless overridden — that pins libssh2's TLS backend to the same
+# version yetty itself uses.
 OSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl/version"
 : "${OPENSSL_VERSION_OVERRIDE:=}"
 if [ -n "$OPENSSL_VERSION_OVERRIDE" ]; then

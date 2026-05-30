@@ -24,16 +24,16 @@ extern "C" {
 #endif
 
 struct yetty_yui_debug_window;
-struct yetty_ygui_engine;
-struct yetty_ygui_widget;
+struct yetty_ygui_runtime;
+struct yetty_ygui_object;
 struct yetty_ywire_stats_snapshot;
 
 YETTY_YRESULT_DECLARE(yetty_yui_debug_window_ptr, struct yetty_yui_debug_window *);
 
-/* Build the widget tree inside `engine`. `pane_id` is woven into the
- * widget id so multiple debug windows can coexist without collisions. */
+/* Build the widget tree under `engine`'s root. `pane_id` is woven into
+ * a debug tag so multiple debug windows are distinguishable in traces. */
 struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
-    struct yetty_ygui_engine *engine, yetty_ycore_object_id pane_id);
+    struct yetty_ygui_runtime *engine, yetty_ycore_object_id pane_id);
 
 /* Removes the widget tree from the engine and frees the bookkeeping. */
 struct yetty_ycore_void_result yetty_yui_debug_window_destroy(struct yetty_yui_debug_window *dw);

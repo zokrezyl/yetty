@@ -26,6 +26,7 @@
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -39,7 +40,8 @@
  * Figure struct
  *=========================================================================*/
 
-struct yetty_ymgui_figure {
+struct [[clang::annotate("class@ymgui:figure")]] [[clang::annotate("parent@yfigure:figure")]]
+yetty_ymgui_figure {
     struct yetty_yfigure_figure base;
 
     /* Borrowed — shared shader/pipeline/sampler. */
@@ -292,8 +294,8 @@ static struct yetty_ycore_void_result ymgui_figure_destroy(struct yetty_yfigure_
         wgpuBufferRelease(f->idx_buf);
     }
     free(f->frame_bytes);
-    free(f);
-    return YETTY_OK_VOID();
+    /* Free the yclass allocation (header + body); body began at obj + 1. */
+    return yetty_yclass_object_free((struct yetty_yclass_object *)self - 1);
 }
 
 static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_figure *self,
@@ -721,18 +723,35 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yf
 /* Ops vtable shared by every ymgui figure. Same-pointer identity is
  * how yetty_ymgui_figure_from_base recognises an ymgui child sitting
  * inside a heterogeneous yfigure container. */
+/* yclass cross-domain override of yfigure:render. Body sits at obj + 1. */
+[[clang::annotate("override@ymgui:figure:yfigure:render")]]
+static struct yetty_ycore_void_result ymgui_figure_render_slot(struct yetty_yclass_ctx *ctx,
+                                                               struct yetty_yclass_object *obj,
+                                                               struct yetty_ydraw_target *target)
+{
+    (void)ctx;
+    return ymgui_figure_render((struct yetty_yfigure_figure *)(obj + 1), target);
+}
+
+/* yclass cross-domain override of yfigure:destroy. Body sits at obj + 1. */
+[[clang::annotate("override@ymgui:figure:yfigure:destroy")]]
+static struct yetty_ycore_void_result ymgui_figure_destroy_slot(struct yetty_yclass_ctx *ctx,
+                                                                struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    return ymgui_figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
+}
+
 static const struct yetty_yfigure_figure_ops *ymgui_figure_ops(void)
 {
     static const struct yetty_yfigure_figure_ops ops = {
-        .destroy = ymgui_figure_destroy,
-        .render = ymgui_figure_render,
         .process_input = ymgui_figure_process_input,
         .process_bytes = ymgui_figure_process_bytes,
     };
     return &ops;
 }
 
-struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create(
+struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_ycore_rectangle rect, struct yetty_ymgui_pipeline *pipeline,
     const struct yetty_context *context)
 {
@@ -743,12 +762,18 @@ struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create(
         return YETTY_ERR(yetty_ymgui_figure_ptr, "ymgui_figure_create: NULL context");
     }
 
-    struct yetty_ymgui_figure *f = calloc(1, sizeof(*f));
-    if (!f) {
-        return YETTY_ERR(yetty_ymgui_figure_ptr, "ymgui_figure_create: oom");
-    }
+    /* Allocate as a yclass object so the figure carries a class header
+     * (enables yclass dispatch). Typed body lives at obj + 1; the
+     * embedded `base` is its first member. */
+    struct yetty_yclass_ptr_result figure_class_r = yetty_ymgui_figure_class_get();
+    YETTY_RETURN_IF_ERR(yetty_ymgui_figure_ptr, figure_class_r, "ymgui_figure_create: figure class");
+    struct yetty_yclass_object_ptr_result figure_obj_r =
+        yetty_yclass_object_alloc(figure_class_r.value);
+    YETTY_RETURN_IF_ERR(yetty_ymgui_figure_ptr, figure_obj_r, "ymgui_figure_create: object_alloc");
+    struct yetty_ymgui_figure *f = (struct yetty_ymgui_figure *)(figure_obj_r.value + 1);
 
     f->base.ops = ymgui_figure_ops();
+    f->base.self_obj = figure_obj_r.value;
     f->base.rect = rect;
     f->base.dirty = 1;
     f->pipeline = pipeline;
@@ -900,7 +925,7 @@ static struct yetty_yfigure_figure_ptr_result ymgui_factory(struct yetty_ycore_r
     }
 
     struct yetty_ymgui_figure_ptr_result fr =
-        yetty_ymgui_figure_create(rect, args->pipeline, context);
+        yetty_ymgui_figure_create_local(rect, args->pipeline, context);
     YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, fr, "ymgui_factory: figure create");
     return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ymgui_figure_as_figure(fr.value));
 }
@@ -928,3 +953,8 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
     }
     return YETTY_OK_VOID();
 }
+
+/* yclass class accessor + slot table — no override slots yet, the
+ * legacy figure_ops vtable still drives dispatch. The accessor exists
+ * so future per-slot ports have a registered class to attach to. */
+#include "figure.gen.c"

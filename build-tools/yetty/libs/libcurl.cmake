@@ -4,7 +4,7 @@
 # tarball published by build-3rdparty-libcurl.yml. The tarball was built
 # statically against three other yetty 3rdparty prebuilts (see
 # build-tools/3rdparty/libcurl/_build.sh):
-#   - openssl-new  (TLS backend)
+#   - openssl  (TLS backend)
 #   - zlib         (gzip Content-Encoding)
 #   - brotli       (br   Content-Encoding)
 #
@@ -16,14 +16,6 @@
 #
 # Exposes `CURL::libcurl` (the find_package(CURL) target name yetty + cpr
 # expect).
-#
-# WARNING / SCOPE:
-# At time of writing, libssh2 still links the OLD janbar 1.1.1w openssl
-# (see libs/libssh2.cmake → openssl.cmake). Linking yetty with BOTH this
-# libcurl AND libssh2 in the same binary will cause OpenSSL symbol
-# conflicts. Either:
-#   - disable libssh2 (YETTY_ENABLE_LIB_LIBSSH2=OFF) until it migrates, OR
-#   - migrate libssh2 to also use openssl-new (not done yet).
 
 include_guard(GLOBAL)
 include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
@@ -41,10 +33,10 @@ include(${YETTY_ROOT}/build-tools/yetty/libs/zlib.cmake)
 include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
 
 #-----------------------------------------------------------------------------
-# Fetch libcurl prebuilt + the openssl-new prebuilt it was built against.
+# Fetch libcurl prebuilt + the openssl prebuilt it was built against.
 #-----------------------------------------------------------------------------
 yetty_3rdparty_fetch(libcurl     _LIBCURL_DIR)
-yetty_3rdparty_fetch(openssl-new _OSSL_DIR)
+yetty_3rdparty_fetch(openssl _OSSL_DIR)
 
 # Tarball layout: lib/libcurl.a + include/curl/*.h
 if(WIN32 AND EXISTS "${_LIBCURL_DIR}/lib/curl.lib")
@@ -61,7 +53,7 @@ if(NOT EXISTS "${_LIBCURL_DIR}/include/curl/curl.h")
         "libcurl: curl.h not found in ${_LIBCURL_DIR}/include/curl/ — tarball layout changed?")
 endif()
 
-# openssl-new prebuilt: lib/libssl.a + lib/libcrypto.a (from build-3rdparty-openssl-new.yml)
+# openssl prebuilt: lib/libssl.a + lib/libcrypto.a (from build-3rdparty-openssl.yml)
 set(_OSSL_SSL    "${_OSSL_DIR}/lib/libssl.a")
 set(_OSSL_CRYPTO "${_OSSL_DIR}/lib/libcrypto.a")
 if(WIN32)
@@ -75,8 +67,8 @@ endif()
 foreach(_F "${_OSSL_SSL}" "${_OSSL_CRYPTO}")
     if(NOT EXISTS "${_F}")
         message(FATAL_ERROR
-            "libcurl: openssl-new prebuilt lib missing: ${_F} — \
-push the lib-openssl-new-${YETTY_3RDPARTY_openssl-new_VERSION} release first")
+            "libcurl: openssl prebuilt lib missing: ${_F} — \
+push the lib-openssl-${YETTY_3RDPARTY_openssl_VERSION} release first")
     endif()
 endforeach()
 
@@ -152,4 +144,4 @@ set(CURL_LIBRARIES      CURL::libcurl                         CACHE STRING  "" F
 set(CURL_VERSION_STRING "${YETTY_3RDPARTY_libcurl_VERSION}"   CACHE STRING  "" FORCE)
 
 message(STATUS "libcurl: prebuilt v${YETTY_3RDPARTY_libcurl_VERSION} "
-               "(TLS: openssl-new ${YETTY_3RDPARTY_openssl-new_VERSION})")
+               "(TLS: openssl ${YETTY_3RDPARTY_openssl_VERSION})")

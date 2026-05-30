@@ -69,10 +69,16 @@ enum osc_term {
 
 /* Registered handler entry. Indexed by (kind, code). The fn + userdata
  * pair survives for the lifetime of the SM; the per-handler coroutine
- * is created on first registration and torn down at SM destroy. */
+ * is created on first registration and torn down at SM destroy.
+ *
+ * `has_args` selects the wire shape this (kind, code) uses — see the
+ * header. The scanner reads it after the first `;` to decide whether
+ * to enter SCAN_OSC_ARGS (consume args between `;`s, decode_args_slot)
+ * or jump straight to SCAN_OSC_BODY with an empty args slot. */
 struct wire_handler {
     enum yetty_ywire_envelope_kind kind;
     int code;
+    int has_args;
     yetty_ywire_process_input_fn fn;
     void *userdata;
 };
@@ -128,9 +134,12 @@ struct yetty_ywire_wire_statemachine {
     void *default_userdata;
 
     /* Catch-all envelope handler — fires for any (kind, code) with no
-     * specific entry in handlers[]. NULL means "drain & drop". */
+     * specific entry in handlers[]. NULL means "drain & drop".
+     * `envelope_default_has_args` is propagated into the synthetic
+     * handler slot used at dispatch. */
     yetty_ywire_process_input_fn envelope_default_fn;
     void *envelope_default_userdata;
+    int envelope_default_has_args;
     /* Synthetic handler entry that points at the catch-all. Kept on the
      * SM so the dispatcher can drive it through the same code path as
      * regular handlers (one per-userdata coro etc.). Refreshed
@@ -959,7 +968,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
     struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
-    yetty_ywire_process_input_fn fn, void *userdata)
+    int has_args, yetty_ywire_process_input_fn fn, void *userdata)
 {
     if (!sm) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
@@ -972,6 +981,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
     }
     for (size_t i = 0; i < sm->handler_count; i++) {
         if (sm->handlers[i].kind == kind && sm->handlers[i].code == code) {
+            sm->handlers[i].has_args = has_args ? 1 : 0;
             sm->handlers[i].fn = fn;
             sm->handlers[i].userdata = userdata;
             if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
@@ -989,8 +999,8 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
         sm->handlers = nh;
         sm->handler_cap = nc;
     }
-    sm->handlers[sm->handler_count++] =
-        (struct wire_handler){.kind = kind, .code = code, .fn = fn, .userdata = userdata};
+    sm->handlers[sm->handler_count++] = (struct wire_handler){
+        .kind = kind, .code = code, .has_args = has_args ? 1 : 0, .fn = fn, .userdata = userdata};
     if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: handler coro spawn failed in register");
     }
@@ -1216,7 +1226,41 @@ static void sm_coro_entry(void *arg)
                 if (c >= '0' && c <= '9') {
                     sm->current_code = sm->current_code * 10 + (int)(c - '0');
                 } else if (c == ';') {
-                    sm->state = SCAN_OSC_ARGS;
+                    /* Resolve handler at the FIRST `;`. The handler's
+                     * has_args flag drives whether we consume an args
+                     * slot (one more `;` later) or jump straight into
+                     * the body. Unknown (kind, code) with no
+                     * envelope_default falls back to has_args=0 — the
+                     * body is drained-and-dropped without trying to
+                     * find a second `;` inside it. */
+                    sm->current_handler = find_handler(sm, sm->current_kind, sm->current_code);
+                    if (!sm->current_handler && sm->envelope_default_fn) {
+                        sm->envelope_default_handler_slot.kind = sm->current_kind;
+                        sm->envelope_default_handler_slot.code = sm->current_code;
+                        sm->envelope_default_handler_slot.has_args = sm->envelope_default_has_args;
+                        sm->envelope_default_handler_slot.fn = sm->envelope_default_fn;
+                        sm->envelope_default_handler_slot.userdata = sm->envelope_default_userdata;
+                        sm->current_handler = &sm->envelope_default_handler_slot;
+                    }
+                    /* Test hook: OSC 99099 synthesises a multi-frame
+                     * error chain so the post_fatal_error → ynotify
+                     * path can be exercised end-to-end from a child
+                     * process. Same intent as the old SCAN_OSC_ARGS
+                     * hook; fires earlier now. */
+                    if (sm->current_kind == YETTY_YWIRE_ENVELOPE_OSC && sm->current_code == 99099) {
+                        struct yetty_ycore_void_result inner =
+                            YETTY_ERR(yetty_ycore_void, "test trigger: inner cause");
+                        struct yetty_ycore_void_result mid =
+                            YETTY_ERR(yetty_ycore_void, "test trigger: middle wrap", inner);
+                        sm->sm_result = YETTY_ERR(yetty_ycore_void,
+                                                  "test trigger: synthetic OSC 99099 error", mid);
+                        return;
+                    }
+                    if (sm->current_handler && sm->current_handler->has_args) {
+                        sm->state = SCAN_OSC_ARGS;
+                    } else {
+                        sm->state = SCAN_OSC_BODY;
+                    }
                 } else {
                     ywarn("wire: malformed envelope code byte=0x%02x kind=0x%02x", (unsigned)c,
                           (unsigned)sm->current_kind);
@@ -1254,29 +1298,10 @@ static void sm_coro_entry(void *arg)
                 }
                 sm->read_pos++;
                 if (c == ';') {
+                    /* Second `;` — args slot complete. Handler was
+                     * resolved at the first `;`; only thing left is to
+                     * decode the args buffer and step to the body. */
                     decode_args_slot(sm);
-                    /* Test hook: OSC 99099 synthesises a multi-frame error
-                     * chain so the post_fatal_error → ynotify path can be
-                     * exercised end-to-end from a child process. */
-                    if (sm->current_kind == YETTY_YWIRE_ENVELOPE_OSC && sm->current_code == 99099) {
-                        struct yetty_ycore_void_result inner =
-                            YETTY_ERR(yetty_ycore_void, "test trigger: inner cause");
-                        struct yetty_ycore_void_result mid =
-                            YETTY_ERR(yetty_ycore_void, "test trigger: middle wrap", inner);
-                        sm->sm_result = YETTY_ERR(yetty_ycore_void,
-                                                  "test trigger: synthetic OSC 99099 error", mid);
-                        return;
-                    }
-                    sm->current_handler = find_handler(sm, sm->current_kind, sm->current_code);
-                    if (!sm->current_handler && sm->envelope_default_fn) {
-                        /* Refresh the synthetic slot to reflect the
-                         * envelope we're about to dispatch. */
-                        sm->envelope_default_handler_slot.kind = sm->current_kind;
-                        sm->envelope_default_handler_slot.code = sm->current_code;
-                        sm->envelope_default_handler_slot.fn = sm->envelope_default_fn;
-                        sm->envelope_default_handler_slot.userdata = sm->envelope_default_userdata;
-                        sm->current_handler = &sm->envelope_default_handler_slot;
-                    }
                     sm->state = SCAN_OSC_BODY;
                 } else if (sm->args_b64_len < sizeof(sm->args_b64)) {
                     sm->args_b64[sm->args_b64_len++] = (char)c;
@@ -1576,7 +1601,8 @@ static struct yetty_ycore_void_result ensure_enc_scratch(struct yetty_ywire_wire
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
     struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
-    int compressed, const void *args, size_t args_len, struct yetty_ycore_buffer *out_buf)
+    int has_args, int compressed, const void *args, size_t args_len,
+    struct yetty_ycore_buffer *out_buf)
 {
     if (!sm) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
@@ -1590,14 +1616,20 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
     if (kind != YETTY_YWIRE_ENVELOPE_OSC && kind != YETTY_YWIRE_ENVELOPE_DCS) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: unknown envelope kind");
     }
+    if (!has_args && (args || args_len)) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "wire_sm: start_write: has_args=0 but args/args_len given");
+    }
 
     sm->enc_out_buf = out_buf;
     sm->enc_b64_carry_n = 0;
     sm->enc_compressed = compressed ? 1 : 0;
 
-    /* Wire shape: "ESC <kind> <code> ; <b64-args> ; <b64-payload> ESC \\".
-     * The args slot is always present (empty if args_len == 0) so the
-     * receiver always sees the same `;…;` split. */
+    /* Wire shape:
+     *   has_args=0 → "ESC <kind> <code> ; <b64+lz4 body> ESC \\"
+     *   has_args=1 → "ESC <kind> <code> ; <b64 args> ; <b64+lz4 body> ESC \\"
+     * Either way the prefix `ESC <kind> <code> ;` is written first;
+     * the args section + closing `;` are only added when has_args. */
     char hdr[32];
     int n = snprintf(hdr, sizeof(hdr), "\033%c%d;", (char)kind, code);
     if (n <= 0 || (size_t)n >= sizeof(hdr)) {
@@ -1607,14 +1639,14 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
         struct yetty_ycore_void_result r = yetty_ycore_buffer_write(out_buf, hdr, (size_t)n);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: hdr");
     }
-    if (args && args_len > 0) {
-        struct yetty_ycore_void_result r = b64_encode_push(sm, (const uint8_t *)args, args_len);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args push");
-        r = b64_encode_flush(sm);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args flush");
-        sm->enc_b64_carry_n = 0;
-    }
-    {
+    if (has_args) {
+        if (args && args_len > 0) {
+            struct yetty_ycore_void_result r = b64_encode_push(sm, (const uint8_t *)args, args_len);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args push");
+            r = b64_encode_flush(sm);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args flush");
+            sm->enc_b64_carry_n = 0;
+        }
         struct yetty_ycore_void_result r = yetty_ycore_buffer_write(out_buf, ";", 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: args close");
     }
@@ -1746,8 +1778,8 @@ out:
  *=========================================================================*/
 
 struct yetty_ycore_void_result yetty_ywire_emit(enum yetty_ywire_envelope_kind kind, int code,
-                                                int compressed, const void *args, size_t args_len,
-                                                const void *body, size_t body_len,
+                                                int has_args, int compressed, const void *args,
+                                                size_t args_len, const void *body, size_t body_len,
                                                 struct yetty_ycore_buffer *out_buf)
 {
     if (!out_buf) {
@@ -1758,7 +1790,7 @@ struct yetty_ycore_void_result yetty_ywire_emit(enum yetty_ywire_envelope_kind k
     struct yetty_ywire_wire_statemachine *sm = sr.value;
 
     struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_start_write(
-        sm, kind, code, compressed, args, args_len, out_buf);
+        sm, kind, code, has_args, compressed, args, args_len, out_buf);
     if (YETTY_IS_OK(r) && body && body_len > 0) {
         r = yetty_ywire_wire_statemachine_write(sm, body, body_len);
     }
@@ -1776,13 +1808,13 @@ struct yetty_ycore_void_result yetty_ywire_emit(enum yetty_ywire_envelope_kind k
 }
 
 struct yetty_ycore_void_result yetty_ywire_emit_to_fd(int fd, enum yetty_ywire_envelope_kind kind,
-                                                      int code, int compressed, const void *args,
-                                                      size_t args_len, const void *body,
-                                                      size_t body_len)
+                                                      int code, int has_args, int compressed,
+                                                      const void *args, size_t args_len,
+                                                      const void *body, size_t body_len)
 {
     struct yetty_ycore_buffer buf = {0};
     struct yetty_ycore_void_result r =
-        yetty_ywire_emit(kind, code, compressed, args, args_len, body, body_len, &buf);
+        yetty_ywire_emit(kind, code, has_args, compressed, args, args_len, body, body_len, &buf);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&buf);
         return r;
@@ -1950,7 +1982,8 @@ out:
  *=========================================================================*/
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_default(
-    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_process_input_fn fn, void *userdata)
+    struct yetty_ywire_wire_statemachine *sm, int has_args, yetty_ywire_process_input_fn fn,
+    void *userdata)
 {
     if (!sm) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
@@ -1961,6 +1994,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_defaul
     }
     sm->envelope_default_fn = fn;
     sm->envelope_default_userdata = userdata;
+    sm->envelope_default_has_args = has_args ? 1 : 0;
     if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: envelope_default coro spawn failed");
     }
@@ -2048,7 +2082,7 @@ static struct buffered_handler *new_buffered(struct yetty_ywire_wire_statemachin
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register_buffered(
     struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
-    yetty_ywire_envelope_cb cb, void *userdata)
+    int has_args, yetty_ywire_envelope_cb cb, void *userdata)
 {
     if (!sm) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
@@ -2062,11 +2096,13 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register_buffered(
     }
     bh->env_cb = cb;
     bh->userdata = userdata;
-    return yetty_ywire_wire_statemachine_register(sm, kind, code, envelope_buffered_dispatch, bh);
+    return yetty_ywire_wire_statemachine_register(sm, kind, code, has_args,
+                                                  envelope_buffered_dispatch, bh);
 }
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_default_buffered(
-    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_envelope_cb cb, void *userdata)
+    struct yetty_ywire_wire_statemachine *sm, int has_args, yetty_ywire_envelope_cb cb,
+    void *userdata)
 {
     if (!sm) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
@@ -2080,7 +2116,8 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_defaul
     }
     bh->env_cb = cb;
     bh->userdata = userdata;
-    return yetty_ywire_wire_statemachine_set_envelope_default(sm, envelope_buffered_dispatch, bh);
+    return yetty_ywire_wire_statemachine_set_envelope_default(sm, has_args,
+                                                              envelope_buffered_dispatch, bh);
 }
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default_buffered(

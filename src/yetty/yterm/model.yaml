@@ -1,0 +1,19 @@
+methods: []
+classes:
+  - name: shader_glyph
+    domain: yterm
+    accessor: yetty_yterm_shader_glyph_class_get
+    type: regular
+    source_file: src/yetty/yterm/shader-glyph-figure.c
+    parent:
+      domain: yfigure
+      name: figure
+    mixins: []
+    data: struct yetty_yterm_shader_glyph_figure
+    ops:
+      - slot: render
+        slot_domain: yfigure
+        impl: figure_render_slot
+      - slot: destroy
+        slot_domain: yfigure
+        impl: figure_destroy_slot

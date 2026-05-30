@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# libssh2 3rdparty wrapper. Builds against the prebuilt openssl tarball
-# from build-tools/3rdparty/openssl/ — see _build.sh for the cross-fetch
-# of that asset at build time.
+# libssh2 3rdparty wrapper. Builds against the prebuilt openssl
+# tarball from build-tools/3rdparty/openssl/ — see _build.sh for the
+# cross-fetch of that asset at build time.
 #
 # Required env:
 #   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |
@@ -26,8 +26,8 @@ case "$TARGET_PLATFORM" in
         ;;
     windows-x86_64)
         # Native MSVC: caller must have vcvarsall'd the shell so cl.exe
-        # is on PATH. Built against the prebuilt openssl windows tarball
-        # fetched by _build.sh.
+        # is on PATH. Built against the prebuilt openssl windows
+        # tarball fetched by _build.sh.
         if ! command -v cl >/dev/null 2>&1 && ! command -v cl.exe >/dev/null 2>&1; then
             echo "error: windows-x86_64 requires MSVC cl on PATH (vcvarsall x64)" >&2
             exit 1

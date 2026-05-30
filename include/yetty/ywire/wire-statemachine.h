@@ -84,20 +84,27 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
     struct yetty_ywire_wire_statemachine *sm);
 
 /*
- * Bind (kind, code) → (fn, userdata). When the framer recognises
- * ESC <kind> <code> ; <args> ;, the SM dispatches fn(userdata, sm).
- * Re-registering the same (kind, code) overwrites. No codec parameter
- * — the decode pipeline is fixed by protocol (args = b64, payload =
- * b64 + lz4).
+ * Bind (kind, code) → (fn, userdata).
  *
- * Coroutine dedup: callers that re-use the same `userdata` pointer
- * across multiple registrations share one persistent coroutine — the
- * fn passed on the *first* registration is the one that's spawned, so
- * be consistent.
+ * `has_args` selects the wire shape:
+ *   has_args = 0  →  ESC <kind> <code> ; <b64+lz4 payload> ESC \\
+ *   has_args = 1  →  ESC <kind> <code> ; <b64 args> ; <b64+lz4 payload> ESC \\
+ *
+ * The default is "no args slot": one `;` separates code from payload,
+ * and the body bytes start immediately. Set `has_args = 1` only when
+ * the protocol on this (kind, code) carries a fixed-shape args struct
+ * the SM decodes into its small args buffer (queried with
+ * yetty_ywire_wire_statemachine_args). yface envelopes use the
+ * has_args=1 shape; yrpc DCS envelopes use the bare has_args=0 shape.
+ *
+ * Re-registering the same (kind, code) overwrites. Coroutine dedup:
+ * callers that re-use the same `userdata` pointer across multiple
+ * registrations share one persistent coroutine — the fn passed on the
+ * *first* registration is the one that's spawned, so be consistent.
  */
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
     struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
-    yetty_ywire_process_input_fn fn, void *userdata);
+    int has_args, yetty_ywire_process_input_fn fn, void *userdata);
 
 /*
  * Bind the default sink for bytes outside any envelope (raw passthrough
@@ -233,7 +240,8 @@ struct yetty_ywire_stats_snapshot yetty_ywire_wire_statemachine_stats_snapshot(
  * _read, queries kind/code via the accessors.
  *=========================================================================*/
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_default(
-    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_process_input_fn fn, void *userdata);
+    struct yetty_ywire_wire_statemachine *sm, int has_args, yetty_ywire_process_input_fn fn,
+    void *userdata);
 
 /*===========================================================================
  * Buffered (push-callback) reader — sugar over the pull API
@@ -257,10 +265,11 @@ typedef struct yetty_ycore_void_result (*yetty_ywire_raw_cb)(void *userdata, con
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register_buffered(
     struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
-    yetty_ywire_envelope_cb cb, void *userdata);
+    int has_args, yetty_ywire_envelope_cb cb, void *userdata);
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_default_buffered(
-    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_envelope_cb cb, void *userdata);
+    struct yetty_ywire_wire_statemachine *sm, int has_args, yetty_ywire_envelope_cb cb,
+    void *userdata);
 
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default_buffered(
     struct yetty_ywire_wire_statemachine *sm, yetty_ywire_raw_cb cb, void *userdata);
@@ -278,12 +287,18 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default_buffere
  * be active on a given SM at a time.
  *=========================================================================*/
 
-/* Begin emitting an envelope. Appends "ESC <kind> <code> ; <b64-args> ;"
- * into out_buf, opens an LZ4F frame if compressed=1, and primes the
- * streaming b64 encoder for the body. */
+/* Begin emitting an envelope. `has_args` mirrors the register-side
+ * flag and picks the wire shape:
+ *   has_args = 0  →  appends "ESC <kind> <code> ;" (`args`/`args_len`
+ *                    must be NULL/0; the receiver does NOT look for a
+ *                    second `;`).
+ *   has_args = 1  →  appends "ESC <kind> <code> ; <b64-args> ;".
+ * Opens an LZ4F frame if compressed=1, and primes the streaming b64
+ * encoder for the body. */
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
     struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
-    int compressed, const void *args, size_t args_len, struct yetty_ycore_buffer *out_buf);
+    int has_args, int compressed, const void *args, size_t args_len,
+    struct yetty_ycore_buffer *out_buf);
 
 /* Push body bytes through the active write codec. Zero-byte calls are
  * a no-op; the encoder may emit zero output bytes (LZ4F batches up to
@@ -303,18 +318,19 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
  * streaming API above when emitting many envelopes back-to-back.
  *=========================================================================*/
 
-/* Append a complete envelope ("ESC <kind> <code> ; <b64-args> ;
- * <b64+lz4 body> ESC \\") to out_buf. */
+/* Append a complete envelope to `out_buf`. `has_args` picks the shape:
+ *   0 → "ESC <kind> <code> ; <b64+lz4 body> ESC \\"  (args/args_len must be NULL/0)
+ *   1 → "ESC <kind> <code> ; <b64-args> ; <b64+lz4 body> ESC \\" */
 struct yetty_ycore_void_result yetty_ywire_emit(enum yetty_ywire_envelope_kind kind, int code,
-                                                int compressed, const void *args, size_t args_len,
-                                                const void *body, size_t body_len,
+                                                int has_args, int compressed, const void *args,
+                                                size_t args_len, const void *body, size_t body_len,
                                                 struct yetty_ycore_buffer *out_buf);
 
 /* Same, but blocking write(2) straight to fd. */
 struct yetty_ycore_void_result yetty_ywire_emit_to_fd(int fd, enum yetty_ywire_envelope_kind kind,
-                                                      int code, int compressed, const void *args,
-                                                      size_t args_len, const void *body,
-                                                      size_t body_len);
+                                                      int code, int has_args, int compressed,
+                                                      const void *args, size_t args_len,
+                                                      const void *body, size_t body_len);
 
 /* Decode a b64 (optionally LZ4F-compressed) body — the bytes between
  * the second `;` and the trailing terminator — into out_buf. */

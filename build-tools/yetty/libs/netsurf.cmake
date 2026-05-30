@@ -146,7 +146,7 @@ target_link_libraries(netsurf_core INTERFACE
 
 #-----------------------------------------------------------------------------
 # Run-time link deps. Same set the in-source build pulled in:
-#   - libcurl (yetty's prebuilt, with openssl-new bundled)
+#   - libcurl (yetty's prebuilt, with openssl bundled)
 #   - libjpeg-turbo (yetty's prebuilt, jpeg-static target)
 #   - libxml-2.0, libpng, libwebp from the host (pkg-config)
 #   - z, m

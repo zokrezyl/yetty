@@ -5,9 +5,9 @@ name: Build 3rdparty — libssh2
 # windows-libs-msvc branch and an MSYS2 CLANG64 build here would produce
 # ABI-incompatible libs).
 #
-# Note: the producer downloads the prebuilt openssl tarball at build
-# time so the resulting libssh2 archive is statically linked against
-# the same openssl version yetty itself uses (read from
+# Note: the producer downloads the prebuilt openssl tarball at
+# build time so the resulting libssh2 archive is statically linked
+# against the same openssl version yetty itself uses (read from
 # build-tools/3rdparty/openssl/version).
 
 on:

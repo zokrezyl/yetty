@@ -1,39 +1,19 @@
-/*
- * yfigure — base type for compositor figures.
- *
- * A figure is a positioned, axis-aligned rectangular thing that knows
- * how to paint itself inside its rectangle. The compositor (ycompositor,
- * defined elsewhere) hosts a list of figures and drives damage-rect
- * repaint; the figure itself is unaware of the compositor.
- *
- * Concrete figure kinds (ygrid, yimage, yplot, …) each live in their
- * own module, embed `struct yetty_yfigure_figure` as the first member,
- * and install an ops vtable. A group is itself a figure (composite
- * pattern, same model as scene-canvas).
- *
- * Coordinate system:
- *   A figure's `rect` is its position + size in absolute target pixel
- *   space. The figure knows where it is from its own state — render
- *   ops do NOT take position parameters.
- *
- *   The wire format encodes coordinates relative to the enclosing
- *   group for compactness and cheap subtree moves; the decoder
- *   translates wire-relative to runtime-absolute as it walks each
- *   CMD_GROUP. When a group moves at runtime, the move walks
- *   descendants and updates their absolute rects accordingly.
- */
-#ifndef YETTY_YFIGURE_FIGURE_H
-#define YETTY_YFIGURE_FIGURE_H
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `figure` (module: yfigure).
+ * Codegen regenerates the section above the MANUAL markers;
+ * hand-written content between the markers is preserved
+ * across runs. Edit annotated source for accessor + slot
+ * changes; edit between MANUAL markers for app-facing
+ * helper declarations, enums, etc. */
+#ifndef YETTY_YCLASSGEN_YFIGURE_FIGURE_H
+#define YETTY_YCLASSGEN_YFIGURE_FIGURE_H
 
-#include <stddef.h>
+#include <yclass/class.h>
+#include <yetty/yfigure/methods.h>
 
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
+struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 struct yetty_yfigure_figure;
 struct yetty_ydraw_target;
 struct yetty_ywire_wire_statemachine;
@@ -109,8 +89,26 @@ struct yetty_yfigure_figure_ops {
     char *(*dump)(const struct yetty_yfigure_figure *self, int indent);
 };
 
+/* figure is a concrete yclass base class — concrete kinds (container,
+ * ygrid, ymgui, …) inherit via `parent@yfigure:figure`, not via
+ * `uses@`. The yclass annotation lives on the forward declaration in
+ * `src/yetty/yfigure/figure.c` so the figure module's codegen pass
+ * groups the class under figure.c (its natural host TU) rather than
+ * the first .c that transitively includes this header. The struct
+ * still carries the legacy `yetty_yfigure_figure_ops` vtable head
+ * member; that vtable remains intentionally transitional until every
+ * concrete figure kind speaks yclass dispatch end-to-end. */
 struct yetty_yfigure_figure {
     const struct yetty_yfigure_figure_ops *ops;
+    /* The owning yclass object header, set by every yclass-allocated
+     * figure right after object_alloc (body sits at object + 1, so this
+     * equals `(struct yetty_yclass_object *)figure - 1`). NULL for
+     * figures not allocated through yclass (e.g. unit-test mocks that
+     * still ride the transitional ops vtable). The container uses this
+     * to route render/destroy through yclass dispatch when present and
+     * the ops vtable otherwise — the bridge that lets migrated and
+     * not-yet-migrated figure kinds coexist. */
+    struct yetty_yclass_object *self_obj;
     /* AABB in target pixel space. Set at construction by the concrete
      * figure; subsequent moves go through the parent's set_rect so
      * damage tracking stays correct.
@@ -119,6 +117,19 @@ struct yetty_yfigure_figure {
      * the parent group uses to address its children, not a property of
      * the child itself. See yetty_yfigure_container_add_child. */
     struct yetty_ycore_rectangle rect;
+    /* Stacking order within the parent container. Higher z renders
+     * later (in front) and wins hit-tests. Default 0. The parent sorts
+     * its children by (z, insertion-seq) — equal z falls back to
+     * insertion order, so single-z trees behave exactly as before.
+     * Set over the wire via the SET_CHILD_Z admin record; coarse bands
+     * (chrome < floating windows < menus) keep layers from interleaving. */
+    int32_t z;
+    /* When set, the parent container skips this child entirely — no
+     * render, no hit. Lets a producer hide a figure (e.g. a closed
+     * dialog) without deleting it and re-shipping its whole body on the
+     * next show. Toggled over the wire via the SET_CHILD_HIDDEN admin
+     * record. Default 0 (visible). */
+    int hidden;
     /* Set by the figure when its contents change without geometry
      * moving. The parent ORs this into its damage region during the
      * next render pass and clears it after. */
@@ -147,18 +158,41 @@ YETTY_YRESULT_DECLARE(yetty_yfigure_container_ptr, struct yetty_yfigure_containe
 struct yetty_context;
 struct yetty_yfigure_registry;
 
-/* Create an empty container with the given AABB.
+/* Construction goes through the codegen-emitted yclass factory
  *
- * `context` and `registry` are BORROWED pointers — the host owns
- * lifetime. They're used when an admin CREATE_CHILD record arrives:
- * the container calls `registry_mint(kind, child_rect, context)` and
- * `add_child` with the new figure. Sub-containers minted via CREATE_CHILD
- * inherit both pointers. Either may be NULL: a NULL registry causes
- * any CREATE_CHILD record to fail with a "no registry" error, useful
- * for containers that should never accept new children. */
-struct yetty_yfigure_container_ptr_result yetty_yfigure_container_create(
-    struct yetty_ycore_rectangle rect, const struct yetty_context *context,
-    struct yetty_yfigure_registry *registry);
+ *     yetty_yfigure_container_create(struct yetty_yclass_ctx *ctx)
+ *
+ * declared in <yetty/yfigure/rpc.h>. Same call on both sides of an
+ * RPC session: ctx->session == NULL allocates a local instance and
+ * runs the `constructor` slot (sets ops); ctx->session != NULL mints
+ * a proxy whose method calls marshal over the session.
+ *
+ * Per-instance runtime state (rect, context, registry) is set by the
+ * owner — the side that hosts the actual container body — via the
+ * setters below right after _create. They take a body pointer
+ * obtained from `yetty_yfigure_container_from(obj)`. They are NOT
+ * yclass slots: the pointers (struct yetty_context *, registry *)
+ * are in-process state that doesn't translate across a wire. */
+
+/* Downcast from the yclass header to the typed body. Used by the
+ * owner to call the setters below right after _create. NULL in →
+ * NULL out. */
+struct yetty_yfigure_container *yetty_yfigure_container_from(struct yetty_yclass_object *obj);
+
+/* Owner-side setters for per-instance runtime state. `context` and
+ * `registry` are borrowed — the host owns their lifetime; both must
+ * outlive every figure they touch. A NULL registry makes any
+ * subsequent CREATE_CHILD record fail with "no registry"; that's the
+ * right shape for read-only containers. `rect` is the container's
+ * own AABB. */
+void yetty_yfigure_container_set_registry(struct yetty_yfigure_container *container,
+                                          struct yetty_yfigure_registry *registry);
+
+void yetty_yfigure_container_set_context(struct yetty_yfigure_container *container,
+                                         const struct yetty_context *context);
+
+void yetty_yfigure_container_set_rect(struct yetty_yfigure_container *container,
+                                      struct yetty_ycore_rectangle rect);
 
 /* Consume one full OSC envelope's body off the SM as a record stream
  * targeted at this (root) container. Loops until the SM signals
@@ -268,9 +302,6 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
  * Caller owns the returned string and frees with free(). NULL on OOM.
  *=========================================================================*/
 char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent);
+/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* YETTY_YFIGURE_FIGURE_H */

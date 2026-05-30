@@ -149,7 +149,12 @@ function(yetty_stage_webasm_assets)
             "${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl"
             "${YETTY_ROOT}/src/yetty/yfont/ms-raster-font.wgsl"
             "${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl"
-            "${YETTY_ROOT}/src/yetty/ymsdf-wgsl/shaders/msdf_gen.wgsl")
+            "${YETTY_ROOT}/src/yetty/ymsdf-wgsl/shaders/msdf_gen.wgsl"
+            # ygrid.wgsl — the yui chrome (titlebar/tabbar/statusbar) renders
+            # through an ygrid figure since the yui→ygui refactor; without its
+            # shader staged here the chrome ygrid fails to create on webasm and
+            # the whole UI silently fails to render.
+            "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl")
         get_filename_component(_NAME "${_SHADER}" NAME)
         _stage_one("${_SHADER}" "data/shaders" "${_NAME}" TRUE "/data")
     endforeach()

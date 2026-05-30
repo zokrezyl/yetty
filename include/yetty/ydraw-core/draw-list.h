@@ -201,8 +201,8 @@ size_t yetty_ydraw_draw_list_size(const struct yetty_ydraw_draw_list *buf);
  * begin without its matching end. Capacity is untouched. Errors:
  * NULL buf, or size > current buffer size (caller bug — would extend
  * into uninitialized memory). */
-struct yetty_ycore_void_result yetty_ydraw_draw_list_truncate(
-    struct yetty_ydraw_draw_list *buf, size_t size);
+struct yetty_ycore_void_result yetty_ydraw_draw_list_truncate(struct yetty_ydraw_draw_list *buf,
+                                                              size_t size);
 
 /* Serialize the whole buffer (scene_bounds + primitives + text_spans) into
  * a single binary blob, tagged with a magic header. The receiver passes the

@@ -1409,7 +1409,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < kAnalyzedCodes_n; i++) {
         mocks[i].expected_code = kAnalyzedCodes[i];
         struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_register(
-            sm, YETTY_YWIRE_ENVELOPE_OSC, kAnalyzedCodes[i],
+            sm, YETTY_YWIRE_ENVELOPE_OSC, kAnalyzedCodes[i], /*has_args=*/1,
             envelope_mock_process_input, &mocks[i]);
         if (YETTY_IS_ERR(r)) {
             fprintf(stderr,

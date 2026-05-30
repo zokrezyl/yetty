@@ -12,7 +12,7 @@
  * Wiring at startup:
  *   - yui installs a handler in yetty_yui_create() that posts the
  *     notification onto the event-loop thread, where it ultimately calls
- *     yetty_ygui_engine_notify on yui's ygui engine. That hop is what
+ *     the ygui framework's notify on yui's engine. That hop is what
  *     makes ynotify safe to call from any thread.
  *   - When no handler is registered (e.g. headless tools, unit tests),
  *     ynotify still logs — the notification just doesn't appear on
@@ -20,8 +20,8 @@
  *     whether anyone is listening.
  *
  * Severity drives both the log level and the on-screen accent stripe
- * (INFO mint, WARN amber, ERROR crimson). Match the integer values to
- * yetty_ygui_severity so handlers can pass them through unchanged.
+ * (INFO mint, WARN amber, ERROR crimson). The integer values are a
+ * caller-defined level (0 = info … higher = more severe).
  */
 
 #include <stdarg.h>
