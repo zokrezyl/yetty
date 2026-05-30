@@ -49,6 +49,13 @@
  * UTF-8 over-counts width slightly — consistent with the original. */
 #define YMD_CHAR_W 0.6f
 
+/* A TEXT_SPAN's y is the glyph BASELINE (the canvas places each glyph at
+ * span_y - bearing_y), so a line drawn at its top edge would ascend off the
+ * top. We treat the per-line cursor as the line's TOP and push the baseline
+ * down by this fraction of the font size so the glyphs sit inside the line
+ * box. ~0.8 covers the tallest ascenders of the default font. */
+#define YMD_ASCENT 0.8f
+
 #define YMD_MARGIN 2.0f         /* left/top margin of the document */
 #define YMD_LIST_INDENT 20.0f   /* bullet / ordered-list hanging indent */
 #define YMD_QUOTE_GUTTER 12.0f  /* horizontal space reserved per quote level */
@@ -1155,21 +1162,23 @@ static struct yetty_ycore_void_result ymd_emit_spans(struct yetty_ydraw_draw_lis
             color = override;
         }
         float text_w = ymd_text_px(span->text_len, scaled_size);
+        /* `y` is the line top; the glyph baseline sits one ascent below it. */
+        float baseline = y + scaled_size * YMD_ASCENT;
 
         if (span->is_code) {
             struct yetty_ycore_void_result r =
-                ymd_emit_box(buf, cursor_x + text_w * 0.5f, y + scaled_size * 0.4f,
-                             text_w * 0.5f + 1.0f, scaled_size * 0.5f + 0.5f, YMD_COLOR_CODE_BG);
+                ymd_emit_box(buf, cursor_x + text_w * 0.5f, y + scaled_size * 0.55f,
+                             text_w * 0.5f + 1.0f, scaled_size * 0.55f, YMD_COLOR_CODE_BG);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ymd span: code box add failed");
         }
 
         struct yetty_ycore_void_result tr =
-            ymd_emit_text(buf, cursor_x, y, span->text, span->text_len, scaled_size, color);
+            ymd_emit_text(buf, cursor_x, baseline, span->text, span->text_len, scaled_size, color);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "ymd span: text add failed");
 
         if (span->strike) {
             struct yetty_ycore_void_result sr = ymd_emit_box(
-                buf, cursor_x + text_w * 0.5f, y + scaled_size * 0.32f, text_w * 0.5f, 0.75f,
+                buf, cursor_x + text_w * 0.5f, y + scaled_size * 0.5f, text_w * 0.5f, 0.9f,
                 YMD_COLOR_STRIKE);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymd span: strike add failed");
         }
@@ -1317,8 +1326,9 @@ static struct yetty_ycore_void_result ymd_emit_one_line(struct yetty_ydraw_draw_
                          line_height * 0.5f, YMD_COLOR_CODE_BG);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, bg, "ymd code: panel");
         if (line->raw_len > 0) {
-            struct yetty_ycore_void_result tr = ymd_emit_text(
-                buf, cx_start + YMD_CODE_PAD, cy, line->raw, line->raw_len, scaled, YMD_COLOR_CODE);
+            struct yetty_ycore_void_result tr =
+                ymd_emit_text(buf, cx_start + YMD_CODE_PAD, cy + scaled * YMD_ASCENT, line->raw,
+                              line->raw_len, scaled, YMD_COLOR_CODE);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "ymd code: text");
         }
         return YETTY_OK_VOID();

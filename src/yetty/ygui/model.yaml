@@ -760,12 +760,6 @@ classes:
     mixins: []
     data: struct tabbar_data
     ops:
-      - slot: widget_on_press
-        slot_domain: ygui
-        impl: tabbar_on_press
-      - slot: widget_on_release
-        slot_domain: ygui
-        impl: tabbar_on_release
       - slot: constructor
         slot_domain: ygui
         impl: tabbar_constructor

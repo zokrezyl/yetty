@@ -102,8 +102,6 @@ static struct yetty_ycore_void_result ymd_emit_body(struct yetty_yclass_ctx *ycl
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
-    fprintf(stderr, "YMDDBG emit_body rect min=(%.1f,%.1f) max=(%.1f,%.1f) w=%.1f h=%.1f\n",
-            r.min.x, r.min.y, r.max.x, r.max.y, w, h);
     if (d->source && (w != d->rendered_w || h != d->rendered_h)) {
         struct yetty_ycore_void_result rr = ymd_render(NULL, yclass_obj, w, h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymarkdown_emit_body: render");
