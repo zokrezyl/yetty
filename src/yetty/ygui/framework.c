@@ -1264,6 +1264,39 @@ fail:
     return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_flush: envelope compose", r);
 }
 
+struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
+    struct yetty_ygui_runtime *engine, int fd)
+{
+    if (!engine || fd < 0) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_clear_remote_fd: bad args");
+    }
+    /* One CLEAR_ALL admin record on the root (id=0) — the host container's
+     * process_records drops every child when it sees this op. */
+    struct yetty_ycore_buffer records = {0};
+    struct yetty_ycore_void_result r =
+        append_admin_record(&records, YETTY_YFIGURE_ADMIN_CLEAR_ALL, NULL, 0);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_buffer_destroy(&records);
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_clear_remote_fd: build record", r);
+    }
+    /* Same envelope framing as framework_flush, written straight to the fd. */
+    struct yetty_yface_bin_meta meta = {
+        .magic = YETTY_YFACE_BIN_MAGIC,
+        .version = YETTY_YFACE_BIN_VERSION,
+        .compressed = YETTY_YFACE_COMP_LZ4F,
+        .compression_algo = 0,
+        .raw_size = records.size,
+        .reserved = {0, 0},
+    };
+    struct yetty_ycore_void_result er =
+        yetty_yface_emit_to_fd(fd, YETTY_OSC_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
+                               records.data, records.size);
+    yetty_ycore_buffer_destroy(&records);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, er,
+                        "yetty_ygui_framework_clear_remote_fd: yface_emit_to_fd");
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runtime *engine)
 {
     if (!engine) {

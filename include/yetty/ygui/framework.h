@@ -75,6 +75,16 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_session(
  * streams, wrap in a yface envelope, write through output_pty. */
 struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runtime *engine);
 
+/* Emit a figure-tree CLEAR_ALL admin record straight to `fd` (blocking
+ * write), telling the host to destroy every remote figure container this
+ * engine produced. Call this at client-mode shutdown BEFORE destroy: once
+ * the event loop has stopped the async output_pty can no longer flush, so
+ * the normal emit path silently drops the teardown and the host keeps the
+ * client's last frame frozen on the pane. The blocking fd write mirrors how
+ * ygreeter emits its ?1500l mouse-unsubscribe on exit. */
+struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
+    struct yetty_ygui_runtime *engine, int fd);
+
 /*-----------------------------------------------------------------------------
  * Input — caller pushes raw byte stream (ASCII + CSI escapes) here.
  * The framework decodes and dispatches to widgets / the key callback.

@@ -1826,6 +1826,43 @@ static struct yetty_ycore_void_result client_mouse_handler(
 }
 
 /*-----------------------------------------------------------------------------
+ * Resize handler — the hosting yetty emits the pane pixel size as an OSC
+ * envelope (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) on the mouse-subscribe
+ * rising edge and on every window resize. Over the telnet/guest transport
+ * (--temu / --qemu) this is the ONLY size signal — TIOCGWINSZ carries no
+ * pixels there — so without applying it the framework stays at its 800x600
+ * default and renders in a small corner. Apply it to the viewport.
+ *---------------------------------------------------------------------------*/
+static struct yetty_ycore_void_result client_resize_handler(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    /* userdata is &cs.app (a struct app **) — distinct from cs.app (mouse
+     * handler) and &cs (default sink) so the SM spawns a separate coro. */
+    struct app *app = *(struct app **)userdata;
+    for (;;) {
+        struct yetty_client_input_resize msg;
+        size_t got = 0;
+        while (got < sizeof(msg)) {
+            struct yetty_ycore_size_result rr =
+                yetty_ywire_wire_statemachine_read(sm, ((uint8_t *)&msg) + got, sizeof(msg) - got);
+            if (YETTY_IS_ERR(rr)) return YETTY_ERR(yetty_ycore_void, "resize: read", rr);
+            if (rr.value == 0) {
+                break;
+            }
+            got += rr.value;
+        }
+        if (got == sizeof(msg) && msg.magic == YETTY_CLIENT_INPUT_RESIZE_MAGIC &&
+            msg.width > 0.0f && msg.height > 0.0f) {
+            struct yetty_ycore_void_result r =
+                yetty_ygui_framework_set_viewport(app->engine, msg.width, msg.height);
+            if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+            yetty_ygui_framework_mark_dirty(app->engine);
+        }
+        yetty_yplatform_coro_yield();
+    }
+}
+
+/*-----------------------------------------------------------------------------
  * Tell the hosting yetty to forward mouse events to our stdin. yetty
  * watches for DEC private modes 1500 (button) and 1501 (move) via the
  * text-layer's libvterm hook — when both are set, mouse events on the
@@ -1976,6 +2013,14 @@ static int run_client_mode(void)
             /*has_args=*/1, client_mouse_handler, cs.app);
         if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
     }
+    {
+        /* Pane pixel size from the host. Distinct userdata (&cs.app) so the
+         * SM gives this its own handler coro, separate from mouse + sink. */
+        struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
+            cs.wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE,
+            /*has_args=*/1, client_resize_handler, &cs.app);
+        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+    }
     /* Tell the host yetty to forward pointer events to our stdin. */
     {
         struct yetty_ycore_void_result sr = client_enable_mouse_forwarding(&cs);
@@ -2013,6 +2058,17 @@ static int run_client_mode(void)
         static const char disable_fwd[] = "\033[?1500l\033[?1501l";
         ssize_t fwd_n = write(STDOUT_FILENO, disable_fwd, sizeof(disable_fwd) - 1);
         (void)fwd_n;
+    }
+
+    /* Tell the host to destroy our remote figure containers, otherwise it
+     * keeps our last frame frozen on the pane after we exit (the shell that
+     * reclaims the pane would render under a stale ygreeter image). Blocking
+     * fd write for the same reason as disable_fwd above — the uv loop has
+     * stopped so the async output pty can no longer flush. */
+    {
+        struct yetty_ycore_void_result cr =
+            yetty_ygui_framework_clear_remote_fd(app.engine, STDOUT_FILENO);
+        if (YETTY_IS_ERR(cr)) yetty_ycore_error_destroy(cr.error);
     }
 
     uv_poll_stop(&cs.stdin_poll);

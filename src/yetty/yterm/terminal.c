@@ -105,10 +105,11 @@ struct yetty_yterm_terminal {
      * Lazily allocated on the first read; freed in destroy. */
     char *pty_read_buf;
 
-    /* Pixel-precise mouse forwarding (DEC ?1500/?1501; OSC 777777/777778).
+    /* Pixel-precise mouse forwarding (DEC ?1500/?1501).
    * The text-layer's libvterm settermprop hook flips these and reports
-   * via terminal_mouse_sub_callback, which also emits OSC 777780 with
-   * the current pixel size on the rising edge so the client can layout. */
+   * via terminal_mouse_sub_callback, which also emits
+   * YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE with the current pixel size on
+   * the rising edge so the client can lay out. */
     int mouse_click_subscribed;
     int mouse_move_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
@@ -465,6 +466,27 @@ static struct yetty_ycore_void_result terminal_emit_card_focus(
     return YETTY_OK_VOID();
 }
 
+/* Tell a windowed/figure client its pixel size so it can lay out. This is
+ * the only size signal a client gets over transports that don't carry
+ * pixels in TIOCGWINSZ — telnet NAWS (the --temu/--qemu guest path) ships
+ * character cols/rows only, so ws_xpixel/ws_ypixel arrive as 0. Emitted on
+ * the mouse-subscribe rising edge (initial size) and on every pane resize. */
+static struct yetty_ycore_void_result terminal_emit_card_resize(
+    struct yetty_yterm_terminal *terminal, uint32_t figure_id, float width, float height)
+{
+    struct yetty_client_input_resize msg = {
+        .magic = YETTY_CLIENT_INPUT_RESIZE_MAGIC,
+        .version = YMGUI_WIRE_VERSION,
+        .figure_id = figure_id,
+        .width = width,
+        .height = height,
+    };
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_resize: yface_emit failed");
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
     struct yetty_yterm_terminal *terminal, uint32_t figure_id, float lx, float ly, int button,
     int press, float wheel_dy)
@@ -689,16 +711,26 @@ static struct yetty_ycore_void_result terminal_scrollback_exit(
 }
 
 /* yetty_yterm_mouse_sub_fn impl — fired by the text-layer when libvterm
- * flips DEC mode 1500/1501. Latch state on the terminal. (No pane-size
- * emission on the rising edge — under the card model, each CARD_PLACE
- * confirms the card's pixel size via YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE individually.) */
+ * flips DEC mode 1500/1501. Latch state on the terminal, and on the
+ * rising edge ship the current pane pixel size to the client via
+ * YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE — over telnet/guest transports
+ * TIOCGWINSZ carries no pixels, so this OSC is the client's only size cue
+ * (without it a ygui client renders at its 800x600 default). */
 static struct yetty_ycore_void_result terminal_mouse_sub_callback(int click_enabled,
                                                                   int move_enabled, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
+    int was_subscribed = terminal->mouse_click_subscribed || terminal->mouse_move_subscribed;
     terminal->mouse_click_subscribed = click_enabled;
     terminal->mouse_move_subscribed = move_enabled;
     ydebug("terminal: mouse_sub click=%d move=%d", click_enabled, move_enabled);
+
+    if (!was_subscribed && (click_enabled || move_enabled) && terminal->applied_w > 0.0f &&
+        terminal->applied_h > 0.0f) {
+        struct yetty_ycore_void_result rr = terminal_emit_card_resize(
+            terminal, terminal->focused_figure_id, terminal->applied_w, terminal->applied_h);
+        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+    }
     /* Subscription drop = the figure no longer wants client input. The
      * figure itself may persist in the compositor (apps that exit with
      * keep_visible=true), but routing keystrokes to it after this point
@@ -2102,9 +2134,14 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                                     "terminal_view_on_event: pty resize failed");
             }
         }
-        /* Cards self-announce their pixel size via per-card YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE
-     * fired from the layer (see ymgui-layer.c::ymgui_resize_grid). No
-     * pane-size emission needed here. */
+        /* Push the new pane pixel size to a subscribed figure client so it
+         * relays out. Telnet/guest clients have no TIOCGWINSZ pixels, so
+         * this OSC is their only resize signal. */
+        if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed) {
+            struct yetty_ycore_void_result er =
+                terminal_emit_card_resize(terminal, terminal->focused_figure_id, width, height);
+            if (YETTY_IS_ERR(er)) yetty_ycore_error_destroy(er.error);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
