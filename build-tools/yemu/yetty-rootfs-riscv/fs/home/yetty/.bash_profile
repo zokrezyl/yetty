@@ -27,6 +27,18 @@ case ":$PATH:" in
 esac
 export PATH
 
-if [ -z "${YGREETER_SKIP:-}" ] && [ -x "$HOME/.local/bin/ygreeter" ]; then
+# Auto-launch ygreeter, but only for the FIRST login of this VM boot. Each
+# yetty tab is its own login shell (telnetd → login -f yetty → bash -l), so
+# without a guard every new tab would relaunch the greeter on top of the same
+# running VM — the user wants it on the first tab only. Gate on a per-boot
+# marker whose name carries the kernel boot_id (unique per boot): a fresh VM
+# session greets again, while later tabs of the same session fall through to
+# a plain shell. `set -C` (noclobber) makes the create atomic so two tabs
+# racing at boot still launch only one greeter. The marker lives in /tmp
+# (world-writable) because this login runs as the unprivileged yetty user,
+# which can't write the root-owned fs root or /run.
+YGREETER_MARKER="/tmp/ygreeter-launched.$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+if [ -z "${YGREETER_SKIP:-}" ] && [ -x "$HOME/.local/bin/ygreeter" ] &&
+    (set -C; : > "$YGREETER_MARKER") 2>/dev/null; then
     "$HOME/.local/bin/ygreeter"
 fi
