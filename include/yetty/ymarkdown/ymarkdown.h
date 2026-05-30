@@ -4,13 +4,22 @@
 /*
  * ymarkdown - render markdown text into a ydraw buffer.
  *
- * The renderer:
- *   - parses headers (#..######), inline bold (**..**), italic (*..*),
- *     bold+italic (***..***), inline code (`..`) and bullet lists
- *     ('-' or '*' at start of line)
- *   - emits text spans via yetty_ydraw_draw_list_add_text
- *   - emits code-run background rectangles as SDF Box primitives
- *   - populates the scene bounds on the buffer from the config
+ * The renderer parses these block constructs:
+ *   - headers (#..######)
+ *   - bullet lists ('-', '*', '+') and ordered lists ('1.', '2)')
+ *   - blockquotes ('>' possibly nested) with an accent gutter bar
+ *   - fenced code blocks (``` or ~~~) drawn on a shared background panel
+ *   - horizontal rules (---, ***, ___)
+ *   - GFM tables (| a | b |\n|---|:--:|) with per-column alignment and grid
+ * and these inline constructs:
+ *   - bold (**..**), italic (*..*), bold+italic (***..***)
+ *   - inline code (`..`) on a tight background box
+ *   - strikethrough (~~..~~)
+ *   - links ([text](url)) rendered as the accent-coloured link text
+ *
+ * It emits text spans via yetty_ydraw_draw_list_add_text, SDF boxes for
+ * code/table/rule fills, and SDF segments for table grid lines, then
+ * populates the scene bounds on the buffer from the config.
  *
  * The result carries the buffer ownership; caller frees it via
  * yetty_ydraw_draw_list_destroy.

@@ -46,6 +46,17 @@ typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int in
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_ygui_object *tabbar,
                                                              yetty_ygui_tab_close_cb cb,
                                                              void *userdata);
+
+/* Built-in "+" new-tab affordance. Installing a non-NULL callback makes
+ * the tabbar paint a "+" immediately to the right of the rightmost tab
+ * (not glued to the far edge) and fire the callback when it is clicked.
+ * The host typically owns the tab model and mirrors the new tab back via
+ * add/remove. Pass NULL to remove the affordance. */
+typedef void (*yetty_ygui_tab_new_cb)(struct yetty_ygui_object *tabbar, void *userdata);
+
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_ygui_object *tabbar,
+                                                                yetty_ygui_tab_new_cb cb,
+                                                                void *userdata);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

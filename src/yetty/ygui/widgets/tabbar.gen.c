@@ -6,6 +6,10 @@
 #include <yetty/ytrace/ytrace.h>
 
 __attribute__((unused))
+static yetty_ygui_widget_on_press_fn yetty_ygui_tabbar_yetty_ygui_widget_on_press_check = tabbar_on_press;
+__attribute__((unused))
+static yetty_ygui_widget_on_release_fn yetty_ygui_tabbar_yetty_ygui_widget_on_release_check = tabbar_on_release;
+__attribute__((unused))
 static yetty_ygui_constructor_fn yetty_ygui_tabbar_yetty_ygui_constructor_check = tabbar_constructor;
 __attribute__((unused))
 static yetty_ygui_widget_paint_fn yetty_ygui_tabbar_yetty_ygui_widget_paint_check = tabbar_paint;
@@ -22,6 +26,8 @@ struct yetty_yclass_ptr_result yetty_ygui_tabbar_class_get(void)
         .data_size = sizeof(struct tabbar_data),
     };
     static const struct yetty_yclass_op ops[] = {
+        {"yetty_ygui", "widget_on_press", (yetty_yclass_method_id_t)yetty_ygui_widget_on_press, (yetty_yclass_impl_t)tabbar_on_press},
+        {"yetty_ygui", "widget_on_release", (yetty_yclass_method_id_t)yetty_ygui_widget_on_release, (yetty_yclass_impl_t)tabbar_on_release},
         {"yetty_ygui", "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor, (yetty_yclass_impl_t)tabbar_constructor},
         {"yetty_ygui", "widget_paint", (yetty_yclass_method_id_t)yetty_ygui_widget_paint, (yetty_yclass_impl_t)tabbar_paint},
     };
