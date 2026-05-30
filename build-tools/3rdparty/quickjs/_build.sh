@@ -4,13 +4,17 @@
 # deps, so the script mirrors lexbor/_build.sh rather than
 # libcurl/_build.sh.
 #
-# We build ONLY the `qjs` static library target — not the qjs/qjsc CLI
+# We build ONLY the static library (libqjs.a) — not the qjs/qjsc CLI
 # executables. The CLI pulls in quickjs-libc (os/syscalls we don't bind
-# into the JS host) and, more importantly, would need host execution
-# during cross builds. The pre-generated unicode tables shipped in the
-# source tree mean `--target qjs` never runs a host-built generator, so
-# every cross target (android / webasm / ios / tvos / riscv) builds
-# cleanly the same way the native one does.
+# into the JS host) and, on every GNU-ld target, fails to link: upstream
+# omits -lm from the executable, so glibc's separate libm leaves
+# pow/fmod/round/... undefined (Apple/Windows/Bionic bundle math into
+# libc and slip through). We must NOT use `cmake --build --target qjs`
+# either — quickjs-ng gives the CLI executable OUTPUT_NAME "qjs", so under
+# Ninja the name "qjs" resolves to that executable, not the library.
+# Build the library output file directly: no exe, no qjsc, no missing
+# -lm, no host generators (the unicode tables are pre-shipped), so every
+# target — native or cross — builds the same way.
 #
 # Output tarball layout (consumed by build-tools/yetty/libs/quickjs.cmake):
 #   lib/libqjs.a            (Unix)
@@ -152,8 +156,15 @@ esac
 echo "==> configuring quickjs-ng ${VERSION} for $TARGET_PLATFORM"
 $EMCMAKE_PREFIX cmake -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja "${CMAKE_ARGS[@]}"
 
-echo "==> building qjs (-j${NCPU})"
-cmake --build "$BUILD_DIR" -j"$NCPU" --target qjs
+# Static-library output filename (Ninja target). MSVC emits qjs.lib;
+# every other toolchain (incl. emscripten's emar) emits libqjs.a.
+case "$TARGET_PLATFORM" in
+windows-x86_64) QJS_LIB_OUT="qjs.lib" ;;
+*)              QJS_LIB_OUT="libqjs.a" ;;
+esac
+
+echo "==> building ${QJS_LIB_OUT} (-j${NCPU})"
+cmake --build "$BUILD_DIR" -j"$NCPU" -- "$QJS_LIB_OUT"
 
 #-----------------------------------------------------------------------------
 # Stage + verify. quickjs-ng's `qjs` target lands as libqjs.a (Unix) /
