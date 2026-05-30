@@ -99,7 +99,7 @@ enum tab_kind {
 #define TAB_COUNT 8
 
 static const char *TAB_LABELS[TAB_COUNT] = {"Welcome",  "Plots",    "Images",  "Code",
-                                            "Video",    "Elements", "YReadme", "YBrowser"};
+                                            "Video",    "Elements", "Markdown", "HTML/Browser"};
 
 /* Brand palette — packed RGBA, R in low byte. Per rules/08-branding.md. */
 #define BRAND_TEXT 0xFFE4E5E0u
@@ -484,9 +484,8 @@ static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_
 
 /* Read the entire file at `path` into a heap buffer. Caller owns the
  * returned pointer and must free it. On failure returns NULL and
- * leaves `*out_len` untouched. Shared by load_image_entry,
- * load_video_entry, load_readme_entry — same idiom three times wasn't
- * worth keeping. */
+ * leaves `*out_len` untouched. Shared by load_image_entry and
+ * load_video_entry — the same idiom twice wasn't worth keeping. */
 static uint8_t *slurp_file(const char *path, size_t *out_len)
 {
     if (!path) return NULL;
@@ -543,42 +542,6 @@ static struct yetty_ycore_void_result load_video_entry(struct yetty_yclass_ctx *
     return r;
 }
 
-/* Inline placeholder used when no <data_dir>/README.md was extracted
- * (dev builds without YETTY_ENABLE_LIB_INCBIN, or a stale data dir
- * from before the assets manifest was wired up). Small enough to
- * answer "is this tab broken?" at a glance. */
-static const char YREADME_FALLBACK_MD[] =
-    "# YReadme\n"
-    "\n"
-    "This tab embeds **README.md** from the repo via incbin and renders\n"
-    "it through the `ymarkdown` widget.\n"
-    "\n"
-    "No file was extracted into `<data_dir>/README.md` — the build was\n"
-    "configured without `YETTY_ENABLE_LIB_INCBIN`, or the marker was\n"
-    "left over from a previous version that didn't ship this asset.\n";
-
-static struct yetty_ycore_void_result load_readme_entry(struct yetty_yclass_ctx *_yc_ctx,
-                                                        struct yetty_yclass_object *_yc_obj,
-                                                        const char *path)
-{
-    (void)_yc_ctx;
-    struct yetty_ygui_object *md = (struct yetty_ygui_object *)_yc_obj;
-    if (path) {
-        size_t got = 0;
-        uint8_t *buf = slurp_file(path, &got);
-        if (buf) {
-            struct yetty_ycore_void_result r =
-                yetty_ygui_ymarkdown_set_source(md, (const char *)buf, got);
-            free(buf);
-            return r;
-        }
-        /* Fall through to the fallback when the file slurp failed —
-         * prefer rendering *something* over leaving the tab blank. */
-    }
-    return yetty_ygui_ymarkdown_set_source(md, YREADME_FALLBACK_MD,
-                                           sizeof(YREADME_FALLBACK_MD) - 1);
-}
-
 /* Tiny self-contained HTML page exercising headings, lists, links,
  * inline styles, and a code block. Lives inline (no incbin) — the
  * point of the tab is to show ybrowser working, not to ship a real
@@ -603,14 +566,9 @@ static const char YBROWSER_SAMPLE_HTML[] =
     "</pre>"
     "</body></html>";
 
-static struct yetty_ycore_void_result load_browser_entry(struct yetty_yclass_ctx *_yc_ctx,
-                                                         struct yetty_yclass_object *_yc_obj)
-{
-    (void)_yc_ctx;
-    struct yetty_ygui_object *browser = (struct yetty_ygui_object *)_yc_obj;
-    return yetty_ygui_ybrowser_set_html(browser, YBROWSER_SAMPLE_HTML,
-                                        sizeof(YBROWSER_SAMPLE_HTML) - 1);
-}
+/* Seeding moved to build_ybrowser_content (below): the YBrowser tab now
+ * renders a stack of collapsing-header sections, one ybrowser each, so
+ * YBROWSER_SAMPLE_HTML above is reused as the "Overview" section. */
 
 static struct yetty_ycore_void_result write_code_snippet(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                          const char *snippet_id)
@@ -1141,6 +1099,346 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
     return YETTY_OK_VOID();
 }
 
+/*=============================================================================
+ * YBrowser tab — feature scenarios as collapsing sections.
+ *
+ * Each scenario is a complete HTML document handed to its own ybrowser
+ * widget inside a collapsing_header, stacked in the same Elements-style
+ * scrollarea. Mirrors demo/ygui/26_ybrowser — the same Typography /
+ * Forms / Grid / CSS-cards / JavaScript pages — so the YBrowser tab
+ * shows the engine's breadth (HTML parse, CSS cascade incl. var(),
+ * flexbox, and live JavaScript) at a glance. The brand palette is baked
+ * into each page so they blend with the dark canvas.
+ *===========================================================================*/
+#define YG_BROWSER_CSS                                                                              \
+    "html,body{margin:0;padding:0;}"                                                                \
+    "body{background:#0B1014;color:#E0E5E4;font-size:15px;padding:14px 18px;}"                      \
+    "h1{color:#74C5A5;}h2{color:#6BA892;}h3{color:#9FA7A8;}"                                        \
+    "p{margin:0 0 10px;}"                                                                           \
+    "a{color:#6BA892;}"                                                                             \
+    ".muted{color:#9FA7A8;}"                                                                        \
+    ".accent{color:#74C5A5;}"                                                                       \
+    "code{color:#74C5A5;}"                                                                          \
+    "hr{border:0;border-top:1px solid #364A47;margin:14px 0;}"                                      \
+    ".card{background:#141A1F;border:1px solid #364A47;border-radius:10px;"                         \
+    "padding:14px 16px;margin:0 0 12px;}"
+
+#define YG_DOC(EXTRA_CSS, BODY)                                                                     \
+    "<!doctype html><html lang=en><head><meta charset=utf-8><style>" YG_BROWSER_CSS EXTRA_CSS       \
+    "</style></head><body>" BODY "</body></html>"
+
+struct ybrowser_scenario {
+    const char *title;
+    const char *html;
+    float height; /* authored open-height of the section's ybrowser */
+};
+
+/* Static-const local table (no file-scope data symbol). Index-aligned
+ * sections; the first opens, the rest start collapsed. */
+static const struct ybrowser_scenario *ybrowser_scenarios(int *count)
+{
+    static const struct ybrowser_scenario table[] = {
+        {"Overview", YBROWSER_SAMPLE_HTML, 230.0f},
+
+        {"Typography",
+         YG_DOC("blockquote{border-left:3px solid #6BA892;background:#141A1F;"
+                "padding:10px 16px;margin:0 0 14px;color:#9FA7A8;border-radius:0 8px 8px 0;}"
+                "pre{background:#0B1014;border:1px solid #364A47;border-radius:8px;"
+                "padding:12px 14px;color:#74C5A5;margin:0 0 14px;}"
+                "ul,ol{padding-left:22px;margin:0 0 12px;}"
+                "li{padding:3px 0;}",
+                "<div class=card>"
+                "<h1>Heading 1</h1><h2>Heading 2</h2><h3>Heading 3</h3><h4>Heading 4</h4>"
+                "<p>Body text flows as wrapped inline runs. The cascade resolves "
+                "color, size and spacing per block element.</p>"
+                "</div>"
+                "<div class=card>"
+                "<h3>Blockquote</h3>"
+                "<blockquote>Terminals were never meant to stay monochrome rectangles. "
+                "ybrowser proves a terminal can host the actual web platform.</blockquote>"
+                "<h3>Preformatted &amp; code</h3>"
+                "<pre>struct yetty_ycore_void_result\n"
+                "yetty_ygui_ybrowser_set_html(obj, html, len);</pre>"
+                "<h3>Lists</h3>"
+                "<ul><li>Block-flow vertical stacking</li>"
+                "<li>Inline text wrapping</li>"
+                "<li>Flex-row even split</li></ul>"
+                "</div>"),
+         470.0f},
+
+        {"Forms",
+         YG_DOC("form{margin:0;}"
+                "label{display:block;color:#9FA7A8;font-size:13px;margin:12px 0 5px;}"
+                "input,select,textarea{display:block;background:#0B1014;color:#E0E5E4;"
+                "border:1px solid #364A47;border-radius:7px;padding:9px 11px;margin:0;}"
+                "textarea{height:60px;}"
+                ".chkrow{display:flex;flex-direction:row;align-items:center;margin:14px 0 0;}"
+                ".box{width:18px;height:18px;border:1px solid #364A47;border-radius:5px;"
+                "background:#0B1014;}"
+                ".box.on{background:#6BA892;border-color:#6BA892;}"
+                ".chklbl{flex-grow:1;color:#E0E5E4;padding-left:10px;}"
+                ".btns{display:flex;flex-direction:row;margin:20px 0 0;}"
+                "button{display:block;flex-grow:1;border:0;border-radius:7px;padding:11px 0;"
+                "text-align:center;background:#1E262C;color:#E0E5E4;margin-right:10px;}"
+                "button.primary{background:#6BA892;color:#0B1014;}",
+                "<div class=card>"
+                "<h2>Create account</h2>"
+                "<form>"
+                "<label>Full name</label><input type=text>"
+                "<label>Email</label><input type=email>"
+                "<label>Password</label><input type=password>"
+                "<label>Plan</label>"
+                "<select><option>Free &mdash; community</option>"
+                "<option>Pro</option><option>Team</option></select>"
+                "<label>Notes</label>"
+                "<textarea>Ships GPU-rendered HTML inside the terminal.</textarea>"
+                "<div class=chkrow><div class=\"box on\"></div>"
+                "<div class=chklbl>Email me product updates</div></div>"
+                "<div class=chkrow><div class=box></div>"
+                "<div class=chklbl>Enable experimental features</div></div>"
+                "<div class=btns><button class=primary>Create account</button>"
+                "<button>Cancel</button></div>"
+                "</form>"
+                "</div>"),
+         540.0f},
+
+        {"Grid",
+         YG_DOC(".grid{border:1px solid #364A47;border-radius:9px;background:#141A1F;"
+                "padding:0;margin:0;}"
+                ".tr{display:flex;flex-direction:row;}"
+                ".tr .c{flex-grow:1;padding:10px 14px;border-top:1px solid #1E262C;color:#E0E5E4;}"
+                ".tr .name{flex-grow:2;}"
+                ".head{background:#1E262C;border-radius:9px 9px 0 0;}"
+                ".head .c{border-top:0;color:#74C5A5;}"
+                ".odd{background:#0F151A;}"
+                ".num{color:#9FA7A8;}",
+                "<div class=card>"
+                "<h2>Flexbox grid</h2>"
+                "<p class=muted>Each row is <code>display:flex</code>; cells share width via "
+                "<code>flex-grow</code>. The name column grows twice as fast.</p>"
+                "<div class=grid>"
+                "<div class=\"tr head\"><div class=\"c name\">Component</div>"
+                "<div class=c>Backend</div><div class=\"c num\">KLOC</div></div>"
+                "<div class=tr><div class=\"c name\">Parser</div>"
+                "<div class=c>lexbor</div><div class=\"c num\">1.4</div></div>"
+                "<div class=\"tr odd\"><div class=\"c name\">Cascade</div>"
+                "<div class=c>libcss</div><div class=\"c num\">0.9</div></div>"
+                "<div class=tr><div class=\"c name\">Scripting</div>"
+                "<div class=c>QuickJS-NG</div><div class=\"c num\">2.1</div></div>"
+                "<div class=\"tr odd\"><div class=\"c name\">Layout</div>"
+                "<div class=c>block + flex</div><div class=\"c num\">1.5</div></div>"
+                "</div>"
+                "</div>"),
+         330.0f},
+
+        {"CSS cards",
+         YG_DOC(":root{--lift:#141A1F;--row:#1E262C;--accent:#6BA892;--bright:#74C5A5;"
+                "--border:#364A47;}"
+                ".deck{display:flex;flex-direction:row;}"
+                ".col{flex-grow:1;background:var(--lift);border:1px solid var(--border);"
+                "border-radius:12px;padding:16px;margin-right:12px;}"
+                ".col.two{background:var(--row);}"
+                ".col.three{background:var(--accent);}"
+                ".col h3{color:var(--bright);margin:0 0 8px;}"
+                ".col.three h3{color:#0B1014;}"
+                ".col p{color:#9FA7A8;margin:0;}"
+                ".col.three p{color:#0B1014;}"
+                ".swatch{height:34px;border-radius:8px;margin:0 0 10px;background:var(--accent);}"
+                ".col.two .swatch{background:var(--bright);}"
+                ".col.three .swatch{background:#0B1014;}",
+                "<div class=card>"
+                "<h2>CSS custom properties</h2>"
+                "<p class=muted>Colors below come from <code>var(--accent)</code> &amp; friends, "
+                "declared once on <code>:root</code> and resolved during the box pass.</p>"
+                "<div class=deck>"
+                "<div class=col><div class=swatch></div><h3>Surface</h3>"
+                "<p>Raised panel on the brand background ladder.</p></div>"
+                "<div class=\"col two\"><div class=swatch></div><h3>Row</h3>"
+                "<p>One step brighter for hover / selection.</p></div>"
+                "<div class=\"col three\"><div class=swatch></div><h3>Accent</h3>"
+                "<p>The brand mint, driving every focus highlight.</p></div>"
+                "</div>"
+                "</div>"),
+         260.0f},
+
+        {"JavaScript",
+         YG_DOC("pre{background:#0B1014;border:1px solid #364A47;border-radius:8px;"
+                "padding:12px 14px;color:#74C5A5;margin:0 0 14px;}"
+                ".jrow{display:flex;flex-direction:row;}"
+                ".jrow .jc{flex-grow:1;padding:8px 12px;border-top:1px solid #1E262C;color:#E0E5E4;}"
+                ".jrow.jhead{background:#1E262C;border-radius:8px 8px 0 0;}"
+                ".jrow.jhead .jc{border-top:0;color:#74C5A5;}"
+                "#out{border:1px solid #364A47;border-radius:8px;background:#141A1F;margin:0 0 12px;}"
+                ".note{padding:9px 12px;color:#9FA7A8;border-top:1px solid #1E262C;}",
+                "<div class=card>"
+                "<h2>JavaScript at load</h2>"
+                "<p class=muted>QuickJS runs inline scripts while the page loads and mutates "
+                "the DOM before paint. Everything in the box below was produced by this script:</p>"
+                "<pre>var out = document.querySelector('#out');\n"
+                "for (var n = 1; n &lt;= 6; n++)\n"
+                "  out.innerHTML += row(n, n*n, Math.pow(2,n));\n"
+                "out.appendChild(stamp(new Date()));</pre>"
+                "<div id=out><div class=note>This panel is generated by JavaScript "
+                "at page load. Seeing this line means the build was configured "
+                "without QuickJS (the lib-quickjs prebuilt wasn't available).</div></div>"
+                "</div>"
+                "<script>"
+                "function cell(t){return '<div class=\"jc\">'+t+'</div>';}"
+                "var out = document.querySelector('#out');"
+                "var html = '<div class=\"jrow jhead\">'+cell('n')+cell('n squared')+cell('2^n')+'</div>';"
+                "for (var n = 1; n <= 6; n++) {"
+                "  html += '<div class=\"jrow\">'+cell(n)+cell(n*n)+cell(Math.pow(2,n))+'</div>';"
+                "}"
+                "out.innerHTML = html;"
+                "var note = document.createElement('div');"
+                "note.className = 'note';"
+                "note.textContent = 'document.createElement + new Date(): ' + new Date().toString();"
+                "out.appendChild(note);"
+                "</script>"),
+         400.0f},
+    };
+    *count = (int)(sizeof(table) / sizeof(table[0]));
+    return table;
+}
+
+/* Build the YBrowser tab body: one collapsing_header section per
+ * scenario, each wrapping an ybrowser. Mirrors build_elements_content;
+ * `root` is the tab's scrollarea. */
+static struct yetty_ycore_void_result build_ybrowser_content(struct app *app,
+                                                             struct yetty_ygui_object *root)
+{
+    (void)app;
+    int count = 0;
+    const struct ybrowser_scenario *scen = ybrowser_scenarios(&count);
+    for (int i = 0; i < count; ++i) {
+        struct yetty_ygui_object *sec = el_section(root, scen[i].title);
+        if (!sec) {
+            continue;
+        }
+        struct yetty_ygui_object *br =
+            el_w(sec, yetty_ygui_ybrowser_class_get().value, scen[i].height);
+        if (br) {
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_ybrowser_set_html(br, scen[i].html, strlen(scen[i].html)));
+        }
+        el_finalize_section(sec);
+        /* First section opens; the rest start collapsed so the tab is
+         * compact. set_open(0) after finalize captures the open height
+         * for re-expansion. */
+        if (i > 0) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_collapsing_header_set_open(sec, 0));
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+/* One YReadme section: a titled collapsing_header whose whole body is a
+ * single ymarkdown widget rendering `src`. Body height is derived from the
+ * source line count — the renderer advances ~22.4px per line at the 16px
+ * cell, and tables / code fences render fewer lines than they span in
+ * source, so line_count * 24 plus a small pad never clips. Mirrors the
+ * add_md_section helper in demo/ygui/24_ymarkdown. */
+static void yr_md_section(struct yetty_ygui_object *area, const char *title, const char *src)
+{
+    struct yetty_ygui_object *sec = el_section(area, title);
+    if (!sec) {
+        return;
+    }
+    size_t len = strlen(src);
+    int lines = 1;
+    for (size_t i = 0; i < len; i++) {
+        if (src[i] == '\n') {
+            lines++;
+        }
+    }
+    float h = (float)lines * 24.0f + 12.0f;
+    struct yetty_ygui_object *md = el_w(sec, yetty_ygui_ymarkdown_class_get().value, h);
+    if (md) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_ymarkdown_set_source(md, src, len));
+    }
+    el_finalize_section(sec);
+}
+
+/* Build the YReadme tab body: one collapsing_header per markdown feature,
+ * each wrapping a ymarkdown widget — the exact accordion from
+ * demo/ygui/24_ymarkdown. `root` is the tab's scrollarea. */
+static struct yetty_ycore_void_result build_yreadme_content(struct app *app,
+                                                            struct yetty_ygui_object *root)
+{
+    (void)app;
+
+    yr_md_section(root, "Overview",
+                  "# ymarkdown\n"
+                  "\n"
+                  "Each section below renders one **markdown** feature.\n"
+                  "Click a section header to *fold* it away, then click\n"
+                  "again to bring it back.\n");
+
+    yr_md_section(root, "Headings",
+                  "# Heading 1\n"
+                  "## Heading 2\n"
+                  "### Heading 3\n"
+                  "#### Heading 4\n"
+                  "##### Heading 5\n"
+                  "###### Heading 6\n"
+                  "\n"
+                  "Paragraph text sits between headings at the base size.\n");
+
+    yr_md_section(root, "Inline styles",
+                  "Markdown runs can be **bold**, *italic*, or\n"
+                  "***bold and italic*** at once.\n"
+                  "\n"
+                  "Inline `code` sits on its own background box, text can\n"
+                  "be ~~struck through~~, and a [link](https://example.com)\n"
+                  "is drawn in the accent colour.\n");
+
+    yr_md_section(root, "Lists",
+                  "Bulleted list:\n"
+                  "\n"
+                  "- first bullet\n"
+                  "- second bullet with **emphasis**\n"
+                  "- third bullet\n"
+                  "\n"
+                  "Ordered list:\n"
+                  "\n"
+                  "1. step one\n"
+                  "2. step two\n"
+                  "3. step three\n");
+
+    yr_md_section(root, "Blockquotes",
+                  "> Terminals can show rich content, not just text.\n"
+                  "> > Nested quotes get their own accent gutter bar.\n"
+                  "\n"
+                  "Body text resumes after the quote.\n");
+
+    yr_md_section(root, "Tables",
+                  "Per-column alignment with a drawn grid:\n"
+                  "\n"
+                  "| Feature     | Status | Notes                |\n"
+                  "|:------------|:------:|---------------------:|\n"
+                  "| Headings    |   ok   |          six levels  |\n"
+                  "| Tables      |   ok   |   aligned + bordered |\n"
+                  "| Code blocks |   ok   |       shared panel   |\n");
+
+    yr_md_section(root, "Code blocks",
+                  "Fenced blocks render verbatim on a shared panel:\n"
+                  "\n"
+                  "```\n"
+                  "fn main() {\n"
+                  "    println!(\"hello, ymarkdown\");\n"
+                  "}\n"
+                  "```\n");
+
+    yr_md_section(root, "Horizontal rules",
+                  "Text above the rule.\n"
+                  "\n"
+                  "---\n"
+                  "\n"
+                  "Text below the rule.\n");
+
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int tab_index)
 {
     /* Wipe + reseed app->body_panel: nav on left + fresh content widget on right. */
@@ -1247,17 +1545,21 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
         break;
     }
     case TAB_KIND_YREADME: {
-        struct yetty_ygui_object_ptr_result mr =
-            yetty_ygui_add(yetty_ygui_ymarkdown_class_get().value, hr.value);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "rebuild: ymarkdown");
-        content = mr.value;
+        /* Scrollarea hosts the per-feature collapsing sections, same
+         * shape as the Elements and YBrowser tabs. */
+        struct yetty_ygui_object_ptr_result sr =
+            yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rebuild: yreadme scrollarea");
+        content = sr.value;
         break;
     }
     case TAB_KIND_YBROWSER: {
-        struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_ybrowser_class_get().value, hr.value);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "rebuild: ybrowser");
-        content = br.value;
+        /* Scrollarea hosts the per-scenario collapsing sections, same
+         * shape as the Elements tab. */
+        struct yetty_ygui_object_ptr_result sr =
+            yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rebuild: ybrowser scrollarea");
+        content = sr.value;
         break;
     }
     case TAB_KIND_RICH:
@@ -1305,12 +1607,10 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
         yetty_ycore_error_destroy_safe(build_elements_content(app, content));
         break;
     case TAB_KIND_YREADME:
-        yetty_ycore_error_destroy_safe(
-            load_readme_entry(NULL, (struct yetty_yclass_object *)content, app->readme_path));
+        yetty_ycore_error_destroy_safe(build_yreadme_content(app, content));
         break;
     case TAB_KIND_YBROWSER:
-        yetty_ycore_error_destroy_safe(
-            load_browser_entry(NULL, (struct yetty_yclass_object *)content));
+        yetty_ycore_error_destroy_safe(build_ybrowser_content(app, content));
         break;
     case TAB_KIND_RICH:
     default: {

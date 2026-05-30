@@ -39,10 +39,17 @@ add_executable(ylexbor-wpt-runner
 
 # QuickJS is needed for the result-readback path; otherwise the runner
 # couldn't pull globalThis.__ylexbor_test_results__ back out.
+#
+# yetty_yplatform_core supplies the platform primitives ytrace.c calls
+# (ymutex_*, format_timestamp, stderr_supports_color). The regular yetty
+# binary pulls them in transitively; this standalone ctest binary, which
+# compiles ytrace.c directly above, must link them explicitly or the
+# final link fails with undefined yetty_yplatform_* references.
 target_link_libraries(ylexbor-wpt-runner PRIVATE
     yetty_ylexbor
     yetty_ydraw_core
     yetty_ycore
+    yetty_yplatform_core
     qjs
 )
 
