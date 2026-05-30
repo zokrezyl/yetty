@@ -182,6 +182,10 @@ struct app {
      * NULL in standalone mode. */
     struct client_state *client;
 
+    /* Shutdown hook — same function the key handler's stop_cb uses,
+     * stored on the app so the titlebar close button can quit too. */
+    void (*stop_cb)(struct app *app);
+
 #ifdef YETTY_YGREETER_HAS_STANDALONE
     /* Standalone-mode resources, NULL in client mode. The headers that
      * define the by-value member types (memory_pty_pair, figure_args,
@@ -458,9 +462,8 @@ static void discover_readme(struct app *app)
  *---------------------------------------------------------------------------*/
 
 /* Wipe a content widget's children and recreate it as the requested kind
- * — the new ygui rich/yplot/yimage widgets do not expose a clear API
- * comparable to ygui-old's set_yaml replacement. Recreating is the
- * simplest correct way to swap content. */
+ * — the ygui rich/yplot/yimage widgets do not expose a clear API, so
+ * recreating is the simplest correct way to swap content. */
 static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int tab_index);
 
 static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
@@ -1354,6 +1357,23 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
     return rebuild_tab_content((struct app *)userdata, idx);
 }
 
+/* Title-bar close-x handler — the window widget emits EVENT_CLOSE; we
+ * react by running the app's mode-specific stop hook. */
+static struct yetty_ycore_void_result on_window_close(struct yetty_yclass_ctx *ctx,
+                                                      struct yetty_yclass_object *target,
+                                                      const struct yetty_ygui_event *event,
+                                                      void *userdata)
+{
+    (void)ctx;
+    (void)target;
+    (void)event;
+    struct app *app = (struct app *)userdata;
+    if (app && app->stop_cb) {
+        app->stop_cb(app);
+    }
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result build_ui(struct app *app)
 {
     /* yinit already ran ygreeter_extract_assets_cb early in startup, so
@@ -1365,22 +1385,36 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
     discover_video_files(app);
     discover_readme(app);
 
-    struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root add");
+    /* The app's main window — a framed window with a title bar carrying
+     * a close "x" (set_closable). Closing emits EVENT_CLOSE, handled by
+     * on_window_close above. The chrome (tabbar / body / statusbar) lives
+     * in the window's auto body. */
+    struct yetty_ygui_object_ptr_result rr =
+        yetty_ygui_add(yetty_ygui_window_class_get().value, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root window add");
     app->root = rr.value;
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(app->root);
-        l.align = YETTY_YGUI_ALIGN_STRETCH;
-        l.gap = 0.0f;
-        struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(app->root, &l);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "build_ui: root layout");
-    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(app->root, "yetty"));
+    yetty_ycore_error_destroy_safe(yetty_ygui_window_set_closable(app->root, 1));
+    struct yetty_ycore_void_result clsub =
+        yetty_ygui_object_subscribe(app->root, YETTY_YGUI_EVENT_CLOSE, on_window_close, app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, clsub, "build_ui: close subscribe");
     struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(app->engine, app->root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "build_ui: set_root");
 
+    struct yetty_ygui_object *content = yetty_ygui_window_body(app->root);
+    if (!content) {
+        return YETTY_ERR(yetty_ycore_void, "build_ui: window body");
+    }
+    {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(content);
+        l.align = YETTY_YGUI_ALIGN_STRETCH;
+        l.gap = 0.0f;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(content, &l));
+    }
+
     /* Tabbar — Welcome / Plots / Images / Code. */
     struct yetty_ygui_object_ptr_result tbr =
-        yetty_ygui_add(yetty_ygui_tabbar_class_get().value, app->root);
+        yetty_ygui_add(yetty_ygui_tabbar_class_get().value, content);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "build_ui: tabbar add");
     app->tabbar = tbr.value;
     {
@@ -1405,7 +1439,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
 
     /* Body panel — vbox that the per-tab content rebuilds populate. */
     struct yetty_ygui_object_ptr_result bpr =
-        yetty_ygui_add(yetty_ygui_vbox_class_get().value, app->root);
+        yetty_ygui_add(yetty_ygui_vbox_class_get().value, content);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, bpr, "build_ui: body panel add");
     app->body_panel = bpr.value;
     {
@@ -1421,7 +1455,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
 
     /* Statusbar — small bottom strip. */
     struct yetty_ygui_object_ptr_result sbr =
-        yetty_ygui_add(yetty_ygui_statusbar_class_get().value, app->root);
+        yetty_ygui_add(yetty_ygui_statusbar_class_get().value, content);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sbr, "build_ui: statusbar add");
     app->statusbar = sbr.value;
     yetty_ycore_error_destroy_safe(
@@ -1905,6 +1939,7 @@ static int run_client_mode(void)
     app.client = &cs;
 
     struct key_ctx kc = {.app = &app, .stop_cb = client_stop};
+    app.stop_cb = client_stop;
     yetty_ygui_framework_set_key_cb(app.engine, on_key, &kc);
     cs.app = &app;
     cs.running = 1;
@@ -1965,6 +2000,20 @@ static int run_client_mode(void)
     }
 
     uv_run(&cs.loop, UV_RUN_DEFAULT);
+
+    /* Undo client_enable_mouse_forwarding before we exit. The DEC private
+     * modes 1500/1501 live in the host yetty's terminal state, not ours —
+     * if we leave them set, the shell that reclaims this pane keeps
+     * receiving OSC mouse envelopes, and its cooked-mode tty echoes the
+     * ESC bytes back as visible "^[" garbage. A blocking write straight to
+     * the fd: the uv loop has stopped, so the async stdout pipe can no
+     * longer flush, but the bytes still sit in the PTY for yetty to parse
+     * after we're gone. */
+    {
+        static const char disable_fwd[] = "\033[?1500l\033[?1501l";
+        ssize_t fwd_n = write(STDOUT_FILENO, disable_fwd, sizeof(disable_fwd) - 1);
+        (void)fwd_n;
+    }
 
     uv_poll_stop(&cs.stdin_poll);
     uv_signal_stop(&cs.sigwinch);
@@ -2306,6 +2355,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     }
 
     struct key_ctx kc = {.app = app, .stop_cb = standalone_stop};
+    app->stop_cb = standalone_stop;
     yetty_ygui_framework_set_key_cb(app->engine, on_key, &kc);
 
     struct yetty_ycore_void_result br = build_ui(app);

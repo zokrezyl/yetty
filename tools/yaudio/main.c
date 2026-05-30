@@ -30,8 +30,7 @@
 #include <webgpu/webgpu.h>
 
 #include <yetty/yplot/yplot.h>
-#include <yetty/ygui-old/ygui.h>
-#include <yetty/ygui-old/ygui_yplot.h>
+#include <yetty/ygui/ygui.h>
 
 /* yui.h lives in src/yetty/yui/yui.h — already on the -I src path. */
 #include <yetty/yui/yui.h>
@@ -45,6 +44,13 @@ enum {
     WAVE_BUCKETS    = 4096,           /* per-frame bucket count for envelope */
     WAVE_DEC_CAP    = 2 * WAVE_BUCKETS, /* worst case = (min,max) pair per bucket */
 };
+
+static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result r)
+{
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
 
 struct yaudio_app {
     const char *wav_path;
@@ -69,12 +75,12 @@ struct yaudio_app {
     struct yetty_yevent_event_listener listener;
 
     struct yetty_yui              *yui;
-    struct yetty_ygui_old_widget      *plot_widget;        /* energy envelope (dBFS) */
-    struct yetty_ygui_old_widget      *wave_widget;        /* raw waveform of zoomed window */
-    struct yetty_ygui_old_widget      *plots_vbox;         /* flex column holding both plots + label */
-    struct yetty_ygui_old_widget      *prev_btn;
-    struct yetty_ygui_old_widget      *next_btn;
-    struct yetty_ygui_old_widget      *status_label;
+    struct yetty_ygui_object      *plot_widget;        /* energy envelope (dBFS) */
+    struct yetty_ygui_object      *wave_widget;        /* raw waveform of zoomed window */
+    struct yetty_ygui_object      *plots_vbox;         /* flex column holding both plots + label */
+    struct yetty_ygui_object      *prev_btn;
+    struct yetty_ygui_object      *next_btn;
+    struct yetty_ygui_object      *status_label;
 
     /* Scratch buffers for the waveform widget.
      *
@@ -275,7 +281,7 @@ static void update_status_label(struct yaudio_app *app)
                  (double)it->peak_dbfs);
     }
     if (app->status_label) {
-        yetty_ygui_old_widget_label_set_text(app->status_label, buf);
+        yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(app->status_label, buf));
     }
     if (app->yui) {
         yetty_yui_set_status_right(app->yui, buf);
@@ -332,7 +338,7 @@ static void apply_view(struct yaudio_app *app)
         if (i_max > app->env_dbfs_n) i_max = app->env_dbfs_n;
         if (i_min >= i_max) i_min = i_max > 0 ? i_max - 1 : 0;
 
-        struct yetty_yplot_render_config pc = {0};
+        struct yetty_ygui_yplot_config pc = {0};
         pc.x_min = (float)t_min;
         pc.x_max = (float)t_max;
         pc.y_min = -90.0f;
@@ -342,23 +348,25 @@ static void apply_view(struct yaudio_app *app)
             .count   = i_max - i_min,
             .color   = 0,
         };
-        yetty_ygui_old_widget_yplot_set_buffers(app->plot_widget, NULL, 0, &bi, 1, &pc);
+        yetty_ycore_error_destroy_safe(
+            yetty_ygui_yplot_set_buffers(app->plot_widget, NULL, 0, &bi, 1, &pc));
     }
 
     /* Waveform plot — freshly streamed from the mmap and decimated. */
     if (app->wave_widget && app->wave_dec) {
         if (load_waveform_window(app, t_min, t_max)) {
-            struct yetty_yplot_render_config wpc = {0};
+            struct yetty_ygui_yplot_config wpc = {0};
             wpc.x_min = (float)t_min;
             wpc.x_max = (float)t_max;
-            wpc.y_min = -(double)app->wave_y_max;
-            wpc.y_max =  (double)app->wave_y_max;
+            wpc.y_min = -(float)app->wave_y_max;
+            wpc.y_max =  (float)app->wave_y_max;
             struct yetty_yplot_buffer_input wbi = {
                 .samples = app->wave_dec,
                 .count   = app->wave_dec_n,
                 .color   = 0xFFE0E5E4u,
             };
-            yetty_ygui_old_widget_yplot_set_buffers(app->wave_widget, NULL, 0, &wbi, 1, &wpc);
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_yplot_set_buffers(app->wave_widget, NULL, 0, &wbi, 1, &wpc));
         }
     }
 }
@@ -418,33 +426,40 @@ static void on_wheel(struct yaudio_app *app, float dy, int mods)
     request_view_update(app);
 }
 
-YETTY_EXTERNAL_CALLBACK
-static void on_prev_click(struct yetty_ygui_old_widget *w, void *userdata)
+static struct yetty_ycore_void_result on_prev_click(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *w, void *userdata)
 {
-    yinfo("yaudio: PREV click fired (widget=%p)", (void *)w);
-    fprintf(stderr, "yaudio: PREV click fired\n"); fflush(stderr);
+    (void)ctx;
+    (void)w;
     struct yaudio_app *app = userdata;
-    if (app->iv->n == 0) return;
+    if (app->iv->n == 0) return YETTY_OK_VOID();
     app->selected = app->selected == 0 ? (int)app->iv->n - 1 : app->selected - 1;
     recenter_plot_on_selected(app);
+    return YETTY_OK_VOID();
 }
 
-YETTY_EXTERNAL_CALLBACK
-static void on_next_click(struct yetty_ygui_old_widget *w, void *userdata)
+static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *w, void *userdata)
 {
-    yinfo("yaudio: NEXT click fired (widget=%p)", (void *)w);
-    fprintf(stderr, "yaudio: NEXT click fired\n"); fflush(stderr);
+    (void)ctx;
+    (void)w;
     struct yaudio_app *app = userdata;
-    if (app->iv->n == 0) return;
+    if (app->iv->n == 0) return YETTY_OK_VOID();
     app->selected = (app->selected + 1) % (int)app->iv->n;
     recenter_plot_on_selected(app);
+    return YETTY_OK_VOID();
 }
 
 static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt)
 {
-    struct yetty_ygui_old_engine *engine = yetty_yui_engine(app->yui);
+    struct yetty_ygui_runtime *engine = yetty_yui_engine(app->yui);
     if (!engine) {
         yerror("yaudio: yui engine is NULL — yui allocation failed");
+        return;
+    }
+    struct yetty_ygui_object *root = yetty_ygui_framework_root(engine);
+    if (!root) {
+        yerror("yaudio: yui engine has no root");
         return;
     }
 
@@ -467,56 +482,73 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
      * value is what leaves room for axis labels / inline text between
      * the plot widgets. Padding is zero; gap eats all the inter-row
      * space. */
-    struct yetty_ygui_old_widget *col = yetty_ygui_old_engine_vbox(engine, "yaudio_col",
-                                                           16.0f, top, plots_w, plots_h);
-    if (col) {
-        yetty_ygui_old_widget_apply_css(col,
-            "display:flex; flex-direction:column; "
-            "padding:0 0 0 0; gap:28;");
+    /* Flex-column container hosting the two plots + the status label.
+     * Absolutely positioned over the workspace area (below yui's
+     * titlebar, above its statusbar + the button strip). */
+    struct yetty_ygui_object *col = NULL;
+    {
+        struct yetty_ygui_object_ptr_result cr =
+            yetty_ygui_add(yetty_ygui_vbox_class_get().value, root);
+        if (YETTY_IS_OK(cr)) {
+            col = cr.value;
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
+                col, "display:flex; flex-direction:column; padding:0 0 0 0; gap:28;"));
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(col, 16.0f, top));
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(col, plots_w, plots_h));
+        } else {
+            yetty_ycore_error_destroy(cr.error);
+        }
     }
     app->plots_vbox = col;
 
-    struct yetty_yplot_render_config pc = {0};
+    struct yetty_ygui_yplot_config pc = {0};
     pc.x_min = (float)app->view_t_min;
     pc.x_max = (float)app->view_t_max;
     pc.y_min = -90.0f;
     pc.y_max = 0.0f;
-
     struct yetty_yplot_buffer_input bi = {
         .samples = app->env_dbfs,
         .count   = app->env_dbfs_n,
         .color   = 0,
     };
-    app->plot_widget = yetty_ygui_old_engine_yplot_from_buffers(
-        engine, "yaudio_plot", 0.0f, 0.0f, plots_w, 0.0f,
-        NULL, 0, &bi, 1, &pc);
-    if (app->plot_widget && col) {
-        yetty_ygui_old_widget_add_child(col, app->plot_widget);
-        yetty_ygui_old_widget_apply_css(app->plot_widget,
-            "flex:1 1 0; align-self:stretch;");
-    } else if (!app->plot_widget) {
-        yerror("yaudio: yplot widget create failed");
+    if (col) {
+        struct yetty_ygui_object_ptr_result pr =
+            yetty_ygui_add(yetty_ygui_yplot_class_get().value, col);
+        if (YETTY_IS_OK(pr)) {
+            app->plot_widget = pr.value;
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_yplot_set_buffers(app->plot_widget, NULL, 0, &bi, 1, &pc));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_apply_css(app->plot_widget, "flex:1 1 0; align-self:stretch;"));
+        } else {
+            yetty_ycore_error_destroy(pr.error);
+            yerror("yaudio: yplot widget create failed");
+        }
     }
 
     /* Status label — between the two plots, inside the same vbox so it
-     * gets the same gap treatment automatically. Bumped font so
-     * "where we are" is the most readable thing in the window. */
-    app->status_label = yetty_ygui_old_engine_label(engine, "yaudio_status",
-                                                0.0f, 0.0f, "(loading…)");
-    if (app->status_label) {
-        yetty_ygui_old_widget_label_set_font_size(app->status_label, 18.0f);
-        if (col) yetty_ygui_old_widget_add_child(col, app->status_label);
+     * gets the same gap treatment automatically. */
+    if (col) {
+        struct yetty_ygui_object_ptr_result lr =
+            yetty_ygui_add(yetty_ygui_label_class_get().value, col);
+        if (YETTY_IS_OK(lr)) {
+            app->status_label = lr.value;
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_label_set_text(app->status_label, "(loading…)"));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_label_set_font_size(app->status_label, 18.0f));
+        } else {
+            yetty_ycore_error_destroy(lr.error);
+        }
     }
 
-    /* Raw-waveform plot directly under the envelope (with the gap
-     * inserted by the vbox). Initial data: a min/max envelope of the
-     * WHOLE file → 2 × WAVE_BUCKETS points. Recenter on Prev/Next + the
-     * wheel handlers reload the slice for the current view window. */
+    /* Raw-waveform plot directly under the envelope (with the vbox gap).
+     * Initial data: a min/max envelope of the WHOLE file. */
     app->wave_dec = calloc(WAVE_DEC_CAP, sizeof(float));
     if (app->wave_dec) {
         load_waveform_window(app, 0.0, dur);
     }
-    struct yetty_yplot_render_config wpc = {0};
+    struct yetty_ygui_yplot_config wpc = {0};
     wpc.x_min = 0.0f;
     wpc.x_max = (float)dur;
     wpc.y_min = -1.0f;
@@ -526,34 +558,57 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
         .count   = app->wave_dec_n,
         .color   = 0xFFE0E5E4u,
     };
-    app->wave_widget = yetty_ygui_old_engine_yplot_from_buffers(
-        engine, "yaudio_wave", 0.0f, 0.0f, plots_w, 0.0f,
-        NULL, 0, &wbi, 1, &wpc);
-    if (app->wave_widget && col) {
-        yetty_ygui_old_widget_add_child(col, app->wave_widget);
-        yetty_ygui_old_widget_apply_css(app->wave_widget,
-            "flex:1 1 0; align-self:stretch;");
-    } else if (!app->wave_widget) {
-        yerror("yaudio: yplot wave widget create failed");
+    if (col) {
+        struct yetty_ygui_object_ptr_result wr =
+            yetty_ygui_add(yetty_ygui_yplot_class_get().value, col);
+        if (YETTY_IS_OK(wr)) {
+            app->wave_widget = wr.value;
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_yplot_set_buffers(app->wave_widget, NULL, 0, &wbi, 1, &wpc));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_apply_css(app->wave_widget, "flex:1 1 0; align-self:stretch;"));
+        } else {
+            yetty_ycore_error_destroy(wr.error);
+            yerror("yaudio: yplot wave widget create failed");
+        }
     }
 
-    /* Buttons live above yui's statusbar; padded so click rects are
-     * fully above the chrome. */
+    /* Buttons live above yui's statusbar; positioned absolutely. */
     float btn_w = 120.0f;
     float btn_h = 36.0f;
     float btn_y = H - sb_h - btn_strip_h + 6.0f;
-    app->prev_btn = yetty_ygui_old_engine_button(engine, "yaudio_prev",
-                                             16.0f, btn_y, btn_w, btn_h, "◀ Prev");
-    app->next_btn = yetty_ygui_old_engine_button(engine, "yaudio_next",
-                                             16.0f + btn_w + 12.0f, btn_y,
-                                             btn_w, btn_h, "Next ▶");
-    yinfo("yaudio: widgets placed — plot=%p prev=%p next=%p label=%p "
-          "btn_y=%.1f sb_h=%.1f W=%.0f H=%.0f",
-          (void *)app->plot_widget, (void *)app->prev_btn,
-          (void *)app->next_btn, (void *)app->status_label,
-          (double)btn_y, (double)sb_h, (double)W, (double)H);
-    if (app->prev_btn) yetty_ygui_old_widget_button_on_click(app->prev_btn, on_prev_click, app);
-    if (app->next_btn) yetty_ygui_old_widget_button_on_click(app->next_btn, on_next_click, app);
+    {
+        struct yetty_ygui_object_ptr_result br =
+            yetty_ygui_add(yetty_ygui_button_class_get().value, root);
+        if (YETTY_IS_OK(br)) {
+            app->prev_btn = br.value;
+            yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(app->prev_btn, "◀ Prev"));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_position(app->prev_btn, 16.0f, btn_y));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_size(app->prev_btn, btn_w, btn_h));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_clickable_on_click_set(app->prev_btn, on_prev_click, app));
+        } else {
+            yetty_ycore_error_destroy(br.error);
+        }
+    }
+    {
+        struct yetty_ygui_object_ptr_result br =
+            yetty_ygui_add(yetty_ygui_button_class_get().value, root);
+        if (YETTY_IS_OK(br)) {
+            app->next_btn = br.value;
+            yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(app->next_btn, "Next ▶"));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_position(app->next_btn, 16.0f + btn_w + 12.0f, btn_y));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_size(app->next_btn, btn_w, btn_h));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_clickable_on_click_set(app->next_btn, on_next_click, app));
+        } else {
+            yetty_ycore_error_destroy(br.error);
+        }
+    }
 
     char status[160];
     snprintf(status, sizeof(status), "%s  •  %.1f s  •  %zu intervals",
@@ -646,20 +701,16 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_DOWN:
         if (ev->mouse.button == 0 && app->plots_vbox && app->wav) {
-            struct rectangle_result rr =
-                yetty_ygui_old_widget_get_layout_box(app->plots_vbox);
-            if (!YETTY_IS_ERR(rr)) {
-                struct yetty_ycore_rectangle box = rr.value;
-                if (ev->mouse.x >= box.min.x && ev->mouse.x <= box.max.x &&
-                    ev->mouse.y >= box.min.y && ev->mouse.y <= box.max.y &&
-                    box.max.x > box.min.x) {
-                    app->dragging         = 1;
-                    app->drag_start_mx    = ev->mouse.x;
-                    app->drag_start_t_min = app->view_t_min;
-                    app->drag_start_t_max = app->view_t_max;
-                    app->drag_plot_w      = box.max.x - box.min.x;
-                    return YETTY_OK(yetty_ycore_int, 1);
-                }
+            struct yetty_ycore_rectangle box = yetty_ygui_widget_rect(app->plots_vbox);
+            if (ev->mouse.x >= box.min.x && ev->mouse.x <= box.max.x &&
+                ev->mouse.y >= box.min.y && ev->mouse.y <= box.max.y &&
+                box.max.x > box.min.x) {
+                app->dragging         = 1;
+                app->drag_start_mx    = ev->mouse.x;
+                app->drag_start_t_min = app->view_t_min;
+                app->drag_start_t_max = app->view_t_max;
+                app->drag_plot_w      = box.max.x - box.min.x;
+                return YETTY_OK(yetty_ycore_int, 1);
             }
         }
         break;
@@ -692,11 +743,11 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (ev->key.key == 262) {
-            on_next_click(NULL, app);
+            yetty_ycore_error_destroy_safe(on_next_click(NULL, NULL, app));
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (ev->key.key == 263) {
-            on_prev_click(NULL, app);
+            yetty_ycore_error_destroy_safe(on_prev_click(NULL, NULL, app));
             return YETTY_OK(yetty_ycore_int, 1);
         }
         break;

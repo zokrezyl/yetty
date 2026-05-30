@@ -18,6 +18,31 @@ struct [[clang::annotate("class@ygui:tree_node")]] [[clang::annotate("parent@ygu
     void *on_toggle_ud;
 };
 
+static inline void tn_ok(struct yetty_ycore_void_result r)
+{
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
+
+/* Fold / unfold the node's content: in-flow children are hidden when
+ * closed so they consume no layout space and emit no prims (the same
+ * `hidden`-flag mechanism collapsing_header uses). The node's own height
+ * is left unset (-1) so the flex layout's intrinsic measure sizes it to
+ * header-only when closed and header + children when open. */
+static void tn_fold_children(struct yetty_ygui_object *obj, int open)
+{
+    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(obj); c;
+         c = yetty_ygui_object_next_sibling(c)) {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(c);
+        if (l.absolute) {
+            continue;
+        }
+        l.hidden = open ? 0 : 1;
+        tn_ok(yetty_ygui_widget_layout_set(c, &l));
+    }
+}
+
 [[clang::annotate("override@ygui:tree_node:constructor")]]
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
@@ -76,15 +101,10 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
         return YETTY_OK(yetty_ycore_int, 0);
     }
     d->open = !d->open;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
-    if (!d->open) {
-        l.height = HEADER_H;
-    } else {
-        l.height = -1.0f;
-    }
-    struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
+    tn_fold_children(obj, d->open);
+    struct yetty_ycore_void_result lr = yetty_ygui_object_set_dirty(obj);
     if (YETTY_IS_ERR(lr)) {
-        return YETTY_ERR(yetty_ycore_int, "tree_node: layout", lr);
+        return YETTY_ERR(yetty_ycore_int, "tree_node: dirty", lr);
     }
     if (d->on_toggle) {
         struct yetty_ycore_void_result cr = d->on_toggle(NULL, yclass_obj, d->on_toggle_ud);
@@ -153,6 +173,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_ygui_o
         yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
                                                          "yetty_ygui_tree_node_class_get"));
     d->open = o ? 1 : 0;
+    tn_fold_children(obj, d->open);
     return yetty_ygui_object_set_dirty(obj);
 }
 

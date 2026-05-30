@@ -114,10 +114,9 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
     int pressed = yetty_ygui_clickable_is_pressed(obj);
     int hovered = yetty_ygui_object_is_hovered(obj);
 
-    /* Pressed surface goes to accent + drops 1 px to give tactile feedback
-     * (matching ygui-old/widgets.c:button_render). Hover replaces the idle
-     * row-grey with the slightly lighter BG_LIFTED so the cursor's button
-     * stands out before commit. */
+    /* Pressed surface goes to accent + drops 1 px to give tactile feedback.
+     * Hover replaces the idle row-grey with the slightly lighter BG_LIFTED
+     * so the cursor's button stands out before commit. */
     uint32_t surface = pressed   ? BTN_BG_PRESSED
                        : hovered ? 0xFF1F1A14u /* BRAND_BG_LIFTED */
                                  : BTN_BG_IDLE;

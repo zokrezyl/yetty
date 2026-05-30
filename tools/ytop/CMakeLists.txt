@@ -7,13 +7,12 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     return()
 endif()
 
-# ytrace + yplatform/shared/{thread,term} are compiled per-final-target
-# (they're not standalone libraries) — pull them in directly.
+# ytrace is compiled per-final-target (not a standalone library); the
+# rest (thread/term/etc.) come from yetty_yplatform_core, pulled in
+# transitively by the new ygui.
 add_executable(ytop
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
 )
 
 target_include_directories(ytop PRIVATE
@@ -21,9 +20,13 @@ target_include_directories(ytop PRIVATE
     ${YETTY_ROOT}/src
 )
 
-# ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yrender, libuv as
-# transitive PUBLIC deps — no need to list them again here.
-target_link_libraries(ytop PRIVATE ygui_old)
+find_package(Threads REQUIRED)
+
+# ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yfigure,
+# yplatform_core, etc. as transitive PUBLIC deps. The new ygui is a pure
+# widget framework (no libuv of its own) and ytop drives its own libuv
+# client loop, so libuv (uv_a) is listed explicitly.
+target_link_libraries(ytop PRIVATE ygui uv_a Threads::Threads)
 
 if(NOT MSVC)
     target_compile_options(ytop PRIVATE -Wall -Wextra)

@@ -339,9 +339,8 @@ workspace:
 # #RGB, #RGBA, #RRGGBB or #RRGGBBAA. Alpha defaults to FF when omitted.
 #
 # The defaults below are the yetty brand palette (see logo). Every entry
-# is optional — missing keys fall back to the C-side default. Client ygui
-# apps pick up these values by calling yetty_ygui_old_theme_apply_config()
-# after creating their engine; yetty's own chrome reads them at startup.
+# is optional — missing keys fall back to the C-side default. yetty's
+# own chrome reads them at startup.
 # ─────────────────────────────────────────────────────────────────────────────
 style:
   # ygui — widget library used by client apps (dialogs, panels, menus).

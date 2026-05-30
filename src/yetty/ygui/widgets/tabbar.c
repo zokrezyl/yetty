@@ -26,8 +26,7 @@
 #include <string.h>
 
 /*-----------------------------------------------------------------------------
- * Pill geometry + brand palette. Mirrors ygui-old/ygui_tabbar.c so the
- * strip reads identically to the long-stabilised version.
+ * Pill geometry + brand palette.
  *---------------------------------------------------------------------------*/
 
 #define TABBAR_DEFAULT_HEADER_H 32.0f
@@ -63,7 +62,15 @@
 struct [[clang::annotate("class@ygui:tabbar")]] [[clang::annotate("parent@ygui:hbox")]]
 tabbar_data {
     int active_index;
+    /* When set, each pill paints a close-x in its right band and a
+     * click landing there fires this callback (with the tab index)
+     * instead of activating the tab. */
+    yetty_ygui_tab_close_cb close_cb;
+    void *close_userdata;
 };
+
+/* Width of the close-x hit band at the right edge of each pill. */
+#define TABBAR_CLOSE_W 22.0f
 
 /*-----------------------------------------------------------------------------
  * Header subclass — clickable rectangle with a label. Inherits
@@ -108,6 +115,20 @@ static struct yetty_ycore_void_result header_on_click(struct yetty_yclass_ctx *y
     int idx = header_index_in_tabbar(obj, hd->tabbar);
     if (idx < 0) {
         return YETTY_OK_VOID();
+    }
+    /* If the tabbar has a close handler and the click landed in the
+     * pill's right close band, fire close instead of activate. */
+    struct tabbar_data *td =
+        yetty_ygui_data_get(hd->tabbar, yetty_ygui_class_expect(yetty_ygui_tabbar_class_get(),
+                                                                "yetty_ygui_tabbar_class_get"));
+    if (td->close_cb) {
+        float px = 0.0f, py = 0.0f;
+        yetty_ygui_clickable_press_pos(obj, &px, &py);
+        struct yetty_ycore_rectangle pr = yetty_ygui_widget_rect(obj);
+        if (px >= pr.max.x - TABBAR_CLOSE_W) {
+            td->close_cb(hd->tabbar, idx, td->close_userdata);
+            return YETTY_OK_VOID();
+        }
     }
     return yetty_ygui_tabbar_set_active(hd->tabbar, idx);
 }
@@ -361,6 +382,15 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: label");
         }
 
+        /* Close-x in the right band when the tabbar has a close handler. */
+        if (td->close_cb && pw > TABBAR_CLOSE_W) {
+            float font_size = 14.0f;
+            float tx = pr.max.x - TABBAR_CLOSE_W + 4.0f;
+            float ty = pr.min.y + (ph + font_size) * 0.5f - 2.0f;
+            rr = paint_label(ctx, "\xC3\x97", tx, ty, text_color, font_size); /* × */
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: close-x");
+        }
+
         prev_header = c;
         prev_active = is_active;
         idx++;
@@ -489,6 +519,21 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_ygui_ob
     ev.source = tabbar;
     ev.i0 = index;
     return yetty_ygui_object_emit(tabbar, &ev);
+}
+
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_ygui_object *tabbar,
+                                                             yetty_ygui_tab_close_cb cb,
+                                                             void *userdata)
+{
+    if (!tabbar) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tabbar_set_on_close: NULL tabbar");
+    }
+    struct tabbar_data *td =
+        yetty_ygui_data_get(tabbar, yetty_ygui_class_expect(yetty_ygui_tabbar_class_get(),
+                                                            "yetty_ygui_tabbar_class_get"));
+    td->close_cb = cb;
+    td->close_userdata = userdata;
+    return yetty_ygui_object_set_dirty(tabbar);
 }
 
 /*-----------------------------------------------------------------------------

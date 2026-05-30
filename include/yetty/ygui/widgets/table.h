@@ -14,10 +14,15 @@
 struct yetty_yclass_ptr_result yetty_ygui_table_class_get(void);
 
 /* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+struct yetty_ygui_object;
+
 struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_ygui_object *obj,
                                                             int n_cols, const char *const *headers);
 struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_ygui_object *obj,
                                                         const char *const *cells, int n_cells);
+/* Drop every data row (headers kept). Used by live monitors (ytop) that
+ * rebuild the row set every refresh tick. */
+struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_ygui_object *obj);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

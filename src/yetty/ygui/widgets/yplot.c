@@ -18,13 +18,37 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* One owned data buffer (deep-copied from the caller's input). */
+struct yplot_buf_slot {
+    float *samples;
+    size_t count;
+    uint32_t color;
+};
+
 struct [[clang::annotate("class@ygui:yplot")]] [[clang::annotate("parent@ygui:widget")]]
 yplot_data {
     char *source;
     size_t source_len;
     struct yetty_ygui_yplot_config cfg;
     int has_cfg;
+    /* Raw-data plotting: owned deep copies of the caller's buffers,
+     * rendered as line plots over x_min..x_max. Empty for expression-
+     * only plots. */
+    struct yplot_buf_slot *buffers;
+    size_t buffer_count;
 };
+
+static void yplot_free_buffers(struct yplot_data *d)
+{
+    if (d->buffers) {
+        for (size_t i = 0; i < d->buffer_count; i++) {
+            free(d->buffers[i].samples);
+        }
+        free(d->buffers);
+        d->buffers = NULL;
+    }
+    d->buffer_count = 0;
+}
 
 [[clang::annotate("override@ygui:yplot:constructor")]]
 static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_ctx *yclass_ctx,
@@ -41,6 +65,8 @@ static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_ctx 
     d->source = NULL;
     d->source_len = 0;
     d->has_cfg = 0;
+    d->buffers = NULL;
+    d->buffer_count = 0;
     return YETTY_OK_VOID();
 }
 
@@ -54,6 +80,7 @@ static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_ctx *
         obj, yetty_ygui_class_expect(yetty_ygui_yplot_class_get(), "yetty_ygui_yplot_class_get"));
     free(d->source);
     d->source = NULL;
+    yplot_free_buffers(d);
     return yetty_ygui_super_void(
         obj, yetty_ygui_class_expect(yetty_ygui_yplot_class_get(), "yetty_ygui_yplot_class_get"),
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
@@ -81,7 +108,9 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *y
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yplot_data *d = yetty_ygui_data_get(
         obj, yetty_ygui_class_expect(yetty_ygui_yplot_class_get(), "yetty_ygui_yplot_class_get"));
-    if (!d->source || d->source_len == 0) {
+    int have_source = d->source && d->source_len > 0;
+    int have_buffers = d->buffers && d->buffer_count > 0;
+    if (!have_source && !have_buffers) {
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -103,7 +132,25 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *y
                      ? d->cfg.flags
                      : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS),
     };
-    struct yetty_ydraw_draw_list_result dlr = yetty_yplot_render(d->source, d->source_len, &cfg);
+    const char *src = d->source ? d->source : "";
+    struct yetty_ydraw_draw_list_result dlr;
+    if (have_buffers) {
+        /* Materialise the wire-format buffer_input array yplot expects. */
+        struct yetty_yplot_buffer_input *bufs =
+            calloc(d->buffer_count, sizeof(struct yetty_yplot_buffer_input));
+        if (!bufs) {
+            return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: buffer_input oom");
+        }
+        for (size_t i = 0; i < d->buffer_count; i++) {
+            bufs[i].samples = d->buffers[i].samples;
+            bufs[i].count = d->buffers[i].count;
+            bufs[i].color = d->buffers[i].color;
+        }
+        dlr = yetty_yplot_render_with_buffers(src, d->source_len, bufs, d->buffer_count, &cfg);
+        free(bufs);
+    } else {
+        dlr = yetty_yplot_render(d->source, d->source_len, &cfg);
+    }
     if (YETTY_IS_ERR(dlr)) {
         return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: yplot_render", dlr);
     }
@@ -195,6 +242,66 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
         d->has_cfg = 1;
     } else {
         d->has_cfg = 0;
+    }
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
+    struct yetty_ygui_object *obj, const char *source, size_t source_len,
+    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
+    const struct yetty_ygui_yplot_config *config)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yplot_set_buffers: NULL obj");
+    }
+    struct yplot_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_yplot_class_get(), "yetty_ygui_yplot_class_get"));
+
+    /* Replace the expression source (NULL clears it — buffer-only plot). */
+    free(d->source);
+    d->source = NULL;
+    d->source_len = 0;
+    if (source) {
+        size_t n = source_len ? source_len : strlen(source);
+        d->source = malloc(n + 1);
+        if (!d->source) {
+            return YETTY_ERR(yetty_ycore_void, "yplot_set_buffers: source malloc");
+        }
+        memcpy(d->source, source, n);
+        d->source[n] = '\0';
+        d->source_len = n;
+    }
+
+    /* Deep-copy the data buffers — the widget owns its copies so the
+     * caller can free / reuse its arrays after the call. */
+    yplot_free_buffers(d);
+    if (buffers && buffer_count > 0) {
+        struct yplot_buf_slot *slots = calloc(buffer_count, sizeof(struct yplot_buf_slot));
+        if (!slots) {
+            return YETTY_ERR(yetty_ycore_void, "yplot_set_buffers: slots oom");
+        }
+        for (size_t i = 0; i < buffer_count; i++) {
+            slots[i].count = buffers[i].count;
+            slots[i].color = buffers[i].color;
+            if (buffers[i].samples && buffers[i].count > 0) {
+                slots[i].samples = malloc(buffers[i].count * sizeof(float));
+                if (!slots[i].samples) {
+                    for (size_t j = 0; j < i; j++) {
+                        free(slots[j].samples);
+                    }
+                    free(slots);
+                    return YETTY_ERR(yetty_ycore_void, "yplot_set_buffers: samples oom");
+                }
+                memcpy(slots[i].samples, buffers[i].samples, buffers[i].count * sizeof(float));
+            }
+        }
+        d->buffers = slots;
+        d->buffer_count = buffer_count;
+    }
+
+    if (config) {
+        d->cfg = *config;
+        d->has_cfg = 1;
     }
     return yetty_ygui_object_set_dirty(obj);
 }

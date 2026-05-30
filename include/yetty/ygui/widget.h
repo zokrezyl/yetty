@@ -15,10 +15,8 @@ struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
 
 /* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 /*-----------------------------------------------------------------------------
- * Flex / CSS layout — minimal field set that ports cleanly from
- * ygui-old's yetty_ygui_layout. The full algorithm will be added in a
- * follow-up phase; this phase only defines the storage shape so apps
- * can author values today and have them flow once the layout pass lands.
+ * Flex / CSS layout — the field set the flex layout pass in layout.c
+ * consumes. Apps author these values directly or via apply_css.
  *---------------------------------------------------------------------------*/
 enum yetty_ygui_flex_direction {
     YETTY_YGUI_FLEX_ROW = 0,
@@ -99,8 +97,8 @@ const struct yetty_ygui_layout *yetty_ygui_widget_layout_get(const struct yetty_
 
 /*-----------------------------------------------------------------------------
  * Convenience geometry / visibility setters — thin wrappers over the
- * layout struct, added to ease the yui port off ygui-old (which exposed
- * these as first-class widget calls). Each marks the widget dirty.
+ * layout struct, exposing geometry/visibility as first-class widget
+ * calls. Each marks the widget dirty.
  *---------------------------------------------------------------------------*/
 /* Toggle the widget (and its subtree) in/out of layout + paint via the
  * layout `hidden` flag. */

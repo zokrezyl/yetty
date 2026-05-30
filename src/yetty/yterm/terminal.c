@@ -81,6 +81,12 @@ struct yetty_yterm_terminal {
     struct yetty_yterm_terminal_context context;
     uint32_t cols;
     uint32_t rows;
+    /* Pixel size this terminal was last actually resized to. The generic
+     * view wrapper (yetty_yui_view_set_bounds) writes view->bounds before
+     * dispatching to our set_bounds, so view->bounds can't be used to
+     * detect a real change — track the applied size here instead. */
+    float applied_w;
+    float applied_h;
     /* Set by workspace_set_active via SET_FOCUS — true means this terminal
      * is the foreground view in its workspace AND the workspace is the
      * tabbar's active one. Layers can read this to switch cursor style
@@ -1875,12 +1881,12 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 
-    /* Store bounds in view */
-    int changed = (view->bounds.w != bounds.w) || (view->bounds.h != bounds.h);
+    /* Detect a real pixel-size change against the size we last resized to.
+     * view->bounds is already overwritten with the new bounds by the
+     * generic wrapper before we run, so compare against applied_w/h. */
+    int changed = (terminal->applied_w != bounds.w) || (terminal->applied_h != bounds.h);
     view->bounds = bounds;
 
-    /* Terminal handles resize via YETTY_EVENT_RESIZE from event loop */
-    /* For now, just log - the actual resize happens through the event system */
     ydebug("terminal_view_set_bounds: %.0fx%.0f at (%.0f,%.0f)", bounds.w, bounds.h, bounds.x,
            bounds.y);
 
@@ -1893,7 +1899,23 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
         yetty_yfigure_container_set_viewport_offset(terminal->root_container, bounds.x, bounds.y);
     }
 
-    (void)changed;
+    /* Actually resize the terminal when the pixel size changes. The
+     * split-drag path reaches a pane through set_bounds (only the full-
+     * window resize goes through a RESIZE event), so this used to just
+     * store the bounds and resize nothing — a pane shrunk/grown by a
+     * splitter kept its old grid + cell metrics, rendering glyphs
+     * squashed until a full-window repaint snapped them back, and a
+     * client program (ygreeter, nvim) never saw the new size. Drive the
+     * exact same resize the event path performs. */
+    if (changed && bounds.w > 0.0f && bounds.h > 0.0f) {
+        terminal->applied_w = bounds.w;
+        terminal->applied_h = bounds.h;
+        struct yetty_yui_event re = {.type = YETTY_YCORE_RESIZE};
+        re.resize.width = bounds.w;
+        re.resize.height = bounds.h;
+        struct yetty_ycore_int_result rr = terminal_view_on_event(view, &re);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "terminal_view_set_bounds: resize");
+    }
     return YETTY_OK_VOID();
 }
 

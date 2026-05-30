@@ -15,6 +15,9 @@
 struct [[clang::annotate("class@ygui:progress")]] [[clang::annotate(
     "parent@ygui:primitive_widget")]] progress_data {
     float value;
+    /* Fill colour (0xAABBGGRR). 0 = use the default brand fill. Lets a
+     * caller (ytop's per-core bars) tint each bar differently. */
+    uint32_t accent;
 };
 
 [[clang::annotate("override@ygui:progress:constructor")]]
@@ -32,6 +35,7 @@ static struct yetty_ycore_void_result progress_constructor(struct yetty_yclass_c
         yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_progress_class_get(),
                                                          "yetty_ygui_progress_class_get"));
     d->value = 0.0f;
+    d->accent = 0u;
     return YETTY_OK_VOID();
 }
 
@@ -87,7 +91,8 @@ static struct yetty_ycore_void_result progress_paint(struct yetty_yclass_ctx *yc
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "progress_paint: track");
     float fw = w * d->value;
     if (fw > 0.0f) {
-        rr = paint_rounded(ctx, r.min.x, r.min.y, fw, h, COLOR_FILL, radius);
+        uint32_t fill = d->accent ? d->accent : COLOR_FILL;
+        rr = paint_rounded(ctx, r.min.x, r.min.y, fw, h, fill, radius);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "progress_paint: fill");
     }
     return YETTY_OK_VOID();
@@ -121,6 +126,19 @@ float yetty_ygui_progress_get_value(const struct yetty_ygui_object *obj)
         (struct yetty_ygui_object *)obj,
         yetty_ygui_class_expect(yetty_ygui_progress_class_get(), "yetty_ygui_progress_class_get"));
     return d->value;
+}
+
+struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_ygui_object *obj,
+                                                              uint32_t color)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "progress_set_accent: NULL obj");
+    }
+    struct progress_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_progress_class_get(),
+                                                         "yetty_ygui_progress_class_get"));
+    d->accent = color;
+    return yetty_ygui_object_set_dirty(obj);
 }
 
 #include "progress.gen.c"

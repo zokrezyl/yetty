@@ -5,10 +5,6 @@
  * Walks the source buffer, identifies each primitive by type word,
  * copies it into a scratch slot, translates the position fields by
  * the widget's offset, and appends to ctx->ygrid_draw_list.
- *
- * Mirrors src/yetty/ygui-old/ygui_rich.c::emit_buffer_translated —
- * see that file for the wire-format type-id ranges and translation
- * conventions.
  */
 
 #include "../internal.h"

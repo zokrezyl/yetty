@@ -11,18 +11,31 @@
  *   Press 'q' to quit.
  */
 
-#include <yetty/ygui-old/ygui.h>
+#include <yetty/ygui/ygui.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/types.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include <uv.h>
+
+static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result r)
+{
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
 
 /* ------------------------------------------------------------------ */
 /* CPU state                                                           */
@@ -249,11 +262,13 @@ static int proc_cmp_cpu_desc(const void *a, const void *b)
 #define MAX_TABLE_ROWS  32
 
 struct app_state {
-    struct yetty_ygui_old_engine *engine;
-    struct yetty_ygui_old_widget *header;
-    struct yetty_ygui_old_widget *cpu_bars[MAX_CORES + 1];
-    struct yetty_ygui_old_widget *cpu_labels[MAX_CORES + 1];
-    struct yetty_ygui_old_widget *table;
+    struct yetty_ygui_runtime *engine;
+    struct yetty_ygui_object *root;
+    struct yetty_ygui_object *header;
+    struct yetty_ygui_object *cpu_bars[MAX_CORES + 1];
+    struct yetty_ygui_object *cpu_labels[MAX_CORES + 1];
+    struct yetty_ygui_object *table;
+    int running;
 
     struct cpu_state cpu_st;
     struct proc_entry procs[MAX_PROCS];
@@ -291,14 +306,35 @@ static uint32_t core_accent(int core)
     return rgba(c[0], c[1], c[2], 255);
 }
 
+/* Add `cls` under `parent`, position + size it absolutely, return it
+ * (or NULL). Absolute placement mirrors ytop's hand-laid-out UI. */
+static struct yetty_ygui_object *ytop_place(struct app_state *s, struct yetty_yclass_ptr_result cls_r,
+                                            float x, float y, float w, float h)
+{
+    if (YETTY_IS_ERR(cls_r)) {
+        yetty_ycore_error_destroy(cls_r.error);
+        return NULL;
+    }
+    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls_r.value, s->root);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+        return NULL;
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(r.value, x, y));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(r.value, w, h));
+    return r.value;
+}
+
 static void build_ui(struct app_state *s, int n_cores)
 {
     /* Header label across the top. */
-    s->header = yetty_ygui_old_engine_label(s->engine, "ytop_title", MARGIN, MARGIN,
-                                         "ytop — q to quit");
+    s->header = ytop_place(s, yetty_ygui_label_class_get(), MARGIN, MARGIN, 400.0f, 20.0f);
+    if (s->header) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(s->header, "ytop — q to quit"));
+    }
 
-    /* Per-core rows: "cpuN" label + progress bar + "%" label, wrapped two
-     * cores per row to fit horizontally on typical card widths. */
+    /* Per-core rows: "cpuN" label + progress bar + "%" label, wrapped
+     * four cores per row to fit horizontally. */
     int cores_per_row = 4;
     if (n_cores < cores_per_row) {
         cores_per_row = n_cores > 0 ? n_cores : 1;
@@ -311,21 +347,27 @@ static void build_ui(struct app_state *s, int n_cores)
         float x = MARGIN + (float)col * core_block_w;
         float y = MARGIN + HEADER_H + (float)row * (ROW_H + 4.0f);
 
-        char id_lbl[32], id_bar[32], id_val[32], lbl_text[16];
-        snprintf(id_lbl, sizeof(id_lbl), "cpu_lbl_%d", i);
-        snprintf(id_bar, sizeof(id_bar), "cpu_bar_%d", i);
-        snprintf(id_val, sizeof(id_val), "cpu_val_%d", i);
+        char lbl_text[16];
         snprintf(lbl_text, sizeof(lbl_text), "cpu%d", i - 1);
 
-        yetty_ygui_old_engine_label(s->engine, id_lbl, x, y + 4.0f, lbl_text);
-        s->cpu_bars[i] = yetty_ygui_old_engine_progress(s->engine, id_bar,
-                                                     x + 50.0f, y, BAR_W, ROW_H, 0.0f);
-        if (s->cpu_bars[i]) {
-            yetty_ygui_old_widget_set_accent_color(s->cpu_bars[i], core_accent(i - 1));
+        struct yetty_ygui_object *core_lbl =
+            ytop_place(s, yetty_ygui_label_class_get(), x, y + 4.0f, 48.0f, 18.0f);
+        if (core_lbl) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(core_lbl, lbl_text));
         }
-        s->cpu_labels[i] = yetty_ygui_old_engine_label(s->engine, id_val,
-                                                    x + 50.0f + BAR_W + 8.0f, y + 4.0f,
-                                                    "  0%");
+        s->cpu_bars[i] =
+            ytop_place(s, yetty_ygui_progress_class_get(), x + 50.0f, y, BAR_W, ROW_H);
+        if (s->cpu_bars[i]) {
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_progress_set_accent(s->cpu_bars[i], core_accent(i - 1)));
+            yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(s->cpu_bars[i], 0.0f));
+        }
+        s->cpu_labels[i] =
+            ytop_place(s, yetty_ygui_label_class_get(), x + 50.0f + BAR_W + 8.0f, y + 4.0f,
+                       60.0f, 18.0f);
+        if (s->cpu_labels[i]) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(s->cpu_labels[i], "  0%"));
+        }
     }
 
     /* Table below the per-core block. */
@@ -337,12 +379,12 @@ static void build_ui(struct app_state *s, int n_cores)
     }
     float table_h = ROW_H + (MAX_TABLE_ROWS + 1) * ROW_H;
 
-    s->table = yetty_ygui_old_engine_table(s->engine, "procs", MARGIN, table_y,
-                                        table_w, table_h);
-    const char *names[]  = { "PID", "USER",   "STATE", "%CPU",  "RSS",   "COMMAND" };
-    const float widths[] = { 70.0f, 90.0f,    60.0f,    70.0f,   100.0f,  0.0f     };
-    yetty_ygui_old_widget_table_set_columns(s->table, names, widths,
-                                         (int)(sizeof(names) / sizeof(names[0])));
+    s->table = ytop_place(s, yetty_ygui_table_class_get(), MARGIN, table_y, table_w, table_h);
+    if (s->table) {
+        static const char *const names[] = {"PID", "USER", "STATE", "%CPU", "RSS", "COMMAND"};
+        yetty_ycore_error_destroy_safe(yetty_ygui_table_set_columns(
+            s->table, (int)(sizeof(names) / sizeof(names[0])), names));
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -369,12 +411,13 @@ static void refresh(struct app_state *s)
             s->cpu_st.pct[i] = p;
             if (i >= 1 && i <= MAX_CORES) {
                 if (s->cpu_bars[i]) {
-                    yetty_ygui_old_widget_progress_set_value(s->cpu_bars[i], p / 100.0f);
+                    yetty_ycore_error_destroy_safe(
+                        yetty_ygui_progress_set_value(s->cpu_bars[i], p / 100.0f));
                 }
                 if (s->cpu_labels[i]) {
                     char buf[16];
                     snprintf(buf, sizeof(buf), "%5.1f%%", p);
-                    yetty_ygui_old_widget_label_set_text(s->cpu_labels[i], buf);
+                    yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(s->cpu_labels[i], buf));
                 }
             }
         }
@@ -388,7 +431,7 @@ static void refresh(struct app_state *s)
     float ticks_per_s = (float)s->clock_ticks;
     qsort(s->procs, (size_t)s->n_procs, sizeof(s->procs[0]), proc_cmp_cpu_desc);
 
-    yetty_ygui_old_widget_table_clear_rows(s->table);
+    yetty_ycore_error_destroy_safe(yetty_ygui_table_clear_rows(s->table));
     int rows_to_show = s->n_procs < MAX_TABLE_ROWS ? s->n_procs : MAX_TABLE_ROWS;
     for (int i = 0; i < rows_to_show; i++) {
         const struct proc_entry *e = &s->procs[i];
@@ -410,7 +453,7 @@ static void refresh(struct app_state *s)
             rss_s,
             e->comm,
         };
-        yetty_ygui_old_widget_table_add_row(s->table, cells, 6);
+        yetty_ycore_error_destroy_safe(yetty_ygui_table_add_row(s->table, cells, 6));
     }
 
     /* Snapshot for the next delta. */
@@ -432,73 +475,276 @@ static void on_refresh_timer(uv_timer_t *t)
     refresh(s);
 }
 
-static void on_key(struct yetty_ygui_old_engine *engine, uint32_t key, int mods, void *user)
+/* ------------------------------------------------------------------ */
+/* Client-mode harness — ytop runs inside a hosting yetty (`yetty -e     */
+/* ./ytop`): ygui ships its OSC envelopes over stdout, real keystrokes   */
+/* arrive on stdin, SIGWINCH carries the pixel size. Mirrors ygreeter's  */
+/* client mode + a 1 s refresh timer.                                    */
+/* ------------------------------------------------------------------ */
+
+struct ytop_stdout_pty {
+    struct yetty_platform_pty base;
+    uv_pipe_t pipe;
+};
+
+struct ytop_write {
+    uv_write_t req;
+    char *data;
+};
+
+static void ytop_on_write_done(uv_write_t *req, int status)
 {
-    (void)mods;
-    (void)user;
-    if (key == 'q' || key == 'Q') {
-        yetty_ygui_old_engine_stop(engine);
+    struct ytop_write *w = (struct ytop_write *)req;
+    (void)status;
+    free(w->data);
+    free(w);
+}
+
+static struct yetty_ycore_size_result ytop_pty_write(struct yetty_platform_pty *self,
+                                                     const char *data, size_t len)
+{
+    struct ytop_stdout_pty *p = (struct ytop_stdout_pty *)self;
+    if (len == 0) {
+        return YETTY_OK(yetty_ycore_size, 0);
     }
+    struct ytop_write *w = calloc(1, sizeof(*w));
+    if (!w) {
+        return YETTY_ERR(yetty_ycore_size, "ytop_pty_write: calloc");
+    }
+    w->data = malloc(len);
+    if (!w->data) {
+        free(w);
+        return YETTY_ERR(yetty_ycore_size, "ytop_pty_write: malloc");
+    }
+    memcpy(w->data, data, len);
+    uv_buf_t buf = uv_buf_init(w->data, (unsigned)len);
+    if (uv_write(&w->req, (uv_stream_t *)&p->pipe, &buf, 1, ytop_on_write_done) != 0) {
+        free(w->data);
+        free(w);
+        return YETTY_ERR(yetty_ycore_size, "ytop_pty_write: uv_write");
+    }
+    return YETTY_OK(yetty_ycore_size, len);
+}
+
+static struct yetty_ycore_size_result ytop_pty_read(struct yetty_platform_pty *s, char *b, size_t n)
+{
+    (void)s;
+    (void)b;
+    (void)n;
+    return YETTY_OK(yetty_ycore_size, 0);
+}
+static struct yetty_ycore_void_result ytop_pty_noop(struct yetty_platform_pty *s)
+{
+    (void)s;
+    return YETTY_OK_VOID();
+}
+static struct yetty_ycore_void_result ytop_pty_resize(struct yetty_platform_pty *s, uint32_t c,
+                                                      uint32_t r, uint32_t pw, uint32_t ph)
+{
+    (void)s;
+    (void)c;
+    (void)r;
+    (void)pw;
+    (void)ph;
+    return YETTY_OK_VOID();
+}
+static struct yetty_platform_pty_pipe_source *ytop_pty_pipe_source(struct yetty_platform_pty *s)
+{
+    (void)s;
+    return NULL;
+}
+static const struct yetty_platform_pty_ops *ytop_pty_ops(void)
+{
+    static const struct yetty_platform_pty_ops ops = {
+        .destroy = ytop_pty_noop,
+        .read = ytop_pty_read,
+        .write = ytop_pty_write,
+        .resize = ytop_pty_resize,
+        .stop = ytop_pty_noop,
+        .pipe_source = ytop_pty_pipe_source,
+    };
+    return &ops;
+}
+
+struct ytop_client {
+    uv_loop_t loop;
+    uv_poll_t stdin_poll;
+    uv_signal_t sigwinch;
+    uv_prepare_t prep;
+    uv_timer_t refresh_timer;
+    struct ytop_stdout_pty out;
+    struct app_state *s;
+};
+
+static int on_key(struct yetty_ygui_runtime *engine, uint32_t key, int mods, void *user)
+{
+    (void)engine;
+    (void)mods;
+    struct app_state *s = user;
+    if (key == 'q' || key == 'Q' || key == 0x03 || key == 0x04) {
+        s->running = 0;
+        return 1;
+    }
+    return 0;
+}
+
+static void ytop_stdin_cb(uv_poll_t *h, int status, int events)
+{
+    struct ytop_client *c = h->data;
+    if (status < 0 || !(events & UV_READABLE)) {
+        return;
+    }
+    char buf[1024];
+    ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
+    if (n > 0) {
+        yetty_ycore_error_destroy_safe(
+            yetty_ygui_framework_feed_input(c->s->engine, buf, (size_t)n));
+    } else if (n == 0 && !isatty(STDIN_FILENO)) {
+        c->s->running = 0;
+    }
+}
+
+static void ytop_pickup_winsz(struct ytop_client *c)
+{
+    struct winsize ws;
+    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_framework_set_viewport(
+            c->s->engine, (float)ws.ws_xpixel, (float)ws.ws_ypixel));
+    }
+}
+
+static void ytop_sigwinch_cb(uv_signal_t *h, int signum)
+{
+    (void)signum;
+    ytop_pickup_winsz((struct ytop_client *)h->data);
+}
+
+static void ytop_prep_cb(uv_prepare_t *h)
+{
+    struct ytop_client *c = h->data;
+    if (yetty_ygui_framework_is_dirty(c->s->engine)) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_framework_emit(c->s->engine));
+    }
+    if (!c->s->running) {
+        uv_stop(h->loop);
+    }
+}
+
+static void ytop_close_cb(uv_handle_t *h)
+{
+    (void)h;
 }
 
 int main(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-
-    if (yetty_ygui_old_init() != 0) {
-        fprintf(stderr, "ytop: ygui_init failed (run inside a real terminal)\n");
-        return 1;
-    }
+    ytrace_init();
 
     struct app_state *s = calloc(1, sizeof(*s));
     if (!s) {
-        yetty_ygui_old_shutdown();
         return 1;
     }
     s->clock_ticks = sysconf(_SC_CLK_TCK);
     if (s->clock_ticks <= 0) {
         s->clock_ticks = 100;
     }
+    s->running = 1;
 
-    /* Seed the CPU sampler so the first delta represents real activity
-     * rather than seconds-since-boot. */
+    /* Seed the CPU sampler so the first delta is real activity. */
     if (read_proc_stat(&s->cpu_st) < 0) {
         fprintf(stderr, "ytop: cannot read /proc/stat (Linux only)\n");
         free(s);
-        yetty_ygui_old_shutdown();
         return 1;
     }
     memcpy(s->cpu_st.prev, s->cpu_st.curr, sizeof(s->cpu_st.curr));
 
-    struct yetty_ygui_old_engine_args args = { .name = "ytop" };
-    struct ygui_engine_ptr_result eng_r = yetty_ygui_old_engine_create(args);
-    if (!eng_r.ok) {
-        yetty_ycore_error_destroy(eng_r.error);
-        free(s);
-        yetty_ygui_old_shutdown();
-        return 1;
+    /* Raw tty BEFORE any OSC write — otherwise the slave tty echoes the
+     * ESC bytes back and the host yetty renders "^[" garbage. */
+    struct termios saved;
+    int tty_raw_ok = 0;
+    if (isatty(STDIN_FILENO) && tcgetattr(STDIN_FILENO, &saved) == 0) {
+        struct termios raw = saved;
+        cfmakeraw(&raw);
+        raw.c_cc[VMIN] = 0;
+        raw.c_cc[VTIME] = 0;
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) == 0) {
+            tty_raw_ok = 1;
+        }
     }
-    s->engine = eng_r.value;
-    build_ui(s, s->cpu_st.n_cores);
-    yetty_ygui_old_engine_on_key(s->engine, on_key, NULL);
 
-    /* Per-tick CPU/memory sampler timer attached to the engine's loop
-     * (the engine owns the loop now). */
-    uv_loop_t *loop = yetty_ygui_old_engine_get_loop(s->engine);
-    uv_timer_t refresh_timer;
-    uv_timer_init(loop, &refresh_timer);
-    refresh_timer.data = s;
-    uv_timer_start(&refresh_timer, on_refresh_timer, /*timeout_ms=*/0,
-                   /*repeat_ms=*/REFRESH_MS);
+    struct ytop_client c = {0};
+    c.s = s;
+    if (uv_loop_init(&c.loop) != 0) {
+        fprintf(stderr, "ytop: uv_loop_init failed\n");
+        goto cleanup;
+    }
+    c.out.base.ops = ytop_pty_ops();
+    if (uv_pipe_init(&c.loop, &c.out.pipe, 0) != 0 ||
+        uv_pipe_open(&c.out.pipe, STDOUT_FILENO) != 0) {
+        fprintf(stderr, "ytop: stdout pipe init failed\n");
+        goto cleanup_loop;
+    }
 
-    yetty_ygui_old_engine_run(s->engine);
+    struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(&c.out.base);
+    if (YETTY_IS_ERR(fr)) {
+        fprintf(stderr, "ytop: framework_create failed: %s\n", fr.error.msg);
+        yetty_ycore_error_destroy(fr.error);
+        goto cleanup_loop;
+    }
+    s->engine = fr.value;
+    yetty_ygui_framework_set_key_cb(s->engine, on_key, s);
 
-    uv_timer_stop(&refresh_timer);
-    uv_close((uv_handle_t *)&refresh_timer, NULL);
+    /* Root + widget tree (absolutely positioned, mirroring ytop's
+     * hand-laid-out chrome). */
+    struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+    if (YETTY_IS_OK(rr)) {
+        s->root = rr.value;
+        yetty_ycore_error_destroy_safe(yetty_ygui_framework_set_root(s->engine, s->root));
+        build_ui(s, s->cpu_st.n_cores);
+    } else {
+        yetty_ycore_error_destroy(rr.error);
+    }
 
-    yetty_ygui_old_engine_destroy(s->engine);
+    if (uv_poll_init(&c.loop, &c.stdin_poll, STDIN_FILENO) == 0) {
+        c.stdin_poll.data = &c;
+        uv_poll_start(&c.stdin_poll, UV_READABLE, ytop_stdin_cb);
+    }
+    if (uv_signal_init(&c.loop, &c.sigwinch) == 0) {
+        c.sigwinch.data = &c;
+        uv_signal_start(&c.sigwinch, ytop_sigwinch_cb, SIGWINCH);
+    }
+    if (uv_prepare_init(&c.loop, &c.prep) == 0) {
+        c.prep.data = &c;
+        uv_prepare_start(&c.prep, ytop_prep_cb);
+    }
+    uv_timer_init(&c.loop, &c.refresh_timer);
+    c.refresh_timer.data = s;
+    uv_timer_start(&c.refresh_timer, on_refresh_timer, /*timeout_ms=*/0, /*repeat_ms=*/REFRESH_MS);
+
+    ytop_pickup_winsz(&c);
+
+    uv_run(&c.loop, UV_RUN_DEFAULT);
+
+    uv_timer_stop(&c.refresh_timer);
+    uv_poll_stop(&c.stdin_poll);
+    uv_signal_stop(&c.sigwinch);
+    uv_prepare_stop(&c.prep);
+    uv_close((uv_handle_t *)&c.refresh_timer, ytop_close_cb);
+    uv_close((uv_handle_t *)&c.stdin_poll, ytop_close_cb);
+    uv_close((uv_handle_t *)&c.sigwinch, ytop_close_cb);
+    uv_close((uv_handle_t *)&c.prep, ytop_close_cb);
+    uv_close((uv_handle_t *)&c.out.pipe, ytop_close_cb);
+    uv_run(&c.loop, UV_RUN_NOWAIT);
+
+    yetty_ycore_error_destroy_safe(yetty_ygui_framework_destroy(s->engine));
+
+cleanup_loop:
+    uv_loop_close(&c.loop);
+cleanup:
+    if (tty_raw_ok) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &saved);
+    }
     free(s);
-    yetty_ygui_old_shutdown();
     return 0;
 }

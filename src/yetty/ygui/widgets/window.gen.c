@@ -13,6 +13,11 @@ __attribute__((unused))
 static yetty_ygui_widget_paint_fn yetty_ygui_window_yetty_ygui_widget_paint_check = paint;
 __attribute__((unused))
 static yetty_ygui_widget_on_press_fn yetty_ygui_window_yetty_ygui_widget_on_press_check = on_press;
+__attribute__((unused))
+static yetty_ygui_widget_on_motion_fn yetty_ygui_window_yetty_ygui_widget_on_motion_check = on_motion;
+__attribute__((unused))
+static yetty_ygui_widget_on_release_fn yetty_ygui_window_yetty_ygui_widget_on_release_check =
+    on_release;
 
 struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void)
 {
@@ -30,6 +35,8 @@ struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void)
         {"yetty_ygui", "destructor", (yetty_yclass_method_id_t)yetty_ygui_destructor, (yetty_yclass_impl_t)dtor},
         {"yetty_ygui", "widget_paint", (yetty_yclass_method_id_t)yetty_ygui_widget_paint, (yetty_yclass_impl_t)paint},
         {"yetty_ygui", "widget_on_press", (yetty_yclass_method_id_t)yetty_ygui_widget_on_press, (yetty_yclass_impl_t)on_press},
+        {"yetty_ygui", "widget_on_motion", (yetty_yclass_method_id_t)yetty_ygui_widget_on_motion, (yetty_yclass_impl_t)on_motion},
+        {"yetty_ygui", "widget_on_release", (yetty_yclass_method_id_t)yetty_ygui_widget_on_release, (yetty_yclass_impl_t)on_release},
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_ygui_vbox_class_get();
     if (YETTY_IS_ERR(parent_class_r))

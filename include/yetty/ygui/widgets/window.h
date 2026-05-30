@@ -23,6 +23,13 @@ struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_ygui_obj
 /* Attach a popup_menu opened by the title bar's hamburger button. */
 struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_ygui_object *obj,
                                                           struct yetty_ygui_object *menu);
+
+/* Show a close "x" in the title bar (ImGui's Begin(&p_open) model). A
+ * click on it emits YETTY_YGUI_EVENT_CLOSE on the window; react via
+ * yetty_ygui_object_subscribe(window, YETTY_YGUI_EVENT_CLOSE, cb, ud).
+ * The framework owns the button; the app decides what "close" means. */
+struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_ygui_object *obj,
+                                                              int closable);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

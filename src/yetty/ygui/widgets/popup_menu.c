@@ -39,6 +39,10 @@ struct menu_item {
     char *label; /* NULL for separator */
     yetty_ygui_menu_item_cb cb;
     void *userdata;
+    /* Drill / back rows repopulate the menu in place (clear → add…) and
+     * must keep it OPEN after their callback. Normal action rows close
+     * the menu before firing. */
+    int is_drill;
 };
 
 struct [[clang::annotate("class@ygui:popup_menu")]] [[clang::annotate(
@@ -268,15 +272,37 @@ static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_ctx
     if (idx >= 0 && idx < d->n_items && d->items[idx].label) {
         yetty_ygui_menu_item_cb cb = d->items[idx].cb;
         void *ud = d->items[idx].userdata;
-        struct yetty_ycore_void_result cr = yetty_ygui_popup_menu_close(obj);
-        if (YETTY_IS_ERR(cr)) {
-            return YETTY_ERR(yetty_ycore_int, "popup_menu_on_press: close", cr);
+        int is_drill = d->items[idx].is_drill;
+        /* Action rows close the menu before firing. Drill / back rows
+         * keep it open: their callback rebuilds the item list in place
+         * (clear → set_title → add…), and closing first would leave the
+         * repopulated menu invisible (open=0, zero rect). */
+        if (!is_drill) {
+            struct yetty_ycore_void_result cr = yetty_ygui_popup_menu_close(obj);
+            if (YETTY_IS_ERR(cr)) {
+                return YETTY_ERR(yetty_ycore_int, "popup_menu_on_press: close", cr);
+            }
         }
         if (cb) {
             struct yetty_ycore_void_result fr =
                 cb(NULL, (struct yetty_yclass_object *)obj, idx, ud);
             if (YETTY_IS_ERR(fr)) {
                 return YETTY_ERR(yetty_ycore_int, "popup_menu_on_press: item cb", fr);
+            }
+        }
+        /* Drill / back callbacks repopulated the (still-open) menu — its
+         * row count changed, so re-measure the height (pos / width keep
+         * their open_at values). */
+        if (is_drill && d->open) {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+            l.height = menu_total_h(d);
+            struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
+            if (YETTY_IS_ERR(lr)) {
+                return YETTY_ERR(yetty_ycore_int, "popup_menu_on_press: re-measure", lr);
+            }
+            struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+            if (YETTY_IS_ERR(dr)) {
+                return YETTY_ERR(yetty_ycore_int, "popup_menu_on_press: dirty", dr);
             }
         }
     }
@@ -335,6 +361,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_ygui_
     d->items[d->n_items].label = copy;
     d->items[d->n_items].cb = cb;
     d->items[d->n_items].userdata = userdata;
+    d->items[d->n_items].is_drill = 0;
     d->n_items++;
     return YETTY_OK_VOID();
 }
@@ -353,8 +380,21 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_separator(struct yetty_
     d->items[d->n_items].label = NULL;
     d->items[d->n_items].cb = NULL;
     d->items[d->n_items].userdata = NULL;
+    d->items[d->n_items].is_drill = 0;
     d->n_items++;
     return YETTY_OK_VOID();
+}
+
+/* Mark the most-recently-added item as a drill / back row (keeps the
+ * menu open + re-measures after its callback). */
+static void mark_last_drill(struct yetty_ygui_object *obj)
+{
+    struct popup_menu_data *d =
+        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
+                                                         "yetty_ygui_popup_menu_class_get"));
+    if (d->n_items > 0) {
+        d->items[d->n_items - 1].is_drill = 1;
+    }
 }
 
 struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_ygui_object *obj, float x,
@@ -424,8 +464,8 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_ygui
     return yetty_ygui_popup_menu_open_at(obj, x, y);
 }
 
-/* Drill-down menu support (ported from ygui-old for yui). The new menu
- * has no separate submenu objects — yui rebuilds the item list in place
+/* Drill-down menu support. The menu has no separate submenu objects —
+ * the host rebuilds the item list in place
  * (clear → set_title → set_back → add_drill_item…), so a "drill item" is
  * just a normal item whose callback repopulates the menu. */
 struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_ygui_object *obj)
@@ -474,8 +514,14 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_ygui_
                                                               void *userdata)
 {
     /* A back row is just the first item; yui adds it before the drill
-     * items. */
-    return yetty_ygui_popup_menu_add_item(obj, label ? label : "‹ Back", cb, userdata);
+     * items. It repopulates the menu in place, so flag it as a drill row
+     * (keeps the menu open after the callback). */
+    struct yetty_ycore_void_result r =
+        yetty_ygui_popup_menu_add_item(obj, label ? label : "‹ Back", cb, userdata);
+    if (YETTY_IS_OK(r)) {
+        mark_last_drill(obj);
+    }
+    return r;
 }
 
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty_ygui_object *obj,
@@ -483,7 +529,11 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty
                                                                     yetty_ygui_menu_item_cb cb,
                                                                     void *userdata)
 {
-    return yetty_ygui_popup_menu_add_item(obj, label, cb, userdata);
+    struct yetty_ycore_void_result r = yetty_ygui_popup_menu_add_item(obj, label, cb, userdata);
+    if (YETTY_IS_OK(r)) {
+        mark_last_drill(obj);
+    }
+    return r;
 }
 
 struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_ygui_object *obj,

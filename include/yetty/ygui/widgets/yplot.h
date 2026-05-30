@@ -14,6 +14,10 @@
 struct yetty_yclass_ptr_result yetty_ygui_yplot_class_get(void);
 
 /* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+#include <stddef.h>
+#include <stdint.h>
+struct yetty_ygui_object;
+
 /* Replace the expression source. The widget rebuilds its primitive on
  * the next emit. */
 struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_object *obj,
@@ -31,6 +35,17 @@ struct yetty_ygui_yplot_config {
 };
 struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
     struct yetty_ygui_object *obj, const struct yetty_ygui_yplot_config *cfg);
+
+/* Raw-data plotting. Replaces the expression source (pass NULL to clear
+ * it for a buffer-only plot) and the data buffers (deep-copied — the
+ * caller keeps ownership of its arrays). Each buffer renders as a line
+ * plot over x_min..x_max with its own colour (0 → palette default).
+ * `config` may be NULL to leave the current config untouched. */
+struct yetty_yplot_buffer_input;
+struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
+    struct yetty_ygui_object *obj, const char *source, size_t source_len,
+    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
+    const struct yetty_ygui_yplot_config *config);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

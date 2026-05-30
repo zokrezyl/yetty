@@ -162,7 +162,7 @@ static void generate_frame(float *out, int n, double t0, double sample_rate, dou
 }
 
 /* Serialize a draw_list and ship it as a YDRAW_SCENE_BIN OSC envelope on
- * stdout. Mirrors src/yetty/ygui-old/ygui_osc.c:write_bin. */
+ * stdout. */
 static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_draw_list *dl)
 {
     const uint8_t *raw = NULL;

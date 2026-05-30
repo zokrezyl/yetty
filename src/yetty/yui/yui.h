@@ -36,7 +36,8 @@ extern "C" {
 struct yetty_yui;
 struct yetty_context;
 struct yetty_ydraw_target;
-struct yetty_ygui_old_widget;
+struct yetty_ygui_object;
+struct yetty_ygui_runtime;
 struct yetty_yui_tabbar;
 
 YETTY_YRESULT_DECLARE(yetty_yui_ptr, struct yetty_yui *);
@@ -154,13 +155,13 @@ void yetty_yui_show_context_menu(struct yetty_yui *yui, float anchor_x, float an
  * that need richer widgets in the bar add children directly to the
  * widget returned by yetty_yui_statusbar(). NULL when ygui engine
  * allocation failed. */
-struct yetty_ygui_old_widget *yetty_yui_statusbar(struct yetty_yui *yui);
+struct yetty_ygui_object *yetty_yui_statusbar(struct yetty_yui *yui);
 
 /* Direct access to yui's ygui engine — for consumers that want to add
  * free-floating widgets (yplot, custom layouts) outside the tabbar /
  * statusbar / menu chrome that yui owns. NULL if engine allocation
  * failed at create time. Caller must not destroy. */
-struct yetty_ygui_old_engine *yetty_yui_engine(struct yetty_yui *yui);
+struct yetty_ygui_runtime *yetty_yui_engine(struct yetty_yui *yui);
 
 /* Dispatch a platform input event into yui (forwards mouse/key/char
  * into the ygui engine for widget hit-testing and click handling).

@@ -200,4 +200,18 @@ struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_ygui_object
     return yetty_ygui_object_set_dirty(obj);
 }
 
+struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_ygui_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "table_clear_rows: NULL");
+    }
+    struct table_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_table_class_get(), "yetty_ygui_table_class_get"));
+    for (int i = 0; i < d->n_rows; i++) {
+        free_row(d->rows[i], d->n_cols);
+    }
+    d->n_rows = 0;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
 #include "table.gen.c"

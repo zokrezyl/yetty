@@ -14,6 +14,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_tabbar_class_get(void);
 
 /* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+struct yetty_ygui_object;
+
 /* Append a tab header to the tabbar. Returns the new header widget,
  * which the app can pass to layout setters or hide / show. The header
  * itself is a chrome widget so its rect / layout fields work the
@@ -33,6 +35,17 @@ int yetty_ygui_tabbar_active(const struct yetty_ygui_object *tabbar);
  * VALUE_CHANGED event with i0 = new_index. */
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_ygui_object *tabbar,
                                                             int index);
+
+/* Per-tab close affordance. Installing a non-NULL callback makes each
+ * pill paint a close-x at its right edge; a click landing there fires
+ * the callback with that tab's index instead of activating it. The host
+ * decides what to remove (it typically owns the tab model and mirrors
+ * the new count back via add/remove). */
+typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index, void *userdata);
+
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_ygui_object *tabbar,
+                                                             yetty_ygui_tab_close_cb cb,
+                                                             void *userdata);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

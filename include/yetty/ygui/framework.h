@@ -119,6 +119,14 @@ int yetty_ygui_framework_is_dirty(const struct yetty_ygui_runtime *engine);
  * mid-drag. */
 int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_runtime *engine);
 
+/* The widget currently holding the pointer capture (the one that
+ * consumed the last press), or NULL. The hovered widget is the deepest
+ * hit under the pointer on the last motion event, or NULL. Hosts use
+ * these to drive cursor-shape decisions (e.g. resize cursor over a
+ * splitter). Both are borrowed — do not destroy. */
+struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(struct yetty_ygui_runtime *engine);
+struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(struct yetty_ygui_runtime *engine);
+
 /* Transient notification ("toast"). The new toolkit has no overlay
  * surface yet, so these record the message to the trace log; the
  * signatures exist so the host (yui) can call them. `severity` is a

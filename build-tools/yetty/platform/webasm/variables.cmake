@@ -38,8 +38,8 @@ set(YETTY_ENABLE_TOOL_YBROWSER    OFF CACHE BOOL "" FORCE)
 # QA tools require host LLVM/Clang libs and hardcode Linux paths.
 set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)
 
-# ygreeter / ytop drive their own libuv event loops (yetty_ygui_old_engine_run)
-# — that path lives in the full `ygui` static library, which only builds
+# ygreeter / ytop drive their own libuv event loops — that path lives in
+# the full `ygui` static library, which only builds
 # when libuv is available. Webasm uses ygui_core (libuv-free) for in-app
 # embedders; the standalone-interactive tools don't make sense in wasm.
 set(YETTY_ENABLE_TOOL_YGREETER OFF CACHE BOOL "" FORCE)

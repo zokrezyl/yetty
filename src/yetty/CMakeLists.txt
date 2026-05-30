@@ -5,12 +5,9 @@
 #-----------------------------------------------------------------------------
 
 if(YETTY_ENABLE_FEATURE_YGUI)
-    # New object-system-based widget toolkit. Apps migrate from
-    # ygui-old one at a time. Symbol namespaces are distinct
-    # (yetty_ygui_* vs yetty_ygui_old_*) so both libraries can be
-    # linked into the same binary during the transition.
+    # Object-system-based widget toolkit (yclass). The sole ygui
+    # implementation now that the legacy toolkit has been removed.
     add_subdirectory(ygui)
-    add_subdirectory(ygui-old)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YMGUI)

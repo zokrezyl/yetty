@@ -50,9 +50,12 @@
 struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
     struct yetty_platform_pty *output_pty)
 {
-    if (!output_pty) {
-        return YETTY_ERR(yetty_ygui_framework_ptr, "yetty_ygui_framework_create: NULL output_pty");
-    }
+    /* output_pty may be NULL: an in-process host (yui) wires a receiver
+     * container via yetty_ygui_framework_set_container_obj and never
+     * touches the pty path. framework_flush only writes to output_pty in
+     * the yface-over-pty fallback, which is taken only when no container
+     * is wired — so a NULL pty is safe as long as a container is set
+     * before the first emit. */
     struct yetty_ygui_runtime *engine = calloc(1, sizeof(*engine));
     if (!engine) {
         return YETTY_ERR(yetty_ygui_framework_ptr, "yetty_ygui_framework_create: calloc failed");
@@ -257,6 +260,16 @@ int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_runtime *eng
     return engine && engine->pressed_obj ? 1 : 0;
 }
 
+struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(struct yetty_ygui_runtime *engine)
+{
+    return engine ? engine->pressed_obj : NULL;
+}
+
+struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(struct yetty_ygui_runtime *engine)
+{
+    return engine ? engine->hovered_obj : NULL;
+}
+
 void yetty_ygui_framework_notify(struct yetty_ygui_runtime *engine, int severity, const char *msg)
 {
     (void)engine;
@@ -439,6 +452,15 @@ static int rect_contains(struct yetty_ycore_rectangle r, float x, float y)
 static struct yetty_ygui_object *hit_test(struct yetty_ygui_object *node, float x, float y)
 {
     if (!node) {
+        return NULL;
+    }
+    /* A hidden subtree receives no hits — even though the layout pass
+     * skips it (so it keeps whatever rect it last had), a folded-away or
+     * closed-and-stale overlay must not intercept clicks meant for the
+     * visible widgets it happens to overlap. Mirrors the emit walk's
+     * should_skip_subtree. */
+    const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(node);
+    if (l && l->hidden) {
         return NULL;
     }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(node);

@@ -20,7 +20,7 @@
  *        per-child align lives in a follow-up).
  *     6. Recurse into each child.
  *
- * Restricted feature set vs ygui-old:
+ * Restricted feature set (current port):
  *   - No wrap (single-line flex).
  *   - No absolute positioning (every child is in-flow).
  *   - No percent sizing (px only).
@@ -59,6 +59,64 @@ static int direction_is_row(const struct yetty_ygui_layout *l)
 static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node,
                                                   struct yetty_ycore_rectangle rect);
 
+/* Intrinsic content size of `node` — used to give a non-grow container a
+ * sensible preferred main-axis size when its own width/height is unset
+ * (-1). A leaf (no in-flow children) measures 0 on an unset axis; a
+ * container measures padding + the sum of its visible in-flow children's
+ * sizes along its own direction (+ gaps), and the max child size on the
+ * cross axis. Recurses so nested vbox/tree_node stacks size bottom-up.
+ *
+ * Authored sizes (>= 0) always win; only unset axes are derived. */
+static void measure_size(struct yetty_ygui_object *node, float *out_w, float *out_h)
+{
+    const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(node);
+    float w = l->width;
+    float h = l->height;
+    if (w < 0.0f || h < 0.0f) {
+        /* Derive the unset axis from content + padding. Even a childless
+         * node contributes its padding (e.g. a tree_node whose header
+         * lives in padding_top must measure to the header height). */
+        int row = direction_is_row(l);
+        float main_sum = 0.0f;
+        float cross_max = 0.0f;
+        int n = 0;
+        for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+            const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
+            if (cl->hidden || cl->absolute) {
+                continue;
+            }
+            float cw = 0.0f, ch = 0.0f;
+            measure_size(c, &cw, &ch);
+            float cmain = row ? cw : ch;
+            float ccross = row ? ch : cw;
+            main_sum += cmain;
+            if (ccross > cross_max) {
+                cross_max = ccross;
+            }
+            n++;
+        }
+        if (n > 1) {
+            main_sum += l->gap * (float)(n - 1);
+        }
+        float content_w = row ? main_sum : cross_max;
+        float content_h = row ? cross_max : main_sum;
+        if (w < 0.0f) {
+            w = content_w + l->padding_left + l->padding_right;
+        }
+        if (h < 0.0f) {
+            h = content_h + l->padding_top + l->padding_bottom;
+        }
+    }
+    if (w < 0.0f) {
+        w = 0.0f;
+    }
+    if (h < 0.0f) {
+        h = 0.0f;
+    }
+    *out_w = clamp_size(w, l->min_width, l->max_width);
+    *out_h = clamp_size(h, l->min_height, l->max_height);
+}
+
 /* Resolve a child's preferred main-axis size + cross-axis size into the
  * given container, before flex grow/shrink distribution. */
 struct child_axes {
@@ -73,10 +131,13 @@ struct child_axes {
 };
 
 static struct child_axes resolve_child_axes(const struct yetty_ygui_layout *parent_layout,
-                                            const struct yetty_ygui_layout *child_layout)
+                                            struct yetty_ygui_object *child)
 {
+    const struct yetty_ygui_layout *child_layout = yetty_ygui_widget_layout_get(child);
     struct child_axes a;
-    if (direction_is_row(parent_layout)) {
+    int row = direction_is_row(parent_layout);
+    float authored_main = row ? child_layout->width : child_layout->height;
+    if (row) {
         a.main_pref = child_layout->width >= 0.0f ? child_layout->width : 0.0f;
         a.cross_pref = child_layout->height >= 0.0f ? child_layout->height : 0.0f;
         a.main_min = child_layout->min_width;
@@ -93,6 +154,17 @@ static struct child_axes resolve_child_axes(const struct yetty_ygui_layout *pare
     }
     a.grow = child_layout->flex_grow;
     a.shrink = child_layout->flex_shrink;
+    /* When the child doesn't author its main size and won't grow to fill,
+     * derive an intrinsic content size so nested containers (tree_node,
+     * vbox-of-rows) stack instead of collapsing to a zero rect. Grow
+     * children keep a 0 base — they expand to fill regardless. Childless
+     * leaves measure 0 (unless they carry padding, e.g. a tree_node whose
+     * header lives in padding_top), so this is safe for plain widgets. */
+    if (authored_main < 0.0f && a.grow <= 0.0f) {
+        float mw = 0.0f, mh = 0.0f;
+        measure_size(child, &mw, &mh);
+        a.main_pref = row ? mw : mh;
+    }
     a.main_pref = clamp_size(a.main_pref, a.main_min, a.main_max);
     return a;
 }
@@ -118,7 +190,7 @@ static struct flex_summary summarize_children(struct yetty_ygui_object *parent,
         if (cl->absolute) {
             continue; /* absolutely-positioned children skip flex */
         }
-        struct child_axes a = resolve_child_axes(parent_layout, cl);
+        struct child_axes a = resolve_child_axes(parent_layout, c);
         s.child_count++;
         s.sum_main_pref += a.main_pref;
         s.sum_grow += a.grow;
@@ -212,7 +284,7 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
             }
             continue;
         }
-        struct child_axes a = resolve_child_axes(pl, cl);
+        struct child_axes a = resolve_child_axes(pl, c);
         float ms = a.main_pref;
         if (grow_unit > 0.0f) {
             ms += a.grow * grow_unit;

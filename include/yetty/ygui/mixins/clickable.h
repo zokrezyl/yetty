@@ -14,6 +14,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
 
 /* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+struct yetty_ygui_object;
+
 typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
                                                               void *userdata);
@@ -27,6 +29,11 @@ struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_yg
 
 /* Read-only: is this widget currently in the "pressed" state? */
 int yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj);
+
+/* Read the viewport coords captured at the last on_press. Lets a click
+ * handler tell which sub-region of the widget was hit (e.g. a tab's
+ * close-x vs its body). Writes 0 for a NULL object. */
+void yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj, float *x, float *y);
 /* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

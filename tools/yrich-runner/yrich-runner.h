@@ -8,7 +8,7 @@
  * as OSC 666674 (the canvas sink consumed by yetty's ydraw-layer). There is
  * no card abstraction — the document IS the canvas.
  *
- * Output protocol (matches src/yetty/ygui-old/ygui_osc.c):
+ * Output protocol:
  *   \033]666674;--clear\033\\          — empty the canvas
  *   \033]666674;--bin;<base64>\033\\   — push a fresh ydraw buffer
  *

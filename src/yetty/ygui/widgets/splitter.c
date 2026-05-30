@@ -5,6 +5,7 @@
  * Relies on the framework's pointer capture so the drag tracks the cursor
  * even when it leaves the thin strip.
  */
+#include "../internal.h"
 #include "paint-helpers.h"
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/splitter.h>
@@ -15,8 +16,48 @@
 
 struct [[clang::annotate("class@ygui:splitter")]] [[clang::annotate(
     "parent@ygui:primitive_widget")]] splitter_data {
-    char placeholder;
+    /* axis_plus1: 0 = auto (derive from parent flex direction); 1 =
+     * column-bar (horizontal bar between stacked siblings → vertical
+     * resize); 2 = row-bar (vertical bar between side-by-side siblings
+     * → horizontal resize). Encoded +1 so the zeroed default reads as
+     * "auto" without needing a constructor override. */
+    int axis_plus1;
+    /* Minimum size of the resized sibling in flex mode (0 = use the
+     * SPLITTER_MIN default). Ignored in external-drive mode — the host
+     * clamps. */
+    float min_size;
+    /* External-drive mode: when set, the splitter does NOT resize its
+     * flex siblings; on drag it reports the cursor's offset from its
+     * own centre along the resize axis and lets the host reposition it
+     * next frame. Used by yui's absolutely-positioned pane dividers. */
+    yetty_ygui_splitter_change_cb change_cb;
+    void *change_userdata;
 };
+
+static const struct yetty_yclass *splitter_class(void)
+{
+    return yetty_ygui_class_expect(yetty_ygui_splitter_class_get(),
+                                   "yetty_ygui_splitter_class_get");
+}
+
+/* Effective axis: 1 = row-bar (horizontal resize), 0 = column-bar
+ * (vertical resize). Honours an explicit override, else derives from the
+ * parent's flex direction. */
+static int splitter_axis_row(struct yetty_ygui_object *obj, const struct splitter_data *d)
+{
+    if (d->axis_plus1 == 1) {
+        return 0;
+    }
+    if (d->axis_plus1 == 2) {
+        return 1;
+    }
+    struct yetty_ygui_object *parent = yetty_ygui_object_parent(obj);
+    if (parent) {
+        const struct yetty_ygui_layout *pl = yetty_ygui_widget_layout_get(parent);
+        return pl->direction == YETTY_YGUI_FLEX_ROW ? 1 : 0;
+    }
+    return 1;
+}
 
 [[clang::annotate("override@ygui:splitter:widget_paint")]]
 static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
@@ -85,6 +126,35 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct splitter_data *sd = yetty_ygui_data_get(obj, splitter_class());
+
+    /* Only resize while this splitter is the actively-dragged widget.
+     * The framework also delivers on_motion to whatever the pointer is
+     * merely hovering over; without this guard a plain mouse-move across
+     * the divider (no button held) would drag the panes. The framework
+     * captures the pointer on a consumed press, so pressed_obj == this
+     * splitter exactly during a real drag. */
+    struct yetty_ygui_runtime *eng = yetty_ygui_object_engine(obj);
+    if (!eng || eng->pressed_obj != obj) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+
+    /* External-drive mode — report the cursor's offset from this bar's
+     * centre along the resize axis and let the host reposition us. */
+    if (sd->change_cb) {
+        int row = splitter_axis_row(obj, sd);
+        struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+        float cx = (r.min.x + r.max.x) * 0.5f;
+        float cy = (r.min.y + r.max.y) * 0.5f;
+        float delta = row ? (x - cx) : (y - cy);
+        sd->change_cb(obj, delta, sd->change_userdata);
+        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        if (YETTY_IS_ERR(dr)) {
+            return YETTY_ERR(yetty_ycore_int, "splitter: external dirty", dr);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
     struct yetty_ygui_object *parent = yetty_ygui_object_parent(obj);
     struct yetty_ygui_object *prev = splitter_prev_sibling(obj);
     if (!parent || !prev) {
@@ -126,6 +196,83 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
         return YETTY_ERR(yetty_ycore_int, "splitter: dirty", dr);
     }
     return YETTY_OK(yetty_ycore_int, 1);
+}
+
+/*-----------------------------------------------------------------------------
+ * Public API — axis / min / external-drive change callback. Added for the
+ * yui port, which positions splitters absolutely over its pane tree and
+ * drives the resize itself off the reported delta.
+ *---------------------------------------------------------------------------*/
+
+void yetty_ygui_splitter_set_axis(struct yetty_ygui_object *obj, int row)
+{
+    if (!obj) {
+        return;
+    }
+    struct yetty_yclass_ptr_result cr = yetty_ygui_splitter_class_get();
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+        return;
+    }
+    if (obj->klass != cr.value) {
+        return;
+    }
+    struct splitter_data *d = yetty_ygui_data_get(obj, cr.value);
+    d->axis_plus1 = (row ? 2 : 1);
+}
+
+int yetty_ygui_splitter_get_axis(const struct yetty_ygui_object *obj)
+{
+    if (!obj) {
+        return -1;
+    }
+    struct yetty_yclass_ptr_result cr = yetty_ygui_splitter_class_get();
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+        return -1;
+    }
+    if (obj->klass != cr.value) {
+        return -1;
+    }
+    const struct splitter_data *d =
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, cr.value);
+    return d->axis_plus1 == 0 ? -1 : d->axis_plus1 - 1;
+}
+
+void yetty_ygui_splitter_set_min(struct yetty_ygui_object *obj, float min_size)
+{
+    if (!obj) {
+        return;
+    }
+    struct yetty_yclass_ptr_result cr = yetty_ygui_splitter_class_get();
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+        return;
+    }
+    if (obj->klass != cr.value) {
+        return;
+    }
+    struct splitter_data *d = yetty_ygui_data_get(obj, cr.value);
+    d->min_size = min_size;
+}
+
+void yetty_ygui_splitter_on_change(struct yetty_ygui_object *obj,
+                                   yetty_ygui_splitter_change_cb cb, void *userdata)
+{
+    if (!obj) {
+        return;
+    }
+    struct yetty_yclass_ptr_result cr = yetty_ygui_splitter_class_get();
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+        return;
+    }
+    if (obj->klass != cr.value) {
+        return;
+    }
+    struct splitter_data *d = yetty_ygui_data_get(obj, cr.value);
+    d->change_cb = cb;
+    d->change_userdata = userdata;
 }
 
 #include "splitter.gen.c"

@@ -111,4 +111,26 @@ int yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj)
     return cd->pressed;
 }
 
+void yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj, float *x, float *y)
+{
+    if (!obj) {
+        if (x) {
+            *x = 0.0f;
+        }
+        if (y) {
+            *y = 0.0f;
+        }
+        return;
+    }
+    struct clickable_data *cd = yetty_ygui_data_get(
+        (struct yetty_ygui_object *)obj, yetty_ygui_class_expect(yetty_ygui_clickable_mixin_get(),
+                                                                 "yetty_ygui_clickable_mixin_get"));
+    if (x) {
+        *x = cd->press_x;
+    }
+    if (y) {
+        *y = cd->press_y;
+    }
+}
+
 #include "clickable.gen.c"
