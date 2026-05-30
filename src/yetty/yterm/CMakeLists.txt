@@ -38,6 +38,18 @@ target_link_libraries(yetty_yterm
     lz4_static
 )
 
+# shader-glyph-figure.c carries `[[clang::annotate(...)]]` on its data
+# struct (codegen reads it off the AST). The C2x attribute syntax needs
+# C23 to parse — host clang/gcc accept it by default, NDK clang 17 does
+# not. Off-MSVC only: MSVC can't express C23 via CMake's C_STANDARD and
+# parses the attributes via the global /std:clatest. (Mirrors ygui.)
+if(NOT MSVC)
+    set_target_properties(yetty_yterm PROPERTIES
+        C_STANDARD 23
+        C_STANDARD_REQUIRED ON
+    )
+endif()
+
 # The yrdawn server (figure + session + codegen dispatch) is linked
 # wherever a host wants to mint yrdawn figures from a registry. On
 # webasm we don't host canvases, so the server lib doesn't exist.

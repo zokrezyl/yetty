@@ -15,7 +15,11 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <io.h> /* read/write/close — MSVC ships no <unistd.h> */
+#else
 #include <unistd.h>
+#endif
 
 struct dcs_transport {
     struct yetty_yclass_transport base;
@@ -123,7 +127,7 @@ static struct yetty_ycore_size_result dcs_recv(struct yetty_yclass_transport *ba
             return YETTY_OK(yetty_ycore_size, 0);
         }
         uint8_t raw[4096];
-        ssize_t n = read(t->read_fd, raw, sizeof(raw));
+        ptrdiff_t n = read(t->read_fd, raw, sizeof(raw));
         if (n < 0) {
             if (errno == EINTR) {
                 continue;

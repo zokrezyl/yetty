@@ -20,3 +20,15 @@ target_link_libraries(yetty_ygrid PUBLIC
     yetty_yrender
     webgpu
 )
+
+# grid.c carries `[[clang::annotate(...)]]` on its data struct (codegen
+# reads it off the AST). The C2x attribute syntax needs C23 to parse —
+# host clang/gcc accept it by default, NDK clang 17 does not. Off-MSVC
+# only: MSVC can't express C23 via CMake's C_STANDARD and parses the
+# attributes via the global /std:clatest. (Mirrors ygui/CMakeLists.txt.)
+if(NOT MSVC)
+    set_target_properties(yetty_ygrid PROPERTIES
+        C_STANDARD 23
+        C_STANDARD_REQUIRED ON
+    )
+endif()
