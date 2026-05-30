@@ -1211,8 +1211,12 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
     if (yui->engine && yetty_ygui_framework_is_dirty(yui->engine)) {
         struct yetty_ycore_void_result er = yetty_ygui_framework_emit(yui->engine);
         if (YETTY_IS_ERR(er)) {
-            ywarn("yui_render: framework_emit: %s", er.error.msg);
-            yetty_ycore_error_destroy(er.error);
+            int depth = 0;
+            for (struct yetty_ycore_error *e = &er.error; e; e = e->cause, depth++) {
+                yerror("yui_render emit chain[%d]: %s  (%s:%d %s)", depth, e->msg,
+                       e->file ? e->file : "?", e->line, e->func ? e->func : "?");
+            }
+            return YETTY_ERR(yetty_ycore_void, "yui_render: framework_emit", er);
         }
     }
 
