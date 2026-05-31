@@ -31,6 +31,21 @@ YETTY_YRESULT_DECLARE(yetty_yplatform_io_size, size_t);
 struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd, void *buf,
                                                                           size_t cap);
 
+/* Wait until `fd` is readable (or hung up / at EOF). `timeout_ms`:
+ *    0   — poll once, return immediately.
+ *   -1   — block until readable.
+ *   > 0  — block up to that many milliseconds.
+ * Returns:
+ *   > 0  — readable now (a subsequent read may still yield EOF).
+ *   0    — timed out with nothing available.
+ *   < 0  — error (bad fd).
+ *
+ * POSIX backs this with poll(2); Windows polls PeekNamedPipe /
+ * GetNumberOfConsoleInputEvents with a short sleep, since CRT pipe/console
+ * handles aren't waitable for "bytes ready" via WaitForSingleObject. Lets a
+ * render/event loop replace a raw poll(fd) call without `#ifdef _WIN32`. */
+int yetty_yplatform_io_wait_readable(int fd, int timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif

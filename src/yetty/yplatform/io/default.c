@@ -7,6 +7,19 @@
 #include <poll.h>
 #include <unistd.h>
 
+int yetty_yplatform_io_wait_readable(int fd, int timeout_ms)
+{
+    if (fd < 0) {
+        return -1;
+    }
+    struct pollfd pfd = {.fd = fd, .events = POLLIN};
+    int pr;
+    do {
+        pr = poll(&pfd, 1, timeout_ms);
+    } while (pr < 0 && errno == EINTR);
+    return pr;
+}
+
 struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd, void *buf,
                                                                           size_t cap)
 {

@@ -12,7 +12,17 @@
 #include <yetty/yaudio/intervals.h>
 #include <yetty/ycore/result.h>
 
+#ifdef _WIN32
+/* MSVC has no <getopt.h>; use yetty's vendored portable getopt and map the
+ * standard names onto its prefixed API. */
+#include <yetty/yplatform/getopt.h>
+#define getopt_long yetty_yplatform_getopt_long
+#define optarg yetty_yplatform_optarg
+#define optind yetty_yplatform_optind
+#define option yetty_yplatform_option
+#else
 #include <getopt.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>

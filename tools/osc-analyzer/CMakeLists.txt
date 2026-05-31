@@ -5,7 +5,9 @@
 # Three entry points: forkpty (-e), stdin passthrough (--interpose),
 # and replay from a file. See main.c for the protocol details.
 
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+# Builds on Linux and Windows. The -e (forkpty spawn) mode is POSIX-only
+# and compiles out on Windows; --interpose / FILE / --records still work.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32)
     return()
 endif()
 
@@ -39,8 +41,10 @@ target_link_libraries(osc-analyzer PRIVATE
     # <yetty/yetty/yetty.h>; linking webgpu brings the include path.
     webgpu
     lz4_static
-    util
 )
+if(NOT WIN32)
+    target_link_libraries(osc-analyzer PRIVATE util)
+endif()
 
 if(NOT MSVC)
     target_compile_options(osc-analyzer PRIVATE -Wall -Wextra)

@@ -11,12 +11,17 @@
 #include <yetty/ytrace/ytrace.h>
 
 #include <errno.h>
-#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 /* WAVE_FORMAT tag values (from MS RIFF spec) */
 enum {
@@ -110,6 +115,50 @@ struct yetty_yaudio_wav_ptr_result yetty_yaudio_wav_open(const char *path)
         return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: NULL path");
     }
 
+#ifdef _WIN32
+    /* Win32 file mapping — same read-only whole-file view as the POSIX
+     * mmap path, so the rest of the reader stays platform-agnostic. */
+    HANDLE hfile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                               FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    if (hfile == INVALID_HANDLE_VALUE) {
+        yerror("wav_open: CreateFile(%s) failed (err=%lu)", path, (unsigned long)GetLastError());
+        return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: open failed");
+    }
+    LARGE_INTEGER fsz;
+    if (!GetFileSizeEx(hfile, &fsz)) {
+        CloseHandle(hfile);
+        return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: GetFileSizeEx failed");
+    }
+    if ((uint64_t)fsz.QuadPart < 44) {
+        CloseHandle(hfile);
+        return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: file too small for RIFF header");
+    }
+    HANDLE hmap = CreateFileMappingA(hfile, NULL, PAGE_READONLY, 0, 0, NULL);
+    if (!hmap) {
+        CloseHandle(hfile);
+        return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: CreateFileMapping failed");
+    }
+    void *map = MapViewOfFile(hmap, FILE_MAP_READ, 0, 0, 0);
+    if (!map) {
+        CloseHandle(hmap);
+        CloseHandle(hfile);
+        return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: MapViewOfFile failed");
+    }
+    size_t map_size = (size_t)fsz.QuadPart;
+
+    struct yetty_yaudio_wav *w = calloc(1, sizeof(struct yetty_yaudio_wav));
+    if (!w) {
+        UnmapViewOfFile(map);
+        CloseHandle(hmap);
+        CloseHandle(hfile);
+        return YETTY_ERR(yetty_yaudio_wav_ptr, "wav_open: calloc failed");
+    }
+    w->fd = -1;
+    w->win_file = hfile;
+    w->win_mapping = hmap;
+    w->map_base = map;
+    w->map_size = map_size;
+#else
     int fd = open(path, O_RDONLY);
     if (fd < 0) {
         yerror("wav_open: open(%s) failed: %s", path, strerror(errno));
@@ -144,6 +193,7 @@ struct yetty_yaudio_wav_ptr_result yetty_yaudio_wav_open(const char *path)
     w->fd = fd;
     w->map_base = map;
     w->map_size = (size_t)st.st_size;
+#endif
 
     const uint8_t *p = w->map_base;
     const uint8_t *end = p + w->map_size;
@@ -256,12 +306,24 @@ void yetty_yaudio_wav_close(struct yetty_yaudio_wav *w)
     if (!w) {
         return;
     }
+#ifdef _WIN32
+    if (w->map_base) {
+        UnmapViewOfFile((void *)w->map_base);
+    }
+    if (w->win_mapping) {
+        CloseHandle((HANDLE)w->win_mapping);
+    }
+    if (w->win_file) {
+        CloseHandle((HANDLE)w->win_file);
+    }
+#else
     if (w->map_base && w->map_size) {
         munmap((void *)w->map_base, w->map_size);
     }
     if (w->fd >= 0) {
         close(w->fd);
     }
+#endif
     free(w);
 }
 

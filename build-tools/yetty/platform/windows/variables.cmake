@@ -15,7 +15,6 @@ set(YETTY_ENABLE_LIB_LIBSSH2       OFF CACHE BOOL "" FORCE)  # yssh wrapper not 
 set(YETTY_ENABLE_FEATURE_YTHORVG   OFF CACHE BOOL "" FORCE)  # C99 compound literals (MSVC C++ rejects)
 set(YETTY_ENABLE_LIB_THORVG        OFF CACHE BOOL "" FORCE)  # only consumer is FEATURE_YTHORVG
 set(YETTY_ENABLE_TOOL_YTHORVG      OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_TOOL_YDRAW_BENCH OFF CACHE BOOL "" FORCE)  # passes -Wextra unconditionally (MSVC: D8021)
 set(YETTY_ENABLE_FEATURE_DEMO      OFF CACHE BOOL "" FORCE)  # hardcodes shared/{thread,term}.c (POSIX)
 set(YETTY_ENABLE_TOOL_YDOC         OFF CACHE BOOL "" FORCE)  # poll.h, termios.h, unistd.h
 set(YETTY_ENABLE_TOOL_YSHEET       OFF CACHE BOOL "" FORCE)  # uses yrich-runner (POSIX TTY)
@@ -35,10 +34,10 @@ set(YETTY_ENABLE_TOOL_YBROWSER     OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_YNETSURF  OFF CACHE BOOL "" FORCE)  # NetSurf prebuilt is non-Windows
 set(YETTY_ENABLE_TOOL_YNETSURF     OFF CACHE BOOL "" FORCE)
 
-# yaudio's wav.c uses POSIX mmap (sys/mman.h, MAP_PRIVATE). A Windows
-# port would need CreateFileMapping / MapViewOfFile. Out of scope for v1.
-set(YETTY_ENABLE_FEATURE_YAUDIO       OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_TOOL_YAUDIO_INTERVALS OFF CACHE BOOL "" FORCE)
+# yaudio offline analysis (the yetty_yaudio lib + the yaudio-intervals CLI)
+# builds on Windows now that wav.c maps files via CreateFileMapping /
+# MapViewOfFile. The yaudio GUI (tools/yaudio) stays Linux-only — it's a
+# standalone GPU + poll() app whose yinit bring-up isn't ported yet.
 set(YETTY_ENABLE_TOOL_YAUDIO          OFF CACHE BOOL "" FORCE)
 
 # QA tools hardcode Linux LLVM paths.

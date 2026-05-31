@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include <yetty/yface/yface.h>
 #include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YDRAW_BIN */
@@ -384,9 +387,13 @@ int main(int argc, char **argv) {
         fflush(stdout);
 
         if (loop_count != 1) {
+#ifdef _WIN32
+            Sleep((DWORD)delay_ms);
+#else
             struct timespec ts = {.tv_sec = delay_ms / 1000,
                                   .tv_nsec = (delay_ms % 1000) * 1000000L};
             nanosleep(&ts, NULL);
+#endif
             g_rng_state++;
             if (loop_count > 1) loop_count--;
         }

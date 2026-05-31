@@ -2,9 +2,9 @@
 #
 # Drives a ycompositor + one ygrid figure straight from C (no terminal,
 # no yui, no ygui), so the new compositor render path can be exercised
-# in isolation.
+# in isolation. Builds on Linux and Windows (standalone GPU window).
 
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32)
     return()
 endif()
 
@@ -24,15 +24,23 @@ set(YCOMP_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yconfig/config.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
 )
+# Platform pipe + pty backend. See tools/ygreeter for why Windows omits
+# conpty.c (it drags in qemu/tinyemu via the pty factory).
+if(WIN32)
+    list(APPEND YCOMP_PLATFORM_SOURCES
+        ${YETTY_ROOT}/src/yetty/yplatform/pipe/windows.c)
+else()
+    list(APPEND YCOMP_PLATFORM_SOURCES
+        ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
+        ${YETTY_ROOT}/src/yetty/ypty/forkpty.c)
+endif()
 
 add_executable(ycompositor
     main.c
@@ -47,12 +55,20 @@ target_include_directories(ycompositor BEFORE PRIVATE
 target_compile_definitions(ycompositor PRIVATE
     YETTY_WEB=0
     YETTY_ANDROID=0
-    YETTY_USE_FORKPTY=1
 )
+if(WIN32)
+    target_compile_definitions(ycompositor PRIVATE
+        YETTY_USE_CONPTY=1 YETTY_USE_DIRECTWRITE=1 NOMINMAX WIN32_LEAN_AND_MEAN)
+else()
+    target_compile_definitions(ycompositor PRIVATE YETTY_USE_FORKPTY=1)
+endif()
 
 find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
+# fontconfig: Linux standalone font discovery; Windows uses DirectWrite.
+if(NOT WIN32)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
+endif()
 
 target_link_libraries(ycompositor PRIVATE
     yetty_ygrid
@@ -69,25 +85,31 @@ target_link_libraries(ycompositor PRIVATE
     ${BROTLIDEC_LIBRARIES}
     Threads::Threads
     ${FONTCONFIG_LIBRARIES}
-    rt
-    util
 )
+if(WIN32)
+    target_link_libraries(ycompositor PRIVATE ws2_32 dwrite)
+else()
+    target_link_libraries(ycompositor PRIVATE rt util)
+endif()
 
 # drawable-iterator (in libyetty_ydraw_core.a) calls into libyetty_ywire.a.
-# CMake's archive ordering pulls ywire in early via the transitive
-# ycompositor → ywire link, before ydraw_core's references show up.
-# Wrap the static block in a --start-group/--end-group so the linker
-# re-scans archives until all references are resolved.
-target_link_options(ycompositor PRIVATE
-    "-Wl,--start-group"
-)
-target_link_libraries(ycompositor PRIVATE
-    "-Wl,--end-group"
-)
+# GNU ld needs --start-group/--end-group to re-scan the static archives
+# until all cross-references resolve. MSVC's link.exe re-scans by default,
+# so the grouping is GNU-ld only.
+if(NOT MSVC)
+    target_link_options(ycompositor PRIVATE "-Wl,--start-group")
+    target_link_libraries(ycompositor PRIVATE "-Wl,--end-group")
+endif()
 target_include_directories(ycompositor PRIVATE ${FONTCONFIG_INCLUDE_DIRS})
 
 set_target_properties(ycompositor PROPERTIES LINKER_LANGUAGE CXX)
 
 if(NOT MSVC)
     target_compile_options(ycompositor PRIVATE -Wall -Wextra)
+endif()
+
+# Standalone GPU window — provision the Dawn/D3D12 runtime DLLs on Windows.
+if(WIN32)
+    include(${YETTY_ROOT}/build-tools/yetty/dawn-runtime-dlls.cmake)
+    yetty_copy_dawn_runtime_dlls(ycompositor)
 endif()

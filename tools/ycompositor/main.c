@@ -42,8 +42,8 @@
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
+#include <yetty/yplatform/io.h>
 
-#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -537,10 +537,9 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
 
     int needs_render = 1;
     while (!app->quit) {
-        struct pollfd pfd = {.fd = pipe_fd, .events = POLLIN};
-        int pr = poll(&pfd, 1, needs_render ? 0 : -1);
+        int pr = yetty_yplatform_io_wait_readable(pipe_fd, needs_render ? 0 : -1);
         int had_events = 0;
-        if (pr > 0 && (pfd.revents & POLLIN)) {
+        if (pr > 0) {
             for (;;) {
                 struct yetty_yui_event ev = {0};
                 struct yetty_ycore_size_result rr =
