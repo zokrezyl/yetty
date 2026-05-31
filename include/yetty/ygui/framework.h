@@ -212,6 +212,15 @@ struct yetty_ygui_emit_ctx {
     size_t staged_mint_cap;
     int staged_ygrid_created;
     size_t staged_deletes_consumed;
+
+    /* CPU-side clip rectangle in absolute px. There is no GPU scissor
+     * yet, so this is the software substitute: the body walk narrows it
+     * to a clip-children container's content box while painting that
+     * container's subtree, and paint hooks cull geometry that falls
+     * outside it (whole widgets, or per-line for multi-line text). When
+     * clip_active is 0 the rect is ignored and nothing is culled. */
+    struct yetty_ycore_rectangle clip;
+    int clip_active;
 };
 
 struct yetty_ycore_void_result yetty_ygui_emit_create_child(
