@@ -732,7 +732,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
     if (yetty->yui && event->type == YETTY_YCORE_MOUSE_DOWN &&
         event->mouse.button == 1 /* GLFW right */) {
         float y = event->mouse.y;
-        float tabbar_h = (float)YETTY_YUI_TABBAR_HEIGHT;
+        float tabbar_h = yetty_dp_to_px(&yetty->context.runtime->gpu.app_gpu_context,
+                                        YETTY_YUI_TABBAR_HEIGHT_DP);
         float status_h = yetty_yui_statusbar_height(yetty->yui);
         if (y >= tabbar_h && y < yetty->window_height - status_h) {
             /* Focus the clicked pane — same logic the workspace's own
@@ -1110,7 +1111,8 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
         yetty_yui_tabbar_add_workspace_from_config(yetty->tabbar, config, &yetty->context);
     if (!YETTY_IS_OK(layout_res)) {
         yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty_yetty, layout_res.error.msg);
+        return YETTY_ERR(yetty_yetty_yetty,
+                         "yetty_create: load initial workspace failed", layout_res);
     }
     ydebug("yetty_create: initial workspace loaded");
 

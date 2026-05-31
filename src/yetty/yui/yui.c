@@ -52,14 +52,16 @@
  * the new ygui textinput wants the ASCII DEL byte. */
 #define YUI_GLFW_KEY_BACKSPACE 259
 
-/* Titlebar chrome sizing — picked to feel browser-y: the strip is 32px
- * (the native TABBAR widget's default header height), the side buttons
- * are square-ish pills matching the per-tab close-x footprint. */
-#define TITLEBAR_STRIP_H 32.0f
-#define TITLEBAR_BTN_W 28.0f
+/* Titlebar chrome sizing in *logical* (CSS-pixel) units — picked to
+ * feel browser-y: the strip is 32px (the native TABBAR widget's default
+ * header height), the side buttons are square-ish pills matching the
+ * per-tab close-x footprint. Each value is multiplied through yui_dp()
+ * at use sites so HiDPI / Retina framebuffers stay visually correct. */
+#define TITLEBAR_STRIP_H_DP 32.0f
+#define TITLEBAR_BTN_W_DP 28.0f
 #define TITLEBAR_STRIP_BG 0xFF2C261Eu
 
-#define YETTY_YUI_SPLITTER_THICKNESS 6.0f
+#define YETTY_YUI_SPLITTER_THICKNESS_DP 6.0f
 
 static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result r)
 {
@@ -171,6 +173,17 @@ struct yetty_yui {
     float cell_w;
     float cell_h;
 };
+
+/* Convert a logical (DP) chrome dimension to framebuffer pixels using
+ * the bound context's HiDPI content_scale. Falls back to 1× when ctx
+ * isn't set, so callers can rely on the helper pre-create as well. */
+static inline float yui_dp(const struct yetty_yui *yui, float dp)
+{
+    if (!yui || !yui->ctx) {
+        return dp;
+    }
+    return yetty_dp_to_px(&yui->ctx->runtime->gpu.app_gpu_context, dp);
+}
 
 /* Add `cls` under `parent`, returning the new object or NULL (error
  * destroyed). */
@@ -695,6 +708,13 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             yetty_ygui_framework_set_container_obj(yui->engine, yui->container_obj));
         yetty_ycore_error_destroy_safe(
             yetty_ygui_framework_set_viewport(yui->engine, (float)surface_w, (float)surface_h));
+        /* Theme: overlay any style.ygui.* / style.yui.* keys from the
+         * user's config onto the engine's brand-default theme. Missing
+         * keys leave the defaults untouched. Once this returns, widget
+         * paint (tabbar pills, button label color, accent bar) reads
+         * its colors from engine->theme. */
+        yetty_ycore_error_destroy_safe(yetty_ygui_framework_apply_config_to_theme(
+            yui->engine, yui->ctx->runtime->config));
 
         /* Root vbox — titlebar (top), spacer (flex), statusbar (bottom).
          * Overlays float on top as absolute children added afterwards. */
@@ -970,7 +990,7 @@ static void yui_splitter_walk_tree(struct yetty_yui *yui, struct yetty_yui_tile 
     e->seen = 1;
 
     if (e->widget && first && second) {
-        const float t = YETTY_YUI_SPLITTER_THICKNESS;
+        const float t = yui_dp(yui, YETTY_YUI_SPLITTER_THICKNESS_DP);
         if (orient == YETTY_YUI_VERTICAL) {
             float x = sb.x - t * 0.5f;
             float y = fb.y;
@@ -1482,7 +1502,10 @@ static char *yui_gpu_info_build_text(const struct yetty_yui *yui)
 {
     char *adapter_desc = NULL;
     if (yui->gpu_info_adapter) {
-        adapter_desc = yetty_ywebgpu_get_webgpu_description(yui->gpu_info_adapter);
+        /* The yui GPU-info panel doesn't keep a handle to the active
+         * surface; only the adapter block is shown here. The surface
+         * caps dump lives in the startup yinfo line from yframework. */
+        adapter_desc = yetty_ywebgpu_get_webgpu_description(yui->gpu_info_adapter, NULL);
     }
     const char *adapter_block = adapter_desc ? adapter_desc : "(WebGPU adapter unavailable)\n";
 
@@ -1715,7 +1738,8 @@ static struct yetty_ygui_object *yui_titlebar_button(struct yetty_yui *yui, cons
         return NULL;
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(b, glyph));
-    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(b, TITLEBAR_BTN_W, TITLEBAR_STRIP_H));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(
+        b, yui_dp(yui, TITLEBAR_BTN_W_DP), yui_dp(yui, TITLEBAR_STRIP_H_DP)));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_bg_color(b, TITLEBAR_STRIP_BG));
     yetty_ycore_error_destroy_safe(yetty_ygui_clickable_on_click_set(b, cb, yui));
     return b;
@@ -1737,7 +1761,7 @@ static void yui_titlebar_build(struct yetty_yui *yui)
         l.direction = YETTY_YGUI_FLEX_ROW;
         l.align = YETTY_YGUI_ALIGN_CENTER;
         l.gap = 0.0f;
-        l.height = TITLEBAR_STRIP_H;
+        l.height = yui_dp(yui, TITLEBAR_STRIP_H_DP);
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(tb, &l));
     }
 
@@ -1749,7 +1773,7 @@ static void yui_titlebar_build(struct yetty_yui *yui)
     if (yui->titlebar_tabbar) {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(yui->titlebar_tabbar);
         l.flex_grow = 1.0f;
-        l.height = TITLEBAR_STRIP_H;
+        l.height = yui_dp(yui, TITLEBAR_STRIP_H_DP);
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(yui->titlebar_tabbar, &l));
         yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(
             yui->titlebar_tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, yui_titlebar_on_tab_change, yui));
@@ -2091,7 +2115,7 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     case YETTY_YCORE_MOUSE_UP:
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
-        in_titlebar = event->mouse.y < 36.0f /* YETTY_YUI_TABBAR_HEIGHT */;
+        in_titlebar = event->mouse.y < yui_dp(yui, YETTY_YUI_TABBAR_HEIGHT_DP);
         break;
     default:
         break;

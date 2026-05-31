@@ -79,6 +79,7 @@ set(YGUI_SOURCES
     framework.c
     event.c
     layout.c
+    theme.c
     ${YGUI_ANNOTATED}
     methods.gen.c
     rpc.gen.c

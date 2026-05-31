@@ -1005,7 +1005,9 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
                 term_res = yetty_yterm_terminal_create(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
                     yetty_yui_tile_destroy(res.value);
-                    return YETTY_ERR(yetty_yui_tile_ptr, term_res.error.msg);
+                    return YETTY_ERR(yetty_yui_tile_ptr,
+                                     "tile_create_from_config: terminal_create failed",
+                                     term_res);
                 }
 
                 yetty_yui_tile_pane_push_view(res.value,

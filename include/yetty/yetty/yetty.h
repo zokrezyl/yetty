@@ -46,6 +46,20 @@ struct yetty_yinit_gpu_context {
     unsigned long x11_window; /* Window (XID) */
 };
 
+/* Convert a logical (CSS-pixel-ish) dimension to framebuffer pixels for
+ * the given platform GPU context. The contract on `content_scale` (see
+ * the comment above) is that every hardcoded chrome dimension — tab
+ * strip height, titlebar buttons, splitter thickness, font sizes — is
+ * authored in logical units and multiplied through this helper at the
+ * use site so HiDPI / Retina displays render at the correct physical
+ * size. NULL ctx or non-positive scale falls back to 1.0f, matching the
+ * "platform without HiDPI" path. */
+static inline float yetty_dp_to_px(const struct yetty_yinit_gpu_context *gpu, float logical_px)
+{
+    float s = (gpu && gpu->content_scale > 0.0f) ? gpu->content_scale : 1.0f;
+    return logical_px * s;
+}
+
 /* Runtime-owned GPU objects, built on top of the platform slice above.
  * Created by yetty_yframework_create; lives on struct yetty_yframework. */
 struct yetty_yframework_gpu_context {

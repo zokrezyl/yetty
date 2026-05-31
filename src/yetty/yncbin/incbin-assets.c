@@ -127,10 +127,21 @@ void yetty_incbin_assets_destroy(struct yetty_incbin_assets *assets)
     free(assets);
 }
 
-/* Get marker path */
-static void get_marker_path(const char *cache_dir, char *out, size_t out_size)
+/* Get marker path.
+ *
+ * The marker name distinguishes asset classes so callers that share a
+ * directory (macOS: data_dir == config_dir == ~/Library/Application
+ * Support/yetty) don't have the first extraction's marker mask the
+ * second's needs-extract check. Pass NULL/"" for the generic marker
+ * used by single-class callers (yemu/qemu cohorts gate on file
+ * presence, not the marker). */
+static void get_marker_path(const char *cache_dir, const char *kind, char *out, size_t out_size)
 {
-    snprintf(out, out_size, "%s/.yetty-assets/version", cache_dir);
+    if (kind && kind[0]) {
+        snprintf(out, out_size, "%s/.yetty-assets/version-%s", cache_dir, kind);
+    } else {
+        snprintf(out, out_size, "%s/.yetty-assets/version", cache_dir);
+    }
 }
 
 /* Create directory recursively. We can't tell from errno alone whether an
@@ -184,7 +195,8 @@ static int mkdir_p(const char *path)
 }
 
 /* Check if extraction is needed */
-int yetty_incbin_assets_needs_extraction(struct yetty_incbin_assets *assets, const char *cache_dir)
+int yetty_incbin_assets_needs_extraction(struct yetty_incbin_assets *assets, const char *cache_dir,
+                                         const char *kind)
 {
     char marker_path[MAX_PATH_LEN];
     char version[64];
@@ -192,7 +204,7 @@ int yetty_incbin_assets_needs_extraction(struct yetty_incbin_assets *assets, con
 
     (void)assets;
 
-    get_marker_path(cache_dir, marker_path, sizeof(marker_path));
+    get_marker_path(cache_dir, kind, marker_path, sizeof(marker_path));
     ydebug("needsExtraction: marker path = %s", marker_path);
 
     f = fopen(marker_path, "r");
@@ -396,13 +408,13 @@ static int extract_with_prefix(struct yetty_incbin_assets *assets, const char *p
 }
 
 /* Write version marker to directory */
-static void write_marker(const char *dir)
+static void write_marker(const char *dir, const char *kind)
 {
     char marker_path[MAX_PATH_LEN];
     char marker_dir[MAX_PATH_LEN];
     FILE *f;
 
-    get_marker_path(dir, marker_path, sizeof(marker_path));
+    get_marker_path(dir, kind, marker_path, sizeof(marker_path));
     strncpy(marker_dir, marker_path, sizeof(marker_dir) - 1);
     marker_dir[sizeof(marker_dir) - 1] = 0;
     char *slash = strrchr(marker_dir, '/');
@@ -427,7 +439,7 @@ int yetty_incbin_assets_extract_data_to(struct yetty_incbin_assets *assets, cons
         return 0;
     }
 
-    write_marker(data_dir);
+    write_marker(data_dir, "data");
     ydebug("Data asset extraction complete");
     return 1;
 }
@@ -446,7 +458,7 @@ int yetty_incbin_assets_extract_config_to(struct yetty_incbin_assets *assets,
         return 0;
     }
 
-    write_marker(config_dir);
+    write_marker(config_dir, "config");
     ydebug("Config asset extraction complete");
     return 1;
 }
@@ -468,6 +480,7 @@ int yetty_incbin_assets_extract_yemu_to(struct yetty_incbin_assets *assets, cons
         return 0;
     }
 
+    write_marker(data_dir, "yemu");
     ydebug("yemu asset extraction complete");
     return 1;
 }
@@ -509,6 +522,7 @@ int yetty_incbin_assets_extract_qemu_to(struct yetty_incbin_assets *assets, cons
         ydebug("Failed to make QEMU executable: %s", strerror(errno));
     }
 
+    write_marker(data_dir, "qemu");
     ydebug("QEMU asset extraction complete");
     return 1;
 }
