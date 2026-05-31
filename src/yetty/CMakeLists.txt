@@ -126,6 +126,11 @@ endif()
 # Foundational, depends only on ycore.
 add_subdirectory(yfigure)
 
+# yshadertoy — standalone Shadertoy-style shader figure kind. Own
+# factory + renderer; depends on yfigure/yrender/yframework. Hosts
+# (yterm) link it to register the YSHADERTOY factory.
+add_subdirectory(yshadertoy)
+
 # ygrid — concrete figure kind: spatial-bucketed batch of SDF prims
 # and glyphs. First migration target for ygui's scene content.
 add_subdirectory(ygrid)

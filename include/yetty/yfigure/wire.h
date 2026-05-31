@@ -103,6 +103,12 @@ enum yetty_yfigure_wire_kind {
     YETTY_YFIGURE_KIND_YVIDEO = 7,
     YETTY_YFIGURE_KIND_YZOO = 8,
     YETTY_YFIGURE_KIND_YJUNGLE = 9,
+
+    /* Standalone Shadertoy-style shader figure. Unlike the producer
+     * kinds above (which reuse the ygrid factory over an SDF/glyph prim
+     * stream), this has its own factory + renderer in src/yetty/yshadertoy.
+     * Its CREATE_CHILD init payload is the raw WGSL shader text. */
+    YETTY_YFIGURE_KIND_YSHADERTOY = 10,
 };
 
 #ifdef __cplusplus

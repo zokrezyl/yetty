@@ -50,6 +50,10 @@ pkg_check_modules(DEMO_FONTCONFIG REQUIRED fontconfig)
 # must keep available; the same trick ygreeter uses.)
 add_library(demo_ygui_runner OBJECT
     runner.c
+    # Shared Shadertoy gallery (demo 41 / ygreeter Shadertoy tab). Plain
+    # string data, no GPU deps — compiled in directly rather than pulled
+    # from the webgpu-bound yetty_yshadertoy lib.
+    ${YETTY_ROOT}/src/yetty/yshadertoy/demo-shaders.c
     ${DEMO_YGUI_PLATFORM_SOURCES}
 )
 target_include_directories(demo_ygui_runner PUBLIC
@@ -74,6 +78,7 @@ target_link_libraries(demo_ygui_runner PUBLIC
     yetty_ywire
     yetty_yfigure
     yetty_ygrid
+    yetty_yshadertoy
     yetty_yfont_core
     yetty_ydraw_factory
     yetty_yimage
@@ -173,6 +178,7 @@ if(YETTY_ENABLE_FEATURE_YJUNGLE)
     demo_ygui_add(27-yjungle 27_yjungle)
 endif()
 demo_ygui_add(40-ymaze 40_ymaze)
+demo_ygui_add(41-yshadertoy 41_yshadertoy)
 if(YETTY_ENABLE_FEATURE_YZOO)
     demo_ygui_add(28-yzoo 28_yzoo)
 endif()

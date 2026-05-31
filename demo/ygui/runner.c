@@ -28,6 +28,7 @@
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
+#include <yetty/yshadertoy/figure.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygrid/ygrid.h>
@@ -349,6 +350,10 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "demo_runner: ygrid_register_factory_for_kind");
         }
+        /* yshadertoy has its own factory + renderer (not the ygrid path). */
+        struct yetty_ycore_void_result sr =
+            yetty_yshadertoy_register_factory(r->figure_registry);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "demo_runner: yshadertoy_register_factory");
     }
 
     /* Local container. */
