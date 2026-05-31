@@ -6,6 +6,7 @@
 #include "yetty/yrdawn/methods.h"
 #include <yclass/class.h>
 #include "yetty/yrdawn/figure.h"
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,16 +83,26 @@ static struct yetty_yclass_ptr_result yetty_yrdawn_accessor_lookup(const char *n
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
-/* ---- yrdawn: install hooks before main ------------------------- */
+/* ---- yrdawn: explicit yclass-RPC hook registration ------------- */
 
-__attribute__((constructor))
-static void yetty_yrdawn_install_hooks(void)
+/* Installs this module's server-side discovery hooks: the accessor
+ * lookup feeds yetty_yclass_by_name()'s registry-miss path, and (when
+ * the module exposes wire methods) the skel lookup feeds RPC skeleton
+ * dispatch. Call once when the yclass RPC / remote-object server is
+ * brought up — idempotent, so repeated calls (several hosts, re-init)
+ * are no-ops. This replaces the former load-time installer: a module
+ * merely being linked no longer mutates global state before main(),
+ * and there is no abort() path on a constructor. */
+struct yetty_ycore_void_result yetty_yrdawn_register(void)
 {
+    static bool registered = false;
+    if (registered)
+        return YETTY_OK_VOID();
+
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_yrdawn_accessor_lookup);
-    if (YETTY_IS_ERR(add_accessor_r)) {
-        yetty_ycore_error_print(stderr, "yetty_yrdawn_install_hooks", add_accessor_r.error);
-        yetty_ycore_error_destroy(add_accessor_r.error);
-        abort();
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
+                        "yetty_yrdawn_register: add_accessor_lookup");
+    registered = true;
+    return YETTY_OK_VOID();
 }

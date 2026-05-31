@@ -35,9 +35,11 @@
 #include <yetty/yfigure/registry.h>
 #ifdef YETTY_HAS_YMGUI
 #include <yetty/ymgui/figure.h>
+#include <yetty/ymgui/rpc.h>
 #endif
 #ifndef __EMSCRIPTEN__
 #include <yetty/yrdawn/figure.h>
+#include <yetty/yrdawn/rpc.h>
 #define YETTY_HAS_YRDAWN_SERVER 1
 #endif
 
@@ -625,6 +627,13 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
         yetty_ymgui_register_factory(registry, &framework->factory_state->ymgui_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, mr,
                         "yframework_register_figure_factories: ymgui register");
+    /* ymgui's yclass-RPC discovery hooks — installed here (rather than by
+     * a load-time constructor) under the same guard that gates ymgui's
+     * linkage, so a host that serves remote objects can resolve and
+     * dispatch ymgui classes over the wire. Idempotent. */
+    struct yetty_ycore_void_result mreg = yetty_ymgui_register();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mreg,
+                        "yframework_register_figure_factories: ymgui hooks");
 #endif
 
 #ifdef YETTY_HAS_YRDAWN_SERVER
@@ -633,6 +642,11 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
         yetty_yrdawn_register_factory(registry, &framework->factory_state->yrdawn_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
                         "yframework_register_figure_factories: yrdawn register");
+    /* yrdawn's yclass-RPC discovery hooks — see the ymgui note above.
+     * Guarded by YETTY_HAS_YRDAWN_SERVER, the same gate as its linkage. */
+    struct yetty_ycore_void_result rreg = yetty_yrdawn_register();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rreg,
+                        "yframework_register_figure_factories: yrdawn hooks");
 #endif
 
 #if !defined(YETTY_HAS_YMGUI) && !defined(YETTY_HAS_YRDAWN_SERVER)

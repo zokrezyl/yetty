@@ -54,11 +54,12 @@ struct yetty_ycore_void_result yetty_yclass_rpc_init(void)
     struct rpc_server_state *s = server();
     /* Idempotent one-shot bootstrap: the object table holds caller-
      * owned objects we cannot free here (we never took ownership), and
-     * the skel-cache / lookup-chain are populated by per-module
-     * constructors before main() — clearing them would orphan the
-     * mappings. Initialise next_handle to 1 on the first call only;
-     * subsequent calls are no-ops so a stale "rpc_init looks like a
-     * reset" expectation can't silently invalidate live handles. */
+     * the skel-cache / lookup-chain are populated by the per-module
+     * yetty_<module>_register() calls at server bring-up — clearing them
+     * would orphan the mappings. Initialise next_handle to 1 on the
+     * first call only; subsequent calls are no-ops so a stale "rpc_init
+     * looks like a reset" expectation can't silently invalidate live
+     * handles. */
     if (s->next_handle != 0)
         return YETTY_OK_VOID();
     s->next_handle = 1;
