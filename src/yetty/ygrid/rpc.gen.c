@@ -15,10 +15,15 @@
 static size_t yetty_ygrid_add_record_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         uint32_t record_len;
     } wire_args;
+#pragma pack(pop)
     if (body_len < sizeof(wire_args)) return 0;
     memcpy(&wire_args, body, sizeof(wire_args));
     if (body_len != sizeof(wire_args) + (size_t)wire_args.record_len) return 0;
@@ -55,9 +60,14 @@ static size_t yetty_ygrid_add_record_skel(const void *body, size_t body_len,
 static size_t yetty_ygrid_clear_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -90,9 +100,14 @@ static size_t yetty_ygrid_clear_skel(const void *body, size_t body_len,
 static size_t yetty_ygrid_destroy_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -125,10 +140,15 @@ static size_t yetty_ygrid_destroy_skel(const void *body, size_t body_len,
 static size_t yetty_ygrid_process_bytes_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         uint32_t payload_len;
     } wire_args;
+#pragma pack(pop)
     if (body_len < sizeof(wire_args)) return 0;
     memcpy(&wire_args, body, sizeof(wire_args));
     if (body_len != sizeof(wire_args) + (size_t)wire_args.payload_len) return 0;
@@ -165,9 +185,14 @@ static size_t yetty_ygrid_process_bytes_skel(const void *body, size_t body_len,
 static size_t yetty_ygrid_reset_content_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server

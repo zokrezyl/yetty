@@ -4,21 +4,21 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_widget_yetty_ygui_constructor_check = widget_default_constructor;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_destructor_fn yetty_ygui_widget_yetty_ygui_destructor_check = widget_default_destructor;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_on_press_fn yetty_ygui_widget_yetty_ygui_widget_on_press_check = widget_default_on_press;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_on_release_fn yetty_ygui_widget_yetty_ygui_widget_on_release_check = widget_default_on_release;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_on_motion_fn yetty_ygui_widget_yetty_ygui_widget_on_motion_check = widget_default_on_motion;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_paint_fn yetty_ygui_widget_yetty_ygui_widget_paint_check = widget_default_paint;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_emit_container_fn yetty_ygui_widget_yetty_ygui_widget_emit_container_check = widget_default_emit_container;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_emit_body_fn yetty_ygui_widget_yetty_ygui_widget_emit_body_check = widget_default_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void)

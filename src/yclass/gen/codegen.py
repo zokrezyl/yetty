@@ -960,9 +960,14 @@ def emit_dispatch_body(m: dict) -> str:
             yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
         YETTY_RETURN_IF_ERR({rid}, remote_id_r, "{qs}: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
-        struct __attribute__((packed)) {{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {{
 {fields}\
         }} wire_args = {{ {init} }};
+#pragma pack(pop)
 {remote_call}\
     }} else {{
         struct yetty_yclass_ptr_result object_class_r =
@@ -1019,7 +1024,7 @@ def emit_class_accessor(cls: dict) -> str:
     # would otherwise collide on the static variable name.
     qcls = qualified_class(cls)
     typecheck_lines = [
-        f"__attribute__((unused))\n"
+        f"[[maybe_unused]]\n"
         f"static {op_c_name(op)}_fn {qcls}_{op_c_name(op)}_check = {op['impl']};"
         for op in cls["ops"]
     ]
@@ -1434,9 +1439,14 @@ def emit_skel(m: dict) -> str:
 static size_t {slot}_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {{
-    struct __attribute__((packed)) {{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {{
 {fields}\
     }} wire_args;
+#pragma pack(pop)
 {unpack_block}\
     struct yetty_yclass_ctx local_ctx = {{0}};
 {resolve_block}\

@@ -64,12 +64,17 @@
 static size_t yetty_ygui_widget_on_press_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t yclass_obj_handle;
         float x;
         float y;
         int button;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -104,12 +109,17 @@ static size_t yetty_ygui_widget_on_press_skel(const void *body, size_t body_len,
 static size_t yetty_ygui_widget_on_release_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t yclass_obj_handle;
         float x;
         float y;
         int button;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -144,9 +154,14 @@ static size_t yetty_ygui_widget_on_release_skel(const void *body, size_t body_le
 static size_t yetty_ygui_constructor_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -179,9 +194,14 @@ static size_t yetty_ygui_constructor_skel(const void *body, size_t body_len,
 static size_t yetty_ygui_destructor_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -214,11 +234,16 @@ static size_t yetty_ygui_destructor_skel(const void *body, size_t body_len,
 static size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         float x;
         float y;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server

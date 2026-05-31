@@ -6,19 +6,19 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_yfigure_render_fn yetty_ygrid_grid_yetty_yfigure_render_check = ygrid_render_slot;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_yfigure_destroy_fn yetty_ygrid_grid_yetty_yfigure_destroy_check = ygrid_destroy_slot;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygrid_add_record_fn yetty_ygrid_grid_yetty_ygrid_add_record_check = yetty_ygrid_grid_add_record_impl;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygrid_clear_fn yetty_ygrid_grid_yetty_ygrid_clear_check = yetty_ygrid_grid_clear_impl;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygrid_destroy_fn yetty_ygrid_grid_yetty_ygrid_destroy_check = yetty_ygrid_grid_destroy_impl;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygrid_process_bytes_fn yetty_ygrid_grid_yetty_ygrid_process_bytes_check = yetty_ygrid_grid_process_bytes_impl;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygrid_reset_content_fn yetty_ygrid_grid_yetty_ygrid_reset_content_check = yetty_ygrid_grid_reset_content_impl;
 
 struct yetty_yclass_ptr_result yetty_ygrid_grid_class_get(void)

@@ -27,12 +27,17 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx
             yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, remote_id_r, "yetty_ygui_widget_on_press: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
-        struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
             uint64_t yclass_obj_handle;
             float x;
             float y;
             int button;
         } wire_args = { container_of((struct yetty_yclass_object *)yclass_obj, struct yetty_yclass_proxy, header)->handle, x, y, button };
+#pragma pack(pop)
         uint8_t resp_buf[1 + sizeof(int)];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
             rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args, sizeof(wire_args),
@@ -75,12 +80,17 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_c
             yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, remote_id_r, "yetty_ygui_widget_on_release: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
-        struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
             uint64_t yclass_obj_handle;
             float x;
             float y;
             int button;
         } wire_args = { container_of((struct yetty_yclass_object *)yclass_obj, struct yetty_yclass_proxy, header)->handle, x, y, button };
+#pragma pack(pop)
         uint8_t resp_buf[1 + sizeof(int)];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
             rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args, sizeof(wire_args),
@@ -145,9 +155,14 @@ struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx * 
             yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r, "yetty_ygui_constructor: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
-        struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
             uint64_t obj_handle;
         } wire_args = { container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)->handle };
+#pragma pack(pop)
         uint8_t resp_buf[1];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
             rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args, sizeof(wire_args),
@@ -187,9 +202,14 @@ struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx * c
             yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r, "yetty_ygui_destructor: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
-        struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
             uint64_t obj_handle;
         } wire_args = { container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)->handle };
+#pragma pack(pop)
         uint8_t resp_buf[1];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
             rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args, sizeof(wire_args),
@@ -229,11 +249,16 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ct
             yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, remote_id_r, "yetty_ygui_widget_on_motion: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
-        struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
             uint64_t obj_handle;
             float x;
             float y;
         } wire_args = { container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)->handle, x, y };
+#pragma pack(pop)
         uint8_t resp_buf[1 + sizeof(int)];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
             rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args, sizeof(wire_args),

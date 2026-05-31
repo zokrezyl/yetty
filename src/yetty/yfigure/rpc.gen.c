@@ -16,9 +16,14 @@
 static size_t yetty_yfigure_constructor_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -51,11 +56,16 @@ static size_t yetty_yfigure_constructor_skel(const void *body, size_t body_len,
 static size_t yetty_yfigure_add_child_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         uint64_t child_handle;
         uint32_t id;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -98,10 +108,15 @@ static size_t yetty_yfigure_add_child_skel(const void *body, size_t body_len,
 static size_t yetty_yfigure_remove_child_by_id_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         uint32_t id;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -134,10 +149,15 @@ static size_t yetty_yfigure_remove_child_by_id_skel(const void *body, size_t bod
 static size_t yetty_yfigure_raise_child_by_id_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         uint32_t id;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -170,10 +190,15 @@ static size_t yetty_yfigure_raise_child_by_id_skel(const void *body, size_t body
 static size_t yetty_yfigure_process_records_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         uint32_t bytes_len;
     } wire_args;
+#pragma pack(pop)
     if (body_len < sizeof(wire_args)) return 0;
     memcpy(&wire_args, body, sizeof(wire_args));
     if (body_len != sizeof(wire_args) + (size_t)wire_args.bytes_len) return 0;

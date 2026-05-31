@@ -5,7 +5,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_emit_container_fn yetty_ygui_yjungle_yetty_ygui_widget_emit_container_check = emit_container;
 
 struct yetty_yclass_ptr_result yetty_ygui_yjungle_class_get(void)

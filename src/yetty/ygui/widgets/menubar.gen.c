@@ -5,7 +5,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_menubar_yetty_ygui_constructor_check = menubar_constructor;
 
 struct yetty_yclass_ptr_result yetty_ygui_menubar_class_get(void)

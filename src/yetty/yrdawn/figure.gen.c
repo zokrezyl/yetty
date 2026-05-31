@@ -6,9 +6,9 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_yfigure_render_fn yetty_yrdawn_figure_yetty_yfigure_render_check = yrdawn_figure_render_slot;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_yfigure_destroy_fn yetty_yrdawn_figure_yetty_yfigure_destroy_check = yrdawn_figure_destroy_slot;
 
 struct yetty_yclass_ptr_result yetty_yrdawn_figure_class_get(void)
