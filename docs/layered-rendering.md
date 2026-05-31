@@ -2,301 +2,205 @@
 
 ## Overview
 
-Terminal rendering is split into multiple layers (text, ydraw, etc.), each rendering to its own texture. A blender composites all layer textures to a render target.
+A terminal is drawn as a stack of **layers** plus a **figure container**, all
+painting **directly into one shared render target**. There are no per-layer
+intermediate textures and no separate blend pass: each layer draws into the
+target with `LoadOp_Load` (so pixels persist), and the target is wiped once per
+frame by a single global `clear()`. The root `yfigure` container renders **last**,
+on top of the layers.
 
-**Key principles:**
-- **Simple orchestration** - terminal.c iterates layers and calls blender
-- **Complex logic in render/** - Rendering and blending logic in `src/yetty/render/`
-- **Blender owns target** - Target is encapsulated, can be changed at runtime
-- **1:1 renderer-layer coupling** - Each layer has its dedicated renderer
-- **Renderer owns binder** - Binder caches compiled shader/pipeline
+```
+yui paints the pane background ──► target   (the terminal owns NO background layer)
+
+terminal_render_frame(terminal, target, force)
+    │  (target already cleared once this frame by the root event handler)
+    │
+    ├── for each layer in terminal->layers[], bottom → top:  ──► target  (LoadOp_Load)
+    │       text-layer  →  ydraw-scrolling-layer
+    │       layer->ops->render(layer, target, force)
+    │
+    └── root yfigure container renders LAST                  ──► target  (figures on top)
+                                                                  │
+                                                                  ▼
+                                             surface / texture / VNC / X11-tile
+```
+
+The terminal's `layers[]` holds exactly two layers — **text-layer** and
+**ydraw-scrolling-layer**. The pane background is painted by `yui` (the
+tab/pane chrome), not by the terminal; there is no terminal background layer.
+
+**Why direct-to-target (no blend round-trip).** The previous model rendered each
+layer to its own texture and blended them. At 4K that is 4 × ~33 MB layer render
+targets plus a ~33 MB blend output read and written every frame — enough to
+starve the display compositor (observed on tvOS). Painting every layer straight
+into the shared target removes that bandwidth entirely.
+
+**Why `LoadOp_Load` everywhere.** Because `loadOp` ignores the scissor rect, a
+`Clear` on any layer pass would wipe *every* pane sharing the big target. So no
+layer pass ever clears; the only wipe is the one global `clear()` the root event
+handler issues before the panes render.
 
 ---
 
-## Architecture
+## Layers vs figures
 
-```
-terminal.c (simple orchestrator)
-    │
-    ├── layers[]      ─────────────────────────────────────┐
-    │   ├── text_layer                                     │
-    │   └── ydraw_layer                                   │
-    │                                                      │ 1:1
-    ├── renderers[]   ←────────────────────────────────────┘
-    │   ├── text_renderer (owns: binder, texture, layer ref)
-    │   └── ydraw_renderer (owns: binder, texture, layer ref)
-    │
-    └── blender->ops->blend(rendered_layers[], count)
-                │
-                ▼
-            render_target (owned by blender)
-                │
-                ▼
-            screen / VNC / other
-```
+| Surface | What it is |
+|---|---|
+| **pane background** | Painted by **`yui`** (the tab/pane chrome), *not* a terminal layer. The terminal never owns a background layer. |
+| **text-layer, ydraw-scrolling-layer** | The two `yetty_yrender_terminal_layer`s in `terminal->layers[]`, painted bottom→top directly into the target. text-layer hosts libvterm; the ydraw scrolling layer holds SDF primitives. |
+| **figure container** (`yfigure`) | The root container, *outside* `layers[]`. Hosts the rich-content **figures** (ygui, ymgui, yrdawn, ygrid, yplot, …) and renders after the layers — it is the compositor for figures. |
+
+Shader-glyph, ymgui, and yrdawn used to be layers; they are now figures in the
+container, so `layers[]` is down to just text + ydraw-scrolling. See
+[ydraw](../src/yetty/ydraw/README.md) for the primitive/figure model and
+[Terminal Layers](term-layers.md) for the scroll/alt-screen state shared across
+both.
 
 ---
 
-## Components (src/yetty/render/)
+## The render target (`render-target.h`)
 
-### 1. render_target
-
-Abstraction for render output. Owned by blender.
+A render target is the destination a layer or figure paints into. It is owned by
+`yframework` (`yetty_yframework.render_target`) and handed to the terminal each
+frame.
 
 ```c
 struct yetty_yrender_target_ops {
-    void (*destroy)(struct yetty_yrender_target *self);
-    WGPUTextureView (*acquire)(struct yetty_yrender_target *self);
-    void (*present)(struct yetty_yrender_target *self);
-    uint32_t (*get_width)(const struct yetty_yrender_target *self);
-    uint32_t (*get_height)(const struct yetty_yrender_target *self);
+    void (*destroy)(struct yetty_ydraw_target *self);
+    struct yetty_ycore_void_result (*clear)(struct yetty_ydraw_target *self);  /* once/frame */
+    struct yetty_ycore_void_result (*render_layer)(struct yetty_ydraw_target *self,
+                                                   struct yetty_yrender_terminal_layer *layer);
+    struct yetty_ycore_void_result (*blend)(struct yetty_ydraw_target *self,
+                                            struct yetty_ydraw_target **sources, size_t count);
+    struct yetty_ycore_void_result (*present)(struct yetty_ydraw_target *self);
+    WGPUTextureView (*get_view)(const struct yetty_ydraw_target *self);
+    WGPUTexture (*get_texture)(const struct yetty_ydraw_target *self);
+    struct yetty_ycore_void_result (*resize)(struct yetty_ydraw_target *self,
+                                             struct yetty_yrender_viewport viewport);
+    struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ydraw_target *self,
+                                                      float scale, float ox, float oy);
 };
 ```
 
-Implementations:
-- **surface_target** - Local window (WGPUSurface)
-- **vnc_target** - VNC server buffer (future)
-- **multi_target** - Multiple targets simultaneously (future)
+The type is `struct yetty_ydraw_target`. A layer's `render` op ultimately calls
+the target's `render_layer` (which begins a `LoadOp_Load` pass and draws into the
+target's view). `present()` outputs the finished frame; `get_texture()` /
+`get_view()` expose the backing texture for readback.
 
-### 2. rendered_layer
+Implementations (in `src/yetty/yrender/`):
 
-Opaque handle for a layer rendered to texture.
+- **surface target** — on-screen window (WGPUSurface).
+- **texture target** (`render-target-texture.c`) — offscreen render-to-texture.
+- **VNC target** (`render-target-vnc.c`) — VNC server framebuffer (headless).
+- **X11-tile target** (`render-target-x11-tile.c`) — X11 tiled output.
 
-```c
-struct yetty_yrender_rendered_layer_ops {
-    void (*release)(struct yetty_yrender_rendered_layer *self);
-    WGPUTextureView (*get_view)(const struct yetty_yrender_rendered_layer *self);
-    uint32_t (*get_width)(const struct yetty_yrender_rendered_layer *self);
-    uint32_t (*get_height)(const struct yetty_yrender_rendered_layer *self);
-};
-```
+> The `blend` op is part of the interface but is **not** used on the terminal
+> render path today (kept for the offscreen/compose-from-sources use case). The
+> older `blender.h`, `layer-renderer.h`, and `rendered-layer.h` headers likewise
+> remain in `yrender` but are not on this path — the terminal allocates no
+> per-layer renderer and no blender.
 
-### 3. layer_renderer
+### Legacy: `terminal->layer_targets[]`
 
-Renders a terminal_layer to texture. **Created with a layer reference (1:1 coupling).**
-
-```c
-struct yetty_yrender_layer_renderer_ops {
-    void (*destroy)(struct yetty_yrender_layer_renderer *self);
-
-    struct yetty_yrender_rendered_layer_result (*render)(
-        struct yetty_yrender_layer_renderer *self,
-        struct yetty_yterm_terminal_layer *layer);
-
-    void (*resize)(struct yetty_yrender_layer_renderer *self,
-                   uint32_t width, uint32_t height);
-};
-
-/* Create renderer with layer reference */
-struct yetty_yrender_layer_renderer_result yetty_yrender_layer_renderer_create(
-    WGPUDevice device,
-    WGPUQueue queue,
-    WGPUTextureFormat format,
-    uint32_t width,
-    uint32_t height);
-```
-
-**Renderer owns:**
-- **Binder** - Caches compiled shader and pipeline. Reuses if shader code unchanged.
-- **Intermediate texture** - Layer renders to this, blender reads from it.
-- **Layer reference** - The renderer is bound to one layer for its lifetime.
-
-**Dirty flag optimization:**
-- `render()` calls `layer->ops->is_dirty()` first
-- If not dirty, returns cached rendered_layer immediately (no GPU work)
-- If dirty, calls `layer->ops->get_gpu_resource_set()` which clears the dirty flag
-
-### 4. blender
-
-Composites layers to target. **Owns the render target.**
-
-```c
-struct yetty_yrender_blender_ops {
-    void (*destroy)(struct yetty_yrender_blender *self);
-
-    struct yetty_ycore_void_result (*blend)(
-        struct yetty_yrender_blender *self,
-        struct yetty_yrender_rendered_layer **layers,
-        size_t layer_count);
-
-    void (*set_target)(
-        struct yetty_yrender_blender *self,
-        struct yetty_yrender_target *target);
-};
-```
-
-Target ownership:
-- Blender takes ownership of target
-- `set_target()` destroys old target, takes new one
-- Enables runtime target switching (screen → VNC)
+The terminal *does* still allocate and resize one render target per layer
+(`terminal->layer_targets[]`, set up in `terminal_create` and kept in sync on
+resize) — a remnant of the old render-to-texture-then-blend model.
+`terminal_render_frame()` no longer uses them: it renders every layer into the
+single shared target passed in. So `layer_targets[]` is dead weight on the
+current direct path (nothing reads it) and is pending cleanup — documented here
+so it isn't mistaken for part of the live render flow.
 
 ---
 
-## terminal.c Integration
+## The frame loop (two passes)
+
+`terminal_render_frame()` (`src/yetty/yterm/terminal.c`) runs two passes over
+`layers[]`:
+
+1. **Dirty scan.** If `force_redraw` is set, or *any* layer reports
+   `is_dirty()`, or the root container is dirty → set `force = 1`. A dirty
+   top layer must force the layers *below* it to repaint, otherwise the dirty
+   layer's old pixels (e.g. the silhouette an ymgui window just vacated) would
+   survive under it.
+2. **Render bottom→top.** For each layer: skip if empty (`is_empty`), else
+   `layer->ops->render(layer, target, force)`. The op returns `1` iff it
+   actually drew; that propagates `force = 1` upward so layers above a repaint
+   also refresh.
 
 ```c
-struct yetty_yterm_terminal {
-    /* layers and their renderers (1:1) */
-    struct yetty_yterm_terminal_layer *layers[MAX_LAYERS];
-    struct yetty_yrender_layer_renderer *renderers[MAX_LAYERS];
-    size_t layer_count;
+int force = force_redraw;
+for (size_t i = 0; !force && i < terminal->layer_count; i++)
+    if (layer_is_dirty(terminal->layers[i])) force = 1;
+if (!force && root_container_dirty(terminal)) force = 1;
 
-    /* compositor */
-    struct yetty_yrender_blender *blender;
-};
-
-static struct yetty_ycore_void_result terminal_render_frame(
-    struct yetty_yterm_terminal *terminal)
-{
-    struct yetty_yrender_rendered_layer *rendered[MAX_LAYERS];
-    size_t rendered_count = 0;
-
-    /* Render each layer to texture (skips if not dirty) */
-    for (size_t i = 0; i < terminal->layer_count; i++) {
-        struct yetty_yrender_rendered_layer_result res =
-            terminal->renderers[i]->ops->render(
-                terminal->renderers[i],
-                terminal->layers[i]);
-        if (YETTY_IS_OK(res)) {
-            rendered[rendered_count++] = res.value;
-        }
-    }
-
-    /* Blend to target */
-    return terminal->blender->ops->blend(
-        terminal->blender,
-        rendered,
-        rendered_count);
+for (size_t i = 0; i < terminal->layer_count; i++) {
+    struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
+    if (layer_is_empty(layer)) continue;
+    struct yetty_ycore_int_result r = layer->ops->render(layer, target, force);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "layer render failed");
+    if (r.value == 1) force = 1;
 }
+
+/* Root container renders LAST, on top of every layer. */
+struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(terminal->root_container);
+yetty_yfigure_render(NULL, /* the figure object */ ..., target);
+rf->dirty = 0;
 ```
+
+**New-OSC path.** When `YGRID_USE_NEW_OSC=1` (`terminal->new_osc_path_active`),
+the loop skips every legacy layer except text-layer — the figure container plus
+text-layer (background + terminal text) are the only paints.
 
 ---
 
-## Data Flow
+## Per-layer GPU binding
 
-```
-terminal_layer (text, ydraw, etc.)
-       │
-       │ renderer checks: layer->ops->is_dirty()
-       │
-       ├── NOT DIRTY ──► return cached rendered_layer (no GPU work)
-       │
-       └── DIRTY ──────► layer->ops->get_gpu_resource_set()
-                               │         (clears dirty flag)
-                               ▼
-                gpu_resource_set (buffers, textures, uniforms, shader)
-                               │
-                               │ binder compiles pipeline (if shader changed)
-                               ▼
-                        intermediate texture
-                               │
-                               │ returned as rendered_layer
-                               ▼
-blender collects all rendered_layers
-       │
-       │ alpha-over compositing
-       ▼
-render_target (screen, VNC, etc.)
-```
-
-**Dirty flag lifecycle:**
-1. Layer data changes → layer sets `dirty = true`
-2. `render()` checks `is_dirty()` → returns cached if false
-3. `get_gpu_resource_set()` called → clears `dirty = false`
-4. Binder checks if shader code changed → recompiles only if needed
-
----
-
-## Binder Caching
-
-The binder (owned by renderer) caches compiled shader and pipeline:
-
-```c
-struct binder {
-    WGPUDevice device;
-    WGPUShaderModule shader;      /* cached */
-    WGPURenderPipeline pipeline;  /* cached */
-    uint32_t shader_hash;         /* hash of last compiled shader code */
-};
-```
-
-**On `bind()` call:**
-1. Compute hash of shader code from gpu_resource_set
-2. If hash matches `shader_hash` → reuse cached pipeline
-3. If hash differs → recompile shader, create new pipeline, update hash
-
-This avoids recompilation when only buffers/uniforms change (common case).
-
----
-
-## Blend Shader (blend.wgsl)
-
-```wgsl
-@group(0) @binding(0) var layer_textures: binding_array<texture_2d<f32>>;
-@group(0) @binding(1) var layer_sampler: sampler;
-@group(0) @binding(2) var<uniform> layer_count: u32;
-
-@fragment
-fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
-    let uv = pos.xy / vec2<f32>(target_size);
-
-    // Start with bottom layer
-    var result = textureSample(layer_textures[0], layer_sampler, uv);
-
-    // Blend subsequent layers (alpha-over, premultiplied)
-    for (var i = 1u; i < layer_count; i++) {
-        let layer = textureSample(layer_textures[i], layer_sampler, uv);
-        result = vec4(
-            result.rgb * (1.0 - layer.a) + layer.rgb,
-            result.a * (1.0 - layer.a) + layer.a
-        );
-    }
-
-    return result;
-}
-```
-
----
-
-## Runtime Target Switching
-
-```c
-/* Switch from screen to VNC */
-struct yetty_yrender_target *vnc_target =
-    yetty_yrender_target_vnc_create(vnc_context);
-
-terminal->blender->ops->set_target(terminal->blender, vnc_target);
-/* Old target destroyed, VNC target now owned by blender */
-
-/* Subsequent renders go to VNC */
-terminal_render_frame(terminal);
-```
+Each layer produces a `struct yetty_ydraw_gpu_resource_set` (buffers, textures,
+uniforms, shader, children). A `gpu-resource-binder` flattens that set, packs it
+into one storage buffer + per-format atlas textures + one uniform block, and
+caches the compiled pipeline keyed by a shader-code hash (recompiling only when
+the shader text changes — uniform/buffer changes reuse the pipeline). That
+mechanism is unchanged by the direct-to-target switch; see
+[GPU Resource Binding](gpu-resource-binding.md) and
+[Render Pipeline](render.md) for the binder flow and the dirty-driven upload.
 
 ---
 
 ## File Structure
 
 ```
-include/yetty/render/
-├── render-target.h         # target interface
-├── rendered-layer.h        # rendered layer handle
-├── layer-renderer.h        # layer → texture renderer
-└── blender.h               # compositor, owns target
+include/yetty/yrender/
+├── render-target.h          # target interface (yetty_ydraw_target)
+├── render-target-x11-tile.h # X11-tile target
+├── gpu-resource-set.h       # resource set tree
+├── gpu-resource-binder.h    # binder interface
+├── gpu-allocator.h          # GPU allocation tracking
+├── pipeline.h               # shared pipeline (two-tier binder)
+├── primitive-gpu-binder.h   # SDF primitive binder
+├── font-dispatcher.h        # glyph → atlas dispatch
+├── texture-format.h         # format helpers
+├── types.h                  # buffer / texture / uniform types
+└── blender.h, layer-renderer.h, rendered-layer.h   # legacy — not on the current path
 
-src/yetty/render/
-├── render-target-surface.c # WGPUSurface target implementation
-├── rendered-layer.c        # rendered layer handle implementation
-├── layer-renderer.c        # renderer (owns binder, texture, layer ref)
-├── binder.c                # shader/pipeline caching
-├── blender.c               # compositor
-└── blend.wgsl              # compositing shader
+src/yetty/yrender/
+├── render-target-texture.c  # offscreen texture target (the LoadOp_Load render_layer impl)
+├── render-target-vnc.c      # VNC server buffer target
+├── render-target-x11-tile.c # X11-tile target
+├── gpu-resource-binder.c    # flatten / pack / codegen / upload
+├── gpu-allocator.c          # allocation tracking
+├── pipeline.c               # shared pipeline
+├── primitive-gpu-binder.c   # SDF primitive binder
+├── font-dispatcher.c        # glyph dispatch
+└── types.c                  # type utilities
+
+src/yetty/yterm/terminal.c   # terminal_render_frame — the loop above
+src/yetty/yfigure/container.c# the root container (compositor) rendered last
 ```
 
 ---
 
 ## Future Extensions (Out of Scope)
 
-- **VNC target** - Render to VNC server buffer
-- **Multi-target** - Render to multiple targets simultaneously
-- **Layer effects** - Per-layer post-processing
-- **Dirty regions** - Partial re-rendering
+- **Multi-target** — render to multiple targets simultaneously.
+- **Layer effects** — per-layer post-processing.
+- **Dirty regions** — partial re-rendering instead of whole-target repaint.

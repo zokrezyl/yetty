@@ -1,10 +1,23 @@
 # FFI Binding Generation
 
-Design for the yetty FFI binding pipeline: parse public C headers with libclang,
-emit YAML metadata, then generate idiomatic bindings for any target language
-(Python, Rust, Go, TypeScript, …).
+Design for the yetty FFI binding pipeline: parse an API model, then generate
+idiomatic bindings for any target language (Python, Rust, Go, TypeScript, …).
 
-Status: design draft. Not yet implemented.
+Status: design draft; an initial parser + Python emitter live under
+`tools/ffi-codegen/`.
+
+> **Relationship to [yclass](../src/yclass/README.md).** There are two model sources that this
+> pipeline can emit bindings from:
+>
+> - **Plain public headers** (`include/yetty/**`) — parsed with libclang into
+>   `metadata.yaml`, as described below. This covers the non-class C API.
+> - **yclass modules** — the annotation-driven class/RPC system already emits a
+>   canonical `model.yaml` per module (classes, slots, args, inheritance). For
+>   the class-based API that model *is* the binding contract; see
+>   [yclass](../src/yclass/README.md).
+>
+> Either way the emitters (Stage 2) consume a model and produce bindings — they
+> never re-parse C.
 
 ## Goals
 

@@ -48,6 +48,15 @@ Downcasting uses `container_of`. No `void *priv` pointers. No inheritance hierar
 
 See [C Coding Style](c-coding-style.md) for the full vtable and embedding patterns.
 
+This hand-written pattern is used for simple, fixed interfaces (fonts, render
+targets, PTYs). For the richer object model — classes with single inheritance,
+mixins, cross-module overrides, and **location-transparent RPC** (the same call
+works on a local object or a remote proxy) — yetty uses **yclass**, where the
+vtable, dispatch, RPC skeletons, and a binding model are *generated* from C23
+`[[clang::annotate(...)]]` annotations on the source. The figure modules
+(`yfigure`, `ygui`, `ymgui`, `yrdawn`, `ygrid`, `yterm`) are built this way. See
+[yclass](../src/yclass/README.md).
+
 ## Error Propagation
 
 Yetty uses typed result unions — similar to Rust's `Result<T, E>` — encoded as C structs with a tagged union.
@@ -70,7 +79,9 @@ See [Result Types](result.md) for the macro definitions and usage patterns.
 
 ## Layered Rendering
 
-The terminal screen is a stack of render layers: text grid, selection, cursor, ydraw overlays, cards. Each layer:
+The terminal screen is a stack of render layers (text grid with selection and
+cursor, plus a ydraw overlay) topped by a `yfigure` container that composites the
+rich-content figures. Each layer:
 
 - Owns a `struct yetty_yrender_gpu_resource_set` describing its GPU needs
 - Has a `dirty` flag — no re-render unless content changed
@@ -117,7 +128,7 @@ Each trace point is a function-local static bool. When disabled, the cost is a s
 
 Compile-time switches (`YTRACE_C_ENABLE_TRACE`, etc.) can remove levels entirely — the macros become `((void)0)`.
 
-See [Tracing](ytrace.md) for the macro implementation, control API, and build-time configuration.
+See [Tracing](../src/yetty/ytrace/README.md) for the macro implementation, control API, and build-time configuration.
 
 ## Font Abstraction
 
@@ -129,7 +140,7 @@ Key design points:
 - **Dirty propagation** — when the atlas changes (new glyphs, resize), the font marks its texture and buffer dirty so the binder uploads only what changed
 - **Style support** — regular, bold, italic, bold-italic with automatic fallback
 
-See [Font System](font.md) for the glyph resolver, atlas packing, and UV coordinate scheme.
+See [Font System](../src/yetty/yfont/README.md) for the glyph resolver, atlas packing, and UV coordinate scheme.
 
 ## Context Hierarchy
 

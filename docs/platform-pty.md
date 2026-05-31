@@ -1,213 +1,113 @@
 # Platform PTY Architecture
 
-## Design Principle
+How PTY I/O is modeled uniformly across platforms. All backends implement one C
+interface (`struct yetty_platform_pty`, `include/yetty/yplatform/pty.h`); the
+event loop only needs a readiness signal, and the reader pulls bytes on demand.
 
-All platforms model PTY I/O after the Unix fd pattern:
+See [Platform Abstraction](platform.md) for where this sits, and
+[Platform Pipe](platform-pipe.md) for the sibling cross-thread input pipe.
 
-1. **Data buffer lives outside C++** (kernel on Unix, JS on WebASM)
-2. **PollSource is notification-only** (like an fd - just tells you data is available)
-3. **Pty::read() pulls data** from the external buffer when called
+## Design principle
 
-This keeps the architecture consistent across platforms and avoids duplicating buffers.
+Every platform models PTY I/O after the Unix fd pattern:
 
-## Unix/Desktop (Linux, macOS)
+1. **The data buffer lives outside the PTY object** — in the kernel on Unix, in
+   the in-iframe VM on WebAssembly. No double-buffering.
+2. **The readiness source is notification-only** — like an fd, it just signals
+   "data available"; it never holds data.
+3. **`read()` pulls** from the external buffer when called.
 
-### Components
+```c
+struct yetty_platform_pty_ops {
+    struct yetty_ycore_void_result (*destroy)(struct yetty_platform_pty *self);
+    struct yetty_ycore_size_result (*read)(struct yetty_platform_pty *self, char *buf, size_t max);
+    struct yetty_ycore_size_result (*write)(struct yetty_platform_pty *self, const char *d, size_t n);
+    struct yetty_ycore_void_result (*resize)(struct yetty_platform_pty *self,
+                                             uint32_t cols, uint32_t rows,
+                                             uint32_t pixel_w, uint32_t pixel_h);
+    struct yetty_ycore_void_result (*stop)(struct yetty_platform_pty *self);
+    struct yetty_platform_pty_pipe_source *(*pipe_source)(struct yetty_platform_pty *self);
+};
+```
+
+`pipe_source()` returns the readiness handle the event loop polls
+(`pty-pipe-source.h` / `pty-poll-source.h`); it has no `read`/`write` and holds
+no buffer.
+
+## Unix / desktop (Linux, macOS)
 
 ```
-Kernel PTY Buffer (owned by OS)
-        ↑↓
-    pty master fd
-        ↑↓
-┌─────────────────────────────────────────┐
-│ UnixPty                                 │
-│   _ptyMaster (fd)                       │
-│   read()  → ::read(_ptyMaster, ...)     │
-│   write() → ::write(_ptyMaster, ...)    │
-│   pollSource() → FdPtyPollSource        │
-└─────────────────────────────────────────┘
+Kernel PTY buffer (owned by the OS)
+        ↑↓  master fd
+  fork-pty backend  (yetty_yplatform_fork_pty_create)
+    read()  → ::read(master_fd, ...)
+    write() → ::write(master_fd, ...)
+    pipe_source() → fd-backed source (just holds the fd number)
         │
-┌─────────────────────────────────────────┐
-│ FdPtyPollSource                         │
-│   _fd (just holds the fd number)        │
-│   fd() → returns _fd                    │
-│   NO read/write methods                 │
-└─────────────────────────────────────────┘
+  yevent loop (libuv)
+    polls the fd via uv_poll; on UV_READABLE, dispatches a readable event
+```
+
+**Shell output → screen:** shell writes stdout → kernel PTY buffer → master fd
+readable → libuv fires → the reader calls `pty->ops->read(buf, len)` → bytes are
+fed into the text layer's libvterm (`vterm_input_write`).
+
+**Keyboard → shell:** key → libvterm produces the escape sequence → the layer's
+PTY-write callback calls `pty->ops->write(data, len)` → kernel buffer → shell
+reads stdin.
+
+On Windows the same backend wraps ConPTY instead of `forkpty()`.
+
+## WebAssembly
+
+WebAssembly has no file descriptors. The console is backed by an **in-iframe
+TinyEMU RISC-V VM** (`yetty_yplatform_iframe_pty_create`), and the byte buffer
+lives in JavaScript in the parent window. C calls into JS to read.
+
+```
+TinyEMU VM (in iframe)  ── produces output ──► postMessage to parent
         │
-┌─────────────────────────────────────────┐
-│ EventLoop (libuv)                       │
-│   createPtyPoll(source)                 │
-│     → casts to FdPtyPollSource          │
-│     → gets fd via source->fd()          │
-│     → uv_poll_init(fd)                  │
-│   When fd readable:                     │
-│     → dispatches PollReadable event     │
-└─────────────────────────────────────────┘
-```
-
-### Data Flow
-
-**Shell output → Terminal screen:**
-```
-1. Shell writes to stdout
-2. Data goes to kernel PTY buffer
-3. Master fd becomes readable
-4. libuv detects UV_READABLE
-5. EventLoop dispatches PollReadable to listeners
-6. Listener calls pty->read(buf, len)
-7. UnixPty::read() calls ::read(_ptyMaster, buf, len)
-8. Data copied from kernel buffer to buf
-9. Listener feeds data to vterm_input_write()
-```
-
-**Keyboard → Shell:**
-```
-1. User types key
-2. vterm produces escape sequence
-3. vterm output callback calls pty->write(data, len)
-4. UnixPty::write() calls ::write(_ptyMaster, data, len)
-5. Data goes to kernel PTY buffer
-6. Shell reads from stdin
-```
-
-## WebASM
-
-### Architecture Challenge
-
-WebASM has no file descriptors. JSLinux VM runs in an iframe and communicates via async postMessage. We cannot synchronously "read" from the VM.
-
-**Solution:** Mirror the Unix model by keeping the buffer in JavaScript (parent window), with C++ calling into JS to read.
-
-### Components
-
-```
-┌─────────────────────────────────────────┐
-│ JSLinux VM (in iframe)                  │
-│   produces output                       │
-│     ↓                                   │
-│   term_write(str)                       │
-│     ↓                                   │
-│   postMessage({type:'term-output',      │
-│                data: str})              │
-└─────────────────────────────────────────┘
-        │ (postMessage carries data to parent)
-        ↓
-┌─────────────────────────────────────────┐
-│ Parent Window JS                        │
-│   var ptyBuffer = '';                   │
-│                                         │
-│   onmessage('term-output'):             │
-│     ptyBuffer += e.data.data            │
-│     Module._webpty_data_available(ptr)  │
-│                                         │
-│   pty_read_buffer(maxLen):              │
-│     var chunk = ptyBuffer.substr(0,max) │
-│     ptyBuffer = ptyBuffer.substr(max)   │
-│     return chunk                        │
-└─────────────────────────────────────────┘
+Parent window JS:  appends to a JS buffer; calls back into wasm to signal "data available"
         │
-┌─────────────────────────────────────────┐
-│ WebasmPty                               │
-│   _ptyId                                │
-│   read()  → EM_ASM: pty_read_buffer()   │
-│   write() → postMessage to iframe       │
-│   pollSource() → WebasmPtyPollSource    │
-│                                         │
-│   onDataAvailable() ← called by JS      │
-│     → _pollSource.notify()              │
-└─────────────────────────────────────────┘
+  iframe PTY backend
+    read()  → reads from the JS buffer via the wasm/JS bridge
+    write() → postMessage into the iframe
+    pipe_source() → callback-backed source (no fd, no buffer)
         │
-┌─────────────────────────────────────────┐
-│ WebasmPtyPollSource                     │
-│   _notifyCallback                       │
-│   setNotifyCallback(cb)                 │
-│   notify() → calls _notifyCallback()    │
-│   NO read/write methods                 │
-│   NO buffer                             │
-└─────────────────────────────────────────┘
-        │
-┌─────────────────────────────────────────┐
-│ EventLoop (emscripten)                  │
-│   createPtyPoll(source)                 │
-│     → casts to WebasmPtyPollSource      │
-│     → sets callback to dispatch         │
-│       PollReadable event                │
-│   When notify() called:                 │
-│     → callback fires                    │
-│     → dispatches PollReadable event     │
-└─────────────────────────────────────────┘
+  yevent loop (emscripten async)
+    the source's callback fires when JS signals data; dispatches a readable event
 ```
 
-### Data Flow
+The data flow mirrors Unix exactly — the only differences are *where the buffer
+lives* (kernel vs JS) and *how the source signals* (fd readiness vs a JS-driven
+callback). On WebAssembly the first console is the in-iframe VM; additional
+sessions fall back to telnet over an iframe transport.
 
-**VM output → Terminal screen:**
-```
-1. JSLinux VM produces output, calls term_write(str)
-2. iframe sends postMessage({type:'term-output', data:str})
-3. Parent window message listener receives
-4. Data appended to parent's JS buffer: ptyBuffer += data
-5. JS calls Module._webpty_data_available(ptyPointer)
-6. WebasmPty::onDataAvailable() calls _pollSource.notify()
-7. PollSource callback fires (set by EventLoop)
-8. EventLoop dispatches PollReadable to listeners
-9. Listener calls pty->read(buf, len)
-10. WebasmPty::read() calls pty_read_buffer(len) via EM_ASM
-11. Data returned from parent's JS buffer to C++
-12. Listener feeds data to vterm_input_write()
-```
+## Other backends
 
-**Keyboard → VM:**
-```
-1. User types key
-2. vterm produces escape sequence
-3. vterm output callback calls pty->write(data, len)
-4. WebasmPty::write() sends postMessage({type:'term-input', data})
-5. iframe receives, calls console_write1() for each char
-6. JSLinux VM receives input
-```
+Behind the same interface:
 
-## Key Design Points
+- `yetty_yplatform_tinyemu_pty_create` — a native console backed by the embedded
+  TinyEMU VM (see `yqemu` / `src/tinyemu`).
+- `yetty_yplatform_memory_pty_pair_create` — an in-process PTY pair (two ring
+  buffers, no fd); `pipe_source()` returns NULL and a wake callback notifies the
+  reader instead.
+- `yssh` / `ytelnet` — SSH and Telnet sessions, exposed as `yetty_platform_pty`.
 
-1. **Buffer location:**
-   - Unix: kernel (accessed via fd)
-   - WebASM: parent window JS (accessed via EM_ASM)
+A factory (`yetty_yplatform_pty_factory_create`) picks the backend from config.
 
-2. **PollSource responsibility:**
-   - Unix: holds fd, EventLoop polls it
-   - WebASM: holds callback, JS calls notify() when data arrives
+## Key design points
 
-3. **Pty::read() behavior:**
-   - Unix: synchronous read from kernel via fd
-   - WebASM: synchronous read from JS via EM_ASM
+| | Unix | WebAssembly |
+|---|---|---|
+| Buffer location | kernel (via fd) | parent-window JS (via wasm/JS bridge) |
+| Readiness source | holds the fd; libuv polls it | holds a callback; JS calls it when data arrives |
+| `read()` | synchronous read from the kernel | synchronous read from the JS buffer |
+| Buffer in the PTY object | none | none |
 
-4. **No buffer in C++:**
-   - Avoids double-buffering
-   - Matches Unix model where kernel owns the buffer
-   - PollSource never touches data, only signals availability
+## Pointers
 
-## Terminal Integration
-
-Terminal must set up PTY polling:
-
-```cpp
-// In Terminal::init()
-auto ptyPollId = _eventLoop->createPtyPoll(_pty->pollSource());
-_eventLoop->registerPollListener(ptyPollId, _screen);
-_eventLoop->startPoll(ptyPollId);
-```
-
-TerminalScreen must handle PollReadable:
-
-```cpp
-Result<bool> TerminalScreen::onEvent(const Event& event) {
-    if (event.type == Event::Type::PollReadable) {
-        char buf[4096];
-        size_t n = _pty->read(buf, sizeof(buf));
-        if (n > 0) {
-            vterm_input_write(_vterm, buf, n);
-        }
-        return Ok(true);
-    }
-    // ... other events
-}
-```
+- Interface + backends: `include/yetty/yplatform/pty.h`
+- Readiness sources: `include/yetty/yplatform/pty-pipe-source.h`,
+  `pty-poll-source.h`
+- Factory: `src/yetty/yplatform/pty-factory/`

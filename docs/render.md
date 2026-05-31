@@ -104,8 +104,11 @@ struct Uniforms {
 
 ## Key Files
 
-- `include/yetty/render/gpu-resource-set.h` — resource set struct
-- `include/yetty/render/gpu-resource-binder.h` — binder interface
-- `src/yetty/render/gpu-resource-binder.c` — binder implementation
-- `include/yetty/render/types.h` — buffer, texture, uniform types
-- `src/yetty/render/types.c` — type utilities (size, alignment, hash)
+- `include/yetty/yrender/gpu-resource-set.h` — resource set struct
+- `include/yetty/yrender/gpu-resource-binder.h` — binder interface
+- `src/yetty/yrender/gpu-resource-binder.c` — binder implementation
+- `include/yetty/yrender/types.h` — buffer, texture, uniform types
+- `src/yetty/yrender/types.c` — type utilities (size, alignment, hash)
+
+See [GPU Resource Binding](gpu-resource-binding.md) for the resource-set struct
+and the `submit`/`finalize`/`update`/`bind` binder ops.

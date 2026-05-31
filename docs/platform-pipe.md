@@ -1,104 +1,78 @@
 # Platform Input Pipe
 
-## Overview
+The input pipe carries input events from platform code (the OS event thread) to
+the worker thread's event loop. It's a dumb byte transport plus a notification
+mechanism — it does not interpret or dispatch events.
 
-PlatformInputPipe transports `Event` structs from platform code (input callbacks) to the EventLoop. It is a dumb byte transport with a notification mechanism.
-
-## Responsibilities
-
-### Pipe
-- Accept bytes via `write()`
-- Return bytes via `read()`
-- Notify EventLoop when data is available
-
-The pipe does NOT interpret Event structs. It does NOT dispatch events. It is just bytes in, bytes out, plus notification.
-
-### EventLoop
-- Receives pipe pointer at creation time
-- If pipe is non-null:
-  - Creates poll for the pipe (fd-based on Linux, callback-based on WebASM)
-  - Starts the poll
-  - On notification: reads `Event` structs from pipe, calls `dispatch(event)` for each
-
-### Listeners
-- Register for specific event types: `KeyDown`, `KeyUp`, `Char`, `MouseDown`, `MouseUp`, `MouseMove`, `Scroll`, `Resize`, etc.
-- Receive events via `onEvent()` when EventLoop dispatches matching type
-
-## Platform Differences
-
-| Platform | Notification Mechanism |
-|----------|------------------------|
-| Linux/macOS | libuv polls read fd |
-| WebASM | `emscripten_async_call` triggers callback |
-| Windows | libuv polls read handle |
-
-The notification mechanism differs, but the flow is identical:
-
-```
-Platform Input Callback
-    |
-    v
-pipe->write(Event)
-    |
-    v
-[notification triggers]
-    |
-    v
-EventLoop receives notification
-    |
-    v
-EventLoop calls pipe->read()
-    |
-    v
-EventLoop calls dispatch(event) — by event type
-    |
-    v
-Listeners registered for that event type receive it
-```
+The concrete type is `struct yetty_ycore_xthread_event_pipe`
+(`include/yetty/yplatform/platform-input-pipe.h`). See
+[Platform Abstraction](platform.md) for the threading model and
+[Platform PTY](platform-pty.md) for the sibling PTY transport.
 
 ## Interface
 
-```cpp
-class PlatformInputPipe {
-    void write(const void* data, size_t size);
-    size_t read(void* data, size_t maxSize);
-    int readFd() const;  // -1 on platforms without fd
-    void setEventLoop(EventLoop* loop);
+```c
+struct yetty_platform_input_pipe_ops {
+    void (*destroy)(struct yetty_ycore_xthread_event_pipe *self);
+    struct yetty_ycore_size_result (*write)(struct yetty_ycore_xthread_event_pipe *self,
+                                            const void *data, size_t size);
+    struct yetty_ycore_size_result (*read)(struct yetty_ycore_xthread_event_pipe *self,
+                                           void *data, size_t max_size);
+    struct yetty_ycore_int_result  (*read_fd)(const struct yetty_ycore_xthread_event_pipe *self);
+    struct yetty_ycore_void_result (*set_event_loop)(struct yetty_ycore_xthread_event_pipe *self,
+                                                     struct yetty_yevent_event_loop *loop);
+    struct yetty_ycore_void_result (*set_nonblocking_write)(
+        struct yetty_ycore_xthread_event_pipe *self);
 };
+
+struct yetty_ycore_xthread_event_pipe {
+    const struct yetty_platform_input_pipe_ops *ops;
+};
+
+/* Platform-specific factory */
+struct yetty_yplatform_input_pipe_result yetty_platform_input_pipe_create(void);
 ```
 
-## Usage
+- `write` / `read` move opaque bytes (event structs); the pipe never inspects
+  them.
+- `read_fd` returns the readable fd on platforms that have one, or an error on
+  those that don't (WebAssembly).
+- `set_event_loop` wires the pipe to the loop on fd-less platforms so the pipe
+  can drive the loop directly.
+- `set_nonblocking_write` switches the producer side to non-blocking — needed
+  when producer and consumer share one libuv loop (e.g. a telnet PTY feeding the
+  wire state machine), so a full buffer can't deadlock the loop.
 
-```cpp
-// Create EventLoop with pipe
-// EventLoop internally: creates poll, starts poll, handles notifications
-auto eventLoop = EventLoop::create(pipe);
+## Flow
 
-// Register listeners for specific event types
-eventLoop->registerListener(Event::Type::KeyDown, terminalScreen);
-eventLoop->registerListener(Event::Type::KeyUp, terminalScreen);
-eventLoop->registerListener(Event::Type::Char, terminalScreen);
-eventLoop->registerListener(Event::Type::MouseDown, terminalScreen);
-eventLoop->registerListener(Event::Type::MouseUp, terminalScreen);
-eventLoop->registerListener(Event::Type::MouseMove, terminalScreen);
-eventLoop->registerListener(Event::Type::Scroll, terminalScreen);
-eventLoop->registerListener(Event::Type::Resize, terminalScreen);
-
-// Start event loop
-eventLoop->start();
+```
+OS input callback (main thread)
+        │  pipe->ops->write(&event, sizeof(event))
+        ▼
+   [ notification ]
+        │  fd readable (native)  /  async callback (WebAssembly)
+        ▼
+event loop wakes, drains the pipe:
+        while (pipe->ops->read(self, &event, sizeof(event)).value == sizeof(event))
+            dispatch(event);   /* routed to the focused view / terminal */
 ```
 
-## EventLoop Internal Behavior
+`ymain` seeds the very first event this way — it writes a `YETTY_YCORE_RESIZE`
+event to the pipe so the first frame uses the live framebuffer size (see
+[Contexts](contexts.md)).
 
-When created with a non-null pipe:
+## Platform differences
 
-1. **Linux/macOS/Windows**: Create uv_poll for `pipe->readFd()`, start polling
-2. **WebASM**: Call `pipe->setEventLoop(this)` so pipe can trigger callback
+| Platform | Notification mechanism |
+|---|---|
+| Linux / macOS | libuv polls the read fd |
+| Windows | libuv polls the read handle |
+| WebAssembly | `set_event_loop` + an async callback (no fd) |
 
-On pipe notification:
-```cpp
-Event event;
-while (_pipe->read(&event, sizeof(event)) == sizeof(event)) {
-    dispatch(event);
-}
-```
+The mechanism differs; the flow above is identical everywhere.
+
+## Pointers
+
+- Interface: `include/yetty/yplatform/platform-input-pipe.h`
+- Event loop: `include/yetty/yevent/event-loop.h`
+- First-event seeding: `src/yetty/ymain/glfw.c`

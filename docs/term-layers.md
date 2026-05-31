@@ -12,11 +12,19 @@ The layers are:
 |---|---|---|
 | **text-layer**   | one `VTerm` (libvterm) — primary + alt buffers, scrollback, cursor | PTY bytes (text + CSI/OSC) |
 | **ydraw-layer** | a `ydraw_canvas` (rolling-row primitive grid) | OSC `600000-600003` |
-| **ymgui-layer**  | a registry of *cards* (placed ImGui sub-regions) | OSC `610000-610004` |
+| **ymgui**        | a registry of *cards* (placed GUI sub-regions) | OSC `610000-610004` |
 
-All three are siblings, instantiated once per terminal in `terminal.c`. They
-share callbacks so scroll, cursor moves, and alt-screen toggles propagate
-between them.
+> **Note on the current model.** text-layer and ydraw-layer are true
+> `yetty_yrender_terminal_layer`s instantiated per terminal. **ymgui is no longer
+> a sibling layer** — it (along with yrdawn, ygrid, ygui) is now a *figure* in the
+> terminal's `yfigure` root container, which renders after the layers. It still
+> participates in the same scroll / cursor / alt-screen propagation described
+> here, so the rolling-row model below applies to it unchanged; only its place in
+> the render pipeline differs. See [Layered Rendering](layered-rendering.md) for
+> the layer-vs-figure split.
+
+These participants share callbacks so scroll, cursor moves, and alt-screen
+toggles propagate between them.
 
 ---
 
@@ -138,6 +146,10 @@ The cost of a toggle is one `set_alt_screen` per layer plus a render.
 ---
 
 ## 3. Future: scrollback-as-history
+
+> **Status: exploratory design note — not implemented.** This section sketches a
+> direction for persistent scrollback; none of it ships today. It's recorded here
+> because the rolling-row event stream above makes it a natural extension.
 
 Today, scrollback evaporates with the process. There's a natural extension:
 treat the rolling-row stream as an **append-only event log**, persistable

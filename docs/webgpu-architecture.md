@@ -1,219 +1,116 @@
 # WebGPU Architecture
 
-## Ownership
+How yetty owns and drives WebGPU objects. This complements
+[Contexts](contexts.md) (the build chain and context structs),
+[GPU Resource Binding](gpu-resource-binding.md) (how buffers/textures pack into a
+fixed binding set), and [Render Pipeline](render.md) (the per-frame upload loop).
 
-### Platform (main thread only)
-Creates ONLY platform-specific objects that require main thread:
-```
-WGPUInstance  - entry point, platform-specific creation
-WGPUSurface   - window handle, platform-specific
-```
-These are passed to Yetty via AppContext.
+Yetty uses the Dawn implementation of WebGPU through its C header
+(`webgpu/webgpu.h`). The whole stack is C; there are no WebGPU C++ wrappers.
 
-### Yetty (render thread)
-Creates and owns the GPU connection:
-```
-WGPUAdapter        - requested from instance
-WGPUDevice         - requested from adapter
-WGPUQueue          - obtained from device
-GpuAllocator       - tracks all GPU allocations
-```
+---
 
-### Views (owned by Yetty)
-Each view (TerminalView, etc.) owns its rendering state:
-```
-ShaderManager      - pipeline, bind group layouts
-Buffers            - uniforms, cells
-BindGroups         - per-view resources
-RenderTarget       - where to render (surface or texture)
-```
+## Object ownership
 
-### Shared Resources (owned by Yetty, used by views)
-Large resources shared across views:
-```
-MsdfFont           - large atlas, shared by all terminal views
-SharedUniforms     - time, mouse position
-```
+WebGPU objects are created at the level that can own them for the right
+lifetime, and handed down by value inside context structs.
 
-## Object Hierarchy
+| Object | Created by | Lives on |
+|---|---|---|
+| `WGPUInstance` | platform / yinit | `yetty_yinit_runtime`, `yinit_gpu_context` |
+| `WGPUSurface` | platform / yinit | `yetty_yinit_runtime` (NULL when headless) |
+| `WGPUAdapter` | yframework | `yetty_yframework_gpu_context` |
+| `WGPUDevice` | yframework | `yetty_yframework_gpu_context` |
+| `WGPUQueue` | yframework | `yetty_yframework_gpu_context` |
+| GPU allocator | yframework | `yetty_yframework_gpu_context.allocator` |
+| MSDF generator | yframework | `yetty_yframework_gpu_context.msdf_generator` |
+| Render target | yframework | `yetty_yframework.render_target` |
+| Pipelines / binders / buffers / atlases | each layer / figure | the layer or figure that produced them |
+
+So **the platform creates only what needs the OS** (instance + surface), and
+**yframework owns the GPU connection and the shared services**. The terminal app's
+layers and figures own only their own pipelines and per-frame data. See
+[Contexts](contexts.md) for the exact structs and the create/teardown order.
 
 ```
-Platform (main.cpp)
+platform / yinit
+│   WGPUInstance, WGPUSurface
 │
-├── Instance       ─┐ Platform-specific
-├── Surface        ─┘ Passed to Yetty
-│
-└── Yetty (render thread)
+└── yframework  (yetty_yframework_create)
+    │   WGPUAdapter, WGPUDevice, WGPUQueue
+    │   GPU allocator, MSDF generator
+    │   render target (surface / texture / VNC / X11-tile)
+    │   event loop, wgpu await machinery, optional VNC + RPC servers
     │
-    ├── Adapter
-    ├── Device
-    ├── Queue
-    ├── GpuAllocator
-    │
-    ├── Shared Resources
-    │   ├── MsdfFont (large atlas, one per app)
-    │   ├── SharedUniformBuffer
-    │   └── SharedBindGroup (group 0)
-    │
-    └── Views
-        │
-        ├── TerminalView
-        │   ├── ShaderManager
-        │   ├── RasterFont (per-view, or use shared MsdfFont)
-        │   ├── UniformBuffer
-        │   ├── CellBuffer
-        │   ├── BindGroup (group 1)
-        │   └── RenderTarget
-        │
-        └── TerminalView (another terminal)
-            └── ...
+    └── yetty  (yetty_create)
+        └── tabs / panes / terminals
+            ├── layers[]: text-layer, ydraw-scrolling-layer
+            │       each layer's render() draws ITSELF into the shared target
+            │       via target->ops->render_layer (no per-layer renderer object,
+            │       no intermediate texture); a binder packs the layer's
+            │       resource set and caches its pipeline by shader hash
+            └── figure container (compositor), rendered last
+                    per-figure binders; one shared pipeline per figure kind
 ```
 
-## One Queue, Multiple Views
+---
 
-WebGPU has ONE queue per device. All rendering is serialized through this queue.
+## One device, one queue
 
-### How it works:
+WebGPU has one queue per device. All uploads (`wgpuQueueWriteBuffer`,
+`wgpuQueueWriteTexture`) and all submits (`wgpuQueueSubmit`) go through the
+single queue that yframework owns. A frame records every layer and figure into
+command buffers and submits them, then presents the surface (or copies the
+render target to a VNC/readback buffer in headless mode).
 
-```cpp
-void Yetty::renderFrame() {
-    // 1. Get surface texture for this frame
-    WGPUTexture surfaceTexture = wgpuSurfaceGetCurrentTexture(surface);
-    WGPUTextureView surfaceView = wgpuTextureCreateView(surfaceTexture, nullptr);
+The render target is an abstraction owned by yframework, not hard-wired to the
+surface — see [Layered Rendering](layered-rendering.md) for the target ops and
+the surface / texture / VNC / X11-tile implementations.
 
-    // 2. Update shared uniforms (time, mouse)
-    updateSharedUniforms();
-    wgpuQueueWriteBuffer(queue, sharedUniformBuffer, 0, &sharedUniforms, size);
+---
 
-    // 3. Each view records its commands into ONE encoder
-    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, nullptr);
+## Binding model: one mega-binding, not per-view groups
 
-    for (View* view : views) {
-        // Each view gets the same encoder
-        // Views render to their own region or layer
-        view->render(encoder, surfaceView);
-    }
+Yetty does **not** use a fixed "group 0 = shared, group 1 = per-view" layout.
+Instead, each layer (and figure) owns a **resource-set binder** that flattens a
+tree of resource sets (layer + its fonts + nested providers) and packs everything
+into a fixed, small binding set:
 
-    // 4. Submit all commands at once
-    WGPUCommandBuffer cmdBuf = wgpuCommandEncoderFinish(encoder, nullptr);
-    wgpuQueueSubmit(queue, 1, &cmdBuf);
+- one storage buffer (all component buffers concatenated, with generated offset
+  constants),
+- one atlas texture per format (R8, RGBA8) with generated UV-region constants,
+- one uniform block (all uniforms packed per WGSL alignment).
 
-    // 5. Present
-    wgpuSurfacePresent(surface);
-}
-```
+This is what removes WebGPU's per-group binding-count limit: any number of
+buffers and textures, from any number of components, collapse into a constant
+number of bindings. The full mechanism, struct layout, and the
+`submit`/`finalize`/`update`/`bind` flow are in
+[GPU Resource Binding](gpu-resource-binding.md).
 
-### View rendering:
+---
 
-```cpp
-void TerminalView::render(WGPUCommandEncoder encoder, WGPUTextureView target) {
-    // Update per-view data
-    updateUniforms();
-    wgpuQueueWriteBuffer(queue, uniformBuffer, 0, &uniforms, size);
+## Multiple terminals and figures
 
-    if (hasDamage()) {
-        wgpuQueueWriteBuffer(queue, cellBuffer, 0, cells, cellCount * sizeof(TextCell));
-        clearDamage();
-    }
+A yetty window can host several panes, each with its own terminal, and each
+terminal composites a stack of layers plus a figure container. They all share:
 
-    // Begin render pass for this view's region
-    WGPURenderPassDescriptor passDesc = {};
-    passDesc.colorAttachments[0].view = target;
-    passDesc.colorAttachments[0].loadOp = WGPULoadOp_Load;  // Don't clear, preserve other views
+- the one device + queue + allocator from yframework,
+- the MSDF font generator (large atlas materialized on demand),
+- the figure factories registered by
+  `yetty_yframework_register_figure_factories` — complex figures (yplot, yimage,
+  ymgui, yrdawn, …) of the same kind share one compiled pipeline, and each
+  instance binds only its own per-instance data.
 
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+Per-terminal state (the cell buffer, per-layer uniforms, per-figure data) is
+owned by that terminal's layers and figures and is never global.
 
-    // Set scissor rect for this view's region (if multiple views on screen)
-    wgpuRenderPassEncoderSetScissorRect(pass, x, y, width, height);
+---
 
-    // Draw
-    wgpuRenderPassEncoderSetPipeline(pass, shaderManager->getPipeline());
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, yetty->getSharedBindGroup(), 0, nullptr);
-    wgpuRenderPassEncoderSetBindGroup(pass, 1, bindGroup, 0, nullptr);
-    wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quadBuffer, 0, 48);
-    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+## Pointers
 
-    wgpuRenderPassEncoderEnd(pass);
-}
-```
-
-## Bind Groups
-
-### Group 0: Shared (owned by Yetty)
-Resources shared across all views:
-```
-binding 0: SharedUniforms (time, mouse, screen size)
-binding 1: MsdfFont atlas texture
-binding 2: MsdfFont sampler
-binding 3: MsdfFont glyph metadata
-```
-One bind group, created by Yetty, used by all views.
-
-### Group 1: Per-View (owned by each View)
-Resources specific to one terminal:
-```
-binding 0: ViewUniforms (projection, cursor, cell size)
-binding 1: CellBuffer (terminal content)
-binding 2: RasterFont atlas (if not using shared MSDF)
-binding 3: RasterFont sampler
-binding 4: RasterFont metadata
-```
-Each view creates its own bind group.
-
-## Offscreen Rendering (VNC Mode)
-
-View renders to texture instead of surface:
-
-```cpp
-class TerminalView {
-    WGPUTexture offscreenTexture;      // render target
-    WGPUBuffer readbackBuffer;          // for CPU access
-
-    void render(WGPUCommandEncoder encoder, WGPUTextureView target) {
-        // If VNC mode, use offscreen texture instead of surface
-        WGPUTextureView actualTarget = vncMode ? offscreenTextureView : target;
-
-        // ... render as usual ...
-
-        // If VNC mode, copy to readback buffer
-        if (vncMode) {
-            wgpuCommandEncoderCopyTextureToBuffer(encoder,
-                &offscreenTexture, &readbackBuffer, &extent);
-        }
-    }
-
-    void sendToVnc() {
-        // Map readback buffer, send pixels
-        wgpuBufferMapAsync(readbackBuffer, ...);
-    }
-};
-```
-
-## Summary
-
-| Object | Created By | Thread | Shared? |
-|--------|------------|--------|---------|
-| Instance | Platform | Main | - |
-| Surface | Platform | Main | - |
-| Adapter | Yetty | Render | - |
-| Device | Yetty | Render | - |
-| Queue | Yetty | Render | Yes, one per app |
-| GpuAllocator | Yetty | Render | Yes |
-| MsdfFont | Yetty | Render | Yes |
-| SharedBindGroup | Yetty | Render | Yes (group 0) |
-| ShaderManager | View | Render | No, per view |
-| ViewBindGroup | View | Render | No, per view |
-| Buffers | View | Render | No, per view |
-
-## Current State vs This Model
-
-Current code already follows this mostly:
-- Platform creates Instance, Surface ✓
-- Yetty creates Adapter, Device, Queue ✓
-- GpuAllocator exists ✓
-
-Missing:
-- Clear View abstraction
-- Shared bind group (group 0) owned by Yetty
-- Per-view bind group (group 1) owned by view
-- Render coordination (who calls render, when)
+- WebGPU object ownership: `include/yetty/yetty/yetty.h`,
+  `include/yetty/yframework/yframework.h`
+- Allocator: `include/yetty/yrender/gpu-allocator.h`
+- Binder + pipeline: `include/yetty/yrender/gpu-resource-binder.h`,
+  `include/yetty/yrender/pipeline.h`
+- Render targets: `include/yetty/yrender/render-target.h`

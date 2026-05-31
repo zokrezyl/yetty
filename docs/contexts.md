@@ -1,159 +1,183 @@
 # Context Pattern
 
-## Purpose
+Yetty avoids threading many arguments through factory functions. Instead of:
 
-Contexts avoid passing many arguments to factory methods. Instead of:
-```cpp
-Thing::create(device, queue, allocator, config, font, ...)  // NO
+```c
+/* NO — long, fragile, hard to extend */
+thing_create(device, queue, allocator, config, event_loop, pty_factory, ...);
 ```
 
-We use:
-```cpp
-Thing::create(const ParentContext& ctx)  // YES
+each level of the system bundles what its children need into a small **context
+struct** and passes that by pointer:
+
+```c
+/* YES — one borrowed context */
+struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
+    struct yetty_ycore_grid_size grid_size, const struct yetty_context *yetty_context);
 ```
 
-## Rules
+Contexts are plain C structs (POD). They hold **copies** of the parent slice and
+**borrowed pointers** to objects the parent owns. There is no global state — a
+component reaches everything it needs through the context it was handed.
 
-### 1. Contexts are structs, stored by value
+See [Design Overview](design.md) for where this sits among the other core
+decisions.
 
-Contexts are plain structs with POD-like semantics. They are cheap to copy.
+---
 
-### 2. Passed by const reference, stored by value
+## The build chain
 
-Factory methods receive parent's context by const reference.
-The object stores a COPY (by value).
+Three layers bring a process up, in strict order. Each is a separate module so
+that non-terminal apps (analyzers, diagnostics, visualizers) can reuse the lower
+two and supply only their own body.
 
-```cpp
-class TerminalImpl {
-    YettyContext _yettyContext;  // stored by VALUE (copy)
+```
+yinit  ──────────►  yframework  ──────────►  yetty
+(platform bootstrap) (GPU/event/RPC services) (terminal app)
 
-    explicit TerminalImpl(const YettyContext& ctx)
-        : _yettyContext(ctx) {}  // copy
+build:    yinit → yframework → app
+teardown: app → yframework → yinit   (strictly nested)
+```
+
+- **yinit** (`include/yetty/yinit/yinit.h`) — paths, asset extraction, config
+  parsing, window + WebGPU surface, event pipes, OS event loop. It calls a
+  worker function on a dedicated thread and hands it a `yetty_yinit_runtime`.
+- **yframework** (`include/yetty/yframework/yframework.h`) — requests the WebGPU
+  adapter/device/queue, builds the GPU allocator, MSDF generator, render target,
+  event loop, and the optional VNC and RPC servers.
+- **yetty** (`include/yetty/yetty/yetty.h`) — the terminal application: tabs,
+  panes, terminals.
+
+The real entry point (`src/yetty/ymain/glfw.c`) is a thin wrapper:
+
+```c
+int main(int argc, char **argv)
+{
+    struct yetty_yinit_app_config cfg = { .extract_assets_fn = yetty_platform_extract_assets };
+    return yetty_yinit_run(argc, argv, &cfg, yetty_worker, NULL);
+}
+
+/* worker runs on the render thread once the platform is up */
+static struct yetty_ycore_void_result yetty_worker(struct yetty_yinit_runtime *rt, void *user)
+{
+    struct yetty_yplatform_pty_factory *pty_factory = /* ...create from rt->config... */;
+    struct yetty_yframework        *yframework   = yetty_yframework_create(rt).value;
+    struct yetty_yetty_yetty       *yetty        = yetty_create(yframework, pty_factory).value;
+    struct yetty_ycore_void_result  res          = yetty_run(yetty);
+    /* teardown is the exact reverse: yetty → yframework → pty_factory */
+    yetty_destroy(yetty);
+    yetty_yframework_destroy(yframework);
+    pty_factory->ops->destroy(pty_factory);
+    return res;
+}
+```
+
+---
+
+## The context structs
+
+### `yetty_yinit_runtime` — platform slice (owned by yinit)
+
+Everything the platform produced before the app runs. Borrowed by the worker;
+yinit frees it after the worker returns.
+
+```c
+struct yetty_yinit_runtime {
+    int argc; char **argv;                 /* CLI passthrough (NULL on android) */
+    struct yetty_yconfig_config *config;   /* parsed config (owned by yinit)    */
+
+    void *instance;                        /* WGPUInstance                       */
+    void *surface;                         /* WGPUSurface — NULL in headless mode */
+    uint32_t surface_width, surface_height;
+    float content_scale;                   /* framebuffer/window (HiDPI)          */
+    void *x11_display; unsigned long x11_window; /* X11 only; NULL/0 elsewhere    */
+    void *window;                          /* opaque native window handle         */
+
+    struct yetty_ycore_xthread_event_pipe *platform_input_pipe; /* main → worker */
+    struct yetty_ycore_xthread_event_pipe *output_pipe;         /* worker → main  */
+    struct yetty_platform_clipboard_manager *clipboard_manager;
+    struct yetty_yplatform_window_manager   *window_manager;
 };
 ```
 
-### 3. Parent passes ITS context to child
+`surface == NULL` is the headless case (`vnc/headless=true` in config): the
+worker still runs, just without a presentable surface.
 
-The child receives the PARENT's context type, not its own.
-The child builds its own internal state from the parent context.
+### `yetty_yinit_gpu_context` — platform GPU slice
 
-```cpp
-// Platform creates AppContext, passes to Yetty
-Yetty::create(const AppContext& appContext);
+The GPU-relevant subset of the above, embedded by value so a consumer can pass a
+pointer to just this slice.
 
-// Yetty creates YettyContext, passes to Terminal
-Terminal::create(const YettyContext& yettyContext);
-```
-
-### 4. Context hierarchy
-
-Each level's context contains the parent's context (by value):
-
-```
-AppContext
-    ├── AppGpuContext { instance, surface }
-    ├── Config*
-    ├── paths...
-    │
-    ▼
-YettyContext {
-    AppContext appContext;           // copy of parent
-    YettyGpuContext gpuContext;      // Yetty-level GPU state
-    SharedBindGroup* sharedBindGroup;
-}
-    │
-    ▼
-TerminalScreenContext {
-    YettyContext yettyContext;              // copy of parent
-    TerminalScreenGpuContext gpuContext;    // TerminalScreen-level GPU state
-    Pty* pty;
-}
-```
-
-## GPU Context Hierarchy
-
-Each level has its own GPU context type, containing parent's GPU context plus its additions:
-
-### AppGpuContext (Platform level)
-```cpp
-struct AppGpuContext {
-    WGPUInstance instance;    // created by platform
-    WGPUSurface surface;      // created by platform
+```c
+struct yetty_yinit_gpu_context {
+    WGPUInstance instance;
+    WGPUSurface  surface;
+    uint32_t     surface_width, surface_height;
+    float        content_scale;
+    void *x11_display; unsigned long x11_window;
 };
 ```
 
-### YettyGpuContext (Yetty level)
-```cpp
-struct YettyGpuContext {
-    AppGpuContext appGpuContext;     // copy of parent's GPU context
-    WGPUAdapter adapter;              // created by Yetty
-    WGPUDevice device;                // created by Yetty
-    WGPUQueue queue;                  // created by Yetty
-    WGPUTextureFormat surfaceFormat;  // determined by Yetty
+### `yetty_yframework_gpu_context` — runtime GPU objects
+
+Built on top of the platform slice. Lives on `struct yetty_yframework`.
+
+```c
+struct yetty_yframework_gpu_context {
+    struct yetty_yinit_gpu_context app_gpu_context; /* copy of the platform slice */
+    WGPUAdapter         adapter;
+    WGPUDevice          device;
+    WGPUQueue           queue;
+    WGPUTextureFormat   surface_format;
+    struct yetty_ydraw_gpu_allocator *allocator;
+    struct yetty_ymsdf_generator     *msdf_generator; /* cpu | gpu, from config   */
 };
 ```
 
-### TerminalScreenGpuContext (TerminalScreen level)
-```cpp
-struct TerminalScreenGpuContext {
-    YettyGpuContext yettyGpuContext;  // copy of parent's GPU context
-    GpuAllocator* allocator;           // created by TerminalScreen
-    ShaderManager* shaderManager;      // created by TerminalScreen
-    // ... other per-view GPU resources
+### `yetty_context` — what the terminal hierarchy receives
+
+The compact context propagated down through tabs, panes, and terminals.
+
+```c
+struct yetty_context {
+    struct yetty_yframework            *runtime;     /* source of truth for GPU/  */
+                                                     /* event/RPC/render-target   */
+    struct yetty_yplatform_pty_factory *pty_factory; /* yetty-specific            */
+    struct yetty_yevent_event_loop     *event_loop;  /* alias of runtime->event_loop */
 };
 ```
 
-## Accessing GPU state
+`runtime` is the one borrowed object that owns the WebGPU device, queue,
+allocator, MSDF generator, render target, and the optional VNC/RPC servers.
+`event_loop` is a convenience alias so hot paths don't dig through `runtime`
+each time.
 
-```cpp
-void TerminalScreen::doSomething() {
-    // Access device (from Yetty level)
-    auto device = _gpuContext.yettyGpuContext.device;
+### `yetty_yterm_terminal_context` — terminal leaf
 
-    // Access surface (from App level)
-    auto surface = _gpuContext.yettyGpuContext.appGpuContext.surface;
+The terminal adds only its PTY to the context it received.
 
-    // Access own allocator
-    auto* allocator = _gpuContext.allocator;
-}
+```c
+struct yetty_yterm_terminal_context {
+    struct yetty_context        yetty_context; /* copy of parent */
+    struct yetty_platform_pty  *pty;
+};
 ```
 
-## Full Context Hierarchy
+---
 
-```
-AppContext {
-    AppGpuContext gpuContext { instance, surface }
-    Config* config
-    PlatformInputPipe* platformInputPipe
-    PtyFactory* ptyFactory
-    std::string shadersDir
-}
-    │
-    ▼
-YettyContext {
-    AppContext appContext                    // COPY
-    YettyGpuContext gpuContext {
-        AppGpuContext appGpuContext          // COPY
-        adapter, device, queue, surfaceFormat
-    }
-    SharedBindGroup* sharedBindGroup         // owned by Yetty
-}
-    │
-    ▼
-TerminalScreenContext {
-    YettyContext yettyContext                // COPY
-    TerminalScreenGpuContext gpuContext {
-        YettyGpuContext yettyGpuContext      // COPY
-        GpuAllocator* allocator              // owned by TerminalScreen
-        ShaderManager* shaderManager         // owned by TerminalScreen
-    }
-    Pty* pty                                 // owned by Terminal
-}
-```
+## Ownership rules
 
-## Ownership
+- A context holds a **copy** of its parent's context (cheap, POD).
+- A context holds **borrowed pointers** to objects owned by a specific level;
+  the level that creates an object destroys it.
+- Lifetimes are strictly nested: a child must be torn down before the parent
+  whose context it borrowed. The `ymain` worker enforces this explicitly
+  (`yetty_destroy` before `yetty_yframework_destroy`) because pending GPU
+  readback callbacks dereference the framework's render target and event loop.
 
-- Contexts contain **copies** of parent contexts (by value)
-- Contexts contain **pointers** to objects owned by that level
-- The level that creates an object owns it and deletes it
-- Pointers in contexts are valid as long as the owner lives
+## Pointers
+
+- Bootstrap: `include/yetty/yinit/yinit.h`, `src/yetty/ymain/glfw.c`
+- Services: `include/yetty/yframework/yframework.h`
+- App + context: `include/yetty/yetty/yetty.h`
+- Terminal leaf: `include/yetty/yterm/terminal.h`
