@@ -54,14 +54,14 @@ The full startup/ownership chain and context structs are in
 | Module | Purpose | |
 |---|---|---|
 | `yterm` | The terminal: text-layer (libvterm) + ydraw-scrolling-layer, screen state, scroll/alt-screen plumbing | ✓ |
-| `ytrace` | Switchable trace points, near-zero cost when off ([ytrace](ytrace.md)) | ✓ |
+| `ytrace` | Switchable trace points, near-zero cost when off ([ytrace](../src/yetty/ytrace/README.md)) | ✓ |
 | `ycore` | Result/error types, math, buffers, util — the foundation everything builds on ([result](result.md)) | ✓ |
 | `yconfig` | YAML config parser with path-based key/value API | ✓ |
 | `yevent` | Event-loop abstraction (pipes, timers, TCP, listeners) | ✓ |
 | `yco` | Coroutine wrapper over libco ([coroutines](coroutines.md)) | ✓ |
 | `ynotify` | Thread-safe user-facing notifications | ✓ |
 | `ycdb` | Constant-database (cdb) key/value store | ✓ |
-| `yclass` | Annotation-driven class/object runtime + RPC + binding model ([yclass](yclass.md)) | ✓ |
+| `yclass` | Annotation-driven class/object runtime + RPC + binding model ([yclass](../src/yclass/README.md)) | ✓ |
 
 ## Rendering pipeline
 
@@ -69,7 +69,7 @@ The full startup/ownership chain and context structs are in
 |---|---|---|
 | `yrender` | GPU pipeline: resource-set binder, allocator, pipeline, render targets, blender ([render](render.md), [GPU binding](gpu-resource-binding.md)) | ✓ |
 | `yrender-utils` | Screenshot, tile-diff helpers | ✓ |
-| `ydraw` | Canvas + rolling-row scrolling primitive model ([ydraw](ydraw.md)) | ✓ |
+| `ydraw` | Canvas + rolling-row scrolling primitive model ([ydraw](../src/yetty/ydraw/README.md)) | ✓ |
 | `ydraw-core` | Serialized primitive buffer, draw list, flyweight registry | ✓ |
 | `ydraw-factory` | Figure factory for complex primitives | ✓ |
 | `ydraw-yaml` | YAML-driven figure construction | ✓ |
@@ -82,30 +82,30 @@ The full startup/ownership chain and context structs are in
 
 | Module | Purpose | |
 |---|---|---|
-| `yfont` | Glyph atlas + GPU resource binding font interface ([font](font.md)) | ✓ |
+| `yfont` | Glyph atlas + GPU resource binding font interface ([font](../src/yetty/yfont/README.md)) | ✓ |
 | `ymsdf` | MSDF (multi-channel SDF) font generation | ◐ |
 | `ymsdf-gen` | Standalone MSDF generator tool | ◐ |
 | `ymsdf-wgsl` | GPU MSDF atlas generation shaders | ◐ |
-| `yfsvm` | Shader-compilation VM: math-expression bytecode for the GPU ([yfsvm](yfsvm.md)) | ✓ |
+| `yfsvm` | Shader-compilation VM: math-expression bytecode for the GPU ([yfsvm](../src/yetty/yfsvm/README.md)) | ✓ |
 | `yexpr` | Expression parser feeding plots and yfsvm | ✓ |
 
 ## Rich content figures
 
-| Module | Purpose | README status → actual |
+| Module | Purpose | |
 |---|---|---|
-| `yplot` | GPU charts / data visualization ([plot-enhanced](plot-enhanced.md)) | ✓ |
+| `yplot` | GPU charts / data visualization ([plot-enhanced](../src/yetty/yplot/README.md)) | ✓ |
 | `yimage` | Inline images (PNG/JPEG/WebP) | ✓ |
-| `yvideo` | Video playback (H.264 + MP4 parser) | ◐ ("In progress" → substantial) |
+| `yvideo` | Video playback (H.264 + MP4 parser) | ◐ |
 | `ygui` | Native widget toolkit (buttons, menus, tables, dialogs, …) | ✓ |
 | `ymgui` | Compositor-side GUI figure (yclass-based) | ✓ |
-| `ydiagram` | Mermaid diagram parser + Sugiyama layout + render | ✓ (absent from README) |
-| `ysvg` | SVG (Tiny 1.2) renderer → ydraw primitives | ✓ (absent from README) |
-| `ypdf` | PDF rendering via pdfio (MuPDF-validated tests) | ✓ ("Planned" → shipping) |
-| `ymarkdown` | Markdown rendering/editing | ◐ ("Porting") |
-| `yrich` | Documents / spreadsheets / slides (`ydoc`, `ysheet`/`yspreadsheet`, `yslides`) | ◐ ("Porting") |
+| `ydiagram` | Mermaid diagram parser + Sugiyama layout + render | ✓ |
+| `ysvg` | SVG (Tiny 1.2) renderer → ydraw primitives | ✓ |
+| `ypdf` | PDF rendering via pdfio (MuPDF-validated tests) | ✓ |
+| `ymarkdown` | Markdown rendering/editing | ◐ |
+| `yrich` | Documents / spreadsheets / slides (`ydoc`, `ysheet`/`yspreadsheet`, `yslides`) | ◐ |
 | `ycat` | MIME-dispatched content viewer (detects PDF/image/SVG/Mermaid/video/text) | ✓ |
 | `ymesh` | 3D mesh loading/rendering (GLB) | ◐ |
-| `ythorvg` | SVG + Lottie via ThorVG (C interface only, no impl yet) | ○ ("Planned" — accurate) |
+| `ythorvg` | SVG + Lottie via ThorVG (C interface only, no impl yet) | ○ |
 | `yecho` | Text/glyph/block parser → ydraw buffer (demo/utility) | ✓ |
 | `ymaze`, `yjungle`, `yzoo` | Animated test scenes (maze solver, SDF jungle, control-point zoo) | ◐ |
 

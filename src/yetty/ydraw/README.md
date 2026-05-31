@@ -639,4 +639,4 @@ per-module `model.yaml` + `.wgsl` pair.
 - `ydraw-factory` — figure factory for complex primitives
 - `ydraw-yaml` — YAML-driven figure construction
 - `yfigure` — the figure/container model the compositor uses (see
-  [Layered Rendering](layered-rendering.md))
+  [Layered Rendering](../../../docs/layered-rendering.md))

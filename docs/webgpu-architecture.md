@@ -25,11 +25,11 @@ lifetime, and handed down by value inside context structs.
 | GPU allocator | yframework | `yetty_yframework_gpu_context.allocator` |
 | MSDF generator | yframework | `yetty_yframework_gpu_context.msdf_generator` |
 | Render target | yframework | `yetty_yframework.render_target` |
-| Pipelines / binders / buffers / atlases | each renderer | the renderer that owns them |
+| Pipelines / binders / buffers / atlases | each layer / figure | the layer or figure that produced them |
 
 So **the platform creates only what needs the OS** (instance + surface), and
-**yframework owns the GPU connection and the shared services**. The terminal app
-and its renderers own only their own pipelines and per-frame data. See
+**yframework owns the GPU connection and the shared services**. The terminal app's
+layers and figures own only their own pipelines and per-frame data. See
 [Contexts](contexts.md) for the exact structs and the create/teardown order.
 
 ```
@@ -44,9 +44,13 @@ platform / yinit
     │
     └── yetty  (yetty_create)
         └── tabs / panes / terminals
-            ├── text layer    → renderer → binder → pipeline
-            ├── ydraw layer    → renderer → binder → pipeline
-            └── figure container (compositor) → per-figure binders/pipelines
+            ├── layers[]: text-layer, ydraw-scrolling-layer
+            │       each layer's render() draws ITSELF into the shared target
+            │       via target->ops->render_layer (no per-layer renderer object,
+            │       no intermediate texture); a binder packs the layer's
+            │       resource set and caches its pipeline by shader hash
+            └── figure container (compositor), rendered last
+                    per-figure binders; one shared pipeline per figure kind
 ```
 
 ---
@@ -68,9 +72,9 @@ the surface / texture / VNC / X11-tile implementations.
 ## Binding model: one mega-binding, not per-view groups
 
 Yetty does **not** use a fixed "group 0 = shared, group 1 = per-view" layout.
-Instead, each renderer owns a **resource-set binder** that flattens a tree of
-resource sets (layer + its fonts + nested providers) and packs everything into a
-fixed, small binding set:
+Instead, each layer (and figure) owns a **resource-set binder** that flattens a
+tree of resource sets (layer + its fonts + nested providers) and packs everything
+into a fixed, small binding set:
 
 - one storage buffer (all component buffers concatenated, with generated offset
   constants),
@@ -98,7 +102,7 @@ terminal composites a stack of layers plus a figure container. They all share:
   instance binds only its own per-instance data.
 
 Per-terminal state (the cell buffer, per-layer uniforms, per-figure data) is
-owned by that terminal's renderers and is never global.
+owned by that terminal's layers and figures and is never global.
 
 ---
 

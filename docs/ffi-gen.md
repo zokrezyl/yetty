@@ -6,7 +6,7 @@ idiomatic bindings for any target language (Python, Rust, Go, TypeScript, …).
 Status: design draft; an initial parser + Python emitter live under
 `tools/ffi-codegen/`.
 
-> **Relationship to [yclass](yclass.md).** There are two model sources that this
+> **Relationship to [yclass](../src/yclass/README.md).** There are two model sources that this
 > pipeline can emit bindings from:
 >
 > - **Plain public headers** (`include/yetty/**`) — parsed with libclang into
@@ -14,7 +14,7 @@ Status: design draft; an initial parser + Python emitter live under
 > - **yclass modules** — the annotation-driven class/RPC system already emits a
 >   canonical `model.yaml` per module (classes, slots, args, inheritance). For
 >   the class-based API that model *is* the binding contract; see
->   [yclass](yclass.md).
+>   [yclass](../src/yclass/README.md).
 >
 > Either way the emitters (Stage 2) consume a model and produce bindings — they
 > never re-parse C.

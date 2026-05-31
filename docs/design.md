@@ -55,7 +55,7 @@ works on a local object or a remote proxy) — yetty uses **yclass**, where the
 vtable, dispatch, RPC skeletons, and a binding model are *generated* from C23
 `[[clang::annotate(...)]]` annotations on the source. The figure modules
 (`yfigure`, `ygui`, `ymgui`, `yrdawn`, `ygrid`, `yterm`) are built this way. See
-[yclass](yclass.md).
+[yclass](../src/yclass/README.md).
 
 ## Error Propagation
 
@@ -128,7 +128,7 @@ Each trace point is a function-local static bool. When disabled, the cost is a s
 
 Compile-time switches (`YTRACE_C_ENABLE_TRACE`, etc.) can remove levels entirely — the macros become `((void)0)`.
 
-See [Tracing](ytrace.md) for the macro implementation, control API, and build-time configuration.
+See [Tracing](../src/yetty/ytrace/README.md) for the macro implementation, control API, and build-time configuration.
 
 ## Font Abstraction
 
@@ -140,7 +140,7 @@ Key design points:
 - **Dirty propagation** — when the atlas changes (new glyphs, resize), the font marks its texture and buffer dirty so the binder uploads only what changed
 - **Style support** — regular, bold, italic, bold-italic with automatic fallback
 
-See [Font System](font.md) for the glyph resolver, atlas packing, and UV coordinate scheme.
+See [Font System](../src/yetty/yfont/README.md) for the glyph resolver, atlas packing, and UV coordinate scheme.
 
 ## Context Hierarchy
 

@@ -16,8 +16,8 @@ languages.
 - RPC + transports: `src/yclass/rpc.c`, `transport-*.c`, `include/yclass/transport.h`
 - Reference example: `poc/class-object-model/` (yanimal · yvehicle · ytuning)
 
-See [Design Overview](design.md) for where this sits, and
-[FFI Generation](ffi-gen.md) for the per-language emitter design that consumes
+See [Design Overview](../../docs/design.md) for where this sits, and
+[FFI Generation](../../docs/ffi-gen.md) for the per-language emitter design that consumes
 the model.
 
 ---
@@ -174,7 +174,7 @@ Every slot implementation must match:
 RetT slot(struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, <rest...>);
 ```
 
-`RetT` is a [Result type](result.md). `ctx` and `obj` are fixed; everything after
+`RetT` is a [Result type](../../docs/result.md). `ctx` and `obj` are fixed; everything after
 is the method's own arguments and is what gets marshalled on the wire.
 
 ---
@@ -247,7 +247,7 @@ decodes a wire call, looks up the impl, and invokes it) and the
 
 - `transport-fd.c` — a file-descriptor transport.
 - `transport-dcs.c` — DCS-framed transport (rides the terminal's escape-sequence
-  channel; see [Terminal Layers](term-layers.md)).
+  channel; see [Terminal Layers](../../docs/term-layers.md)).
 - `rpc-dcs-server.c` — the server side over DCS.
 
 Because the slot id is a 28-bit value that fits the RPC header, and the qualified
@@ -256,7 +256,7 @@ each other as long as they share the wire labels.
 
 This is the foundation under `yrdawn` (remote GPU canvases), `ymgui`, `yfigure`,
 and the other yclass-based figure modules — see the
-[Architecture & Module Map](architecture.md).
+[Architecture & Module Map](../../docs/architecture.md).
 
 ---
 
@@ -297,13 +297,13 @@ This is the bridge to **language bindings**: a binding generator does not need t
 re-parse C or understand annotations — it reads `model.yaml` and emits idiomatic
 classes/methods for Python, Rust, and so on. The per-language emitter design (a
 separate stage that turns the model into `Result<T,E>` in Rust, exceptions in
-Python, etc.) is documented in [FFI Generation](ffi-gen.md). yetty's binding
+Python, etc.) is documented in [FFI Generation](../../docs/ffi-gen.md). yetty's binding
 tooling lives under `tools/ffi-codegen/` (parser + per-language emitters), with
 generated output committed under `bindings/` (e.g. `bindings/python/`).
 
 > **Note on the two generators.** `yclass`'s codegen turns *annotated class
 > sources* into the C object/RPC layer + this model. The FFI pipeline
-> ([ffi-gen.md](ffi-gen.md)) turns an API model into per-language bindings. They
+> ([ffi-gen.md](../../docs/ffi-gen.md)) turns an API model into per-language bindings. They
 > meet at the model: yclass produces it, the FFI emitters consume it.
 
 ---
@@ -351,4 +351,4 @@ local and proxy dispatch — the smallest end-to-end view of the whole system.
 - Generator: `src/yclass/gen/codegen.py` (run via `make codegen`)
 - RPC / transports: `include/yclass/rpc.h`, `transport.h`; `src/yclass/`
 - Reference: `poc/class-object-model/`
-- Bindings: [FFI Generation](ffi-gen.md), `tools/ffi-codegen/`, `bindings/`
+- Bindings: [FFI Generation](../../docs/ffi-gen.md), `tools/ffi-codegen/`, `bindings/`

@@ -3,7 +3,7 @@
 > **Scope.** This is the design + syntax spec for expression-based plotting in
 > `yplot`. The expression engine it describes ships as two modules: **`yexpr`**
 > (parser) and **`yfsvm`** (a shader-expression VM that compiles to GPU bytecode
-> — see [yfsvm](yfsvm.md)). The C-pseudocode and "ShaderManager" snippets below
+> — see [yfsvm](../yfsvm/README.md)). The C-pseudocode and "ShaderManager" snippets below
 > are illustrative; the real path is `yexpr → yfsvm → the resource-set binder`.
 > The OSC/syntax reference is current.
 
@@ -406,7 +406,7 @@ struct Metadata {
 
 `yfsvm` compiles the parsed expression to bytecode and emits the WGSL accessor
 that the plot shader calls (the generated shader is assembled by the resource-set
-binder, [GPU Resource Binding](gpu-resource-binding.md)):
+binder, [GPU Resource Binding](../../../docs/gpu-resource-binding.md)):
 
 ```wgsl
 // Generated WGSL — evaluated on the GPU via the yfsvm library

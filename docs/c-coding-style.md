@@ -40,9 +40,10 @@ Separate ops struct from object struct:
 ```c
 /* Vtable */
 struct yetty_yterm_terminal_layer_ops {
-    void (*destroy)(struct yetty_yterm_terminal_layer *self);
-    void (*write)(struct yetty_yterm_terminal_layer *self, const char *data, size_t len);
-    void (*resize)(struct yetty_yterm_terminal_layer *self, uint32_t cols, uint32_t rows);
+    struct yetty_ycore_void_result (*destroy)(struct yetty_yterm_terminal_layer *self);
+    struct yetty_ycore_int_result (*render)(struct yetty_yterm_terminal_layer *self,
+                                            struct yetty_ydraw_target *target, int force);
+    void (*scroll)(struct yetty_yterm_terminal_layer *self, int lines);
 };
 
 /* Object */
@@ -128,40 +129,65 @@ layer = malloc(sizeof(struct yetty_yterm_terminal_text_layer));
 Objects follow the `create`/`destroy` pattern:
 
 ```c
-/* Creation - returns result type */
+/* Creation — returns a result type */
 struct yetty_thing_result yetty_thing_create(...);
 
-/* Destruction - void, handles NULL, propagates to children */
-void yetty_thing_destroy(struct yetty_thing *thing);
+/* Destruction — handles NULL, propagates to children.
+ * Return type is NOT universally void (see rule 4). */
+struct yetty_ycore_void_result yetty_thing_destroy(struct yetty_thing *thing);
 ```
 
 ### destroy Rules
 
-1. **Handle NULL**: `destroy(NULL)` must be safe (no-op)
-2. **Propagate**: destroy children before freeing self
-3. **Idempotent**: safe to call multiple times
-4. **No return value**: void, errors logged but not returned
+1. **Handle NULL**: `destroy(NULL)` must never dereference — return early
+   (either `YETTY_OK_VOID()` or an error Result), never crash.
+2. **Propagate**: destroy children before freeing self.
+3. **Best-effort, don't bail on first error.** A destroy is the one place the
+   "stash the first error and keep going" shape is correct: every teardown step
+   must run so nothing leaks. Surface the first error at the end. (Contrast with
+   normal flow, which propagates immediately.)
+4. **Return type — not universally `void`.** Many low-level ops-vtable `destroy`
+   callbacks are `void` (e.g. render targets). But destroy APIs that can fail
+   return `struct yetty_ycore_void_result` — including the terminal and
+   terminal-layer destroys. Use `void` only when teardown genuinely cannot fail.
 
 ```c
-void yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal)
+struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal)
 {
     if (!terminal)
-        return;
+        return YETTY_ERR(yetty_ycore_void, "terminal_destroy: NULL terminal");
 
-    /* Destroy children first */
+    /* Best-effort cleanup: every step runs so nothing leaks. Stash the first
+     * error and keep going; surface it at the end. */
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    bool have_err = false;
+
+    /* Layer render targets: their ops->destroy is void by signature. */
+    for (size_t i = 0; i < terminal->layer_count; i++)
+        if (terminal->layer_targets[i] && terminal->layer_targets[i]->ops->destroy)
+            terminal->layer_targets[i]->ops->destroy(terminal->layer_targets[i]);
+
+    /* Layers: their ops->destroy returns a Result. */
     for (size_t i = 0; i < terminal->layer_count; i++) {
-        if (terminal->layers[i])
-            terminal->layers[i]->ops->destroy(terminal->layers[i]);
+        struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
+        if (layer && layer->ops && layer->ops->destroy) {
+            struct yetty_ycore_void_result r = layer->ops->destroy(layer);
+            if (YETTY_IS_ERR(r)) {
+                if (!have_err) { first_err = r; have_err = true; }
+                else { yetty_ycore_error_destroy(r.error); }
+            }
+        }
     }
 
-    /* Destroy owned resources */
-    if (terminal->blender)
-        terminal->blender->ops->destroy(terminal->blender);
+    /* ... destroy the root figure container, registry, fonts, … (same shape) ... */
 
-    /* Free self */
     free(terminal);
+    return have_err ? first_err : YETTY_OK_VOID();
 }
 ```
+
+Note the two destroy styles side by side: the render-target op returns `void`
+(teardown can't fail), while the layer op returns `struct yetty_ycore_void_result`.
 
 ### SHUTDOWN Event
 

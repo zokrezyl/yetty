@@ -113,7 +113,7 @@ wgpuSurfacePresent(surface);              /* or copy to readback in headless mod
 
 Most layers draw a single full-pane quad and do all the work in the fragment
 shader (SDF evaluation, glyph sampling). `instance_count > 1` is used where each
-instance maps to one cell — see [ydraw](ydraw.md).
+instance maps to one cell — see [ydraw](../src/yetty/ydraw/README.md).
 
 ## Where ownership lives
 

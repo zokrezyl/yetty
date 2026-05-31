@@ -153,15 +153,15 @@ picture, then dive into a subsystem.
 **Rendering**
 | Document | Description |
 |----------|-------------|
-| [Layered Rendering](docs/layered-rendering.md) | Layer stack, compositor, blender |
+| [Layered Rendering](docs/layered-rendering.md) | Direct-to-target layer stack and figure compositor |
 | [WebGPU Architecture](docs/webgpu-architecture.md) | WebGPU object ownership |
 | [WebGPU Concepts](docs/webgpu.md) | WebGPU primer (C) |
 | [GPU Resource Binding](docs/gpu-resource-binding.md) | Buffer packing and atlas textures |
 | [Render Pipeline](docs/render.md) | Dirty-driven upload and recompilation |
-| [ydraw](docs/ydraw.md) | Primitives, figures, and scrolling model |
-| [Font System](docs/font.md) | Glyph rendering and atlas |
-| [yfsvm](docs/yfsvm.md) | Shader expression VM |
-| [Enhanced Plots](docs/plot-enhanced.md) | yplot internals |
+| [ydraw](src/yetty/ydraw/README.md) | Primitives, figures, and scrolling model |
+| [Font System](src/yetty/yfont/README.md) | Glyph rendering and atlas |
+| [yfsvm](src/yetty/yfsvm/README.md) | Shader expression VM |
+| [Enhanced Plots](src/yetty/yplot/README.md) | yplot internals |
 
 **Terminal & platform**
 | Document | Description |
@@ -172,12 +172,12 @@ picture, then dive into a subsystem.
 | [Platform PTY](docs/platform-pty.md) | PTY backends |
 | [Platform Pipe](docs/platform-pipe.md) | Cross-thread input pipe |
 | [Coroutines](docs/coroutines.md) | yco / yevent concurrency |
-| [yvnc](docs/yvnc.md) | VNC client/server |
+| [yvnc](src/yetty/yvnc/README.md) | VNC client/server |
 
 **Codegen & bindings**
 | Document | Description |
 |----------|-------------|
-| [yclass](docs/yclass.md) | Annotation-driven classes, RPC, and the binding model |
+| [yclass](src/yclass/README.md) | Annotation-driven classes, RPC, and the binding model |
 | [FFI Generation](docs/ffi-gen.md) | Per-language binding emitters |
 
 **Conventions & tooling**
@@ -185,7 +185,7 @@ picture, then dive into a subsystem.
 |----------|-------------|
 | [C Coding Style](docs/c-coding-style.md) | Naming, structs, memory rules |
 | [Result Types](docs/result.md) | Typed error propagation |
-| [ytrace](docs/ytrace.md) | Logging and tracing |
+| [ytrace](src/yetty/ytrace/README.md) | Logging and tracing |
 | [Buck2](docs/buck2.md) | Buck2 build notes |
 
 ## Contributing
