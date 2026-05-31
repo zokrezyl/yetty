@@ -11,10 +11,11 @@
 # we still build ygreeter, but only the client path. main.c gates the
 # standalone block on YETTY_YGREETER_HAS_STANDALONE.
 
-# Builds on Linux (both modes) and Windows (standalone GPU mode only —
-# client mode's termios/ioctl/SIGWINCH/uv-stdin-poll glue isn't ported).
-# Other systems (macOS, mobile) aren't wired up.
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32)
+# Builds on Linux (both modes), macOS (both modes — shares the POSIX
+# forkpty / termios / fontconfig path with Linux) and Windows (standalone
+# GPU mode only — client mode's termios/ioctl/SIGWINCH/uv-stdin-poll glue
+# isn't ported). Other systems (mobile) aren't wired up.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32 AND NOT APPLE)
     return()
 endif()
 
@@ -136,9 +137,16 @@ target_link_libraries(ygreeter PRIVATE
     ${BROTLIDEC_LIBRARIES}
     Threads::Threads
 )
+# Platform-specific link bits:
+#   Windows  — ws2_32 (libuv's Windows socket layer), dwrite (font backend).
+#   macOS    — util for openpty/forkpty; rt symbols live in libc/libSystem
+#              so no -lrt (same pattern as tinyemu.cmake).
+#   Linux    — rt for clock/shm/timer (glibc splits those out), util for
+#              openpty/forkpty/login_tty.
 if(WIN32)
-    # ws2_32: libuv's Windows socket layer. dwrite: DirectWrite font backend.
     target_link_libraries(ygreeter PRIVATE ws2_32 dwrite)
+elseif(APPLE)
+    target_link_libraries(ygreeter PRIVATE util)
 else()
     target_link_libraries(ygreeter PRIVATE rt util)
 endif()

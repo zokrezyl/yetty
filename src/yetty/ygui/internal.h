@@ -171,6 +171,13 @@ struct yetty_ygui_runtime {
     float viewport_w;
     float viewport_h;
 
+    /* Chrome palette + canonical sizes. Owned by the engine: created
+     * in framework_create with the brand defaults; destroyed in
+     * framework_destroy. yetty_ygui_framework_set_theme replaces the
+     * owned theme (caller passes ownership in). Widget paint code
+     * consults this via yetty_ygui_framework_theme(engine). */
+    struct yetty_ygui_theme *theme;
+
     /* Engine-level dirty flag. Cleared by emit. */
     int dirty;
 

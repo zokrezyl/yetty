@@ -375,6 +375,12 @@ style:
     shadow:        "#00000040"  # 25 % black drop shadow
     tooltip-bg:    "#141A1FF0"  # near-opaque BG_LIFTED
 
+    # Body font size, logical px. Drives button labels, tab headers,
+    # close-x glyphs, and other paint-time text inside chrome widgets.
+    # Per-widget emphasis sizes (e.g. the "+" new-tab glyph) scale
+    # relative to this so the visual hierarchy survives user tuning.
+    font-size:     "14.0"
+
   # yui — yetty's own window chrome (tab strip, tabs, window buttons,
   # left "v" pull-down menu, "+" new-tab pill).
   yui:

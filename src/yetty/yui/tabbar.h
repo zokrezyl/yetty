@@ -5,7 +5,7 @@
  * yetty_yui_tabbar — browser-style tab strip that owns N workspaces.
  *
  * Replaces the single-workspace ownership in yetty.c. The strip sits at the
- * top of the window (height = YETTY_YUI_TABBAR_HEIGHT) and lets the user
+ * top of the window (height = YETTY_YUI_TABBAR_HEIGHT_DP × content_scale) and lets the user
  * switch / create / close workspaces. Because the OS window decoration is
  * disabled on desktop (see yplatform/window/default.c), the strip area is
  * also the only place where the window can be dragged to move.
@@ -49,12 +49,12 @@ struct yetty_ydraw_target;
 
 YETTY_YRESULT_DECLARE(yetty_yui_tabbar_ptr, struct yetty_yui_tabbar *);
 
-/* Reserved top-strip pixel height. ~36 logical px matches typical
- * browser tab strips, leaving room for unmistakably rounded top corners
- * on the tab
- * cells (TABBAR_TAB_RADIUS lives in tabbar.c). On HiDPI displays this
- * scales with framebuffer pixels so it stays visually proportional. */
-#define YETTY_YUI_TABBAR_HEIGHT 36.0f
+/* Reserved top-strip height in *logical* (CSS-pixel) units. ~36 logical
+ * px matches typical browser tab strips and leaves room for the rounded
+ * top corners on the tab cells (TABBAR_TAB_RADIUS lives in tabbar.c).
+ * Multiply through yetty_dp_to_px() at use sites so HiDPI / Retina
+ * framebuffers render the strip at the correct physical size. */
+#define YETTY_YUI_TABBAR_HEIGHT_DP 36.0f
 
 /* Create the tabbar. `config` is borrowed and outlives the tabbar; the
  * tabbar reads style/yui from it during construction to overlay brand

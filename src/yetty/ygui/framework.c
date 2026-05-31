@@ -27,6 +27,7 @@
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/methods.h>
 #include <yetty/yfigure/wire.h>
+#include <yetty/ygui/theme.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
@@ -68,6 +69,16 @@ struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
     engine->ygrid_created = 0;
     engine->viewport_w = 800.0f;
     engine->viewport_h = 600.0f;
+    /* Brand theme — widgets consult this at paint time. Default
+     * palette is the yetty brand; yetty_ygui_framework_set_theme (or
+     * apply_config_to_theme) overlays user config. The engine owns the
+     * theme by default; replacement transfers ownership in. */
+    engine->theme = yetty_ygui_theme_create_default();
+    if (!engine->theme) {
+        free(engine);
+        return YETTY_ERR(yetty_ygui_framework_ptr,
+                         "yetty_ygui_framework_create: theme alloc failed");
+    }
     engine->dirty = 1;
     /* yclass dispatch defaults: in-process (no remote session), no
      * container wired yet. Host calls set_container_obj / set_session
@@ -120,6 +131,10 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_ru
         engine->ygrid_draw_list = NULL;
     }
     yetty_ycore_buffer_destroy(&engine->figure_bodies);
+    if (engine->theme) {
+        yetty_ygui_theme_destroy(engine->theme);
+        engine->theme = NULL;
+    }
     free(engine);
     return YETTY_OK_VOID();
 }
@@ -222,6 +237,46 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(struct yetty_yg
     engine->viewport_h = height_px;
     engine->dirty = 1;
     return YETTY_OK_VOID();
+}
+
+struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_ygui_runtime *engine)
+{
+    return engine ? engine->theme : NULL;
+}
+
+struct yetty_ycore_void_result yetty_ygui_framework_set_theme(struct yetty_ygui_runtime *engine,
+                                                              struct yetty_ygui_theme *theme)
+{
+    if (!engine) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_theme: NULL engine");
+    }
+    if (!theme) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_theme: NULL theme");
+    }
+    if (engine->theme && engine->theme != theme) {
+        yetty_ygui_theme_destroy(engine->theme);
+    }
+    engine->theme = theme;
+    engine->dirty = 1;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_framework_apply_config_to_theme(
+    struct yetty_ygui_runtime *engine, const struct yetty_yconfig_config *config)
+{
+    if (!engine) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_apply_config_to_theme: NULL engine");
+    }
+    if (!engine->theme) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_apply_config_to_theme: engine has no theme");
+    }
+    struct yetty_ycore_void_result r = yetty_ygui_theme_apply_config(engine->theme, config);
+    if (YETTY_IS_OK(r)) {
+        engine->dirty = 1;
+    }
+    return r;
 }
 
 void yetty_ygui_framework_viewport(const struct yetty_ygui_runtime *engine, float *width_px,

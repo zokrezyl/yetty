@@ -558,7 +558,8 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                 term_res = yetty_yterm_terminal_create(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
                     yetty_yui_tile_destroy(tile_res.value);
-                    return YETTY_ERR(yetty_ycore_void, term_res.error.msg);
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "workspace_load_layout: terminal_create failed", term_res);
                 }
 
                 yetty_yui_tile_pane_push_view(tile_res.value,
@@ -569,7 +570,8 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
     }
 
     if (YETTY_IS_ERR(tile_res)) {
-        return YETTY_ERR(yetty_ycore_void, tile_res.error.msg);
+        return YETTY_ERR(yetty_ycore_void, "workspace_load_layout: tile creation failed",
+                         tile_res);
     }
 
     /* Set as root */

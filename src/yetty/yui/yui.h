@@ -175,7 +175,7 @@ void yetty_yui_set_status_right(struct yetty_yui *yui, const char *text);
 /* Pixel height of the statusbar strip, or 0 when no statusbar is
  * attached. Used by the tabbar / workspace layout so terminal cells
  * don't render under the bar. Mirrors the tabbar's own
- * YETTY_YUI_TABBAR_HEIGHT — yui carves out the bottom strip the way
+ * YETTY_YUI_TABBAR_HEIGHT_DP — yui carves out the bottom strip the way
  * the tabbar carves out the top. */
 float yetty_yui_statusbar_height(const struct yetty_yui *yui);
 

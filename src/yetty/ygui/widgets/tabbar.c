@@ -49,22 +49,20 @@
 #define TABBAR_PLUS_GAP 4.0f
 #define TABBAR_PLUS_W 30.0f
 
-/* Packed RGBA (R in low byte). Matches the old theme constants:
- *   bg_strip   = BRAND_BG_ROW   (#1E262C) — flat band under the pills
- *   bg_active  = BRAND_BG       (#0B1014) — active pill body
- *   bg_inactive= BRAND_BG_ROW   (#1E262C) — inactive pill body (flush with strip)
- *   accent     = BRAND_ACCENT   (#6BA892) — 3px bar under the active pill
- *   text_act   = BRAND_TEXT_PRI (#E0E5E4)
- *   text_mut   = BRAND_TEXT_SEC (#9FA7A8)
- *   separator  = BRAND_BORDER   (#364A47) — hairline between two inactives
+/* Colors are pulled from engine->theme at paint time so user config
+ * (style.yui.* / style.ygui.*) reaches the renderer. The defaults
+ * live in src/yetty/ygui/theme.c::theme_create_default; this file
+ * names the role each theme field plays in the tabbar:
+ *
+ *   strip      = theme->yui_strip         flat band under the pills
+ *   active     = theme->yui_tab_active    active pill body
+ *   inactive   = theme->yui_tab_inactive  inactive pill body
+ *   accent     = theme->yui_accent        3px bar under the active pill
+ *   text_act   = theme->text_primary      active tab label
+ *   text_mut   = theme->text_muted        inactive tab label
+ *   separator  = theme->border            hairline between two inactives
  */
-#define COLOR_STRIP_BG 0xFF2C261Eu
-#define COLOR_PILL_ACTIVE 0xFF14100Bu
-#define COLOR_PILL_INACTIVE 0xFF2C261Eu
-#define COLOR_ACCENT 0xFF92A86Bu
-#define COLOR_TEXT_ACTIVE 0xFFE4E5E0u
-#define COLOR_TEXT_MUTED 0xFFA8A79Fu
-#define COLOR_SEPARATOR 0xFF474A36u
+#include <yetty/ygui/theme.h>
 
 /*-----------------------------------------------------------------------------
  * Tabbar instance data.
@@ -432,10 +430,24 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
     if (strip_w <= 0.0f || strip_h <= 0.0f) {
         return YETTY_OK_VOID();
     }
+    /* Pull colors + font size from the engine theme so style.yui.* and
+     * style.ygui.font-size in user config reach the renderer. The
+     * fallback literals are belt-and-braces — theme is engine-owned and
+     * non-NULL after framework_create. */
+    const struct yetty_ygui_theme *theme =
+        yetty_ygui_framework_theme(yetty_ygui_object_engine(obj));
+    uint32_t color_strip = theme ? theme->yui_strip : 0xFF1F1A14u;
+    uint32_t color_active = theme ? theme->yui_tab_active : 0xFF14100Bu;
+    uint32_t color_inactive = theme ? theme->yui_tab_inactive : 0xFF2C261Eu;
+    uint32_t color_accent = theme ? theme->yui_accent : 0xFF92A86Bu;
+    uint32_t color_text_active = theme ? theme->text_primary : 0xFFE4E5E0u;
+    uint32_t color_text_muted = theme ? theme->text_muted : 0xFFA8A79Fu;
+    uint32_t color_separator = theme ? theme->border : 0xFF474A36u;
+    float base_font_size = theme && theme->font_size > 0.0f ? theme->font_size : 14.0f;
 
     /* Strip background — a flat band the width of the widget. */
     struct yetty_ycore_void_result rr =
-        paint_pill(ctx, r.min.x, r.min.y, strip_w, strip_h, COLOR_STRIP_BG, 0.0f);
+        paint_pill(ctx, r.min.x, r.min.y, strip_w, strip_h, color_strip, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: strip bg");
 
     struct tabbar_data *td = yetty_ygui_data_get(
@@ -451,15 +463,15 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
         float pw = pr.max.x - pr.min.x;
         float ph = pr.max.y - pr.min.y;
         int is_active = (idx == active);
-        uint32_t fill = is_active ? COLOR_PILL_ACTIVE : COLOR_PILL_INACTIVE;
-        uint32_t text_color = is_active ? COLOR_TEXT_ACTIVE : COLOR_TEXT_MUTED;
+        uint32_t fill = is_active ? color_active : color_inactive;
+        uint32_t text_color = is_active ? color_text_active : color_text_muted;
 
         rr = paint_pill(ctx, pr.min.x, pr.min.y, pw, ph, fill, TABBAR_PILL_RADIUS);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: pill");
 
         if (is_active && ph > TABBAR_ACCENT_BAR_H) {
             rr = paint_pill(ctx, pr.min.x, pr.max.y - TABBAR_ACCENT_BAR_H, pw, TABBAR_ACCENT_BAR_H,
-                            COLOR_ACCENT, 0.0f);
+                            color_accent, 0.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: accent bar");
         }
 
@@ -471,8 +483,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
             float sep_y = pr.min.y + TABBAR_SEPARATOR_INSET_Y;
             float sep_h = ph - 2.0f * TABBAR_SEPARATOR_INSET_Y;
             if (sep_h > 0.0f) {
-                rr =
-                    paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, COLOR_SEPARATOR, 0.0f);
+                rr = paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, color_separator,
+                                0.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: separator");
             }
         }
@@ -481,7 +493,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
         struct header_data *hd =
             yetty_ygui_data_get(c, yetty_ygui_class_expect(header_class_get(), "header_class_get"));
         if (hd->label && hd->label[0]) {
-            float font_size = 14.0f;
+            float font_size = base_font_size;
             float tx = pr.min.x + TABBAR_PILL_PAD_X;
             float ty = pr.min.y + (ph + font_size) * 0.5f - 2.0f;
             rr = paint_label(ctx, hd->label, tx, ty, text_color, font_size);
@@ -490,7 +502,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
 
         /* Close-x in the right band when the tabbar has a close handler. */
         if (td->close_cb && pw > TABBAR_CLOSE_W) {
-            float font_size = 14.0f;
+            float font_size = base_font_size;
             float tx = pr.max.x - TABBAR_CLOSE_W + 4.0f;
             float ty = pr.min.y + (ph + font_size) * 0.5f - 2.0f;
             rr = paint_label(ctx, "\xC3\x97", tx, ty, text_color, font_size); /* × */
@@ -514,7 +526,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
             float sep_y = r.min.y + TABBAR_SEPARATOR_INSET_Y;
             float sep_h = strip_h - 2.0f * TABBAR_SEPARATOR_INSET_Y;
             if (sep_h > 0.0f) {
-                rr = paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, COLOR_SEPARATOR, 0.0f);
+                rr = paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, color_separator,
+                                0.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: plus separator");
             }
         }
@@ -523,11 +536,14 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
         /* "+" glyph, centered in the plus rect. Muted like an inactive
          * tab — Chrome-style minimal affordance, no persistent pill. */
         if (plus.min.x < r.max.x) {
-            float font_size = 17.0f;
+            /* The plus glyph is intentionally a bit larger than body
+             * font — scale relative to base_font_size so config tuning
+             * still keeps the visual hierarchy. */
+            float font_size = base_font_size * (17.0f / 14.0f);
             float glyph_w = font_size * 0.45f;
             float tx = plus.min.x + (TABBAR_PLUS_W - glyph_w) * 0.5f;
             float ty = r.min.y + (strip_h + font_size) * 0.5f - 2.0f;
-            rr = paint_label(ctx, "+", tx, ty, COLOR_TEXT_MUTED, font_size);
+            rr = paint_label(ctx, "+", tx, ty, color_text_muted, font_size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: plus glyph");
         }
     }

@@ -81,13 +81,14 @@ struct yetty_yframework_factory_state {
     int _unused; /* keep the struct non-empty when no kinds compile in */
 };
 
-struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter)
+struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter,
+                                                             WGPUSurface surface)
 {
     if (!adapter) {
         return YETTY_ERR(yetty_ycore_void, "log_gpu_info: adapter is NULL");
     }
 
-    char *desc = yetty_ywebgpu_get_webgpu_description(adapter);
+    char *desc = yetty_ywebgpu_get_webgpu_description(adapter, surface);
     if (!desc) {
         return YETTY_ERR(yetty_ycore_void,
                          "log_gpu_info: yetty_ywebgpu_get_webgpu_description failed");
@@ -137,9 +138,13 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
 
     /* Best-effort: GPU info logging is diagnostic-only — degraded
      * GPUs may not surface a description string but the rest of init
-     * can still proceed. */
+     * can still proceed. Pass the surface so the dump includes the
+     * supported-formats / present-modes list (their preferred-first
+     * ordering is platform-specific and load-bearing for chrome
+     * colors — see Surface format pick below). */
     {
-        struct yetty_ycore_void_result _gi = yetty_yframework_log_gpu_info(rt->gpu.adapter);
+        struct yetty_ycore_void_result _gi =
+            yetty_yframework_log_gpu_info(rt->gpu.adapter, surface);
         if (YETTY_IS_ERR(_gi)) {
             ywarn("yframework: log_gpu_info: %s", _gi.error.msg ? _gi.error.msg : "(no msg)");
             yetty_ycore_error_destroy(_gi.error);
@@ -205,7 +210,25 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
         WGPUSurfaceCapabilities caps = {0};
         wgpuSurfaceGetCapabilities(surface, rt->gpu.adapter, &caps);
         if (caps.formatCount > 0) {
+            /* Prefer a UNORM (linear-byte) BGRA/RGBA surface over the *Srgb
+             * variants. Dawn-on-Metal reports an sRGB-tagged format first on
+             * macOS, which makes the GPU treat every byte the shader writes
+             * as already-encoded sRGB and decode it back to linear before
+             * scan-out. Our shaders write straight color bytes (no manual
+             * gamma encode) — that mismatch crushes dark values to black
+             * (see the chrome looking entirely black on macOS while Linux,
+             * which returns BGRA8Unorm first, renders the intended palette).
+             * Pick a UNORM format when offered; only fall back to the
+             * first-reported (potentially *Srgb) when nothing linear is
+             * available. */
             rt->gpu.surface_format = caps.formats[0];
+            for (size_t i = 0; i < caps.formatCount; i++) {
+                if (caps.formats[i] == WGPUTextureFormat_BGRA8Unorm ||
+                    caps.formats[i] == WGPUTextureFormat_RGBA8Unorm) {
+                    rt->gpu.surface_format = caps.formats[i];
+                    break;
+                }
+            }
         }
         const char *want =
             rt->config->ops->get_string(rt->config, "rendering/present-mode", "auto");

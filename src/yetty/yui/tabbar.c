@@ -110,6 +110,19 @@ struct yetty_yui_tabbar {
      * yui's engine theme (BRAND_* via apply_css). Field block removed. */
 };
 
+/* Convert a logical (DP) chrome dimension to framebuffer pixels using
+ * the bound context's HiDPI content_scale (see
+ * yetty_yinit_gpu_context::content_scale). Falls back to 1× when ctx
+ * isn't bound yet — pre-first-add the strip is never hit-tested or
+ * laid out anyway, so this keeps callers free of NULL guards. */
+static inline float tabbar_dp(const struct yetty_yui_tabbar *bar, float dp)
+{
+    if (!bar || !bar->yetty_ctx) {
+        return dp;
+    }
+    return yetty_dp_to_px(&bar->yetty_ctx->runtime->gpu.app_gpu_context, dp);
+}
+
 /*---------------------------------------------------------------------------
  * Allocation helpers
  *--------------------------------------------------------------------------*/
@@ -231,7 +244,7 @@ int yetty_yui_tabbar_edge_cursor_at(const struct yetty_yui_tabbar *bar, float x,
     }
     /* Anything in the strip is window-drag territory, not resize — let
      * yui's other cursor logic (or the default arrow) handle it. */
-    if (y < YETTY_YUI_TABBAR_HEIGHT) {
+    if (y < tabbar_dp(bar, YETTY_YUI_TABBAR_HEIGHT_DP)) {
         return YETTY_YCORE_CURSOR_DEFAULT;
     }
     const float EDGE = 8.0f;
@@ -260,7 +273,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *
     bar->height = height;
     bar->total_height = total_height > 0 ? total_height : height;
 
-    float strip = YETTY_YUI_TABBAR_HEIGHT;
+    float strip = tabbar_dp(bar, YETTY_YUI_TABBAR_HEIGHT_DP);
     if (strip > height) {
         /* Window smaller than strip — give workspaces zero rows rather than
          * negative bounds, which would NaN through the renderer. */
@@ -337,7 +350,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
     /* Size + origin the fresh workspace to the per-tab area before loading
      * layout so the loaded views start with bounds that already sit below
      * the strip. */
-    float strip = YETTY_YUI_TABBAR_HEIGHT;
+    float strip = tabbar_dp(bar, YETTY_YUI_TABBAR_HEIGHT_DP);
     if (strip > bar->height) {
         strip = bar->height;
     }
@@ -429,7 +442,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
     }
     struct yetty_yui_workspace *ws = wr.value;
 
-    float strip = YETTY_YUI_TABBAR_HEIGHT;
+    float strip = tabbar_dp(bar, YETTY_YUI_TABBAR_HEIGHT_DP);
     if (strip > bar->height) {
         strip = bar->height;
     }
@@ -707,7 +720,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
      * the tabbar; we don't forward it to the workspace. Once the strip has
      * actual tab cells, this is where the per-tab hit / drag-to-move /
      * close-button logic will live. */
-    float strip = YETTY_YUI_TABBAR_HEIGHT;
+    float strip = tabbar_dp(bar, YETTY_YUI_TABBAR_HEIGHT_DP);
     if (strip > bar->height) {
         strip = bar->height;
     }

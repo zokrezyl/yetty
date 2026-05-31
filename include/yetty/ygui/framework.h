@@ -33,6 +33,8 @@ struct yetty_ydraw_draw_list;
 struct yetty_ycore_buffer;
 struct yetty_yclass_object;
 struct yetty_yclass_rpc_session;
+struct yetty_ygui_theme;
+struct yetty_yconfig_config;
 
 #ifdef __cplusplus
 extern "C" {
@@ -119,6 +121,27 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(struct yetty_yg
 
 void yetty_ygui_framework_viewport(const struct yetty_ygui_runtime *engine, float *width_px,
                                    float *height_px);
+
+/* Theme — the engine owns a default brand palette on create. Widget
+ * paint code reads from this via yetty_ygui_framework_theme(engine).
+ * Hosts that want config-driven theming call apply_config_to_theme
+ * once with their loaded yconfig; missing keys leave the brand
+ * defaults untouched.
+ *
+ * Lifetime: framework_create allocates the default theme; the engine
+ * owns + destroys it on framework_destroy. set_theme replaces the
+ * owned theme (engine takes ownership of the new pointer and frees
+ * the old one). */
+struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_ygui_runtime *engine);
+
+struct yetty_ycore_void_result yetty_ygui_framework_set_theme(struct yetty_ygui_runtime *engine,
+                                                              struct yetty_ygui_theme *theme);
+
+/* Convenience: overlay any `style.ygui.*` / `style.yui.*` keys from
+ * `config` onto the engine's owned theme in place. Missing keys leave
+ * the field at its current value (brand default or earlier overlay). */
+struct yetty_ycore_void_result yetty_ygui_framework_apply_config_to_theme(
+    struct yetty_ygui_runtime *engine, const struct yetty_yconfig_config *config);
 
 void yetty_ygui_framework_mark_dirty(struct yetty_ygui_runtime *engine);
 

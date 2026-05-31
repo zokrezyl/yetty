@@ -97,9 +97,15 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
 struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework *rt);
 
 /* Dump adapter info (vendor, backend, type, IDs, key limits) via yinfo.
+ * When `surface` is non-NULL, also dumps the surface's supported texture
+ * formats (preferred first) and present modes — useful for tracking down
+ * per-platform asymmetries (e.g. Metal returning a *Srgb format first
+ * while Vulkan returns *Unorm).
+ *
  * Safe to call any time after the adapter is up. Errors: NULL adapter,
  * adapter-info-fetch failure (the WebGPU call surface). */
-struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter);
+struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter,
+                                                             WGPUSurface surface);
 
 /* Reconfigure surface after a window resize. Called from the app's RESIZE
  * handler — yframework keeps the present_mode the initial capability scan
