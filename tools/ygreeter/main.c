@@ -95,13 +95,14 @@ enum tab_kind {
     TAB_KIND_YREADME,     /* extracted README.md, rendered by `ymarkdown` */
     TAB_KIND_YBROWSER,    /* inline HTML, rendered by `ybrowser` */
     TAB_KIND_DIAGRAMS,    /* Mermaid diagrams in collapsing headers (ydiagram) */
+    TAB_KIND_YMAZE,       /* animated maze, rendered by the `ymaze` widget */
 };
 
-#define TAB_COUNT 9
+#define TAB_COUNT 10
 
-static const char *TAB_LABELS[TAB_COUNT] = {"Welcome",  "Plots",        "Images",
-                                            "Code",     "Video",        "Elements",
-                                            "Markdown", "HTML/Browser", "Diagrams"};
+static const char *TAB_LABELS[TAB_COUNT] = {"Welcome",  "Plots",        "Images",  "Code",
+                                            "Video",    "Elements",     "Markdown", "HTML/Browser",
+                                            "Diagrams", "YMaze"};
 
 /* Brand palette — packed RGBA, R in low byte. Per rules/08-branding.md. */
 #define BRAND_TEXT 0xFFE4E5E0u
@@ -203,6 +204,9 @@ struct app {
     struct yetty_ydraw_font *font;
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
+    /* ~30 fps animation pump for self-animating widgets (ymaze, …). */
+    struct yetty_yevent_event_listener frame_listener;
+    yetty_yevent_timer_id frame_timer;
     struct yetty_ydraw_target *render_target;
 #endif
 };
@@ -668,6 +672,7 @@ static int tab_entry_count(const struct app *app, int tab_index)
     case 6: /* YReadme  — single piece of content (README.md). */
     case 7: /* YBrowser — single inline HTML sample. */
     case 8: /* Diagrams — single self-contained scrollarea. */
+    case 9: /* YMaze    — single self-contained animated widget. */
         return 1;
     default: return 0;
     }
@@ -709,6 +714,7 @@ static enum tab_kind tab_kind_for(int tab_index)
     case 6: return TAB_KIND_YREADME;
     case 7: return TAB_KIND_YBROWSER;
     case 8: return TAB_KIND_DIAGRAMS;
+    case 9: return TAB_KIND_YMAZE;
     case 0:
     case 3:
     default:
@@ -1557,6 +1563,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     case TAB_KIND_YREADME:
     case TAB_KIND_YBROWSER:
     case TAB_KIND_DIAGRAMS:
+    case TAB_KIND_YMAZE:
         has_nav = false;
         break;
     default:
@@ -1638,6 +1645,13 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
         content = sr.value;
         break;
     }
+    case TAB_KIND_YMAZE: {
+        struct yetty_ygui_object_ptr_result zr =
+            yetty_ygui_add(yetty_ygui_ymaze_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "rebuild: ymaze");
+        content = zr.value;
+        break;
+    }
     case TAB_KIND_YREADME: {
         /* Scrollarea hosts the per-feature collapsing sections, same
          * shape as the Elements and YBrowser tabs. */
@@ -1702,6 +1716,10 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
         break;
     case TAB_KIND_DIAGRAMS:
         yetty_ycore_error_destroy_safe(build_diagrams_content(app, content));
+        break;
+    case TAB_KIND_YMAZE:
+        /* Self-contained: the ymaze widget creates + animates its own
+         * maze in its constructor, so there is nothing to seed. */
         break;
     case TAB_KIND_YREADME:
         yetty_ycore_error_destroy_safe(build_yreadme_content(app, content));
@@ -2546,6 +2564,23 @@ static const char *standalone_encode_key(uint32_t key, char *scratch, size_t scr
     }
 }
 
+/* Animation pump — force a full re-emit each tick so self-animating
+ * widgets (the ymaze tab) re-run their emit_body and advance. */
+static struct yetty_ycore_int_result standalone_frame_tick(
+    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
+{
+    (void)ev;
+    struct app *app = container_of(listener, struct app, frame_listener);
+    if (app->engine) {
+        yetty_ygui_framework_mark_dirty(app->engine);
+    }
+    if (app->yframework && app->yframework->event_loop &&
+        app->yframework->event_loop->ops->request_render) {
+        app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
 static struct yetty_ycore_int_result standalone_event_handler(
     struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
 {
@@ -2826,6 +2861,25 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     struct yetty_ycore_void_result rel =
         yetty_yevent_register_default_listeners(app->yframework->event_loop, &app->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "standalone: register_default_listeners");
+
+    /* ~30 fps animation pump for self-animating widgets (ymaze tab). */
+    {
+        struct yetty_yevent_event_loop *loop = app->yframework->event_loop;
+        struct yetty_yevent_timer_id_result tr = loop->ops->create_timer(loop);
+        if (YETTY_IS_OK(tr)) {
+            app->frame_timer = tr.value;
+            app->frame_listener.handler = standalone_frame_tick;
+            struct yetty_ycore_void_result cr = loop->ops->config_timer(loop, app->frame_timer, 33);
+            if (YETTY_IS_ERR(cr)) yetty_ycore_error_destroy(cr.error);
+            struct yetty_ycore_void_result lr =
+                loop->ops->register_timer_listener(loop, app->frame_timer, &app->frame_listener);
+            if (YETTY_IS_ERR(lr)) yetty_ycore_error_destroy(lr.error);
+            struct yetty_ycore_void_result st = loop->ops->start_timer(loop, app->frame_timer);
+            if (YETTY_IS_ERR(st)) yetty_ycore_error_destroy(st.error);
+        } else {
+            yetty_ycore_error_destroy(tr.error);
+        }
+    }
 
     /* Kick first frame. */
     yetty_yevent_post_async(rt->platform_input_pipe,

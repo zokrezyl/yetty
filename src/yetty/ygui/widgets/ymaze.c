@@ -1,0 +1,115 @@
+/* ygui-ymaze.c — wraps yetty_ymaze_render into a ydraw_embed.
+ *
+ * Mirrors ygui-ymarkdown.c: the widget owns a yetty_ymaze and, on each
+ * emit_body, renders the maze for the current time into a fresh ydraw
+ * buffer and hands it to the ydraw_embed base (which paints it into the
+ * hosting ygrid). The widget re-marks itself dirty after every emit so the
+ * framework keeps re-emitting — that is what animates the actor. */
+#include "../internal.h"
+#include <yetty/ygui/widgets/ydraw_embed.h>
+#include <yetty/ygui/widgets/ymaze.h>
+#include <yetty/ymaze/ymaze.h>
+#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/yplatform/time.h>
+
+struct [[clang::annotate("class@ygui:ymaze")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
+ymaze_data {
+    struct yetty_ymaze *maze;
+    double start_time;
+    float scene_w;
+    float scene_h;
+};
+
+[[clang::annotate("override@ygui:ymaze:constructor")]]
+static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                      struct yetty_yclass_object *yclass_obj)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
+        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymaze_ctor: super");
+    struct ymaze_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"));
+
+    struct yetty_ymaze_config cfg = yetty_ymaze_config_default();
+    struct yetty_ymaze_ptr_result mr = yetty_ymaze_create(&cfg, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "ymaze_ctor: maze create");
+    d->maze = mr.value;
+    d->start_time = yetty_yplatform_ytime_monotonic_sec();
+    d->scene_w = 0.0f;
+    d->scene_h = 0.0f;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@ygui:ymaze:destructor")]]
+static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_ctx *yclass_ctx,
+                                                     struct yetty_yclass_object *yclass_obj)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct ymaze_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"));
+    yetty_ymaze_destroy(d->maze);
+    d->maze = NULL;
+    return yetty_ygui_super_void(
+        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"),
+        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+}
+
+[[clang::annotate("override@ygui:ymaze:widget_emit_body")]]
+static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *yclass_ctx,
+                                                    struct yetty_yclass_object *yclass_obj,
+                                                    struct yetty_ygui_emit_ctx *ctx)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct ymaze_data *d = yetty_ygui_data_get(
+        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"));
+
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    float w = r.max.x - r.min.x;
+    float h = r.max.y - r.min.y;
+    if (d->maze && w > 0.0f && h > 0.0f) {
+        if (w != d->scene_w || h != d->scene_h) {
+            (void)yetty_ymaze_set_scene_size(d->maze, w, h);
+            d->scene_w = w;
+            d->scene_h = h;
+        }
+        struct yetty_ydraw_draw_list_config bcfg = {
+            .scene_min_x = 0.0f,
+            .scene_min_y = 0.0f,
+            .scene_max_x = w,
+            .scene_max_y = h,
+        };
+        struct yetty_ydraw_draw_list_result br =
+            yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ymaze_emit_body: buffer create");
+        float t = (float)(yetty_yplatform_ytime_monotonic_sec() - d->start_time);
+        struct yetty_ycore_void_result rr = yetty_ymaze_render(d->maze, br.value, t, NULL);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ydraw_draw_list_destroy(br.value);
+            return YETTY_ERR(yetty_ycore_void, "ymaze_emit_body: render", rr);
+        }
+        /* set_buffer takes ownership of the buffer. */
+        struct yetty_ycore_void_result sb = yetty_ygui_ydraw_embed_set_buffer(obj, br.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sb, "ymaze_emit_body: set_buffer");
+        /* Keep the frame pump alive — the maze is animated. */
+        (void)yetty_ygui_object_set_dirty(obj);
+    }
+
+    /* Forward to super's emit_body (ydraw_embed paints the buffer). */
+    yetty_yclass_method_slot slot =
+        yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
+    yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(
+        yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"), slot);
+    if (!impl) {
+        return YETTY_OK_VOID();
+    }
+    typedef struct yetty_ycore_void_result (*fn_t)(
+        struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
+    return ((fn_t)impl)(NULL, yclass_obj, ctx);
+}
+
+#include "ymaze.gen.c"

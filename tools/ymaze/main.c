@@ -1,506 +1,312 @@
 /*
- * ymaze — animated maze frontend.
+ * tools/ymaze/main.c — standalone animated-maze app.
  *
- * The yetty_ymaze library produces ydraw primitives; this tool drives time,
- * owns a yetty_ydraw_draw_list, and emits OSC 600000 (clear) + OSC 600001
- * (bin) per frame so the host pane's ydraw-layer redraws.
+ * Opens a window via yinit_run + yframework_create, builds a single
+ * full-window ygrid figure, and renders the yetty_ymaze into it every
+ * frame. No terminal, no ygui widget tree — the maze drives the ygrid /
+ * compositor render path directly (the "independent app" counterpart to
+ * the ygui ymaze widget). Modeled on tools/ycompositor.
  *
- * Modeled on tools/ymesh/main.c. There is no card abstraction in new yetty
- * — the maze fills the whole pane.
+ * Per frame: clear the grid, render the maze for the current time into a
+ * ydraw buffer, push each primitive into the grid, then
+ * target->clear → figure render → target->present. The poll timeout paces
+ * the loop at ~30 fps so the actor animates.
  *
- * Subscribe to terminal-wide input (key + resize rising-edge report) so the
- * scene resizes as the pane resizes and so 'r' / 'q' / '+' / '-' work both
- * via raw TTY bytes and via wire key events.
- *
- * Defaults: animate at ~30 fps, regenerate on finish.
+ * Keys: q / ESC quit.
  */
 
-#include <yetty/ymaze/ymaze.h>
-
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
-#include <yetty/yface/yface.h>
-#include <yetty/ymgui/wire.h>
-#include <yetty/yterm/client-input.h>
+#include <yetty/yinit/yinit.h>
+#include <yetty/yframework/yframework.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/yconfig/config.h>
+#include <yetty/yevent/event.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/extract-assets.h>
+#include <yetty/yplatform/time.h>
+#include <yetty/yrender/render-target.h>
+#include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/rpc.h>
+#include <yetty/yfigure/wire.h>
+#include <yetty/ygrid/ygrid.h>
 #include <yetty/ydraw-core/draw-list.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ysdf/types.gen.h>
+#include <yetty/ymaze/ymaze.h>
+#include <yetty/ytrace/ytrace.h>
+#include <webgpu/webgpu.h>
 
-#include <signal.h>
-#include <stdbool.h>
-#include <stdint.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-
-#include <yetty/yplatform/compat.h> /* clock_gettime shim on MSVC */
-#include <yetty/yplatform/tty.h>
-
-/*=============================================================================
- * Output side — emit OSC envelopes via yface_emit.
- *===========================================================================*/
-
-static int emit_envelope(int osc_code, int compressed, const void *args, size_t args_len,
-                         const void *body, size_t body_len)
-{
-    struct yetty_ycore_buffer env = {0};
-    struct yetty_ycore_void_result r =
-        yetty_yface_emit(osc_code, compressed, args, args_len, body, body_len, &env);
-    int rc = 0;
-    if (YETTY_IS_OK(r) && env.size > 0) {
-        fwrite(env.data, 1, env.size, stdout);
-    } else if (YETTY_IS_ERR(r)) {
-        rc = 1;
-    }
-    yetty_ycore_buffer_destroy(&env);
-    return rc;
-}
-
-static int emit_clear(void)
-{
-    return emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
-}
-
-static int emit_bin_serialized(struct yetty_ydraw_draw_list *buf)
-{
-    const uint8_t *raw = NULL;
-    size_t raw_size = yetty_ydraw_draw_list_serialize(buf, &raw);
-    if (raw_size == 0 || !raw) {
-        return 1;
-    }
-
-    struct yetty_yface_bin_meta meta = {
-        .magic = YETTY_YFACE_BIN_MAGIC,
-        .version = YETTY_YFACE_BIN_VERSION,
-        .compressed = YETTY_YFACE_COMP_LZ4F,
-        .compression_algo = 0,
-        .raw_size = raw_size,
-        .reserved = {0, 0},
-    };
-    return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size);
-}
-
-/*=============================================================================
- * Terminal-wide input subscription — gets us pane pixel size on rising edge
- * (and on actual resize), plus key + mouse events. We only consume keys here,
- * but the resize emission rides on any subscription bit.
- *===========================================================================*/
-
-static void term_input_subscribe(uint32_t flags)
-{
-    struct yetty_client_input_sub msg = {
-        .magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
-        .version = YMGUI_WIRE_VERSION,
-        .flags = flags,
-        ._pad0 = 0,
-    };
-    (void)emit_envelope(YETTY_OSC_CS_CLIENT_INPUT_SUB, /*compressed=*/0, NULL, 0, &msg,
-                        sizeof(msg));
-}
-
-/*=============================================================================
- * Alternate screen buffer (raw mode is handled by the platform tty API).
- *===========================================================================*/
-
-static int alt_screen_active = 0;
-
-static void alt_screen_leave(void)
-{
-    if (alt_screen_active) {
-        static const char seq[] = "\033[?1049l";
-        fwrite(seq, 1, sizeof(seq) - 1, stdout);
-        fflush(stdout);
-        alt_screen_active = 0;
-    }
-}
-
-static void alt_screen_enter(void)
-{
-    if (!yetty_yplatform_tty_stdout_is_tty()) {
-        return;
-    }
-    static const char seq[] = "\033[?1049h";
-    fwrite(seq, 1, sizeof(seq) - 1, stdout);
-    fflush(stdout);
-    alt_screen_active = 1;
-    atexit(alt_screen_leave);
-}
-
-static volatile sig_atomic_t signal_quit = 0;
-static void on_signal(int sig)
-{
-    (void)sig;
-    signal_quit = 1;
-}
-
-/*=============================================================================
- * Time helper — monotonic seconds since first call.
- *===========================================================================*/
-
-static float monotonic_now(void)
-{
-    static int initialized = 0;
-    static struct timespec start;
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    if (!initialized) {
-        start = ts;
-        initialized = 1;
-    }
-    float sec = (float)(ts.tv_sec - start.tv_sec);
-    sec += (float)(ts.tv_nsec - start.tv_nsec) / 1e9f;
-    return sec;
-}
-
-/*=============================================================================
- * App state — collected so yface callbacks can mutate it via void *user.
- *===========================================================================*/
 
 struct ymaze_app {
-    struct yetty_ymaze *maze;
-    struct yetty_ydraw_draw_list *buf;
-
-    float pane_w;
-    float pane_h;
-    bool have_pane_size;
-
-    bool dirty;
-    bool want_quit;
+    int quit;
+    struct yetty_context           ctx;
+    struct yetty_yframework        *yrt;
+    struct yetty_ydraw_target      *target;
+    struct yetty_yfigure_container *root;
+    struct yetty_ygrid_grid        *grid;
+    struct yetty_ymaze             *maze;
+    struct yetty_ydraw_draw_list   *buf; /* reused across frames */
+    double                          start_time;
+    void                           *surface;
+    uint32_t                        surface_w;
+    uint32_t                        surface_h;
 };
 
-static void apply_pane_size(struct ymaze_app *app, float w, float h)
-{
-    if (w < 1.0f || h < 1.0f) {
-        return;
-    }
-    if (app->have_pane_size && w == app->pane_w && h == app->pane_h) {
-        return;
-    }
-    app->pane_w = w;
-    app->pane_h = h;
-    app->have_pane_size = true;
-    (void)yetty_ymaze_set_scene_size(app->maze, w, h);
-    app->dirty = true;
-}
+#define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
-/* CSI [H = cursor home (1,1); CSI [2J = clear entire screen. Sent before
- * every frame so any stray text-layer output (or pre-existing terminal
- * content under the alt screen) is wiped and the maze redraws over a
- * blank canvas. We send the whole maze every frame — optimisation later. */
-static void emit_term_clear_home(void)
+/* Walk a ydraw buffer's primitive stream and push each primitive into the
+ * grid as its own record. The buffer's prim layout
+ * (`[type|z_order|fill|stroke|stroke_width|geom…]`, plus an optional id
+ * word when the HAS_ID flag is set) is exactly the ygrid record format, so
+ * each prim is forwarded verbatim. */
+static struct yetty_ycore_void_result push_buffer_to_grid(struct yetty_ygrid_grid *grid,
+                                                          const struct yetty_ydraw_draw_list *buf)
 {
-    static const char seq[] = "\033[H\033[2J";
-    fwrite(seq, 1, sizeof(seq) - 1, stdout);
-}
-
-static void redraw(struct ymaze_app *app)
-{
-    float t = monotonic_now();
-    bool regenerated = false;
-    struct yetty_ycore_void_result r = yetty_ymaze_render(app->maze, app->buf, t, &regenerated);
-    if (YETTY_IS_ERR(r)) {
-        fprintf(stderr, "ymaze: render failed: %s\n", r.error.msg);
-        yetty_ycore_error_destroy(r.error);
-        return;
-    }
-    emit_term_clear_home();
-    (void)emit_clear();
-    (void)emit_bin_serialized(app->buf);
-    fflush(stdout);
-}
-
-/*=============================================================================
- * Key handling — codepoint dispatch, shared by raw bytes + wire CHAR events.
- *===========================================================================*/
-
-static void on_key_codepoint(struct ymaze_app *app, uint32_t cp)
-{
-    switch (cp) {
-    case 'q':
-    case 'Q':
-    case 0x03: /* Ctrl-C */
-    case 0x1b: /* ESC */
-        app->want_quit = 1;
-        break;
-    case 'r':
-    case 'R':
-        (void)yetty_ymaze_regenerate(app->maze);
-        app->dirty = true;
-        break;
-    case '+':
-    case '=':
-    case '-':
-    case '_': {
-        const struct yetty_ymaze_config *cur = yetty_ymaze_config_get(app->maze);
-        if (!cur) {
+    const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(buf);
+    size_t total = yetty_ydraw_draw_list_size(buf);
+    size_t off = 0;
+    while (off + sizeof(uint32_t) <= total) {
+        const uint32_t *prim = (const uint32_t *)(data + off);
+        size_t remaining = total - off;
+        uint32_t type = prim[0];
+        size_t sdf_bytes = yetty_ysdf_primitive_size(RICH_TYPE_BASE(type));
+        size_t psize;
+        if (sdf_bytes > 0) {
+            psize = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
+        } else {
+            /* Non-SDF record: u32 type | u32 payload_size | payload. The
+             * maze emits only SDF prims, so this path is defensive. */
+            if (remaining < 2 * sizeof(uint32_t)) {
+                break;
+            }
+            psize = 2 * sizeof(uint32_t) + prim[1];
+        }
+        if (psize == 0 || psize > remaining) {
             break;
         }
-        struct yetty_ymaze_config nc = *cur;
-        float factor = (cp == '+' || cp == '=') ? 1.25f : 0.8f;
-        nc.actor_speed *= factor;
-        /* Same clamps the library applies on create — re-create with
-		 * the same maze layout. */
-        if (nc.actor_speed < 0.5f) {
-            nc.actor_speed = 0.5f;
-        }
-        if (nc.actor_speed > 50.0f) {
-            nc.actor_speed = 50.0f;
-        }
-        struct yetty_ymaze_ptr_result nr = yetty_ymaze_create(&nc, 0);
-        if (YETTY_IS_OK(nr)) {
-            yetty_ymaze_destroy(app->maze);
-            app->maze = nr.value;
-            if (app->have_pane_size) {
-                (void)yetty_ymaze_set_scene_size(app->maze, app->pane_w, app->pane_h);
-            }
-            app->dirty = true;
-        } else {
-            yetty_ycore_error_destroy(nr.error);
-        }
-        break;
+        struct yetty_ycore_void_result r = yetty_ygrid_add_record_local(grid, data + off, psize);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "push_buffer_to_grid: add_record");
+        off += psize;
     }
+    return YETTY_OK_VOID();
+}
+
+/* Render the maze for the current time into the grid (cleared first). */
+static struct yetty_ycore_void_result render_maze(struct ymaze_app *app)
+{
+    if (!app->grid || !app->maze || !app->buf) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result cr = yetty_ygrid_clear_local(app->grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "render_maze: grid clear");
+
+    float t = (float)(yetty_yplatform_ytime_monotonic_sec() - app->start_time);
+    struct yetty_ycore_void_result rr = yetty_ymaze_render(app->maze, app->buf, t, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "render_maze: ymaze_render");
+
+    struct yetty_ycore_void_result pr = push_buffer_to_grid(app->grid, app->buf);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_maze: push to grid");
+
+    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+    rf->dirty = 1;
+    return YETTY_OK_VOID();
+}
+
+/* (Re)build the single full-window ygrid figure. Called at startup and on
+ * RESIZE. The maze's scene size is matched to the figure so it fills it. */
+static struct yetty_ycore_void_result rebuild_figure(struct ymaze_app *app)
+{
+    struct yetty_ycore_rectangle rect = {
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h},
+    };
+    float w = rect.max.x - rect.min.x;
+    float h = rect.max.y - rect.min.y;
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+
+    if (app->grid) {
+        struct yetty_ycore_void_result rr =
+            yetty_yfigure_container_remove_child_by_id(app->root, 1u);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rebuild_figure: remove old");
+        app->grid = NULL;
+    }
+
+    struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, 32u, 16u, &app->ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "rebuild_figure: ygrid_create");
+    app->grid = gr.value;
+
+    (void)yetty_ymaze_set_scene_size(app->maze, w, h);
+
+    struct yetty_ycore_void_result ar =
+        yetty_yfigure_container_add_child(app->root, yetty_ygrid_as_figure(app->grid), /*id=*/1u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "rebuild_figure: add_child");
+
+    struct yetty_ycore_void_result mr = render_maze(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "rebuild_figure: render_maze");
+
+    yinfo("ymaze: figure rebuilt for %ux%u", app->surface_w, app->surface_h);
+    return YETTY_OK_VOID();
+}
+
+static void handle_event(struct ymaze_app *app, const struct yetty_yui_event *ev)
+{
+    switch (ev->type) {
+    case YETTY_YCORE_SHUTDOWN:
+    case YETTY_YCORE_WINDOW_CLOSE:
+        app->quit = 1;
+        return;
+    case YETTY_YCORE_RESIZE: {
+        uint32_t w = (uint32_t)ev->resize.width;
+        uint32_t h = (uint32_t)ev->resize.height;
+        if (w == 0 || h == 0) return;
+        app->surface_w = w;
+        app->surface_h = h;
+        struct yetty_ycore_void_result rr = yetty_yframework_reconfigure_surface(app->yrt, w, h);
+        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
+        struct yetty_ycore_void_result tr = app->target->ops->resize(app->target, vp);
+        if (YETTY_IS_ERR(tr)) yetty_ycore_error_destroy(tr.error);
+        struct yetty_ycore_void_result fr = rebuild_figure(app);
+        if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+        return;
+    }
+    case YETTY_YCORE_KEY_DOWN:
+        /* GLFW key codes: 256=ESC, 81=Q, 82=R. */
+        if (ev->key.key == 256 || ev->key.key == 81) {
+            app->quit = 1;
+        } else if (ev->key.key == 82) {
+            (void)yetty_ymaze_regenerate(app->maze);
+        }
+        return;
     default:
-        break;
-    }
-}
-
-/*=============================================================================
- * yface callbacks.
- *===========================================================================*/
-
-static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
-                   const uint8_t *payload, size_t payload_len)
-{
-    (void)args;
-    (void)args_len;
-    struct ymaze_app *app = user;
-
-    if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE ||
-        osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE) {
-        if (payload_len < sizeof(struct yetty_client_input_resize)) {
-            return;
-        }
-        const struct yetty_client_input_resize *r =
-            (const struct yetty_client_input_resize *)payload;
-        apply_pane_size(app, r->width, r->height);
-        return;
-    }
-
-    if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY ||
-        osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY) {
-        if (payload_len < sizeof(struct yetty_client_input_key)) {
-            return;
-        }
-        const struct yetty_client_input_key *k = (const struct yetty_client_input_key *)payload;
-        if (k->kind == YETTY_YMGUI_INPUT_KEY_CHAR && k->codepoint) {
-            on_key_codepoint(app, k->codepoint);
-        }
         return;
     }
 }
 
-static void on_raw(void *user, const char *bytes, size_t n)
+static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     struct ymaze_app *app = user;
-    for (size_t i = 0; i < n; i++) {
-        on_key_codepoint(app, (unsigned char)bytes[i]);
-    }
-}
 
-/*=============================================================================
- * CLI parsing — same flags as the C++ MazeConfig parser, plus our extras.
- *===========================================================================*/
+    struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
+    app->yrt = yr.value;
 
-static uint32_t parse_color(const char *s)
-{
-    if (!s || !*s) {
-        return 0;
-    }
-    if ((s[0] == '0') && (s[1] == 'x' || s[1] == 'X')) {
-        s += 2;
-    }
-    return (uint32_t)strtoul(s, NULL, 16);
-}
+    app->ctx.runtime = app->yrt;
+    app->ctx.pty_factory = NULL;
+    app->ctx.event_loop = app->yrt->event_loop;
 
-static void usage(FILE *out, const char *prog)
-{
-    fprintf(out,
-            "Usage: %s [options]\n"
-            "\n"
-            "Animated maze demo — emits ydraw OSC envelopes to stdout.\n"
-            "\n"
-            "Maze options:\n"
-            "  --cols N              maze columns (3..80, default 15)\n"
-            "  --rows N              maze rows    (3..50, default 10)\n"
-            "  --speed F             actor speed cells/sec (0.5..50, default 4.0)\n"
-            "  --wall-width F        wall stroke width (0.3..5.0, default 1.5)\n"
-            "  --wall-color HEX      AARRGGBB (default 0xFF808080)\n"
-            "  --actor-color HEX     AARRGGBB (default 0xFF00CCFF)\n"
-            "  --start-color HEX     AARRGGBB (default 0xFF00FF00)\n"
-            "  --end-color HEX       AARRGGBB (default 0xFF0000FF)\n"
-            "  --bg-color HEX        AARRGGBB (default 0xFF1A1A2E)\n"
-            "\n"
-            "Frontend options:\n"
-            "  -w, --width PX        scene width  fallback when host pane unknown (default 600)\n"
-            "  -H, --height PX       scene height fallback when host pane unknown (default 400)\n"
-            "  --no-auto-regen       stop after first solve instead of regenerating\n"
-            "  --seed N              RNG seed (default = monotonic clock)\n"
-            "  -h, --help            show this help\n"
-            "\n"
-            "Interactive controls:\n"
-            "  q / Q / ESC / Ctrl-C  quit\n"
-            "  r / R                 regenerate maze now\n"
-            "  + / =                 speed up actor\n"
-            "  - / _                 slow down actor\n",
-            prog);
+    app->surface = rt->surface;
+    app->surface_w = rt->surface_width;
+    app->surface_h = rt->surface_height;
+
+    /* Swap yframework's async x11-tile target for a plain texture target
+     * the simple poll loop can drive (same reasoning as ycompositor). */
+    app->yrt->render_target->ops->destroy(app->yrt->render_target);
+    app->yrt->render_target = NULL;
+    struct yetty_yrender_viewport vp = {
+        .x = 0, .y = 0, .w = (float)app->surface_w, .h = (float)app->surface_h};
+    struct yetty_yrender_target_ptr_result tr = yetty_yrender_target_texture_create(
+        app->yrt->gpu.device, app->yrt->gpu.queue, app->yrt->gpu.surface_format,
+        app->yrt->gpu.allocator, (WGPUSurface)app->surface, vp);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "texture target create failed");
+    app->target = tr.value;
+
+    struct yetty_ycore_rectangle root_rect = {
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h}};
+    struct yetty_yclass_ctx yclass_ctx = {0};
+    struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "root container create failed");
+    app->root = yetty_yfigure_container_from(obj_res.value);
+    yetty_yfigure_container_set_context(app->root, &app->ctx);
+    yetty_yfigure_container_set_rect(app->root, root_rect);
+
+    /* Maze + reusable draw buffer. */
+    struct yetty_ymaze_config cfg = yetty_ymaze_config_default();
+    struct yetty_ymaze_ptr_result mr = yetty_ymaze_create(&cfg, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "ymaze_create failed");
+    app->maze = mr.value;
+    struct yetty_ydraw_draw_list_result br =
+        yetty_ydraw_draw_list_config_buffer_create(NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "draw_list create failed");
+    app->buf = br.value;
+    app->start_time = yetty_yplatform_ytime_monotonic_sec();
+
+    struct yetty_ycore_void_result fr = rebuild_figure(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "rebuild_figure (initial) failed");
+
+    struct yetty_ycore_int_result fdr =
+        rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fdr, "pipe read_fd failed");
+    int pipe_fd = fdr.value;
+
+    while (!app->quit) {
+        /* ~30 fps: block up to 33 ms for input, then render a fresh frame
+         * regardless — the maze is animated. */
+        struct pollfd pfd = {.fd = pipe_fd, .events = POLLIN};
+        int pr = poll(&pfd, 1, 33);
+        if (pr > 0 && (pfd.revents & POLLIN)) {
+            for (;;) {
+                struct yetty_yui_event ev = {0};
+                struct yetty_ycore_size_result rr =
+                    rt->platform_input_pipe->ops->read(rt->platform_input_pipe, &ev, sizeof(ev));
+                if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) break;
+                handle_event(app, &ev);
+            }
+        }
+        if (app->quit) break;
+        if (rt->instance) {
+            wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
+        }
+
+        struct yetty_ycore_void_result mrr = render_maze(app);
+        if (YETTY_IS_ERR(mrr)) yetty_ycore_error_destroy(mrr.error);
+
+        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+        struct yetty_ydraw_target *target = app->target;
+        struct yetty_ycore_void_result cl = target->ops->clear(target);
+        if (YETTY_IS_ERR(cl)) yetty_ycore_error_destroy(cl.error);
+        struct yetty_ycore_void_result rrr =
+            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
+        if (YETTY_IS_ERR(rrr)) {
+            yetty_ycore_error_destroy(rrr.error);
+        } else {
+            rf->dirty = 0;
+        }
+        struct yetty_ycore_void_result pp = target->ops->present(target);
+        if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
+    }
+
+    {
+        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+        struct yetty_ycore_void_result dr =
+            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
+    }
+    app->root = NULL;
+    app->grid = NULL;
+    yetty_ydraw_draw_list_destroy(app->buf);
+    app->buf = NULL;
+    yetty_ymaze_destroy(app->maze);
+    app->maze = NULL;
+    app->target->ops->destroy(app->target);
+    app->target = NULL;
+    yetty_yframework_destroy(app->yrt);
+    app->yrt = NULL;
+    return YETTY_OK_VOID();
 }
 
 int main(int argc, char **argv)
 {
-    struct yetty_ymaze_config cfg = yetty_ymaze_config_default();
-    uint32_t seed = 0;
-
-    for (int i = 1; i < argc; i++) {
-        const char *a = argv[i];
-        if (!strcmp(a, "-h") || !strcmp(a, "--help")) {
-            usage(stdout, argv[0]);
-            return 0;
-        }
-        if (!strcmp(a, "--cols") && i + 1 < argc) {
-            cfg.cols = (uint32_t)strtoul(argv[++i], NULL, 10);
-        } else if (!strcmp(a, "--rows") && i + 1 < argc) {
-            cfg.rows = (uint32_t)strtoul(argv[++i], NULL, 10);
-        } else if (!strcmp(a, "--speed") && i + 1 < argc) {
-            cfg.actor_speed = (float)atof(argv[++i]);
-        } else if (!strcmp(a, "--wall-width") && i + 1 < argc) {
-            cfg.wall_width = (float)atof(argv[++i]);
-        } else if (!strcmp(a, "--wall-color") && i + 1 < argc) {
-            cfg.wall_color = parse_color(argv[++i]);
-        } else if (!strcmp(a, "--actor-color") && i + 1 < argc) {
-            cfg.actor_color = parse_color(argv[++i]);
-        } else if (!strcmp(a, "--start-color") && i + 1 < argc) {
-            cfg.start_color = parse_color(argv[++i]);
-        } else if (!strcmp(a, "--end-color") && i + 1 < argc) {
-            cfg.end_color = parse_color(argv[++i]);
-        } else if (!strcmp(a, "--bg-color") && i + 1 < argc) {
-            cfg.bg_color = parse_color(argv[++i]);
-        } else if ((!strcmp(a, "-w") || !strcmp(a, "--width")) && i + 1 < argc) {
-            cfg.scene_width = (float)atof(argv[++i]);
-        } else if ((!strcmp(a, "-H") || !strcmp(a, "--height")) && i + 1 < argc) {
-            cfg.scene_height = (float)atof(argv[++i]);
-        } else if (!strcmp(a, "--no-auto-regen")) {
-            cfg.auto_regen = false;
-        } else if (!strcmp(a, "--seed") && i + 1 < argc) {
-            seed = (uint32_t)strtoul(argv[++i], NULL, 10);
-        } else {
-            fprintf(stderr, "ymaze: unknown option %s\n", a);
-            usage(stderr, argv[0]);
-            return 2;
-        }
-    }
-
-    struct yetty_ymaze_ptr_result mr = yetty_ymaze_create(&cfg, seed);
-    if (YETTY_IS_ERR(mr)) {
-        fprintf(stderr, "ymaze: %s\n", mr.error.msg);
-        yetty_ycore_error_destroy(mr.error);
-        return 1;
-    }
-
-    struct yetty_ydraw_draw_list_config bcfg = {
-        .scene_min_x = 0.0f,
-        .scene_min_y = 0.0f,
-        .scene_max_x = cfg.scene_width,
-        .scene_max_y = cfg.scene_height,
+    struct ymaze_app app = {0};
+    struct yetty_yinit_app_config cfg = {
+        .extract_assets_fn = yetty_platform_extract_assets,
     };
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
-    if (YETTY_IS_ERR(br)) {
-        fprintf(stderr, "ymaze: %s\n", br.error.msg);
-        yetty_ycore_error_destroy(br.error);
-        yetty_ymaze_destroy(mr.value);
-        return 1;
-    }
-
-    struct ymaze_app app = {
-        .maze = mr.value,
-        .buf = br.value,
-        .pane_w = cfg.scene_width,
-        .pane_h = cfg.scene_height,
-        .have_pane_size = false,
-        .dirty = true,
-        .want_quit = false,
-    };
-
-    struct yetty_yface_ptr_result yr = yetty_yface_create();
-    if (YETTY_IS_ERR(yr)) {
-        fprintf(stderr, "ymaze: yface_create: %s\n", yr.error.msg);
-        yetty_ycore_error_destroy(yr.error);
-        yetty_ydraw_draw_list_destroy(app.buf);
-        yetty_ymaze_destroy(app.maze);
-        return 1;
-    }
-    struct yetty_yface *yface = yr.value;
-    yetty_yface_set_handlers(yface, on_osc, on_raw, &app);
-
-    signal(SIGINT, on_signal);
-    signal(SIGTERM, on_signal);
-#ifdef SIGHUP
-    signal(SIGHUP, on_signal);
-#endif
-
-    yetty_yplatform_tty_binary_io();
-    if (yetty_yplatform_tty_set_raw() < 0) {
-        fprintf(stderr, "ymaze: cannot put stdin into raw mode\n");
-        yetty_yface_destroy(yface);
-        yetty_ydraw_draw_list_destroy(app.buf);
-        yetty_ymaze_destroy(app.maze);
-        return 1;
-    }
-    atexit(yetty_yplatform_tty_restore);
-
-    /* Switch to the alt screen so the maze runs over a fresh page and the
-	 * user's prior terminal content is restored on exit. atexit handles
-	 * the restore even on signal-driven shutdown. */
-    alt_screen_enter();
-
-    /* Subscribe to keys so we get rising-edge TERM_RESIZE with pane size,
-	 * plus subsequent resizes and CHAR-coded keystrokes. */
-    term_input_subscribe(YETTY_CLIENT_INPUT_SUB_KEY);
-    fflush(stdout);
-
-    /* Initial frame — uses CLI-supplied scene size; the rising-edge resize
-	 * report (if any arrives) overrides it. */
-    redraw(&app);
-    app.dirty = false;
-
-    char buf[4096];
-    while (!signal_quit && !app.want_quit) {
-        /* ~30 fps animation tick — drives time forward even with no
-		 * input. */
-        int rdy = yetty_yplatform_tty_stdin_wait(33);
-        if (rdy < 0) {
-            break;
-        }
-        if (rdy > 0) {
-            int n = yetty_yplatform_tty_stdin_read(buf, sizeof(buf));
-            if (n > 0) {
-                (void)yetty_yface_feed_bytes(yface, buf, (size_t)n);
-            } else if (n == 0 && !yetty_yplatform_tty_stdin_is_tty()) {
-                break;
-            }
-        }
-        /* Always redraw — the maze is animated, so each tick advances
-		 * the actor regardless of input. */
-        redraw(&app);
-        app.dirty = false;
-    }
-
-    term_input_subscribe(0);
-    (void)emit_clear();
-    fflush(stdout);
-    alt_screen_leave();
-
-    yetty_yface_destroy(yface);
-    yetty_ydraw_draw_list_destroy(app.buf);
-    yetty_ymaze_destroy(app.maze);
-    return 0;
+    return yetty_yinit_run(argc, argv, &cfg, ymaze_worker, &app);
 }

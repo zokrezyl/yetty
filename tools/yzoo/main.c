@@ -1,498 +1,286 @@
 /*
- * yzoo — animated control-point zoo frontend.
+ * tools/yzoo/main.c — standalone animated-zoo app.
  *
- * The yetty_yzoo library produces ydraw primitives; this tool drives time,
- * owns a yetty_ydraw_draw_list, and emits OSC 600001 (bin) per frame so
- * the host pane's ydraw-layer redraws. The bin payload's first prim is
- * CMD_ZERO (added by the renderer), which clears the canvas + resets the
- * cursor in the same envelope as the new prims — same flicker-free pattern
- * as ygui.
+ * Opens a window via yinit_run + yframework_create, builds a single
+ * full-window ygrid figure, and renders the yetty_yzoo into it every
+ * frame. No terminal, no ygui widget tree — the zoo drives the ygrid /
+ * compositor render path directly. Modeled on tools/ymaze.
  *
- * Modeled on tools/ymaze/main.c. There is no card abstraction in new yetty —
- * the zoo fills the whole pane.
- *
- * Subscribes to terminal-wide input so the scene resizes when the pane
- * resizes and so 'q' / ESC / Ctrl-C work both via raw TTY bytes and via wire
- * key events.
- *
- * Defaults: animate at ~30 fps, never stop (always-animating scene).
+ * Keys: q / ESC quit.
  */
 
-#include <yetty/yzoo/yzoo.h>
-
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
-#include <yetty/yface/yface.h>
-#include <yetty/ymgui/wire.h>
-#include <yetty/yterm/client-input.h>
+#include <yetty/yinit/yinit.h>
+#include <yetty/yframework/yframework.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/yconfig/config.h>
+#include <yetty/yevent/event.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/extract-assets.h>
+#include <yetty/yplatform/time.h>
+#include <yetty/yrender/render-target.h>
+#include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/rpc.h>
+#include <yetty/yfigure/wire.h>
+#include <yetty/ygrid/ygrid.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/ysdf/types.gen.h>
+#include <yetty/yzoo/yzoo.h>
+#include <yetty/ytrace/ytrace.h>
+#include <webgpu/webgpu.h>
 
-#include <signal.h>
-#include <stdbool.h>
-#include <stdint.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-
-#include <yetty/yplatform/compat.h> /* clock_gettime shim on MSVC */
-#include <yetty/yplatform/tty.h>
-
-/*=============================================================================
- * Output side — emit OSC envelopes via yface_emit.
- *===========================================================================*/
-
-static struct yetty_ycore_void_result
-emit_envelope(int osc_code, int compressed,
-	      const void *args, size_t args_len,
-	      const void *body, size_t body_len)
-{
-	struct yetty_ycore_buffer env = {0};
-	struct yetty_ycore_void_result r = yetty_yface_emit(
-		osc_code, compressed, args, args_len, body, body_len, &env);
-	if (YETTY_IS_OK(r) && env.size > 0)
-		fwrite(env.data, 1, env.size, stdout);
-	yetty_ycore_buffer_destroy(&env);
-	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_envelope: yface_emit failed");
-	return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result emit_clear(void)
-{
-	struct yetty_ycore_void_result r =
-		emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
-	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_clear");
-	return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result
-emit_bin_serialized(struct yetty_ydraw_draw_list *buf)
-{
-	const uint8_t *raw = NULL;
-	size_t raw_size = yetty_ydraw_draw_list_serialize(buf, &raw);
-	if (raw_size == 0 || !raw)
-		return YETTY_ERR(yetty_ycore_void, "emit_bin_serialized: empty buffer");
-
-	struct yetty_yface_bin_meta meta = {
-		.magic = YETTY_YFACE_BIN_MAGIC,
-		.version = YETTY_YFACE_BIN_VERSION,
-		.compressed = YETTY_YFACE_COMP_LZ4F,
-		.compression_algo = 0,
-		.raw_size = raw_size,
-		.reserved = {0, 0},
-	};
-	struct yetty_ycore_void_result r =
-		emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
-			      &meta, sizeof(meta), raw, raw_size);
-	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_bin_serialized");
-	return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result term_input_subscribe(uint32_t flags)
-{
-	struct yetty_client_input_sub msg = {
-		.magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
-		.version = YMGUI_WIRE_VERSION,
-		.flags = flags,
-		._pad0 = 0,
-	};
-	struct yetty_ycore_void_result r =
-		emit_envelope(YETTY_OSC_CS_CLIENT_INPUT_SUB, /*compressed=*/0,
-			      NULL, 0, &msg, sizeof(msg));
-	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "term_input_subscribe");
-	return YETTY_OK_VOID();
-}
-
-/*=============================================================================
- * Alternate screen buffer (raw mode is handled by the platform tty API).
- *===========================================================================*/
-
-static int alt_screen_active = 0;
-
-static void alt_screen_leave(void)
-{
-	if (alt_screen_active) {
-		static const char seq[] = "\033[?1049l";
-		fwrite(seq, 1, sizeof(seq) - 1, stdout);
-		fflush(stdout);
-		alt_screen_active = 0;
-	}
-}
-
-static void alt_screen_enter(void)
-{
-	if (!yetty_yplatform_tty_stdout_is_tty())
-		return;
-	static const char seq[] = "\033[?1049h";
-	fwrite(seq, 1, sizeof(seq) - 1, stdout);
-	fflush(stdout);
-	alt_screen_active = 1;
-	atexit(alt_screen_leave);
-}
-
-static volatile sig_atomic_t signal_quit = 0;
-
-YETTY_EXTERNAL_CALLBACK
-static void on_signal(int sig) { (void)sig; signal_quit = 1; }
-
-/*=============================================================================
- * Time helper — monotonic seconds since first call.
- *===========================================================================*/
-
-static float monotonic_now(void)
-{
-	static int initialized = 0;
-	static struct timespec start;
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	if (!initialized) {
-		start = ts;
-		initialized = 1;
-	}
-	float sec = (float)(ts.tv_sec - start.tv_sec);
-	sec += (float)(ts.tv_nsec - start.tv_nsec) / 1e9f;
-	return sec;
-}
-
-/*=============================================================================
- * App state — collected so yface callbacks can mutate it via void *user.
- *===========================================================================*/
 
 struct yzoo_app {
-	struct yetty_yzoo               *zoo;
-	struct yetty_ydraw_draw_list *buf;
-
-	float pane_w;
-	float pane_h;
-	bool  have_pane_size;
-
-	bool want_quit;
+    int quit;
+    struct yetty_context           ctx;
+    struct yetty_yframework        *yrt;
+    struct yetty_ydraw_target      *target;
+    struct yetty_yfigure_container *root;
+    struct yetty_ygrid_grid        *grid;
+    struct yetty_yzoo              *zoo;
+    struct yetty_ydraw_draw_list   *buf;
+    double                          start_time;
+    void                           *surface;
+    uint32_t                        surface_w;
+    uint32_t                        surface_h;
 };
 
-static struct yetty_ycore_void_result
-apply_pane_size(struct yzoo_app *app, float w, float h)
+#define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
+
+static struct yetty_ycore_void_result push_buffer_to_grid(struct yetty_ygrid_grid *grid,
+                                                          const struct yetty_ydraw_draw_list *buf)
 {
-	if (w < 1.0f || h < 1.0f)
-		return YETTY_OK_VOID();
-	if (app->have_pane_size && w == app->pane_w && h == app->pane_h)
-		return YETTY_OK_VOID();
-	app->pane_w = w;
-	app->pane_h = h;
-	app->have_pane_size = true;
-	struct yetty_ycore_void_result r = yetty_yzoo_set_scene_size(app->zoo, w, h);
-	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "apply_pane_size: set_scene_size failed");
-	return YETTY_OK_VOID();
+    const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(buf);
+    size_t total = yetty_ydraw_draw_list_size(buf);
+    size_t off = 0;
+    while (off + sizeof(uint32_t) <= total) {
+        const uint32_t *prim = (const uint32_t *)(data + off);
+        size_t remaining = total - off;
+        uint32_t type = prim[0];
+        size_t sdf_bytes = yetty_ysdf_primitive_size(RICH_TYPE_BASE(type));
+        size_t psize;
+        if (sdf_bytes > 0) {
+            psize = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
+        } else {
+            if (remaining < 2 * sizeof(uint32_t)) {
+                break;
+            }
+            psize = 2 * sizeof(uint32_t) + prim[1];
+        }
+        if (psize == 0 || psize > remaining) {
+            break;
+        }
+        struct yetty_ycore_void_result r = yetty_ygrid_add_record_local(grid, data + off, psize);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "push_buffer_to_grid: add_record");
+        off += psize;
+    }
+    return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result redraw(struct yzoo_app *app)
+static struct yetty_ycore_void_result render_zoo(struct yzoo_app *app)
 {
-	float t = monotonic_now();
-	struct yetty_ycore_void_result r = yetty_yzoo_render(app->zoo, app->buf, t);
-	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "redraw: render failed");
-	struct yetty_ycore_void_result er = emit_bin_serialized(app->buf);
-	YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "redraw: emit failed");
-	fflush(stdout);
-	return YETTY_OK_VOID();
+    if (!app->grid || !app->zoo || !app->buf) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result cr = yetty_ygrid_clear_local(app->grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "render_zoo: grid clear");
+
+    float t = (float)(yetty_yplatform_ytime_monotonic_sec() - app->start_time);
+    struct yetty_ycore_void_result rr = yetty_yzoo_render(app->zoo, app->buf, t);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "render_zoo: yzoo_render");
+
+    struct yetty_ycore_void_result pr = push_buffer_to_grid(app->grid, app->buf);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_zoo: push to grid");
+
+    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+    rf->dirty = 1;
+    return YETTY_OK_VOID();
 }
 
-/*=============================================================================
- * Key handling — codepoint dispatch, shared by raw bytes + wire CHAR events.
- *===========================================================================*/
-
-static void on_key_codepoint(struct yzoo_app *app, uint32_t cp)
+static struct yetty_ycore_void_result rebuild_figure(struct yzoo_app *app)
 {
-	switch (cp) {
-	case 'q': case 'Q':
-	case 0x03:    /* Ctrl-C */
-	case 0x1b:    /* ESC */
-		app->want_quit = 1;
-		break;
-	default: break;
-	}
+    struct yetty_ycore_rectangle rect = {
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h}};
+    float w = rect.max.x - rect.min.x;
+    float h = rect.max.y - rect.min.y;
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+
+    if (app->grid) {
+        struct yetty_ycore_void_result rr =
+            yetty_yfigure_container_remove_child_by_id(app->root, 1u);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rebuild_figure: remove old");
+        app->grid = NULL;
+    }
+
+    struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, 32u, 16u, &app->ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "rebuild_figure: ygrid_create");
+    app->grid = gr.value;
+
+    (void)yetty_yzoo_set_scene_size(app->zoo, w, h);
+
+    struct yetty_ycore_void_result ar =
+        yetty_yfigure_container_add_child(app->root, yetty_ygrid_as_figure(app->grid), /*id=*/1u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "rebuild_figure: add_child");
+
+    struct yetty_ycore_void_result mr = render_zoo(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "rebuild_figure: render_zoo");
+
+    yinfo("yzoo: figure rebuilt for %ux%u", app->surface_w, app->surface_h);
+    return YETTY_OK_VOID();
 }
 
-/*=============================================================================
- * yface callbacks.
- *===========================================================================*/
-
-YETTY_EXTERNAL_CALLBACK
-static void on_osc(void *user, int osc_code,
-		   const uint8_t *args, size_t args_len,
-		   const uint8_t *payload, size_t payload_len)
+static void handle_event(struct yzoo_app *app, const struct yetty_yui_event *ev)
 {
-	(void)args; (void)args_len;
-	struct yzoo_app *app = user;
-
-	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE
-	    || osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE) {
-		if (payload_len < sizeof(struct yetty_client_input_resize))
-			return;
-		const struct yetty_client_input_resize *r =
-			(const struct yetty_client_input_resize *)payload;
-		struct yetty_ycore_void_result ar =
-			apply_pane_size(app, r->width, r->height);
-		if (YETTY_IS_ERR(ar))
-			yetty_ycore_error_destroy(ar.error);
-		return;
-	}
-
-	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY || osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY) {
-		if (payload_len < sizeof(struct yetty_client_input_key))
-			return;
-		const struct yetty_client_input_key *k =
-			(const struct yetty_client_input_key *)payload;
-		if (k->kind == YETTY_YMGUI_INPUT_KEY_CHAR && k->codepoint)
-			on_key_codepoint(app, k->codepoint);
-		return;
-	}
+    switch (ev->type) {
+    case YETTY_YCORE_SHUTDOWN:
+    case YETTY_YCORE_WINDOW_CLOSE:
+        app->quit = 1;
+        return;
+    case YETTY_YCORE_RESIZE: {
+        uint32_t w = (uint32_t)ev->resize.width;
+        uint32_t h = (uint32_t)ev->resize.height;
+        if (w == 0 || h == 0) return;
+        app->surface_w = w;
+        app->surface_h = h;
+        struct yetty_ycore_void_result rr = yetty_yframework_reconfigure_surface(app->yrt, w, h);
+        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
+        struct yetty_ycore_void_result tr = app->target->ops->resize(app->target, vp);
+        if (YETTY_IS_ERR(tr)) yetty_ycore_error_destroy(tr.error);
+        struct yetty_ycore_void_result fr = rebuild_figure(app);
+        if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+        return;
+    }
+    case YETTY_YCORE_KEY_DOWN:
+        if (ev->key.key == 256 || ev->key.key == 81) {
+            app->quit = 1;
+        }
+        return;
+    default:
+        return;
+    }
 }
 
-YETTY_EXTERNAL_CALLBACK
-static void on_raw(void *user, const char *bytes, size_t n)
+static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt, void *user)
 {
-	struct yzoo_app *app = user;
-	for (size_t i = 0; i < n; i++)
-		on_key_codepoint(app, (unsigned char)bytes[i]);
-}
+    struct yzoo_app *app = user;
 
-/*=============================================================================
- * CLI parsing — same flag set as the C++ ydraw-zoo argv parser, plus our
- * frontend extras (-w/-H/--seed/--help).
- *===========================================================================*/
+    struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
+    app->yrt = yr.value;
 
-static uint32_t parse_color(const char *s)
-{
-	if (!s || !*s)
-		return 0;
-	if ((s[0] == '0') && (s[1] == 'x' || s[1] == 'X'))
-		s += 2;
-	return (uint32_t)strtoul(s, NULL, 16);
-}
+    app->ctx.runtime = app->yrt;
+    app->ctx.pty_factory = NULL;
+    app->ctx.event_loop = app->yrt->event_loop;
 
-static int parse_radius_pair(const char *s, float *out_min, float *out_max)
-{
-	const char *comma = strchr(s, ',');
-	if (!comma)
-		return -1;
-	char buf[64];
-	size_t lo_len = (size_t)(comma - s);
-	if (lo_len >= sizeof(buf))
-		return -1;
-	memcpy(buf, s, lo_len);
-	buf[lo_len] = '\0';
-	*out_min = (float)atof(buf);
-	*out_max = (float)atof(comma + 1);
-	if (*out_max < *out_min) {
-		float t = *out_max;
-		*out_max = *out_min;
-		*out_min = t;
-	}
-	return 0;
-}
+    app->surface = rt->surface;
+    app->surface_w = rt->surface_width;
+    app->surface_h = rt->surface_height;
 
-static void usage(FILE *out, const char *prog)
-{
-	fprintf(out,
-		"Usage: %s [options]\n"
-		"\n"
-		"Animated control-point zoo — emits ydraw OSC envelopes to stdout.\n"
-		"\n"
-		"Zoo options:\n"
-		"  -n, --points N         target control points (2..100, default 20)\n"
-		"  -k, --connections K    target connections per CP (1..10, default 3)\n"
-		"  -g, --growth F         outward drift rate (0.05..3.0, default 0.30)\n"
-		"      --max-dist F       max connection distance (20..600, default 280)\n"
-		"      --marker-size F    CP marker size (0.5..20, default 3.0)\n"
-		"      --stroke-min F     min stroke width (0.1..10, default 0.5)\n"
-		"      --stroke-max F     max stroke width (0.5..20, default 2.5)\n"
-		"      --curve-ratio F    fraction of curved connections (0..1, default 0.80)\n"
-		"      --bezier-segs N   segments per bezier curve (1..32, default 12)\n"
-		"      --spawn-radius MIN,MAX  spawn radius range (default 20,140)\n"
-		"      --bg-color HEX     advisory bg (default 0xFF1A1A2E)\n"
-		"\n"
-		"Frontend options:\n"
-		"  -w, --width PX         scene width fallback when host pane unknown (default 600)\n"
-		"  -H, --height PX        scene height fallback when host pane unknown (default 400)\n"
-		"      --seed N           RNG seed (default = monotonic clock)\n"
-		"  -h, --help             show this help\n"
-		"\n"
-		"Interactive controls:\n"
-		"  q / Q / ESC / Ctrl-C   quit\n",
-		prog);
+    app->yrt->render_target->ops->destroy(app->yrt->render_target);
+    app->yrt->render_target = NULL;
+    struct yetty_yrender_viewport vp = {
+        .x = 0, .y = 0, .w = (float)app->surface_w, .h = (float)app->surface_h};
+    struct yetty_yrender_target_ptr_result tr = yetty_yrender_target_texture_create(
+        app->yrt->gpu.device, app->yrt->gpu.queue, app->yrt->gpu.surface_format,
+        app->yrt->gpu.allocator, (WGPUSurface)app->surface, vp);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "texture target create failed");
+    app->target = tr.value;
+
+    struct yetty_ycore_rectangle root_rect = {
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h}};
+    struct yetty_yclass_ctx yclass_ctx = {0};
+    struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "root container create failed");
+    app->root = yetty_yfigure_container_from(obj_res.value);
+    yetty_yfigure_container_set_context(app->root, &app->ctx);
+    yetty_yfigure_container_set_rect(app->root, root_rect);
+
+    struct yetty_yzoo_config cfg = yetty_yzoo_config_default();
+    struct yetty_yzoo_ptr_result zr = yetty_yzoo_create(&cfg, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yzoo_create failed");
+    app->zoo = zr.value;
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "draw_list create failed");
+    app->buf = br.value;
+    app->start_time = yetty_yplatform_ytime_monotonic_sec();
+
+    struct yetty_ycore_void_result fr = rebuild_figure(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "rebuild_figure (initial) failed");
+
+    struct yetty_ycore_int_result fdr =
+        rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fdr, "pipe read_fd failed");
+    int pipe_fd = fdr.value;
+
+    while (!app->quit) {
+        struct pollfd pfd = {.fd = pipe_fd, .events = POLLIN};
+        int pr = poll(&pfd, 1, 33);
+        if (pr > 0 && (pfd.revents & POLLIN)) {
+            for (;;) {
+                struct yetty_yui_event ev = {0};
+                struct yetty_ycore_size_result rr =
+                    rt->platform_input_pipe->ops->read(rt->platform_input_pipe, &ev, sizeof(ev));
+                if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) break;
+                handle_event(app, &ev);
+            }
+        }
+        if (app->quit) break;
+        if (rt->instance) {
+            wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
+        }
+
+        struct yetty_ycore_void_result mrr = render_zoo(app);
+        if (YETTY_IS_ERR(mrr)) yetty_ycore_error_destroy(mrr.error);
+
+        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+        struct yetty_ydraw_target *target = app->target;
+        struct yetty_ycore_void_result cl = target->ops->clear(target);
+        if (YETTY_IS_ERR(cl)) yetty_ycore_error_destroy(cl.error);
+        struct yetty_ycore_void_result rrr =
+            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
+        if (YETTY_IS_ERR(rrr)) {
+            yetty_ycore_error_destroy(rrr.error);
+        } else {
+            rf->dirty = 0;
+        }
+        struct yetty_ycore_void_result pp = target->ops->present(target);
+        if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
+    }
+
+    {
+        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+        struct yetty_ycore_void_result dr =
+            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
+    }
+    app->root = NULL;
+    app->grid = NULL;
+    yetty_ydraw_draw_list_destroy(app->buf);
+    app->buf = NULL;
+    yetty_yzoo_destroy(app->zoo);
+    app->zoo = NULL;
+    app->target->ops->destroy(app->target);
+    app->target = NULL;
+    yetty_yframework_destroy(app->yrt);
+    app->yrt = NULL;
+    return YETTY_OK_VOID();
 }
 
 int main(int argc, char **argv)
 {
-	struct yetty_yzoo_config cfg = yetty_yzoo_config_default();
-	uint32_t seed = 0;
-
-	for (int i = 1; i < argc; i++) {
-		const char *a = argv[i];
-		if (!strcmp(a, "-h") || !strcmp(a, "--help")) {
-			usage(stdout, argv[0]);
-			return 0;
-		}
-		if ((!strcmp(a, "-n") || !strcmp(a, "--points")) && i + 1 < argc) {
-			cfg.target_points = (uint32_t)strtoul(argv[++i], NULL, 10);
-		} else if ((!strcmp(a, "-k") || !strcmp(a, "--connections"))
-			   && i + 1 < argc) {
-			cfg.target_conns_per_cp = (uint32_t)strtoul(argv[++i], NULL, 10);
-		} else if ((!strcmp(a, "-g") || !strcmp(a, "--growth"))
-			   && i + 1 < argc) {
-			cfg.growth_rate = (float)atof(argv[++i]);
-		} else if (!strcmp(a, "--max-dist") && i + 1 < argc) {
-			cfg.max_connection_dist = (float)atof(argv[++i]);
-		} else if (!strcmp(a, "--marker-size") && i + 1 < argc) {
-			cfg.cp_marker_size = (float)atof(argv[++i]);
-		} else if (!strcmp(a, "--stroke-min") && i + 1 < argc) {
-			cfg.stroke_min = (float)atof(argv[++i]);
-		} else if (!strcmp(a, "--stroke-max") && i + 1 < argc) {
-			cfg.stroke_max = (float)atof(argv[++i]);
-		} else if (!strcmp(a, "--curve-ratio") && i + 1 < argc) {
-			cfg.curve_ratio = (float)atof(argv[++i]);
-		} else if (!strcmp(a, "--bezier-segs") && i + 1 < argc) {
-			cfg.bezier_segments = (uint32_t)strtoul(argv[++i], NULL, 10);
-		} else if (!strcmp(a, "--spawn-radius") && i + 1 < argc) {
-			if (parse_radius_pair(argv[++i], &cfg.spawn_radius_min,
-					      &cfg.spawn_radius_max) < 0) {
-				fprintf(stderr, "yzoo: --spawn-radius expects MIN,MAX\n");
-				return 2;
-			}
-		} else if (!strcmp(a, "--bg-color") && i + 1 < argc) {
-			cfg.bg_color = parse_color(argv[++i]);
-		} else if ((!strcmp(a, "-w") || !strcmp(a, "--width"))
-			   && i + 1 < argc) {
-			cfg.scene_width = (float)atof(argv[++i]);
-		} else if ((!strcmp(a, "-H") || !strcmp(a, "--height"))
-			   && i + 1 < argc) {
-			cfg.scene_height = (float)atof(argv[++i]);
-		} else if (!strcmp(a, "--seed") && i + 1 < argc) {
-			seed = (uint32_t)strtoul(argv[++i], NULL, 10);
-		} else {
-			fprintf(stderr, "yzoo: unknown option %s\n", a);
-			usage(stderr, argv[0]);
-			return 2;
-		}
-	}
-
-	struct yetty_yzoo_ptr_result zr = yetty_yzoo_create(&cfg, seed);
-	if (YETTY_IS_ERR(zr)) {
-		fprintf(stderr, "yzoo: %s\n", zr.error.msg);
-		yetty_ycore_error_destroy(zr.error);
-		return 1;
-	}
-
-	struct yetty_ydraw_draw_list_config bcfg = {
-		.scene_min_x = 0.0f,
-		.scene_min_y = 0.0f,
-		.scene_max_x = cfg.scene_width,
-		.scene_max_y = cfg.scene_height,
-	};
-	struct yetty_ydraw_draw_list_result br =
-		yetty_ydraw_draw_list_config_buffer_create(&bcfg);
-	if (YETTY_IS_ERR(br)) {
-		fprintf(stderr, "yzoo: %s\n", br.error.msg);
-		yetty_ycore_error_destroy(br.error);
-		yetty_yzoo_destroy(zr.value);
-		return 1;
-	}
-
-	struct yzoo_app app = {
-		.zoo            = zr.value,
-		.buf            = br.value,
-		.pane_w         = cfg.scene_width,
-		.pane_h         = cfg.scene_height,
-		.have_pane_size = false,
-		.want_quit      = false,
-	};
-
-	struct yetty_yface_ptr_result yr = yetty_yface_create();
-	if (YETTY_IS_ERR(yr)) {
-		fprintf(stderr, "yzoo: yface_create: %s\n", yr.error.msg);
-		yetty_ycore_error_destroy(yr.error);
-		yetty_ydraw_draw_list_destroy(app.buf);
-		yetty_yzoo_destroy(app.zoo);
-		return 1;
-	}
-	struct yetty_yface *yface = yr.value;
-	yetty_yface_set_handlers(yface, on_osc, on_raw, &app);
-
-	signal(SIGINT,  on_signal);
-	signal(SIGTERM, on_signal);
-#ifdef SIGHUP
-	signal(SIGHUP,  on_signal);
-#endif
-
-	yetty_yplatform_tty_binary_io();
-	if (yetty_yplatform_tty_set_raw() < 0) {
-		fprintf(stderr, "yzoo: cannot put stdin into raw mode\n");
-		yetty_yface_destroy(yface);
-		yetty_ydraw_draw_list_destroy(app.buf);
-		yetty_yzoo_destroy(app.zoo);
-		return 1;
-	}
-	atexit(yetty_yplatform_tty_restore);
-
-	alt_screen_enter();
-
-	{
-		struct yetty_ycore_void_result sr =
-			term_input_subscribe(YETTY_CLIENT_INPUT_SUB_KEY);
-		if (YETTY_IS_ERR(sr)) {
-			fprintf(stderr, "yzoo: subscribe: %s\n", sr.error.msg);
-			yetty_ycore_error_destroy(sr.error);
-		}
-	}
-	fflush(stdout);
-
-	{
-		struct yetty_ycore_void_result dr = redraw(&app);
-		if (YETTY_IS_ERR(dr)) {
-			fprintf(stderr, "yzoo: initial redraw: %s\n", dr.error.msg);
-			yetty_ycore_error_destroy(dr.error);
-		}
-	}
-
-	char ibuf[4096];
-	while (!signal_quit && !app.want_quit) {
-		int rdy = yetty_yplatform_tty_stdin_wait(33);
-		if (rdy < 0) {
-			break;
-		}
-		if (rdy > 0) {
-			int n = yetty_yplatform_tty_stdin_read(ibuf, sizeof(ibuf));
-			if (n > 0) {
-				struct yetty_ycore_void_result fr =
-					yetty_yface_feed_bytes(yface, ibuf, (size_t)n);
-				if (YETTY_IS_ERR(fr))
-					yetty_ycore_error_destroy(fr.error);
-			} else if (n == 0 && !yetty_yplatform_tty_stdin_is_tty()) {
-				break;
-			}
-		}
-		struct yetty_ycore_void_result dr = redraw(&app);
-		if (YETTY_IS_ERR(dr)) {
-			fprintf(stderr, "yzoo: redraw: %s\n", dr.error.msg);
-			yetty_ycore_error_destroy(dr.error);
-			app.want_quit = true;
-		}
-	}
-
-	{
-		struct yetty_ycore_void_result sr = term_input_subscribe(0);
-		if (YETTY_IS_ERR(sr))
-			yetty_ycore_error_destroy(sr.error);
-		struct yetty_ycore_void_result cr = emit_clear();
-		if (YETTY_IS_ERR(cr))
-			yetty_ycore_error_destroy(cr.error);
-	}
-	fflush(stdout);
-	alt_screen_leave();
-
-	yetty_yface_destroy(yface);
-	yetty_ydraw_draw_list_destroy(app.buf);
-	yetty_yzoo_destroy(app.zoo);
-	return 0;
+    struct yzoo_app app = {0};
+    struct yetty_yinit_app_config cfg = {
+        .extract_assets_fn = yetty_platform_extract_assets,
+    };
+    return yetty_yinit_run(argc, argv, &cfg, yzoo_worker, &app);
 }

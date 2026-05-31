@@ -120,6 +120,16 @@ struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *jungle,
                                                   struct yetty_ydraw_draw_list *buf,
                                                   uint64_t now_ms);
 
+/* Full-redraw variant of yetty_yjungle_tick: advance the simulation to
+ * `now_ms`, then write the entire current chain into `buf` as a flat
+ * primitive list (no GROUP/DELETE deltas). The buffer is cleared first.
+ * For consumers that repaint a full prim list every frame — e.g. the ygui
+ * `ymaze`-style ydraw_embed widget — rather than accumulating deltas on a
+ * persistent scene canvas. */
+struct yetty_ycore_void_result yetty_yjungle_render(struct yetty_yjungle *jungle,
+                                                    struct yetty_ydraw_draw_list *buf,
+                                                    uint64_t now_ms);
+
 const struct yetty_yjungle_config *yetty_yjungle_config_get(const struct yetty_yjungle *jungle);
 
 #ifdef __cplusplus

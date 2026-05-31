@@ -10,7 +10,6 @@
 
 #include <yclass/class.h>
 #include <yetty/ygui/methods.h>
-#include <yetty/ygui/mixins/clickable.h>
 
 struct yetty_yclass_ptr_result yetty_ygui_tree_node_class_get(void);
 

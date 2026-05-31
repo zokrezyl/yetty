@@ -61,6 +61,7 @@
 #include <yetty/ygui/widgets/yimage.h>
 #include <yetty/ygui/widgets/yjungle.h>
 #include <yetty/ygui/widgets/ymarkdown.h>
+#include <yetty/ygui/widgets/ymaze.h>
 #include <yetty/ygui/widgets/ypdf.h>
 #include <yetty/ygui/widgets/yplot.h>
 #include <yetty/ygui/widgets/yvideo.h>
