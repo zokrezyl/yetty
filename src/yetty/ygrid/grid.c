@@ -188,6 +188,15 @@ yetty_ygrid_grid {
      * here; the per-figure scissor clips. 0 = top-left. */
     float scroll_x;
     float scroll_y;
+    /* HiDPI scale = framebuffer px / logical px, captured from the host's
+     * gpu context at create time (1.0 on non-HiDPI, and on the headless
+     * test path). Producers (ygui chrome, …) author and ship their wire
+     * envelope in display-independent LOGICAL pixels; this receiver
+     * multiplies every incoming coordinate by content_scale at
+     * add-record time so the same envelope renders at the correct
+     * physical size on whatever display it lands on. A remote receiver
+     * applies its OWN display's scale to the identical envelope. */
+    float content_scale;
     /* Coordinate mode. When set, prim coords are ABSOLUTE screen pixels
      * (the chrome grid + ygui figures via make_figure, whose subtrees are
      * laid out in absolute coords): the grid spans the whole target and
@@ -2309,11 +2318,20 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     g->base.dirty = 1;
     g->grid_cols = grid_cols;
     g->grid_rows = grid_rows;
+    g->content_scale = 1.0f;
     if (!headless) {
         g->device = context->runtime->gpu.device;
         g->queue = context->runtime->gpu.queue;
         g->target_format = context->runtime->gpu.surface_format;
         g->allocator = context->runtime->gpu.allocator;
+        /* Mirror text-layer's scale-at-construction: read the host's
+         * HiDPI factor once here so the receiver-side coordinate scaling
+         * needs no per-host plumbing. Guard against an unset / zero value
+         * leaking a degenerate scale into the wire path. */
+        float scale = context->runtime->gpu.app_gpu_context.content_scale;
+        if (scale > 0.0f) {
+            g->content_scale = scale;
+        }
     }
     g->staging_dirty = 1;
     g->free_slot_head = YGRID_INVALID_SLOT;
@@ -2500,6 +2518,79 @@ struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid
     return &grid->base;
 }
 
+/* Multiply one little-endian f32 wire word in place by `scale`. The
+ * wire words are u32-typed storage; round-trip through a float so the
+ * scaling is well-defined regardless of alignment. */
+static void scale_record_word(uint32_t *word, float scale)
+{
+    float v;
+    memcpy(&v, word, sizeof(v));
+    v *= scale;
+    memcpy(word, &v, sizeof(v));
+}
+
+/* Apply the receiver's HiDPI scale to every LOGICAL-pixel coordinate in
+ * a freshly-appended wire record, in place, before the record is parsed
+ * and staged. Doing it here (once, at the add boundary) means both the
+ * spatial index built by parse_and_index_record and the bytes copied
+ * verbatim into the GPU storage buffer see framebuffer-pixel
+ * coordinates — no second pass, no AABB/staging divergence.
+ *
+ * Only geometry/position fields are touched; color, z_order, and
+ * packed-index words are left intact. Handled types are exactly the
+ * ones a logical-pixel producer (ygui chrome) emits:
+ *
+ *   GLYPH      — x, y, font_size (words 2,3,4).
+ *   TEXT_SPAN  — x, y, font_size (words 2,3,4). Its expanded glyphs
+ *                inherit the scaled span and are NOT re-scaled: they are
+ *                generated straight into parse_and_index_record, below
+ *                this boundary.
+ *   SDF prims  — stroke_w (word 4) plus the geometry words from word 5
+ *                onward, minus the two trailing u32 color words carried
+ *                by the gradient-box variants.
+ *
+ * Everything else (FONT, complex figures, admin commands) falls through
+ * untouched — those carry no scalable chrome coordinates here. */
+static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offset,
+                                size_t record_len)
+{
+    float scale = g->content_scale;
+    if (scale == 1.0f) {
+        return;
+    }
+    uint32_t word_count = (uint32_t)(record_len / 4u);
+    if (word_count < 5u) {
+        return;
+    }
+    uint32_t *words = (uint32_t *)(g->bytes + record_offset);
+    uint32_t type = words[0];
+
+    if (type == YGRID_GLYPH_TYPE || type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
+        /* Both layouts place x, y, font_size at words 2, 3, 4. */
+        scale_record_word(&words[2], scale);
+        scale_record_word(&words[3], scale);
+        scale_record_word(&words[4], scale);
+        return;
+    }
+
+    /* SDF prims share the header [type, z_order, fill, stroke, stroke_w]
+     * with geometry from word 5. yetty_ysdf_handler gates the type so
+     * non-SDF records are skipped. */
+    struct yetty_ydraw_drawable_base_ops_ptr_result ops_r = yetty_ysdf_handler(type);
+    if (YETTY_IS_ERR(ops_r)) {
+        yetty_ycore_error_destroy(ops_r.error);
+        return;
+    }
+    uint32_t geom_end = word_count;
+    if (type == YETTY_YSDF_LINEAR_GRADIENT_BOX || type == YETTY_YSDF_RADIAL_GRADIENT_BOX) {
+        geom_end -= 2u; /* trailing u32 color words stay intact */
+    }
+    scale_record_word(&words[4], scale); /* stroke_w */
+    for (uint32_t i = 5u; i < geom_end; ++i) {
+        scale_record_word(&words[i], scale);
+    }
+}
+
 struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_grid *grid,
                                                             const uint8_t *record_bytes,
                                                             size_t record_len)
@@ -2517,6 +2608,10 @@ struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_g
     uint32_t record_offset = (uint32_t)grid->bytes_len;
     memcpy(grid->bytes + grid->bytes_len, record_bytes, record_len);
     grid->bytes_len += record_len;
+
+    /* Receiver-side HiDPI scaling: rewrite logical-pixel coordinates to
+     * framebuffer pixels in place before the record is indexed/staged. */
+    scale_record_coords(grid, record_offset, record_len);
 
     struct yetty_ycore_void_result pr = parse_and_index_record(grid, record_offset, record_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid_add_record: parse_and_index");

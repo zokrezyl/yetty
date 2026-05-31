@@ -278,6 +278,52 @@ static size_t yetty_ygui_destructor_skel(const void *body, size_t body_len,
     return 1;
 }
 
+static size_t yetty_ygui_widget_on_scroll_skel(const void *body, size_t body_len,
+                          void *resp, size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+        float x;
+        float y;
+        float dx;
+        float dy;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) return 0;
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_ctx local_ctx = {0};
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr,
+            "[skel] yetty_ygui_widget_on_scroll: handle_resolve", obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        if (resp_max < 1) return 0;
+        ((uint8_t *)resp)[0] = 1;
+        return 1;
+    }
+    struct yetty_ycore_int_result call_r = yetty_ygui_widget_on_scroll(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y, wire_args.dx, wire_args.dy);
+    if (resp_max < 1) return 0;
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_scroll", call_r.error);
+        yetty_ycore_error_destroy(call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        return 1;
+    }
+    if (resp_max < 1 + sizeof(call_r.value)) return 0;
+    ((uint8_t *)resp)[0] = 0;
+    memcpy((uint8_t *)resp + 1, &call_r.value, sizeof(call_r.value));
+    return 1 + sizeof(call_r.value);
+}
+
 struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_create(struct yetty_yclass_ctx *ctx)
 {
     ydebug("class=yetty_ygui_primitive_widget");
@@ -3969,7 +4015,8 @@ static const struct yetty_ygui_skel_row yetty_ygui_skel_rows[] = {
     {"yetty_ygui_widget_on_release", yetty_ygui_widget_on_release_skel},
     {"yetty_ygui_widget_on_motion", yetty_ygui_widget_on_motion_skel},
     {"yetty_ygui_constructor", yetty_ygui_constructor_skel},
-    {"yetty_ygui_destructor", yetty_ygui_destructor_skel}
+    {"yetty_ygui_destructor", yetty_ygui_destructor_skel},
+    {"yetty_ygui_widget_on_scroll", yetty_ygui_widget_on_scroll_skel}
 };
 
 static yetty_yclass_rpc_skel_fn yetty_ygui_skel_lookup(yetty_yclass_method_slot slot)

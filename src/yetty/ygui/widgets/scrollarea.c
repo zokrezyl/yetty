@@ -70,6 +70,28 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_ygui_objec
     return scrollarea_set_offset(obj, d, new_off);
 }
 
+/* Wheel / trackpad scroll. dy>0 (wheel up) moves toward the top. Consumed
+ * only when there's room to scroll, so it bubbles to an enclosing
+ * scrollable when this one is empty/short. */
+[[clang::annotate("override@ygui:scrollarea:widget_on_scroll")]]
+static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_ctx *yclass_ctx,
+                                               struct yetty_yclass_object *yclass_obj, float x,
+                                               float y, float dx, float dy)
+{
+    (void)yclass_ctx;
+    (void)x;
+    (void)y;
+    (void)dx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct scrollarea_data *d = yetty_ygui_data_get(obj, scrollarea_class());
+    if (d->max_offset <= 0.0f) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_ycore_void_result sr = scrollarea_set_offset(obj, d, d->offset - dy * 48.0f);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, sr, "scrollarea on_scroll");
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
 [[clang::annotate("override@ygui:scrollarea:constructor")]]
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)

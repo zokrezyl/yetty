@@ -108,6 +108,11 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
     struct yetty_ygui_runtime *engine, float x, float y);
 
+/* Wheel / trackpad scroll at (x, y) with deltas (dx, dy). Delivered to the
+ * widget under the pointer, bubbling up until a scrollable consumes it. */
+struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
+    struct yetty_ygui_runtime *engine, float x, float y, float dx, float dy);
+
 /*-----------------------------------------------------------------------------
  * Root + viewport.
  *---------------------------------------------------------------------------*/

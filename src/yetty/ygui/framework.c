@@ -647,6 +647,34 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
+    struct yetty_ygui_runtime *engine, float x, float y, float dx, float dy)
+{
+    if (!engine) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_scroll: NULL engine");
+    }
+    if (!engine->root) {
+        return YETTY_OK_VOID();
+    }
+    /* Deliver to the widget under the pointer, bubbling up until one
+     * consumes it (a scrollarea / filepicker). Mirrors the press path. */
+    struct yetty_ygui_object *target = hit_test(engine->root, x, y);
+    while (target) {
+        struct yetty_ycore_int_result r =
+            yetty_ygui_widget_on_scroll(NULL, (struct yetty_yclass_object *)target, x, y, dx, dy);
+        if (YETTY_IS_ERR(r)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_ygui_framework_feed_mouse_scroll: on_scroll", r);
+        }
+        if (r.value) {
+            engine->dirty = 1;
+            return YETTY_OK_VOID();
+        }
+        target = target->parent;
+    }
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ygui_object *yetty_ygui_framework_root(struct yetty_ygui_runtime *engine)
 {
     return engine ? engine->root : NULL;

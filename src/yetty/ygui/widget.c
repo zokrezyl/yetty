@@ -133,6 +133,23 @@ static struct yetty_ycore_int_result widget_default_on_motion(struct yetty_yclas
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
+/* Wheel / trackpad scroll. (dx, dy) are the deltas at (x, y). Default:
+ * not handled (0), so the framework keeps bubbling to an ancestor that
+ * scrolls. Scrollable widgets (scrollarea, filepicker) override this. */
+[[clang::annotate("override@ygui:widget:widget_on_scroll")]]
+static struct yetty_ycore_int_result widget_default_on_scroll(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              float x, float y, float dx, float dy)
+{
+    (void)ctx;
+    (void)obj;
+    (void)x;
+    (void)y;
+    (void)dx;
+    (void)dy;
+    return YETTY_OK(yetty_ycore_int, 0);
+}
+
 [[clang::annotate("override@ygui:widget:widget_paint")]] [[clang::annotate(
     "local@ygui:widget_paint")]]
 static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_ctx *ctx,

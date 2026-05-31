@@ -52,16 +52,14 @@
  * the new ygui textinput wants the ASCII DEL byte. */
 #define YUI_GLFW_KEY_BACKSPACE 259
 
-/* Titlebar chrome sizing in *logical* (CSS-pixel) units — picked to
- * feel browser-y: the strip is 32px (the native TABBAR widget's default
- * header height), the side buttons are square-ish pills matching the
- * per-tab close-x footprint. Each value is multiplied through yui_dp()
- * at use sites so HiDPI / Retina framebuffers stay visually correct. */
-#define TITLEBAR_STRIP_H_DP 32.0f
-#define TITLEBAR_BTN_W_DP 28.0f
+/* Titlebar chrome sizing — picked to feel browser-y: the strip is 32px
+ * (the native TABBAR widget's default header height), the side buttons
+ * are square-ish pills matching the per-tab close-x footprint. */
+#define TITLEBAR_STRIP_H 32.0f
+#define TITLEBAR_BTN_W 28.0f
 #define TITLEBAR_STRIP_BG 0xFF2C261Eu
 
-#define YETTY_YUI_SPLITTER_THICKNESS_DP 6.0f
+#define YETTY_YUI_SPLITTER_THICKNESS 6.0f
 
 static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result r)
 {
@@ -146,6 +144,18 @@ struct yetty_yui {
     float surface_w;
     float surface_h;
 
+    /* HiDPI scale = framebuffer px / logical px (1.0 on non-HiDPI),
+     * captured from the gpu context at create. The figure container and
+     * the terminal workspace live in framebuffer pixels, but the ygui
+     * chrome (tabbar/statusbar/dialogs/splitters) is authored and laid
+     * out in display-independent LOGICAL pixels: the receiver-side ygrid
+     * multiplies every chrome coordinate back up by this factor. So the
+     * boundary code here divides framebuffer-pixel inputs (viewport,
+     * pointer events, tile-derived splitter bounds) by content_scale on
+     * the way into ygui, and multiplies ygui-reported logical deltas
+     * back out on the way to the framebuffer-pixel tile model. */
+    float content_scale;
+
     /* Per-split visual divider widgets. */
     struct yetty_yui_splitter_entry {
         yetty_ycore_object_id split_id;     /* tile_id of the yui_split */
@@ -173,17 +183,6 @@ struct yetty_yui {
     float cell_w;
     float cell_h;
 };
-
-/* Convert a logical (DP) chrome dimension to framebuffer pixels using
- * the bound context's HiDPI content_scale. Falls back to 1× when ctx
- * isn't set, so callers can rely on the helper pre-create as well. */
-static inline float yui_dp(const struct yetty_yui *yui, float dp)
-{
-    if (!yui || !yui->ctx) {
-        return dp;
-    }
-    return yetty_dp_to_px(&yui->ctx->runtime->gpu.app_gpu_context, dp);
-}
 
 /* Add `cls` under `parent`, returning the new object or NULL (error
  * destroyed). */
@@ -579,6 +578,10 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->ctx = context;
     yui->surface_w = (float)surface_w;
     yui->surface_h = (float)surface_h;
+    yui->content_scale = context->runtime->gpu.app_gpu_context.content_scale;
+    if (yui->content_scale <= 0.0f) {
+        yui->content_scale = 1.0f;
+    }
     yui->last_cursor_shape = -1;
     yui->cell_w = cell_w;
     yui->cell_h = cell_h;
@@ -706,8 +709,11 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         yui->engine = er.value;
         yetty_ycore_error_destroy_safe(
             yetty_ygui_framework_set_container_obj(yui->engine, yui->container_obj));
-        yetty_ycore_error_destroy_safe(
-            yetty_ygui_framework_set_viewport(yui->engine, (float)surface_w, (float)surface_h));
+        /* Logical viewport: the chrome lays out in display-independent
+         * pixels; the ygrid receiver scales back to framebuffer pixels. */
+        yetty_ycore_error_destroy_safe(yetty_ygui_framework_set_viewport(
+            yui->engine, (float)surface_w / yui->content_scale,
+            (float)surface_h / yui->content_scale));
         /* Theme: overlay any style.ygui.* / style.yui.* keys from the
          * user's config onto the engine's brand-default theme. Missing
          * keys leave the defaults untouched. Once this returns, widget
@@ -990,17 +996,22 @@ static void yui_splitter_walk_tree(struct yetty_yui *yui, struct yetty_yui_tile 
     e->seen = 1;
 
     if (e->widget && first && second) {
-        const float t = yui_dp(yui, YETTY_YUI_SPLITTER_THICKNESS_DP);
+        /* Tile bounds (sb/fb) are framebuffer pixels; the splitter is a
+         * chrome widget laid out in logical pixels, so divide the derived
+         * position/extent by content_scale. The thickness `t` is already a
+         * logical constant and is left as-is. */
+        const float scale = yui->content_scale > 0.0f ? yui->content_scale : 1.0f;
+        const float t = YETTY_YUI_SPLITTER_THICKNESS;
         if (orient == YETTY_YUI_VERTICAL) {
-            float x = sb.x - t * 0.5f;
-            float y = fb.y;
-            float h = fb.h;
+            float x = sb.x / scale - t * 0.5f;
+            float y = fb.y / scale;
+            float h = fb.h / scale;
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(e->widget, x, y));
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(e->widget, t, h));
         } else {
-            float x = fb.x;
-            float y = sb.y - t * 0.5f;
-            float w = fb.w;
+            float x = fb.x / scale;
+            float y = sb.y / scale - t * 0.5f;
+            float w = fb.w / scale;
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(e->widget, x, y));
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(e->widget, w, t));
         }
@@ -1056,8 +1067,12 @@ static void yui_splitter_on_change(struct yetty_ygui_object *widget, float delta
     if (span <= 0.0f) {
         return;
     }
+    /* `span` is framebuffer pixels (tile bounds); `delta` is the logical
+     * drag distance ygui reports. Lift the delta to framebuffer pixels so
+     * the new split ratio tracks the pointer 1:1 on HiDPI. */
+    const float scale = t->yui->content_scale > 0.0f ? t->yui->content_scale : 1.0f;
     float old_ratio = yetty_yui_tile_split_ratio(split);
-    float new_first = old_ratio * span + delta;
+    float new_first = old_ratio * span + delta * scale;
     float ratio = new_first / span;
     if (ratio < 0.05f) {
         ratio = 0.05f;
@@ -1503,8 +1518,7 @@ static char *yui_gpu_info_build_text(const struct yetty_yui *yui)
     char *adapter_desc = NULL;
     if (yui->gpu_info_adapter) {
         /* The yui GPU-info panel doesn't keep a handle to the active
-         * surface; only the adapter block is shown here. The surface
-         * caps dump lives in the startup yinfo line from yframework. */
+         * surface; only the adapter block is shown here. */
         adapter_desc = yetty_ywebgpu_get_webgpu_description(yui->gpu_info_adapter, NULL);
     }
     const char *adapter_block = adapter_desc ? adapter_desc : "(WebGPU adapter unavailable)\n";
@@ -1738,8 +1752,7 @@ static struct yetty_ygui_object *yui_titlebar_button(struct yetty_yui *yui, cons
         return NULL;
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(b, glyph));
-    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(
-        b, yui_dp(yui, TITLEBAR_BTN_W_DP), yui_dp(yui, TITLEBAR_STRIP_H_DP)));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(b, TITLEBAR_BTN_W, TITLEBAR_STRIP_H));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_bg_color(b, TITLEBAR_STRIP_BG));
     yetty_ycore_error_destroy_safe(yetty_ygui_clickable_on_click_set(b, cb, yui));
     return b;
@@ -1761,7 +1774,7 @@ static void yui_titlebar_build(struct yetty_yui *yui)
         l.direction = YETTY_YGUI_FLEX_ROW;
         l.align = YETTY_YGUI_ALIGN_CENTER;
         l.gap = 0.0f;
-        l.height = yui_dp(yui, TITLEBAR_STRIP_H_DP);
+        l.height = TITLEBAR_STRIP_H;
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(tb, &l));
     }
 
@@ -1773,7 +1786,7 @@ static void yui_titlebar_build(struct yetty_yui *yui)
     if (yui->titlebar_tabbar) {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(yui->titlebar_tabbar);
         l.flex_grow = 1.0f;
-        l.height = yui_dp(yui, TITLEBAR_STRIP_H_DP);
+        l.height = TITLEBAR_STRIP_H;
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(yui->titlebar_tabbar, &l));
         yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(
             yui->titlebar_tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, yui_titlebar_on_tab_change, yui));
@@ -1994,9 +2007,14 @@ float yetty_yui_statusbar_height(const struct yetty_yui *yui)
     if (!yui || !yui->statusbar) {
         return 0.0f;
     }
+    /* The statusbar is a ygui chrome widget laid out in logical pixels;
+     * its height feeds the terminal workspace layout, which works in
+     * framebuffer pixels. Convert back up so the reserved strip matches
+     * the statusbar's physical (receiver-scaled) render height. */
+    float scale = yui->content_scale > 0.0f ? yui->content_scale : 1.0f;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(yui->statusbar);
-    float h = r.max.y - r.min.y;
-    return h > 0.0f ? h : 22.0f;
+    float h = (r.max.y - r.min.y) * scale;
+    return h > 0.0f ? h : 22.0f * scale;
 }
 
 const char *yetty_yui_get_field_text(const struct yetty_yui *yui, enum yetty_yui_view_kind kind,
@@ -2110,12 +2128,18 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     int active = yetty_yui_is_active(yui);
     int has_pressed = yetty_ygui_framework_has_pressed_widget(yui->engine);
     int in_titlebar = 0;
+    /* The ygui chrome is laid out in logical pixels; pointer events arrive
+     * in framebuffer pixels. Convert once so every ygui-facing hit-test and
+     * feed below works in the chrome's own coordinate space. The yui tile
+     * model (cursor edge / tab hit) stays in framebuffer pixels, so
+     * yui_apply_cursor below keeps the raw event coordinates. */
+    const float scale = yui->content_scale > 0.0f ? yui->content_scale : 1.0f;
     switch (event->type) {
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP:
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
-        in_titlebar = event->mouse.y < yui_dp(yui, YETTY_YUI_TABBAR_HEIGHT_DP);
+        in_titlebar = event->mouse.y / scale < 36.0f /* YETTY_YUI_TABBAR_HEIGHT */;
         break;
     default:
         break;
@@ -2134,8 +2158,9 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
          * menu's item dispatch. */
         if (yui->app_menu && yetty_ygui_popup_menu_is_open(yui->app_menu)) {
             struct yetty_ycore_rectangle mr = yetty_ygui_widget_rect(yui->app_menu);
-            int inside = event->mouse.x >= mr.min.x && event->mouse.x < mr.max.x &&
-                         event->mouse.y >= mr.min.y && event->mouse.y < mr.max.y;
+            float mx = event->mouse.x / scale;
+            float my = event->mouse.y / scale;
+            int inside = mx >= mr.min.x && mx < mr.max.x && my >= mr.min.y && my < mr.max.y;
             if (!inside) {
                 yetty_ycore_error_destroy_safe(yetty_ygui_popup_menu_close(yui->app_menu));
                 yetty_ygui_framework_mark_dirty(yui->engine);
@@ -2143,7 +2168,8 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
             }
         }
         yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_button(
-            yui->engine, event->mouse.x, event->mouse.y, event->mouse.button, 1, event->mouse.mods));
+            yui->engine, event->mouse.x / scale, event->mouse.y / scale, event->mouse.button, 1,
+            event->mouse.mods));
         yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
         if (active || yetty_ygui_framework_has_pressed_widget(yui->engine)) {
             return YETTY_OK(yetty_ycore_int, 1);
@@ -2151,13 +2177,14 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         return YETTY_OK(yetty_ycore_int, 0);
     case YETTY_YCORE_MOUSE_UP:
         yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_button(
-            yui->engine, event->mouse.x, event->mouse.y, event->mouse.button, 0, event->mouse.mods));
+            yui->engine, event->mouse.x / scale, event->mouse.y / scale, event->mouse.button, 0,
+            event->mouse.mods));
         yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
         return YETTY_OK(yetty_ycore_int, active || has_pressed ? 1 : 0);
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
-        yetty_ycore_error_destroy_safe(
-            yetty_ygui_framework_feed_mouse_motion(yui->engine, event->mouse.x, event->mouse.y));
+        yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_motion(
+            yui->engine, event->mouse.x / scale, event->mouse.y / scale));
         yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
         return YETTY_OK(yetty_ycore_int, active || has_pressed ? 1 : 0);
     case YETTY_YCORE_KEY_DOWN:
@@ -2177,6 +2204,15 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         }
         return YETTY_OK(yetty_ycore_int, active ? 1 : 0);
     }
+    case YETTY_YCORE_MOUSE_SCROLL:
+        /* Wheel / trackpad → ygui, so a focused dialog's scrollarea scrolls
+         * instead of the input falling through to terminal scrollback. */
+        /* Pointer position → logical; wheel deltas (dx/dy) are notches,
+         * not pixels, so they pass through unscaled. */
+        yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_scroll(
+            yui->engine, event->mouse_scroll.x / scale, event->mouse_scroll.y / scale,
+            event->mouse_scroll.dx, event->mouse_scroll.dy));
+        return YETTY_OK(yetty_ycore_int, active ? 1 : 0);
     default:
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -2212,8 +2248,11 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
     yui->surface_w = (float)surface_w;
     yui->surface_h = (float)surface_h;
     if (yui->engine) {
-        yetty_ycore_error_destroy_safe(
-            yetty_ygui_framework_set_viewport(yui->engine, (float)surface_w, (float)surface_h));
+        /* Logical viewport (see yui_create); container rect below stays
+         * in framebuffer pixels. */
+        yetty_ycore_error_destroy_safe(yetty_ygui_framework_set_viewport(
+            yui->engine, (float)surface_w / yui->content_scale,
+            (float)surface_h / yui->content_scale));
     }
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container);
     rf->rect = (struct yetty_ycore_rectangle){

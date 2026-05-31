@@ -77,6 +77,24 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+  - slot: widget_on_scroll
+    domain: ygui
+    owning_class: widget
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: dx
+        type: float
+      - name: dy
+        type: float
+    local: false
   - slot: widget_paint
     domain: ygui
     owning_class: widget
@@ -173,6 +191,9 @@ classes:
       - slot: widget_on_motion
         slot_domain: ygui
         impl: widget_default_on_motion
+      - slot: widget_on_scroll
+        slot_domain: ygui
+        impl: widget_default_on_scroll
       - slot: widget_paint
         slot_domain: ygui
         impl: widget_default_paint
@@ -438,6 +459,9 @@ classes:
       - slot: widget_on_motion
         slot_domain: ygui
         impl: fp_on_motion
+      - slot: widget_on_scroll
+        slot_domain: ygui
+        impl: fp_on_scroll
       - slot: widget_on_press
         slot_domain: ygui
         impl: on_press
@@ -627,6 +651,9 @@ classes:
         name: draggable
     data: struct scrollarea_data
     ops:
+      - slot: widget_on_scroll
+        slot_domain: ygui
+        impl: on_scroll
       - slot: constructor
         slot_domain: ygui
         impl: ctor

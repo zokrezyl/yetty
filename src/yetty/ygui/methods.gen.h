@@ -10,6 +10,7 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(struct y
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, float, float);
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
