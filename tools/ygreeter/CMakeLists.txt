@@ -24,6 +24,10 @@ endif()
 set(YGREETER_SOURCES
     main.c
     embedded-assets.c
+    # Shared Shadertoy gallery (Shadertoy tab). Plain string data, no GPU
+    # deps — compiled in directly so the client/cross build (which omits
+    # the webgpu-bound yetty_yshadertoy lib) still has the table.
+    ${YETTY_ROOT}/src/yetty/yshadertoy/demo-shaders.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
@@ -148,6 +152,7 @@ if(YETTY_ENABLE_LIB_WEBGPU)
     target_link_libraries(ygreeter PRIVATE
         yetty_yfigure
         yetty_ygrid
+        yetty_yshadertoy
         yetty_yfont_core
         yetty_ydraw_factory
         yetty_yimage

@@ -68,6 +68,7 @@ set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ymaze.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ypdf.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yplot.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yshadertoy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yvideo.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yzoo.c
 )

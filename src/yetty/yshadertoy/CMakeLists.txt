@@ -1,0 +1,48 @@
+# yshadertoy — standalone Shadertoy-style shader figure.
+#
+# A yfigure:figure subclass that paints its whole rect with a full-screen
+# quad running a user-supplied WGSL mainImage(), injecting the usual
+# Shadertoy inputs (iResolution/iTime/iTimeDelta/iFrame/iMouse) as
+# uniforms. Decoupled from the terminal text grid — the shader text is an
+# argument. Hosts (yetty_yterm) link this to register the
+# YETTY_YFIGURE_KIND_YSHADERTOY factory; the ygui yshadertoy widget mints
+# figures of that kind over the wire.
+#
+# methods.gen.c / rpc.gen.c / figure.gen.c are produced by `make codegen`
+# from figure.c's [[clang::annotate(...)]] and committed to git. Platform
+# builds compile what is in the tree.
+
+add_library(yetty_yshadertoy STATIC
+    figure.c
+    methods.gen.c
+    rpc.gen.c
+)
+
+target_include_directories(yetty_yshadertoy PUBLIC
+    ${YETTY_ROOT}/include
+)
+# Internal yclass codegen headers (methods.gen.h) sit under src/.
+target_include_directories(yetty_yshadertoy PRIVATE ${YETTY_ROOT}/src)
+
+target_link_libraries(yetty_yshadertoy PUBLIC
+    yetty_ycore
+    yetty_yclass
+    yetty_yfigure
+    yetty_yframework
+    yetty_yrender
+    yetty_yevent
+    yetty_ywire
+    webgpu
+)
+
+# figure.c carries `[[clang::annotate(...)]]` on its data struct (codegen
+# reads it off the AST). The C2x attribute syntax needs C23 to parse —
+# host clang/gcc accept it by default, NDK clang 17 does not. Off-MSVC
+# only: MSVC can't express C23 via CMake's C_STANDARD and parses the
+# attributes via the global /std:clatest. (Mirrors src/yetty/yfigure.)
+if(NOT MSVC)
+    set_target_properties(yetty_yshadertoy PROPERTIES
+        C_STANDARD 23
+        C_STANDARD_REQUIRED ON
+    )
+endif()

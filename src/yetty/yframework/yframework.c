@@ -33,6 +33,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yfigure/registry.h>
+#include <yetty/yshadertoy/figure.h>
 #ifdef YETTY_HAS_YMGUI
 #include <yetty/ymgui/figure.h>
 #include <yetty/ymgui/rpc.h>
@@ -649,8 +650,14 @@ struct yetty_ycore_void_result yetty_yframework_register_figure_factories(
                         "yframework_register_figure_factories: yrdawn hooks");
 #endif
 
+    /* yshadertoy — always available (no feature gate). Own factory +
+     * renderer; the registry hands the host context to the factory at
+     * mint time, so there's no args bundle to thread through. */
+    struct yetty_ycore_void_result sr = yetty_yshadertoy_register_factory(registry);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr,
+                        "yframework_register_figure_factories: yshadertoy register");
+
 #if !defined(YETTY_HAS_YMGUI) && !defined(YETTY_HAS_YRDAWN_SERVER)
-    (void)registry;
     (void)context;
 #endif
 

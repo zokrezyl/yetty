@@ -42,6 +42,7 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
+#include <yetty/yshadertoy/demo-shaders.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplatform/fs.h>
 #include <yetty/yplatform/paths.h>
@@ -65,6 +66,7 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
+#include <yetty/yshadertoy/figure.h>
 #include <yetty/yinit/yinit.h>
 #include <yetty/yrender/render-target.h>
 #endif
@@ -106,13 +108,14 @@ enum tab_kind {
     TAB_KIND_YMAZE,       /* animated maze, rendered by the `ymaze` widget */
     TAB_KIND_YZOO,        /* animated zoo, rendered by the `yzoo` widget */
     TAB_KIND_YJUNGLE,     /* animated jungle, rendered by the `yjungle` widget */
+    TAB_KIND_YSHADERTOY,  /* Shadertoy-style WGSL, rendered by the `yshadertoy` widget */
 };
 
-#define TAB_COUNT 12
+#define TAB_COUNT 13
 
 static const char *TAB_LABELS[TAB_COUNT] = {
-    "Welcome",  "Plots", "Images",   "Code",  "Video",  "Elements",
-    "Markdown", "HTML/Browser",      "Diagrams", "YMaze", "YZoo", "YJungle"};
+    "Welcome",  "Plots",        "Images",   "Code",  "Video",  "Elements", "Markdown",
+    "HTML/Browser", "Diagrams", "YMaze",    "YZoo",  "YJungle", "Shadertoy"};
 
 /* Brand palette — packed RGBA, R in low byte. Per rules/08-branding.md. */
 #define BRAND_TEXT 0xFFE4E5E0u
@@ -228,6 +231,35 @@ struct app {
 static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result r)
 {
     if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+}
+
+/*-----------------------------------------------------------------------------
+ * Shadertoy tab — a sub-tabbar swaps the WGSL source on the hosted
+ * yshadertoy widget. The widget is rebuilt every time the Shadertoy tab
+ * is re-entered (rebuild_tab_content), so the handler reaches the live
+ * widget through this single-instance pointer, refreshed at build time.
+ * Shader gallery: <yetty/yshadertoy/demo-shaders.h>.
+ *---------------------------------------------------------------------------*/
+static struct yetty_ygui_object *g_shadertoy_widget;
+
+static void shadertoy_apply(int idx)
+{
+    if (idx < 0 || idx >= yetty_yshadertoy_demo_shader_count || !g_shadertoy_widget) return;
+    const char *wgsl = yetty_yshadertoy_demo_shaders[idx].wgsl;
+    yetty_ycore_error_destroy_safe(
+        yetty_ygui_yshadertoy_set_source(g_shadertoy_widget, wgsl, strlen(wgsl)));
+}
+
+static struct yetty_ycore_void_result on_shadertoy_subtab(struct yetty_yclass_ctx *yc_ctx,
+                                                          struct yetty_yclass_object *yc_obj,
+                                                          const struct yetty_ygui_event *event,
+                                                          void *userdata)
+{
+    (void)yc_ctx;
+    (void)yc_obj;
+    (void)userdata;
+    shadertoy_apply(event->i0);
+    return YETTY_OK_VOID();
 }
 
 /*-----------------------------------------------------------------------------
@@ -682,9 +714,10 @@ static int tab_entry_count(const struct app *app, int tab_index)
     case 6: /* YReadme  — single piece of content (README.md). */
     case 7: /* YBrowser — single inline HTML sample. */
     case 8:  /* Diagrams — single self-contained scrollarea. */
-    case 9:  /* YMaze    — single self-contained animated widget. */
-    case 10: /* YZoo     — single self-contained animated widget. */
-    case 11: /* YJungle  — single self-contained animated widget. */
+    case 9:  /* YMaze     — single self-contained animated widget. */
+    case 10: /* YZoo      — single self-contained animated widget. */
+    case 11: /* YJungle   — single self-contained animated widget. */
+    case 12: /* Shadertoy — single self-contained animated widget. */
         return 1;
     default: return 0;
     }
@@ -729,6 +762,7 @@ static enum tab_kind tab_kind_for(int tab_index)
     case 9: return TAB_KIND_YMAZE;
     case 10: return TAB_KIND_YZOO;
     case 11: return TAB_KIND_YJUNGLE;
+    case 12: return TAB_KIND_YSHADERTOY;
     case 0:
     case 3:
     default:
@@ -1584,6 +1618,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     case TAB_KIND_YMAZE:
     case TAB_KIND_YZOO:
     case TAB_KIND_YJUNGLE:
+    case TAB_KIND_YSHADERTOY:
         has_nav = false;
         break;
     default:
@@ -1686,6 +1721,50 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
         content = zr.value;
         break;
     }
+    case TAB_KIND_YSHADERTOY: {
+        /* vbox(sub-tabbar, yshadertoy): same gallery as demo 41. The
+         * sub-tabbar swaps the WGSL source on the hosted yshadertoy
+         * widget; the host-side figure injects iResolution/iTime/iMouse
+         * and runs mainImage() on a full-rect quad, animating itself.
+         * Shaders: <yetty/yshadertoy/demo-shaders.h>. */
+        struct yetty_ygui_object_ptr_result vr =
+            yetty_ygui_add(yetty_ygui_vbox_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "rebuild: shadertoy vbox");
+        {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(vr.value);
+            l.flex_grow = 1.0f;
+            l.gap = 6.0f;
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(vr.value, &l));
+        }
+        struct yetty_ygui_object_ptr_result str =
+            yetty_ygui_add(yetty_ygui_tabbar_class_get().value, vr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, str, "rebuild: shadertoy sub-tabbar");
+        {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(str.value);
+            l.height = 32.0f;
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(str.value, &l));
+        }
+        for (int i = 0; i < yetty_yshadertoy_demo_shader_count; i++) {
+            struct yetty_ygui_object_ptr_result hh =
+                yetty_ygui_tabbar_add_tab(str.value, yetty_yshadertoy_demo_shaders[i].label);
+            if (YETTY_IS_ERR(hh)) yetty_ycore_error_destroy(hh.error);
+        }
+        struct yetty_ygui_object_ptr_result zr =
+            yetty_ygui_add(yetty_ygui_yshadertoy_class_get().value, vr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "rebuild: yshadertoy");
+        {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(zr.value);
+            l.flex_grow = 1.0f;
+            l.min_height = 200.0f;
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(zr.value, &l));
+        }
+        g_shadertoy_widget = zr.value;
+        yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(
+            str.value, YETTY_YGUI_EVENT_VALUE_CHANGED, on_shadertoy_subtab, app));
+        shadertoy_apply(0);
+        content = vr.value;
+        break;
+    }
     case TAB_KIND_YREADME: {
         /* Scrollarea hosts the per-feature collapsing sections, same
          * shape as the Elements and YBrowser tabs. */
@@ -1754,8 +1833,10 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     case TAB_KIND_YMAZE:
     case TAB_KIND_YZOO:
     case TAB_KIND_YJUNGLE:
+    case TAB_KIND_YSHADERTOY:
         /* Self-contained: these widgets create + animate their own scene
-         * in their constructor, so there is nothing to seed. */
+         * (yshadertoy's source was already set when the content widget was
+         * built above), so there is nothing to seed. */
         break;
     case TAB_KIND_YREADME:
         yetty_ycore_error_destroy_safe(build_yreadme_content(app, content));
@@ -2829,6 +2910,10 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "standalone: ygrid_register_factory_for_kind");
         }
+        /* yshadertoy has its own factory + renderer (not the ygrid path). */
+        struct yetty_ycore_void_result sfr =
+            yetty_yshadertoy_register_factory(app->figure_registry);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sfr, "standalone: yshadertoy_register_factory");
     }
 
     /* Local container. */

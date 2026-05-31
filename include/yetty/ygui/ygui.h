@@ -64,6 +64,7 @@
 #include <yetty/ygui/widgets/ymaze.h>
 #include <yetty/ygui/widgets/ypdf.h>
 #include <yetty/ygui/widgets/yplot.h>
+#include <yetty/ygui/widgets/yshadertoy.h>
 #include <yetty/ygui/widgets/yvideo.h>
 #include <yetty/ygui/widgets/yzoo.h>
 
