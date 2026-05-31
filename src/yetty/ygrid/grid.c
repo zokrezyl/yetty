@@ -1624,10 +1624,20 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     float ty0 = target->viewport.y;
     float tx1 = target->viewport.x + target->viewport.w;
     float ty1 = target->viewport.y + target->viewport.h;
-    float sx0 = vx > tx0 ? vx : tx0;
-    float sy0 = vy > ty0 ? vy : ty0;
-    float sx1 = (vx + w) < tx1 ? (vx + w) : tx1;
-    float sy1 = (vy + h) < ty1 ? (vy + h) : ty1;
+    /* Absolute (ygui chrome) grids receive a LOGICAL rect from the engine
+     * viewport; their prims are scaled to framebuffer pixels in
+     * scale_record_coords, so the scissor — which is in framebuffer pixels —
+     * must scale the rect by the same content_scale to match. Local figures
+     * already carry a framebuffer-pixel rect, so the scale stays 1. */
+    float rect_scale = (g->absolute_coords && g->content_scale > 0.0f) ? g->content_scale : 1.0f;
+    float rvx0 = vx * rect_scale;
+    float rvy0 = vy * rect_scale;
+    float rvx1 = (vx + w) * rect_scale;
+    float rvy1 = (vy + h) * rect_scale;
+    float sx0 = rvx0 > tx0 ? rvx0 : tx0;
+    float sy0 = rvy0 > ty0 ? rvy0 : ty0;
+    float sx1 = rvx1 < tx1 ? rvx1 : tx1;
+    float sy1 = rvy1 < ty1 ? rvy1 : ty1;
     if (sx1 <= sx0 || sy1 <= sy0) {
         /* Entirely off-pane — nothing visible. Skip draw cleanly. */
         wgpuRenderPassEncoderEnd(pass);
@@ -2554,6 +2564,14 @@ static void scale_record_word(uint32_t *word, float scale)
 static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offset,
                                 size_t record_len)
 {
+    /* Only absolute-coords grids carry ygui chrome authored in logical
+     * pixels; their rect/scissor is scaled to physical in ygrid_render to
+     * match. Local producer figures (yplot/yimage/…) own their coordinate
+     * space (rect comes from the compositor in framebuffer pixels) and are
+     * left untouched. */
+    if (!g->absolute_coords) {
+        return;
+    }
     float scale = g->content_scale;
     if (scale == 1.0f) {
         return;
