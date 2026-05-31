@@ -820,6 +820,32 @@ static void cells_clear(struct yetty_ygrid_grid *g)
  * Spatial bucketing — insert one prim into every cell it overlaps.
  *=========================================================================*/
 
+/* Content extent in framebuffer pixels — the span the cell grid covers.
+ * When content_w/h is set it is already framebuffer px (render forces it to
+ * the target viewport for absolute grids). When unset, the fallback is the
+ * figure rect — but an absolute (ygui chrome) grid's rect is in LOGICAL
+ * pixels, while its prims are scaled to framebuffer px in
+ * scale_record_coords; scale the fallback to match so cells, prim AABBs and
+ * the render-time content_w all live in the same space. Local figures keep
+ * a framebuffer-pixel rect, so the scale stays 1. */
+static float ygrid_content_extent_w(const struct yetty_ygrid_grid *g)
+{
+    if (g->content_w > 0.0f) {
+        return g->content_w;
+    }
+    float rect_w = g->base.rect.max.x - g->base.rect.min.x;
+    return (g->absolute_coords && g->content_scale > 0.0f) ? rect_w * g->content_scale : rect_w;
+}
+
+static float ygrid_content_extent_h(const struct yetty_ygrid_grid *g)
+{
+    if (g->content_h > 0.0f) {
+        return g->content_h;
+    }
+    float rect_h = g->base.rect.max.y - g->base.rect.min.y;
+    return (g->absolute_coords && g->content_scale > 0.0f) ? rect_h * g->content_scale : rect_h;
+}
+
 static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, uint32_t prim_index)
 {
     const struct ygrid_prim_meta *p = &g->prims[prim_index];
@@ -827,8 +853,8 @@ static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, ui
      * grid_size*cell_size), so prims past the visible rect bucket into
      * real cell rows instead of clamping into the last visible one.
      * Content defaults to the rect when unset. */
-    float content_w = g->content_w > 0.0f ? g->content_w : (g->base.rect.max.x - g->base.rect.min.x);
-    float content_h = g->content_h > 0.0f ? g->content_h : (g->base.rect.max.y - g->base.rect.min.y);
+    float content_w = ygrid_content_extent_w(g);
+    float content_h = ygrid_content_extent_h(g);
     float cw = content_w / (float)g->grid_cols;
     float ch = content_h / (float)g->grid_rows;
     if (cw <= 0.0f || ch <= 0.0f) {
@@ -1470,8 +1496,8 @@ static struct yetty_ycore_void_result resize_grid_dims_if_needed(struct yetty_yg
     /* Size the cell grid to the content, not the on-screen rect, so a
      * scrolling figure's off-screen prims bucket into real cells. Content
      * defaults to the rect when unset (non-scrolling figures: identical). */
-    float cw = g->content_w > 0.0f ? g->content_w : (g->base.rect.max.x - g->base.rect.min.x);
-    float ch = g->content_h > 0.0f ? g->content_h : (g->base.rect.max.y - g->base.rect.min.y);
+    float cw = ygrid_content_extent_w(g);
+    float ch = ygrid_content_extent_h(g);
     struct yetty_ycore_rectangle content_rect = {{0.0f, 0.0f}, {cw, ch}};
     ygrid_dims_from_rect(content_rect, &want_cols, &want_rows);
     if (want_cols == g->grid_cols && want_rows == g->grid_rows) {
