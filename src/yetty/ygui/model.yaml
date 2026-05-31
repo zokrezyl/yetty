@@ -31,6 +31,20 @@ methods:
       - name: button
         type: int
     local: false
+  - slot: widget_on_motion
+    domain: ygui
+    owning_class: draggable
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: yclass_ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: yclass_obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    local: false
   - slot: widget_emit_body
     domain: ygui
     owning_class: primitive_widget
@@ -62,20 +76,6 @@ methods:
         type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
-    local: false
-  - slot: widget_on_motion
-    domain: ygui
-    owning_class: widget
-    return_type: struct yetty_ycore_int_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: x
-        type: float
-      - name: y
-        type: float
     local: false
   - slot: widget_paint
     domain: ygui
@@ -117,6 +117,24 @@ classes:
       - slot: widget_on_release
         slot_domain: ygui
         impl: clickable_on_release
+  - name: draggable
+    domain: ygui
+    accessor: yetty_ygui_draggable_mixin_get
+    type: mixin
+    source_file: src/yetty/ygui/mixins/draggable.c
+    parent: null
+    mixins: []
+    data: struct draggable_data
+    ops:
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: draggable_on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: draggable_on_motion
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: draggable_on_release
   - name: primitive_widget
     domain: ygui
     accessor: yetty_ygui_primitive_widget_class_get
@@ -601,7 +619,9 @@ classes:
     parent:
       domain: ygui
       name: vbox
-    mixins: []
+    mixins:
+      - domain: ygui
+        name: draggable
     data: struct scrollarea_data
     ops:
       - slot: constructor

@@ -101,6 +101,15 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
+    /* Vertical bounds the rows must stay within. Inside a scrollarea the
+     * emit walk narrows the clip to the viewport, so when the block is
+     * scrolled, rows above/below the client area are dropped rather than
+     * spilling over the chrome (e.g. the tabbar). With no clip in force,
+     * fall back to the widget's own rect. There is no GPU scissor to clamp
+     * a partial row, so a row is drawn only when it sits wholly inside the
+     * bounds — at the edges this steps line-by-line instead of bleeding. */
+    float clip_top = ctx->clip_active ? ctx->clip.min.y : r.min.y;
+    float clip_bottom = ctx->clip_active ? ctx->clip.max.y : r.max.y;
     float cursor_y = r.min.y;
     for (int i = 0; i < d->n_lines; ++i) {
         struct rich_line *line = &d->lines[i];
@@ -115,24 +124,29 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
             row_fs = 14.0f;
         }
         float row_advance = row_fs * 1.25f;
-        float baseline = cursor_y + row_fs;
-        float cursor_x = r.min.x;
-        for (int s = 0; s < line->n_spans; ++s) {
-            struct rich_span *sp = &line->spans[s];
-            if (!sp->text || !sp->text[0]) {
-                continue;
+        float row_top = cursor_y;
+        float row_bottom = cursor_y + row_advance;
+        if (row_top >= clip_top && row_bottom <= clip_bottom) {
+            float baseline = cursor_y + row_fs;
+            float cursor_x = r.min.x;
+            for (int s = 0; s < line->n_spans; ++s) {
+                struct rich_span *sp = &line->spans[s];
+                if (!sp->text || !sp->text[0]) {
+                    continue;
+                }
+                size_t n = strlen(sp->text);
+                struct yetty_ycore_buffer tb = {
+                    .data = (uint8_t *)sp->text, .capacity = n, .size = n};
+                struct yetty_ycore_void_result tr =
+                    yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, cursor_x, baseline, &tb,
+                                                   sp->font_size, sp->color, 0, -1, 0.0f);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "rich_paint: text");
+                cursor_x += (float)n * sp->font_size * 0.55f;
             }
-            size_t n = strlen(sp->text);
-            struct yetty_ycore_buffer tb = {.data = (uint8_t *)sp->text, .capacity = n, .size = n};
-            struct yetty_ycore_void_result tr =
-                yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, cursor_x, baseline, &tb,
-                                               sp->font_size, sp->color, 0, -1, 0.0f);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "rich_paint: text");
-            cursor_x += (float)n * sp->font_size * 0.55f;
         }
         cursor_y += row_advance;
-        if (cursor_y > r.max.y) {
-            break;
+        if (cursor_y >= clip_bottom) {
+            break; /* every later row is below the client area */
         }
     }
     return YETTY_OK_VOID();

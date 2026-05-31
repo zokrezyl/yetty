@@ -257,6 +257,22 @@ struct yetty_ycore_void_result yetty_ygui_wire_append_record(struct yetty_ycore_
                                                              uint32_t id, const uint8_t *payload,
                                                              uint32_t payload_len);
 
+/* Main-axis scroll offset on the base widget slice — the layout pass
+ * shifts a node's in-flow children toward the content-box origin by this
+ * amount. Internal: only scrolling containers (scrollarea) set it; every
+ * other widget leaves it at 0. Kept off the public widget.h because it is
+ * an implementation detail of the layout pass, not authored geometry. */
+struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_ygui_object *obj,
+                                                                 float offset);
+float yetty_ygui_widget_scroll_main_get(const struct yetty_ygui_object *obj);
+
+/* "Clip my children" flag on the base widget slice — the emit body walk
+ * narrows the CPU clip rect to this node's content box while painting its
+ * subtree. Internal: scrolling containers (scrollarea) set it. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_clip_children(struct yetty_ygui_object *obj,
+                                                                   int clip);
+int yetty_ygui_widget_clips_children(const struct yetty_ygui_object *obj);
+
 #ifdef __cplusplus
 }
 #endif

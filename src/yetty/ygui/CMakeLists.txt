@@ -21,6 +21,7 @@ set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widget.c
     ${CMAKE_CURRENT_SOURCE_DIR}/primitive-widget.c
     ${CMAKE_CURRENT_SOURCE_DIR}/mixins/clickable.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/mixins/draggable.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/breadcrumbs.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/button.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/checkbox.c

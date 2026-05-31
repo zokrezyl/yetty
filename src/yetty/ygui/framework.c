@@ -1033,17 +1033,92 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
 /* Emit `node` and its subtree's prims into the currently-active draw
  * list (ctx->ygrid_draw_list). Shared by the normal path and the
  * figure-boundary path below. */
+/* Content box (rect minus padding) of a clip-children container — the
+ * region its subtree is allowed to paint into. */
+static struct yetty_ycore_rectangle emit_clip_content_box(struct yetty_ygui_object *node)
+{
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(node);
+    const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(node);
+    if (l) {
+        r.min.x += l->padding_left;
+        r.min.y += l->padding_top;
+        r.max.x -= l->padding_right;
+        r.max.y -= l->padding_bottom;
+    }
+    if (r.max.x < r.min.x) {
+        r.max.x = r.min.x;
+    }
+    if (r.max.y < r.min.y) {
+        r.max.y = r.min.y;
+    }
+    return r;
+}
+
+static struct yetty_ycore_rectangle emit_clip_intersect(struct yetty_ycore_rectangle a,
+                                                        struct yetty_ycore_rectangle b)
+{
+    struct yetty_ycore_rectangle o;
+    o.min.x = a.min.x > b.min.x ? a.min.x : b.min.x;
+    o.min.y = a.min.y > b.min.y ? a.min.y : b.min.y;
+    o.max.x = a.max.x < b.max.x ? a.max.x : b.max.x;
+    o.max.y = a.max.y < b.max.y ? a.max.y : b.max.y;
+    if (o.max.x < o.min.x) {
+        o.max.x = o.min.x;
+    }
+    if (o.max.y < o.min.y) {
+        o.max.y = o.min.y;
+    }
+    return o;
+}
+
+/* A widget rect that lies wholly outside the active clip paints nothing. */
+static int emit_clip_excludes(const struct yetty_ygui_emit_ctx *ctx,
+                              struct yetty_ycore_rectangle r)
+{
+    if (!ctx->clip_active) {
+        return 0;
+    }
+    return r.max.y <= ctx->clip.min.y || r.min.y >= ctx->clip.max.y ||
+           r.max.x <= ctx->clip.min.x || r.min.x >= ctx->clip.max.x;
+}
+
 static struct yetty_ycore_void_result walk_emit_body_inline(struct yetty_ygui_object *node,
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    struct yetty_ycore_void_result r =
-        yetty_ygui_widget_emit_body(NULL, (struct yetty_yclass_object *)node, ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_walk_emit_body: emit_body");
+    /* Cull a widget that is entirely outside the current clip. Its subtree
+     * is still walked — a child may legitimately overflow its parent (a
+     * scrollarea's content is taller than the scrollarea), and each node is
+     * tested on its own rect. Widgets that straddle the edge still paint;
+     * those that can sub-clip (multi-line text) do so in their paint hook. */
+    if (!emit_clip_excludes(ctx, yetty_ygui_widget_rect(node))) {
+        struct yetty_ycore_void_result r =
+            yetty_ygui_widget_emit_body(NULL, (struct yetty_yclass_object *)node, ctx);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_walk_emit_body: emit_body");
+    }
+
+    /* A clip-children container (scrollarea) narrows the clip to its
+     * content box for the duration of its subtree, intersecting with any
+     * clip already in force (nested scroll regions). */
+    int saved_active = ctx->clip_active;
+    struct yetty_ycore_rectangle saved_clip = ctx->clip;
+    if (yetty_ygui_widget_clips_children(node)) {
+        struct yetty_ycore_rectangle box = emit_clip_content_box(node);
+        ctx->clip = saved_active ? emit_clip_intersect(saved_clip, box) : box;
+        ctx->clip_active = 1;
+    }
+
     for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
         struct yetty_ycore_void_result rc = yetty_ygui_framework_walk_emit_body(c, ctx);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rc,
-                            "yetty_ygui_framework_walk_emit_body: child walk");
+        if (YETTY_IS_ERR(rc)) {
+            ctx->clip = saved_clip;
+            ctx->clip_active = saved_active;
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_ygui_framework_walk_emit_body: child walk", rc);
+        }
     }
+
+    ctx->clip = saved_clip;
+    ctx->clip_active = saved_active;
     return YETTY_OK_VOID();
 }
 

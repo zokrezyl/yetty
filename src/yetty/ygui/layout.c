@@ -337,9 +337,13 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
         }
     }
 
-    /* Place children. */
+    /* Place children. A scrolling container (scrollarea) carries a
+     * main-axis scroll offset; subtract it so its in-flow children slide
+     * toward the content-box origin, revealing content further down the
+     * stack. Zero for every non-scrolling widget, so this is a no-op for
+     * the rest of the tree. */
     idx = 0;
-    float cursor_main = main_offset;
+    float cursor_main = main_offset - yetty_ygui_widget_scroll_main_get(node);
     for (struct yetty_ygui_object *c = node->first_child; c && idx < placed_count;
          c = c->next_sibling) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
