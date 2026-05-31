@@ -67,22 +67,26 @@
 
 #define YMD_MAX_COLS 64 /* table columns past this are dropped */
 
-/* Existing palette (kept identical to the original look). */
-#define YMD_COLOR_TEXT 0xFFE6E6E6u
-#define YMD_COLOR_BOLD 0xFFFFFFFFu
-#define YMD_COLOR_CODE 0xFF66CC99u
-#define YMD_COLOR_HEADER 0xFFFFFFFFu
-#define YMD_COLOR_CODE_BG 0xFF3D3D3Du
+/* ydraw packs colors as 0xAABBGGRR — every ydraw shader unpacks the low
+ * byte as red ((packed & 0xFF) / 255). The brand hex in each comment is
+ * the conventional #RRGGBB; the constant stores it byte-swapped (B and R
+ * exchanged). Symmetric greys (#E6E6E6, #FFFFFF, #3D3D3D) read the same
+ * either way. */
+#define YMD_COLOR_TEXT 0xFFE6E6E6u   /* #E6E6E6 off-white body */
+#define YMD_COLOR_BOLD 0xFFFFFFFFu   /* #FFFFFF */
+#define YMD_COLOR_CODE 0xFF99CC66u   /* #66CC99 */
+#define YMD_COLOR_HEADER 0xFFFFFFFFu /* #FFFFFF */
+#define YMD_COLOR_CODE_BG 0xFF3D3D3Du /* #3D3D3D */
 
 /* New surfaces follow the brand palette (mint accent, teal borders,
  * off-white/muted text, raised background rows). */
-#define YMD_COLOR_LINK 0xFF74C5A5u        /* accent bright */
-#define YMD_COLOR_QUOTE_TEXT 0xFF9FA7A8u  /* secondary text */
-#define YMD_COLOR_QUOTE_BAR 0xFF6BA892u   /* accent */
-#define YMD_COLOR_RULE 0xFF364A47u        /* border */
-#define YMD_COLOR_TABLE_BORDER 0xFF364A47u /* border */
-#define YMD_COLOR_TABLE_HDR_BG 0xFF1E262Cu /* raised row */
-#define YMD_COLOR_STRIKE 0xFF9FA7A8u       /* secondary text */
+#define YMD_COLOR_LINK 0xFFA5C574u         /* #74C5A5 accent bright */
+#define YMD_COLOR_QUOTE_TEXT 0xFFA8A79Fu   /* #9FA7A8 secondary text */
+#define YMD_COLOR_QUOTE_BAR 0xFF92A86Bu    /* #6BA892 accent */
+#define YMD_COLOR_RULE 0xFF474A36u         /* #364A47 border */
+#define YMD_COLOR_TABLE_BORDER 0xFF474A36u /* #364A47 border */
+#define YMD_COLOR_TABLE_HDR_BG 0xFF2C261Eu /* #1E262C raised row */
+#define YMD_COLOR_STRIKE 0xFFA8A79Fu       /* #9FA7A8 secondary text */
 
 /*=============================================================================
  * Parse tree (internal)

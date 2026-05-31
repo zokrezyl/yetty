@@ -2022,7 +2022,12 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
      * normal dispatch — this means typing while in scrollback returns to
      * live and delivers the keystroke to the shell, which is what users
      * expect when they meant to interact with the prompt. */
-        if (terminal->scrollback_active) {
+        /* A bare modifier press (Ctrl/Shift/Alt/Super, GLFW 340-347) is not a
+         * real keystroke — it carries no shell input and is typically the
+         * start of a chord like Ctrl+wheel (non-intrusive zoom). It must NOT
+         * exit scrollback, or holding Ctrl to zoom would snap back to live. */
+        bool is_bare_modifier = (event->key.key >= 340 && event->key.key <= 347);
+        if (terminal->scrollback_active && !is_bare_modifier) {
             int is_enter = (event->key.key == 257); /* GLFW_KEY_ENTER */
             struct yetty_ycore_void_result xr = terminal_scrollback_exit(terminal);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, xr,

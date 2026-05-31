@@ -492,11 +492,14 @@ static uint32_t grid_sb_word_count_fn(uint32_t type_word, void *ctx)
     if (type_word == YETTY_YSDF_GLYPH) {
         return YDRAW_GLYPH_WORDS;
     }
-    if (type_word >= 0x10000000u && type_word <= 0x1FFFFFFFu) {
-        uint32_t wc = yetty_ysdf_word_count((enum yetty_ysdf_type)type_word);
-        if (wc > 0) {
-            return wc;
-        }
+    /* Every ysdf primitive type (box, segment, circle, …) is a high-range
+     * tag (0x7FFFFFxx). yetty_ysdf_word_count returns the record's word
+     * count for a known tag and 0 for anything else, so it doubles as the
+     * validity gate — no separate range check is needed (a stale range here
+     * silently rejected box/segment lines on scrollback restore). */
+    uint32_t wc = yetty_ysdf_word_count((enum yetty_ysdf_type)type_word);
+    if (wc > 0) {
+        return wc;
     }
     return 0;
 }
@@ -907,6 +910,35 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
             struct yetty_ycore_void_result rr =
                 yetty_ydraw_scrolling_grid_restore_range(grid, window_top, window_last - 1u);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rebuild_staging: restore_range");
+
+            /* A multi-row drawable (table grid line, code panel, image,
+             * figure …) is stored on its BOTTOM row and referenced from the
+             * rows above via lines_ahead. When that bottom row sits below the
+             * visible window — in the still-evicted scrollback region — its
+             * prim is gone, so the in-window cell refs index a stale drawable
+             * and the element renders partially / garbled. Scan the restored
+             * window for the lowest anchor any in-window cell points at and
+             * restore those below-window lines too, so the prefix-sum and the
+             * drawable staging agree. */
+            uint32_t max_anchor = window_last - 1u;
+            for (uint32_t canvas_y = window_top; canvas_y < window_last; canvas_y++) {
+                const struct grid_line *line = &grid->lines[canvas_y];
+                for (uint32_t x = 0; x < line->cell_count; x++) {
+                    const struct drawable_ref_array *refs = &line->cells[x].refs;
+                    for (uint32_t ri = 0; ri < refs->count; ri++) {
+                        uint32_t bl = canvas_y + refs->data[ri].lines_ahead;
+                        if (bl < grid->lines_count && bl > max_anchor) {
+                            max_anchor = bl;
+                        }
+                    }
+                }
+            }
+            if (max_anchor >= window_last) {
+                struct yetty_ycore_void_result ar =
+                    yetty_ydraw_scrolling_grid_restore_range(grid, window_last, max_anchor);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
+                                    "rebuild_staging: restore_range (below-window anchors)");
+            }
         }
     }
 
