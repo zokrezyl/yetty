@@ -321,6 +321,14 @@ static struct yetty_ycore_void_result render_target_texture_resize(
     /* Store viewport */
     rt->base.viewport = viewport;
 
+    /* A 0x0 framebuffer (e.g. a minimised or closing window on Windows) would
+     * make wgpuDeviceCreateTexture fail validation and abort. Keep the last
+     * valid texture and skip recreation until the window has a real size
+     * again — mirrors the 0x0 guard in yframework's surface reconfigure. */
+    if (width == 0 || height == 0) {
+        return YETTY_OK_VOID();
+    }
+
     /* Only recreate texture if size changed */
     if (rt->texture) {
         uint32_t old_w = wgpuTextureGetWidth(rt->texture);
