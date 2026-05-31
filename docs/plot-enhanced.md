@@ -1,8 +1,17 @@
-# Enhanced Plot Card: Expression-Based Plotting
+# Enhanced Plot Figure: Expression-Based Plotting
+
+> **Scope.** This is the design + syntax spec for expression-based plotting in
+> `yplot`. The expression engine it describes ships as two modules: **`yexpr`**
+> (parser) and **`yfsvm`** (a shader-expression VM that compiles to GPU bytecode
+> — see [yfsvm](yfsvm.md)). The C-pseudocode and "ShaderManager" snippets below
+> are illustrative; the real path is `yexpr → yfsvm → the resource-set binder`.
+> The OSC/syntax reference is current.
 
 ## Overview
 
-This document describes enhancements to the plot card to support mathematical expressions, animated plots with time-based uniforms, named buffer declarations, and external data streaming.
+This document describes expression-based plotting in the `yplot` figure:
+mathematical expressions, animated plots with time-based uniforms, named buffer
+declarations, and external data streaming.
 
 **Goals:**
 - Support mathematical expressions like `sin(x)`, `x^2 + 2*x - 1`
@@ -10,7 +19,7 @@ This document describes enhancements to the plot card to support mathematical ex
 - Named buffer declarations for external streaming clients
 - Combine buffer data with expressions: `data(x) * sin(x)`
 - Maintain backward compatibility with existing buffer-only plots
-- Leverage ShaderManager for dynamic WGSL code generation
+- Compile expressions to WGSL via the `yexpr` → `yfsvm` pipeline
 
 ## Quick Reference
 
@@ -40,8 +49,8 @@ Full example:
 
 ### Data Flow (Existing)
 ```
-yetty-client → OSC sequence → plot card → buffer upload → shader renders
-                              (parse CSV)  (cardStorage)   (sample buffer)
+yetty-client → OSC sequence → plot figure → buffer upload → shader renders
+                              (parse CSV)   (storage buf)   (sample buffer)
 ```
 
 ### Shader Structure (Existing)
@@ -55,8 +64,8 @@ The plot shader (`0x0001-plot.wgsl`) currently:
 
 ### New Data Flow
 ```
-yetty-client → OSC sequence → plot card → ShaderManager → GPU renders
-               (expression)   (parse)     (inject WGSL)   (evaluate)
+yetty-client → OSC sequence → plot figure → yexpr → yfsvm → GPU renders
+               (expression)   (parse)       (AST)   (bytecode)  (evaluate)
 ```
 
 ### Expression Compilation
@@ -395,15 +404,14 @@ struct Metadata {
 
 ### Phase 3: Shader Injection
 
-Extend ShaderManager to support plot expression injection:
+`yfsvm` compiles the parsed expression to bytecode and emits the WGSL accessor
+that the plot shader calls (the generated shader is assembled by the resource-set
+binder, [GPU Resource Binding](gpu-resource-binding.md)):
 
-```cpp
-// In ShaderManager
-Result<uint32_t> injectPlotExpression(const std::string& wgslBody);
-
-// Generated WGSL
+```wgsl
+// Generated WGSL — evaluated on the GPU via the yfsvm library
 fn plot_expr_0(x: f32, time: f32, buffers: ptr<storage, array<f32>>, buf_offset: u32, buf_len: u32) -> f32 {
-    // Injected expression body
+    // Compiled from the user expression, e.g. "sin(x) + cos(2*x)"
     return sin(x) + cos(2.0 * x);
 }
 ```

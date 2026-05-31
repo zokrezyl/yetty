@@ -1,147 +1,156 @@
 # GPU Resource Binding
 
-## Architecture
+Yetty packs an arbitrary number of buffers and textures from an arbitrary number
+of components into a **fixed, small set of GPU bindings**. This sidesteps
+WebGPU's per-group binding limits: a text layer plus its font, plus dozens of
+PDF-embedded subset fonts, all collapse into one storage buffer + one atlas per
+format + one uniform block.
 
-```
-TerminalScreen (orchestrates layers)
-  └── TextGridLayer (has GpuResourceBinder)
-        ├── Layer's GpuResourceSet: uniforms + cells buffer
-        └── Font's GpuResourceSet: texture + sampler + glyph buffer
-  └── OverlayLayer (has GpuResourceBinder)
-        ├── Layer's GpuResourceSet: uniforms + overlay data
-        └── Other objects' GpuResourceSets
-```
+This document covers the data structures and the binder flow. See
+[Design Overview](design.md) for the rationale and [Render Pipeline](render.md)
+for the per-frame upload and recompilation logic.
 
-- **TerminalScreen**: orchestrates render layers, does NOT provide GpuResourceSet
-- **RenderLayer**: provides its own GpuResourceSet (uniforms + layer-specific buffers) and owns a GpuResourceBinder
-- **Objects** (Font, etc.): provide their GpuResourceSets to the layer's binder
+---
 
-## GpuResourceSet
+## Resource set tree
 
-Struct with resource descriptions + CPU data pointers:
+Every component that needs GPU resources fills in a
+`struct yetty_ydraw_gpu_resource_set` (declared in
+`include/yetty/yrender/gpu-resource-set.h`). Resource sets form a **tree**: a
+layer's set lists the font's set as a child, and the binder flattens the whole
+tree depth-first (children before parents).
 
-```cpp
-struct GpuResourceSet {
-    bool shared;                      // bind group 0 or 1
-    std::string name;
+```c
+struct yetty_ydraw_gpu_resource_set {
+    char namespace[YETTY_YRENDER_NAME_MAX];     /* prefixes generated WGSL names */
+    struct yetty_ycore_pixel_size pixel_size;
 
-    // Texture
-    uint32_t textureWidth, textureHeight;
-    WGPUTextureFormat textureFormat;
-    const uint8_t* textureData;
-    size_t textureDataSize;
+    struct yetty_yrender_texture textures[YETTY_YRENDER_RS_MAX_TEXTURES]; /* 4 */
+    size_t texture_count;
 
-    // Sampler
-    WGPUFilterMode samplerFilter;
+    struct yetty_yrender_buffer  buffers[YETTY_YRENDER_RS_MAX_BUFFERS];   /* 4 */
+    size_t buffer_count;
 
-    // Buffer (storage)
-    size_t bufferSize;
-    const uint8_t* bufferData;
-    size_t bufferDataSize;
-    bool bufferReadonly;
+    struct yetty_yrender_uniform uniforms[YETTY_YRENDER_RS_MAX_UNIFORMS]; /* 32 */
+    size_t uniform_count;
 
-    // Uniforms
-    std::vector<UniformField> uniformFields;
-    const uint8_t* uniformData;
-    size_t uniformDataSize;
+    struct yetty_yrender_shader_code shader;     /* WGSL body for this provider  */
+
+    struct yetty_ydraw_gpu_resource_set *children[YETTY_YRENDER_RS_MAX_CHILDREN]; /* 64 */
+    size_t children_count;
+
+    uint32_t instance_count;  /* draw shape: 6 verts × instance_count. 0 = skip. */
 };
 ```
 
-## RenderLayer Pattern
+Each `buffer`/`texture`/`uniform` carries a description **plus a CPU data
+pointer and a dirty flag**. The component owns the backing data; the resource set
+just points at it.
 
-Each RenderLayer:
-1. Owns a GpuResourceBinder
-2. Provides its own GpuResourceSet (uniforms + layer data like cells)
-3. Owns objects (Font, etc.) that provide GpuResourceSets
+> The struct lives in the `yetty_ydraw_` namespace for historical reasons but is
+> declared and used throughout `yrender`. The matching result type is
+> `yetty_yrender_gpu_resource_set_result`.
 
-### TextGridLayer Example
+---
 
-```cpp
-class TextGridLayer {
-    TerminalScreen* _terminalScreen;  // provides cells data, cursor state (NO GPU knowledge)
-    GpuResourceBinder* _binder;
-    Font* _font;
-    GridUniforms _uniforms;  // projection, screenSize, cellSize, cursor, etc.
+## The binder
 
-    GpuResourceSet getGpuResourceSet() const {
-        GpuResourceSet res;
-        res.name = "textGridLayer";
+`struct yetty_yrender_gpu_resource_binder`
+(`include/yetty/yrender/gpu-resource-binder.h`) owns the merged GPU objects and
+the compiled pipeline. It is driven through its ops table:
 
-        // Cells buffer - pulled from TerminalScreen
-        size_t cellCount = _terminalScreen->getRows() * _terminalScreen->getCols();
-        res.bufferSize = cellCount * sizeof(TextCell);
-        res.bufferData = (const uint8_t*)_terminalScreen->getCellData();
-        res.bufferDataSize = res.bufferSize;
-        res.bufferReadonly = true;
+```c
+struct yetty_yrender_gpu_resource_binder_ops {
+    void (*destroy)(struct yetty_yrender_gpu_resource_binder *self);
 
-        // Uniforms - layer's own struct
-        res.uniformFields = {
-            {"projection", "mat4x4<f32>", 64},
-            {"screenSize", "vec2<f32>", 8},
-            {"cellSize", "vec2<f32>", 8},
-            {"gridSize", "vec2<f32>", 8},
-            {"cursorPos", "vec2<f32>", 8},
-            // ... etc
-        };
-        res.uniformData = (const uint8_t*)&_uniforms;
-        res.uniformDataSize = sizeof(_uniforms);
+    /* Per frame: hand the binder a (sub)tree of resource sets to collect. */
+    struct yetty_ycore_void_result (*submit)(
+        struct yetty_yrender_gpu_resource_binder *self,
+        const struct yetty_ydraw_gpu_resource_set *rs);
 
-        return res;
-    }
+    /* One-time: flatten, pack, create GPU objects, compile pipeline. */
+    struct yetty_ycore_void_result (*finalize)(struct yetty_yrender_gpu_resource_binder *self);
 
-    void render(WGPURenderPassEncoder pass) {
-        // Update uniforms from terminal state
-        _uniforms.cursorPos = {_terminalScreen->getCursorCol(), _terminalScreen->getCursorRow()};
-        // ...
+    /* Per frame: upload only dirty data; re-finalize on structural change. */
+    struct yetty_ycore_void_result (*update)(struct yetty_yrender_gpu_resource_binder *self);
 
-        // Pass GpuResourceSets to binder every frame
-        _binder->addGpuResourceSet(getGpuResourceSet());
-        _binder->addGpuResourceSet(_font->getGpuResourceSet());
+    /* Per frame: bind to a render pass at the given group index. */
+    struct yetty_ycore_void_result (*bind)(struct yetty_yrender_gpu_resource_binder *self,
+                                           WGPURenderPassEncoder pass, uint32_t group_index);
 
-        // Bind and draw
-        _binder->bind(pass, 1);
-        wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-    }
+    WGPURenderPipeline (*get_pipeline)(const struct yetty_yrender_gpu_resource_binder *self);
+    WGPUBuffer (*get_quad_vertex_buffer)(const struct yetty_yrender_gpu_resource_binder *self);
+
+    /* Streaming: write a sub-range of one flattened storage buffer with a
+     * single wgpuQueueWriteBuffer — no rebind, no re-finalize. Used for live
+     * data (audio samples, scrolling time series). */
+    struct yetty_ycore_void_result (*write_buffer_chunk)(
+        struct yetty_yrender_gpu_resource_binder *self,
+        size_t buffer_index, size_t byte_offset, const void *data, size_t size);
 };
 ```
 
-## GpuResourceBinder
+### Two construction modes
 
-Two methods:
+```c
+/* Binder owns its own pipeline (compiles its shader at finalize).
+ * Used by layer / render-target code where pipeline-per-binder is fine. */
+yetty_yrender_gpu_resource_binder_create(device, queue, surface_format, allocator);
 
-```cpp
-class GpuResourceBinder {
-    // Called every frame - creates GPU resources on first call, uploads from data pointers
-    void addGpuResourceSet(const GpuResourceSet& gpuResourceSet);
-
-    // Called every frame after all addGpuResourceSet - binds to render pass
-    void bind(WGPURenderPassEncoder pass, uint32_t groupIndex);
-};
+/* Binder uses an externally-owned, shared pipeline; it owns only the
+ * per-instance side (uniform buffer, storage buffer, bind group). Used by
+ * complex figures (yplot, yimage, ...) so all instances of one kind share
+ * one compiled shader. The pipeline must outlive the binder. */
+yetty_yrender_gpu_resource_binder_create_with_pipeline(device, queue, allocator, pipeline);
 ```
 
-## Frame Flow
+---
 
-```cpp
-void TextGridLayer::render(WGPURenderPassEncoder pass) {
-    // Update layer uniforms
-    _uniforms.projection = ...;
-    _uniforms.cursorPos = ...;
+## What `finalize()` produces
 
-    // Pass current data to binder
-    _binder->addGpuResourceSet(getGpuResourceSet());
-    _binder->addGpuResourceSet(_font->getGpuResourceSet());
+The binder flattens the resource set tree and packs everything into a fixed
+binding layout, generating the WGSL glue automatically:
 
-    // Bind to render pass
-    _binder->bind(pass, 1);
+- **One storage buffer** — every component buffer concatenated (4-byte aligned)
+  into a single `array<u32>`, with generated offset constants
+  (`text_grid_buffer_offset`, `raster_font_buffer_offset`, …).
+- **One atlas texture per format** (R8, RGBA8) — every component texture
+  shelf-packed, with generated UV-region constants (`<namespace>_texture_region`).
+- **One uniform block** — every component uniform packed into a single WGSL
+  struct following WGSL alignment rules (vec2→8, vec3/vec4/mat4→16, scalar→4).
+- **Merged shader** — generated binding declarations, offset constants, and
+  region constants are prepended to each provider's shader body.
 
-    // Draw
-    wgpuRenderPassEncoderDraw(pass, ...);
-}
+The result is a constant number of GPU bindings regardless of how many
+components contributed. See [Render Pipeline](render.md) for the exact
+`finalize()` / `update()` step lists and the change-detection that triggers a
+re-finalize.
+
+---
+
+## Per-frame flow
+
+```c
+/* A renderer owns one binder. Each frame: */
+binder->ops->submit(binder, &layer_resource_set);  /* collect the tree         */
+binder->ops->update(binder);                        /* upload dirty data,       */
+                                                     /* re-finalize if structure changed */
+binder->ops->bind(binder, pass, /*group*/ 0);
+wgpuRenderPassEncoderDraw(pass, 6, instance_count, 0, 0);
 ```
 
-**First frame** (per resource name): GpuResourceBinder creates GPU resources
-**Every frame**: GpuResourceBinder uploads from data pointers, binds
+- **First dirty frame:** `finalize()` runs (via `update`'s first-call path) —
+  create GPU objects, compile pipeline.
+- **Subsequent frames:** `update()` uploads only buffers/textures whose dirty
+  flag is set, clearing the flag after upload.
+- **Structural change** (a buffer size or texture dimension changed, or shader
+  code changed by hash): the binder releases its GPU objects and re-finalizes.
 
-## Bind Group Layout
+## Key files
 
-GpuResourceBinder creates its own bind group layout based on added GpuResourceSets. Binding indices assigned sequentially per resource type (texture, sampler, buffer, uniform).
+- `include/yetty/yrender/gpu-resource-set.h` — resource set tree struct
+- `include/yetty/yrender/gpu-resource-binder.h` — binder ops + constructors
+- `include/yetty/yrender/types.h` — buffer / texture / uniform types
+- `src/yetty/yrender/gpu-resource-binder.c` — flatten, pack, codegen, upload
+- `src/yetty/yrender/pipeline.c` — shared pipeline (two-tier mode)
+- `src/yetty/yrender/types.c` — size / alignment / hash helpers

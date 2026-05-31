@@ -23,7 +23,7 @@ Terminals are stuck in the 1970s — text, maybe colors, that's it. Meanwhile, t
 
 - **Pure C, FFI-first** — no hidden costs, bind from Rust, Go, Python, Swift, Kotlin
 - **Layered rendering** — text and graphics coexist, scroll together
-- **Composable primitives** — simple (SDF shapes) and complex (cards)
+- **Composable primitives** — simple (SDF shapes) and complex (figures)
 - **Dirty-driven pipeline** — nothing runs unless something changed
 - **GPU resource binding** — all buffers and textures packed into minimal GPU bindings
 
@@ -31,32 +31,56 @@ Terminals are stuck in the 1970s — text, maybe colors, that's it. Meanwhile, t
 
 ```
 Terminal
-  └── text-layer (libvterm)
-  └── ydraw-layer
-        ├── simple primitives (circles, boxes, lines, glyphs)
-        └── complex primitives / cards
-              └── yplot, yimage, yvideo, ydoc, ysheet...
+  ├── text-layer        libvterm (VT100/xterm)
+  ├── ydraw-layer       SDF primitives: circles, boxes, lines, glyphs
+  └── figure container  the compositor — renders after the layers
+        └── figures: yplot · yimage · yvideo · ygui · ymgui · yrdawn ·
+                     ydiagram · ysvg · ypdf · yvnc · ...
 ```
 
-Cards are nested ydraw canvases — same rendering model all the way down. A card can contain other cards, enabling recursive composition.
+A **figure** is a complex primitive that integrates with the terminal grid: it
+scrolls with text, shares the GPU resource model, and can be nested (figures may
+contain other figures). The terminal renders two real layers (text and ydraw)
+plus a `yfigure` container that hosts the rich content.
 
-## Rich Content Cards
+> Yetty is built from ~70 small C modules. See the **[Architecture & Module
+> Map](docs/architecture.md)** for the complete inventory and how the pieces
+> connect.
 
-Cards are complex primitives that integrate seamlessly with the terminal grid. They scroll with text, share the GPU resource model, and can be nested.
+## Rich Content Figures
 
-| Card | Description | Status |
+Figures are complex primitives that integrate seamlessly with the terminal grid.
+They scroll with text, share the GPU resource model, and can be nested.
+
+| Figure | Description | Status |
 |------|-------------|--------|
-| **yplot** | GPU-accelerated charts and data visualization | ✓ |
-| **yimage** | Inline images (PNG, JPEG, WebP) | ✓ |
-| **yvideo** | Video playback | In progress |
-| **ygui** | Interactive widgets | ✓ |
-| **yvnc** | Embedded VNC client | ✓ |
-| **ymarkdown** | Markdown rendering/editing (WYSIWYG) | Porting |
-| **ydoc** | Document viewer | Porting |
-| **ysheet** | Spreadsheets | Porting |
-| **yslide** | Presentations | Porting |
-| **ythorvg** | SVG and Lottie animations | Planned |
-| **ypdf** | PDF rendering | Planned |
+| **yplot** | GPU-accelerated charts and data visualization | ✅ Working |
+| **yimage** | Inline images (PNG, JPEG, WebP) | ✅ Working |
+| **ygui** | Interactive widgets (buttons, menus, tables, dialogs) | ✅ Working |
+| **ymgui** | Compositor-side GUI figure | ✅ Working |
+| **yvnc** / **ydvnc** | VNC client + desktop viewer | ✅ Working |
+| **ydiagram** | Mermaid diagrams (parser + layout + render) | ✅ Working |
+| **ysvg** | SVG (Tiny 1.2) rendering | ✅ Working |
+| **ypdf** | PDF rendering (via pdfio) | ✅ Working |
+| **ycat** | MIME-dispatched content viewer | ✅ Working |
+| **yvideo** | Video playback (H.264) | 🚧 Beta |
+| **ymarkdown** | Markdown rendering/editing (WYSIWYG) | 🚧 Porting |
+| **yrich** | Documents, spreadsheets, presentations | 🚧 Porting |
+| **ymesh** | 3D mesh rendering | 🚧 Early |
+| **ythorvg** | SVG and Lottie animations (ThorVG) | 📋 Planned |
+
+## Beyond the desktop
+
+Yetty is more than a renderer — it speaks to remote machines and embeds a web
+stack.
+
+| Capability | Module(s) | Status |
+|---|---|---|
+| **SSH / Telnet** | yssh, ytelnet | ✅ Working |
+| **Remote GPU rendering** | yrdawn (client + server over OSC) | ✅ Working |
+| **RPC control plane** | yctl | ✅ Working |
+| **Web rendering** | ylexbor (lexbor + QuickJS), ybrowser | 🚧 Early |
+| **RISC-V VM console** | yqemu, embedded TinyEMU | 🚧 Early |
 
 ## Core Features
 
@@ -73,11 +97,12 @@ Cards are complex primitives that integrate seamlessly with the terminal grid. T
 
 | Platform | Status |
 |----------|--------|
-| Linux | ✓ |
-| macOS | ✓ |
-| Windows | In progress |
-| Android | ✓ |
-| WebAssembly | ✓ |
+| Linux | ✅ Working |
+| macOS | ✅ Working |
+| Android | ✅ Working |
+| WebAssembly | ✅ Working |
+| Windows | 🚧 In progress |
+| iOS / tvOS | 🧪 Experimental |
 
 ## Building
 
@@ -115,15 +140,48 @@ make build-android_x86_64-ytrace-release
 
 ## Documentation
 
+Start with the **[Architecture & Module Map](docs/architecture.md)** for the full
+picture, then dive into a subsystem.
+
+**Overview**
 | Document | Description |
 |----------|-------------|
-| [Design Overview](docs/design.md) | Architecture and design decisions |
-| [Layered Rendering](docs/layered-rendering.md) | Layer stack and compositor |
+| [Architecture & Module Map](docs/architecture.md) | The ~70 modules, grouped, with maturity |
+| [Design Overview](docs/design.md) | Core decisions and rationale |
+| [Contexts](docs/contexts.md) | Bootstrap chain and context structs |
+
+**Rendering**
+| Document | Description |
+|----------|-------------|
+| [Layered Rendering](docs/layered-rendering.md) | Layer stack, compositor, blender |
+| [WebGPU Architecture](docs/webgpu-architecture.md) | WebGPU object ownership |
+| [WebGPU Concepts](docs/webgpu.md) | WebGPU primer (C) |
 | [GPU Resource Binding](docs/gpu-resource-binding.md) | Buffer packing and atlas textures |
-| [ydraw](docs/ydraw.md) | Primitives and scrolling model |
-| [Platform Abstraction](docs/platform.md) | PTY, event loop, input pipe |
+| [Render Pipeline](docs/render.md) | Dirty-driven upload and recompilation |
+| [ydraw](docs/ydraw.md) | Primitives, figures, and scrolling model |
 | [Font System](docs/font.md) | Glyph rendering and atlas |
+| [yfsvm](docs/yfsvm.md) | Shader expression VM |
+| [Enhanced Plots](docs/plot-enhanced.md) | yplot internals |
+
+**Terminal & platform**
+| Document | Description |
+|----------|-------------|
+| [Terminal Screen](docs/terminal-screen.md) | Screen state and compositing |
+| [Terminal Layers](docs/term-layers.md) | Scrolling, alt-screen, rolling rows |
+| [Platform Abstraction](docs/platform.md) | PTY, event loop, per-OS layout |
+| [Platform PTY](docs/platform-pty.md) | PTY backends |
+| [Platform Pipe](docs/platform-pipe.md) | Cross-thread input pipe |
+| [Coroutines](docs/coroutines.md) | yco / yevent concurrency |
+| [yvnc](docs/yvnc.md) | VNC client/server |
+
+**Conventions & tooling**
+| Document | Description |
+|----------|-------------|
+| [C Coding Style](docs/c-coding-style.md) | Naming, structs, memory rules |
+| [Result Types](docs/result.md) | Typed error propagation |
+| [FFI Generation](docs/ffi-gen.md) | Generating language bindings |
 | [ytrace](docs/ytrace.md) | Logging and tracing |
+| [Buck2](docs/buck2.md) | Buck2 build notes |
 
 ## Contributing
 
@@ -139,17 +197,28 @@ Share suggestions on [GitHub Discussions](https://github.com/zokrezyl/yetty/disc
 ## Dependencies
 
 ### Core
-- **libvterm** — VT100/xterm terminal emulation
+- **libvterm** — VT100/xterm terminal emulation (vendored)
 - **Dawn** — WebGPU implementation
 - **FreeType** — Font rasterization
 - **GLFW** — Cross-platform windowing
 - **libuv** — Async I/O and event loop
+- **libco** — Coroutines
+- **brotli** — Bundled-asset compression
 
-### Optional
-- **ThorVG** — SVG and Lottie rendering (planned)
-- **PDFium** — PDF rendering (planned)
+### Content & remote
+- **pdfio** — PDF parsing (ypdf)
+- **openh264** — H.264 video decode (yvideo)
+- **lexbor** + **QuickJS** — HTML/CSS/JS web stack (ylexbor)
+- **libssh2** — SSH backend (yssh)
+- **LZ4** — Wire-stream compression (yface)
+- **cdb** — Constant key/value database (ycdb)
+- **TinyEMU** — RISC-V VM console (vendored)
 
-All dependencies use permissive licenses (MIT, BSD, Zlib, Apache-2.0).
+### Optional / planned
+- **ThorVG** — SVG and Lottie rendering (wired in build; renderer in progress)
+
+Dependencies use permissive licenses (MIT, BSD, Zlib, Apache-2.0); the optional
+NetSurf integration (`ynetsurf`) is GPL and off by default.
 
 
 ---

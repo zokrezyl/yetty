@@ -1,247 +1,124 @@
 # WebGPU Concepts
 
-This document explains WebGPU concepts used in yetty for terminal rendering.
+A short primer on the WebGPU objects yetty uses, with C snippets against the
+Dawn C header (`webgpu/webgpu.h`). For how yetty *owns* these objects see
+[WebGPU Architecture](webgpu-architecture.md); for how it binds resources see
+[GPU Resource Binding](gpu-resource-binding.md).
 
-## Core Objects (Creation Order)
+## Core objects (creation order)
 
 ### Instance
-Entry point to WebGPU. Created once per application.
+Entry point to WebGPU, created once. The platform creates it (it needs the OS)
+and passes it via the yinit runtime.
+```c
+WGPUInstance instance = wgpuCreateInstance(NULL);
 ```
-WGPUInstance = wgpuCreateInstance()
-```
-- Platform creates this in main()
-- Passed to Yetty via AppContext
 
 ### Surface
-Represents the window's drawable area. Platform-specific.
-```
-WGPUSurface = platform-specific creation from window handle
-```
-- GLFW: created via glfw3webgpu helper
-- WebASM: created from HTML canvas
-- Passed to Yetty via AppContext
+The window's drawable area; platform-specific. Created by the platform from the
+native window handle (GLFW helper, Android `ANativeWindow`, canvas on WebASM).
+NULL in headless mode.
 
 ### Adapter
-Represents a physical GPU. Requested from instance.
+A physical GPU, requested from the instance by yframework.
+```c
+wgpuInstanceRequestAdapter(instance, &options, callbackInfo); /* → WGPUAdapter */
 ```
-wgpuInstanceRequestAdapter(instance, options) -> WGPUAdapter
-```
-- Options specify power preference, compatible surface
-- Yetty requests this during init
 
-### Device
-Logical connection to GPU. All GPU operations go through device.
+### Device + Queue
+The logical GPU connection and its single command queue, both owned by
+yframework.
+```c
+wgpuAdapterRequestDevice(adapter, &desc, callbackInfo); /* → WGPUDevice */
+WGPUQueue queue = wgpuDeviceGetQueue(device);
 ```
-wgpuAdapterRequestDevice(adapter, descriptor) -> WGPUDevice
-```
-- Descriptor specifies required limits (buffer sizes, texture dimensions)
-- Yetty requests this during init
-- Passed to all GPU components via GPUContext
 
-### Queue
-Command submission queue. One per device.
-```
-WGPUQueue = wgpuDeviceGetQueue(device)
-```
-- Used to submit command buffers
-- Used to write data to buffers/textures
-- Passed to components via GPUContext
-
-## Resource Objects
+## Resource objects
 
 ### Buffer
-GPU memory for vertices, uniforms, storage data.
-```cpp
+GPU memory for vertices, uniforms, or storage data.
+```c
 WGPUBufferDescriptor desc = {
     .size = bytes,
-    .usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst
+    .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
 };
-WGPUBuffer = wgpuDeviceCreateBuffer(device, &desc)
+WGPUBuffer buffer = wgpuDeviceCreateBuffer(device, &desc);
 ```
-Usage flags:
-- `Vertex` - vertex data
-- `Index` - index data
-- `Uniform` - small constant data (uniforms)
-- `Storage` - large read/write data (SSBOs)
-- `CopyDst` - can receive data from CPU
-- `CopySrc` - can be read back to CPU
+Usage flags combine `Vertex`, `Index`, `Uniform`, `Storage`, `CopyDst`,
+`CopySrc`. Yetty's large per-frame data (cells, primitives, glyph metadata) lives
+in `Storage` buffers; small per-frame constants live in a `Uniform` buffer.
 
-### Texture
-GPU image data.
-```cpp
-WGPUTextureDescriptor desc = {
+### Texture / TextureView / Sampler
+```c
+WGPUTextureDescriptor td = {
     .size = {width, height, 1},
     .format = WGPUTextureFormat_RGBA8Unorm,
-    .usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst
+    .usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst,
 };
-WGPUTexture = wgpuDeviceCreateTexture(device, &desc)
+WGPUTexture     tex  = wgpuDeviceCreateTexture(device, &td);
+WGPUTextureView view = wgpuTextureCreateView(tex, NULL);
+WGPUSampler     samp = wgpuDeviceCreateSampler(device, &(WGPUSamplerDescriptor){
+    .magFilter = WGPUFilterMode_Linear, .minFilter = WGPUFilterMode_Linear });
 ```
-
-### TextureView
-How to interpret a texture (format, mip levels, array layers).
-```cpp
-WGPUTextureView = wgpuTextureCreateView(texture, &viewDesc)
-```
-
-### Sampler
-How to sample a texture (filtering, wrapping).
-```cpp
-WGPUSamplerDescriptor desc = {
-    .magFilter = WGPUFilterMode_Linear,
-    .minFilter = WGPUFilterMode_Linear
-};
-WGPUSampler = wgpuDeviceCreateSampler(device, &desc)
-```
-
-## Shader Objects
+Font atlases are `R8Unorm` (MSDF / raster glyph coverage); color content is
+`RGBA8Unorm`.
 
 ### ShaderModule
-Compiled shader code (WGSL).
-```cpp
-WGPUShaderModuleWGSLDescriptor wgslDesc = {
-    .code = wgslSource
-};
-WGPUShaderModuleDescriptor desc = {
-    .nextInChain = &wgslDesc.chain
-};
-WGPUShaderModule = wgpuDeviceCreateShaderModule(device, &desc)
+Compiled WGSL. Yetty generates part of the WGSL (binding declarations, offset and
+region constants) and prepends it to each provider's shader body before
+compiling — see [GPU Resource Binding](gpu-resource-binding.md).
+```c
+WGPUShaderSourceWGSL wgsl = { .chain = {.sType = WGPUSType_ShaderSourceWGSL},
+                              .code = {.data = src, .length = len} };
+WGPUShaderModuleDescriptor sd = { .nextInChain = &wgsl.chain };
+WGPUShaderModule module = wgpuDeviceCreateShaderModule(device, &sd);
 ```
 
-## Bind Groups (Resource Binding)
+## Binding and pipelines
 
-### BindGroupLayout
-Describes what resources a shader expects at each binding.
-```cpp
-WGPUBindGroupLayoutEntry entries[] = {
-    {.binding = 0, .visibility = Fragment, .buffer.type = Uniform},
-    {.binding = 1, .visibility = Fragment, .texture.sampleType = Float},
-    {.binding = 2, .visibility = Fragment, .sampler.type = Filtering}
-};
-WGPUBindGroupLayout = wgpuDeviceCreateBindGroupLayout(device, &layoutDesc)
-```
-
-### BindGroup
-Actual resources bound to a layout.
-```cpp
-WGPUBindGroupEntry entries[] = {
-    {.binding = 0, .buffer = uniformBuffer, .size = sizeof(Uniforms)},
-    {.binding = 1, .textureView = atlasView},
-    {.binding = 2, .sampler = linearSampler}
-};
-WGPUBindGroup = wgpuDeviceCreateBindGroup(device, &desc)
-```
-
-### PipelineLayout
-Combines multiple bind group layouts.
-```cpp
-WGPUBindGroupLayout layouts[] = {group0Layout, group1Layout};
-WGPUPipelineLayout = wgpuDeviceCreatePipelineLayout(device, &desc)
-```
-
-In yetty shaders:
-- Group 0: Shared resources (time, mouse, card data)
-- Group 1: Per-terminal resources (uniforms, cells, fonts)
-
-## Pipeline Objects
+### BindGroupLayout / BindGroup / PipelineLayout
+A bind group layout declares what resources a shader expects; a bind group binds
+the actual resources. Yetty's binder builds these automatically from the
+flattened resource-set tree, so there is **no fixed shared/per-view group split**
+— the binding layout is derived from whatever resource sets were submitted. See
+[GPU Resource Binding](gpu-resource-binding.md).
 
 ### RenderPipeline
-Complete rendering configuration: shaders, vertex layout, blending, etc.
-```cpp
-WGPURenderPipelineDescriptor desc = {
-    .layout = pipelineLayout,
-    .vertex = {.module = shader, .entryPoint = "vs_main", ...},
-    .fragment = {.module = shader, .entryPoint = "fs_main", ...},
-    .primitive = {.topology = TriangleList},
-    ...
+The full draw configuration: shader, vertex layout, blending, primitive
+topology. Yetty compiles a pipeline once and recompiles only when the shader code
+hash changes (see [Render Pipeline](render.md)).
+
+## Per-frame commands
+
+```c
+WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device, NULL);
+
+WGPURenderPassDescriptor pass = {
+    .colorAttachmentCount = 1,
+    .colorAttachments = &(WGPURenderPassColorAttachment){
+        .view = target_view, .loadOp = WGPULoadOp_Clear, .storeOp = WGPUStoreOp_Store },
 };
-WGPURenderPipeline = wgpuDeviceCreateRenderPipeline(device, &desc)
+WGPURenderPassEncoder rp = wgpuCommandEncoderBeginRenderPass(enc, &pass);
+
+wgpuRenderPassEncoderSetPipeline(rp, pipeline);
+wgpuRenderPassEncoderSetBindGroup(rp, 0, bind_group, 0, NULL);
+wgpuRenderPassEncoderSetVertexBuffer(rp, 0, quad_vb, 0, WGPU_WHOLE_SIZE);
+wgpuRenderPassEncoderDraw(rp, 6, instance_count, 0, 0); /* full-pane quad */
+wgpuRenderPassEncoderEnd(rp);
+
+WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, NULL);
+wgpuQueueSubmit(queue, 1, &cmd);          /* one queue, see webgpu-architecture.md */
+wgpuSurfacePresent(surface);              /* or copy to readback in headless mode */
 ```
 
-## Rendering (Per Frame)
+Most layers draw a single full-pane quad and do all the work in the fragment
+shader (SDF evaluation, glyph sampling). `instance_count > 1` is used where each
+instance maps to one cell — see [ydraw](ydraw.md).
 
-### CommandEncoder
-Records GPU commands.
-```cpp
-WGPUCommandEncoder = wgpuDeviceCreateCommandEncoder(device, nullptr)
-```
+## Where ownership lives
 
-### RenderPassEncoder
-Records draw commands within a render pass.
-```cpp
-WGPURenderPassDescriptor passDesc = {
-    .colorAttachments = {{.view = surfaceTextureView, .loadOp = Clear, ...}}
-};
-WGPURenderPassEncoder = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc)
-```
-
-### Drawing
-```cpp
-wgpuRenderPassEncoderSetPipeline(pass, pipeline);
-wgpuRenderPassEncoderSetBindGroup(pass, 0, sharedBindGroup, 0, nullptr);
-wgpuRenderPassEncoderSetBindGroup(pass, 1, terminalBindGroup, 0, nullptr);
-wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quadBuffer, 0, size);
-wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);  // 6 vertices = 2 triangles
-wgpuRenderPassEncoderEnd(pass);
-```
-
-### Submit
-```cpp
-WGPUCommandBuffer cmdBuf = wgpuCommandEncoderFinish(encoder, nullptr);
-wgpuQueueSubmit(queue, 1, &cmdBuf);
-```
-
-### Present
-```cpp
-wgpuSurfacePresent(surface);
-```
-
-## Yetty Resource Ownership
-
-```
-Platform (main)
-  |
-  +-- Instance, Surface (owned by platform)
-  |
-  +-- Yetty
-        |
-        +-- Adapter, Device, Queue (owned by Yetty)
-        +-- GpuAllocator (tracks all GPU allocations)
-        |
-        +-- Terminal
-              |
-              +-- TerminalScreen
-                    |
-                    +-- ShaderManager (owned per-terminal)
-                    |     +-- ShaderModule
-                    |     +-- RenderPipeline
-                    |     +-- PipelineLayout
-                    |     +-- BindGroupLayouts (group 0, group 1)
-                    |     +-- Shared BindGroup (group 0)
-                    |     +-- Quad vertex buffer
-                    |
-                    +-- RasterFont
-                    |     +-- Texture (atlas)
-                    |     +-- TextureView
-                    |     +-- Sampler
-                    |     +-- Buffer (glyph metadata)
-                    |
-                    +-- Uniform buffer
-                    +-- Cell buffer (SSBO)
-                    +-- BindGroup (group 1)
-```
-
-## Data Flow (Rendering)
-
-1. **CPU updates uniforms** (projection, cursor, screen size)
-   ```cpp
-   wgpuQueueWriteBuffer(queue, uniformBuffer, 0, &uniforms, size)
-   ```
-
-2. **CPU updates cells** (when terminal content changes)
-   ```cpp
-   wgpuQueueWriteBuffer(queue, cellBuffer, 0, cells, cellCount * sizeof(TextCell))
-   ```
-
-3. **GPU reads** uniforms and cells in fragment shader
-4. **Fragment shader** samples font atlas, computes pixel colors
-5. **Output** to surface texture, presented to window
+The authoritative ownership table (who creates instance/surface/adapter/device/
+queue/allocator/render-target) is in
+[WebGPU Architecture](webgpu-architecture.md). In short: the platform creates
+instance + surface; yframework owns the device, queue, allocator, and render
+target; each renderer owns its own pipelines and per-frame buffers.

@@ -62,6 +62,6 @@ The text layer includes the font's resource set as a child in its own resource s
 
 ## Headers
 
-- `include/yetty/font/font.h` — interface
-- `include/yetty/font/raster-font.h` — raster font creation
-- `src/yetty/font/raster-font.c` — implementation
+- `include/yetty/yfont/font.h` — interface (the type prefix is `yetty_font_`)
+- `include/yetty/yfont/raster-font.h` — raster font creation
+- `src/yetty/yfont/raster-font.c` — implementation

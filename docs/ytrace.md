@@ -66,4 +66,4 @@ Build targets control this: `ytrace` builds have all levels enabled, `yinfo` bui
 
 ## Header
 
-`include/yetty/ytrace.h`
+`include/yetty/ytrace/ytrace.h`

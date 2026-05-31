@@ -2,14 +2,34 @@
 
 ## Overview
 
-Terminal rendering is split into multiple layers (text, ydraw, etc.), each rendering to its own texture. A blender composites all layer textures to a render target.
+Terminal rendering is split into multiple layers (text, ydraw), each rendering to
+its own texture. A blender composites the layer textures to a render target. On
+top of the legacy layers, a **figure container** (the compositor) renders the
+rich content — see "Layers vs figures" below.
 
 **Key principles:**
-- **Simple orchestration** - terminal.c iterates layers and calls blender
-- **Complex logic in render/** - Rendering and blending logic in `src/yetty/render/`
+- **Simple orchestration** - the terminal iterates layers and calls the blender
+- **Complex logic in `yrender/`** - rendering and blending logic lives in
+  `src/yetty/yrender/`
 - **Blender owns target** - Target is encapsulated, can be changed at runtime
 - **1:1 renderer-layer coupling** - Each layer has its dedicated renderer
 - **Renderer owns binder** - Binder caches compiled shader/pipeline
+
+> ## Layers vs figures
+>
+> This document describes the **layer** pipeline: the `yrender` machinery that
+> renders a `yetty_yrender_terminal_layer` to a texture and blends it. Today the
+> terminal instantiates two such layers — **text-layer** (libvterm) and
+> **ydraw-scrolling-layer** (SDF primitives) — plus a background layer supplied
+> by the host pane.
+>
+> Most *rich content* (ygui, ymgui, yrdawn canvases, ygrid, yplot, …) no longer
+> lives in a layer. It lives as a **figure** inside a `yfigure` root container
+> that the terminal renders **after** the legacy layers. That container is the
+> de-facto compositor for figures; "blender" below is the lower-level GPU stage
+> that composites layer textures. See [ydraw](ydraw.md) for the figure/primitive
+> model and [Terminal Layers](term-layers.md) for the scroll/alt-screen state
+> shared across both worlds.
 
 ---
 
@@ -37,7 +57,7 @@ terminal.c (simple orchestrator)
 
 ---
 
-## Components (src/yetty/render/)
+## Components (src/yetty/yrender/)
 
 ### 1. render_target
 
@@ -53,10 +73,11 @@ struct yetty_yrender_target_ops {
 };
 ```
 
-Implementations:
-- **surface_target** - Local window (WGPUSurface)
-- **vnc_target** - VNC server buffer (future)
-- **multi_target** - Multiple targets simultaneously (future)
+Implementations (in `src/yetty/yrender/`):
+- **surface target** - local window (WGPUSurface), the on-screen path
+- **texture target** (`render-target-texture.c`) - offscreen render-to-texture
+- **VNC target** (`render-target-vnc.c`) - VNC server framebuffer (headless)
+- **X11-tile target** (`render-target-x11-tile.c`) - X11 tiled output
 
 ### 2. rendered_layer
 
@@ -277,26 +298,41 @@ terminal_render_frame(terminal);
 ## File Structure
 
 ```
-include/yetty/render/
-├── render-target.h         # target interface
-├── rendered-layer.h        # rendered layer handle
-├── layer-renderer.h        # layer → texture renderer
-└── blender.h               # compositor, owns target
+include/yetty/yrender/
+├── render-target.h          # target interface
+├── render-target-x11-tile.h # X11-tile target
+├── rendered-layer.h         # rendered layer handle
+├── layer-renderer.h         # layer → texture renderer
+├── blender.h                # compositor, owns target
+├── gpu-resource-set.h       # resource set tree
+├── gpu-resource-binder.h    # binder interface
+├── gpu-allocator.h          # GPU allocation tracking
+├── pipeline.h               # shared pipeline (two-tier binder)
+├── primitive-gpu-binder.h   # SDF primitive binder
+├── font-dispatcher.h        # glyph → atlas dispatch
+├── texture-format.h         # format helpers
+└── types.h                  # buffer / texture / uniform types
 
-src/yetty/render/
-├── render-target-surface.c # WGPUSurface target implementation
-├── rendered-layer.c        # rendered layer handle implementation
-├── layer-renderer.c        # renderer (owns binder, texture, layer ref)
-├── binder.c                # shader/pipeline caching
-├── blender.c               # compositor
-└── blend.wgsl              # compositing shader
+src/yetty/yrender/
+├── render-target-texture.c  # offscreen texture target
+├── render-target-vnc.c      # VNC server buffer target
+├── render-target-x11-tile.c # X11-tile target
+├── gpu-resource-binder.c    # flatten / pack / codegen / upload
+├── gpu-allocator.c          # allocation tracking
+├── pipeline.c               # shared pipeline
+├── primitive-gpu-binder.c   # SDF primitive binder
+├── font-dispatcher.c        # glyph dispatch
+├── types.c                  # type utilities
+└── blend.wgsl               # compositing shader
 ```
 
 ---
 
 ## Future Extensions (Out of Scope)
 
-- **VNC target** - Render to VNC server buffer
 - **Multi-target** - Render to multiple targets simultaneously
 - **Layer effects** - Per-layer post-processing
 - **Dirty regions** - Partial re-rendering
+
+(The VNC target listed here in earlier drafts now ships —
+`render-target-vnc.c`.)

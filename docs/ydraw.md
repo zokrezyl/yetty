@@ -374,7 +374,8 @@ Complex primitives may contain nested ydraw (recursive). Each nesting level woul
 
 ### Render Target Integration
 
-The render target abstraction handles both local GPU and remote ymux:
+The render target abstraction handles both local GPU and remote rendering
+(via `yrdawn`):
 
 **Local GPU:**
 ```
@@ -383,10 +384,10 @@ layer->render(render_target)
   └── complex prims → viewport passes (same target)
 ```
 
-**ymux (remote):**
+**Remote (`yrdawn`):**
 ```
-Serialize primitive data → send to remote
-Remote renders using same approach
+Serialize primitive data → send to remote client/server
+Remote renders using same approach, result composited as a yrdawn figure
 ```
 
 ### Wire Format (FAM - Flexible Array Member)
@@ -622,14 +623,20 @@ Runtime binds bytes to pipeline - no interpretation. Only constructor (sender) a
 
 ## Status
 
+The complex-primitive code generator described above has shipped. The generator
+and the abstract/concrete factory split live in `ydraw-core`, `ydraw-factory`,
+and `ydraw-yaml`; complex figures (yplot, yimage, yvideo, …) are generated from a
+per-module `model.yaml` + `.wgsl` pair.
+
 **Done:**
 - Type registry with result-based error handling
 - Abstract factory pattern (maps type_id → concrete factory)
-- Code generator: serialization (C header/source from YAML)
+- Code generator: serialization, factory + instance boilerplate, resource-set
+  initialization, and WGSL accessor functions from YAML
 
-**TODO:**
-- Code generator: factory boilerplate (create/destroy, binder management)
-- Code generator: instance boilerplate (create/destroy, render)
-- Code generator: resource set initialization from YAML
-- Code generator: WGSL accessor functions
-- Remove hand-written boilerplate from yplot.c (should be generated)
+**Related modules:**
+- `ydraw-core` — serialized primitive buffer, draw list, flyweight registry
+- `ydraw-factory` — figure factory for complex primitives
+- `ydraw-yaml` — YAML-driven figure construction
+- `yfigure` — the figure/container model the compositor uses (see
+  [Layered Rendering](layered-rendering.md))

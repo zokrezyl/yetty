@@ -70,7 +70,9 @@ See [Result Types](result.md) for the macro definitions and usage patterns.
 
 ## Layered Rendering
 
-The terminal screen is a stack of render layers: text grid, selection, cursor, ydraw overlays, cards. Each layer:
+The terminal screen is a stack of render layers (text grid with selection and
+cursor, plus a ydraw overlay) topped by a `yfigure` container that composites the
+rich-content figures. Each layer:
 
 - Owns a `struct yetty_yrender_gpu_resource_set` describing its GPU needs
 - Has a `dirty` flag — no re-render unless content changed
