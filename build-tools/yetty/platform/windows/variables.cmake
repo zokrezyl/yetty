@@ -10,6 +10,7 @@ set(YETTY_ENABLE_LIB_MSDFGEN       OFF CACHE BOOL "" FORCE)
 
 # Features/libs whose sources use POSIX APIs not yet ported to Windows.
 set(YETTY_ENABLE_FEATURE_SSH       OFF CACHE BOOL "" FORCE)  # <netdb.h>, <pthread.h>, <poll.h>
+set(YETTY_ENABLE_FEATURE_YMGUI     OFF CACHE BOOL "" FORCE)  # frontend ymgui_encode.c: poll()-based non-blocking PTY write not ported (issue #247)
 set(YETTY_ENABLE_LIB_LIBSSH2       OFF CACHE BOOL "" FORCE)  # yssh wrapper not ported
 set(YETTY_ENABLE_FEATURE_YTHORVG   OFF CACHE BOOL "" FORCE)  # C99 compound literals (MSVC C++ rejects)
 set(YETTY_ENABLE_LIB_THORVG        OFF CACHE BOOL "" FORCE)  # only consumer is FEATURE_YTHORVG

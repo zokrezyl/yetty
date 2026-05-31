@@ -136,10 +136,18 @@ endif()
 
 # C2x so `[[clang::annotate(...)]]` attribute syntax parses (yclass
 # codegen reads these annotations off the AST). Switched up from C11.
-set_target_properties(ygui PROPERTIES
-    C_STANDARD 23
-    C_STANDARD_REQUIRED ON
-)
+#
+# MSVC can't express the C23 dialect through CMake's C_STANDARD
+# abstraction (CMake fails generation with "compiler does not support
+# this"), but the Windows build already passes /std:clatest globally
+# (build-tools/yetty/platform/windows/cmake.cmake), which parses the
+# same `[[...]]` attributes — so apply the property only off-MSVC.
+if(NOT MSVC)
+    set_target_properties(ygui PROPERTIES
+        C_STANDARD 23
+        C_STANDARD_REQUIRED ON
+    )
+endif()
 
 install(TARGETS ygui ARCHIVE DESTINATION lib)
 install(DIRECTORY ${YETTY_ROOT}/include/yetty/ygui/

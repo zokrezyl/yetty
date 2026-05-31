@@ -6,7 +6,11 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#ifdef _WIN32
+#include <io.h> /* read/write/close — MSVC ships no <unistd.h> */
+#else
 #include <unistd.h>
+#endif
 
 struct fd_transport {
     struct yetty_yclass_transport base;
@@ -18,7 +22,7 @@ static struct yetty_ycore_size_result fd_send(struct yetty_yclass_transport *t, 
 {
     struct fd_transport *ft = (struct fd_transport *)t;
     for (;;) {
-        ssize_t w = write(ft->fd, bytes, len);
+        ptrdiff_t w = write(ft->fd, bytes, len);
         if (w >= 0)
             return YETTY_OK(yetty_ycore_size, (size_t)w);
         if (errno == EINTR)
@@ -32,7 +36,7 @@ static struct yetty_ycore_size_result fd_recv(struct yetty_yclass_transport *t, 
 {
     struct fd_transport *ft = (struct fd_transport *)t;
     for (;;) {
-        ssize_t r = read(ft->fd, buf, max);
+        ptrdiff_t r = read(ft->fd, buf, max);
         if (r >= 0)
             return YETTY_OK(yetty_ycore_size, (size_t)r);
         if (errno == EINTR)

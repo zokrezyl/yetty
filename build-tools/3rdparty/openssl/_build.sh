@@ -195,7 +195,17 @@ android-arm64-v8a|android-x86_64)
     # OpenSSL's Configurations/15-android.conf reads ANDROID_NDK_ROOT.
     export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
     case "$TARGET_PLATFORM" in
-        android-arm64-v8a) CFG_TARGET="android-arm64"  ;;
+        android-arm64-v8a)
+            CFG_TARGET="android-arm64"
+            # OpenSSL 4.0.0's android-arm64 target emits SVE2 poly1305 asm
+            # (poly1305_blocks_sve2) whose adrp/add relocations are not
+            # PIC-clean; ld.lld rejects them (R_AARCH64_ADR_PREL_PG_HI21
+            # "recompile with -fPIC") when linking into the PIC
+            # libyetty.so. Disable native asm on arm64 (same knob the
+            # webasm target uses). android-x86_64 asm is PIC-clean and
+            # keeps its acceleration.
+            CFG_ARGS+=(no-asm)
+            ;;
         android-x86_64)    CFG_TARGET="android-x86_64" ;;
     esac
     CFG_ARGS+=("-D__ANDROID_API__=${ANDROID_API}")
