@@ -8,8 +8,19 @@
  * widget showing the RMS envelope and Prev/Next buttons that pan
  * across the detected noise intervals.
  *
- * Render loop: drain input pipe → update yplot view if selection
- * changed → clear target → yui_render → present.
+ * Startup is two-staged so the window appears immediately even for a
+ * large file:
+ *   1. Bring up the runtime + yui and a centred progress bar, then
+ *      present that first frame.
+ *   2. Run the heavy WAV open / envelope / interval passes on a
+ *      yworkpool worker thread. The worker publishes a [0,1] fraction
+ *      and posts (throttled) RENDER events so the event loop keeps
+ *      repainting the bar; when it finishes, the pool's done() callback
+ *      builds the real plot UI back on the loop thread and hides the
+ *      loading screen.
+ *
+ * Render loop: update progress bar while loading (or apply the yplot
+ * view if the selection changed) → clear target → yui_render → present.
  */
 
 #include <yetty/yinit/yinit.h>
@@ -25,6 +36,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/extract-assets.h>
+#include <yetty/yplatform/yworkpool.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
@@ -43,6 +55,21 @@
 enum {
     WAVE_BUCKETS    = 4096,           /* per-frame bucket count for envelope */
     WAVE_DEC_CAP    = 2 * WAVE_BUCKETS, /* worst case = (min,max) pair per bucket */
+};
+
+/* Stage of the background load — drives the progress-bar caption and the
+ * mapping from each pass's local [0,1] fraction onto the global bar. */
+enum yaudio_load_phase {
+    YAUDIO_PHASE_OPEN = 0,
+    YAUDIO_PHASE_ENVELOPE,
+    YAUDIO_PHASE_INTERVALS,
+};
+
+/* Outcome the worker hands to done() (on the loop thread). */
+enum yaudio_load_state {
+    YAUDIO_LOAD_RUNNING = 0,
+    YAUDIO_LOAD_OK,
+    YAUDIO_LOAD_FAILED,
 };
 
 static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result r)
@@ -125,6 +152,29 @@ struct yaudio_app {
      * drive a full mmap walk and the worker thread would never reach
      * the render call — freezing the UI. */
     int      view_dirty;
+
+    /* --- Asynchronous load ------------------------------------------
+     * The window + a centred progress bar come up first; the heavy WAV
+     * open / envelope / interval passes then run on a yworkpool worker so
+     * the event loop stays free to repaint the bar. The worker publishes
+     * load_progress / load_phase (read on the loop thread in the RENDER
+     * handler) and posts throttled RENDER events to wake the loop;
+     * load_state + load_err carry the outcome to yaudio_load_done(), which
+     * builds the real UI on the loop thread. */
+    struct yetty_yplatform_yworkpool         *load_pool;
+    struct yetty_ycore_xthread_event_pipe    *input_pipe; /* worker → loop wake */
+    struct yetty_yinit_runtime               *rt;         /* for build_widgets() in done() */
+
+    volatile double load_progress;        /* 0..1, monotonic; worker writes, loop reads */
+    volatile int    load_phase;           /* enum yaudio_load_phase */
+    volatile int    load_state;           /* enum yaudio_load_state */
+    char            load_err[160];        /* failure message (worker writes, done() reads) */
+    double          last_posted_progress; /* worker-local: throttles RENDER posts */
+
+    /* Loading-screen widgets, hidden once the real plot UI is built. */
+    struct yetty_ygui_object *load_bar;
+    struct yetty_ygui_object *load_label;
+    int    ui_built;                      /* real plot UI constructed yet? */
 };
 
 #define MOD_SHIFT 0x0001u
@@ -134,15 +184,52 @@ struct yaudio_app {
 /* Loading                                                                  */
 /* ----------------------------------------------------------------------- */
 
+/* Wake the event loop so it repaints the progress bar. Safe to call from
+ * the worker thread: the xthread input pipe is the same mechanism the PTY
+ * threads use, and its write() is a full barrier — any load_progress /
+ * load_phase store sequenced before it is visible to the loop thread by
+ * the time it dispatches the RENDER. */
+static void yaudio_worker_wake(struct yaudio_app *app)
+{
+    yetty_yevent_post_async(app->input_pipe,
+                            &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
+}
+
+/* Library progress callback — runs on the worker thread. Folds each pass's
+ * local [0,1] fraction into the global bar range and wakes the loop when it
+ * advanced enough to be worth a repaint (~0.5% steps → a couple hundred
+ * RENDERs across the whole load, not one per analysis frame). */
+static void yaudio_progress_cb(void *ud, double f)
+{
+    struct yaudio_app *app = ud;
+    double g;
+    switch (app->load_phase) {
+    case YAUDIO_PHASE_ENVELOPE:  g = 0.02 + f * 0.49; break; /* envelope:  2%..51%  */
+    case YAUDIO_PHASE_INTERVALS: g = 0.51 + f * 0.49; break; /* intervals: 51%..100% */
+    default:                     g = f;               break;
+    }
+    app->load_progress = g;
+    if (g - app->last_posted_progress >= 0.005 || g >= 0.999) {
+        app->last_posted_progress = g;
+        yaudio_worker_wake(app);
+    }
+}
+
 static struct yetty_ycore_void_result
 yaudio_load(struct yaudio_app *app)
 {
+    app->load_phase    = YAUDIO_PHASE_OPEN;
+    app->load_progress = 0.0;
+    yaudio_worker_wake(app);
+
     struct yetty_yaudio_wav_ptr_result wr = yetty_yaudio_wav_open(app->wav_path);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "yaudio: open WAV failed");
     app->wav = wr.value;
 
+    app->load_phase = YAUDIO_PHASE_ENVELOPE;
+    yaudio_worker_wake(app);
     struct yetty_yaudio_envelope_ptr_result er =
-        yetty_yaudio_envelope_create(app->wav, 0, 0, 0);
+        yetty_yaudio_envelope_create(app->wav, 0, 0, 0, yaudio_progress_cb, app);
     if (YETTY_IS_ERR(er)) {
         yetty_yaudio_wav_close(app->wav);
         app->wav = NULL;
@@ -150,8 +237,10 @@ yaudio_load(struct yaudio_app *app)
     }
     app->env = er.value;
 
+    app->load_phase = YAUDIO_PHASE_INTERVALS;
+    yaudio_worker_wake(app);
     struct yetty_yaudio_intervals_ptr_result ir =
-        yetty_yaudio_intervals_find(app->wav, 0, NULL);
+        yetty_yaudio_intervals_find(app->wav, 0, NULL, yaudio_progress_cb, app);
     if (YETTY_IS_ERR(ir)) {
         yetty_yaudio_envelope_destroy(app->env);
         app->env = NULL;
@@ -375,21 +464,29 @@ static void recenter_plot_on_selected(struct yaudio_app *app)
 {
     if (!app->plot_widget || app->iv->n == 0) return;
 
-    /* Preserve the user's current zoom: keep the span, just translate
-     * the view so the selected interval's start_sec lands at the left
-     * edge. clamp_view (called from request_view_update) handles file
-     * edges. */
     const struct yetty_yaudio_interval *it = &app->iv->items[app->selected];
+    double dur  = (double)app->wav->frames / (double)app->wav->sample_rate;
     double span = app->view_t_max - app->view_t_min;
-    if (span <= 0.0) {
-        /* No prior zoom yet (e.g. degenerate startup state) — fall back
-         * to an 8×interval window so the user sees context, not noise. */
+
+    /* Choose how wide a window to frame the interval in. When the view
+     * still spans (almost) the whole file there is no room to pan — keeping
+     * that span just lets clamp_view snap straight back to [0, dur] and
+     * Prev/Next appear to do nothing. So in that case (and the degenerate
+     * span<=0 case) zoom to an 8×-interval window — min 30 s, capped at the
+     * file length — so each step visibly jumps to its interval. A genuine
+     * user zoom (span well under the file) is preserved. */
+    if (span <= 0.0 || span >= dur * 0.98) {
         double iv_d = it->end_sec - it->start_sec;
         span = iv_d * 8.0;
-        if (span < 30.0) span = 30.0;
+        if (span < 2.0)  span = 2.0; /* minimum context for very short blips */
+        if (span > dur)  span = dur;
     }
-    app->view_t_min = it->start_sec;
-    app->view_t_max = it->start_sec + span;
+
+    /* Centre the interval in the window so the jump is obvious; clamp_view
+     * (via request_view_update) keeps the window inside the file. */
+    double mid = 0.5 * (it->start_sec + it->end_sec);
+    app->view_t_min = mid - 0.5 * span;
+    app->view_t_max = mid + 0.5 * span;
     request_view_update(app);
 }
 
@@ -610,12 +707,123 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
         }
     }
 
+    /* Mouse/key cheatsheet, to the right of the buttons. Static text — ygui
+     * owns it in the tree, so it needs no app-side handle. Mirrors the
+     * gestures handled in on_wheel() and the MOUSE_DRAG path. */
+    {
+        float help_x = 16.0f + 2.0f * btn_w + 12.0f + 24.0f; /* past Next button + gap */
+        struct yetty_ygui_object_ptr_result hr =
+            yetty_ygui_add(yetty_ygui_label_class_get().value, root);
+        if (YETTY_IS_OK(hr)) {
+            struct yetty_ygui_object *help = hr.value;
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(
+                help,
+                "◀ ▶ / ←→: prev·next interval    Drag: pan    Wheel: scroll    "
+                "Ctrl+Wheel: amplitude    Ctrl+Shift+Wheel: time zoom"));
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_font_size(help, 13.0f));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_position(help, help_x, btn_y + 10.0f));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_size(help, W - help_x - 16.0f, btn_h));
+        } else {
+            yetty_ycore_error_destroy(hr.error);
+        }
+    }
+
     char status[160];
     snprintf(status, sizeof(status), "%s  •  %.1f s  •  %zu intervals",
              app->wav_path, dur, app->iv->n);
     yetty_yui_set_status_left(app->yui, status);
 
     update_status_label(app);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Loading screen                                                           */
+/* ----------------------------------------------------------------------- */
+
+/* A caption + a progress bar, centred over an otherwise empty window. Built
+ * before any file work so the window can present immediately; hidden by
+ * yaudio_load_done() once the real plot UI replaces it. */
+static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime *rt)
+{
+    struct yetty_ygui_runtime *engine = yetty_yui_engine(app->yui);
+    if (!engine) {
+        yerror("yaudio: yui engine is NULL — yui allocation failed");
+        return;
+    }
+    struct yetty_ygui_object *root = yetty_ygui_framework_root(engine);
+    if (!root) {
+        yerror("yaudio: yui engine has no root");
+        return;
+    }
+
+    float W  = (float)rt->surface_width;
+    float H  = (float)rt->surface_height;
+    float bw = 460.0f;
+    if (bw > W - 64.0f) bw = W - 64.0f;
+    float cx = (W - bw) * 0.5f;
+    float cy = H * 0.5f;
+
+    {
+        struct yetty_ygui_object_ptr_result lr =
+            yetty_ygui_add(yetty_ygui_label_class_get().value, root);
+        if (YETTY_IS_OK(lr)) {
+            app->load_label = lr.value;
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(app->load_label, "Loading…"));
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_font_size(app->load_label, 20.0f));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_position(app->load_label, cx, cy - 36.0f));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_size(app->load_label, bw, 26.0f));
+        } else {
+            yetty_ycore_error_destroy(lr.error);
+        }
+    }
+    {
+        struct yetty_ygui_object_ptr_result pr =
+            yetty_ygui_add(yetty_ygui_progress_class_get().value, root);
+        if (YETTY_IS_OK(pr)) {
+            app->load_bar = pr.value;
+            yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(app->load_bar, 0.0f));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_position(app->load_bar, cx, cy));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_widget_set_size(app->load_bar, bw, 22.0f));
+        } else {
+            yetty_ycore_error_destroy(pr.error);
+            yerror("yaudio: progress widget create failed");
+        }
+    }
+
+    char status[256];
+    snprintf(status, sizeof(status), "Loading %s …", app->wav_path);
+    yetty_yui_set_status_left(app->yui, status);
+}
+
+/* Pull the latest worker-published progress into the bar + caption. Runs on
+ * the loop thread, once per RENDER while the load is in flight. */
+static void update_loading_ui(struct yaudio_app *app)
+{
+    if (!app->load_bar) return;
+
+    double p = app->load_progress;
+    if (p < 0.0) p = 0.0;
+    if (p > 1.0) p = 1.0;
+    yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(app->load_bar, (float)p));
+
+    if (app->load_label) {
+        const char *phase;
+        switch (app->load_phase) {
+        case YAUDIO_PHASE_ENVELOPE:  phase = "computing energy envelope"; break;
+        case YAUDIO_PHASE_INTERVALS: phase = "detecting intervals";       break;
+        default:                     phase = "opening file";              break;
+        }
+        char buf[256];
+        snprintf(buf, sizeof(buf), "%s — %s … %d%%", app->wav_path, phase,
+                 (int)(p * 100.0 + 0.5));
+        yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(app->load_label, buf));
+    }
 }
 
 /* ----------------------------------------------------------------------- */
@@ -653,7 +861,9 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
             app->render_target->ops->is_busy(app->render_target)) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
-        if (app->view_dirty) {
+        if (!app->ui_built) {
+            update_loading_ui(app);
+        } else if (app->view_dirty) {
             apply_view(app);
         }
         struct yetty_ycore_void_result cl =
@@ -775,6 +985,64 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
 }
 
 /* ----------------------------------------------------------------------- */
+/* Background load                                                          */
+/* ----------------------------------------------------------------------- */
+
+/* Worker-thread body: the heavy open / envelope / interval passes. Stores
+ * the outcome in load_state / load_err; yaudio_load_done() (loop thread)
+ * reads it. On failure yaudio_load() has already freed any partial state
+ * and NULLed the pointers, so the teardown's unconditional destroys are
+ * safe either way. */
+static void yaudio_load_run(void *ctx)
+{
+    struct yaudio_app *app = ctx;
+
+    struct yetty_ycore_void_result r = yaudio_load(app);
+    if (YETTY_IS_ERR(r)) {
+        snprintf(app->load_err, sizeof(app->load_err), "%s",
+                 r.error.msg ? r.error.msg : "load failed");
+        yetty_ycore_error_destroy(r.error);
+        app->load_state = YAUDIO_LOAD_FAILED;
+    } else {
+        app->load_state = YAUDIO_LOAD_OK;
+    }
+    app->load_progress = 1.0;
+    /* The pool posts done() to the loop thread; the RENDER it triggers
+     * repaints the final state. */
+}
+
+/* Loop-thread continuation: build the real UI (or surface the error) and
+ * retire the loading screen. */
+static void yaudio_load_done(void *ctx)
+{
+    struct yaudio_app *app = ctx;
+
+    if (app->load_state == YAUDIO_LOAD_OK) {
+        build_widgets(app, app->rt);
+        app->ui_built = 1;
+        if (app->load_bar)
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(app->load_bar, 0));
+        if (app->load_label)
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(app->load_label, 0));
+    } else {
+        /* Keep the window up; show why on the loading caption + status. */
+        if (app->load_bar)
+            yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(app->load_bar, 1.0f));
+        if (app->load_label) {
+            char buf[224];
+            snprintf(buf, sizeof(buf), "Failed to load %s: %s", app->wav_path, app->load_err);
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(app->load_label, buf));
+        }
+        yetty_yui_set_status_left(app->yui, app->load_err);
+    }
+
+    if (app->runtime && app->runtime->event_loop &&
+        app->runtime->event_loop->ops->request_render) {
+        app->runtime->event_loop->ops->request_render(app->runtime->event_loop);
+    }
+}
+
+/* ----------------------------------------------------------------------- */
 /* Render loop                                                              */
 /* ----------------------------------------------------------------------- */
 
@@ -783,13 +1051,11 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     struct yaudio_app *app = user;
 
-    struct yetty_ycore_void_result lr = yaudio_load(app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yaudio: load failed");
-
-    /* Standard GPU/event/render-target bring-up. Same call yetty's own
-     * main uses — adapter, device, queue, allocator, msdf generator,
-     * surface configuration, event loop, render target. The runtime
-     * owns all of it; we just borrow via app->ctx.runtime->X. */
+    /* Standard GPU/event/render-target bring-up FIRST — the window and a
+     * progress bar must come up before any heavy file work. Same call
+     * yetty's own main uses (adapter, device, queue, allocator, msdf
+     * generator, surface configuration, event loop, render target); the
+     * runtime owns all of it and we borrow via app->ctx.runtime->X. */
     struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yrt_res, "yaudio: yframework_create failed");
     app->runtime           = yrt_res.value;
@@ -797,6 +1063,8 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
     app->ctx.pty_factory   = NULL;          /* yaudio has no terminal */
     app->ctx.event_loop    = app->runtime->event_loop;
     app->render_target     = app->runtime->render_target;
+    app->rt                = rt;
+    app->input_pipe        = rt->platform_input_pipe;
 
     /* yui — owns the scene-canvas + ygui engine. cell_w/h are mostly
      * arbitrary for our use; pick the same defaults yui's tabbar uses. */
@@ -805,7 +1073,10 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yui_create failed");
     app->yui = yr.value;
 
-    build_widgets(app, rt);
+    /* Loading screen only — the real plot UI is built later, from
+     * yaudio_load_done(), once the worker has the data. */
+    app->last_posted_progress = -1.0;
+    build_loading_ui(app, rt);
 
     /* Wire up our event handler on the runtime's libuv event loop. The
      * loop drives the platform_input_pipe; events dispatch into
@@ -816,16 +1087,37 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
         app->runtime->event_loop, &app->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "register_default_listeners failed");
 
-    /* Kick the first frame. ymain/glfw.c posts an initial RESIZE before
-     * calling the worker; libuv will dispatch it once the loop starts. */
+    /* Offload the load to a worker thread so the loop keeps repainting the
+     * progress bar; done() builds the real UI back on the loop thread. */
+    struct yetty_yplatform_yworkpool_ptr_result pres =
+        yetty_yplatform_yworkpool_create(app->runtime->event_loop, "yaudio-load", 1);
+    if (YETTY_IS_OK(pres)) {
+        app->load_pool = pres.value;
+        struct yetty_yplatform_yworkpool_job job = {
+            .run = yaudio_load_run, .done = yaudio_load_done, .ctx = app,
+        };
+        struct yetty_ycore_void_result sres =
+            yetty_yplatform_yworkpool_submit(app->load_pool, job);
+        if (YETTY_IS_ERR(sres)) {
+            ywarn("yaudio: load submit failed (%s); loading synchronously", sres.error.msg);
+            yetty_ycore_error_destroy(sres.error);
+            yaudio_load_run(app);
+            yaudio_load_done(app);
+        }
+    } else {
+        ywarn("yaudio: worker pool create failed (%s); loading synchronously", pres.error.msg);
+        yetty_ycore_error_destroy(pres.error);
+        yaudio_load_run(app);
+        yaudio_load_done(app);
+    }
+
+    /* Present the first frame (the loading screen) immediately. */
     yetty_yevent_post_async(rt->platform_input_pipe,
                             &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
-    /* Run the libuv loop until SHUTDOWN. Replaces the old hand-rolled
-     * poll() / drain pipe / render / present loop — same outcome
-     * (input-driven render coalesced via libuv's idle handle) but no
-     * duplicated machinery and the x11-tile target's tile-diff readback
-     * callbacks now actually fire. */
+    /* Run the libuv loop until SHUTDOWN. Input-driven render coalesced via
+     * libuv's idle handle; the x11-tile target's tile-diff readback
+     * callbacks fire here too. */
     struct yetty_ycore_void_result run_res =
         app->runtime->event_loop->ops->start(app->runtime->event_loop);
     if (YETTY_IS_ERR(run_res)) {
@@ -833,11 +1125,13 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
         yetty_ycore_error_destroy(run_res.error);
     }
 
-    /* Teardown: yui first (it holds GPU resources owned by the runtime),
-     * then the runtime (render target, msdf, allocator, event loop,
-     * surface, queue, device, adapter, in reverse-creation order). */
-    if (app->yui)     yetty_yui_destroy(app->yui);
-    if (app->runtime) yetty_yframework_destroy(app->runtime);
+    /* Teardown: join the worker first (so nothing touches app after the
+     * frees), then yui (it holds GPU resources owned by the runtime), then
+     * the runtime (render target, msdf, allocator, event loop, surface,
+     * queue, device, adapter, in reverse-creation order). */
+    if (app->load_pool) yetty_yplatform_yworkpool_destroy(app->load_pool);
+    if (app->yui)       yetty_yui_destroy(app->yui);
+    if (app->runtime)   yetty_yframework_destroy(app->runtime);
 
     yetty_yaudio_intervals_destroy(app->iv);
     yetty_yaudio_envelope_destroy(app->env);

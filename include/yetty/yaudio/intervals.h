@@ -18,6 +18,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yaudio/wav.h>
+#include <yetty/yaudio/progress.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -62,10 +63,13 @@ YETTY_YRESULT_DECLARE(yetty_yaudio_intervals_ptr, struct yetty_yaudio_intervals 
 void yetty_yaudio_intervals_config_defaults(struct yetty_yaudio_intervals_config *cfg);
 
 /* Analyse one channel of `w`. Heap-allocates the result; destroy with
- * yetty_yaudio_intervals_destroy(). */
+ * yetty_yaudio_intervals_destroy(). `progress` (may be NULL) is called
+ * periodically with a [0, 1] fraction during the pass-1 RMS scan (the
+ * dominant cost); `progress_ud` is passed through to it. */
 struct yetty_yaudio_intervals_ptr_result yetty_yaudio_intervals_find(
     const struct yetty_yaudio_wav *w, uint32_t channel,
-    const struct yetty_yaudio_intervals_config *cfg);
+    const struct yetty_yaudio_intervals_config *cfg,
+    yetty_yaudio_progress_fn progress, void *progress_ud);
 
 void yetty_yaudio_intervals_destroy(struct yetty_yaudio_intervals *iv);
 

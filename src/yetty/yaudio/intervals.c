@@ -64,11 +64,17 @@ static int cmp_float_asc(const void *a, const void *b)
 static struct yetty_ycore_void_result compute_frame_rms(const struct yetty_yaudio_wav *w,
                                                         uint32_t channel, uint32_t frame_samples,
                                                         uint32_t hop_samples, float *rms_out,
-                                                        size_t total_frames)
+                                                        size_t total_frames,
+                                                        yetty_yaudio_progress_fn progress,
+                                                        void *progress_ud)
 {
     if (frame_samples == 0 || hop_samples == 0) {
         return YETTY_ERR(yetty_ycore_void, "compute_frame_rms: zero frame/hop");
     }
+
+    /* Emit ~200 progress ticks across the whole scan, independent of
+     * file size (see the matching note in envelope.c). */
+    const size_t progress_step = total_frames > 200 ? total_frames / 200 : 1;
 
     /* Buffer holds enough samples to span at least one analysis window
      * plus the next hop, so we always have frame_samples consecutive
@@ -159,6 +165,10 @@ static struct yetty_ycore_void_result compute_frame_rms(const struct yetty_yaudi
         }
         rms_out[frame_idx] = (float)sqrt(sum_sq / (double)frame_samples);
         frame_idx++;
+
+        if (progress && (frame_idx % progress_step) == 0) {
+            progress(progress_ud, (double)frame_idx / (double)total_frames);
+        }
     }
 
     free(buf);
@@ -345,7 +355,8 @@ static struct yetty_yaudio_intervals_ptr_result build_intervals(
 
 struct yetty_yaudio_intervals_ptr_result yetty_yaudio_intervals_find(
     const struct yetty_yaudio_wav *w, uint32_t channel,
-    const struct yetty_yaudio_intervals_config *cfg_in)
+    const struct yetty_yaudio_intervals_config *cfg_in, yetty_yaudio_progress_fn progress,
+    void *progress_ud)
 {
     if (!w) {
         return YETTY_ERR(yetty_yaudio_intervals_ptr, "intervals_find: NULL wav");
@@ -379,8 +390,8 @@ struct yetty_yaudio_intervals_ptr_result yetty_yaudio_intervals_find(
         return YETTY_ERR(yetty_yaudio_intervals_ptr, "intervals_find: rms alloc failed");
     }
 
-    struct yetty_ycore_void_result rr =
-        compute_frame_rms(w, channel, cfg.frame_samples, cfg.hop_samples, rms, total_frames);
+    struct yetty_ycore_void_result rr = compute_frame_rms(
+        w, channel, cfg.frame_samples, cfg.hop_samples, rms, total_frames, progress, progress_ud);
     if (YETTY_IS_ERR(rr)) {
         free(rms);
         return YETTY_ERR(yetty_yaudio_intervals_ptr, "intervals_find: pass 1 failed", rr);
