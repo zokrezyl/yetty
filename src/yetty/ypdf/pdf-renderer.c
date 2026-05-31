@@ -46,6 +46,13 @@
 #define PAGE_MARGIN 20.0f
 #define MAX_FONTS 32
 
+/* Uniform page zoom. The PDF is emitted at 1 point = 1 ydraw unit, so the
+ * on-screen font size equals the PDF's point size. Scaling every emitted
+ * coordinate, font size and the page bounds by this factor enlarges the whole
+ * page — text included — without reflowing, which is the only way to grow PDF
+ * text. 1.5 = 50% larger. Adjust this one knob to change the zoom. */
+#define YPDF_RENDER_SCALE 1.5f
+
 /*=============================================================================
  * Font tracking
  *===========================================================================*/
@@ -1349,6 +1356,7 @@ struct yetty_ypdf_render_ctx {
     size_t font_count;
     float y_offset;
     float page_height;
+    float scale; /* uniform page zoom applied to every emitted coordinate + size */
 };
 
 /*=============================================================================
@@ -1361,8 +1369,8 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
 {
 
     struct yetty_ypdf_render_ctx *c = (struct yetty_ypdf_render_ctx *)ud;
-    float sx = pos_x;
-    float sy = c->y_offset + (c->page_height - pos_y);
+    float sx = pos_x * c->scale;
+    float sy = (c->y_offset + (c->page_height - pos_y)) * c->scale;
 
     int font_idx = find_font_idx(c->fonts, c->font_count, state->font_name);
     struct yetty_ypdf_font_info *fi = (font_idx >= 0) ? &c->fonts[font_idx] : NULL;
@@ -1403,11 +1411,12 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
      * codepoint and per ASCII space. Without this, lines that contain
      * spaces drift by ~1.2 px per space (mutool sees the actual on-page
      * positions; canvas would otherwise sum only font advances). */
+    float disp_size = effective_size * c->scale;
     float h_scale_for_emit = state->horizontal_scaling / 100.0f;
-    float emit_char_spacing = state->char_spacing * effective_size * h_scale_for_emit;
-    float emit_word_spacing = state->word_spacing * effective_size * h_scale_for_emit;
+    float emit_char_spacing = state->char_spacing * disp_size * h_scale_for_emit;
+    float emit_word_spacing = state->word_spacing * disp_size * h_scale_for_emit;
     (void)yetty_ydraw_draw_list_add_text_full(
-        c->buffer, sx, sy, &tb, effective_size, color, 0, font_id,
+        c->buffer, sx, sy, &tb, disp_size, color, 0, font_id,
         (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f, emit_char_spacing,
         emit_word_spacing);
 
@@ -1424,7 +1433,6 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
     } else {
         return YETTY_ERR(float, "no font for advance measurement");
     }
-    (void)effective_size;
 
     /* Count codepoints / spaces for char/word spacing. */
     int num_cps = 0, num_spaces = 0;
@@ -1470,16 +1478,20 @@ static void rect_paint_cb(void *ud, float x, float y, float w, float h,
 {
 
     struct yetty_ypdf_render_ctx *c = (struct yetty_ypdf_render_ctx *)ud;
-    float rx = x;
-    float ry = c->y_offset + (c->page_height - y - h);
+    float s = c->scale;
+    float rx = x * s;
+    float ry = (c->y_offset + (c->page_height - y - h)) * s;
+    float w_s = w * s;
+    float h_s = h * s;
+    float lw_s = line_width * s;
 
     if (mode == YETTY_YPDF_PAINT_FILL || mode == YETTY_YPDF_PAINT_FILL_AND_STROKE) {
         uint32_t fc = rgb_to_abgr(fr, fg, fb);
         struct yetty_ysdf_box geom = {
-            .center_x = rx + w * 0.5f,
-            .center_y = ry + h * 0.5f,
-            .half_width = w * 0.5f,
-            .half_height = h * 0.5f,
+            .center_x = rx + w_s * 0.5f,
+            .center_y = ry + h_s * 0.5f,
+            .half_width = w_s * 0.5f,
+            .half_height = h_s * 0.5f,
             .corner_radius = 0.0f,
         };
         yetty_ydraw_draw_list_add_cmd_add_box(c->buffer, 0, 0, fc, 0, 0.0f, &geom);
@@ -1487,14 +1499,13 @@ static void rect_paint_cb(void *ud, float x, float y, float w, float h,
     if (mode == YETTY_YPDF_PAINT_STROKE || mode == YETTY_YPDF_PAINT_FILL_AND_STROKE) {
         uint32_t sc = rgb_to_abgr(sr, sg, sb);
         struct yetty_ysdf_segment sides[4] = {
-            {rx, ry, rx + w, ry},
-            {rx + w, ry, rx + w, ry + h},
-            {rx + w, ry + h, rx, ry + h},
-            {rx, ry + h, rx, ry},
+            {rx, ry, rx + w_s, ry},
+            {rx + w_s, ry, rx + w_s, ry + h_s},
+            {rx + w_s, ry + h_s, rx, ry + h_s},
+            {rx, ry + h_s, rx, ry},
         };
         for (int i = 0; i < 4; i++) {
-            yetty_ydraw_draw_list_add_cmd_add_segment(c->buffer, 0, 0, 0, sc, line_width,
-                                                      &sides[i]);
+            yetty_ydraw_draw_list_add_cmd_add_segment(c->buffer, 0, 0, 0, sc, lw_s, &sides[i]);
         }
     }
 }
@@ -1505,14 +1516,15 @@ static void line_paint_cb(void *ud, float x0, float y0, float x1, float y1, floa
 {
 
     struct yetty_ypdf_render_ctx *c = (struct yetty_ypdf_render_ctx *)ud;
+    float s = c->scale;
     uint32_t color = rgb_to_abgr(r, g, b);
     struct yetty_ysdf_segment geom = {
-        .start_x = x0,
-        .start_y = c->y_offset + (c->page_height - y0),
-        .end_x = x1,
-        .end_y = c->y_offset + (c->page_height - y1),
+        .start_x = x0 * s,
+        .start_y = (c->y_offset + (c->page_height - y0)) * s,
+        .end_x = x1 * s,
+        .end_y = (c->y_offset + (c->page_height - y1)) * s,
     };
-    yetty_ydraw_draw_list_add_cmd_add_segment(c->buffer, 0, 0, 0, color, line_width, &geom);
+    yetty_ydraw_draw_list_add_cmd_add_segment(c->buffer, 0, 0, 0, color, line_width * s, &geom);
 }
 
 /*=============================================================================
@@ -1563,8 +1575,8 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
     struct yetty_ydraw_draw_list_config cfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
-        .scene_max_x = max_width,
-        .scene_max_y = total_height,
+        .scene_max_x = max_width * YPDF_RENDER_SCALE,
+        .scene_max_y = total_height * YPDF_RENDER_SCALE,
     };
     struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
@@ -1583,6 +1595,7 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         .font_count = 0,
         .y_offset = 0.0f,
         .page_height = 0.0f,
+        .scale = YPDF_RENDER_SCALE,
     };
 
     struct yetty_ypdf_content_parser_callbacks cb = {
@@ -1720,12 +1733,13 @@ struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
 
         /* Page envelope: scene spans the page plus a bottom margin so the
          * receiver scrolls a uniform gap between pages. Coordinates inside
-         * are page-relative (origin top-left, y=0..ph). */
+         * are page-relative (origin top-left, y=0..ph) and scaled by
+         * YPDF_RENDER_SCALE on emit, so the scene bounds scale to match. */
         struct yetty_ydraw_draw_list_config bcfg = {
             .scene_min_x = 0.0f,
             .scene_min_y = 0.0f,
-            .scene_max_x = pw,
-            .scene_max_y = ph + PAGE_MARGIN,
+            .scene_max_x = pw * YPDF_RENDER_SCALE,
+            .scene_max_y = (ph + PAGE_MARGIN) * YPDF_RENDER_SCALE,
         };
         struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
         if (YETTY_IS_ERR(br)) {
@@ -1752,6 +1766,7 @@ struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
         ctx.font_count = font_count;
         ctx.y_offset = 0.0f;
         ctx.page_height = ph;
+        ctx.scale = YPDF_RENDER_SCALE;
 
         size_t num_streams = pdfioPageGetNumStreams(page_obj);
         for (size_t s = 0; s < num_streams; s++) {
