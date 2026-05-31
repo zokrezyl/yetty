@@ -48,6 +48,15 @@ Downcasting uses `container_of`. No `void *priv` pointers. No inheritance hierar
 
 See [C Coding Style](c-coding-style.md) for the full vtable and embedding patterns.
 
+This hand-written pattern is used for simple, fixed interfaces (fonts, render
+targets, PTYs). For the richer object model — classes with single inheritance,
+mixins, cross-module overrides, and **location-transparent RPC** (the same call
+works on a local object or a remote proxy) — yetty uses **yclass**, where the
+vtable, dispatch, RPC skeletons, and a binding model are *generated* from C23
+`[[clang::annotate(...)]]` annotations on the source. The figure modules
+(`yfigure`, `ygui`, `ymgui`, `yrdawn`, `ygrid`, `yterm`) are built this way. See
+[yclass](yclass.md).
+
 ## Error Propagation
 
 Yetty uses typed result unions — similar to Rust's `Result<T, E>` — encoded as C structs with a tagged union.

@@ -174,12 +174,17 @@ picture, then dive into a subsystem.
 | [Coroutines](docs/coroutines.md) | yco / yevent concurrency |
 | [yvnc](docs/yvnc.md) | VNC client/server |
 
+**Codegen & bindings**
+| Document | Description |
+|----------|-------------|
+| [yclass](docs/yclass.md) | Annotation-driven classes, RPC, and the binding model |
+| [FFI Generation](docs/ffi-gen.md) | Per-language binding emitters |
+
 **Conventions & tooling**
 | Document | Description |
 |----------|-------------|
 | [C Coding Style](docs/c-coding-style.md) | Naming, structs, memory rules |
 | [Result Types](docs/result.md) | Typed error propagation |
-| [FFI Generation](docs/ffi-gen.md) | Generating language bindings |
 | [ytrace](docs/ytrace.md) | Logging and tracing |
 | [Buck2](docs/buck2.md) | Buck2 build notes |
 

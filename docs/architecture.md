@@ -61,7 +61,7 @@ The full startup/ownership chain and context structs are in
 | `yco` | Coroutine wrapper over libco ([coroutines](coroutines.md)) | ✓ |
 | `ynotify` | Thread-safe user-facing notifications | ✓ |
 | `ycdb` | Constant-database (cdb) key/value store | ✓ |
-| `yclass` | Tiny class/object runtime + RPC, used by the figure system | ✓ |
+| `yclass` | Annotation-driven class/object runtime + RPC + binding model ([yclass](yclass.md)) | ✓ |
 
 ## Rendering pipeline
 
