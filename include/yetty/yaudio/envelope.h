@@ -12,6 +12,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yaudio/wav.h>
+#include <yetty/yaudio/progress.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -32,10 +33,12 @@ struct yetty_yaudio_envelope {
 YETTY_YRESULT_DECLARE(yetty_yaudio_envelope_ptr, struct yetty_yaudio_envelope *);
 
 /* Compute the RMS envelope. Pass 0 for frame_samples / hop_samples to
- * use the defaults (1024 each — same as intervals_find). */
+ * use the defaults (1024 each — same as intervals_find). `progress` (may
+ * be NULL) is called periodically with a [0, 1] fraction as the channel
+ * is streamed; `progress_ud` is passed through to it. */
 struct yetty_yaudio_envelope_ptr_result yetty_yaudio_envelope_create(
     const struct yetty_yaudio_wav *w, uint32_t channel, uint32_t frame_samples,
-    uint32_t hop_samples);
+    uint32_t hop_samples, yetty_yaudio_progress_fn progress, void *progress_ud);
 
 void yetty_yaudio_envelope_destroy(struct yetty_yaudio_envelope *env);
 

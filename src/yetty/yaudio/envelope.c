@@ -20,7 +20,7 @@ enum {
 
 struct yetty_yaudio_envelope_ptr_result yetty_yaudio_envelope_create(
     const struct yetty_yaudio_wav *w, uint32_t channel, uint32_t frame_samples,
-    uint32_t hop_samples)
+    uint32_t hop_samples, yetty_yaudio_progress_fn progress, void *progress_ud)
 {
     if (!w) {
         return YETTY_ERR(yetty_yaudio_envelope_ptr, "envelope_create: NULL wav");
@@ -72,6 +72,11 @@ struct yetty_yaudio_envelope_ptr_result yetty_yaudio_envelope_create(
     size_t buf_fill = 0;
     size_t src_off = 0;
     const size_t src_total = w->frames;
+
+    /* Emit ~200 progress ticks across the whole pass regardless of file
+     * size — fine-grained enough for a smooth bar, coarse enough that the
+     * callback never dominates the inner loop. */
+    const size_t progress_step = total_frames > 200 ? total_frames / 200 : 1;
 
     /* Initial fill */
     {
@@ -139,6 +144,10 @@ struct yetty_yaudio_envelope_ptr_result yetty_yaudio_envelope_create(
         }
         env->rms[frame_idx] = (float)sqrt(sum_sq / (double)frame_samples);
         frame_idx++;
+
+        if (progress && (frame_idx % progress_step) == 0) {
+            progress(progress_ud, (double)frame_idx / (double)total_frames);
+        }
     }
 
     free(buf);

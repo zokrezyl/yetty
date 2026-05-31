@@ -80,7 +80,7 @@ static int process_channel(const char *path,
     if (opts->hop_samples > 0)   cfg.hop_samples   = (uint32_t)opts->hop_samples;
 
     struct yetty_yaudio_intervals_ptr_result r =
-        yetty_yaudio_intervals_find(w, channel, &cfg);
+        yetty_yaudio_intervals_find(w, channel, &cfg, NULL, NULL);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "%s: ch%u: %s\n", path, channel, r.error.msg);
         for (const struct yetty_ycore_error *e = r.error.cause; e; e = e->cause) {
