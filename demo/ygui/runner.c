@@ -76,8 +76,30 @@ struct demo_runner {
     struct yetty_ydraw_font *font;
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
+    /* ~30 fps animation pump: fires request_render so self-dirtying
+     * widgets (ymaze / yzoo / yjungle) keep re-emitting. */
+    struct yetty_yevent_event_listener frame_listener;
+    yetty_yevent_timer_id frame_timer;
     struct yetty_ydraw_target *render_target;
 };
+
+static struct yetty_ycore_int_result frame_tick(struct yetty_yevent_event_listener *listener,
+                                                const struct yetty_yui_event *ev)
+{
+    (void)ev;
+    struct demo_runner *r = container_of(listener, struct demo_runner, frame_listener);
+    /* Force a full re-emit each tick so animated widgets re-run their
+     * emit_body (advancing their own clock) — a widget's self-set dirty
+     * flag does not survive the emit pass on its own. */
+    if (r->engine) {
+        yetty_ygui_framework_mark_dirty(r->engine);
+    }
+    if (r->yframework && r->yframework->event_loop &&
+        r->yframework->event_loop->ops->request_render) {
+        r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
 
 struct yetty_ygui_runtime *demo_runner_engine(struct demo_runner *r)
 {
@@ -162,6 +184,15 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         }
         struct yetty_ycore_void_result pp = r->render_target->ops->present(r->render_target);
         if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
+        /* Animation pump: an animated widget (e.g. ymaze) re-marks itself
+         * dirty during emit. present() throttles to vsync, so re-arming a
+         * render whenever the framework is still dirty gives a steady frame
+         * loop without a separate timer. Static demos never self-dirty, so
+         * this is a no-op for them. */
+        if (yetty_ygui_framework_is_dirty(r->engine) && r->yframework &&
+            r->yframework->event_loop && r->yframework->event_loop->ops->request_render) {
+            r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -426,6 +457,25 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         yetty_yevent_register_default_listeners(r->yframework->event_loop, &r->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "demo_runner: register_default_listeners");
 
+    /* Start the ~30 fps animation pump. */
+    {
+        struct yetty_yevent_event_loop *loop = r->yframework->event_loop;
+        struct yetty_yevent_timer_id_result tr = loop->ops->create_timer(loop);
+        if (YETTY_IS_OK(tr)) {
+            r->frame_timer = tr.value;
+            r->frame_listener.handler = frame_tick;
+            struct yetty_ycore_void_result cr = loop->ops->config_timer(loop, r->frame_timer, 33);
+            if (YETTY_IS_ERR(cr)) yetty_ycore_error_destroy(cr.error);
+            struct yetty_ycore_void_result lr =
+                loop->ops->register_timer_listener(loop, r->frame_timer, &r->frame_listener);
+            if (YETTY_IS_ERR(lr)) yetty_ycore_error_destroy(lr.error);
+            struct yetty_ycore_void_result st = loop->ops->start_timer(loop, r->frame_timer);
+            if (YETTY_IS_ERR(st)) yetty_ycore_error_destroy(st.error);
+        } else {
+            yetty_ycore_error_destroy(tr.error);
+        }
+    }
+
     yetty_yevent_post_async(rt->platform_input_pipe,
                             &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
@@ -621,6 +671,7 @@ struct client_state {
     uv_poll_t stdin_poll;
     uv_signal_t sigwinch;
     uv_prepare_t prep;
+    uv_timer_t frame_timer; /* ~30 fps animation pump */
     struct stdout_pty out;
     /* Async-delivery PTY shim for stdin — bytes arrive via the libuv
      * poll callback and get fed into the wire SM with _feed; the SM
@@ -841,6 +892,17 @@ static void client_sigwinch_cb(uv_signal_t *handle, int signum)
     client_pickup_winsz((struct client_state *)handle->data);
 }
 
+/* Animation pump: force a re-emit each tick so self-animating widgets
+ * (ymaze / yzoo / yjungle) re-run their emit_body and ship a fresh frame to
+ * the hosting yetty. */
+static void client_frame_cb(uv_timer_t *handle)
+{
+    struct client_state *cs = (struct client_state *)handle->data;
+    if (cs->runner && cs->runner->engine) {
+        yetty_ygui_framework_mark_dirty(cs->runner->engine);
+    }
+}
+
 static void client_prep_cb(uv_prepare_t *handle)
 {
     struct client_state *cs = (struct client_state *)handle->data;
@@ -993,6 +1055,10 @@ static int run_client_mode(const char *name, demo_build_fn build)
     if (uv_prepare_init(&cs.loop, &cs.prep) == 0) {
         cs.prep.data = &cs;
         uv_prepare_start(&cs.prep, client_prep_cb);
+    }
+    if (uv_timer_init(&cs.loop, &cs.frame_timer) == 0) {
+        cs.frame_timer.data = &cs;
+        uv_timer_start(&cs.frame_timer, client_frame_cb, 33, 33);
     }
 
     uv_run(&cs.loop, UV_RUN_DEFAULT);

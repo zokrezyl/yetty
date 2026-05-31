@@ -760,6 +760,12 @@ classes:
     mixins: []
     data: struct tabbar_data
     ops:
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: tabbar_on_press
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: tabbar_on_release
       - slot: constructor
         slot_domain: ygui
         impl: tabbar_constructor
@@ -930,6 +936,12 @@ classes:
       - slot: widget_on_press
         slot_domain: ygui
         impl: on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: on_motion
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: on_release
   - name: ybrowser
     domain: ygui
     accessor: yetty_ygui_ybrowser_class_get
@@ -1017,13 +1029,19 @@ classes:
     source_file: src/yetty/ygui/widgets/yjungle.c
     parent:
       domain: ygui
-      name: widget
+      name: ydraw_embed
     mixins: []
     data: struct yjungle_data
     ops:
-      - slot: widget_emit_container
+      - slot: constructor
         slot_domain: ygui
-        impl: emit_container
+        impl: yjungle_ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: yjungle_dtor
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: yjungle_emit_body
   - name: ymarkdown
     domain: ygui
     accessor: yetty_ygui_ymarkdown_class_get
@@ -1044,6 +1062,26 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: ymd_emit_body
+  - name: ymaze
+    domain: ygui
+    accessor: yetty_ygui_ymaze_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/ymaze.c
+    parent:
+      domain: ygui
+      name: ydraw_embed
+    mixins: []
+    data: struct ymaze_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ymz_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: ymz_destructor
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: ymz_emit_body
   - name: yplot
     domain: ygui
     accessor: yetty_ygui_yplot_class_get
@@ -1097,10 +1135,16 @@ classes:
     source_file: src/yetty/ygui/widgets/yzoo.c
     parent:
       domain: ygui
-      name: widget
+      name: ydraw_embed
     mixins: []
     data: struct yzoo_data
     ops:
-      - slot: widget_emit_container
+      - slot: constructor
         slot_domain: ygui
-        impl: emit_container
+        impl: yzoo_ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: yzoo_dtor
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: yzoo_emit_body

@@ -1,12 +1,16 @@
 /* GENERATED — do not edit. */
 #include "yetty/ygui/methods.gen.h"
-#include "yetty/ygui/widget.h"
+#include "yetty/ygui/widgets/ydraw_embed.h"
 #include "yetty/ygui/widgets/yzoo.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
 [[maybe_unused]]
-static yetty_ygui_widget_emit_container_fn yetty_ygui_yzoo_yetty_ygui_widget_emit_container_check = emit_container;
+static yetty_ygui_constructor_fn yetty_ygui_yzoo_yetty_ygui_constructor_check = yzoo_ctor;
+[[maybe_unused]]
+static yetty_ygui_destructor_fn yetty_ygui_yzoo_yetty_ygui_destructor_check = yzoo_dtor;
+[[maybe_unused]]
+static yetty_ygui_widget_emit_body_fn yetty_ygui_yzoo_yetty_ygui_widget_emit_body_check = yzoo_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_yzoo_class_get(void)
 {
@@ -20,9 +24,11 @@ struct yetty_yclass_ptr_result yetty_ygui_yzoo_class_get(void)
         .data_size = sizeof(struct yzoo_data),
     };
     static const struct yetty_yclass_op ops[] = {
-        {"yetty_ygui", "widget_emit_container", (yetty_yclass_method_id_t)yetty_ygui_widget_emit_container, (yetty_yclass_impl_t)emit_container},
+        {"yetty_ygui", "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor, (yetty_yclass_impl_t)yzoo_ctor},
+        {"yetty_ygui", "destructor", (yetty_yclass_method_id_t)yetty_ygui_destructor, (yetty_yclass_impl_t)yzoo_dtor},
+        {"yetty_ygui", "widget_emit_body", (yetty_yclass_method_id_t)yetty_ygui_widget_emit_body, (yetty_yclass_impl_t)yzoo_emit_body},
     };
-    struct yetty_yclass_ptr_result parent_class_r = yetty_ygui_widget_class_get();
+    struct yetty_yclass_ptr_result parent_class_r = yetty_ygui_ydraw_embed_class_get();
     if (YETTY_IS_ERR(parent_class_r))
         return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_yzoo_class_get: parent accessor failed", parent_class_r);
     struct yetty_yclass_ptr_result register_class_r =

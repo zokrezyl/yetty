@@ -687,6 +687,27 @@ static struct yetty_ycore_void_result emit_segment_subtree(struct yetty_ydraw_dr
     return YETTY_OK_VOID();
 }
 
+/* Flat variant of emit_segment_subtree: walk the tree and emit each leaf
+ * primitive directly, with no GROUP framing. Used by the full-redraw path
+ * (yetty_yjungle_render) for consumers that paint a flat prim list each
+ * frame (the ygui ydraw_embed widget) rather than accumulating GROUP/DELETE
+ * deltas on a persistent canvas. */
+static struct yetty_ycore_void_result emit_segment_flat(struct yetty_ydraw_draw_list *buf,
+                                                        const struct yjungle_segment *seg,
+                                                        uint32_t *z_order_counter, float scene_w,
+                                                        float scene_h)
+{
+    if (seg->is_group) {
+        for (uint32_t i = 0; i < seg->children_count; i++) {
+            struct yetty_ycore_void_result cr =
+                emit_segment_flat(buf, &seg->children[i], z_order_counter, scene_w, scene_h);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "yjungle: flat child emit");
+        }
+        return YETTY_OK_VOID();
+    }
+    return emit_primitive(buf, (*z_order_counter)++, seg, scene_w, scene_h);
+}
+
 /*=============================================================================
  * Public API
  *===========================================================================*/
@@ -971,5 +992,40 @@ struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,
     }
 
     schedule_next_event(j, now_ms);
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yjungle_render(struct yetty_yjungle *j,
+                                                    struct yetty_ydraw_draw_list *buf,
+                                                    uint64_t now_ms)
+{
+    if (!j) {
+        return YETTY_ERR(yetty_ycore_void, "yjungle_render: NULL jungle");
+    }
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "yjungle_render: NULL buf");
+    }
+
+    /* Advance the simulation (mutates the chain). The tick writes its
+     * incremental commands into a scratch buffer we throw away — only the
+     * chain side effect matters here. */
+    struct yetty_ydraw_draw_list_result sr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yjungle_render: scratch create");
+    struct yetty_ycore_void_result tr = yetty_yjungle_tick(j, sr.value, now_ms);
+    yetty_ydraw_draw_list_destroy(sr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "yjungle_render: advance");
+
+    /* Emit the whole current chain as a flat prim list, replacing the
+     * buffer each frame (the full-redraw model the ydraw_embed widget
+     * needs). */
+    yetty_ydraw_draw_list_clear(buf);
+    yetty_ydraw_draw_list_set_scene_bounds(buf, 0.0f, 0.0f, j->config.scene_width,
+                                           j->config.scene_height);
+    uint32_t z_order = 0u;
+    for (uint32_t i = 0; i < j->chain_len; i++) {
+        struct yetty_ycore_void_result er = emit_segment_flat(
+            buf, &j->chain[i], &z_order, j->config.scene_width, j->config.scene_height);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yjungle_render: segment");
+    }
     return YETTY_OK_VOID();
 }
