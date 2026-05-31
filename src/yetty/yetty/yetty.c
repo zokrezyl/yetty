@@ -752,7 +752,14 @@ static struct yetty_ycore_int_result yetty_event_handler(
                     }
                 }
             }
-            yetty_yui_show_context_menu(yetty->yui, event->mouse.x, event->mouse.y);
+            /* The context menu is ygui chrome laid out in logical pixels;
+             * convert the framebuffer-pixel click to logical for its anchor. */
+            float menu_cs = yetty->runtime ? yetty->runtime->gpu.app_gpu_context.content_scale : 1.0f;
+            if (menu_cs <= 0.0f) {
+                menu_cs = 1.0f;
+            }
+            yetty_yui_show_context_menu(yetty->yui, event->mouse.x / menu_cs,
+                                        event->mouse.y / menu_cs);
             if (yetty->event_loop && yetty->event_loop->ops &&
                 yetty->event_loop->ops->request_render) {
                 yetty->event_loop->ops->request_render(yetty->event_loop);

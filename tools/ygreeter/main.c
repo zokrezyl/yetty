@@ -1058,8 +1058,9 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
         /* File browser, rooted at $HOME (or "/"). */
         struct yetty_ygui_object *fp = el_w(sec, yetty_ygui_filepicker_class_get().value, 240);
         const char *home = getenv("HOME");
-        yetty_ycore_error_destroy_safe(
-            yetty_ygui_filepicker_set_dir(fp, home && *home ? home : "/"));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                            yetty_ygui_filepicker_set_dir(fp, home && *home ? home : "/"),
+                            "elements: filepicker set_dir");
 
         el_finalize_section(sec);
     }
@@ -2698,10 +2699,21 @@ static struct yetty_ycore_int_result standalone_frame_tick(
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
+/* HiDPI scale (framebuffer px / logical px) of the local display, 1.0 if
+ * unset. The ygui chrome is authored in logical pixels and the ygrid
+ * receiver scales it back up, so the standalone platform path divides
+ * framebuffer-pixel viewport/pointer values by this on the way into ygui. */
+static float app_content_scale(const struct app *app)
+{
+    float s = app->yframework->gpu.app_gpu_context.content_scale;
+    return s > 0.0f ? s : 1.0f;
+}
+
 static struct yetty_ycore_int_result standalone_event_handler(
     struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
 {
     struct app *app = container_of(listener, struct app, listener);
+    const float scale = app_content_scale(app);
 
     if (ev->type == YETTY_YCORE_WINDOW_REFRESH) {
         if (app->render_target && app->render_target->ops->refresh_full) {
@@ -2766,8 +2778,9 @@ static struct yetty_ycore_int_result standalone_event_handler(
             app->render_target->ops->resize(app->render_target, vp);
         }
         {
+            /* Logical viewport; container rect below stays framebuffer px. */
             struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-                app->engine, (float)ev->resize.width, (float)ev->resize.height);
+                app->engine, (float)ev->resize.width / scale, (float)ev->resize.height / scale);
             if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
         }
         if (app->root_container) {
@@ -2800,8 +2813,19 @@ static struct yetty_ycore_int_result standalone_event_handler(
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP: {
         struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_button(
-            app->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button,
+            app->engine, ev->mouse.x / scale, ev->mouse.y / scale, ev->mouse.button,
             ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0, ev->mouse.mods);
+        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (app->yframework->event_loop->ops->request_render) {
+            app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+    case YETTY_YCORE_MOUSE_SCROLL: {
+        /* Positions are scaled like the others; the wheel deltas are not. */
+        struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_scroll(
+            app->engine, ev->mouse_scroll.x / scale, ev->mouse_scroll.y / scale,
+            ev->mouse_scroll.dx, ev->mouse_scroll.dy);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
@@ -2810,8 +2834,8 @@ static struct yetty_ycore_int_result standalone_event_handler(
     }
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        struct yetty_ycore_void_result r =
-            yetty_ygui_framework_feed_mouse_motion(app->engine, ev->mouse.x, ev->mouse.y);
+        struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_motion(
+            app->engine, ev->mouse.x / scale, ev->mouse.y / scale);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         /* Hover state may have flipped — request a render so the new
          * hovered widget repaints before the next event. */
@@ -2958,8 +2982,11 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             yetty_ygui_framework_create(app->pty_pair.a);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
         app->engine = fr.value;
+        /* Logical viewport: chrome is authored in logical px, the ygrid
+         * receiver scales back to framebuffer px (see app_content_scale). */
+        float cs = app_content_scale(app);
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            app->engine, (float)rt->surface_width, (float)rt->surface_height);
+            app->engine, (float)rt->surface_width / cs, (float)rt->surface_height / cs);
         if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
     }
 

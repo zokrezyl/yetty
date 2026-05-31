@@ -154,7 +154,12 @@ struct ygrid_id_index_entry {
 #define U_VZ_OFF 5
 #define U_CZ_SCALE 6
 #define U_CZ_OFF 7
-#define U_COUNT 8
+/* On-screen rect size in px. The vertex maps the rect's NDC quad onto a
+ * rect-sized window of the (possibly larger) content; cells + bounds use
+ * grid_size*cell_size = the content extent. When content == rect this is
+ * the same value, so non-scrolling figures are unaffected. */
+#define U_VIEW_SIZE 8
+#define U_COUNT 9
 
 /*===========================================================================
  * The figure
@@ -171,6 +176,36 @@ yetty_ygrid_grid {
 
     uint32_t grid_cols;
     uint32_t grid_rows;
+
+    /* Content extent in px. The cell grid + prim bucketing span this, not
+     * the on-screen rect — so content can be taller/wider than the
+     * viewport. 0 means "same as the rect" (the figure fills itself; the
+     * common, non-scrolling case). */
+    float content_w;
+    float content_h;
+    /* Scroll offset in px: the content coordinate shown at the rect's
+     * top-left. The shader maps the rect to the content window starting
+     * here; the per-figure scissor clips. 0 = top-left. */
+    float scroll_x;
+    float scroll_y;
+    /* HiDPI scale = framebuffer px / logical px, captured from the host's
+     * gpu context at create time (1.0 on non-HiDPI, and on the headless
+     * test path). Producers (ygui chrome, …) author and ship their wire
+     * envelope in display-independent LOGICAL pixels; this receiver
+     * multiplies every incoming coordinate by content_scale at
+     * add-record time so the same envelope renders at the correct
+     * physical size on whatever display it lands on. A remote receiver
+     * applies its OWN display's scale to the identical envelope. */
+    float content_scale;
+    /* Coordinate mode. When set, prim coords are ABSOLUTE screen pixels
+     * (the chrome grid + ygui figures via make_figure, whose subtrees are
+     * laid out in absolute coords): the grid spans the whole target and
+     * clips to its own rect with the GPU scissor, so a sub-rect figure
+     * renders its absolute-coord content clipped to its box — no
+     * re-origin, so layout / hit-test / paint need no special-casing.
+     * When clear, coords are LOCAL to the figure rect (producer figures:
+     * yimage/yplot/… draw from 0,0). Set by the factory per kind. */
+    int absolute_coords;
 
     /* Wire bytes — concatenated records, copied verbatim from
      * yetty_ygrid_add_record callers. */
@@ -785,11 +820,43 @@ static void cells_clear(struct yetty_ygrid_grid *g)
  * Spatial bucketing — insert one prim into every cell it overlaps.
  *=========================================================================*/
 
+/* Content extent in framebuffer pixels — the span the cell grid covers.
+ * When content_w/h is set it is already framebuffer px (render forces it to
+ * the target viewport for absolute grids). When unset, the fallback is the
+ * figure rect — but an absolute (ygui chrome) grid's rect is in LOGICAL
+ * pixels, while its prims are scaled to framebuffer px in
+ * scale_record_coords; scale the fallback to match so cells, prim AABBs and
+ * the render-time content_w all live in the same space. Local figures keep
+ * a framebuffer-pixel rect, so the scale stays 1. */
+static float ygrid_content_extent_w(const struct yetty_ygrid_grid *g)
+{
+    if (g->content_w > 0.0f) {
+        return g->content_w;
+    }
+    float rect_w = g->base.rect.max.x - g->base.rect.min.x;
+    return (g->absolute_coords && g->content_scale > 0.0f) ? rect_w * g->content_scale : rect_w;
+}
+
+static float ygrid_content_extent_h(const struct yetty_ygrid_grid *g)
+{
+    if (g->content_h > 0.0f) {
+        return g->content_h;
+    }
+    float rect_h = g->base.rect.max.y - g->base.rect.min.y;
+    return (g->absolute_coords && g->content_scale > 0.0f) ? rect_h * g->content_scale : rect_h;
+}
+
 static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, uint32_t prim_index)
 {
     const struct ygrid_prim_meta *p = &g->prims[prim_index];
-    float cw = (g->base.rect.max.x - g->base.rect.min.x) / (float)g->grid_cols;
-    float ch = (g->base.rect.max.y - g->base.rect.min.y) / (float)g->grid_rows;
+    /* Cell size spans the content extent (matches the shader's
+     * grid_size*cell_size), so prims past the visible rect bucket into
+     * real cell rows instead of clamping into the last visible one.
+     * Content defaults to the rect when unset. */
+    float content_w = ygrid_content_extent_w(g);
+    float content_h = ygrid_content_extent_h(g);
+    float cw = content_w / (float)g->grid_cols;
+    float ch = content_h / (float)g->grid_rows;
     if (cw <= 0.0f || ch <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -1381,6 +1448,30 @@ void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
     grid->figure_factory = factory;
 }
 
+void yetty_ygrid_set_content_size(struct yetty_ygrid_grid *grid, float content_w, float content_h)
+{
+    if (!grid) {
+        return;
+    }
+    grid->content_w = content_w > 0.0f ? content_w : 0.0f;
+    grid->content_h = content_h > 0.0f ? content_h : 0.0f;
+    /* Cell layout depends on the content extent; force a re-bucket +
+     * re-stage on the next render (resize_grid_dims_if_needed picks up the
+     * new dims). */
+    grid->staging_dirty = 1;
+}
+
+void yetty_ygrid_set_scroll(struct yetty_ygrid_grid *grid, float scroll_x, float scroll_y)
+{
+    if (!grid) {
+        return;
+    }
+    /* Pure view shift — the shader reads it as cz_off; content + buckets
+     * are unchanged, so no re-stage, just a redraw. */
+    grid->scroll_x = scroll_x;
+    grid->scroll_y = scroll_y;
+}
+
 /* Defined further down (alongside the other shader-build helpers, after
  * the resource_set / pipeline setup section). Declared here so the
  * render path can pull it in when the font set changes mid-frame. */
@@ -1402,7 +1493,13 @@ static struct yetty_ycore_void_result resize_grid_dims_if_needed(struct yetty_yg
 {
     uint32_t want_cols;
     uint32_t want_rows;
-    ygrid_dims_from_rect(g->base.rect, &want_cols, &want_rows);
+    /* Size the cell grid to the content, not the on-screen rect, so a
+     * scrolling figure's off-screen prims bucket into real cells. Content
+     * defaults to the rect when unset (non-scrolling figures: identical). */
+    float cw = ygrid_content_extent_w(g);
+    float ch = ygrid_content_extent_h(g);
+    struct yetty_ycore_rectangle content_rect = {{0.0f, 0.0f}, {cw, ch}};
+    ygrid_dims_from_rect(content_rect, &want_cols, &want_rows);
     if (want_cols == g->grid_cols && want_rows == g->grid_rows) {
         return YETTY_OK_VOID();
     }
@@ -1430,6 +1527,15 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
     ydebug("ygrid_render: rect=(%.1f,%.1f)-(%.1f,%.1f) prims=%u staging_dirty=%d", self->rect.min.x,
            self->rect.min.y, self->rect.max.x, self->rect.max.y, g->prim_count, g->staging_dirty);
+
+    /* Absolute-coords figures span the whole target (their prims are in
+     * screen coords); the GPU scissor below clips to the figure's own rect.
+     * Drive the cell grid + bounds off the target extent so absolute prims
+     * bucket correctly. */
+    if (g->absolute_coords && target) {
+        g->content_w = target->viewport.w;
+        g->content_h = target->viewport.h;
+    }
 
     struct yetty_ycore_void_result rr = resize_grid_dims_if_needed(g);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ygrid_render: resize_grid_dims_if_needed");
@@ -1463,8 +1569,27 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     g->rs.uniforms[U_GRID_SIZE].vec2[1] = (float)g->grid_rows;
     float w = self->rect.max.x - self->rect.min.x;
     float h = self->rect.max.y - self->rect.min.y;
-    g->rs.uniforms[U_CELL_SIZE].vec2[0] = w / (float)g->grid_cols;
-    g->rs.uniforms[U_CELL_SIZE].vec2[1] = h / (float)g->grid_rows;
+    /* Cells span the content, not the rect: grid_size * cell_size is the
+     * content extent the shader bounds-checks + buckets against. Content
+     * defaults to the rect when unset (the figure fills itself). Use the
+     * scale-aware helpers so absolute-coords (ygui chrome) grids — whose
+     * rect arrives in LOGICAL pixels but whose prims are scaled to
+     * framebuffer pixels in scale_record_coords — see a framebuffer-pixel
+     * cell extent. Mismatch here clips the right/bottom half of the
+     * framebuffer to transparent on HiDPI (cells too small → shader
+     * grid_pixel_w/h bounds check trips at fb x >= logical_w). */
+    float cw = ygrid_content_extent_w(g);
+    float ch = ygrid_content_extent_h(g);
+    g->rs.uniforms[U_CELL_SIZE].vec2[0] = cw / (float)g->grid_cols;
+    g->rs.uniforms[U_CELL_SIZE].vec2[1] = ch / (float)g->grid_rows;
+    /* View size = what the NDC quad maps onto. Local figures map the rect;
+     * absolute figures map the whole target so prim coords are screen
+     * coords (content_w/h was set to the target above). cz_off is the
+     * (local-mode) scroll offset; the per-figure scissor clips either way. */
+    g->rs.uniforms[U_VIEW_SIZE].vec2[0] = g->absolute_coords ? cw : w;
+    g->rs.uniforms[U_VIEW_SIZE].vec2[1] = g->absolute_coords ? ch : h;
+    g->rs.uniforms[U_CZ_OFF].vec2[0] = g->scroll_x;
+    g->rs.uniforms[U_CZ_OFF].vec2[1] = g->scroll_y;
     g->rs.uniforms[U_PRIM_COUNT].u32 = g->prim_count;
     g->rs.pixel_size.width = w;
     g->rs.pixel_size.height = h;
@@ -1513,7 +1638,15 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     pass_desc.colorAttachments = &ca;
 
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(enc, &pass_desc);
-    wgpuRenderPassEncoderSetViewport(pass, vx, vy, w, h, 0.0f, 1.0f);
+    /* Absolute figures span the whole target (prim coords are screen
+     * coords); local figures map the NDC quad onto their own rect. The
+     * scissor below clips to the figure rect regardless. */
+    if (g->absolute_coords) {
+        wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
+                                         target->viewport.w, target->viewport.h, 0.0f, 1.0f);
+    } else {
+        wgpuRenderPassEncoderSetViewport(pass, vx, vy, w, h, 0.0f, 1.0f);
+    }
     /* SetScissorRect MUST stay within the render-area bounds. The
      * figure's rect may extend slightly beyond the pane (window's
      * absolute screen rect can exceed the target by a few pixels —
@@ -1523,10 +1656,20 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     float ty0 = target->viewport.y;
     float tx1 = target->viewport.x + target->viewport.w;
     float ty1 = target->viewport.y + target->viewport.h;
-    float sx0 = vx > tx0 ? vx : tx0;
-    float sy0 = vy > ty0 ? vy : ty0;
-    float sx1 = (vx + w) < tx1 ? (vx + w) : tx1;
-    float sy1 = (vy + h) < ty1 ? (vy + h) : ty1;
+    /* Absolute (ygui chrome) grids receive a LOGICAL rect from the engine
+     * viewport; their prims are scaled to framebuffer pixels in
+     * scale_record_coords, so the scissor — which is in framebuffer pixels —
+     * must scale the rect by the same content_scale to match. Local figures
+     * already carry a framebuffer-pixel rect, so the scale stays 1. */
+    float rect_scale = (g->absolute_coords && g->content_scale > 0.0f) ? g->content_scale : 1.0f;
+    float rvx0 = vx * rect_scale;
+    float rvy0 = vy * rect_scale;
+    float rvx1 = (vx + w) * rect_scale;
+    float rvy1 = (vy + h) * rect_scale;
+    float sx0 = rvx0 > tx0 ? rvx0 : tx0;
+    float sy0 = rvy0 > ty0 ? rvy0 : ty0;
+    float sx1 = rvx1 < tx1 ? rvx1 : tx1;
+    float sy1 = rvy1 < ty1 ? rvy1 : ty1;
     if (sx1 <= sx0 || sy1 <= sy0) {
         /* Entirely off-pane — nothing visible. Skip draw cleanly. */
         wgpuRenderPassEncoderEnd(pass);
@@ -2004,8 +2147,11 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"ydraw_cell_zoom_scale", YETTY_YRENDER_UNIFORM_F32};
     rs->uniforms[U_CZ_OFF] =
         (struct yetty_yrender_uniform){"ydraw_cell_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_VIEW_SIZE] =
+        (struct yetty_yrender_uniform){"ydraw_view_size", YETTY_YRENDER_UNIFORM_VEC2};
 
-    /* Static-figure defaults: no scrolling, no per-frame zoom. */
+    /* Defaults: no zoom; scroll (cz_off) and view_size are set per-frame
+     * in render from the figure's rect + scroll offset. */
     rs->uniforms[U_ROLLING_ROW_0].u32 = 0;
     rs->uniforms[U_VZ_SCALE].f32 = 1.0f;
     rs->uniforms[U_VZ_OFF].vec2[0] = 0.0f;
@@ -2013,6 +2159,8 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
     rs->uniforms[U_CZ_SCALE].f32 = 1.0f;
     rs->uniforms[U_CZ_OFF].vec2[0] = 0.0f;
     rs->uniforms[U_CZ_OFF].vec2[1] = 0.0f;
+    rs->uniforms[U_VIEW_SIZE].vec2[0] = 0.0f;
+    rs->uniforms[U_VIEW_SIZE].vec2[1] = 0.0f;
 }
 
 /* Load the raw ydraw-layer.wgsl bytes into layer_shader_code. The
@@ -2212,11 +2360,23 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     g->base.dirty = 1;
     g->grid_cols = grid_cols;
     g->grid_rows = grid_rows;
+    g->content_scale = 1.0f;
     if (!headless) {
         g->device = context->runtime->gpu.device;
         g->queue = context->runtime->gpu.queue;
         g->target_format = context->runtime->gpu.surface_format;
         g->allocator = context->runtime->gpu.allocator;
+        /* Mirror text-layer's scale-at-construction: read the host's
+         * HiDPI factor once here so the receiver-side coordinate scaling
+         * needs no per-host plumbing. Guard against an unset / zero value
+         * leaking a degenerate scale into the wire path. */
+        float scale = context->runtime->gpu.app_gpu_context.content_scale;
+        if (scale > 0.0f) {
+            g->content_scale = scale;
+        }
+        ydebug("ygrid_create: rect=(%.1f,%.1f)+%.1fx%.1f content_scale=%.3f",
+               rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y,
+               g->content_scale);
     }
     g->staging_dirty = 1;
     g->free_slot_head = YGRID_INVALID_SLOT;
@@ -2337,9 +2497,9 @@ static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *ou
  * (optional) complex-prim factory. NULL `user` is allowed — produces
  * an ygrid with no font and no complex-prim support, useful for tests
  * and tooling. */
-static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_rectangle rect,
-                                                            const struct yetty_context *context,
-                                                            void *user)
+static struct yetty_yfigure_figure_ptr_result ygrid_factory_impl(struct yetty_ycore_rectangle rect,
+                                                                 const struct yetty_context *context,
+                                                                 void *user, int absolute_coords)
 {
     uint32_t grid_cols, grid_rows;
     ygrid_dims_from_rect(rect, &grid_cols, &grid_rows);
@@ -2347,6 +2507,7 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_r
     if (YETTY_IS_ERR(gr)) {
         return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: create", gr);
     }
+    gr.value->absolute_coords = absolute_coords;
     if (user) {
         const struct yetty_ygrid_factory_args *args = user;
         if (args->default_font) {
@@ -2364,18 +2525,34 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_r
     return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ygrid_as_figure(gr.value));
 }
 
+/* KIND_YGRID figures (the chrome grid + ygui widgets promoted via
+ * make_figure) carry absolute-coord content. */
+static struct yetty_yfigure_figure_ptr_result ygrid_factory_absolute(
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
+{
+    return ygrid_factory_impl(rect, context, user, 1);
+}
+
+/* Producer-kind figures (yimage/yplot/…) draw their content in local
+ * coords from (0,0). */
+static struct yetty_yfigure_figure_ptr_result ygrid_factory_local(
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
+{
+    return ygrid_factory_impl(rect, context, user, 0);
+}
+
 struct yetty_ycore_void_result yetty_ygrid_register_factory(
     struct yetty_yfigure_registry *registry, const struct yetty_ygrid_factory_args *args)
 {
-    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YGRID, ygrid_factory,
-                                           (void *)args);
+    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YGRID,
+                                           ygrid_factory_absolute, (void *)args);
 }
 
 struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
     struct yetty_yfigure_registry *registry, uint32_t kind,
     const struct yetty_ygrid_factory_args *args)
 {
-    return yetty_yfigure_registry_register(registry, kind, ygrid_factory, (void *)args);
+    return yetty_yfigure_registry_register(registry, kind, ygrid_factory_local, (void *)args);
 }
 
 struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)
@@ -2384,6 +2561,101 @@ struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid
         return NULL;
     }
     return &grid->base;
+}
+
+/* Multiply one little-endian f32 wire word in place by `scale`. The
+ * wire words are u32-typed storage; round-trip through a float so the
+ * scaling is well-defined regardless of alignment. */
+static void scale_record_word(uint32_t *word, float scale)
+{
+    float v;
+    memcpy(&v, word, sizeof(v));
+    v *= scale;
+    memcpy(word, &v, sizeof(v));
+}
+
+/* Apply the receiver's HiDPI scale to every LOGICAL-pixel coordinate in
+ * a freshly-appended wire record, in place, before the record is parsed
+ * and staged. Doing it here (once, at the add boundary) means both the
+ * spatial index built by parse_and_index_record and the bytes copied
+ * verbatim into the GPU storage buffer see framebuffer-pixel
+ * coordinates — no second pass, no AABB/staging divergence.
+ *
+ * Only geometry/position fields are touched; color, z_order, and
+ * packed-index words are left intact. Handled types are exactly the
+ * ones a logical-pixel producer (ygui chrome) emits:
+ *
+ *   GLYPH      — x, y, font_size (words 2,3,4).
+ *   TEXT_SPAN  — x, y, font_size (words 2,3,4). Its expanded glyphs
+ *                inherit the scaled span and are NOT re-scaled: they are
+ *                generated straight into parse_and_index_record, below
+ *                this boundary.
+ *   SDF prims  — stroke_w (word 4) plus the geometry words from word 5
+ *                onward, minus the two trailing u32 color words carried
+ *                by the gradient-box variants.
+ *
+ * Everything else (FONT, complex figures, admin commands) falls through
+ * untouched — those carry no scalable chrome coordinates here. */
+static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offset,
+                                size_t record_len)
+{
+    /* Only absolute-coords grids carry ygui chrome authored in logical
+     * pixels; their rect/scissor is scaled to physical in ygrid_render to
+     * match. Local producer figures (yplot/yimage/…) own their coordinate
+     * space (rect comes from the compositor in framebuffer pixels) and are
+     * left untouched. */
+    if (!g->absolute_coords) {
+        return;
+    }
+    float scale = g->content_scale;
+    if (scale == 1.0f) {
+        return;
+    }
+    uint32_t word_count = (uint32_t)(record_len / 4u);
+    if (word_count < 5u) {
+        return;
+    }
+    uint32_t *words = (uint32_t *)(g->bytes + record_offset);
+    uint32_t type = words[0];
+
+    if (type == YGRID_GLYPH_TYPE || type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
+        /* Both layouts place x, y, font_size at words 2, 3, 4. */
+        scale_record_word(&words[2], scale);
+        scale_record_word(&words[3], scale);
+        scale_record_word(&words[4], scale);
+        return;
+    }
+
+    /* SDF prims share the header [type, z_order, fill, stroke, stroke_w]
+     * with geometry from word 5. yetty_ysdf_handler gates the type so
+     * non-SDF records are skipped. */
+    struct yetty_ydraw_drawable_base_ops_ptr_result ops_r = yetty_ysdf_handler(type);
+    if (YETTY_IS_ERR(ops_r)) {
+        yetty_ycore_error_destroy(ops_r.error);
+        ydebug("scale_record_coords: SKIP type=0x%08X (not SDF) word_count=%u", type, word_count);
+        return;
+    }
+    uint32_t geom_end = word_count;
+    if (type == YETTY_YSDF_LINEAR_GRADIENT_BOX || type == YETTY_YSDF_RADIAL_GRADIENT_BOX) {
+        geom_end -= 2u; /* trailing u32 color words stay intact */
+    }
+    /* Snapshot pre-scale fill/stroke for the dump below. */
+    uint32_t fill = words[2];
+    uint32_t stroke = words[3];
+    scale_record_word(&words[4], scale); /* stroke_w */
+    for (uint32_t i = 5u; i < geom_end; ++i) {
+        scale_record_word(&words[i], scale);
+    }
+    if (word_count >= 10u) {
+        float cx, cy, hw, hh;
+        memcpy(&cx, &words[5], 4);
+        memcpy(&cy, &words[6], 4);
+        memcpy(&hw, &words[7], 4);
+        memcpy(&hh, &words[8], 4);
+        ydebug("scale_record_coords: SDF type=0x%08X fill=0x%08X stroke=0x%08X "
+               "post-scale center=(%.1f,%.1f) half=(%.1f,%.1f)",
+               type, fill, stroke, cx, cy, hw, hh);
+    }
 }
 
 struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_grid *grid,
@@ -2403,6 +2675,10 @@ struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_g
     uint32_t record_offset = (uint32_t)grid->bytes_len;
     memcpy(grid->bytes + grid->bytes_len, record_bytes, record_len);
     grid->bytes_len += record_len;
+
+    /* Receiver-side HiDPI scaling: rewrite logical-pixel coordinates to
+     * framebuffer pixels in place before the record is indexed/staged. */
+    scale_record_coords(grid, record_offset, record_len);
 
     struct yetty_ycore_void_result pr = parse_and_index_record(grid, record_offset, record_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid_add_record: parse_and_index");

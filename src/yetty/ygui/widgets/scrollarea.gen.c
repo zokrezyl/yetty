@@ -7,6 +7,8 @@
 #include <yetty/ytrace/ytrace.h>
 
 [[maybe_unused]]
+static yetty_ygui_widget_on_scroll_fn yetty_ygui_scrollarea_yetty_ygui_widget_on_scroll_check = on_scroll;
+[[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_scrollarea_yetty_ygui_constructor_check = ctor;
 [[maybe_unused]]
 static yetty_ygui_widget_paint_fn yetty_ygui_scrollarea_yetty_ygui_widget_paint_check = paint;
@@ -23,6 +25,7 @@ struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void)
         .data_size = sizeof(struct scrollarea_data),
     };
     static const struct yetty_yclass_op ops[] = {
+        {"yetty_ygui", "widget_on_scroll", (yetty_yclass_method_id_t)yetty_ygui_widget_on_scroll, (yetty_yclass_impl_t)on_scroll},
         {"yetty_ygui", "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor, (yetty_yclass_impl_t)ctor},
         {"yetty_ygui", "widget_paint", (yetty_yclass_method_id_t)yetty_ygui_widget_paint, (yetty_yclass_impl_t)paint},
     };

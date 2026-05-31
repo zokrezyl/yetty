@@ -15,6 +15,8 @@ static yetty_ygui_widget_on_release_fn yetty_ygui_widget_yetty_ygui_widget_on_re
 [[maybe_unused]]
 static yetty_ygui_widget_on_motion_fn yetty_ygui_widget_yetty_ygui_widget_on_motion_check = widget_default_on_motion;
 [[maybe_unused]]
+static yetty_ygui_widget_on_scroll_fn yetty_ygui_widget_yetty_ygui_widget_on_scroll_check = widget_default_on_scroll;
+[[maybe_unused]]
 static yetty_ygui_widget_paint_fn yetty_ygui_widget_yetty_ygui_widget_paint_check = widget_default_paint;
 [[maybe_unused]]
 static yetty_ygui_widget_emit_container_fn yetty_ygui_widget_yetty_ygui_widget_emit_container_check = widget_default_emit_container;
@@ -38,6 +40,7 @@ struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void)
         {"yetty_ygui", "widget_on_press", (yetty_yclass_method_id_t)yetty_ygui_widget_on_press, (yetty_yclass_impl_t)widget_default_on_press},
         {"yetty_ygui", "widget_on_release", (yetty_yclass_method_id_t)yetty_ygui_widget_on_release, (yetty_yclass_impl_t)widget_default_on_release},
         {"yetty_ygui", "widget_on_motion", (yetty_yclass_method_id_t)yetty_ygui_widget_on_motion, (yetty_yclass_impl_t)widget_default_on_motion},
+        {"yetty_ygui", "widget_on_scroll", (yetty_yclass_method_id_t)yetty_ygui_widget_on_scroll, (yetty_yclass_impl_t)widget_default_on_scroll},
         {"yetty_ygui", "widget_paint", (yetty_yclass_method_id_t)yetty_ygui_widget_paint, (yetty_yclass_impl_t)widget_default_paint},
         {"yetty_ygui", "widget_emit_container", (yetty_yclass_method_id_t)yetty_ygui_widget_emit_container, (yetty_yclass_impl_t)widget_default_emit_container},
         {"yetty_ygui", "widget_emit_body", (yetty_yclass_method_id_t)yetty_ygui_widget_emit_body, (yetty_yclass_impl_t)widget_default_emit_body},

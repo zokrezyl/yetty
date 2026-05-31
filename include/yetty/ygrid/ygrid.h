@@ -144,6 +144,19 @@ struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *
 struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *grid, uint32_t slot,
                                                     struct yetty_ydraw_font *font);
 
+/* Content extent in px. By default a ygrid's content fills its on-screen
+ * rect; set a larger extent to make it a scroll viewport — the cell grid
+ * and prim bucketing then span the content while the rect stays the
+ * visible window. Pass 0 for an axis to mean "same as the rect". Records
+ * are still authored in content-local coords. */
+void yetty_ygrid_set_content_size(struct yetty_ygrid_grid *grid, float content_w, float content_h);
+
+/* Scroll offset in px: the content coordinate shown at the rect's
+ * top-left. The shader maps the rect onto the content window starting
+ * here; the per-figure scissor clips. Records don't move — scrolling is a
+ * single offset update + redraw, no re-emit. */
+void yetty_ygrid_set_scroll(struct yetty_ygrid_grid *grid, float scroll_x, float scroll_y);
+
 #ifdef __cplusplus
 }
 #endif

@@ -30,17 +30,11 @@ struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget_data {
      * widgets that never call set_bg_color are unaffected. Painted by
      * primitive_widget's emit_body before the widget's own paint. */
     uint32_t bg;
-    /* Main-axis scroll offset in px: the layout pass shifts this widget's
-     * in-flow children toward the content-box origin by this amount, so a
-     * container can show a window onto over-long content. 0 (the default)
-     * leaves every other widget's layout untouched. Set by scrollarea via
-     * the internal accessor below; read by layout.c. */
+    /* Main-axis scroll offset in px. The layout pass shifts this node's
+     * in-flow children toward the content-box origin by this amount. Used
+     * by scrollarea (a ygrid figure) to slide its content; the figure's
+     * GPU scissor clips the overflow. 0 for every other widget. */
     float scroll_main;
-    /* When non-zero, the emit body walk narrows the CPU clip rectangle to
-     * this widget's content box while painting its subtree, so over-long
-     * children are culled to the viewport (the software stand-in for a GPU
-     * scissor). Set by scrollarea; 0 for every other widget. */
-    int clip_children;
 };
 
 /* Convenience accessor — every internal helper that needs the widget
@@ -139,6 +133,23 @@ static struct yetty_ycore_int_result widget_default_on_motion(struct yetty_yclas
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
+/* Wheel / trackpad scroll. (dx, dy) are the deltas at (x, y). Default:
+ * not handled (0), so the framework keeps bubbling to an ancestor that
+ * scrolls. Scrollable widgets (scrollarea, filepicker) override this. */
+[[clang::annotate("override@ygui:widget:widget_on_scroll")]]
+static struct yetty_ycore_int_result widget_default_on_scroll(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              float x, float y, float dx, float dy)
+{
+    (void)ctx;
+    (void)obj;
+    (void)x;
+    (void)y;
+    (void)dx;
+    (void)dy;
+    return YETTY_OK(yetty_ycore_int, 0);
+}
+
 [[clang::annotate("override@ygui:widget:widget_paint")]] [[clang::annotate(
     "local@ygui:widget_paint")]]
 static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_ctx *ctx,
@@ -224,11 +235,9 @@ struct yetty_ycore_rectangle yetty_ygui_widget_rect(const struct yetty_ygui_obje
     return wd->rect;
 }
 
-/* Main-axis scroll offset (internal — see struct yetty_ygui_widget_data and
- * the layout pass). Stored on the base widget slice so the layout pass can
- * read it for any node without knowing the concrete widget class. Mirrors
- * set_rect's dirty bump but does NOT mark the engine dirty: the scrolling
- * widget requests the actual repaint via yetty_ygui_object_set_dirty. */
+/* Main-axis scroll offset (internal — read by the layout pass to slide a
+ * scrolling container's children). Sets obj->dirty but not engine dirty;
+ * the scroller requests the repaint via yetty_ygui_object_set_dirty. */
 struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_ygui_object *obj,
                                                                  float offset)
 {
@@ -249,30 +258,6 @@ float yetty_ygui_widget_scroll_main_get(const struct yetty_ygui_object *obj)
     struct yetty_ygui_widget_data *wd =
         yetty_ygui_data_get((struct yetty_ygui_object *)obj, widget_class());
     return wd->scroll_main;
-}
-
-/* "Clip my children" flag (internal — see struct yetty_ygui_widget_data and
- * the emit body walk). A scrolling container sets this so its over-long
- * subtree is culled to its content box. */
-struct yetty_ycore_void_result yetty_ygui_widget_set_clip_children(struct yetty_ygui_object *obj,
-                                                                   int clip)
-{
-    if (!obj) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_clip_children: NULL obj");
-    }
-    struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
-    wd->clip_children = clip ? 1 : 0;
-    return YETTY_OK_VOID();
-}
-
-int yetty_ygui_widget_clips_children(const struct yetty_ygui_object *obj)
-{
-    if (!obj) {
-        return 0;
-    }
-    struct yetty_ygui_widget_data *wd =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, widget_class());
-    return wd->clip_children;
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_layout_set(struct yetty_ygui_object *obj,

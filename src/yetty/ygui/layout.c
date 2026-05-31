@@ -212,7 +212,9 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
 
     const struct yetty_ygui_layout *pl = yetty_ygui_widget_layout_get(node);
 
-    /* Content box = rect minus padding. */
+    /* Content box = rect minus padding. Always absolute — a scrolling
+     * figure renders its (absolute-coord) children clipped by its scissor;
+     * no per-node coordinate special-casing here. */
     float content_min_x = rect.min.x + pl->padding_left;
     float content_min_y = rect.min.y + pl->padding_top;
     float content_max_x = rect.max.x - pl->padding_right;
@@ -337,11 +339,9 @@ static struct yetty_ycore_void_result layout_node(struct yetty_ygui_object *node
         }
     }
 
-    /* Place children. A scrolling container (scrollarea) carries a
-     * main-axis scroll offset; subtract it so its in-flow children slide
-     * toward the content-box origin, revealing content further down the
-     * stack. Zero for every non-scrolling widget, so this is a no-op for
-     * the rest of the tree. */
+    /* Place children. A scrolling container carries a main-axis scroll
+     * offset; subtract it so its in-flow children slide toward the
+     * content-box origin. 0 for non-scrolling nodes. */
     idx = 0;
     float cursor_main = main_offset - yetty_ygui_widget_scroll_main_get(node);
     for (struct yetty_ygui_object *c = node->first_child; c && idx < placed_count;

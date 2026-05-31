@@ -21,6 +21,7 @@
 #include <yetty/ygui/widgets/hbox.h>
 #include <yetty/ygui/widgets/tabbar.h>
 #include <yetty/ysdf/funcs.gen.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -446,6 +447,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
     float base_font_size = theme && theme->font_size > 0.0f ? theme->font_size : 14.0f;
 
     /* Strip background — a flat band the width of the widget. */
+    ydebug("tabbar_paint: strip rect=(%.1f,%.1f)+%.1fx%.1f color=0x%08X",
+           r.min.x, r.min.y, strip_w, strip_h, color_strip);
     struct yetty_ycore_void_result rr =
         paint_pill(ctx, r.min.x, r.min.y, strip_w, strip_h, color_strip, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: strip bg");
@@ -453,6 +456,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
     struct tabbar_data *td = yetty_ygui_data_get(
         obj, yetty_ygui_class_expect(yetty_ygui_tabbar_class_get(), "yetty_ygui_tabbar_class_get"));
     int active = td->active_index;
+    ydebug("tabbar_paint: active_index=%d", active);
 
     int idx = 0;
     struct yetty_ygui_object *prev_header = NULL;
@@ -470,6 +474,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: pill");
 
         if (is_active && ph > TABBAR_ACCENT_BAR_H) {
+            ydebug("tabbar_paint: accent rect=(%.1f,%.1f)+%.1fx%.1f color=0x%08X",
+                   pr.min.x, pr.max.y - TABBAR_ACCENT_BAR_H, pw, TABBAR_ACCENT_BAR_H, color_accent);
             rr = paint_pill(ctx, pr.min.x, pr.max.y - TABBAR_ACCENT_BAR_H, pw, TABBAR_ACCENT_BAR_H,
                             color_accent, 0.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: accent bar");

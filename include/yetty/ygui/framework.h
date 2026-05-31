@@ -108,6 +108,11 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
     struct yetty_ygui_runtime *engine, float x, float y);
 
+/* Wheel / trackpad scroll at (x, y) with deltas (dx, dy). Delivered to the
+ * widget under the pointer, bubbling up until a scrollable consumes it. */
+struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
+    struct yetty_ygui_runtime *engine, float x, float y, float dx, float dy);
+
 /*-----------------------------------------------------------------------------
  * Root + viewport.
  *---------------------------------------------------------------------------*/
@@ -236,14 +241,13 @@ struct yetty_ygui_emit_ctx {
     int staged_ygrid_created;
     size_t staged_deletes_consumed;
 
-    /* CPU-side clip rectangle in absolute px. There is no GPU scissor
-     * yet, so this is the software substitute: the body walk narrows it
-     * to a clip-children container's content box while painting that
-     * container's subtree, and paint hooks cull geometry that falls
-     * outside it (whole widgets, or per-line for multi-line text). When
-     * clip_active is 0 the rect is ignored and nothing is culled. */
-    struct yetty_ycore_rectangle clip;
-    int clip_active;
+    /* Nested-figure clip. As the container walk descends through figure
+     * boundaries it narrows this to the intersection of the ancestor
+     * figures' rects; each figure is emitted with its rect clipped to it,
+     * so a scrollable nested inside another scrollable can't paint outside
+     * its parent's box. Inactive at the root (no clipping). */
+    struct yetty_ycore_rectangle fig_clip;
+    int fig_clip_active;
 };
 
 struct yetty_ycore_void_result yetty_ygui_emit_create_child(

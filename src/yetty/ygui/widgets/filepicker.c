@@ -1,6 +1,7 @@
 /* filepicker.c — directory browser. Lists the entries of a directory;
  * click a folder (trailing "/") to descend, ".." to go up, a file to
  * select it. */
+#include "../internal.h"
 #include "paint-helpers.h"
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/filepicker.h>
@@ -26,7 +27,10 @@ struct [[clang::annotate("class@ygui:filepicker")]] [[clang::annotate(
     char **entries;
     int entry_count;
     int selected;
-    int scroll;
+    int scroll; /* first visible row */
+    /* Drag-to-scroll: captured at press, consumed by on_motion. */
+    float press_y;
+    int press_scroll;
 };
 
 static const struct yetty_yclass *fp_class(void)
@@ -63,23 +67,24 @@ static int fp_entry_cmp(const void *a, const void *b)
 /* Reload `cwd`'s entries into the sorted `entries` array. Directories
  * keep a trailing "/" so the user (and the click handler) can tell them
  * apart. "." is dropped; ".." is kept for navigation. */
-static void fp_load_dir(struct fp_data *d)
+/* Build the listing for `d->cwd`. Failure-safe: the new list is built
+ * fully before the old one is replaced, so a directory that can't be
+ * opened (permission denied, deleted, …) leaves the current listing
+ * intact and returns a chained error instead of silently blanking. */
+static struct yetty_ycore_void_result fp_load_dir(struct fp_data *d)
 {
-    fp_free_entries(d);
-    d->selected = -1;
-    d->scroll = 0;
     if (!d->cwd) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "fp_load_dir: no directory set");
     }
     struct yetty_yplatform_dir *dir = yetty_yplatform_dir_open(d->cwd);
     if (!dir) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "fp_load_dir: cannot open directory");
     }
     int cap = 16, n = 0;
     char **list = malloc((size_t)cap * sizeof(char *));
     if (!list) {
         yetty_yplatform_dir_close(dir);
-        return;
+        return YETTY_ERR(yetty_ycore_void, "fp_load_dir: alloc entry list");
     }
     struct yetty_yplatform_dir_entry e;
     while (yetty_yplatform_dir_next(dir, &e)) {
@@ -90,7 +95,12 @@ static void fp_load_dir(struct fp_data *d)
             int nc = cap * 2;
             char **grown = realloc(list, (size_t)nc * sizeof(char *));
             if (!grown) {
-                break;
+                for (int i = 0; i < n; i++) {
+                    free(list[i]);
+                }
+                free(list);
+                yetty_yplatform_dir_close(dir);
+                return YETTY_ERR(yetty_ycore_void, "fp_load_dir: grow entry list");
             }
             list = grown;
             cap = nc;
@@ -98,7 +108,12 @@ static void fp_load_dir(struct fp_data *d)
         size_t name_len = strlen(e.name);
         char *entry = malloc(name_len + 2);
         if (!entry) {
-            continue;
+            for (int i = 0; i < n; i++) {
+                free(list[i]);
+            }
+            free(list);
+            yetty_yplatform_dir_close(dir);
+            return YETTY_ERR(yetty_ycore_void, "fp_load_dir: alloc entry");
         }
         memcpy(entry, e.name, name_len);
         if (e.is_dir) {
@@ -111,8 +126,13 @@ static void fp_load_dir(struct fp_data *d)
     }
     yetty_yplatform_dir_close(dir);
     qsort(list, (size_t)n, sizeof(char *), fp_entry_cmp);
+    /* Commit — only now that the full listing succeeded. */
+    fp_free_entries(d);
+    d->selected = -1;
+    d->scroll = 0;
     d->entries = list;
     d->entry_count = n;
+    return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@ygui:filepicker:constructor")]]
@@ -209,7 +229,120 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                        ry + (FP_ROW_H + fs) * 0.5f - 3.0f, fs, col),
                             "fp: row");
     }
+
+    /* Scrollbar — shown whenever the list overflows the visible rows. The
+     * thumb height is the visible fraction; its position tracks d->scroll.
+     * Drag the list (on_motion) to move it. */
+    if (d->entry_count > visible) {
+        float sb_w = 5.0f;
+        float sb_x = r.max.x - sb_w - 2.0f;
+        float track_h = (float)visible * FP_ROW_H;
+        if (track_h > list_h) {
+            track_h = list_h;
+        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                            yguix_box(ctx, sb_x, list_y, sb_w, track_h, FP_SEL_BG, sb_w * 0.5f),
+                            "fp: sb track");
+        float thumb_h = track_h * (float)visible / (float)d->entry_count;
+        if (thumb_h < 16.0f) {
+            thumb_h = 16.0f;
+        }
+        if (thumb_h > track_h) {
+            thumb_h = track_h;
+        }
+        int max_scroll = d->entry_count - visible;
+        float frac = max_scroll > 0 ? (float)d->scroll / (float)max_scroll : 0.0f;
+        float thumb_y = list_y + frac * (track_h - thumb_h);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                            yguix_box(ctx, sb_x, thumb_y, sb_w, thumb_h, FP_DIR, sb_w * 0.5f),
+                            "fp: sb thumb");
+    }
     return YETTY_OK_VOID();
+}
+
+/* Drag-to-scroll: while this picker holds the pointer capture, translate
+ * vertical drag into a row offset. The paint already windows + clips to
+ * [scroll, scroll+visible), so changing scroll is all that's needed. */
+[[clang::annotate("override@ygui:filepicker:widget_on_motion")]]
+static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_ctx *yclass_ctx,
+                                                  struct yetty_yclass_object *yclass_obj, float x,
+                                                  float y)
+{
+    (void)yclass_ctx;
+    (void)x;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_ygui_runtime *eng = yetty_ygui_object_engine(obj);
+    if (!eng || eng->pressed_obj != obj) {
+        return YETTY_OK(yetty_ycore_int, 0); /* only while we're the drag target */
+    }
+    struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    float list_h = (r.max.y - r.min.y) - FP_HEADER_H - 4.0f;
+    int visible = (int)(list_h / FP_ROW_H);
+    if (visible < 1) {
+        visible = 1;
+    }
+    int max_scroll = d->entry_count - visible;
+    if (max_scroll < 0) {
+        max_scroll = 0;
+    }
+    /* Drag down scrolls down the list (later rows) — matches the thumb
+     * drag and the gutter-jump direction. */
+    int ns = d->press_scroll + (int)((y - d->press_y) / FP_ROW_H);
+    if (ns < 0) {
+        ns = 0;
+    }
+    if (ns > max_scroll) {
+        ns = max_scroll;
+    }
+    if (ns != d->scroll) {
+        d->scroll = ns;
+        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        if (YETTY_IS_ERR(dr)) {
+            return YETTY_ERR(yetty_ycore_int, "fp: scroll dirty", dr);
+        }
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+/* Wheel / trackpad scroll over the list. dy>0 (wheel up) moves toward the
+ * top. Consumed only when the list overflows, so it bubbles otherwise. */
+[[clang::annotate("override@ygui:filepicker:widget_on_scroll")]]
+static struct yetty_ycore_int_result fp_on_scroll(struct yetty_yclass_ctx *yclass_ctx,
+                                                  struct yetty_yclass_object *yclass_obj, float x,
+                                                  float y, float dx, float dy)
+{
+    (void)yclass_ctx;
+    (void)x;
+    (void)y;
+    (void)dx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    float list_h = (r.max.y - r.min.y) - FP_HEADER_H - 4.0f;
+    int visible = (int)(list_h / FP_ROW_H);
+    if (visible < 1) {
+        visible = 1;
+    }
+    int max_scroll = d->entry_count - visible;
+    if (max_scroll <= 0) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    int ns = d->scroll - (int)dy;
+    if (ns < 0) {
+        ns = 0;
+    }
+    if (ns > max_scroll) {
+        ns = max_scroll;
+    }
+    if (ns != d->scroll) {
+        d->scroll = ns;
+        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        if (YETTY_IS_ERR(dr)) {
+            return YETTY_ERR(yetty_ycore_int, "fp: scroll dirty", dr);
+        }
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 [[clang::annotate("override@ygui:filepicker:widget_on_press")]]
@@ -217,8 +350,6 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
                                               struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
-    (void)yclass_ctx;
-    (void)x;
     (void)btn;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
@@ -227,6 +358,50 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     if (ly < FP_HEADER_H + 2.0f) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
+    /* Anchor a possible drag-to-scroll; consuming the press captures the
+     * pointer so on_motion gets the drag even past the widget's rect. */
+    d->press_y = y;
+    d->press_scroll = d->scroll;
+
+    /* A press in the scrollbar gutter jumps the thumb to that position — it
+     * is NOT a row click (clicking the gutter must never select/navigate
+     * the row painted behind it). Geometry mirrors the paint. */
+    float list_h = (r.max.y - r.min.y) - FP_HEADER_H - 4.0f;
+    int visible = (int)(list_h / FP_ROW_H);
+    if (visible < 1) {
+        visible = 1;
+    }
+    int max_scroll = d->entry_count - visible;
+    if (max_scroll < 0) {
+        max_scroll = 0;
+    }
+    float sb_x = r.max.x - 5.0f - 2.0f;
+    if (x >= sb_x - 2.0f && max_scroll > 0) {
+        float track_y = r.min.y + FP_HEADER_H + 2.0f;
+        float track_h = (float)visible * FP_ROW_H;
+        if (track_h > list_h) {
+            track_h = list_h;
+        }
+        float frac = track_h > 0.0f ? (y - track_y) / track_h : 0.0f;
+        if (frac < 0.0f) {
+            frac = 0.0f;
+        }
+        if (frac > 1.0f) {
+            frac = 1.0f;
+        }
+        int ns = (int)(frac * (float)max_scroll + 0.5f);
+        if (ns > max_scroll) {
+            ns = max_scroll;
+        }
+        d->scroll = ns;
+        d->press_scroll = d->scroll;
+        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        if (YETTY_IS_ERR(dr)) {
+            return YETTY_ERR(yetty_ycore_int, "fp: gutter scroll dirty", dr);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
     int row = (int)((ly - FP_HEADER_H - 2.0f) / FP_ROW_H) + d->scroll;
     if (row < 0 || row >= d->entry_count) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -264,9 +439,16 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
         if (!dup) {
             return YETTY_ERR(yetty_ycore_int, "fp: strdup cwd");
         }
-        free(d->cwd);
+        char *old = d->cwd;
         d->cwd = dup;
-        fp_load_dir(d);
+        struct yetty_ycore_void_result lr = fp_load_dir(d);
+        if (YETTY_IS_ERR(lr)) {
+            /* Open failed — stay in the current directory (don't blank). */
+            free(d->cwd);
+            d->cwd = old;
+            return YETTY_ERR(yetty_ycore_int, "fp: open directory", lr);
+        }
+        free(old);
     } else {
         /* File — select. */
         d->selected = row;
@@ -289,9 +471,15 @@ struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_ygui_o
     if (!dup) {
         return YETTY_ERR(yetty_ycore_void, "filepicker_set_dir: strdup");
     }
-    free(d->cwd);
+    char *old = d->cwd;
     d->cwd = dup;
-    fp_load_dir(d);
+    struct yetty_ycore_void_result lr = fp_load_dir(d);
+    if (YETTY_IS_ERR(lr)) {
+        free(d->cwd);
+        d->cwd = old;
+        return YETTY_ERR(yetty_ycore_void, "filepicker_set_dir: load", lr);
+    }
+    free(old);
     return yetty_ygui_object_set_dirty(obj);
 }
 
