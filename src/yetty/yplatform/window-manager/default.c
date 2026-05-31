@@ -47,6 +47,23 @@ struct yetty_yplatform_glfw_window_manager {
      * redundant glfwSetCursor calls. */
     GLFWcursor *cursors[5]; /* indexed by enum yetty_ycore_cursor_shape */
     int applied_shape;
+
+    /* Manual maximize bookkeeping for macOS. Cocoa's `-[NSWindow zoom:]`
+     * (which glfwMaximizeWindow lowers to) is a silent no-op for borderless
+     * windows — and yetty creates a borderless window so it can draw its
+     * own titlebar (see yplatform/window/default.c with
+     * GLFW_DECORATED = GLFW_FALSE). The maximize button + strip
+     * double-click therefore both did nothing on macOS while working on
+     * X11/Wayland/Win32. We work around by saving the window's geometry
+     * and resizing to the monitor's workarea ourselves; restore puts it
+     * back. Active only on APPLE; other platforms keep using
+     * glfwMaximizeWindow/Restore which the WM handles correctly even on
+     * undecorated surfaces. */
+    int macos_maximized; /* 1 while we've stretched to the workarea */
+    int macos_saved_x;
+    int macos_saved_y;
+    int macos_saved_w;
+    int macos_saved_h;
 };
 
 static void glfw_window_manager_destroy(struct yetty_yplatform_window_manager *self)
@@ -181,11 +198,55 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         glfwIconifyWindow(m->window);
         break;
     case YETTY_YCORE_WINDOW_TOGGLE_MAXIMIZE:
+#if defined(__APPLE__)
+        /* Borderless NSWindows silently ignore `-[NSWindow zoom:]`
+         * (which is what glfwMaximizeWindow lowers to on macOS), so we
+         * resize to the monitor's workarea by hand and remember the
+         * pre-maximize geometry to restore on toggle-off. The
+         * GLFW_MAXIMIZED attribute stays false throughout — Cocoa
+         * doesn't consider us maximized. We track the state in our own
+         * `macos_maximized` flag. */
+        if (m->macos_maximized) {
+            glfwSetWindowPos(m->window, m->macos_saved_x, m->macos_saved_y);
+            glfwSetWindowSize(m->window, m->macos_saved_w, m->macos_saved_h);
+            m->macos_maximized = 0;
+            break;
+        }
+        glfwGetWindowPos(m->window, &m->macos_saved_x, &m->macos_saved_y);
+        glfwGetWindowSize(m->window, &m->macos_saved_w, &m->macos_saved_h);
+        /* Pick the monitor whose workarea contains the window's center;
+         * fall back to the primary monitor for the (rare) case where
+         * the window straddles every monitor. */
+        int cx = m->macos_saved_x + m->macos_saved_w / 2;
+        int cy = m->macos_saved_y + m->macos_saved_h / 2;
+        GLFWmonitor *target = NULL;
+        int mc = 0;
+        GLFWmonitor **monitors = glfwGetMonitors(&mc);
+        for (int i = 0; i < mc; i++) {
+            int wax, way, waw, wah;
+            glfwGetMonitorWorkarea(monitors[i], &wax, &way, &waw, &wah);
+            if (cx >= wax && cx < wax + waw && cy >= way && cy < way + wah) {
+                target = monitors[i];
+                break;
+            }
+        }
+        if (!target) {
+            target = glfwGetPrimaryMonitor();
+        }
+        if (target) {
+            int wax, way, waw, wah;
+            glfwGetMonitorWorkarea(target, &wax, &way, &waw, &wah);
+            glfwSetWindowPos(m->window, wax, way);
+            glfwSetWindowSize(m->window, waw, wah);
+            m->macos_maximized = 1;
+        }
+#else
         if (glfwGetWindowAttrib(m->window, GLFW_MAXIMIZED)) {
             glfwRestoreWindow(m->window);
         } else {
             glfwMaximizeWindow(m->window);
         }
+#endif
         break;
     case YETTY_YCORE_WINDOW_CLOSE: {
         /* Mirror the OS-bar close callback exactly: post SHUTDOWN to the
