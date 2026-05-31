@@ -31,17 +31,29 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <poll.h>
-#include <pty.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <io.h>
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+#define read _read
+#define write _write
+#define close _close
+#define open _open
+#else
+#include <poll.h>
+#include <pty.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
+#include <yetty/yplatform/io.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/cmds.h>
@@ -992,85 +1004,94 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
  * bytes into the SM via yetty_ywire_wire_statemachine_feed.
  *=========================================================================*/
 
+#ifdef _WIN32
+/* memmem is a GNU/BSD extension absent from MSVC's CRT. A proper prototype
+ * (returns void*) also avoids the implicit-int → pointer cast warning. */
+static void *memmem(const void *hay, size_t hl, const void *need, size_t nl)
+{
+    if (nl == 0) {
+        return (void *)hay;
+    }
+    if (hl < nl) {
+        return NULL;
+    }
+    const unsigned char *h = (const unsigned char *)hay;
+    for (size_t i = 0; i + nl <= hl; i++) {
+        if (h[i] == *(const unsigned char *)need && memcmp(h + i, need, nl) == 0) {
+            return (void *)(h + i);
+        }
+    }
+    return NULL;
+}
+#endif
+
 static int pump_fd(struct yetty_ywire_wire_statemachine *sm, int in_fd,
                    int out_fd, int forward_to_stdout)
 {
     char chunk[1u << 13];
     for (;;) {
-        struct pollfd pfd = {.fd = in_fd, .events = POLLIN};
-        int pr = poll(&pfd, 1, -1);
+        /* Block until readable, then drain with non-blocking reads. Both
+         * steps go through the yplatform io shim so this is portable:
+         * POSIX uses poll(2)+read(2); Windows uses PeekNamedPipe-gated
+         * ReadFile. That also removes the O_NONBLOCK fcntl dance the
+         * callers used to need. */
+        int pr = yetty_yplatform_io_wait_readable(in_fd, -1);
         if (pr < 0) {
-            if (errno == EINTR) continue;
-            fprintf(stderr, "osc-analyzer: poll failed: %s\n", strerror(errno));
+            fprintf(stderr, "osc-analyzer: wait_readable failed on fd %d\n", in_fd);
             return 1;
         }
-        if (!(pfd.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL))) continue;
-
-        int saw_hup = (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) != 0;
-        int eof = 0;
         int got_bytes = 0;
         for (;;) {
-            ssize_t n = read(in_fd, chunk, sizeof(chunk));
-            if (n > 0) {
-                got_bytes = 1;
-                /* Byte-for-byte passthrough first, then feed the SM and
-                 * drive its coroutine. That ordering means a downstream
-                 * `tee` consumer sees the same bytes the SM sees, in
-                 * the same order, before any decode work. */
-                if (forward_to_stdout) {
-                    ssize_t w = 0;
-                    while (w < n) {
-                        ssize_t k = write(out_fd, chunk + w, (size_t)(n - w));
-                        if (k < 0) {
-                            if (errno == EINTR) continue;
-                            fprintf(stderr,
-                                    "osc-analyzer: passthrough write failed: %s\n",
-                                    strerror(errno));
-                            return 1;
-                        }
-                        w += k;
-                    }
-                }
-                struct yetty_ycore_void_result fr =
-                    yetty_ywire_wire_statemachine_feed(sm, chunk, (size_t)n);
-                if (YETTY_IS_ERR(fr)) {
-                    fprintf(stderr, "osc-analyzer: SM feed failed: %s\n",
-                            fr.error.msg);
-                    yetty_ycore_error_destroy(fr.error);
-                    return 1;
-                }
-                struct yetty_ycore_void_result pr2 =
-                    yetty_ywire_wire_statemachine_process(sm);
-                if (YETTY_IS_ERR(pr2)) {
-                    fprintf(stderr, "osc-analyzer: SM process failed: %s\n",
-                            pr2.error.msg);
-                    yetty_ycore_error_destroy(pr2.error);
-                    return 1;
-                }
-                continue;
+            struct yetty_yplatform_io_size_result rr =
+                yetty_yplatform_io_read_nonblocking(in_fd, chunk, sizeof(chunk));
+            if (YETTY_IS_ERR(rr)) {
+                fprintf(stderr, "osc-analyzer: read failed: %s\n", rr.error.msg);
+                yetty_ycore_error_destroy(rr.error);
+                return 1;
             }
-            if (n == 0) { eof = 1; break; }
-            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
-            if (errno == EINTR) continue;
-            /* PTY master read returns EIO once the child closes its
-             * slave with no buffered output left — treat as EOF, same
-             * as yetty's own PTY pipe handler. */
-            if (errno == EIO) { eof = 1; break; }
-            fprintf(stderr, "osc-analyzer: read failed: %s\n",
-                    strerror(errno));
-            return 1;
+            size_t n = rr.value;
+            if (n == 0) break;
+            got_bytes = 1;
+            /* Byte-for-byte passthrough first, then feed the SM and drive
+             * its coroutine — a downstream `tee` consumer sees the same
+             * bytes in the same order, before any decode work. */
+            if (forward_to_stdout) {
+                size_t w = 0;
+                while (w < n) {
+                    int k = (int)write(out_fd, chunk + w, (unsigned int)(n - w));
+                    if (k < 0) {
+                        fprintf(stderr, "osc-analyzer: passthrough write failed\n");
+                        return 1;
+                    }
+                    w += (size_t)k;
+                }
+            }
+            struct yetty_ycore_void_result fr =
+                yetty_ywire_wire_statemachine_feed(sm, chunk, n);
+            if (YETTY_IS_ERR(fr)) {
+                fprintf(stderr, "osc-analyzer: SM feed failed: %s\n", fr.error.msg);
+                yetty_ycore_error_destroy(fr.error);
+                return 1;
+            }
+            struct yetty_ycore_void_result pr2 =
+                yetty_ywire_wire_statemachine_process(sm);
+            if (YETTY_IS_ERR(pr2)) {
+                fprintf(stderr, "osc-analyzer: SM process failed: %s\n", pr2.error.msg);
+                yetty_ycore_error_destroy(pr2.error);
+                return 1;
+            }
         }
-        if (eof) return 0;
-        /* poll signalled hangup/error and the fd had no readable bytes
-         * left — child has exited, drained, and the kernel reports
-         * POLLHUP. Treat that as EOF: looping would spin forever since
-         * poll will keep re-firing the same event. */
-        if (saw_hup && !got_bytes) return 0;
+        /* wait_readable reported ready but the drain read nothing — the fd
+         * is at EOF / hung up. (A blocking wait never returns "ready" with
+         * no bytes otherwise.) */
+        if (!got_bytes) return 0;
     }
 }
 
+#ifndef _WIN32
 /* Spawn argv under a freshly forked PTY and pump the master through
- * the SM. Returns the child's exit code (or 1 on internal error). */
+ * the SM. Returns the child's exit code (or 1 on internal error).
+ * forkpty/execvp/waitpid are POSIX — the -e mode is Linux/macOS only. */
 static int run_exec(char **argv, int cols, int rows,
                     struct yetty_ywire_wire_statemachine *sm)
 {
@@ -1119,11 +1140,10 @@ static int run_exec(char **argv, int cols, int rows,
     }
     return rc;
 }
+#endif /* !_WIN32 */
 
 static int run_interpose(struct yetty_ywire_wire_statemachine *sm)
 {
-    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    if (flags >= 0) fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
     return pump_fd(sm, STDIN_FILENO, STDOUT_FILENO, /*forward_to_stdout=*/1);
 }
 
@@ -1135,8 +1155,6 @@ static int run_file(const char *path, struct yetty_ywire_wire_statemachine *sm)
         fprintf(stderr, "open %s: %s\n", path, strerror(errno));
         return 1;
     }
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags >= 0) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     int rc = pump_fd(sm, fd, -1, /*forward_to_stdout=*/0);
     if (fd != STDIN_FILENO) close(fd);
     return rc;
@@ -1426,7 +1444,15 @@ int main(int argc, char **argv)
 
     int rc;
     if (exec_at >= 0) {
+#ifdef _WIN32
+        (void)cols;
+        (void)rows;
+        fprintf(stderr, "osc-analyzer: -e (forkpty spawn) is not supported on "
+                        "Windows; use --interpose, FILE, or --records\n");
+        rc = 2;
+#else
         rc = run_exec(&argv[exec_at], cols, rows, sm);
+#endif
     } else if (interpose) {
         rc = run_interpose(sm);
     } else {

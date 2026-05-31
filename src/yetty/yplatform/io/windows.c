@@ -13,6 +13,54 @@
 #include <windows.h>
 #include <io.h>
 
+int yetty_yplatform_io_wait_readable(int fd, int timeout_ms)
+{
+    if (fd < 0) {
+        return -1;
+    }
+    HANDLE h = (HANDLE)_get_osfhandle(fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return -1;
+    }
+
+    DWORD type = GetFileType(h);
+    int elapsed = 0;
+    /* No "bytes ready" wait primitive for CRT pipe/console handles, so poll
+     * the same readiness checks io_read_nonblocking uses with a short sleep. */
+    for (;;) {
+        if (type == FILE_TYPE_PIPE) {
+            DWORD avail = 0;
+            if (!PeekNamedPipe(h, NULL, 0, NULL, &avail, NULL)) {
+                /* Broken pipe — report readable so the caller's next read
+                 * observes EOF and terminates its loop. */
+                return (GetLastError() == ERROR_BROKEN_PIPE) ? 1 : -1;
+            }
+            if (avail > 0) {
+                return 1;
+            }
+        } else if (type == FILE_TYPE_CHAR) {
+            DWORD events = 0;
+            if (!GetNumberOfConsoleInputEvents(h, &events) || events > 0) {
+                return 1;
+            }
+        } else {
+            /* Disk / unknown: always immediately readable until EOF. */
+            return 1;
+        }
+
+        if (timeout_ms == 0) {
+            return 0;
+        }
+        if (timeout_ms > 0 && elapsed >= timeout_ms) {
+            return 0;
+        }
+        Sleep(2);
+        if (timeout_ms > 0) {
+            elapsed += 2;
+        }
+    }
+}
+
 struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd, void *buf,
                                                                           size_t cap)
 {

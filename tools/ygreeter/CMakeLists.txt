@@ -11,7 +11,10 @@
 # we still build ygreeter, but only the client path. main.c gates the
 # standalone block on YETTY_YGREETER_HAS_STANDALONE.
 
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+# Builds on Linux (both modes) and Windows (standalone GPU mode only —
+# client mode's termios/ioctl/SIGWINCH/uv-stdin-poll glue isn't ported).
+# Other systems (macOS, mobile) aren't wired up.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32)
     return()
 endif()
 
@@ -24,13 +27,28 @@ set(YGREETER_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yconfig/config.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
 )
+# Platform pipe backend: Win32 pipes on Windows, POSIX pipes elsewhere.
+# Standalone mode drives a memory pty (memory-pty.c, above) — it never
+# spawns a shell or VM, so the real pty backend differs by platform:
+#   - Linux links forkpty.c, which is self-contained (no external refs).
+#   - Windows would otherwise link conpty.c, but that file also carries the
+#     VM-dispatching factory (--temu/--qemu), pulling in qemu/tinyemu. Since
+#     nothing in ygreeter references that factory, we omit conpty.c entirely.
+if(WIN32)
+    list(APPEND YGREETER_SOURCES
+        ${YETTY_ROOT}/src/yetty/yplatform/pipe/windows.c
+    )
+else()
+    list(APPEND YGREETER_SOURCES
+        ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
+        ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
+    )
+endif()
 # ygreeter ships its OWN incbin manifest (logos + the demo video) via
 # embedded-assets.c — it does NOT pull yetty's larger asset extractor
 # (kernel / opensbi / qemu / shaders / fonts), which would force a
@@ -68,18 +86,31 @@ target_include_directories(ygreeter BEFORE PRIVATE
 target_compile_definitions(ygreeter PRIVATE
     YETTY_WEB=0
     YETTY_ANDROID=0
-    YETTY_USE_FORKPTY=1
-    YETTY_YGUI_HAS_UV
 )
+if(WIN32)
+    # Standalone-only on Windows: ConPTY + DirectWrite, no libuv client glue
+    # (YETTY_YGUI_HAS_UV stays undefined → client mode compiles out).
+    target_compile_definitions(ygreeter PRIVATE
+        YETTY_USE_CONPTY=1
+        YETTY_USE_DIRECTWRITE=1
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+    )
+else()
+    target_compile_definitions(ygreeter PRIVATE
+        YETTY_USE_FORKPTY=1
+        YETTY_YGUI_HAS_UV
+    )
+endif()
 if(YETTY_ENABLE_LIB_WEBGPU)
     target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_STANDALONE)
 endif()
 
 find_package(Threads REQUIRED)
-# fontconfig is only used by the standalone-mode font lookup path. Skip
-# the pkg-config probe when standalone mode isn't being built — riscv64
-# cross-builds don't ship fontconfig.pc.
-if(YETTY_ENABLE_LIB_WEBGPU)
+# fontconfig is the Linux standalone-mode font-discovery backend. Windows
+# resolves fonts through DirectWrite (in yetty_yfont_core), and riscv64
+# cross-builds (no standalone) don't ship fontconfig.pc — skip the probe.
+if(YETTY_ENABLE_LIB_WEBGPU AND NOT WIN32)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 endif()
@@ -100,9 +131,13 @@ target_link_libraries(ygreeter PRIVATE
     uv_a
     ${BROTLIDEC_LIBRARIES}
     Threads::Threads
-    rt
-    util
 )
+if(WIN32)
+    # ws2_32: libuv's Windows socket layer. dwrite: DirectWrite font backend.
+    target_link_libraries(ygreeter PRIVATE ws2_32 dwrite)
+else()
+    target_link_libraries(ygreeter PRIVATE rt util)
+endif()
 
 # Standalone-mode link line — Dawn-bound libs (ygrid/yimage/yplot
 # call wgpu functions), the GLFW window helper, the full YETTY_LIBS
@@ -131,6 +166,13 @@ set_target_properties(ygreeter PROPERTIES LINKER_LANGUAGE CXX)
 
 if(NOT MSVC)
     target_compile_options(ygreeter PRIVATE -Wall -Wextra)
+endif()
+
+# Standalone mode opens a Dawn/D3D12 window — copy the DX shader-compiler
+# DLLs next to ygreeter.exe so it runs from its own build dir.
+if(WIN32 AND YETTY_ENABLE_LIB_WEBGPU)
+    include(${YETTY_ROOT}/build-tools/yetty/dawn-runtime-dlls.cmake)
+    yetty_copy_dawn_runtime_dlls(ygreeter)
 endif()
 
 # Self-contained ygreeter: embed the assets that drive the Images and

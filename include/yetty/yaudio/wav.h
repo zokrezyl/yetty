@@ -36,6 +36,12 @@ struct yetty_yaudio_wav {
     int fd;
     const uint8_t *map_base;
     size_t map_size;
+#ifdef _WIN32
+    /* Win32 file-mapping handles (HANDLE, kept as void* so this header
+     * doesn't need windows.h). fd stays -1 on Windows. */
+    void *win_file;
+    void *win_mapping;
+#endif
 
     /* format */
     enum yetty_yaudio_wav_sample_format fmt;

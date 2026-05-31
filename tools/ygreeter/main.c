@@ -27,7 +27,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
@@ -41,6 +43,7 @@
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yimage/yimage-gen.h>
+#include <yetty/yplatform/fs.h>
 #include <yetty/yplatform/paths.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -70,8 +73,13 @@
 #include <uv.h>
 #endif
 
+/* Client mode (the only consumer of these POSIX TTY headers) is gated on
+ * YETTY_YGUI_HAS_UV, which is off on Windows — keep the includes off there
+ * too so the standalone-only build compiles under MSVC. */
+#ifndef _WIN32
 #include <sys/ioctl.h>
 #include <termios.h>
+#endif
 
 /*=============================================================================
  * Tab descriptors — mirrors the main-branch ygreeter layout:
@@ -391,7 +399,7 @@ static void discover_logo_images(struct app *app)
     int cap = 0;
     for (int i = 1; i <= 8; ++i) {
         snprintf(path_buf, sizeof(path_buf), "%s/logo-%d.jpeg", data_dir, i);
-        int ok = access(path_buf, R_OK) == 0;
+        int ok = yetty_yplatform_file_exists(path_buf);
         ydebug("ygreeter: discover_logo_images probe=%s status=%s", path_buf,
                ok ? "found" : "missing");
         if (!ok) continue;
@@ -429,7 +437,7 @@ static void discover_video_files(struct app *app)
     static const char *const candidates[] = {"yetty-unchained-2.mp4"};
     for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
         snprintf(path_buf, sizeof(path_buf), "%s/%s", data_dir, candidates[i]);
-        int ok = access(path_buf, R_OK) == 0;
+        int ok = yetty_yplatform_file_exists(path_buf);
         ydebug("ygreeter: discover_video_files probe=%s status=%s", path_buf,
                ok ? "found" : "missing");
         if (!ok) continue;
@@ -459,7 +467,7 @@ static void discover_readme(struct app *app)
     if (!data_dir || !*data_dir) return;
     char path_buf[1024];
     snprintf(path_buf, sizeof(path_buf), "%s/README.md", data_dir);
-    int ok = access(path_buf, R_OK) == 0;
+    int ok = yetty_yplatform_file_exists(path_buf);
     ydebug("ygreeter: discover_readme probe=%s status=%s", path_buf, ok ? "found" : "missing");
     if (!ok) return;
     app->readme_path = strdup(path_buf);
