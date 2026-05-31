@@ -431,8 +431,19 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
     vb.attributeCount = 1;
     vb.attributes = &pos;
 
+    /* Premultiplied-alpha src-over. Shaders ship their fragments
+     * pre-multiplied (see ygrid.wgsl / ydraw-layer.wgsl: the final
+     * `return vec4(result_color * result_alpha, result_alpha)`),
+     * so the blend factor for the source must be ONE — not SrcAlpha,
+     * which would multiply the pre-multiplied RGB by the alpha a
+     * SECOND time and turn rgb*a²+dst*(1-a) into the new framebuffer
+     * value. For fully-opaque fragments (a=1) the math collapses to
+     * the same answer on most backends, but Dawn-on-Metal vs
+     * Dawn-on-Vulkan diverge at sub-pixel SDF edges (where a≠1) and
+     * thin-bar SDF prims (the chrome accent underline) can vanish
+     * entirely on macOS while rendering correctly on Linux. */
     WGPUBlendState blend = {0};
-    blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
+    blend.color.srcFactor = WGPUBlendFactor_One;
     blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
     blend.color.operation = WGPUBlendOperation_Add;
     blend.alpha.srcFactor = WGPUBlendFactor_One;

@@ -920,8 +920,16 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
     vb_layout.attributeCount = 1;
     vb_layout.attributes = &pos_attr;
 
+    /* Premultiplied-alpha src-over — shaders that drive this pipeline
+     * (ygrid.wgsl, ydraw-layer.wgsl) emit premultiplied fragments
+     * `vec4(rgb * a, a)`. Source factor must be ONE so the blend
+     * doesn't multiply by alpha a second time; otherwise sub-pixel SDF
+     * edges and thin bars (the chrome accent underline) collapse to
+     * invisible on Dawn-on-Metal even though Dawn-on-Vulkan tolerates
+     * the mismatch for fully-opaque fragments. Same fix is mirrored in
+     * yrender/pipeline.c. */
     WGPUBlendState blend = {0};
-    blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
+    blend.color.srcFactor = WGPUBlendFactor_One;
     blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
     blend.color.operation = WGPUBlendOperation_Add;
     blend.alpha.srcFactor = WGPUBlendFactor_One;

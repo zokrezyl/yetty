@@ -1571,9 +1571,15 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     float h = self->rect.max.y - self->rect.min.y;
     /* Cells span the content, not the rect: grid_size * cell_size is the
      * content extent the shader bounds-checks + buckets against. Content
-     * defaults to the rect when unset (the figure fills itself). */
-    float cw = g->content_w > 0.0f ? g->content_w : w;
-    float ch = g->content_h > 0.0f ? g->content_h : h;
+     * defaults to the rect when unset (the figure fills itself). Use the
+     * scale-aware helpers so absolute-coords (ygui chrome) grids — whose
+     * rect arrives in LOGICAL pixels but whose prims are scaled to
+     * framebuffer pixels in scale_record_coords — see a framebuffer-pixel
+     * cell extent. Mismatch here clips the right/bottom half of the
+     * framebuffer to transparent on HiDPI (cells too small → shader
+     * grid_pixel_w/h bounds check trips at fb x >= logical_w). */
+    float cw = ygrid_content_extent_w(g);
+    float ch = ygrid_content_extent_h(g);
     g->rs.uniforms[U_CELL_SIZE].vec2[0] = cw / (float)g->grid_cols;
     g->rs.uniforms[U_CELL_SIZE].vec2[1] = ch / (float)g->grid_rows;
     /* View size = what the NDC quad maps onto. Local figures map the rect;
@@ -2368,6 +2374,9 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         if (scale > 0.0f) {
             g->content_scale = scale;
         }
+        ydebug("ygrid_create: rect=(%.1f,%.1f)+%.1fx%.1f content_scale=%.3f",
+               rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y,
+               g->content_scale);
     }
     g->staging_dirty = 1;
     g->free_slot_head = YGRID_INVALID_SLOT;
@@ -2623,15 +2632,29 @@ static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offs
     struct yetty_ydraw_drawable_base_ops_ptr_result ops_r = yetty_ysdf_handler(type);
     if (YETTY_IS_ERR(ops_r)) {
         yetty_ycore_error_destroy(ops_r.error);
+        ydebug("scale_record_coords: SKIP type=0x%08X (not SDF) word_count=%u", type, word_count);
         return;
     }
     uint32_t geom_end = word_count;
     if (type == YETTY_YSDF_LINEAR_GRADIENT_BOX || type == YETTY_YSDF_RADIAL_GRADIENT_BOX) {
         geom_end -= 2u; /* trailing u32 color words stay intact */
     }
+    /* Snapshot pre-scale fill/stroke for the dump below. */
+    uint32_t fill = words[2];
+    uint32_t stroke = words[3];
     scale_record_word(&words[4], scale); /* stroke_w */
     for (uint32_t i = 5u; i < geom_end; ++i) {
         scale_record_word(&words[i], scale);
+    }
+    if (word_count >= 10u) {
+        float cx, cy, hw, hh;
+        memcpy(&cx, &words[5], 4);
+        memcpy(&cy, &words[6], 4);
+        memcpy(&hw, &words[7], 4);
+        memcpy(&hh, &words[8], 4);
+        ydebug("scale_record_coords: SDF type=0x%08X fill=0x%08X stroke=0x%08X "
+               "post-scale center=(%.1f,%.1f) half=(%.1f,%.1f)",
+               type, fill, stroke, cx, cy, hw, hh);
     }
 }
 

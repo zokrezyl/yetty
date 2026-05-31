@@ -5,21 +5,18 @@
 #include <string.h>
 
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_circle(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_circle *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_circle *geom)
 {
     uint32_t data[9];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_CIRCLE;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -35,21 +32,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_circle(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_box(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_box *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_box *geom)
 {
     uint32_t data[11];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_BOX;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -67,21 +61,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_box(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_segment(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_segment *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_segment *geom)
 {
     uint32_t data[10];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_SEGMENT;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -98,21 +89,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_segment(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_triangle(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_triangle *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_triangle *geom)
 {
     uint32_t data[12];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_TRIANGLE;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -131,21 +119,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_triangle(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_ellipse(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_ellipse *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_ellipse *geom)
 {
     uint32_t data[10];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_ELLIPSE;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -162,21 +147,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_ellipse(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_arc(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_arc *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_arc *geom)
 {
     uint32_t data[12];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_ARC;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -195,21 +177,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_arc(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rounded_box(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_rounded_box *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_rounded_box *geom)
 {
     uint32_t data[14];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_ROUNDED_BOX;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -230,21 +209,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rounded_box(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rhombus(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_rhombus *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_rhombus *geom)
 {
     uint32_t data[10];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_RHOMBUS;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -261,21 +237,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rhombus(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pentagon(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_pentagon *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_pentagon *geom)
 {
     uint32_t data[9];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_PENTAGON;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -291,21 +264,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pentagon(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_hexagon(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_hexagon *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_hexagon *geom)
 {
     uint32_t data[9];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_HEXAGON;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -321,21 +291,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_hexagon(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_star(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_star *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_star *geom)
 {
     uint32_t data[11];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_STAR;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -353,21 +320,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_star(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pie(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_pie *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_pie *geom)
 {
     uint32_t data[11];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_PIE;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -385,21 +349,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pie(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_ring(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_ring *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_ring *geom)
 {
     uint32_t data[12];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_RING;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -418,21 +379,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_ring(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_heart(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_heart *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_heart *geom)
 {
     uint32_t data[9];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_HEART;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -448,21 +406,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_heart(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_cross(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_cross *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_cross *geom)
 {
     uint32_t data[11];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_CROSS;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -480,21 +435,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_cross(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rounded_x(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_rounded_x *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_rounded_x *geom)
 {
     uint32_t data[10];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_ROUNDED_X;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -511,21 +463,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rounded_x(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_capsule(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_capsule *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_capsule *geom)
 {
     uint32_t data[11];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_CAPSULE;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -543,21 +492,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_capsule(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_moon(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_moon *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_moon *geom)
 {
     uint32_t data[11];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_MOON;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -575,21 +521,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_moon(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_egg(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_egg *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_egg *geom)
 {
     uint32_t data[10];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_EGG;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -606,21 +549,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_egg(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_octogon(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_octogon *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_octogon *geom)
 {
     uint32_t data[9];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_OCTOGON;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -636,21 +576,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_octogon(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_hexagram(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_hexagram *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_hexagram *geom)
 {
     uint32_t data[9];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_HEXAGRAM;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -666,21 +603,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_hexagram(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pentagram(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_pentagram *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_pentagram *geom)
 {
     uint32_t data[9];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_PENTAGRAM;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -696,21 +630,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pentagram(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_linear_gradient_box(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_linear_gradient_box *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_linear_gradient_box *geom)
 {
     uint32_t data[17];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_LINEAR_GRADIENT_BOX;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -725,10 +656,8 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_linear_gradient
     memcpy(&data[off++], &geom->grad_y0, sizeof(float));
     memcpy(&data[off++], &geom->grad_x1, sizeof(float));
     memcpy(&data[off++], &geom->grad_y1, sizeof(float));
-    tmp = (uint32_t)geom->color0;
-    memcpy(&data[off++], &tmp, sizeof(tmp));
-    tmp = (uint32_t)geom->color1;
-    memcpy(&data[off++], &tmp, sizeof(tmp));
+    tmp = (uint32_t)geom->color0; memcpy(&data[off++], &tmp, sizeof(tmp));
+    tmp = (uint32_t)geom->color1; memcpy(&data[off++], &tmp, sizeof(tmp));
 
     struct yetty_ydraw_id_result r =
         yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
@@ -736,21 +665,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_linear_gradient
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_radial_gradient_box(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_radial_gradient_box *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_radial_gradient_box *geom)
 {
     uint32_t data[16];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_RADIAL_GRADIENT_BOX;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -764,10 +690,8 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_radial_gradient
     memcpy(&data[off++], &geom->grad_cx, sizeof(float));
     memcpy(&data[off++], &geom->grad_cy, sizeof(float));
     memcpy(&data[off++], &geom->grad_radius, sizeof(float));
-    tmp = (uint32_t)geom->color_inner;
-    memcpy(&data[off++], &tmp, sizeof(tmp));
-    tmp = (uint32_t)geom->color_outer;
-    memcpy(&data[off++], &tmp, sizeof(tmp));
+    tmp = (uint32_t)geom->color_inner; memcpy(&data[off++], &tmp, sizeof(tmp));
+    tmp = (uint32_t)geom->color_outer; memcpy(&data[off++], &tmp, sizeof(tmp));
 
     struct yetty_ydraw_id_result r =
         yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
@@ -775,21 +699,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_radial_gradient
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_sphere_3d(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_sphere_3d *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_sphere_3d *geom)
 {
     uint32_t data[10];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_SPHERE_3D;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -806,21 +727,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_sphere_3d(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_box_3d(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_box_3d *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_box_3d *geom)
 {
     uint32_t data[12];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_BOX_3D;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -839,21 +757,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_box_3d(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_torus_3d(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_torus_3d *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_torus_3d *geom)
 {
     uint32_t data[11];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_TORUS_3D;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
@@ -871,21 +786,18 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_torus_3d(
     return YETTY_OK_VOID();
 }
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_cylinder_3d(
-    struct yetty_ydraw_draw_list *list, uint32_t id, uint32_t z_order, uint32_t fill_color,
-    uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_cylinder_3d *geom)
+    struct yetty_ydraw_draw_list *list, uint32_t id,
+    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
+    float stroke_width, const struct yetty_ysdf_cylinder_3d *geom)
 {
     uint32_t data[11];
     uint32_t off = 0;
     uint32_t tmp;
 
     tmp = (uint32_t)YETTY_YSDF_CYLINDER_3D;
-    if (id != 0u) {
-        tmp |= 0x80000000u;
-    }
+    if (id != 0u) tmp |= 0x80000000u;
     data[off++] = tmp;
-    if (id != 0u) {
-        data[off++] = id;
-    }
+    if (id != 0u) data[off++] = id;
 
     data[off++] = z_order;
     data[off++] = fill_color;
