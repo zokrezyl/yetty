@@ -5,11 +5,11 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_ymarkdown_yetty_ygui_constructor_check = ymd_constructor;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_destructor_fn yetty_ygui_ymarkdown_yetty_ygui_destructor_check = ymd_destructor;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_emit_body_fn yetty_ygui_ymarkdown_yetty_ygui_widget_emit_body_check = ymd_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_ymarkdown_class_get(void)

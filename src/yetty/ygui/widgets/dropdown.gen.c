@@ -6,11 +6,11 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_dropdown_yetty_ygui_constructor_check = dropdown_constructor;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_destructor_fn yetty_ygui_dropdown_yetty_ygui_destructor_check = dropdown_destructor;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_paint_fn yetty_ygui_dropdown_yetty_ygui_widget_paint_check = dropdown_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_dropdown_class_get(void)

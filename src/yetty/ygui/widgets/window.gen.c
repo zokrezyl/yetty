@@ -5,19 +5,18 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_window_yetty_ygui_constructor_check = ctor;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_destructor_fn yetty_ygui_window_yetty_ygui_destructor_check = dtor;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_paint_fn yetty_ygui_window_yetty_ygui_widget_paint_check = paint;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_on_press_fn yetty_ygui_window_yetty_ygui_widget_on_press_check = on_press;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_on_motion_fn yetty_ygui_window_yetty_ygui_widget_on_motion_check = on_motion;
-__attribute__((unused))
-static yetty_ygui_widget_on_release_fn yetty_ygui_window_yetty_ygui_widget_on_release_check =
-    on_release;
+[[maybe_unused]]
+static yetty_ygui_widget_on_release_fn yetty_ygui_window_yetty_ygui_widget_on_release_check = on_release;
 
 struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void)
 {

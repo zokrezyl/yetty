@@ -5,11 +5,11 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_paint_fn yetty_ygui_splitter_yetty_ygui_widget_paint_check = paint;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_on_press_fn yetty_ygui_splitter_yetty_ygui_widget_on_press_check = on_press;
-__attribute__((unused))
+[[maybe_unused]]
 static yetty_ygui_widget_on_motion_fn yetty_ygui_splitter_yetty_ygui_widget_on_motion_check = on_motion;
 
 struct yetty_yclass_ptr_result yetty_ygui_splitter_class_get(void)

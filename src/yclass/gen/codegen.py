@@ -20,7 +20,7 @@ Reads annotated .c sources, builds the in-memory model, emits:
   Internal (under <module_src_dir>/):
     <class>.gen.c      — accessor body, included at the foot of <class>.c.
     methods.gen.c      — public stub bodies.
-    rpc.gen.c          — skels + accessor/skel lookup hooks + constructor.
+    rpc.gen.c          — skels + accessor/skel lookups + yetty_<module>_register().
     model.yaml         — informational dump.
 
 Symbol naming:
@@ -960,9 +960,14 @@ def emit_dispatch_body(m: dict) -> str:
             yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
         YETTY_RETURN_IF_ERR({rid}, remote_id_r, "{qs}: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
-        struct __attribute__((packed)) {{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {{
 {fields}\
         }} wire_args = {{ {init} }};
+#pragma pack(pop)
 {remote_call}\
     }} else {{
         struct yetty_yclass_ptr_result object_class_r =
@@ -1019,7 +1024,7 @@ def emit_class_accessor(cls: dict) -> str:
     # would otherwise collide on the static variable name.
     qcls = qualified_class(cls)
     typecheck_lines = [
-        f"__attribute__((unused))\n"
+        f"[[maybe_unused]]\n"
         f"static {op_c_name(op)}_fn {qcls}_{op_c_name(op)}_check = {op['impl']};"
         for op in cls["ops"]
     ]
@@ -1434,9 +1439,14 @@ def emit_skel(m: dict) -> str:
 static size_t {slot}_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {{
-    struct __attribute__((packed)) {{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {{
 {fields}\
     }} wire_args;
+#pragma pack(pop)
 {unpack_block}\
     struct yetty_yclass_ctx local_ctx = {{0}};
 {resolve_block}\
@@ -1604,12 +1614,8 @@ static yetty_yclass_rpc_skel_fn yetty_{module}_skel_lookup(yetty_yclass_method_s
             f"    {{\n"
             f"        struct yetty_ycore_void_result add_skel_r =\n"
             f"            yetty_yclass_rpc_add_skel_lookup(yetty_{module}_skel_lookup);\n"
-            f"        if (YETTY_IS_ERR(add_skel_r)) {{\n"
-            f"            yetty_ycore_error_print(stderr,\n"
-            f'                "yetty_{module}_install_hooks: rpc_add_skel_lookup", add_skel_r.error);\n'
-            f"            yetty_ycore_error_destroy(add_skel_r.error);\n"
-            f"            abort();\n"
-            f"        }}\n"
+            f"        YETTY_RETURN_IF_ERR(yetty_ycore_void, add_skel_r,\n"
+            f'                            "yetty_{module}_register: rpc_add_skel_lookup");\n'
             f"    }}\n"
         )
 
@@ -1617,19 +1623,29 @@ static yetty_yclass_rpc_skel_fn yetty_{module}_skel_lookup(yetty_yclass_method_s
 {accessor_section}\
 {skel_section}\
 
-/* ---- {module}: install hooks before main ------------------------- */
+/* ---- {module}: explicit yclass-RPC hook registration ------------- */
 
-__attribute__((constructor))
-static void yetty_{module}_install_hooks(void)
+/* Installs this module's server-side discovery hooks: the accessor
+ * lookup feeds yetty_yclass_by_name()'s registry-miss path, and (when
+ * the module exposes wire methods) the skel lookup feeds RPC skeleton
+ * dispatch. Call once when the yclass RPC / remote-object server is
+ * brought up — idempotent, so repeated calls (several hosts, re-init)
+ * are no-ops. This replaces the former load-time installer: a module
+ * merely being linked no longer mutates global state before main(),
+ * and there is no abort() path on a constructor. */
+struct yetty_ycore_void_result yetty_{module}_register(void)
 {{
+    static bool registered = false;
+    if (registered)
+        return YETTY_OK_VOID();
+
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_{module}_accessor_lookup);
-    if (YETTY_IS_ERR(add_accessor_r)) {{
-        yetty_ycore_error_print(stderr, "yetty_{module}_install_hooks", add_accessor_r.error);
-        yetty_ycore_error_destroy(add_accessor_r.error);
-        abort();
-    }}
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
+                        "yetty_{module}_register: add_accessor_lookup");
 {skel_install}\
+    registered = true;
+    return YETTY_OK_VOID();
 }}
 """
 
@@ -1644,8 +1660,16 @@ def emit_rpc_h(model: dict, module: str, out_path: Path):
     out_path.write_text(
         HEADER
         + f"#ifndef {guard}\n#define {guard}\n\n"
-        + '#include <yclass/rpc.h>\n\n'
+        + '#include <yclass/rpc.h>\n'
+        + '#include <yetty/ycore/result.h>\n\n'
         + (decls + "\n\n" if decls else "")
+        + "/* Installs this module's yclass-RPC server-side discovery hooks\n"
+          " * (accessor lookup feeding yetty_yclass_by_name; skel lookup\n"
+          " * feeding RPC dispatch when the module exposes wire methods).\n"
+          " * Call once when the yclass RPC / remote-object server is brought\n"
+          " * up; idempotent, so repeated calls are no-ops. Replaces the\n"
+          " * former load-time __attribute__((constructor)) installer. */\n"
+        + f"struct yetty_ycore_void_result yetty_{module}_register(void);\n\n"
         + "#endif\n"
     )
 
@@ -1663,8 +1687,8 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
              f'#include "yetty/{module}/methods.h"\n',
              '#include <yclass/class.h>\n',
              class_includes,
-             '#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'
-             '#include <string.h>\n\n']
+             '#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n'
+             '#include <stdlib.h>\n#include <string.h>\n\n']
     for m in model["methods"]:
         # Local-only slots never cross the wire and have no skel — the
         # public stub is dispatch-only, and emit_lookup_tables omits

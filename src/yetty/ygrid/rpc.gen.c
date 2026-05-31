@@ -6,6 +6,7 @@
 #include "yetty/ygrid/methods.h"
 #include <yclass/class.h>
 #include "yetty/ygrid/grid.h"
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,10 +15,15 @@
 static size_t yetty_ygrid_add_record_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         uint32_t record_len;
     } wire_args;
+#pragma pack(pop)
     if (body_len < sizeof(wire_args)) return 0;
     memcpy(&wire_args, body, sizeof(wire_args));
     if (body_len != sizeof(wire_args) + (size_t)wire_args.record_len) return 0;
@@ -54,9 +60,14 @@ static size_t yetty_ygrid_add_record_skel(const void *body, size_t body_len,
 static size_t yetty_ygrid_clear_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -89,9 +100,14 @@ static size_t yetty_ygrid_clear_skel(const void *body, size_t body_len,
 static size_t yetty_ygrid_destroy_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -124,10 +140,15 @@ static size_t yetty_ygrid_destroy_skel(const void *body, size_t body_len,
 static size_t yetty_ygrid_process_bytes_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
         uint32_t payload_len;
     } wire_args;
+#pragma pack(pop)
     if (body_len < sizeof(wire_args)) return 0;
     memcpy(&wire_args, body, sizeof(wire_args));
     if (body_len != sizeof(wire_args) + (size_t)wire_args.payload_len) return 0;
@@ -164,9 +185,14 @@ static size_t yetty_ygrid_process_bytes_skel(const void *body, size_t body_len,
 static size_t yetty_ygrid_reset_content_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {
-    struct __attribute__((packed)) {
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
         uint64_t obj_handle;
     } wire_args;
+#pragma pack(pop)
     /* Strict length match — both sides regenerate from the same
      * annotated source; a size mismatch means signature drift, and
      * silently truncating to the local prefix would let the server
@@ -291,26 +317,32 @@ static yetty_yclass_rpc_skel_fn yetty_ygrid_skel_lookup(yetty_yclass_method_slot
     return NULL;
 }
 
-/* ---- ygrid: install hooks before main ------------------------- */
+/* ---- ygrid: explicit yclass-RPC hook registration ------------- */
 
-__attribute__((constructor))
-static void yetty_ygrid_install_hooks(void)
+/* Installs this module's server-side discovery hooks: the accessor
+ * lookup feeds yetty_yclass_by_name()'s registry-miss path, and (when
+ * the module exposes wire methods) the skel lookup feeds RPC skeleton
+ * dispatch. Call once when the yclass RPC / remote-object server is
+ * brought up — idempotent, so repeated calls (several hosts, re-init)
+ * are no-ops. This replaces the former load-time installer: a module
+ * merely being linked no longer mutates global state before main(),
+ * and there is no abort() path on a constructor. */
+struct yetty_ycore_void_result yetty_ygrid_register(void)
 {
+    static bool registered = false;
+    if (registered)
+        return YETTY_OK_VOID();
+
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_ygrid_accessor_lookup);
-    if (YETTY_IS_ERR(add_accessor_r)) {
-        yetty_ycore_error_print(stderr, "yetty_ygrid_install_hooks", add_accessor_r.error);
-        yetty_ycore_error_destroy(add_accessor_r.error);
-        abort();
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
+                        "yetty_ygrid_register: add_accessor_lookup");
     {
         struct yetty_ycore_void_result add_skel_r =
             yetty_yclass_rpc_add_skel_lookup(yetty_ygrid_skel_lookup);
-        if (YETTY_IS_ERR(add_skel_r)) {
-            yetty_ycore_error_print(stderr,
-                "yetty_ygrid_install_hooks: rpc_add_skel_lookup", add_skel_r.error);
-            yetty_ycore_error_destroy(add_skel_r.error);
-            abort();
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, add_skel_r,
+                            "yetty_ygrid_register: rpc_add_skel_lookup");
     }
+    registered = true;
+    return YETTY_OK_VOID();
 }

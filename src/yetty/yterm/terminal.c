@@ -43,7 +43,9 @@
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
+#include <yetty/ygrid/rpc.h>
 #include <yetty/yterm/shader-glyph-figure.h>
+#include <yetty/yterm/rpc.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
 
@@ -1534,6 +1536,26 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
                         "terminal_create: register compositor for YCOMPOSITOR_BIN");
     ydebug("terminal_create: ycompositor registered for OSC %d", YETTY_OSC_YCOMPOSITOR_BIN);
+
+    /* This process is about to act as a yclass RPC / remote-object
+     * server, so bring up the per-module discovery hooks explicitly.
+     * The accessor lookups feed yetty_yclass_by_name()'s registry-miss
+     * path (server CREATE / GET_CLASS) and the skel lookups feed wire
+     * method dispatch. These were formerly installed by load-time
+     * constructors in each module's generated rpc.gen.c; registering
+     * them here keeps the side effect out of the linker and off every
+     * process that never serves objects. Conditionally-linked modules
+     * (ymgui, yrdawn) are registered from
+     * yetty_yframework_register_figure_factories above, under the same
+     * feature guards that gate their linkage. */
+    {
+        struct yetty_ycore_void_result reg_r = yetty_yfigure_register();
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, reg_r, "terminal_create: yfigure_register");
+        reg_r = yetty_ygrid_register();
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, reg_r, "terminal_create: ygrid_register");
+        reg_r = yetty_yterm_register();
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, reg_r, "terminal_create: yterm_register");
+    }
 
     /* yclass RPC over DCS — subprocess clients (ygui, future widgets)
      * make yclass calls into the in-terminal yfigure tree by shipping
