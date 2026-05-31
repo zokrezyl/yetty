@@ -435,6 +435,9 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: fp_on_motion
       - slot: widget_on_press
         slot_domain: ygui
         impl: on_press

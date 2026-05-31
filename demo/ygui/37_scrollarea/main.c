@@ -274,6 +274,48 @@ static void build_fits_scene(struct yetty_ygui_object *content)
     }
 }
 
+/* Scene 5 — three scrollables nested. The outer scrolls; the middle box
+ * (fixed height inside the outer) scrolls its own content; the inner box
+ * (fixed height inside the middle) scrolls too. Each is its own ygrid
+ * figure and clips to the intersection of its ancestors' boxes. */
+static void build_nested_scene(struct yetty_ygui_object *content)
+{
+    struct yetty_ygui_object *outer =
+        begin_scene(content, "Nested x3 — outer scrolls; the middle and inner boxes scroll too");
+    if (!outer) {
+        return;
+    }
+    char buf[32];
+    for (int i = 1; i <= 5; i++) {
+        snprintf(buf, sizeof(buf), "Outer row %02d", i);
+        add_label_row(outer, buf);
+    }
+    struct yetty_ygui_object *middle = add_obj(outer, yetty_ygui_scrollarea_class_get());
+    if (middle) {
+        set_size(middle, -1.0f, 320.0f); /* fixed box inside the outer */
+        for (int i = 1; i <= 5; i++) {
+            snprintf(buf, sizeof(buf), "Middle row %02d", i);
+            add_label_row(middle, buf);
+        }
+        struct yetty_ygui_object *inner = add_obj(middle, yetty_ygui_scrollarea_class_get());
+        if (inner) {
+            set_size(inner, -1.0f, 140.0f); /* fixed box inside the middle */
+            for (int i = 1; i <= 30; i++) {
+                snprintf(buf, sizeof(buf), "Inner row %02d", i);
+                add_label_row(inner, buf);
+            }
+        }
+        for (int i = 6; i <= 14; i++) {
+            snprintf(buf, sizeof(buf), "Middle row %02d", i);
+            add_label_row(middle, buf);
+        }
+    }
+    for (int i = 6; i <= 22; i++) {
+        snprintf(buf, sizeof(buf), "Outer row %02d", i);
+        add_label_row(outer, buf);
+    }
+}
+
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_ygui_object *root)
 {
@@ -291,7 +333,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         set_size(tabbar, -1.0f, 36.0f);
         /* add_tab returns the header widget in a result; the demo doesn't
          * need the handle, so just free any error and move on. */
-        const char *labels[] = {"Multi-line text", "Widget group", "Long list", "Fits"};
+        const char *labels[] = {"Multi-line text", "Widget group", "Long list", "Fits",
+                                "Nested x3"};
         for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); i++) {
             struct yetty_ygui_object_ptr_result t = yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
             if (YETTY_IS_ERR(t)) {
@@ -310,6 +353,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     build_group_scene(content);
     build_list_scene(content);
     build_fits_scene(content);
+    build_nested_scene(content);
 
     show_scene(0);
     if (tabbar) {

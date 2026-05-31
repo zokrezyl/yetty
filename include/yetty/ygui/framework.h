@@ -235,6 +235,14 @@ struct yetty_ygui_emit_ctx {
     size_t staged_mint_cap;
     int staged_ygrid_created;
     size_t staged_deletes_consumed;
+
+    /* Nested-figure clip. As the container walk descends through figure
+     * boundaries it narrows this to the intersection of the ancestor
+     * figures' rects; each figure is emitted with its rect clipped to it,
+     * so a scrollable nested inside another scrollable can't paint outside
+     * its parent's box. Inactive at the root (no clipping). */
+    struct yetty_ycore_rectangle fig_clip;
+    int fig_clip_active;
 };
 
 struct yetty_ycore_void_result yetty_ygui_emit_create_child(

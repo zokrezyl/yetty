@@ -1,6 +1,7 @@
 /* filepicker.c — directory browser. Lists the entries of a directory;
  * click a folder (trailing "/") to descend, ".." to go up, a file to
  * select it. */
+#include "../internal.h"
 #include "paint-helpers.h"
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/filepicker.h>
@@ -26,7 +27,10 @@ struct [[clang::annotate("class@ygui:filepicker")]] [[clang::annotate(
     char **entries;
     int entry_count;
     int selected;
-    int scroll;
+    int scroll; /* first visible row */
+    /* Drag-to-scroll: captured at press, consumed by on_motion. */
+    float press_y;
+    int press_scroll;
 };
 
 static const struct yetty_yclass *fp_class(void)
@@ -212,6 +216,50 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     return YETTY_OK_VOID();
 }
 
+/* Drag-to-scroll: while this picker holds the pointer capture, translate
+ * vertical drag into a row offset. The paint already windows + clips to
+ * [scroll, scroll+visible), so changing scroll is all that's needed. */
+[[clang::annotate("override@ygui:filepicker:widget_on_motion")]]
+static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_ctx *yclass_ctx,
+                                                  struct yetty_yclass_object *yclass_obj, float x,
+                                                  float y)
+{
+    (void)yclass_ctx;
+    (void)x;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_ygui_runtime *eng = yetty_ygui_object_engine(obj);
+    if (!eng || eng->pressed_obj != obj) {
+        return YETTY_OK(yetty_ycore_int, 0); /* only while we're the drag target */
+    }
+    struct fp_data *d = yetty_ygui_data_get(obj, fp_class());
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    float list_h = (r.max.y - r.min.y) - FP_HEADER_H - 4.0f;
+    int visible = (int)(list_h / FP_ROW_H);
+    if (visible < 1) {
+        visible = 1;
+    }
+    int max_scroll = d->entry_count - visible;
+    if (max_scroll < 0) {
+        max_scroll = 0;
+    }
+    /* Grab-and-pan: dragging down pulls the content down (earlier rows). */
+    int ns = d->press_scroll - (int)((y - d->press_y) / FP_ROW_H);
+    if (ns < 0) {
+        ns = 0;
+    }
+    if (ns > max_scroll) {
+        ns = max_scroll;
+    }
+    if (ns != d->scroll) {
+        d->scroll = ns;
+        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        if (YETTY_IS_ERR(dr)) {
+            return YETTY_ERR(yetty_ycore_int, "fp: scroll dirty", dr);
+        }
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
 [[clang::annotate("override@ygui:filepicker:widget_on_press")]]
 static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ctx,
                                               struct yetty_yclass_object *yclass_obj, float x,
@@ -227,6 +275,10 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     if (ly < FP_HEADER_H + 2.0f) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
+    /* Anchor a possible drag-to-scroll; consuming the press captures the
+     * pointer so on_motion gets the drag even past the widget's rect. */
+    d->press_y = y;
+    d->press_scroll = d->scroll;
     int row = (int)((ly - FP_HEADER_H - 2.0f) / FP_ROW_H) + d->scroll;
     if (row < 0 || row >= d->entry_count) {
         return YETTY_OK(yetty_ycore_int, 0);
