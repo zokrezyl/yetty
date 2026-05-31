@@ -44,13 +44,15 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(input.position, 0.0, 1.0);
 
-    let grid_size = uniforms.ydraw_ydraw_grid_size;
-    let cell_size = uniforms.ydraw_ydraw_cell_size;
-    let grid_pixel_w = grid_size.x * cell_size.x;
-    let grid_pixel_h = grid_size.y * cell_size.y;
+    // Map the rect's NDC quad onto the on-screen view (rect) size in px.
+    // The fragment offsets this by the scroll (cz_off) into the content and
+    // buckets/bounds against grid_size*cell_size (the content extent). When
+    // content == rect, view == content and this is identical to mapping the
+    // whole content onto the rect (the non-scrolling case).
+    let view = uniforms.ydraw_ydraw_view_size;
     output.grid_pixel = vec2<f32>(
-        (input.position.x * 0.5 + 0.5) * grid_pixel_w,
-        (0.5 - input.position.y * 0.5) * grid_pixel_h
+        (input.position.x * 0.5 + 0.5) * view.x,
+        (0.5 - input.position.y * 0.5) * view.y
     );
     return output;
 }

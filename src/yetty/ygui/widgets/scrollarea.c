@@ -1,21 +1,18 @@
-/* ygui-scrollarea.c — vbox with a draggable scrollbar.
+/* ygui-scrollarea.c — vbox that scrolls its content as a ygrid figure.
  *
- * Extends vbox and lists the draggable mixin, so a press in the content
- * area or the scrollbar gutter is captured and every motion arrives as a
- * (dx, dy) delta. The vertical delta drives a scroll offset that the
- * layout pass applies to the children (see yetty_ygui_widget_scroll_main_*
- * + layout.c), and the thumb's size and position are derived from the
- * content-vs-viewport ratio rather than being hardcoded.
+ * The scrollarea promotes itself to its own YGRID figure (make_figure). The
+ * grid base does the clipping for free — it renders the (absolute-coord)
+ * subtree and GPU-scissors it to the figure's rect, so content never bleeds
+ * past the box. Because coords stay absolute, layout, hit-testing and paint
+ * need no special-casing: the children inside stay fully interactive.
  *
- * Overflow is culled to the viewport by the emit walk: this widget sets
- * the base "clip children" flag, so its subtree is clipped to its content
- * box (a CPU stand-in for a GPU scissor). The cull is geometry-granular —
- * whole widgets outside the viewport are dropped and multi-line text drops
- * whole rows — so a partial row at the edge steps rather than being
- * pixel-clipped; true per-pixel clipping still needs renderer support.
+ * Scrolling is the base widget's main-axis scroll offset: the drag delta
+ * moves it, the layout slides the children by it, the scissor clips the
+ * overflow. The thumb sits at the gutter and tracks the offset.
  */
 #include "../internal.h"
 #include "paint-helpers.h"
+#include <yetty/yfigure/wire.h>
 #include <yetty/ygui/mixins/draggable.h>
 #include <yetty/ygui/widgets/scrollarea.h>
 #include <yetty/ygui/widgets/vbox.h>
@@ -27,13 +24,9 @@
 
 struct [[clang::annotate("class@ygui:scrollarea")]] [[clang::annotate("parent@ygui:vbox")]]
 [[clang::annotate("uses@ygui:draggable")]] scrollarea_data {
-    /* Current scroll position in px (0 = top). The single source of truth;
-     * mirrored into the base widget's scroll_main for the layout pass. */
-    float offset;
-    /* Cached each paint so the drag callback can map a cursor delta onto a
-     * scroll delta without re-measuring the children. */
-    float max_offset;  /* content_h - viewport_h, clamped >= 0 */
-    float thumb_travel; /* track_h - thumb_h, clamped >= 0 */
+    float offset;       /* scroll position in px (0 = top) */
+    float max_offset;   /* content_h - viewport_h, clamped >= 0 (cached) */
+    float thumb_travel; /* track_h - thumb_h, clamped >= 0 (cached) */
 };
 
 static const struct yetty_yclass *scrollarea_class(void)
@@ -42,9 +35,25 @@ static const struct yetty_yclass *scrollarea_class(void)
                                    "yetty_ygui_scrollarea_class_get");
 }
 
+/* Apply a clamped offset: store it, push it to the base scroll offset (so
+ * the layout slides the children), and request a frame. */
+static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_ygui_object *obj,
+                                                            struct scrollarea_data *d, float off)
+{
+    if (off < 0.0f) {
+        off = 0.0f;
+    }
+    if (off > d->max_offset) {
+        off = d->max_offset;
+    }
+    d->offset = off;
+    struct yetty_ycore_void_result sr = yetty_ygui_widget_scroll_main_set(obj, off);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "scrollarea: scroll_main");
+    return yetty_ygui_object_set_dirty(obj);
+}
+
 /* Drag callback installed on the draggable mixin. The cursor moves the
- * thumb 1:1, and the thumb's travel maps onto the full content offset, so
- * scale the vertical delta by content-travel / thumb-travel. */
+ * thumb 1:1; the thumb's travel maps onto the full content offset. */
 static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_ygui_object *obj, float dx,
                                                          float dy, void *userdata)
 {
@@ -52,24 +61,13 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_ygui_objec
     (void)userdata;
     struct scrollarea_data *d = yetty_ygui_data_get(obj, scrollarea_class());
     if (d->max_offset <= 0.0f || d->thumb_travel <= 0.0f) {
-        return YETTY_OK_VOID(); /* content fits — nothing to scroll */
+        return YETTY_OK_VOID();
     }
     float new_off = d->offset + dy * (d->max_offset / d->thumb_travel);
-    if (new_off < 0.0f) {
-        new_off = 0.0f;
-    }
-    if (new_off > d->max_offset) {
-        new_off = d->max_offset;
-    }
     if (new_off == d->offset) {
         return YETTY_OK_VOID();
     }
-    d->offset = new_off;
-    struct yetty_ycore_void_result sr = yetty_ygui_widget_scroll_main_set(obj, new_off);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "scrollarea_on_drag: scroll_main");
-    /* Request a frame: layout re-places the children at the new offset and
-     * the thumb repaints at its new position. */
-    return yetty_ygui_object_set_dirty(obj);
+    return scrollarea_set_offset(obj, d, new_off);
 }
 
 [[clang::annotate("override@ygui:scrollarea:constructor")]]
@@ -92,10 +90,11 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     l.gap = 4.0f;
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "scrollarea: layout");
-    /* Cull over-long content to the viewport — the emit walk clips this
-     * widget's subtree to its content box (no GPU scissor yet). */
-    struct yetty_ycore_void_result cr = yetty_ygui_widget_set_clip_children(obj, 1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "scrollarea: clip_children");
+    /* Become our own ygrid figure: dedicated grid at our rect → GPU scissor
+     * clips the content, and the subtree lays out in local coords. */
+    struct yetty_ycore_void_result fr =
+        yetty_ygui_widget_make_figure(obj, YETTY_YFIGURE_KIND_YGRID, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "scrollarea: make_figure");
     return yetty_ygui_draggable_on_drag_set(obj, scrollarea_on_drag, NULL);
 }
 
@@ -116,9 +115,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_OK_VOID();
     }
 
-    /* Viewport (content-box) height vs. intrinsic content height. Children
-     * keep their laid-out heights independent of the scroll offset, so the
-     * sum of their heights + gaps is a stable content extent. */
+    /* Content height = sum of in-flow children heights + gaps. Children are
+     * laid out in this figure's local space; heights are offset-invariant. */
     const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(obj);
     float viewport_h = h - l->padding_top - l->padding_bottom;
     if (viewport_h < 0.0f) {
@@ -144,17 +142,18 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (max_off < 0.0f) {
         max_off = 0.0f;
     }
+    d->max_offset = max_off;
 
-    /* Clamp the live offset (content may have shrunk since the last drag). */
+    /* Re-clamp if content shrank since the last drag. */
+    if (d->offset > max_off) {
+        struct yetty_ycore_void_result cr = scrollarea_set_offset(obj, d, max_off);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "scrollarea: clamp");
+    }
     float off = d->offset;
-    if (off > max_off) {
-        off = max_off;
-    }
-    if (off < 0.0f) {
-        off = 0.0f;
-    }
 
-    /* Track spans the content box vertically, inset to match the padding. */
+    /* Track + thumb in absolute coords (the grid renders this figure's
+     * content absolute and scissor-clips to the rect). Track spans the
+     * content box vertically at the gutter. */
     float track_x = r.max.x - SCROLLBAR_W - 2.0f;
     float track_y = r.min.y + 4.0f;
     float track_h = h - 8.0f;
@@ -164,11 +163,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 
     float thumb_h, thumb_y, thumb_travel;
     if (max_off <= 0.0f || content_h <= 0.0f) {
-        /* Everything fits — full-height thumb, pinned, no travel. */
         thumb_h = track_h;
         thumb_travel = 0.0f;
         thumb_y = track_y;
-        off = 0.0f;
     } else {
         thumb_h = track_h * (viewport_h / content_h);
         if (thumb_h < SCROLLBAR_MIN_THUMB) {
@@ -183,20 +180,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         }
         thumb_y = track_y + (off / max_off) * thumb_travel;
     }
-
-    /* Cache what the drag callback needs, then commit the (clamped) offset.
-     * Outside the clamp path offset == scroll_main already (kept in sync by
-     * the drag callback), so only re-sync + repaint when the clamp moved
-     * it — that keeps this from re-dirtying the widget every frame. */
-    d->max_offset = max_off;
     d->thumb_travel = thumb_travel;
-    if (off != d->offset) {
-        d->offset = off;
-        struct yetty_ycore_void_result mr = yetty_ygui_widget_scroll_main_set(obj, off);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "scrollarea: scroll_main clamp");
-        struct yetty_ycore_void_result cr = yetty_ygui_object_set_dirty(obj);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "scrollarea: clamp dirty");
-    }
 
     YETTY_RETURN_IF_ERR(yetty_ycore_void,
                         yguix_box(ctx, track_x, track_y, SCROLLBAR_W, track_h, COLOR_TRACK,

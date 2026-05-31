@@ -154,7 +154,12 @@ struct ygrid_id_index_entry {
 #define U_VZ_OFF 5
 #define U_CZ_SCALE 6
 #define U_CZ_OFF 7
-#define U_COUNT 8
+/* On-screen rect size in px. The vertex maps the rect's NDC quad onto a
+ * rect-sized window of the (possibly larger) content; cells + bounds use
+ * grid_size*cell_size = the content extent. When content == rect this is
+ * the same value, so non-scrolling figures are unaffected. */
+#define U_VIEW_SIZE 8
+#define U_COUNT 9
 
 /*===========================================================================
  * The figure
@@ -171,6 +176,27 @@ yetty_ygrid_grid {
 
     uint32_t grid_cols;
     uint32_t grid_rows;
+
+    /* Content extent in px. The cell grid + prim bucketing span this, not
+     * the on-screen rect — so content can be taller/wider than the
+     * viewport. 0 means "same as the rect" (the figure fills itself; the
+     * common, non-scrolling case). */
+    float content_w;
+    float content_h;
+    /* Scroll offset in px: the content coordinate shown at the rect's
+     * top-left. The shader maps the rect to the content window starting
+     * here; the per-figure scissor clips. 0 = top-left. */
+    float scroll_x;
+    float scroll_y;
+    /* Coordinate mode. When set, prim coords are ABSOLUTE screen pixels
+     * (the chrome grid + ygui figures via make_figure, whose subtrees are
+     * laid out in absolute coords): the grid spans the whole target and
+     * clips to its own rect with the GPU scissor, so a sub-rect figure
+     * renders its absolute-coord content clipped to its box — no
+     * re-origin, so layout / hit-test / paint need no special-casing.
+     * When clear, coords are LOCAL to the figure rect (producer figures:
+     * yimage/yplot/… draw from 0,0). Set by the factory per kind. */
+    int absolute_coords;
 
     /* Wire bytes — concatenated records, copied verbatim from
      * yetty_ygrid_add_record callers. */
@@ -788,8 +814,14 @@ static void cells_clear(struct yetty_ygrid_grid *g)
 static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, uint32_t prim_index)
 {
     const struct ygrid_prim_meta *p = &g->prims[prim_index];
-    float cw = (g->base.rect.max.x - g->base.rect.min.x) / (float)g->grid_cols;
-    float ch = (g->base.rect.max.y - g->base.rect.min.y) / (float)g->grid_rows;
+    /* Cell size spans the content extent (matches the shader's
+     * grid_size*cell_size), so prims past the visible rect bucket into
+     * real cell rows instead of clamping into the last visible one.
+     * Content defaults to the rect when unset. */
+    float content_w = g->content_w > 0.0f ? g->content_w : (g->base.rect.max.x - g->base.rect.min.x);
+    float content_h = g->content_h > 0.0f ? g->content_h : (g->base.rect.max.y - g->base.rect.min.y);
+    float cw = content_w / (float)g->grid_cols;
+    float ch = content_h / (float)g->grid_rows;
     if (cw <= 0.0f || ch <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -1381,6 +1413,30 @@ void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
     grid->figure_factory = factory;
 }
 
+void yetty_ygrid_set_content_size(struct yetty_ygrid_grid *grid, float content_w, float content_h)
+{
+    if (!grid) {
+        return;
+    }
+    grid->content_w = content_w > 0.0f ? content_w : 0.0f;
+    grid->content_h = content_h > 0.0f ? content_h : 0.0f;
+    /* Cell layout depends on the content extent; force a re-bucket +
+     * re-stage on the next render (resize_grid_dims_if_needed picks up the
+     * new dims). */
+    grid->staging_dirty = 1;
+}
+
+void yetty_ygrid_set_scroll(struct yetty_ygrid_grid *grid, float scroll_x, float scroll_y)
+{
+    if (!grid) {
+        return;
+    }
+    /* Pure view shift — the shader reads it as cz_off; content + buckets
+     * are unchanged, so no re-stage, just a redraw. */
+    grid->scroll_x = scroll_x;
+    grid->scroll_y = scroll_y;
+}
+
 /* Defined further down (alongside the other shader-build helpers, after
  * the resource_set / pipeline setup section). Declared here so the
  * render path can pull it in when the font set changes mid-frame. */
@@ -1402,7 +1458,13 @@ static struct yetty_ycore_void_result resize_grid_dims_if_needed(struct yetty_yg
 {
     uint32_t want_cols;
     uint32_t want_rows;
-    ygrid_dims_from_rect(g->base.rect, &want_cols, &want_rows);
+    /* Size the cell grid to the content, not the on-screen rect, so a
+     * scrolling figure's off-screen prims bucket into real cells. Content
+     * defaults to the rect when unset (non-scrolling figures: identical). */
+    float cw = g->content_w > 0.0f ? g->content_w : (g->base.rect.max.x - g->base.rect.min.x);
+    float ch = g->content_h > 0.0f ? g->content_h : (g->base.rect.max.y - g->base.rect.min.y);
+    struct yetty_ycore_rectangle content_rect = {{0.0f, 0.0f}, {cw, ch}};
+    ygrid_dims_from_rect(content_rect, &want_cols, &want_rows);
     if (want_cols == g->grid_cols && want_rows == g->grid_rows) {
         return YETTY_OK_VOID();
     }
@@ -1430,6 +1492,15 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
     ydebug("ygrid_render: rect=(%.1f,%.1f)-(%.1f,%.1f) prims=%u staging_dirty=%d", self->rect.min.x,
            self->rect.min.y, self->rect.max.x, self->rect.max.y, g->prim_count, g->staging_dirty);
+
+    /* Absolute-coords figures span the whole target (their prims are in
+     * screen coords); the GPU scissor below clips to the figure's own rect.
+     * Drive the cell grid + bounds off the target extent so absolute prims
+     * bucket correctly. */
+    if (g->absolute_coords && target) {
+        g->content_w = target->viewport.w;
+        g->content_h = target->viewport.h;
+    }
 
     struct yetty_ycore_void_result rr = resize_grid_dims_if_needed(g);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ygrid_render: resize_grid_dims_if_needed");
@@ -1463,8 +1534,21 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     g->rs.uniforms[U_GRID_SIZE].vec2[1] = (float)g->grid_rows;
     float w = self->rect.max.x - self->rect.min.x;
     float h = self->rect.max.y - self->rect.min.y;
-    g->rs.uniforms[U_CELL_SIZE].vec2[0] = w / (float)g->grid_cols;
-    g->rs.uniforms[U_CELL_SIZE].vec2[1] = h / (float)g->grid_rows;
+    /* Cells span the content, not the rect: grid_size * cell_size is the
+     * content extent the shader bounds-checks + buckets against. Content
+     * defaults to the rect when unset (the figure fills itself). */
+    float cw = g->content_w > 0.0f ? g->content_w : w;
+    float ch = g->content_h > 0.0f ? g->content_h : h;
+    g->rs.uniforms[U_CELL_SIZE].vec2[0] = cw / (float)g->grid_cols;
+    g->rs.uniforms[U_CELL_SIZE].vec2[1] = ch / (float)g->grid_rows;
+    /* View size = what the NDC quad maps onto. Local figures map the rect;
+     * absolute figures map the whole target so prim coords are screen
+     * coords (content_w/h was set to the target above). cz_off is the
+     * (local-mode) scroll offset; the per-figure scissor clips either way. */
+    g->rs.uniforms[U_VIEW_SIZE].vec2[0] = g->absolute_coords ? cw : w;
+    g->rs.uniforms[U_VIEW_SIZE].vec2[1] = g->absolute_coords ? ch : h;
+    g->rs.uniforms[U_CZ_OFF].vec2[0] = g->scroll_x;
+    g->rs.uniforms[U_CZ_OFF].vec2[1] = g->scroll_y;
     g->rs.uniforms[U_PRIM_COUNT].u32 = g->prim_count;
     g->rs.pixel_size.width = w;
     g->rs.pixel_size.height = h;
@@ -1513,7 +1597,15 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     pass_desc.colorAttachments = &ca;
 
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(enc, &pass_desc);
-    wgpuRenderPassEncoderSetViewport(pass, vx, vy, w, h, 0.0f, 1.0f);
+    /* Absolute figures span the whole target (prim coords are screen
+     * coords); local figures map the NDC quad onto their own rect. The
+     * scissor below clips to the figure rect regardless. */
+    if (g->absolute_coords) {
+        wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
+                                         target->viewport.w, target->viewport.h, 0.0f, 1.0f);
+    } else {
+        wgpuRenderPassEncoderSetViewport(pass, vx, vy, w, h, 0.0f, 1.0f);
+    }
     /* SetScissorRect MUST stay within the render-area bounds. The
      * figure's rect may extend slightly beyond the pane (window's
      * absolute screen rect can exceed the target by a few pixels —
@@ -2004,8 +2096,11 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"ydraw_cell_zoom_scale", YETTY_YRENDER_UNIFORM_F32};
     rs->uniforms[U_CZ_OFF] =
         (struct yetty_yrender_uniform){"ydraw_cell_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_VIEW_SIZE] =
+        (struct yetty_yrender_uniform){"ydraw_view_size", YETTY_YRENDER_UNIFORM_VEC2};
 
-    /* Static-figure defaults: no scrolling, no per-frame zoom. */
+    /* Defaults: no zoom; scroll (cz_off) and view_size are set per-frame
+     * in render from the figure's rect + scroll offset. */
     rs->uniforms[U_ROLLING_ROW_0].u32 = 0;
     rs->uniforms[U_VZ_SCALE].f32 = 1.0f;
     rs->uniforms[U_VZ_OFF].vec2[0] = 0.0f;
@@ -2013,6 +2108,8 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
     rs->uniforms[U_CZ_SCALE].f32 = 1.0f;
     rs->uniforms[U_CZ_OFF].vec2[0] = 0.0f;
     rs->uniforms[U_CZ_OFF].vec2[1] = 0.0f;
+    rs->uniforms[U_VIEW_SIZE].vec2[0] = 0.0f;
+    rs->uniforms[U_VIEW_SIZE].vec2[1] = 0.0f;
 }
 
 /* Load the raw ydraw-layer.wgsl bytes into layer_shader_code. The
@@ -2337,9 +2434,9 @@ static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *ou
  * (optional) complex-prim factory. NULL `user` is allowed — produces
  * an ygrid with no font and no complex-prim support, useful for tests
  * and tooling. */
-static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_rectangle rect,
-                                                            const struct yetty_context *context,
-                                                            void *user)
+static struct yetty_yfigure_figure_ptr_result ygrid_factory_impl(struct yetty_ycore_rectangle rect,
+                                                                 const struct yetty_context *context,
+                                                                 void *user, int absolute_coords)
 {
     uint32_t grid_cols, grid_rows;
     ygrid_dims_from_rect(rect, &grid_cols, &grid_rows);
@@ -2347,6 +2444,7 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_r
     if (YETTY_IS_ERR(gr)) {
         return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: create", gr);
     }
+    gr.value->absolute_coords = absolute_coords;
     if (user) {
         const struct yetty_ygrid_factory_args *args = user;
         if (args->default_font) {
@@ -2364,18 +2462,34 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory(struct yetty_ycore_r
     return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ygrid_as_figure(gr.value));
 }
 
+/* KIND_YGRID figures (the chrome grid + ygui widgets promoted via
+ * make_figure) carry absolute-coord content. */
+static struct yetty_yfigure_figure_ptr_result ygrid_factory_absolute(
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
+{
+    return ygrid_factory_impl(rect, context, user, 1);
+}
+
+/* Producer-kind figures (yimage/yplot/…) draw their content in local
+ * coords from (0,0). */
+static struct yetty_yfigure_figure_ptr_result ygrid_factory_local(
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
+{
+    return ygrid_factory_impl(rect, context, user, 0);
+}
+
 struct yetty_ycore_void_result yetty_ygrid_register_factory(
     struct yetty_yfigure_registry *registry, const struct yetty_ygrid_factory_args *args)
 {
-    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YGRID, ygrid_factory,
-                                           (void *)args);
+    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YGRID,
+                                           ygrid_factory_absolute, (void *)args);
 }
 
 struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
     struct yetty_yfigure_registry *registry, uint32_t kind,
     const struct yetty_ygrid_factory_args *args)
 {
-    return yetty_yfigure_registry_register(registry, kind, ygrid_factory, (void *)args);
+    return yetty_yfigure_registry_register(registry, kind, ygrid_factory_local, (void *)args);
 }
 
 struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)

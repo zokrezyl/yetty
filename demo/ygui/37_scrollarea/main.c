@@ -153,7 +153,6 @@ static struct yetty_ygui_object *begin_scene(struct yetty_ygui_object *content, 
     struct yetty_ygui_object *scroll = add_obj(scene, yetty_ygui_scrollarea_class_get());
     if (scroll) {
         set_grow(scroll, 1.0f);
-        err_ok(yetty_ygui_widget_set_bg_color(scroll, COLOR_VIEWPORT));
     }
     if (g.count < (int)(sizeof(g.scenes) / sizeof(g.scenes[0]))) {
         g.scenes[g.count++] = scene;
