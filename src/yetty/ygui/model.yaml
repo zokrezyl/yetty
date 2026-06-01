@@ -1216,6 +1216,35 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: yplot_emit_body
+  - name: yrich_view
+    domain: ygui
+    accessor: yetty_ygui_yrich_view_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/yrich_view.c
+    parent:
+      domain: ygui
+      name: ydraw_embed
+    mixins: []
+    data: struct yrich_view_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: yrich_view_ctor
+      - slot: destructor
+        slot_domain: ygui
+        impl: yrich_view_dtor
+      - slot: widget_emit_body
+        slot_domain: ygui
+        impl: yrich_view_emit_body
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: yrich_view_on_press
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: yrich_view_on_release
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: yrich_view_on_motion
   - name: yshadertoy
     domain: ygui
     accessor: yetty_ygui_yshadertoy_class_get

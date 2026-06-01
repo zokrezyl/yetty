@@ -1,25 +1,25 @@
-# yslide — interactive presentation editor (pure C, was yslides in poc).
-add_executable(yslide
-    main.c
-    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-)
+# yslide — presentation editor. Thin entry over the shared yetty_yrich_app
+# host (see tools/ydoc/CMakeLists.txt for the link-group rationale).
+if(NOT TARGET yetty_yrich_app)
+    return()
+endif()
 
-find_package(Threads REQUIRED)
+add_executable(yslide main.c $<TARGET_OBJECTS:yetty_yrich_app>)
 
 target_include_directories(yslide PRIVATE
     ${YETTY_ROOT}/include
     ${YETTY_ROOT}/src
 )
 
-target_link_libraries(yslide PRIVATE
-    yrich_runner
-    yetty_yrich
-    yetty_ydraw_core
-    yetty_ycore
-    Threads::Threads
-    yetty_yplatform_core
-)
+if(NOT MSVC)
+    target_link_options(yslide PRIVATE "-Wl,--start-group")
+    target_link_libraries(yslide PRIVATE ${YRICH_APP_LINK_LIBS} ${YETTY_LIBS} "-Wl,--end-group")
+else()
+    target_link_libraries(yslide PRIVATE ${YRICH_APP_LINK_LIBS} ${YETTY_LIBS})
+endif()
 
-target_compile_options(yslide PRIVATE -Wall -Wextra)
+set_target_properties(yslide PROPERTIES LINKER_LANGUAGE CXX)
+
+if(NOT MSVC)
+    target_compile_options(yslide PRIVATE -Wall -Wextra)
+endif()

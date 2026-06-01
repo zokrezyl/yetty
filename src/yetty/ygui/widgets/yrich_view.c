@@ -1,0 +1,385 @@
+/*
+ * ygui-yrich_view.c — hosts a yetty_yrich_document inside a ydraw_embed.
+ *
+ * yrich documents (ydoc rich-text, yspreadsheet, yslides) render
+ * themselves into a yetty_ydraw_draw_list. This widget owns one such
+ * document, re-renders it into a fresh draw list whenever its rect
+ * changes or the document marks itself dirty, and hands the buffer to
+ * the ydraw_embed base — which blits the primitive stream translated
+ * to the widget's rect. Pointer input is coordinate-transformed into
+ * document space and forwarded to the document's input handlers.
+ *
+ * The render/re-render-on-resize gate mirrors ymarkdown: layout runs
+ * after set_document, so the rect is only known at emit time; a cached
+ * (w, h) keeps a stationary, unchanged document from paying the render
+ * cost every frame.
+ */
+#include "../internal.h"
+
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/ygui/theme.h>
+#include <yetty/ygui/widgets/ydraw_embed.h>
+#include <yetty/ygui/widgets/yrich_view.h>
+#include <yetty/yrich/yrich-document.h>
+#include <yetty/yrich/yrich-types.h>
+#include <yetty/ysdf/funcs.gen.h>
+#include <yetty/ysdf/types.gen.h>
+
+#include <stdint.h>
+#include <string.h>
+
+/* Fallback text/page colours (brand off-white on a lifted surface) used
+ * when no engine theme is reachable yet. Packed 0xAABBGGRR, matching the
+ * theme + yrich colour convention. */
+#define YRICH_VIEW_FALLBACK_TEXT 0xFFE4E5E0u
+#define YRICH_VIEW_FALLBACK_PAGE 0xFF1F1A14u
+
+#define YRICH_VIEW_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
+
+struct [[clang::annotate("class@ygui:yrich_view")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
+yrich_view_data {
+    struct yetty_yrich_document *doc; /* model — owned iff `own` */
+    int own;
+    float rendered_w;
+    float rendered_h;
+    int pressed; /* a press is in flight → forward motion as drag */
+};
+
+static const struct yetty_yclass *yrich_view_class(void)
+{
+    return yetty_ygui_class_expect(yetty_ygui_yrich_view_class_get(),
+                                   "yetty_ygui_yrich_view_class_get");
+}
+
+[[clang::annotate("override@ygui:yrich_view:constructor")]]
+static struct yetty_ycore_void_result yrich_view_ctor(struct yetty_yclass_ctx *yclass_ctx,
+                                                      struct yetty_yclass_object *yclass_obj)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
+        obj, yrich_view_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yrich_view_ctor: super");
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    d->doc = NULL;
+    d->own = 0;
+    d->rendered_w = 0.0f;
+    d->rendered_h = 0.0f;
+    d->pressed = 0;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@ygui:yrich_view:destructor")]]
+static struct yetty_ycore_void_result yrich_view_dtor(struct yetty_yclass_ctx *yclass_ctx,
+                                                      struct yetty_yclass_object *yclass_obj)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    if (d->own && d->doc) {
+        /* The ydraw_embed base owns the last render buffer and frees it
+         * in its own destructor; the document only borrows it, so tear
+         * the document down here without touching the buffer. */
+        yetty_yrich_document_set_buffer(d->doc, NULL);
+        yetty_yrich_document_destroy(d->doc);
+    }
+    d->doc = NULL;
+    return yetty_ygui_super_void(obj, yrich_view_class(),
+                                (yetty_yclass_method_id_t)yetty_ygui_destructor);
+}
+
+/* Render the document into a fresh draw list sized (w, h) and install it
+ * on the ydraw_embed base. The document keeps a borrowed pointer to the
+ * buffer; the base takes ownership and frees the previous one. */
+/* Size of one primitive at `prim`, or 0 if malformed / truncated. Mirrors
+ * the ydraw_embed walk: SDF prims are fixed-size (+ optional id word);
+ * everything else carries a u32 payload_size after the type word. */
+static size_t yrich_view_prim_size(const uint32_t *prim, size_t remaining)
+{
+    if (remaining < sizeof(uint32_t)) {
+        return 0;
+    }
+    uint32_t type = prim[0];
+    size_t sdf_bytes = yetty_ysdf_primitive_size(YRICH_VIEW_TYPE_BASE(type));
+    if (sdf_bytes > 0) {
+        size_t s = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
+        return s <= remaining ? s : 0;
+    }
+    if (remaining < 2 * sizeof(uint32_t)) {
+        return 0;
+    }
+    size_t s = 2 * sizeof(uint32_t) + prim[1];
+    return s <= remaining ? s : 0;
+}
+
+/* Recolour every TEXT_SPAN in the freshly-rendered buffer to `color`. The
+ * yrich model bakes a fixed (near-black) colour into each text run; this
+ * makes content legible against the themed background. TEXT_SPAN wire
+ * layout (text-span-prim.h): word[6] is the packed colour. */
+static void yrich_view_retint_text(struct yetty_ydraw_draw_list *buf, uint32_t color)
+{
+    uint8_t *data = (uint8_t *)yetty_ydraw_draw_list_data(buf);
+    size_t size = yetty_ydraw_draw_list_size(buf);
+    if (!data) {
+        return;
+    }
+    size_t off = 0;
+    while (off + sizeof(uint32_t) <= size) {
+        uint32_t *prim = (uint32_t *)(data + off);
+        size_t s = yrich_view_prim_size(prim, size - off);
+        if (s == 0) {
+            break;
+        }
+        if (YRICH_VIEW_TYPE_BASE(prim[0]) == YETTY_YDRAW_TYPE_TEXT_SPAN &&
+            s >= 7 * sizeof(uint32_t)) {
+            prim[6] = color;
+        }
+        off += s;
+    }
+}
+
+/* Theme text / page colours, falling back to the brand defaults when the
+ * widget is not yet attached to an engine. */
+static void yrich_view_theme_colors(struct yetty_ygui_object *obj, uint32_t *text, uint32_t *page)
+{
+    struct yetty_ygui_runtime *engine = yetty_ygui_object_engine(obj);
+    if (engine) {
+        struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(engine);
+        if (theme) {
+            *text = theme->text_primary;
+            *page = theme->bg_secondary;
+        }
+    }
+}
+
+static struct yetty_ycore_void_result yrich_view_render(struct yetty_ygui_object *obj, float w,
+                                                        float h)
+{
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    if (!d->doc || w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yrich_view_render: buffer create");
+    yetty_yrich_document_set_buffer(d->doc, br.value);
+    struct yetty_ycore_void_result rr = yetty_yrich_document_render(d->doc);
+    if (YETTY_IS_ERR(rr)) {
+        yetty_yrich_document_set_buffer(d->doc, NULL);
+        yetty_ydraw_draw_list_destroy(br.value);
+        return YETTY_ERR(yetty_ycore_void, "yrich_view_render: document render", rr);
+    }
+    yetty_yrich_document_clear_dirty(d->doc);
+
+    /* Colours come from the engine theme (no live terminal to OSC-query in
+     * a windowed app). Retint the document's text so it is legible, and
+     * give the surface a themed page background. */
+    uint32_t text_color = YRICH_VIEW_FALLBACK_TEXT;
+    uint32_t page_color = YRICH_VIEW_FALLBACK_PAGE;
+    yrich_view_theme_colors(obj, &text_color, &page_color);
+    yrich_view_retint_text(br.value, text_color);
+    if (yetty_ygui_widget_bg(obj) != page_color) {
+        struct yetty_ycore_void_result bgr = yetty_ygui_widget_set_bg_color(obj, page_color);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, bgr, "yrich_view_render: page bg");
+    }
+
+    struct yetty_ycore_void_result sb = yetty_ygui_ydraw_embed_set_buffer(obj, br.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sb, "yrich_view_render: set_buffer");
+    d->rendered_w = w;
+    d->rendered_h = h;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@ygui:yrich_view:widget_emit_body")]]
+static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_ctx *yclass_ctx,
+                                                           struct yetty_yclass_object *yclass_obj,
+                                                           struct yetty_ygui_emit_ctx *ctx)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    float w = r.max.x - r.min.x;
+    float h = r.max.y - r.min.y;
+    if (d->doc && (w != d->rendered_w || h != d->rendered_h ||
+                   yetty_yrich_document_is_dirty(d->doc))) {
+        struct yetty_ycore_void_result rr = yrich_view_render(obj, w, h);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yrich_view_emit_body: render");
+    }
+    /* Chain into the ydraw_embed → primitive_widget → paint super body. */
+    yetty_yclass_method_slot slot =
+        yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
+    yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(yrich_view_class(), slot);
+    if (!impl) {
+        return YETTY_OK_VOID();
+    }
+    typedef struct yetty_ycore_void_result (*fn_t)(
+        struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
+    return ((fn_t)impl)(NULL, yclass_obj, ctx);
+}
+
+/* Map an absolute viewport point to document content coords. */
+static void to_doc_coords(struct yetty_ygui_object *obj, float x, float y, float *dx, float *dy)
+{
+    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    *dx = x - r.min.x;
+    *dy = y - r.min.y;
+}
+
+[[clang::annotate("override@ygui:yrich_view:widget_on_press")]]
+static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_ctx *yclass_ctx,
+                                                         struct yetty_yclass_object *yclass_obj,
+                                                         float x, float y, int button)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    if (!d->doc) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    float dx, dy;
+    to_doc_coords(obj, x, y, &dx, &dy);
+    struct yetty_yrich_input_mods mods = {0};
+    yetty_yrich_document_on_mouse_down(d->doc, dx, dy, (uint32_t)button, mods);
+    d->pressed = 1;
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, yetty_ygui_object_set_dirty(obj), "yrich_view_on_press");
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+[[clang::annotate("override@ygui:yrich_view:widget_on_release")]]
+static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_ctx *yclass_ctx,
+                                                           struct yetty_yclass_object *yclass_obj,
+                                                           float x, float y, int button)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    if (!d->doc) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    float dx, dy;
+    to_doc_coords(obj, x, y, &dx, &dy);
+    struct yetty_yrich_input_mods mods = {0};
+    yetty_yrich_document_on_mouse_up(d->doc, dx, dy, (uint32_t)button, mods);
+    d->pressed = 0;
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, yetty_ygui_object_set_dirty(obj), "yrich_view_on_release");
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+[[clang::annotate("override@ygui:yrich_view:widget_on_motion")]]
+static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ctx *yclass_ctx,
+                                                          struct yetty_yclass_object *yclass_obj,
+                                                          float x, float y)
+{
+    (void)yclass_ctx;
+    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    if (!d->doc || !d->pressed) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    float dx, dy;
+    to_doc_coords(obj, x, y, &dx, &dy);
+    struct yetty_yrich_input_mods mods = {0};
+    yetty_yrich_document_on_mouse_drag(d->doc, dx, dy, 0, mods);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, yetty_ygui_object_set_dirty(obj), "yrich_view_on_motion");
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+/*-----------------------------------------------------------------------------
+ * Public API — model attachment + host-driven keyboard forwarding.
+ *---------------------------------------------------------------------------*/
+struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_ygui_object *obj,
+                                                                  struct yetty_yrich_document *doc,
+                                                                  int own)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yrich_view_set_document: NULL obj");
+    }
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    if (d->own && d->doc && d->doc != doc) {
+        yetty_yrich_document_set_buffer(d->doc, NULL);
+        yetty_yrich_document_destroy(d->doc);
+    }
+    d->doc = doc;
+    d->own = own ? 1 : 0;
+    /* Drop the embed buffer + force a render at the next emit. */
+    struct yetty_ycore_void_result cb = yetty_ygui_ydraw_embed_set_buffer(obj, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cb, "yrich_view_set_document: clear buffer");
+    d->rendered_w = 0.0f;
+    d->rendered_h = 0.0f;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+/* Force a re-render at the next emit even when neither the rect nor the
+ * document's own dirty flag changed — used after a host action (toolbar
+ * button, programmatic edit) mutates the document. */
+struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_ygui_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yrich_view_invalidate: NULL obj");
+    }
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    d->rendered_w = 0.0f;
+    d->rendered_h = 0.0f;
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+struct yetty_yrich_document *yetty_ygui_yrich_view_document(const struct yetty_ygui_object *obj)
+{
+    if (!obj) {
+        return NULL;
+    }
+    struct yrich_view_data *d =
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yrich_view_class());
+    return d->doc;
+}
+
+struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
+    const struct yetty_ygui_object *obj, float *w, float *h)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yrich_view_content_size: NULL obj");
+    }
+    struct yrich_view_data *d =
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yrich_view_class());
+    if (w) {
+        *w = d->doc ? yetty_yrich_document_content_width(d->doc) : 0.0f;
+    }
+    if (h) {
+        *h = d->doc ? yetty_yrich_document_content_height(d->doc) : 0.0f;
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_ygui_object *obj,
+                                                              uint32_t key,
+                                                              struct yetty_yrich_input_mods mods)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yrich_view_feed_key: NULL obj");
+    }
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    if (!d->doc) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result kr = yetty_yrich_document_on_key_down(d->doc, key, mods);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, kr, "yrich_view_feed_key");
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_ygui_object *obj,
+                                                               const char *text, size_t len)
+{
+    if (!obj || !text) {
+        return YETTY_ERR(yetty_ycore_void, "yrich_view_feed_text: NULL arg");
+    }
+    struct yrich_view_data *d = yetty_ygui_data_get(obj, yrich_view_class());
+    if (!d->doc) {
+        return YETTY_OK_VOID();
+    }
+    yetty_yrich_document_on_text_input(d->doc, text, len);
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+#include "yrich_view.gen.c"

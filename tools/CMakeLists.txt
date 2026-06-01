@@ -103,10 +103,6 @@ if(YETTY_ENABLE_TOOL_YBROWSER)
     add_subdirectory(ybrowser)
 endif()
 
-if(YETTY_ENABLE_TOOL_YDOC OR YETTY_ENABLE_TOOL_YSHEET OR YETTY_ENABLE_TOOL_YSLIDE)
-    add_subdirectory(yrich-runner)
-endif()
-
 if(YETTY_ENABLE_TOOL_YDOC)
     add_subdirectory(ydoc)
 endif()
