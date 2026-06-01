@@ -109,13 +109,40 @@ enum tab_kind {
     TAB_KIND_YZOO,        /* animated zoo, rendered by the `yzoo` widget */
     TAB_KIND_YJUNGLE,     /* animated jungle, rendered by the `yjungle` widget */
     TAB_KIND_YSHADERTOY,  /* Shadertoy-style WGSL, rendered by the `yshadertoy` widget */
+    TAB_KIND_YNODES,      /* node-graph editor, rendered by the `ynodes` widget */
+    TAB_KIND_YPDF,        /* PDF document, rendered by the `ypdf` widget */
 };
 
-#define TAB_COUNT 13
+/* Scenes — the leaf content panels. `tab_kind_for` / `tab_entry_*` are
+ * keyed by these indices. A scene is shown either directly (its own
+ * top-level tab) or under a top tab's sub-tabbar. */
+#define TAB_COUNT 15
 
-static const char *TAB_LABELS[TAB_COUNT] = {
+static const char *SCENE_LABELS[TAB_COUNT] = {
     "Welcome",  "Plots",        "Images",   "Code",  "Video",  "Elements", "Markdown",
-    "HTML/Browser", "Diagrams", "YMaze",    "YZoo",  "YJungle", "Shadertoy"};
+    "HTML/Browser", "Diagrams", "YMaze",    "YZoo",  "YJungle", "Shadertoy", "Node Editor",
+    "PDF"};
+
+/* Top-level tabs. A tab with a single scene shows it directly; a tab with
+ * several shows a sub-tabbar (same widget the Shadertoy gallery uses) that
+ * switches between its scenes. `subs` lists scene indices. */
+struct top_tab {
+    const char *label;
+    int n_subs;
+    int subs[6];
+};
+
+static const struct top_tab TOP_TABS[] = {
+    {"Welcome", 1, {0}},
+    {"Plots", 1, {1}},
+    {"Media", 2, {2, 4}},                 /* Images, Video */
+    {"Rich text", 5, {6, 3, 14, 7, 8}},   /* Markdown, Code, PDF, HTML/Browser, Diagrams */
+    {"YGUI Widgets", 1, {5}},             /* former Elements */
+    {"Shadertoy", 1, {12}},               /* own tab — it already carries a gallery sub-tabbar */
+    {"Ymazing", 4, {9, 10, 11, 13}},      /* YMaze, YZoo, YJungle, Node Editor */
+};
+
+#define TOP_TAB_COUNT ((int)(sizeof(TOP_TABS) / sizeof(TOP_TABS[0])))
 
 /* Brand palette — packed RGBA, R in low byte. Per rules/08-branding.md. */
 #define BRAND_TEXT 0xFFE4E5E0u
@@ -177,6 +204,21 @@ struct app {
 
     struct tab_state tabs[TAB_COUNT];
 
+    /* Two-level tab navigation. The top tabbar (app->tabbar) selects a
+     * top tab; grouped top tabs add a sub-tabbar (subbar) that selects
+     * among their scenes. The visible scene renders into scene_parent
+     * (body_panel for a single-scene tab, subbody for a grouped one);
+     * nav-row clicks rebuild into scene_parent. */
+    int cur_top;
+    int top_active_sub[TOP_TAB_COUNT];
+    struct yetty_ygui_object *subbar;
+    struct yetty_ygui_object *subbody;
+    struct yetty_ygui_object *scene_parent;
+    int cur_scene;
+
+    /* Extracted sample PDF absolute path inside data_dir, or NULL. */
+    char *pdf_path;
+
     /* Image-path scratch: filled from get_data_dir/logo-N.jpeg at
      * startup by discover_logo_images, referenced from the Images
      * nav entries. Heap so the count can grow. Owned by the app —
@@ -236,7 +278,7 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
 /*-----------------------------------------------------------------------------
  * Shadertoy tab — a sub-tabbar swaps the WGSL source on the hosted
  * yshadertoy widget. The widget is rebuilt every time the Shadertoy tab
- * is re-entered (rebuild_tab_content), so the handler reaches the live
+ * is re-entered (build_scene_body), so the handler reaches the live
  * widget through this single-instance pointer, refreshed at build time.
  * Shader gallery: <yetty/yshadertoy/demo-shaders.h>.
  *---------------------------------------------------------------------------*/
@@ -505,6 +547,22 @@ static void discover_readme(struct app *app)
     app->readme_path = strdup(path_buf);
 }
 
+/* Locate the extracted sample PDF (incbin manifest ships
+ * <data_dir>/pdf-sample.pdf). Failure leaves app->pdf_path NULL — the PDF
+ * subtab then renders an empty ypdf. */
+static void discover_pdf(struct app *app)
+{
+    if (app->pdf_path) return;
+    const char *data_dir = yetty_yplatform_get_data_dir();
+    if (!data_dir || !*data_dir) return;
+    char path_buf[1024];
+    snprintf(path_buf, sizeof(path_buf), "%s/pdf-sample.pdf", data_dir);
+    int ok = yetty_yplatform_file_exists(path_buf);
+    ydebug("ygreeter: discover_pdf probe=%s status=%s", path_buf, ok ? "found" : "missing");
+    if (!ok) return;
+    app->pdf_path = strdup(path_buf);
+}
+
 /*-----------------------------------------------------------------------------
  * Loaders — populate the per-tab content widget from a given entry.
  *---------------------------------------------------------------------------*/
@@ -512,7 +570,10 @@ static void discover_readme(struct app *app)
 /* Wipe a content widget's children and recreate it as the requested kind
  * — the ygui rich/yplot/yimage widgets do not expose a clear API, so
  * recreating is the simplest correct way to swap content. */
-static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int tab_index);
+static struct yetty_ycore_void_result build_scene_body(struct app *app,
+                                                       struct yetty_ygui_object *parent,
+                                                       int scene_index);
+static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index);
 
 static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
                                                       const struct nav_entry *entry)
@@ -763,6 +824,8 @@ static enum tab_kind tab_kind_for(int tab_index)
     case 10: return TAB_KIND_YZOO;
     case 11: return TAB_KIND_YJUNGLE;
     case 12: return TAB_KIND_YSHADERTOY;
+    case 13: return TAB_KIND_YNODES;
+    case 14: return TAB_KIND_YPDF;
     case 0:
     case 3:
     default:
@@ -1590,11 +1653,166 @@ static struct yetty_ycore_void_result build_diagrams_content(struct app *app,
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int tab_index)
+/*=============================================================================
+ * Node-editor tab — the exact scene from demo/ygui/38_ynodes: a ynodes
+ * editor filling the body, three nodes holding ordinary widgets, two
+ * pre-wired links, and a palette the node context menu can insert.
+ *===========================================================================*/
+static struct yetty_ygui_object *yng_make_node(struct yetty_ygui_object *editor, float gx, float gy,
+                                               float gw, float gh, const char *title)
 {
-    /* Wipe + reseed app->body_panel: nav on left + fresh content widget on right. */
+    struct yetty_ygui_object_ptr_result nr = yetty_ygui_ynodes_add_node(editor, gx, gy);
+    if (YETTY_IS_ERR(nr)) {
+        yetty_ycore_error_destroy(nr.error);
+        return NULL;
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_ynode_set_graph_size(nr.value, gw, gh));
+    yetty_ycore_error_destroy_safe(yetty_ygui_ynode_set_title(nr.value, title));
+    return nr.value;
+}
+
+static void yng_reg(struct yetty_ygui_object *editor, const char *name,
+                    struct yetty_yclass_ptr_result cls)
+{
+    if (YETTY_IS_ERR(cls)) {
+        yetty_ycore_error_destroy(cls.error);
+        return;
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_ynodes_register_widget(editor, name, cls.value));
+}
+
+static void yng_u32(struct uint32_result r)
+{
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
+
+/* Add a child widget of `cls` to `node` and set its row height. */
+static struct yetty_ygui_object *yng_child(struct yetty_ygui_object *node,
+                                           struct yetty_yclass_ptr_result cls, float h)
+{
+    if (YETTY_IS_ERR(cls)) {
+        yetty_ycore_error_destroy(cls.error);
+        return NULL;
+    }
+    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls.value, node);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+        return NULL;
+    }
+    yetty_ycore_error_destroy_safe(el_set_height(r.value, h));
+    return r.value;
+}
+
+static struct yetty_ycore_void_result build_ynodes_content(struct app *app,
+                                                           struct yetty_ygui_object *parent)
+{
+    (void)app;
+    const struct yetty_ycore_rgba text = {224, 229, 228, 255};
+    const struct yetty_ycore_rgba muted = {168, 167, 159, 255};
+
+    /* Instruction strip. */
+    struct yetty_ygui_object_ptr_result hint =
+        yetty_ygui_add(yetty_ygui_label_class_get().value, parent);
+    if (YETTY_IS_OK(hint)) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(
+            hint.value, "drag nodes  \xe2\x80\xa2  drag pin\xe2\x86\x92pin to connect  \xe2\x80\xa2  "
+                        "right-click for menu  \xe2\x80\xa2  pan: drag canvas  \xe2\x80\xa2  wheel: zoom"));
+        yetty_ycore_error_destroy_safe(yetty_ygui_label_set_color(hint.value, muted));
+        yetty_ycore_error_destroy_safe(el_set_height(hint.value, 24.0f));
+    } else {
+        yetty_ycore_error_destroy(hint.error);
+    }
+
+    /* Editor fills the rest of the tab body. */
+    struct yetty_ygui_object_ptr_result er =
+        yetty_ygui_add(yetty_ygui_ynodes_class_get().value, parent);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "build_ynodes_content: ynodes");
+    struct yetty_ygui_object *editor = er.value;
+    {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(editor);
+        l.flex_grow = 1.0f;
+        l.min_height = 200.0f;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(editor, &l));
+    }
+
+    /* Palette the node context menu can insert ("Add <name>"). */
+    yng_reg(editor, "Label", yetty_ygui_label_class_get());
+    yng_reg(editor, "Button", yetty_ygui_button_class_get());
+    yng_reg(editor, "Slider", yetty_ygui_slider_class_get());
+    yng_reg(editor, "Checkbox", yetty_ygui_checkbox_class_get());
+    yng_reg(editor, "Toggle", yetty_ygui_toggle_class_get());
+    yng_reg(editor, "Progress", yetty_ygui_progress_class_get());
+
+    /* Node A — source with one output. */
+    struct yetty_ygui_object *a = yng_make_node(editor, 60.0f, 70.0f, 190.0f, 130.0f, "Source");
+    if (a) {
+        yng_u32(yetty_ygui_ynode_add_output(a, "value"));
+        struct yetty_ygui_object *lbl = yng_child(a, yetty_ygui_label_class_get(), 18.0f);
+        if (lbl) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(lbl, "amplitude"));
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_color(lbl, text));
+        }
+        struct yetty_ygui_object *sld = yng_child(a, yetty_ygui_slider_class_get(), 26.0f);
+        if (sld) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_slider_set_range(sld, 0.0f, 1.0f));
+            yetty_ycore_error_destroy_safe(yetty_ygui_slider_set_value(sld, 0.6f));
+        }
+    }
+
+    /* Node B — mixer: two inputs, one output, a couple of controls. */
+    struct yetty_ygui_object *b = yng_make_node(editor, 350.0f, 130.0f, 200.0f, 160.0f, "Mixer");
+    if (b) {
+        yng_u32(yetty_ygui_ynode_add_input(b, "a"));
+        yng_u32(yetty_ygui_ynode_add_input(b, "b"));
+        yng_u32(yetty_ygui_ynode_add_output(b, "out"));
+        struct yetty_ygui_object *chk = yng_child(b, yetty_ygui_checkbox_class_get(), 24.0f);
+        if (chk) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_checkbox_set_label(chk, "enabled"));
+            yetty_ycore_error_destroy_safe(yetty_ygui_checkbox_set_checked(chk, 1));
+        }
+        struct yetty_ygui_object *btn = yng_child(b, yetty_ygui_button_class_get(), 32.0f);
+        if (btn) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(btn, "Apply"));
+        }
+    }
+
+    /* Node C — sink with one input. */
+    struct yetty_ygui_object *c = yng_make_node(editor, 680.0f, 90.0f, 180.0f, 120.0f, "Output");
+    if (c) {
+        yng_u32(yetty_ygui_ynode_add_input(c, "result"));
+        struct yetty_ygui_object *lbl = yng_child(c, yetty_ygui_label_class_get(), 18.0f);
+        if (lbl) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(lbl, "preview"));
+            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_color(lbl, muted));
+        }
+        struct yetty_ygui_object *btn = yng_child(c, yetty_ygui_button_class_get(), 32.0f);
+        if (btn) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(btn, "Save"));
+        }
+    }
+
+    /* Pre-wire: Source.value → Mixer.a, Mixer.out → Output.result. */
+    if (a && b) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_ynodes_link(editor, a, 0, b, 0));
+    }
+    if (b && c) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_ynodes_link(editor, b, 0, c, 0));
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result build_scene_body(struct app *app,
+                                                       struct yetty_ygui_object *parent,
+                                                       int tab_index)
+{
+    /* Wipe + reseed `parent`: nav on left + fresh content widget on right.
+     * `parent` is body_panel for a single-scene tab, or a group's subbody. */
+    app->scene_parent = parent;
+    app->cur_scene = tab_index;
     while (1) {
-        struct yetty_ygui_object *c = yetty_ygui_object_first_child(app->body_panel);
+        struct yetty_ygui_object *c = yetty_ygui_object_first_child(parent);
         if (!c) break;
         yetty_ycore_error_destroy_safe(yetty_ygui_del(c));
     }
@@ -1620,6 +1838,8 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     case TAB_KIND_YZOO:
     case TAB_KIND_YJUNGLE:
     case TAB_KIND_YSHADERTOY:
+    case TAB_KIND_YNODES:
+    case TAB_KIND_YPDF:
         has_nav = false;
         break;
     default:
@@ -1629,7 +1849,7 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
 
     /* Outer hbox: nav + content side-by-side (or just content). */
     struct yetty_ygui_object_ptr_result hr =
-        yetty_ygui_add(yetty_ygui_hbox_class_get().value, app->body_panel);
+        yetty_ygui_add(yetty_ygui_hbox_class_get().value, parent);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "rebuild: hbox");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(hr.value);
@@ -1766,6 +1986,31 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
         content = vr.value;
         break;
     }
+    case TAB_KIND_YNODES: {
+        /* vbox(hint, ynodes-editor) — the editor scene is seeded below by
+         * build_ynodes_content (mirrors demo/ygui/38_ynodes). */
+        struct yetty_ygui_object_ptr_result vr =
+            yetty_ygui_add(yetty_ygui_vbox_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "rebuild: ynodes vbox");
+        {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(vr.value);
+            l.flex_grow = 1.0f;
+            l.gap = 6.0f;
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(vr.value, &l));
+        }
+        content = vr.value;
+        break;
+    }
+    case TAB_KIND_YPDF: {
+        struct yetty_ygui_object_ptr_result pr =
+            yetty_ygui_add(yetty_ygui_ypdf_class_get().value, hr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "rebuild: ypdf");
+        if (app->pdf_path) {
+            yetty_ycore_error_destroy_safe(yetty_ygui_ypdf_set_file(pr.value, app->pdf_path));
+        }
+        content = pr.value;
+        break;
+    }
     case TAB_KIND_YREADME: {
         /* Scrollarea hosts the per-feature collapsing sections, same
          * shape as the Elements and YBrowser tabs. */
@@ -1831,13 +2076,18 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     case TAB_KIND_DIAGRAMS:
         yetty_ycore_error_destroy_safe(build_diagrams_content(app, content));
         break;
+    case TAB_KIND_YNODES:
+        yetty_ycore_error_destroy_safe(build_ynodes_content(app, content));
+        break;
     case TAB_KIND_YMAZE:
     case TAB_KIND_YZOO:
     case TAB_KIND_YJUNGLE:
     case TAB_KIND_YSHADERTOY:
-        /* Self-contained: these widgets create + animate their own scene
-         * (yshadertoy's source was already set when the content widget was
-         * built above), so there is nothing to seed. */
+    case TAB_KIND_YPDF:
+        /* Self-contained: these widgets create + animate (or load) their
+         * own scene when the content widget was built above (yshadertoy's
+         * source / ypdf's file were set there), so there is nothing to
+         * seed. */
         break;
     case TAB_KIND_YREADME:
         yetty_ycore_error_destroy_safe(build_yreadme_content(app, content));
@@ -1864,6 +2114,99 @@ static struct yetty_ycore_void_result rebuild_tab_content(struct app *app, int t
     return YETTY_OK_VOID();
 }
 
+/* Sub-tabbar change inside a grouped top tab → rebuild the selected scene
+ * into the group's subbody (the sub-tabbar itself is left intact). */
+static struct yetty_ycore_void_result on_subtab_change(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj,
+                                                       const struct yetty_ygui_event *event,
+                                                       void *userdata)
+{
+    (void)_yc_ctx;
+    struct app *app = (struct app *)userdata;
+    /* Ignore events from a sub-tabbar that is not the active group's — e.g.
+     * one being torn down while switching top tabs. */
+    if ((struct yetty_ygui_object *)_yc_obj != app->subbar) {
+        return YETTY_OK_VOID();
+    }
+    const struct top_tab *tt = &TOP_TABS[app->cur_top];
+    int sub = event->i0;
+    if (sub < 0 || sub >= tt->n_subs || !app->subbody) {
+        return YETTY_OK_VOID();
+    }
+    app->top_active_sub[app->cur_top] = sub;
+    return build_scene_body(app, app->subbody, tt->subs[sub]);
+}
+
+/* Build the body for top tab `top_index`: a single-scene tab fills the
+ * body directly; a grouped tab lays out vbox(sub-tabbar, subbody) and
+ * builds its active sub-scene into subbody. */
+static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index)
+{
+    if (top_index < 0 || top_index >= TOP_TAB_COUNT) {
+        return YETTY_OK_VOID();
+    }
+    app->cur_top = top_index;
+    app->subbar = NULL;
+    app->subbody = NULL;
+    const struct top_tab *tt = &TOP_TABS[top_index];
+
+    if (tt->n_subs <= 1) {
+        return build_scene_body(app, app->body_panel, tt->subs[0]);
+    }
+
+    /* Grouped tab — wipe the body and lay out vbox(sub-tabbar, subbody). */
+    while (1) {
+        struct yetty_ygui_object *c = yetty_ygui_object_first_child(app->body_panel);
+        if (!c) break;
+        yetty_ycore_error_destroy_safe(yetty_ygui_del(c));
+    }
+    struct yetty_ygui_object_ptr_result vr =
+        yetty_ygui_add(yetty_ygui_vbox_class_get().value, app->body_panel);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "rebuild_top: group vbox");
+    {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(vr.value);
+        l.flex_grow = 1.0f;
+        l.gap = 6.0f;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(vr.value, &l));
+    }
+    struct yetty_ygui_object_ptr_result str =
+        yetty_ygui_add(yetty_ygui_tabbar_class_get().value, vr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, str, "rebuild_top: sub-tabbar");
+    {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(str.value);
+        l.height = 30.0f;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(str.value, &l));
+    }
+    for (int k = 0; k < tt->n_subs; k++) {
+        struct yetty_ygui_object_ptr_result hh =
+            yetty_ygui_tabbar_add_tab(str.value, SCENE_LABELS[tt->subs[k]]);
+        if (YETTY_IS_ERR(hh)) yetty_ycore_error_destroy(hh.error);
+    }
+    struct yetty_ygui_object_ptr_result sb =
+        yetty_ygui_add(yetty_ygui_vbox_class_get().value, vr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sb, "rebuild_top: subbody");
+    {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(sb.value);
+        l.flex_grow = 1.0f;
+        l.align = YETTY_YGUI_ALIGN_STRETCH;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(sb.value, &l));
+    }
+    app->subbar = str.value;
+    app->subbody = sb.value;
+
+    int sub = app->top_active_sub[top_index];
+    if (sub < 0 || sub >= tt->n_subs) {
+        sub = 0;
+        app->top_active_sub[top_index] = 0;
+    }
+    if (sub != 0) {
+        yetty_ycore_error_destroy_safe(yetty_ygui_tabbar_set_active(str.value, sub));
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(
+        str.value, YETTY_YGUI_EVENT_VALUE_CHANGED, on_subtab_change, app));
+    return build_scene_body(app, sb.value, tt->subs[sub]);
+}
+
 static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *userdata)
 {
     (void)_yc_ctx;
@@ -1871,11 +2214,12 @@ static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *_y
     (void)btn;
     struct row_link *rl = (struct row_link *)userdata;
     if (!rl) return YETTY_OK_VOID();
-    if (rl->tab != yetty_ygui_tabbar_active(rl->app->tabbar)) {
+    /* Ignore stale row-links from a scene that's no longer the one on screen. */
+    if (rl->tab != rl->app->cur_scene) {
         return YETTY_OK_VOID();
     }
     rl->app->tabs[rl->tab].active_entry = rl->entry;
-    return rebuild_tab_content(rl->app, rl->tab);
+    return build_scene_body(rl->app, rl->app->scene_parent, rl->tab);
 }
 
 static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
@@ -1886,8 +2230,8 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
     struct yetty_ygui_object *target = (struct yetty_ygui_object *)_yc_obj;
     (void)target;
     int idx = event->i0;
-    if (idx < 0 || idx >= TAB_COUNT) return YETTY_OK_VOID();
-    return rebuild_tab_content((struct app *)userdata, idx);
+    if (idx < 0 || idx >= TOP_TAB_COUNT) return YETTY_OK_VOID();
+    return rebuild_top((struct app *)userdata, idx);
 }
 
 /* Title-bar close-x handler — the window widget emits EVENT_CLOSE; we
@@ -1917,6 +2261,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
     discover_logo_images(app);
     discover_video_files(app);
     discover_readme(app);
+    discover_pdf(app);
 
     /* The app's main window — a framed window with a title bar carrying
      * a close "x" (set_closable). Closing emits EVENT_CLOSE, handled by
@@ -1957,19 +2302,15 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
         struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(app->tabbar, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "build_ui: tabbar layout");
     }
-    for (int i = 0; i < TAB_COUNT; ++i) {
+    for (int i = 0; i < TOP_TAB_COUNT; ++i) {
         struct yetty_ygui_object_ptr_result hr =
-            yetty_ygui_tabbar_add_tab(app->tabbar, TAB_LABELS[i]);
+            yetty_ygui_tabbar_add_tab(app->tabbar, TOP_TABS[i].label);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "build_ui: tabbar_add_tab");
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(hr.value);
         l.width = 130;
         struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(hr.value, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "build_ui: header layout");
     }
-    struct yetty_ycore_void_result subr = yetty_ygui_object_subscribe(
-        app->tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_change, app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, subr, "build_ui: subscribe");
-
     /* Body panel — vbox that the per-tab content rebuilds populate. */
     struct yetty_ygui_object_ptr_result bpr =
         yetty_ygui_add(yetty_ygui_vbox_class_get().value, content);
@@ -1999,19 +2340,35 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
         app->tabs[i].active_entry = 0;
         app->tabs[i].kind = tab_kind_for(i);
     }
-    /* Optional launch-tab override for screenshot scripting: YGREETER_TAB=N
-     * selects the initial tab without needing keyboard or mouse input
-     * before the screenshot is captured. */
+    /* Subscribe before selecting the start tab: a programmatic set_active
+     * emits VALUE_CHANGED, so on_tab_change drives the initial build. That
+     * keeps exactly one rebuild path (no second, racing rebuild). */
+    struct yetty_ycore_void_result subr = yetty_ygui_object_subscribe(
+        app->tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_change, app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, subr, "build_ui: subscribe");
+
+    /* Launch-view overrides for screenshot scripting: YGREETER_TAB=N picks
+     * the top tab, YGREETER_SUBTAB=M the sub-tab within a grouped one — no
+     * keyboard or mouse needed. Set the sub-tab before the build so
+     * rebuild_top picks it up. */
     int start_tab = 0;
     const char *env_tab = getenv("YGREETER_TAB");
     if (env_tab && *env_tab) {
         int v = atoi(env_tab);
-        if (v >= 0 && v < TAB_COUNT) start_tab = v;
+        if (v >= 0 && v < TOP_TAB_COUNT) start_tab = v;
+    }
+    const char *env_sub = getenv("YGREETER_SUBTAB");
+    if (env_sub && *env_sub) {
+        int sv = atoi(env_sub);
+        if (sv >= 0 && sv < TOP_TABS[start_tab].n_subs) {
+            app->top_active_sub[start_tab] = sv;
+        }
     }
     if (start_tab != 0) {
-        yetty_ycore_error_destroy_safe(yetty_ygui_tabbar_set_active(app->tabbar, start_tab));
+        /* set_active emits VALUE_CHANGED → on_tab_change → rebuild_top. */
+        return yetty_ygui_tabbar_set_active(app->tabbar, start_tab);
     }
-    return rebuild_tab_content(app, start_tab);
+    return rebuild_top(app, 0);
 }
 
 /* Common key handler — looks the same regardless of mode. The caller's
@@ -2033,14 +2390,14 @@ static int on_key(struct yetty_ygui_runtime *engine, uint32_t key, int mods, voi
     }
     if (key == YETTY_YGUI_KEY_ARROW_LEFT) {
         int active = yetty_ygui_tabbar_active(app->tabbar);
-        int next = active > 0 ? active - 1 : TAB_COUNT - 1;
+        int next = active > 0 ? active - 1 : TOP_TAB_COUNT - 1;
         struct yetty_ycore_void_result r = yetty_ygui_tabbar_set_active(app->tabbar, next);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         return 1;
     }
     if (key == YETTY_YGUI_KEY_ARROW_RIGHT) {
         int active = yetty_ygui_tabbar_active(app->tabbar);
-        int next = (active + 1) % TAB_COUNT;
+        int next = (active + 1) % TOP_TAB_COUNT;
         struct yetty_ycore_void_result r = yetty_ygui_tabbar_set_active(app->tabbar, next);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         return 1;
@@ -3099,6 +3456,8 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     }
     free(app->readme_path);
     app->readme_path = NULL;
+    free(app->pdf_path);
+    app->pdf_path = NULL;
     return YETTY_OK_VOID();
 }
 

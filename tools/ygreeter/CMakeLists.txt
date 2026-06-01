@@ -213,6 +213,7 @@ if(YETTY_ENABLE_LIB_INCBIN)
             "assets/logo-3.jpeg"
             "assets/logo-4.jpeg"
             "assets/yetty-unchained-2.mp4"
+            "test/ut/ypdf/pdf-sample.pdf"
             "README.md")
         if(EXISTS "${YETTY_ROOT}/${_F}")
             get_filename_component(_NAME "${_F}" NAME)
