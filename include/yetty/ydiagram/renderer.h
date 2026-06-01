@@ -30,6 +30,13 @@ struct yetty_ydiagram_render_options {
     float dash_length;         /* px, default 6 */
     float dash_gap;            /* px, default 4 */
     uint32_t background_color; /* 0 = transparent; otherwise emit a big box */
+
+    /* Prepend a CMD_ZERO that clears the receiving canvas and resets its
+     * cursor to (0,0) on decode — "full redraw, replace the pane" semantics
+     * (default true; what a re-rendering ygui diagram widget wants). Set
+     * false for cat-like one-shot use (ycat): the diagram then flows inline
+     * at the current cursor instead of jumping to the pane origin. */
+    bool clear_canvas;
 };
 
 struct yetty_ydiagram_render_options yetty_ydiagram_default_render_options(void);

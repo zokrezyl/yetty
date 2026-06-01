@@ -879,6 +879,43 @@ static void apply_direction(struct yetty_ydiagram_graph *g)
     compute_bounds(g);
 }
 
+/* ycat content must flow DOWNWARD from the cursor like `cat` — never above or
+ * left of it, and tight to the origin (no large empty offset). compute_bounds()
+ * pads the scene box outward by 20px and the direction transform can leave the
+ * box far from the origin; either way min_x/min_y end up != 0. Translate the
+ * whole scene — nodes, edge control points + labels, clusters, and the bounds —
+ * so min_x/min_y land exactly at 0 (the 20px box pad becomes the top/left
+ * content margin). */
+static void translate_to_non_negative(struct yetty_ydiagram_graph *g)
+{
+    float sx = -g->min_x;
+    float sy = -g->min_y;
+    if (sx == 0.0f && sy == 0.0f) {
+        return;
+    }
+    for (size_t i = 0; i < g->node_count; i++) {
+        g->nodes[i].x += sx;
+        g->nodes[i].y += sy;
+    }
+    for (size_t i = 0; i < g->edge_count; i++) {
+        struct yetty_ydiagram_edge *e = &g->edges[i];
+        for (size_t k = 0; k < e->control_count; k++) {
+            e->control_points[k].x += sx;
+            e->control_points[k].y += sy;
+        }
+        e->label_position.x += sx;
+        e->label_position.y += sy;
+    }
+    for (size_t i = 0; i < g->cluster_count; i++) {
+        g->clusters[i].x += sx;
+        g->clusters[i].y += sy;
+    }
+    g->min_x += sx;
+    g->max_x += sx;
+    g->min_y += sy;
+    g->max_y += sy;
+}
+
 /*=============================================================================
  * Public entry
  *===========================================================================*/
@@ -917,5 +954,6 @@ struct yetty_ycore_void_result yetty_ydiagram_layout(
     route_edges(g);
     compute_bounds(g);
     apply_direction(g);
+    translate_to_non_negative(g);
     return YETTY_OK_VOID();
 }

@@ -392,7 +392,8 @@ static void seq_box(struct seq_render *r, float cx, float cy, float w, float h, 
 }
 
 struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
-    const char *input, size_t len, yetty_ydiagram_measure_text_fn measure_fn, void *measure_ud)
+    const char *input, size_t len, yetty_ydiagram_measure_text_fn measure_fn, void *measure_ud,
+    bool clear_canvas)
 {
     if (!input) {
         return YETTY_ERR(yetty_ydiagram_seq_buffer, "sequence_render: NULL input");
@@ -460,7 +461,9 @@ struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
     }
 
     struct seq_render r = {.buf = br.value, .z = 0};
-    (void)yetty_ydraw_draw_list_add_cmd_zero(br.value);
+    if (clear_canvas) {
+        (void)yetty_ydraw_draw_list_add_cmd_zero(br.value);
+    }
     yetty_ydraw_draw_list_set_scene_bounds(br.value, 0.0f, 0.0f, total_w, total_h);
 
     /* Lifelines (under everything). */

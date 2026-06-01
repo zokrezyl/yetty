@@ -30,11 +30,16 @@ struct yetty_ydiagram_buffer_result yetty_ydiagram_render_mermaid_full(
 
     enum yetty_ydiagram_kind kind = yetty_ydiagram_detect(input, len);
 
+    /* Whether to clear the canvas + reset the cursor (full redraw) or flow
+     * inline at the cursor (cat-like). Mirrors the render-options flag; the
+     * default matches default_render_options() (clear = true). */
+    bool clear_canvas = render_options ? render_options->clear_canvas : true;
+
     /* Sequence diagrams are not a layered graph — they own their layout and
      * render straight into a buffer. */
     if (kind == YETTY_YDIAGRAM_KIND_SEQUENCE) {
         struct yetty_ydiagram_seq_buffer_result sr =
-            yetty_ydiagram_sequence_render(input, len, measure, measure_userdata);
+            yetty_ydiagram_sequence_render(input, len, measure, measure_userdata, clear_canvas);
         if (YETTY_IS_ERR(sr)) {
             return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: sequence render failed", sr);
         }

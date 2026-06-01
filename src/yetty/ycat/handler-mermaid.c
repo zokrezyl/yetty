@@ -19,7 +19,14 @@ struct yetty_ydraw_draw_list_result yetty_ycat_handler_mermaid(
     (void)path_hint;
     (void)config;
 
-    struct yetty_ydiagram_buffer_result r = yetty_ydiagram_render_mermaid((const char *)bytes, len);
+    /* ycat is cat-like: the diagram must flow inline at the cursor, not clear
+     * the pane and jump to the origin. Render with clear_canvas = false (the
+     * standalone ydiagram tool and ygui widgets keep the full-redraw default). */
+    struct yetty_ydiagram_render_options opts = yetty_ydiagram_default_render_options();
+    opts.clear_canvas = false;
+
+    struct yetty_ydiagram_buffer_result r =
+        yetty_ydiagram_render_mermaid_full((const char *)bytes, len, NULL, &opts, NULL, NULL);
     if (YETTY_IS_ERR(r)) {
         return YETTY_ERR(yetty_ydraw_draw_list, r.error.msg);
     }

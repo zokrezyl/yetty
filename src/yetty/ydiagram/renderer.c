@@ -30,6 +30,7 @@ struct yetty_ydiagram_render_options yetty_ydiagram_default_render_options(void)
         .dash_length = 6.0f,
         .dash_gap = 4.0f,
         .background_color = 0,
+        .clear_canvas = true, /* preserve full-redraw default for widgets */
     };
     return o;
 }
@@ -677,13 +678,12 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
 
     yetty_ydraw_draw_list_set_scene_bounds(buffer, g->min_x, g->min_y, g->max_x, g->max_y);
 
-    /* CMD_ZERO at the start of every full-redraw buffer — clears the
-     * receiving canvas + resets cursor as a side effect of decoding.
-     * Replaces the obsolete separate YDRAW_CLEAR OSC envelope (see
-     * yetty/ydraw-core/cmds.h). Sending CLEAR + BIN as two envelopes
-     * currently freezes yetty's OSC SM (CLEAR handler doesn't drain the
-     * body terminator), so we use the single-envelope form. */
-    (void)yetty_ydraw_draw_list_add_cmd_zero(buffer);
+    /* CMD_ZERO clears the receiving canvas + resets its cursor to (0,0) on
+     * decode — full-redraw semantics. Skipped in cat-like (inline) mode so the
+     * diagram flows at the current cursor instead of jumping to the origin. */
+    if (opts.clear_canvas) {
+        (void)yetty_ydraw_draw_list_add_cmd_zero(buffer);
+    }
 
     /* Optional fullscreen background. */
     if (opts.background_color) {
