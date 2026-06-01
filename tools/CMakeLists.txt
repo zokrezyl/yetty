@@ -123,6 +123,10 @@ if(YETTY_ENABLE_TOOL_YTHORVG AND YETTY_ENABLE_FEATURE_YTHORVG AND YETTY_ENABLE_L
     add_subdirectory(ythorvg)
 endif()
 
+if(YETTY_ENABLE_TOOL_YLOTTIE AND YETTY_ENABLE_FEATURE_YLOTTIE)
+    add_subdirectory(ylottie)
+endif()
+
 if(YETTY_ENABLE_TOOL_DECODE_YDRAW)
     add_subdirectory(decode-ydraw)
     add_subdirectory(osc-analyzer)

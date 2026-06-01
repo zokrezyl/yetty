@@ -235,6 +235,10 @@ if(YETTY_ENABLE_FEATURE_YSVG)
     add_subdirectory(ysvg)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YLOTTIE)
+    add_subdirectory(ylottie)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YIMAGE)
     add_subdirectory(yimage)
 endif()
