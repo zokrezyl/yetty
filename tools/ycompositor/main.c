@@ -58,7 +58,7 @@ struct ycomp_app {
     struct yetty_ygrid_grid   *grid;
     /* Default font loaded once at worker startup and attached to every
      * rebuilt grid at slot 0. Owned here, destroyed in teardown. */
-    struct yetty_ydraw_font   *font;
+    struct yetty_yfont_font   *font;
     void                       *surface; /* WGPUSurface borrowed from yinit_rt */
     uint32_t                    surface_w;
     uint32_t                    surface_h;

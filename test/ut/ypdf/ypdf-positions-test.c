@@ -399,7 +399,7 @@ int main(void)
      */
     /* First, build a font_id → raster_font* map by walking FONT prims. */
     enum { MAX_FONTS_LOCAL = 32 };
-    struct yetty_ydraw_font *fonts[MAX_FONTS_LOCAL] = {0};
+    struct yetty_yfont_font *fonts[MAX_FONTS_LOCAL] = {0};
     struct yetty_ydraw_primitive_iter_result ir3 =
         yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
     REQUIRE(ir3.ok, "iterator first (font scan) failed");
@@ -407,8 +407,8 @@ int main(void)
     int loaded_fonts = 0;
     for (;;) {
         if (it4.fw.data[0] == YETTY_YDRAW_TYPE_FONT) {
-            struct yetty_ydraw_font_drawable_view fv;
-            if (yetty_ydraw_font_drawable_parse(it4.fw.data, &fv) == 0 && fv.font_id >= 0 &&
+            struct yetty_yfont_font_drawable_view fv;
+            if (yetty_yfont_font_drawable_parse(it4.fw.data, &fv) == 0 && fv.font_id >= 0 &&
                 fv.font_id < MAX_FONTS_LOCAL && fv.ttf && fv.ttf_len > 0) {
                 struct yetty_font_font_result rf =
                     yetty_yfont_raster_font_create_from_data(fv.ttf, fv.ttf_len, "test", NULL,
@@ -442,7 +442,7 @@ int main(void)
             struct yetty_ydraw_text_span_drawable_view v;
             if (yetty_ydraw_text_span_drawable_parse(it5.fw.data, &v) == 0 && v.text_len > 0 &&
                 v.font_id >= 0 && v.font_id < MAX_FONTS_LOCAL && fonts[v.font_id]) {
-                struct yetty_ydraw_font *f = fonts[v.font_id];
+                struct yetty_yfont_font *f = fonts[v.font_id];
                 float cursor_x = v.x;
                 /* Walk UTF-8: decode each codepoint, advance the cursor
                  * by the FULL multi-byte sequence's measure plus the PDF
@@ -533,7 +533,7 @@ int main(void)
                                 dv.x, dv.y, dv.font_id, dv.font_size, dv.char_spacing, dv.word_spacing);
                         fwrite(dv.text, 1, dv.text_len, stderr);
                         fprintf(stderr, "'\n");
-                        struct yetty_ydraw_font *f = fonts[dv.font_id];
+                        struct yetty_yfont_font *f = fonts[dv.font_id];
                         float cx = dv.x;
                         for (uint32_t k = 0; k < dv.text_len; k++) {
                             unsigned char c0 = (unsigned char)dv.text[k];

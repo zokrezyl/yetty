@@ -74,7 +74,7 @@ struct demo_runner {
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_raw_figure_factory *figure_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
-    struct yetty_ydraw_font *font;
+    struct yetty_yfont_font *font;
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
     /* ~30 fps animation pump: fires request_render so self-dirtying

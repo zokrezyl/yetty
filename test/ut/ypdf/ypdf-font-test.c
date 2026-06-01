@@ -38,7 +38,7 @@ int main(void) {
         return 77; /* skip */
     }
 
-    struct yetty_ydraw_font *f = fr.value;
+    struct yetty_yfont_font *f = fr.value;
     REQUIRE(f->ops && f->ops->measure_text, "measure_text missing");
 
     const char *sample = "Hello";

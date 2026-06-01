@@ -35,7 +35,7 @@ extern "C" {
 
 #define YETTY_YDRAW_TYPE_FONT 0x40000001u
 
-struct yetty_ydraw_font_drawable_view {
+struct yetty_yfont_font_drawable_view {
     int32_t font_id;
     const char *name; /* NOT NUL-terminated, len in name_len */
     uint32_t name_len;
@@ -45,12 +45,12 @@ struct yetty_ydraw_font_drawable_view {
 
 /* Parse a FONT prim. The view points into the prim payload — lifetime is
  * tied to the underlying buffer. Returns 0 on success, -1 on malformed. */
-int yetty_ydraw_font_drawable_parse(const uint32_t *prim,
-                                    struct yetty_ydraw_font_drawable_view *out YETTY_ANNOT_OUT);
+int yetty_yfont_font_drawable_parse(const uint32_t *prim,
+                                    struct yetty_yfont_font_drawable_view *out YETTY_ANNOT_OUT);
 
 /* Flyweight base ops handler. Returns ops only for type FONT. Register
  * via yetty_ydraw_flyweight_registry_add(reg, FONT, FONT, handler). */
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_font_drawable_handler(
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_yfont_font_drawable_handler(
     uint32_t drawable_type);
 
 #ifdef __cplusplus

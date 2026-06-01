@@ -31,7 +31,7 @@ struct yetty_ydraw_canvas_ops;
 struct yetty_ydraw_raw_figure_factory;
 struct yetty_ydraw_figure;
 struct yetty_ydraw_flyweight_registry;
-struct yetty_ydraw_font;
+struct yetty_yfont_font;
 struct yetty_ywire_wire_statemachine;
 
 /* Result type for the polymorphic pointer — every variant's create
@@ -132,8 +132,8 @@ struct yetty_ydraw_canvas_ops {
     /* Fonts */
     uint32_t (*font_count)(const struct yetty_ydraw_canvas *canvas);
     uint32_t (*font_generation)(const struct yetty_ydraw_canvas *canvas);
-    struct yetty_ydraw_font *(*get_font_at)(const struct yetty_ydraw_canvas *canvas, uint32_t slot);
-    struct yetty_ydraw_font *(*get_default_font)(const struct yetty_ydraw_canvas *canvas);
+    struct yetty_yfont_font *(*get_font_at)(const struct yetty_ydraw_canvas *canvas, uint32_t slot);
+    struct yetty_yfont_font *(*get_default_font)(const struct yetty_ydraw_canvas *canvas);
 
     /* Flyweight registry / complex-prim factory accessors. */
     const struct yetty_ydraw_flyweight_registry *(*get_flyweight_registry)(

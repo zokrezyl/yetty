@@ -64,7 +64,7 @@ struct yetty_ypdf_font_info {
                                          * once at first add, stable across
                                          * pages. Streaming mode: envelope-
                                          * local, rewritten per page. */
-    struct yetty_ydraw_font *raw_font; /* non-atlas metrics source */
+    struct yetty_yfont_font *raw_font; /* non-atlas metrics source */
     bool is_identity_h;
     struct yetty_ycore_map to_unicode; /* CID → Unicode */
     bool to_unicode_init;

@@ -79,7 +79,7 @@ struct font_map_entry {
     char hex[17];
     bool declared;
     bool resolved;
-    struct yetty_ydraw_font *font;
+    struct yetty_yfont_font *font;
     yetty_yfont_cache_handle handle;
 };
 
@@ -214,7 +214,7 @@ struct scrolling_canvas {
     uint32_t drawable_staging_capacity;
 
     /* Default font (slot 0). */
-    struct yetty_ydraw_font *default_font;
+    struct yetty_yfont_font *default_font;
     yetty_yfont_cache_handle default_handle;
 
     /* 0 = MSDF, 1 = raster. */
@@ -940,7 +940,7 @@ static struct uint32_result add_drawable_internal(
 
 static struct uint32_result expand_text_span_to_glyphs(
     struct scrolling_canvas *c, const struct yetty_ydraw_text_span_drawable_view *ts,
-    struct yetty_ydraw_font *font, yetty_yfont_cache_handle font_handle)
+    struct yetty_yfont_font *font, yetty_yfont_cache_handle font_handle)
 {
     static uint32_t glyph_z_order = 0;
     float base_size = font->ops->get_base_size(font);
@@ -1161,8 +1161,8 @@ static struct yetty_ycore_void_result dispatch_one(
         return YETTY_OK_VOID();
     }
     if (drawable_type == YETTY_YDRAW_TYPE_FONT) {
-        struct yetty_ydraw_font_drawable_view fv;
-        if (yetty_ydraw_font_drawable_parse(flyweight->data, &fv) != 0 || fv.font_id < 0) {
+        struct yetty_yfont_font_drawable_view fv;
+        if (yetty_yfont_font_drawable_parse(flyweight->data, &fv) != 0 || fv.font_id < 0) {
             return YETTY_OK_VOID();
         }
         char hex[17];
@@ -1209,7 +1209,7 @@ static struct yetty_ycore_void_result dispatch_one(
         if (yetty_ydraw_text_span_drawable_parse(flyweight->data, &tv) != 0) {
             return YETTY_OK_VOID();
         }
-        struct yetty_ydraw_font *font = NULL;
+        struct yetty_yfont_font *font = NULL;
         yetty_yfont_cache_handle handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
         if (tv.font_id >= 0 && (uint32_t)tv.font_id < env->fonts_map.capacity) {
             struct font_map_entry *e = &env->fonts_map.entries[tv.font_id];
@@ -1512,7 +1512,7 @@ static uint32_t scrolling_font_generation(const struct yetty_ydraw_canvas *base)
     return base ? yetty_yfont_cache_generation(as_scrolling_const(base)->font_cache) : 0;
 }
 
-static struct yetty_ydraw_font *scrolling_get_font_at(const struct yetty_ydraw_canvas *base,
+static struct yetty_yfont_font *scrolling_get_font_at(const struct yetty_ydraw_canvas *base,
                                                       uint32_t slot)
 {
     if (!base) {
@@ -1522,7 +1522,7 @@ static struct yetty_ydraw_font *scrolling_get_font_at(const struct yetty_ydraw_c
                                      (yetty_yfont_cache_handle)slot);
 }
 
-static struct yetty_ydraw_font *scrolling_get_default_font(const struct yetty_ydraw_canvas *base)
+static struct yetty_yfont_font *scrolling_get_default_font(const struct yetty_ydraw_canvas *base)
 {
     return base ? as_scrolling_const(base)->default_font : NULL;
 }

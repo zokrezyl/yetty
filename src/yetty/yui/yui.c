@@ -78,7 +78,7 @@ struct yetty_yui {
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *figure_registry;
 
-    struct yetty_ydraw_font *font;
+    struct yetty_yfont_font *font;
 
     struct yetty_ydraw_raw_figure_factory *figure_factory;
     struct yetty_ygrid_factory_args figure_args;

@@ -97,7 +97,7 @@ struct ycomp_ygui_app {
     /* Default font handed to the compositor; every per-group ygrid the
      * compositor creates borrows this at slot 0 so TEXT_SPAN records
      * (button labels, etc.) expand into renderable glyphs. */
-    struct yetty_ydraw_font   *font;
+    struct yetty_yfont_font   *font;
     /* ygrid factory bundle — borrowed by every ygrid the registry mints;
      * must outlive every ygrid (i.e. outlive the container). */
     struct yetty_ygrid_factory_args figure_args;

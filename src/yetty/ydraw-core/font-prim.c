@@ -23,12 +23,12 @@ static uint32_t font_payload_size(uint32_t name_len, uint32_t ttf_len)
     return align4(bare);
 }
 
-size_t yetty_ydraw_font_drawable_size_for(uint32_t name_len, uint32_t ttf_len)
+size_t yetty_yfont_font_drawable_size_for(uint32_t name_len, uint32_t ttf_len)
 {
     return FONT_PRIM_HEADER + font_payload_size(name_len, ttf_len);
 }
 
-void yetty_ydraw_font_drawable_write(uint8_t *out, int32_t font_id, const char *name,
+void yetty_yfont_font_drawable_write(uint8_t *out, int32_t font_id, const char *name,
                                      uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len)
 {
     uint32_t payload_size = font_payload_size(name_len, ttf_len);
@@ -57,8 +57,8 @@ void yetty_ydraw_font_drawable_write(uint8_t *out, int32_t font_id, const char *
     }
 }
 
-int yetty_ydraw_font_drawable_parse(const uint32_t *prim,
-                                    struct yetty_ydraw_font_drawable_view *out)
+int yetty_yfont_font_drawable_parse(const uint32_t *prim,
+                                    struct yetty_yfont_font_drawable_view *out)
 {
     if (!prim || !out) {
         return -1;
@@ -123,7 +123,7 @@ static const struct yetty_ydraw_drawable_base_ops g_font_drawable_base_ops = {
     .aabb = font_drawable_aabb,
 };
 
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_font_drawable_handler(
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_yfont_font_drawable_handler(
     uint32_t drawable_type)
 {
     if (drawable_type == YETTY_YDRAW_TYPE_FONT) {
