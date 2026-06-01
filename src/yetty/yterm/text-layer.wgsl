@@ -73,6 +73,18 @@ fn read_cell_bg(cell_index: u32) -> vec3<f32> {
     );
 }
 
+// The 16-bit VTermScreenCellAttrs sits in the high half of u32[2].
+// Bit layout: bold:1, underline:2, italic:1, blink:1, conceal:1, strike:1, …
+//   bold      = attrs & 1
+//   underline = (attrs >> 1) & 3   (0=off 1=single 2=double 3=curly)
+//   strike    = (attrs >> 6) & 1
+// Bold/italic are applied upstream by choosing a bold/italic font glyph;
+// only the line decorations are drawn here.
+fn read_cell_attrs(cell_index: u32) -> u32 {
+    let packed2 = storage_buffer[text_grid_buffer_offset + cell_index * 3u + 2u];
+    return (packed2 >> 16u) & 0xFFFFu;
+}
+
 // font_sample is provided by the child font shader (raster or msdf)
 
 @fragment
@@ -127,6 +139,33 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // The pane background-clear layer underneath us has already painted the
     // terminal area, so we draw fully opaque on top.
     var out_color = mix(bg_color, fg_color, glyph_alpha);
+
+    // Line decorations — underline / strikethrough — painted in the fg colour.
+    // Positions are fractions of the cell height; thickness is ~1px (clamped
+    // so it stays visible at small cell sizes).
+    let attrs = read_cell_attrs(cell_index);
+    let underline_mode = (attrs >> 1u) & 0x3u;
+    let strike_on = ((attrs >> 6u) & 0x1u) != 0u;
+    let cell_uv = local_px / cell_size;
+    let line_half = max(0.5 / cell_size.y, 0.03);
+    if (underline_mode != 0u) {
+        var on_line = false;
+        if (underline_mode == 1u) {
+            on_line = abs(cell_uv.y - 0.92) < line_half;            // single
+        } else if (underline_mode == 2u) {
+            on_line = abs(cell_uv.y - 0.86) < line_half * 0.8 ||    // double
+                      abs(cell_uv.y - 0.96) < line_half * 0.8;
+        } else {
+            let wave = 0.90 + 0.035 * sin(cell_uv.x * 6.28318 * 2.0); // curly
+            on_line = abs(cell_uv.y - wave) < line_half;
+        }
+        if (on_line) {
+            out_color = fg_color;
+        }
+    }
+    if (strike_on && abs(cell_uv.y - 0.52) < line_half) {
+        out_color = fg_color;
+    }
 
     // Selection highlight — xterm-style stream selection.
     //

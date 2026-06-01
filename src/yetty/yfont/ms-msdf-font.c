@@ -45,7 +45,13 @@ struct yetty_yfont_glyph_meta_gpu {
 struct yetty_yfont_ms_msdf_font {
     struct yetty_yfont_ms_font base;
 
-    struct yetty_ycdb_reader *cdb;
+    /* One CDB reader per style (Regular, Bold, Italic, BoldItalic), indexed
+     * by enum yetty_yfont_ms_style. cdb[REGULAR] is required; the others are
+     * NULL when that variant isn't on disk and fall back to Regular. All
+     * variants share the single atlas / meta buffer below — glyphs are keyed
+     * by (style, codepoint) so the same character in different styles gets
+     * distinct slots. */
+    struct yetty_ycdb_reader *cdb[4];
 
     /* Atlas (RGBA8) */
     uint8_t *atlas_pixels;
@@ -123,20 +129,35 @@ static void atlas_grow(struct yetty_yfont_ms_msdf_font *f)
     f->atlas_height = new_h;
 }
 
-static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_t cp)
+static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_t cp,
+                                     enum yetty_yfont_ms_style style)
 {
-    const uint32_t *existing = yetty_ycore_map_get(&f->glyph_map, cp);
+    if ((int)style < 0 || (int)style > 3) {
+        style = YETTY_YFONT_MS_STYLE_REGULAR;
+    }
+    /* Variant not on disk → render that style with the Regular face. */
+    struct yetty_ycdb_reader *cdb = f->cdb[style] ? f->cdb[style] : f->cdb[YETTY_YFONT_MS_STYLE_REGULAR];
+    if (!f->cdb[style]) {
+        style = YETTY_YFONT_MS_STYLE_REGULAR;
+    }
+
+    /* Glyphs are keyed by (style, codepoint): the same character in two
+     * styles occupies two atlas slots. cp is ≤ 0x10FFFF so it fits in the
+     * low 24 bits, leaving the top byte for the style. */
+    uint32_t map_key = ((uint32_t)style << 24) | (cp & 0x00FFFFFFu);
+
+    const uint32_t *existing = yetty_ycore_map_get(&f->glyph_map, map_key);
     if (existing) {
         return YETTY_OK(uint32, *existing);
     }
 
-    /* Read from CDB */
+    /* Read from the style's CDB */
     uint32_t key = cp;
     void *data = NULL;
     size_t data_len = 0;
 
     struct yetty_ycore_void_result res =
-        yetty_ycdb_reader_get(f->cdb, &key, sizeof(key), &data, &data_len);
+        yetty_ycdb_reader_get(cdb, &key, sizeof(key), &data, &data_len);
     if (YETTY_IS_ERR(res)) {
         return YETTY_ERR(uint32, res.error.msg);
     }
@@ -209,7 +230,7 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
         m->advance = hdr.advance;
         f->next_slot++;
 
-        if (yetty_ycore_map_put(&f->glyph_map, cp, slot) < 0) {
+        if (yetty_ycore_map_put(&f->glyph_map, map_key, slot) < 0) {
             free(data);
             return YETTY_ERR(uint32, "map full");
         }
@@ -267,7 +288,7 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
 
     f->next_slot++;
 
-    if (yetty_ycore_map_put(&f->glyph_map, cp, slot) < 0) {
+    if (yetty_ycore_map_put(&f->glyph_map, map_key, slot) < 0) {
         free(data);
         return YETTY_ERR(uint32, "map full");
     }
@@ -293,7 +314,11 @@ static void ms_msdf_destroy(struct yetty_yfont_ms_font *self)
     free(font->shader_code.data);
     yetty_ycore_map_destroy(&font->glyph_map);
     yetty_ycore_map_destroy(&font->slot_to_cp);
-    yetty_ycdb_reader_close(font->cdb);
+    for (int i = 0; i < 4; i++) {
+        if (font->cdb[i]) {
+            yetty_ycdb_reader_close(font->cdb[i]);
+        }
+    }
     free(font);
 }
 
@@ -339,15 +364,18 @@ static struct uint32_result ms_msdf_get_glyph_index(struct yetty_yfont_ms_font *
     if (!f) {
         return YETTY_ERR(uint32, "font is NULL");
     }
-    return load_one(f, cp);
+    return load_one(f, cp, YETTY_YFONT_MS_STYLE_REGULAR);
 }
 
 static struct uint32_result ms_msdf_get_glyph_index_styled(struct yetty_yfont_ms_font *self,
                                                            uint32_t cp,
                                                            enum yetty_yfont_ms_style style)
 {
-    (void)style;
-    return ms_msdf_get_glyph_index(self, cp);
+    struct yetty_yfont_ms_msdf_font *f = (struct yetty_yfont_ms_msdf_font *)self;
+    if (!f) {
+        return YETTY_ERR(uint32, "font is NULL");
+    }
+    return load_one(f, cp, style);
 }
 
 static struct yetty_ycore_void_result ms_msdf_resize(struct yetty_yfont_ms_font *self,
@@ -370,7 +398,7 @@ static struct yetty_ycore_void_result ms_msdf_load_glyphs(struct yetty_yfont_ms_
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (size_t i = 0; i < count; i++) {
-        load_one(f, cps[i]);
+        load_one(f, cps[i], YETTY_YFONT_MS_STYLE_REGULAR);
     }
     return YETTY_OK_VOID();
 }
@@ -382,7 +410,7 @@ static struct yetty_ycore_void_result ms_msdf_load_basic_latin(struct yetty_yfon
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
-        load_one(f, cp);
+        load_one(f, cp, YETTY_YFONT_MS_STYLE_REGULAR);
     }
     return YETTY_OK_VOID();
 }
@@ -488,6 +516,45 @@ static const struct yetty_yfont_ms_font_ops ms_msdf_ops = {
  * Create
  *===========================================================================*/
 
+static void close_all_cdb(struct yetty_yfont_ms_msdf_font *font)
+{
+    for (int i = 0; i < 4; i++) {
+        if (font->cdb[i]) {
+            yetty_ycdb_reader_close(font->cdb[i]);
+            font->cdb[i] = NULL;
+        }
+    }
+}
+
+/* Open a style variant by swapping the "-Regular.cdb" suffix of the regular
+ * path for `suffix`. Returns NULL (not an error) when the path doesn't follow
+ * the convention or the variant file is absent — callers fall back to the
+ * regular face. */
+static struct yetty_ycdb_reader *open_style_variant(const char *regular_path, const char *suffix)
+{
+    const char *tail = "-Regular.cdb";
+    size_t plen = strlen(regular_path);
+    size_t tlen = strlen(tail);
+    if (plen < tlen || strcmp(regular_path + plen - tlen, tail) != 0) {
+        return NULL;
+    }
+    size_t base = plen - tlen;
+    char path[1024];
+    if (base + strlen(suffix) + 1 > sizeof(path)) {
+        return NULL;
+    }
+    memcpy(path, regular_path, base);
+    strcpy(path + base, suffix);
+
+    struct yetty_ycdb_reader_result r = yetty_ycdb_reader_open(path);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+        return NULL;
+    }
+    ydebug("ms_msdf_font: loaded style variant %s", path);
+    return r.value;
+}
+
 struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     const char *cdb_path, const char *shader_path, float font_size,
     struct yetty_yfont_ms_padding padding)
@@ -526,7 +593,12 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     font->shader_code = shader_res.value;
 
     font->base.ops = &ms_msdf_ops;
-    font->cdb = cdb_res.value;
+    font->cdb[YETTY_YFONT_MS_STYLE_REGULAR] = cdb_res.value;
+    /* Bold / italic / bold-italic faces share the regular's atlas + metadata;
+     * absent variants stay NULL and fall back to regular at lookup time. */
+    font->cdb[YETTY_YFONT_MS_STYLE_BOLD] = open_style_variant(cdb_path, "-Bold.cdb");
+    font->cdb[YETTY_YFONT_MS_STYLE_ITALIC] = open_style_variant(cdb_path, "-Oblique.cdb");
+    font->cdb[YETTY_YFONT_MS_STYLE_BOLD_ITALIC] = open_style_variant(cdb_path, "-BoldOblique.cdb");
     font->requested_size = font_size;
     font->base_size = 32.0f; /* TODO: read from CDB or config */
     font->pixel_range = 4.0f;
@@ -540,7 +612,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     font->atlas_pixels = calloc(atlas_bytes, 1);
     if (!font->atlas_pixels) {
         free(font->shader_code.data);
-        yetty_ycdb_reader_close(font->cdb);
+        close_all_cdb(font);
         free(font);
         return YETTY_ERR(yetty_font_ms_font, "atlas allocation failed");
     }
@@ -555,7 +627,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     if (!font->meta) {
         free(font->atlas_pixels);
         free(font->shader_code.data);
-        yetty_ycdb_reader_close(font->cdb);
+        close_all_cdb(font);
         free(font);
         return YETTY_ERR(yetty_font_ms_font, "meta allocation failed");
     }
@@ -568,7 +640,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
         free(font->meta);
         free(font->atlas_pixels);
         free(font->shader_code.data);
-        yetty_ycdb_reader_close(font->cdb);
+        close_all_cdb(font);
         free(font);
         return YETTY_ERR(yetty_font_ms_font, "map init failed");
     }
@@ -577,7 +649,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
         free(font->meta);
         free(font->atlas_pixels);
         free(font->shader_code.data);
-        yetty_ycdb_reader_close(font->cdb);
+        close_all_cdb(font);
         free(font);
         return YETTY_ERR(yetty_font_ms_font, "inverse map init failed");
     }
@@ -635,7 +707,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
 	 * cell size would visibly shift as glyphs (especially descenders like
 	 * underscore, or wide glyphs) load on demand. */
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
-        load_one(font, cp);
+        load_one(font, cp, YETTY_YFONT_MS_STYLE_REGULAR);
     }
     if (font->max_ascent <= 0.0f || font->advance_cdb <= 0.0f) {
         free(font->meta);
@@ -643,7 +715,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
         free(font->shader_code.data);
         yetty_ycore_map_destroy(&font->glyph_map);
         yetty_ycore_map_destroy(&font->slot_to_cp);
-        yetty_ycdb_reader_close(font->cdb);
+        close_all_cdb(font);
         free(font);
         return YETTY_ERR(yetty_font_ms_font, "failed to determine font metrics");
     }

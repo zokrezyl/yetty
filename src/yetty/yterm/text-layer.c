@@ -806,6 +806,87 @@ static void vterm_output_callback(const char *data, size_t len, void *user)
     }
 }
 
+/* Resolve one config colour key to a VTermColor. Missing / malformed keys
+ * fall back to default_hex so a partial palette in config still works. */
+static VTermColor color_from_config(const struct yetty_yconfig_config *config,
+                                           const char *key, const char *default_hex)
+{
+    const char *s = NULL;
+    if (config && config->ops && config->ops->get_string) {
+        s = config->ops->get_string(config, key, default_hex);
+    }
+    if (!s || !*s) {
+        s = default_hex;
+    }
+    uint32_t packed = 0;
+    VTermColor col = {0};
+    if (yetty_ycore_parse_hex_color(s, &packed) ||
+        yetty_ycore_parse_hex_color(default_hex, &packed)) {
+        /* parse_hex_color packs byte0=R, byte1=G, byte2=B. */
+        col.red = (uint8_t)(packed & 0xFFu);
+        col.green = (uint8_t)((packed >> 8) & 0xFFu);
+        col.blue = (uint8_t)((packed >> 16) & 0xFFu);
+    }
+    return col;
+}
+
+/* Apply the configurable terminal colour palette to a freshly-created vterm.
+ *
+ * libvterm resolves every indexed colour (ANSI 30-37/90-97, 38;5;n for n<16)
+ * through state->colors[0..15]; truecolor (38;2;r;g;b) bypasses it entirely.
+ * The built-in defaults are deliberately harsh full-saturation primaries, so
+ * we override them here with softer values and let config refine each one.
+ * Keys (each a #RRGGBB string):
+ *   terminal/colors/normal/{black,red,green,yellow,blue,magenta,cyan,white}
+ *   terminal/colors/bright/{...same...}
+ *   terminal/colors/{foreground,background}
+ * Must run before vterm_screen_reset() so the reset copies our default
+ * fg/bg into the active pen.
+ */
+static void apply_color_palette(const struct yetty_yconfig_config *config, VTerm *vterm)
+{
+    /* index, config key, soft default — defaults mirror a muted xterm-style
+     * palette (the kind tmux / nvim / ls look right against). */
+    static const struct {
+        const char *key;
+        const char *hex;
+    } palette[16] = {
+        {"terminal/colors/normal/black", "#1d1f21"},
+        {"terminal/colors/normal/red", "#cc6666"},
+        {"terminal/colors/normal/green", "#b5bd68"},
+        {"terminal/colors/normal/yellow", "#f0c674"},
+        {"terminal/colors/normal/blue", "#81a2be"},
+        {"terminal/colors/normal/magenta", "#b294bb"},
+        {"terminal/colors/normal/cyan", "#8abeb7"},
+        {"terminal/colors/normal/white", "#c5c8c6"},
+        {"terminal/colors/bright/black", "#666666"},
+        {"terminal/colors/bright/red", "#d54e53"},
+        {"terminal/colors/bright/green", "#b9ca4a"},
+        {"terminal/colors/bright/yellow", "#e7c547"},
+        {"terminal/colors/bright/blue", "#7aa6da"},
+        {"terminal/colors/bright/magenta", "#c397d8"},
+        {"terminal/colors/bright/cyan", "#70c0ba"},
+        {"terminal/colors/bright/white", "#eaeaea"},
+    };
+
+    VTermState *state = vterm_obtain_state(vterm);
+    if (!state) {
+        return;
+    }
+
+    for (int i = 0; i < 16; i++) {
+        VTermColor col = color_from_config(config, palette[i].key, palette[i].hex);
+        vterm_state_set_palette_color(state, i, &col);
+    }
+
+    /* Default fg/bg keep yetty's existing look unless config overrides them:
+     * near-white text on a black canvas (the pane background is painted
+     * separately by yui). */
+    VTermColor fg = color_from_config(config, "terminal/colors/foreground", "#f0f0f0");
+    VTermColor bg = color_from_config(config, "terminal/colors/background", "#000000");
+    vterm_state_set_default_colors(state, &fg, &bg);
+}
+
 struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     uint32_t cols, uint32_t rows, const struct yetty_context *context,
     yetty_yterm_pty_write_fn pty_write_fn, void *pty_write_userdata,
@@ -941,6 +1022,11 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     vterm_screen_set_callbacks(text_layer->screen, &screen_callbacks, text_layer);
     vterm_screen_enable_altscreen(text_layer->screen, 1);
     vterm_screen_enable_reflow(text_layer->screen, 1);
+
+    /* Override the built-in (harsh) ANSI palette with softer, config-driven
+     * colours before the reset copies default fg/bg into the active pen. */
+    apply_color_palette(context->runtime->config, text_layer->vterm);
+
     vterm_screen_reset(text_layer->screen, 1);
 
     /* Set up vterm output callback to write to PTY */
