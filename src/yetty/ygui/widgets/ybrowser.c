@@ -31,12 +31,11 @@ static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *y
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_ybrowser_class_get(), "yetty_ygui_ybrowser_class_get"),
+        yetty_ygui_ybrowser_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ybrowser_ctor: super");
     struct ybrowser_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ybrowser_class_get(),
-                                                         "yetty_ygui_ybrowser_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ybrowser_class_get().value);
     d->html = NULL;
     d->html_len = 0;
     d->rendered_w = 0.0f;
@@ -51,13 +50,12 @@ static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *yc
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct ybrowser_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ybrowser_class_get(),
-                                                         "yetty_ygui_ybrowser_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ybrowser_class_get().value);
     free(d->html);
     d->html = NULL;
     return yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_ybrowser_class_get(), "yetty_ygui_ybrowser_class_get"),
+        yetty_ygui_ybrowser_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -77,8 +75,7 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct ybrowser_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ybrowser_class_get(),
-                                                         "yetty_ygui_ybrowser_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ybrowser_class_get().value);
     if (!d->html || d->html_len == 0) {
         return YETTY_OK_VOID();
     }
@@ -124,8 +121,7 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *ycl
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct ybrowser_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ybrowser_class_get(),
-                                                         "yetty_ygui_ybrowser_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ybrowser_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -136,7 +132,7 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *ycl
     yetty_yclass_method_slot slot =
         yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
     yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(
-        yetty_ygui_class_expect(yetty_ygui_ybrowser_class_get(), "yetty_ygui_ybrowser_class_get"),
+        yetty_ygui_ybrowser_class_get().value,
         slot);
     if (!impl) {
         return YETTY_OK_VOID();
@@ -153,8 +149,7 @@ struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_ygui_ob
         return YETTY_ERR(yetty_ycore_void, "ybrowser_set_html: NULL");
     }
     struct ybrowser_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ybrowser_class_get(),
-                                                         "yetty_ygui_ybrowser_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ybrowser_class_get().value);
     char *buf = malloc(len);
     if (len > 0 && !buf) {
         return YETTY_ERR(yetty_ycore_void, "ybrowser_set_html: malloc");

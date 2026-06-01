@@ -75,7 +75,7 @@ static float window_hamburger_x(const struct window_data *d, struct yetty_ycore_
 
 static const struct yetty_yclass *window_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_window_class_get(), "yetty_ygui_window_class_get");
+    return yetty_ygui_window_class_get().value;
 }
 
 static struct yetty_ycore_void_result win_rounded(struct yetty_ygui_emit_ctx *ctx, float x, float y,

@@ -36,13 +36,11 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj,
-                              yetty_ygui_class_expect(yetty_ygui_ydraw_embed_class_get(),
-                                                      "yetty_ygui_ydraw_embed_class_get"),
+                              yetty_ygui_ydraw_embed_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ydraw_embed: super");
     struct embed_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ydraw_embed_class_get(),
-                                                         "yetty_ygui_ydraw_embed_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
     d->buf = NULL;
     return YETTY_OK_VOID();
 }
@@ -54,15 +52,13 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct embed_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ydraw_embed_class_get(),
-                                                         "yetty_ygui_ydraw_embed_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
     if (d->buf) {
         yetty_ydraw_draw_list_destroy(d->buf);
     }
     d->buf = NULL;
     return yetty_ygui_super_void(obj,
-                                 yetty_ygui_class_expect(yetty_ygui_ydraw_embed_class_get(),
-                                                         "yetty_ygui_ydraw_embed_class_get"),
+                                 yetty_ygui_ydraw_embed_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -141,8 +137,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: NULL ctx");
     }
     struct embed_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ydraw_embed_class_get(),
-                                                         "yetty_ygui_ydraw_embed_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
     if (!d->buf) {
         return YETTY_OK_VOID();
     }
@@ -221,8 +216,7 @@ struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_yg
         return YETTY_ERR(yetty_ycore_void, "ydraw_embed_set_buffer: NULL");
     }
     struct embed_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_ydraw_embed_class_get(),
-                                                         "yetty_ygui_ydraw_embed_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_ydraw_embed_class_get().value);
     if (d->buf && d->buf != buf) {
         yetty_ydraw_draw_list_destroy(d->buf);
     }

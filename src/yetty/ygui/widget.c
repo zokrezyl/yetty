@@ -38,15 +38,14 @@ struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget_data {
 };
 
 /* Convenience accessor — every internal helper that needs the widget
- * class pointer goes through this. The codegen-shaped accessor returns
- * a Result; this delegates to yetty_ygui_class_expect so a registration
- * failure aborts loudly with the chained cause rather than silently
- * casting the error union to a pointer. Registration only happens at
- * the first call and the result is cached — after that this is a
- * one-instruction Result unwrap. */
+ * class pointer goes through this. By the time any widget method runs,
+ * the class is already registered (you cannot dispatch a method on an
+ * unregistered class), so the accessor's Result is always OK here and
+ * .value is safe. Registration can only fail on the first call, which
+ * happens at widget-creation time where the Result is checked. */
 static const struct yetty_yclass *widget_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_widget_class_get(), "yetty_ygui_widget_class_get");
+    return yetty_ygui_widget_class_get().value;
 }
 
 /*===========================================================================

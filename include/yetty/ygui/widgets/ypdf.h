@@ -2,7 +2,6 @@
 #ifndef YETTY_YGUI_WIDGETS_YPDF_H
 #define YETTY_YGUI_WIDGETS_YPDF_H
 #include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
 #include <yetty/ygui/object.h>
 #ifdef __cplusplus
 extern "C" {

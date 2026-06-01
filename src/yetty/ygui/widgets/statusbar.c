@@ -29,12 +29,11 @@ static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(), "yetty_ygui_statusbar_class_get"),
+        yetty_ygui_statusbar_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "statusbar_constructor: super");
     struct statusbar_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(),
-                                                         "yetty_ygui_statusbar_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_statusbar_class_get().value);
     d->left = NULL;
     d->right = NULL;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -51,14 +50,13 @@ static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_c
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct statusbar_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(),
-                                                         "yetty_ygui_statusbar_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_statusbar_class_get().value);
     free(d->left);
     free(d->right);
     d->left = d->right = NULL;
     return yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(), "yetty_ygui_statusbar_class_get"),
+        yetty_ygui_statusbar_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -73,8 +71,7 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
         return YETTY_ERR(yetty_ycore_void, "statusbar_paint: NULL ctx");
     }
     struct statusbar_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(),
-                                                         "yetty_ygui_statusbar_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_statusbar_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -133,8 +130,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_ygui_o
         return YETTY_ERR(yetty_ycore_void, "statusbar_set_left: NULL obj");
     }
     struct statusbar_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(),
-                                                         "yetty_ygui_statusbar_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_statusbar_class_get().value);
     free(d->left);
     d->left = dup_or_null(text);
     if (text && !d->left) {
@@ -150,8 +146,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_ygui_
         return YETTY_ERR(yetty_ycore_void, "statusbar_set_right: NULL obj");
     }
     struct statusbar_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(),
-                                                         "yetty_ygui_statusbar_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_statusbar_class_get().value);
     free(d->right);
     d->right = dup_or_null(text);
     if (text && !d->right) {

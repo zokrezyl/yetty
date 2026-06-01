@@ -15,9 +15,7 @@ struct yetty_yclass_ptr_result yetty_ygui_ynodes_class_get(void);
 
 /* === MANUAL CONTENT BELOW — preserved across codegen runs === */
 #include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
-
-struct yetty_ygui_object;
+#include <yetty/ygui/object.h>
 
 /*-----------------------------------------------------------------------------
  * ynodes — a node-graph editor canvas.

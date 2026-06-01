@@ -54,12 +54,12 @@ static struct yetty_ycore_void_result ydiagram_constructor(struct yetty_yclass_c
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_ydiagram_class_get(), "yetty_ygui_ydiagram_class_get"),
+        yetty_ygui_ydiagram_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ydiagram_constructor: super");
     struct ydiagram_data *d = yetty_ygui_data_get(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_ydiagram_class_get(), "yetty_ygui_ydiagram_class_get"));
+        yetty_ygui_ydiagram_class_get().value);
     d->source = NULL;
     d->source_len = 0;
     return YETTY_OK_VOID();
@@ -73,13 +73,13 @@ static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_ct
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct ydiagram_data *d = yetty_ygui_data_get(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_ydiagram_class_get(), "yetty_ygui_ydiagram_class_get"));
+        yetty_ygui_ydiagram_class_get().value);
     free(d->source);
     d->source = NULL;
     /* The rendered buffer is owned by ydraw_embed; its destructor frees it. */
     return yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_ydiagram_class_get(), "yetty_ygui_ydiagram_class_get"),
+        yetty_ygui_ydiagram_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -91,7 +91,7 @@ struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_ygui_
     }
     struct ydiagram_data *d = yetty_ygui_data_get(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_ydiagram_class_get(), "yetty_ygui_ydiagram_class_get"));
+        yetty_ygui_ydiagram_class_get().value);
 
     /* Drop the previous source; clearing the embedded buffer too keeps a
      * stale diagram from lingering if the new source is empty or fails. */
@@ -156,7 +156,7 @@ const char *yetty_ygui_ydiagram_get_source(const struct yetty_ygui_object *obj)
     }
     struct ydiagram_data *d = yetty_ygui_data_get(
         (struct yetty_ygui_object *)obj,
-        yetty_ygui_class_expect(yetty_ygui_ydiagram_class_get(), "yetty_ygui_ydiagram_class_get"));
+        yetty_ygui_ydiagram_class_get().value);
     return d->source;
 }
 

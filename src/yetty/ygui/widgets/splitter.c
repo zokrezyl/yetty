@@ -36,8 +36,7 @@ struct [[clang::annotate("class@ygui:splitter")]] [[clang::annotate(
 
 static const struct yetty_yclass *splitter_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_splitter_class_get(),
-                                   "yetty_ygui_splitter_class_get");
+    return yetty_ygui_splitter_class_get().value;
 }
 
 /* Effective axis: 1 = row-bar (horizontal resize), 0 = column-bar

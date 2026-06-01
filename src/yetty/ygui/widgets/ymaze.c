@@ -27,11 +27,11 @@ static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_ctx *y
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"),
+        obj, yetty_ygui_ymaze_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymaze_ctor: super");
     struct ymaze_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"));
+        obj, yetty_ygui_ymaze_class_get().value);
 
     struct yetty_ymaze_config cfg = yetty_ymaze_config_default();
     struct yetty_ymaze_ptr_result mr = yetty_ymaze_create(&cfg, 0);
@@ -50,11 +50,11 @@ static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_ctx *yc
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct ymaze_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"));
+        obj, yetty_ygui_ymaze_class_get().value);
     yetty_ymaze_destroy(d->maze);
     d->maze = NULL;
     return yetty_ygui_super_void(
-        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"),
+        obj, yetty_ygui_ymaze_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -66,7 +66,7 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *ycl
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct ymaze_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"));
+        obj, yetty_ygui_ymaze_class_get().value);
 
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
@@ -103,7 +103,7 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *ycl
     yetty_yclass_method_slot slot =
         yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
     yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(
-        yetty_ygui_class_expect(yetty_ygui_ymaze_class_get(), "yetty_ygui_ymaze_class_get"), slot);
+        yetty_ygui_ymaze_class_get().value, slot);
     if (!impl) {
         return YETTY_OK_VOID();
     }

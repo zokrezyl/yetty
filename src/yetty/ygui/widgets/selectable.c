@@ -23,8 +23,7 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_c
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)ud;
     struct sel_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                                         "yetty_ygui_selectable_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_selectable_class_get().value);
     d->selected = !d->selected;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
@@ -43,13 +42,11 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj,
-                              yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                                      "yetty_ygui_selectable_class_get"),
+                              yetty_ygui_selectable_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "selectable: super");
     struct sel_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                                         "yetty_ygui_selectable_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_selectable_class_get().value);
     d->text = NULL;
     d->selected = 0;
     return yetty_ygui_clickable_on_click_set(obj, on_click, NULL);
@@ -62,12 +59,10 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct sel_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                                         "yetty_ygui_selectable_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_selectable_class_get().value);
     free(d->text);
     return yetty_ygui_super_void(obj,
-                                 yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                                         "yetty_ygui_selectable_class_get"),
+                                 yetty_ygui_selectable_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -82,8 +77,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_ERR(yetty_ycore_void, "selectable paint: NULL ctx");
     }
     struct sel_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                                         "yetty_ygui_selectable_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_selectable_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -114,8 +108,7 @@ struct yetty_ycore_void_result yetty_ygui_selectable_set_text(struct yetty_ygui_
         return YETTY_ERR(yetty_ycore_void, "selectable_set_text: NULL");
     }
     struct sel_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                                         "yetty_ygui_selectable_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_selectable_class_get().value);
     free(d->text);
     d->text = NULL;
     if (t) {
@@ -136,8 +129,7 @@ struct yetty_ycore_void_result yetty_ygui_selectable_set_selected(struct yetty_y
         return YETTY_ERR(yetty_ycore_void, "selectable_set_selected: NULL");
     }
     struct sel_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                                         "yetty_ygui_selectable_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_selectable_class_get().value);
     d->selected = s ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -149,8 +141,7 @@ int yetty_ygui_selectable_is_selected(const struct yetty_ygui_object *obj)
     }
     return ((struct sel_data *)yetty_ygui_data_get(
                 (struct yetty_ygui_object *)obj,
-                yetty_ygui_class_expect(yetty_ygui_selectable_class_get(),
-                                        "yetty_ygui_selectable_class_get")))
+                yetty_ygui_selectable_class_get().value))
         ->selected;
 }
 

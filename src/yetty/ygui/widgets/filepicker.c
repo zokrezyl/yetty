@@ -35,8 +35,7 @@ struct [[clang::annotate("class@ygui:filepicker")]] [[clang::annotate(
 
 static const struct yetty_yclass *fp_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_filepicker_class_get(),
-                                   "yetty_ygui_filepicker_class_get");
+    return yetty_ygui_filepicker_class_get().value;
 }
 
 static char *fp_strdup(const char *s)

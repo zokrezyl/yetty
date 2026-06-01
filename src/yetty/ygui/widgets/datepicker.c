@@ -29,8 +29,7 @@ struct [[clang::annotate("class@ygui:datepicker")]] [[clang::annotate(
 
 static const struct yetty_yclass *dp_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_datepicker_class_get(),
-                                   "yetty_ygui_datepicker_class_get");
+    return yetty_ygui_datepicker_class_get().value;
 }
 
 static int dp_days_in_month(int year, int m0)

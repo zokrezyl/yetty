@@ -35,8 +35,7 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_c
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)ud;
     struct combo_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_combobox_class_get(),
-                                                         "yetty_ygui_combobox_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     if (!d->menu) {
         return YETTY_OK_VOID();
     }
@@ -52,12 +51,11 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_combobox_class_get(), "yetty_ygui_combobox_class_get"),
+        yetty_ygui_combobox_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "combo: super");
     struct combo_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_combobox_class_get(),
-                                                         "yetty_ygui_combobox_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     d->text = NULL;
     d->menu = NULL;
     return yetty_ygui_clickable_on_click_set(obj, on_click, NULL);
@@ -70,12 +68,11 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct combo_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_combobox_class_get(),
-                                                         "yetty_ygui_combobox_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     free(d->text);
     return yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_combobox_class_get(), "yetty_ygui_combobox_class_get"),
+        yetty_ygui_combobox_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -90,8 +87,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_ERR(yetty_ycore_void, "combo paint: NULL ctx");
     }
     struct combo_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_combobox_class_get(),
-                                                         "yetty_ygui_combobox_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -116,8 +112,7 @@ struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_ygui_ob
         return YETTY_ERR(yetty_ycore_void, "combo_set_text: NULL");
     }
     struct combo_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_combobox_class_get(),
-                                                         "yetty_ygui_combobox_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     free(d->text);
     d->text = NULL;
     if (t) {
@@ -138,8 +133,7 @@ struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_y
         return YETTY_ERR(yetty_ycore_void, "combo_add_suggestion: NULL");
     }
     struct combo_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_combobox_class_get(),
-                                                         "yetty_ygui_combobox_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     if (!d->menu) {
         return YETTY_OK_VOID();
     }
@@ -153,8 +147,7 @@ struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_ygui_ob
         return YETTY_ERR(yetty_ycore_void, "combo_set_menu: NULL");
     }
     struct combo_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_combobox_class_get(),
-                                                         "yetty_ygui_combobox_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_combobox_class_get().value);
     d->menu = menu;
     return YETTY_OK_VOID();
 }
@@ -166,7 +159,7 @@ const char *yetty_ygui_combobox_get_text(const struct yetty_ygui_object *obj)
     }
     struct combo_data *d = yetty_ygui_data_get(
         (struct yetty_ygui_object *)obj,
-        yetty_ygui_class_expect(yetty_ygui_combobox_class_get(), "yetty_ygui_combobox_class_get"));
+        yetty_ygui_combobox_class_get().value);
     return d->text ? d->text : "";
 }
 

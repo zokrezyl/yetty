@@ -21,11 +21,11 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_class_expect(yetty_ygui_yvideo_class_get(), "yetty_ygui_yvideo_class_get"),
+        obj, yetty_ygui_yvideo_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yvideo: super");
     struct yvideo_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_yvideo_class_get(), "yetty_ygui_yvideo_class_get"));
+        obj, yetty_ygui_yvideo_class_get().value);
     d->bytes = NULL;
     d->len = 0;
     return YETTY_OK_VOID();
@@ -38,10 +38,10 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yvideo_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_yvideo_class_get(), "yetty_ygui_yvideo_class_get"));
+        obj, yetty_ygui_yvideo_class_get().value);
     free(d->bytes);
     return yetty_ygui_super_void(
-        obj, yetty_ygui_class_expect(yetty_ygui_yvideo_class_get(), "yetty_ygui_yvideo_class_get"),
+        obj, yetty_ygui_yvideo_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -65,7 +65,7 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yvideo_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_yvideo_class_get(), "yetty_ygui_yvideo_class_get"));
+        obj, yetty_ygui_yvideo_class_get().value);
     if (!d->bytes || d->len == 0) {
         return YETTY_OK_VOID();
     }
@@ -144,7 +144,7 @@ struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_ygui_obj
         return YETTY_ERR(yetty_ycore_void, "yvideo_set_bytes: NULL");
     }
     struct yvideo_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_yvideo_class_get(), "yetty_ygui_yvideo_class_get"));
+        obj, yetty_ygui_yvideo_class_get().value);
     free(d->bytes);
     d->bytes = NULL;
     d->len = 0;

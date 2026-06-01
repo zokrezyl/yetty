@@ -98,7 +98,7 @@ struct [[clang::annotate("class@ygui:ynodes")]] [[clang::annotate(
 
 static const struct yetty_yclass *ynodes_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_ynodes_class_get(), "yetty_ygui_ynodes_class_get");
+    return yetty_ygui_ynodes_class_get().value;
 }
 
 static struct nodes_data *ynodes_data(struct yetty_ygui_object *editor)

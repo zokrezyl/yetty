@@ -26,7 +26,6 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ygui/class.h>
 
 struct yetty_platform_pty;
 struct yetty_ydraw_draw_list;
@@ -35,6 +34,10 @@ struct yetty_yclass_object;
 struct yetty_yclass_rpc_session;
 struct yetty_ygui_theme;
 struct yetty_yconfig_config;
+struct yetty_ygui_object;
+struct yetty_ygui_framework;
+
+YETTY_YRESULT_DECLARE(yetty_ygui_framework_ptr, struct yetty_ygui_framework *);
 
 #ifdef __cplusplus
 extern "C" {

@@ -17,6 +17,10 @@
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/widgets/tooltip.h>
 
+/* This test pokes at internals — it hand-registers a probe class via
+ * yclass and needs ygui's slot domain (YETTY_YGUI_DOMAIN). */
+#include <yetty/ygui/internal.h>
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

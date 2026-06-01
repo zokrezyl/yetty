@@ -10,12 +10,15 @@
 
 #include <stdint.h>
 
+#include <yclass/class.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct yetty_ygui_object;
+YETTY_YRESULT_DECLARE(yetty_ygui_object_ptr, struct yetty_ygui_object *);
 
 /* Create one instance of `cls` and link it under `parent` (NULL for the
  * root). Allocates one block sized to (header + sum of data slices).

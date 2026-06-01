@@ -27,12 +27,11 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_stepper_class_get(), "yetty_ygui_stepper_class_get"),
+        yetty_ygui_stepper_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "stepper: super");
     struct stepper_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_stepper_class_get(),
-                                                         "yetty_ygui_stepper_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     d->labels = NULL;
     d->n = 0;
     d->cap = 0;
@@ -47,15 +46,14 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct stepper_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_stepper_class_get(),
-                                                         "yetty_ygui_stepper_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     for (int i = 0; i < d->n; i++) {
         free(d->labels[i]);
     }
     free(d->labels);
     return yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_stepper_class_get(), "yetty_ygui_stepper_class_get"),
+        yetty_ygui_stepper_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -70,8 +68,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_ERR(yetty_ycore_void, "stepper paint: NULL ctx");
     }
     struct stepper_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_stepper_class_get(),
-                                                         "yetty_ygui_stepper_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     if (d->n <= 0) {
         return YETTY_OK_VOID();
     }
@@ -140,8 +137,7 @@ struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_obj
         return YETTY_ERR(yetty_ycore_void, "stepper_add_step: NULL");
     }
     struct stepper_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_stepper_class_get(),
-                                                         "yetty_ygui_stepper_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     if (!grow(d, d->n + 1)) {
         return YETTY_ERR(yetty_ycore_void, "stepper_add_step: realloc");
     }
@@ -165,8 +161,7 @@ struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_ygui_
         return YETTY_ERR(yetty_ycore_void, "stepper_set_current: NULL");
     }
     struct stepper_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_stepper_class_get(),
-                                                         "yetty_ygui_stepper_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_stepper_class_get().value);
     d->current = i;
     return yetty_ygui_object_set_dirty(obj);
 }

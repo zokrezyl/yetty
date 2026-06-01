@@ -78,7 +78,7 @@ struct [[clang::annotate("class@ygui:ynode")]] [[clang::annotate("parent@ygui:vb
 
 static const struct yetty_yclass *ynode_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_ynode_class_get(), "yetty_ygui_ynode_class_get");
+    return yetty_ygui_ynode_class_get().value;
 }
 
 static struct node_data *ynode_data(struct yetty_ygui_object *node)

@@ -40,8 +40,7 @@ ch_data {
 
 static const struct yetty_yclass *ch_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_collapsing_header_class_get(),
-                                   "yetty_ygui_collapsing_header_class_get");
+    return yetty_ygui_collapsing_header_class_get().value;
 }
 
 /* Fill + optional stroke rounded box. */

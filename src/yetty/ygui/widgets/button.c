@@ -33,11 +33,11 @@ static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_ctx
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_class_expect(yetty_ygui_button_class_get(), "yetty_ygui_button_class_get"),
+        obj, yetty_ygui_button_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "button_constructor: super");
     struct button_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_button_class_get(), "yetty_ygui_button_class_get"));
+        obj, yetty_ygui_button_class_get().value);
     d->label = NULL;
     return YETTY_OK_VOID();
 }
@@ -49,11 +49,11 @@ static struct yetty_ycore_void_result button_destructor(struct yetty_yclass_ctx 
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct button_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_button_class_get(), "yetty_ygui_button_class_get"));
+        obj, yetty_ygui_button_class_get().value);
     free(d->label);
     d->label = NULL;
     return yetty_ygui_super_void(
-        obj, yetty_ygui_class_expect(yetty_ygui_button_class_get(), "yetty_ygui_button_class_get"),
+        obj, yetty_ygui_button_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -105,7 +105,7 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
         return YETTY_ERR(yetty_ycore_void, "button_paint: NULL ctx");
     }
     struct button_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_button_class_get(), "yetty_ygui_button_class_get"));
+        obj, yetty_ygui_button_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -206,7 +206,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_ygui_obj
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_button_set_label: NULL obj");
     }
     struct button_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_button_class_get(), "yetty_ygui_button_class_get"));
+        obj, yetty_ygui_button_class_get().value);
     free(d->label);
     if (!label) {
         d->label = NULL;
@@ -228,7 +228,7 @@ const char *yetty_ygui_button_get_label(const struct yetty_ygui_object *obj)
     }
     struct button_data *d = yetty_ygui_data_get(
         (struct yetty_ygui_object *)obj,
-        yetty_ygui_class_expect(yetty_ygui_button_class_get(), "yetty_ygui_button_class_get"));
+        yetty_ygui_button_class_get().value);
     return d->label;
 }
 
