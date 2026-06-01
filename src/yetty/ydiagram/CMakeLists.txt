@@ -6,6 +6,11 @@
 add_library(yetty_ydiagram STATIC
     graph-ir.c
     mermaid-parser.c
+    diagram-detect.c
+    state-parser.c
+    class-parser.c
+    er-parser.c
+    sequence.c
     sugiyama-layout.c
     renderer.c
     ydiagram.c

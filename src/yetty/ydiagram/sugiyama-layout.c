@@ -567,6 +567,20 @@ static void reduce_crossings(struct yetty_ydiagram_graph *g, struct layer_table 
  * layer, then assign y per layer (largest height) and x within layer.
  *===========================================================================*/
 
+/* Measure one label, falling back to the 0.6 * font_size * len heuristic when
+ * no real text-measure callback was supplied. */
+static float measure_label(yetty_ydiagram_measure_text_fn measure, const char *text,
+                           float font_size, void *userdata)
+{
+    if (!text || !text[0]) {
+        return 0.0f;
+    }
+    if (measure) {
+        return measure(text, strlen(text), font_size, userdata);
+    }
+    return font_size * 0.6f * (float)strlen(text);
+}
+
 static void size_nodes(struct yetty_ydiagram_graph *g, const struct yetty_ydiagram_layout_params *p,
                        yetty_ydiagram_measure_text_fn measure, void *userdata)
 {
@@ -577,6 +591,42 @@ static void size_nodes(struct yetty_ydiagram_graph *g, const struct yetty_ydiagr
         if (n->is_dummy) {
             n->width = 0;
             n->height = 0;
+            continue;
+        }
+        if (n->fixed_size) {
+            /* Pseudostate dots / fixed markers carry their own dimensions. */
+            continue;
+        }
+        if (n->is_record) {
+            /* UML class / ER entity: title compartment + body rows. Width is
+             * the widest of the title and any row; height stacks the title
+             * compartment over one line per row. */
+            float fs = n->style.font_size;
+            float widest = measure_label(measure, n->label, fs, userdata);
+            if (n->stereotype && n->stereotype[0]) {
+                float sw = measure_label(measure, n->stereotype, fs - 2.0f, userdata);
+                if (sw > widest) {
+                    widest = sw;
+                }
+            }
+            for (size_t r = 0; r < n->row_count; r++) {
+                float rw = measure_label(measure, n->rows[r], fs, userdata);
+                if (rw > widest) {
+                    widest = rw;
+                }
+            }
+            float pad_x = p->node_padding_x + 6.0f;
+            n->width = widest + pad_x * 2.0f;
+            if (n->width < default_w) {
+                n->width = default_w;
+            }
+            float header_h = fs + p->node_padding_y * 2.0f;
+            if (n->stereotype && n->stereotype[0]) {
+                header_h += fs - 2.0f;
+            }
+            n->header_h = header_h;
+            float line_h = fs + 8.0f;
+            n->height = header_h + (float)n->row_count * line_h;
             continue;
         }
         if (measure && n->label && n->label[0]) {
@@ -829,6 +879,43 @@ static void apply_direction(struct yetty_ydiagram_graph *g)
     compute_bounds(g);
 }
 
+/* ycat content must flow DOWNWARD from the cursor like `cat` — never above or
+ * left of it, and tight to the origin (no large empty offset). compute_bounds()
+ * pads the scene box outward by 20px and the direction transform can leave the
+ * box far from the origin; either way min_x/min_y end up != 0. Translate the
+ * whole scene — nodes, edge control points + labels, clusters, and the bounds —
+ * so min_x/min_y land exactly at 0 (the 20px box pad becomes the top/left
+ * content margin). */
+static void translate_to_non_negative(struct yetty_ydiagram_graph *g)
+{
+    float sx = -g->min_x;
+    float sy = -g->min_y;
+    if (sx == 0.0f && sy == 0.0f) {
+        return;
+    }
+    for (size_t i = 0; i < g->node_count; i++) {
+        g->nodes[i].x += sx;
+        g->nodes[i].y += sy;
+    }
+    for (size_t i = 0; i < g->edge_count; i++) {
+        struct yetty_ydiagram_edge *e = &g->edges[i];
+        for (size_t k = 0; k < e->control_count; k++) {
+            e->control_points[k].x += sx;
+            e->control_points[k].y += sy;
+        }
+        e->label_position.x += sx;
+        e->label_position.y += sy;
+    }
+    for (size_t i = 0; i < g->cluster_count; i++) {
+        g->clusters[i].x += sx;
+        g->clusters[i].y += sy;
+    }
+    g->min_x += sx;
+    g->max_x += sx;
+    g->min_y += sy;
+    g->max_y += sy;
+}
+
 /*=============================================================================
  * Public entry
  *===========================================================================*/
@@ -867,5 +954,6 @@ struct yetty_ycore_void_result yetty_ydiagram_layout(
     route_edges(g);
     compute_bounds(g);
     apply_direction(g);
+    translate_to_non_negative(g);
     return YETTY_OK_VOID();
 }

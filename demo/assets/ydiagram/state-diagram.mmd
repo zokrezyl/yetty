@@ -1,0 +1,13 @@
+%% Native state diagram — `stateDiagram-v2` (not the flowchart approximation
+%% in state-machine.mmd). `[*]` is the initial pseudostate when used as a
+%% transition source and the final pseudostate when used as a target;
+%% transition labels use ` : text`.
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Connecting : connect
+    Connecting --> Ready : ok
+    Connecting --> Failed : fail
+    Ready --> Idle : disconnect
+    Failed --> Connecting : retry
+    Failed --> [*] : abort
+    Ready --> [*] : done

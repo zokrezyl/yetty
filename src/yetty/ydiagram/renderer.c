@@ -30,6 +30,7 @@ struct yetty_ydiagram_render_options yetty_ydiagram_default_render_options(void)
         .dash_length = 6.0f,
         .dash_gap = 4.0f,
         .background_color = 0,
+        .clear_canvas = true, /* preserve full-redraw default for widgets */
     };
     return o;
 }
@@ -58,6 +59,13 @@ static float measure_text(struct render_state *s, const char *text, float font_s
     }
     return font_size * 0.6f * (float)n;
 }
+
+/* Forward declarations — record/compartment rendering (defined with the shape
+ * emitters) reuses the text and segment helpers defined further down. */
+static void emit_text(struct render_state *s, float x, float y, const char *text, float font_size,
+                      uint32_t color);
+static void emit_segment_xy(struct render_state *s, float x0, float y0, float x1, float y1,
+                            uint32_t color, float width);
 
 /*=============================================================================
  * Shape emitters
@@ -252,8 +260,76 @@ static void emit_cylinder(struct render_state *s, const struct yetty_ydiagram_no
                                               n->style.stroke_width, &r);
 }
 
+/* Concentric ring + filled core — UML/state final pseudostate. */
+static void emit_double_circle(struct render_state *s, const struct yetty_ydiagram_node *n)
+{
+    float r = (n->width < n->height ? n->width : n->height) * 0.5f;
+    struct yetty_ysdf_circle outer = {.center_x = n->x, .center_y = n->y, .radius = r};
+    yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, 0, n->style.stroke_color,
+                                             n->style.stroke_width, &outer);
+    struct yetty_ysdf_circle inner = {.center_x = n->x, .center_y = n->y, .radius = r * 0.55f};
+    yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, n->style.stroke_color, 0, 0.0f,
+                                             &inner);
+}
+
+/* Multi-line text run, top-aligned and left-padded inside a band. */
+static void emit_left_text(struct render_state *s, float x, float baseline, const char *text,
+                           float font_size, uint32_t color)
+{
+    emit_text(s, x, baseline, text, font_size, color);
+}
+
+/* UML class / ER entity: outer box, a title compartment (optional stereotype
+ * line + name), then one line per body row, split into two compartments at
+ * `method_start` (attributes / methods). */
+static void emit_record(struct render_state *s, const struct yetty_ydiagram_node *n)
+{
+    float fs = n->style.font_size;
+    float left = n->x - n->width * 0.5f;
+    float right = n->x + n->width * 0.5f;
+    float top = n->y - n->height * 0.5f;
+    float pad_x = 8.0f;
+
+    emit_rect(s, n, 3.0f);
+
+    /* Title compartment. */
+    float title_cy = top + n->header_h * 0.5f;
+    if (n->stereotype && n->stereotype[0]) {
+        float sw = measure_text(s, n->stereotype, fs - 2.0f);
+        emit_text(s, n->x - sw * 0.5f, top + (fs - 2.0f) + 2.0f, n->stereotype, fs - 2.0f,
+                  n->style.text_color);
+        title_cy = top + (fs - 2.0f) + (n->header_h - (fs - 2.0f)) * 0.5f;
+    }
+    if (n->label && n->label[0]) {
+        float tw = measure_text(s, n->label, fs);
+        emit_text(s, n->x - tw * 0.5f, title_cy + fs / 3.0f, n->label, fs, n->style.text_color);
+    }
+
+    /* Divider under the title. */
+    emit_segment_xy(s, left, top + n->header_h, right, top + n->header_h, n->style.stroke_color,
+                    n->style.stroke_width);
+
+    if (n->row_count == 0) {
+        return;
+    }
+    float line_h = (n->height - n->header_h) / (float)n->row_count;
+    for (size_t r = 0; r < n->row_count; r++) {
+        float band_top = top + n->header_h + (float)r * line_h;
+        emit_left_text(s, left + pad_x, band_top + line_h * 0.5f + fs / 3.0f, n->rows[r], fs,
+                       n->style.text_color);
+        if (r == n->method_start && n->method_start > 0 && n->method_start < n->row_count) {
+            emit_segment_xy(s, left, band_top, right, band_top, n->style.stroke_color,
+                            n->style.stroke_width);
+        }
+    }
+}
+
 static void emit_node_shape(struct render_state *s, const struct yetty_ydiagram_node *n)
 {
+    if (n->is_record) {
+        emit_record(s, n);
+        return;
+    }
     switch (n->shape) {
     case YETTY_YDIAGRAM_SHAPE_RECTANGLE:
         emit_rect(s, n, 0.0f);
@@ -262,8 +338,10 @@ static void emit_node_shape(struct render_state *s, const struct yetty_ydiagram_
         emit_rect(s, n, n->style.corner_radius);
         break;
     case YETTY_YDIAGRAM_SHAPE_CIRCLE:
-    case YETTY_YDIAGRAM_SHAPE_DOUBLE_CIRCLE:
         emit_circle(s, n);
+        break;
+    case YETTY_YDIAGRAM_SHAPE_DOUBLE_CIRCLE:
+        emit_double_circle(s, n);
         break;
     case YETTY_YDIAGRAM_SHAPE_DIAMOND:
         emit_diamond(s, n);
@@ -359,6 +437,27 @@ static void emit_dashed_line(struct render_state *s, float x0, float y0, float x
     s->z = z + 1;
 }
 
+static void emit_segment_xy(struct render_state *s, float x0, float y0, float x1, float y1,
+                            uint32_t color, float width)
+{
+    struct yetty_ysdf_segment g = {.start_x = x0, .start_y = y0, .end_x = x1, .end_y = y1};
+    yetty_ydraw_draw_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, color, width, &g);
+}
+
+static void emit_filled_triangle(struct render_state *s, float ax, float ay, float bx, float by,
+                                 float cx, float cy, uint32_t color)
+{
+    struct yetty_ysdf_triangle geom = {
+        .vertex_a_x = ax, .vertex_a_y = ay, .vertex_b_x = bx,
+        .vertex_b_y = by, .vertex_c_x = cx, .vertex_c_y = cy,
+    };
+    yetty_ydraw_draw_list_add_cmd_add_triangle(s->buf, 0, s->z++, color, 0, 0.0f, &geom);
+}
+
+/* Arrowhead / line terminal at `(x, y)`, pointing along `angle` (the edge's
+ * travel direction, i.e. into the node the terminal sits on). Supports the
+ * flowchart arrows plus the UML (triangle / diamond) and ER (crow's-foot)
+ * terminals. */
 static void emit_arrowhead(struct render_state *s, float x, float y, float angle,
                            enum yetty_ydiagram_arrow_style style, uint32_t color, float size)
 {
@@ -368,22 +467,91 @@ static void emit_arrowhead(struct render_state *s, float x, float y, float angle
 
     float cos_a = cosf(angle);
     float sin_a = sinf(angle);
-    float spread = 0.4f;
+    /* Unit vectors: `b` points back along the edge (away from the node),
+     * `p` is perpendicular. */
+    float bxu = -cos_a, byu = -sin_a;
+    float pxu = -sin_a, pyu = cos_a;
+    float lw = 1.6f;
 
-    float bx = x - cos_a * size;
-    float by = y - sin_a * size;
-    float px = -sin_a * size * spread;
-    float py = cos_a * size * spread;
-
-    struct yetty_ysdf_triangle geom = {
-        .vertex_a_x = x,
-        .vertex_a_y = y,
-        .vertex_b_x = bx + px,
-        .vertex_b_y = by + py,
-        .vertex_c_x = bx - px,
-        .vertex_c_y = by - py,
-    };
-    yetty_ydraw_draw_list_add_cmd_add_triangle(s->buf, 0, s->z++, color, 0, 0.0f, &geom);
+    switch (style) {
+    case YETTY_YDIAGRAM_ARROW_NORMAL:
+    case YETTY_YDIAGRAM_ARROW_OPEN:
+    default: {
+        float spread = 0.4f;
+        float bx = x + bxu * size, by = y + byu * size;
+        emit_filled_triangle(s, x, y, bx + pxu * size * spread, by + pyu * size * spread,
+                             bx - pxu * size * spread, by - pyu * size * spread, color);
+        break;
+    }
+    case YETTY_YDIAGRAM_ARROW_TRIANGLE: {
+        /* Hollow triangle (UML generalization / realization). */
+        float d = size * 1.7f;
+        float hw = size * 0.85f;
+        float bx = x + bxu * d, by = y + byu * d;
+        float lx = bx + pxu * hw, ly = by + pyu * hw;
+        float rx = bx - pxu * hw, ry = by - pyu * hw;
+        emit_segment_xy(s, x, y, lx, ly, color, lw);
+        emit_segment_xy(s, lx, ly, rx, ry, color, lw);
+        emit_segment_xy(s, rx, ry, x, y, color, lw);
+        break;
+    }
+    case YETTY_YDIAGRAM_ARROW_DIAMOND:
+    case YETTY_YDIAGRAM_ARROW_DIAMOND_OPEN: {
+        float d = size * 1.1f;
+        float mx = x + bxu * d, my = y + byu * d;        /* mid  */
+        float fx = x + bxu * d * 2.0f, fy = y + byu * d * 2.0f; /* far */
+        float lx = mx + pxu * d * 0.7f, ly = my + pyu * d * 0.7f;
+        float rx = mx - pxu * d * 0.7f, ry = my - pyu * d * 0.7f;
+        if (style == YETTY_YDIAGRAM_ARROW_DIAMOND) {
+            emit_filled_triangle(s, x, y, lx, ly, fx, fy, color);
+            emit_filled_triangle(s, x, y, fx, fy, rx, ry, color);
+        } else {
+            emit_segment_xy(s, x, y, lx, ly, color, lw);
+            emit_segment_xy(s, lx, ly, fx, fy, color, lw);
+            emit_segment_xy(s, fx, fy, rx, ry, color, lw);
+            emit_segment_xy(s, rx, ry, x, y, color, lw);
+        }
+        break;
+    }
+    case YETTY_YDIAGRAM_ARROW_CIRCLE:
+    case YETTY_YDIAGRAM_ARROW_DOT: {
+        float r = size * 0.4f;
+        float cx = x + bxu * r, cy = y + byu * r;
+        struct yetty_ysdf_circle g = {.center_x = cx, .center_y = cy, .radius = r};
+        uint32_t fill = style == YETTY_YDIAGRAM_ARROW_DOT ? color : 0;
+        yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, fill, color, lw, &g);
+        break;
+    }
+    case YETTY_YDIAGRAM_ARROW_CROW_ONE:
+    case YETTY_YDIAGRAM_ARROW_CROW_ONE_OPT:
+    case YETTY_YDIAGRAM_ARROW_CROW_MANY:
+    case YETTY_YDIAGRAM_ARROW_CROW_MANY_OPT: {
+        bool many = (style == YETTY_YDIAGRAM_ARROW_CROW_MANY ||
+                     style == YETTY_YDIAGRAM_ARROW_CROW_MANY_OPT);
+        bool optional = (style == YETTY_YDIAGRAM_ARROW_CROW_ONE_OPT ||
+                         style == YETTY_YDIAGRAM_ARROW_CROW_MANY_OPT);
+        float span = size * 1.6f; /* distance from node edge to the apex */
+        float foot = size * 0.9f;
+        if (many) {
+            float ax = x + bxu * span, ay = y + byu * span;
+            emit_segment_xy(s, ax, ay, x, y, color, lw);
+            emit_segment_xy(s, ax, ay, x + pxu * foot, y + pyu * foot, color, lw);
+            emit_segment_xy(s, ax, ay, x - pxu * foot, y - pyu * foot, color, lw);
+        } else {
+            /* "exactly one": a single bar one step back from the edge. */
+            float bx = x + bxu * span * 0.6f, by = y + byu * span * 0.6f;
+            emit_segment_xy(s, bx + pxu * foot, by + pyu * foot, bx - pxu * foot, by - pyu * foot,
+                            color, lw);
+        }
+        if (optional) {
+            float r = size * 0.42f;
+            float cx = x + bxu * (span + r * 1.4f), cy = y + byu * (span + r * 1.4f);
+            struct yetty_ysdf_circle g = {.center_x = cx, .center_y = cy, .radius = r};
+            yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, 0, color, lw, &g);
+        }
+        break;
+    }
+    }
 }
 
 /*=============================================================================
@@ -408,6 +576,9 @@ static void emit_text(struct render_state *s, float x, float y, const char *text
 
 static void emit_node_label(struct render_state *s, const struct yetty_ydiagram_node *n)
 {
+    if (n->is_record) {
+        return; /* record draws its own multi-compartment text */
+    }
     if (!n->label || !n->label[0]) {
         return;
     }
@@ -507,13 +678,12 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
 
     yetty_ydraw_draw_list_set_scene_bounds(buffer, g->min_x, g->min_y, g->max_x, g->max_y);
 
-    /* CMD_ZERO at the start of every full-redraw buffer — clears the
-     * receiving canvas + resets cursor as a side effect of decoding.
-     * Replaces the obsolete separate YDRAW_CLEAR OSC envelope (see
-     * yetty/ydraw-core/cmds.h). Sending CLEAR + BIN as two envelopes
-     * currently freezes yetty's OSC SM (CLEAR handler doesn't drain the
-     * body terminator), so we use the single-envelope form. */
-    (void)yetty_ydraw_draw_list_add_cmd_zero(buffer);
+    /* CMD_ZERO clears the receiving canvas + resets its cursor to (0,0) on
+     * decode — full-redraw semantics. Skipped in cat-like (inline) mode so the
+     * diagram flows at the current cursor instead of jumping to the origin. */
+    if (opts.clear_canvas) {
+        (void)yetty_ydraw_draw_list_add_cmd_zero(buffer);
+    }
 
     /* Optional fullscreen background. */
     if (opts.background_color) {

@@ -102,6 +102,11 @@ static void destroy_node(struct yetty_ydiagram_node *n)
     free(n->id);
     free(n->label);
     free(n->cluster_id);
+    free(n->stereotype);
+    for (size_t i = 0; i < n->row_count; i++) {
+        free(n->rows[i]);
+    }
+    free(n->rows);
 }
 
 static void destroy_edge(struct yetty_ydiagram_edge *e)
@@ -251,6 +256,24 @@ struct yetty_ycore_void_result yetty_ydiagram_cluster_add_node(struct yetty_ydia
         return YETTY_ERR(yetty_ycore_void, "cluster_add_node: oom");
     }
     c->node_ids[c->node_count++] = copy;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ydiagram_node_add_row(struct yetty_ydiagram_node *n,
+                                                           const char *text)
+{
+    if (!n || !text) {
+        return YETTY_ERR(yetty_ycore_void, "node_add_row: NULL node or text");
+    }
+    struct yetty_ycore_void_result gr =
+        grow_array((void **)&n->rows, &n->row_capacity, n->row_count + 1, sizeof(*n->rows));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "node_add_row: grow failed");
+
+    char *copy = strdup(text);
+    if (!copy) {
+        return YETTY_ERR(yetty_ycore_void, "node_add_row: oom");
+    }
+    n->rows[n->row_count++] = copy;
     return YETTY_OK_VOID();
 }
 

@@ -1,0 +1,16 @@
+%% Sequence diagram — `sequenceDiagram`. Participants are columns with vertical
+%% lifelines; messages are time-ordered arrows flowing top to bottom.
+%%   ->>   solid line + arrowhead       -->>  dashed line + arrowhead (return)
+%%   ->    solid line                   -->   dashed line
+%%   A->>A self-message (loop)          Note right of X / over X,Y
+sequenceDiagram
+    participant U as User
+    participant W as Web App
+    participant DB as Database
+
+    U->>W: submit form
+    W->>W: validate
+    W->>DB: INSERT row
+    DB-->>W: ok (id=42)
+    W-->>U: 201 Created
+    Note right of DB: row is durable
