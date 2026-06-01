@@ -135,13 +135,19 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *y
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result rr = paint_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4.0f);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "textinput_paint: bg");
-    /* Outline = 1.5px stroke approximation via two boxes — light. The
-     * SDF stroke args on the box primitive could be used; quick path
-     * draws the body and skips the stroke for now. */
+    /* Outline = 1.5px frame: paint the border-colored rounded box, then
+     * inset the fill on top so a thin ring remains. Without a visible frame
+     * the field is invisible whenever its fill matches the surrounding
+     * surface (e.g. a toolbar on the same brand background). */
     uint32_t border = d->focused ? COLOR_BORDER_FOCUS : COLOR_BORDER;
-    (void)border;
+    struct yetty_ycore_void_result rr = paint_box(ctx, r.min.x, r.min.y, w, h, border, 4.0f);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "textinput_paint: border");
+    const float inset = 1.5f;
+    if (w > 2.0f * inset && h > 2.0f * inset) {
+        rr = paint_box(ctx, r.min.x + inset, r.min.y + inset, w - 2.0f * inset, h - 2.0f * inset,
+                       COLOR_BG, 3.0f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "textinput_paint: bg");
+    }
     const char *text = (d->text && d->text[0]) ? d->text : d->placeholder;
     uint32_t color = (d->text && d->text[0]) ? COLOR_TEXT : COLOR_PLACEHOLDER;
     if (text && text[0]) {

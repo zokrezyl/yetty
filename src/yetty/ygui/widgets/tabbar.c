@@ -617,6 +617,26 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_ygui_ob
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_ygui_object *tabbar,
+                                                           int index, const char *label)
+{
+    if (!tabbar || index < 0) {
+        return YETTY_OK_VOID();
+    }
+    int i = 0;
+    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(tabbar); c;
+         c = yetty_ygui_object_next_sibling(c)) {
+        if (i == index) {
+            struct yetty_ycore_void_result lr =
+                header_set_label(NULL, (struct yetty_yclass_object *)c, label);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yetty_ygui_tabbar_set_label: set");
+            return yetty_ygui_object_set_dirty(tabbar);
+        }
+        i++;
+    }
+    return YETTY_OK_VOID();
+}
+
 int yetty_ygui_tabbar_count(const struct yetty_ygui_object *tabbar)
 {
     if (!tabbar) {

@@ -1,52 +1,46 @@
 /*
- * ylexbor-demo — render HTML via the ylexbor lib, emit ydraw OSC.
- *
- * Two operating modes (same shape ynetsurf uses):
+ * ybrowser — render HTML via the yetty_ybrowser engine (lexbor + libcss +
+ * QuickJS), with two operating modes:
  *
  *   ONE-SHOT (--once, or non-TTY stdout):
- *     read HTML, lay out, emit one OSC envelope to stdout, exit.
- *     Used to pipe HTML into yetty:
- *         echo '<h1>hi</h1>' | ./ylexbor-demo --osc
+ *     read HTML, lay out, emit one ydraw OSC envelope to stdout, exit.
+ *     Used to pipe HTML into yetty (legacy OSC mode):
+ *         echo '<h1>hi</h1>' | ./ybrowser --once
  *
  *   INTERACTIVE (default when stdin + stdout are TTYs):
- *     subscribe to terminal-wide input via YETTY_OSC_CS_CLIENT_INPUT_SUB,
- *     re-render on every input event. Arrow keys / PgUp/PgDn scroll;
- *     Ctrl-C exits. The pane pixel size comes back as
- *     YETTY_OSC_SC_CLIENT_INPUT_RESIZE which we feed straight into the
- *     viewport.
+ *     a Google-Chrome-like UI built on the ygui widget framework — a
+ *     tabbar, a toolbar (back / forward / reload + address bar) and a
+ *     scrollable page area. Implemented in browser-ui.c; this file only
+ *     parses args, gates the two modes, and owns the one-shot path plus
+ *     the HTML-acquisition helpers shared with the UI.
  */
 
 #include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <sys/select.h>
 #include <sys/stat.h>
-#include <termios.h>
 #include <time.h>
 #include <unistd.h>
 
 #include <yetty/ybrowser/ybrowser.h>
+#include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ycore/types.h>
-#include <yetty/ymgui/wire.h>
-#include <yetty/yterm/client-input.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <curl/curl.h>
 
+#include "browser-ui.h"
 
 /* ===========================================================================
  * Input acquisition — file path, stdin, http(s):// URL.
  * ===========================================================================*/
 
-static int looks_like_url(const char *s)
+int ybrowser_looks_like_url(const char *s)
 {
 	return strncmp(s, "http://", 7) == 0 || strncmp(s, "https://", 8) == 0;
 }
@@ -75,9 +69,9 @@ static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
 /* Out-param: caller-owned char* gets filled with the post-redirect URL
  * (e.g. http://wikipedia.org/wiki/Photography → https://en.wikipedia.org/
  * wiki/Photography). NULL passes through. The caller frees with free().
- * Used by main.c to set base_url to the effective URL so that image
- * src= references resolve against the HTTPS origin — that pulls them
- * over HTTP/2 multiplexing instead of HTTP/1.1 with 30+ TCP handshakes. */
+ * Used to set base_url to the effective URL so that image src= references
+ * resolve against the HTTPS origin — that pulls them over HTTP/2
+ * multiplexing instead of HTTP/1.1 with 30+ TCP handshakes. */
 static char *slurp_url(const char *url, size_t *out_len, char **out_effective_url)
 {
 	CURL *c = curl_easy_init();
@@ -98,7 +92,7 @@ static char *slurp_url(const char *url, size_t *out_len, char **out_effective_ur
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
-	/* Send a standard Chrome UA. Bot-looking UAs ("ylexbor-demo/0.1")
+	/* Send a standard Chrome UA. Bot-looking UAs ("ybrowser/0.1")
 	 * cause sites like Wikipedia and news.google.com to serve a
 	 * stripped-down legacy/no-JS page that hides images behind sprite
 	 * tricks or replaces <img src> with text labels. The image-fetch
@@ -130,15 +124,13 @@ static char *slurp_url(const char *url, size_t *out_len, char **out_effective_ur
 	if (headers) {
 		curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
 	}
-	/* No-op stderr suppression — curl prints to stderr only on
-	 * CURLOPT_VERBOSE, which we never set. */
 
 	CURLcode rc = curl_easy_perform(c);
 	long http_status = 0;
 	curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &http_status);
 
 	if (rc != CURLE_OK) {
-		fprintf(stderr, "ylexbor-demo: fetch %s failed: %s\n",
+		fprintf(stderr, "ybrowser: fetch %s failed: %s\n",
 			url, curl_easy_strerror(rc));
 		curl_easy_cleanup(c);
 		if (headers) curl_slist_free_all(headers);
@@ -146,7 +138,7 @@ static char *slurp_url(const char *url, size_t *out_len, char **out_effective_ur
 		return NULL;
 	}
 	if (http_status >= 400) {
-		fprintf(stderr, "ylexbor-demo: %s -> HTTP %ld\n",
+		fprintf(stderr, "ybrowser: %s -> HTTP %ld\n",
 			url, http_status);
 		/* Render the body anyway — error pages are HTML too. */
 	}
@@ -169,15 +161,15 @@ static char *slurp_url(const char *url, size_t *out_len, char **out_effective_ur
 	return b.data;
 }
 
-static char *slurp_file(const char *path, size_t *out_len, char **out_effective_url)
+char *ybrowser_slurp_file(const char *path, size_t *out_len, char **out_effective_url)
 {
-	if (looks_like_url(path))
+	if (ybrowser_looks_like_url(path))
 		return slurp_url(path, out_len, out_effective_url);
 	if (out_effective_url) *out_effective_url = NULL;
 
 	FILE *f = strcmp(path, "-") == 0 ? stdin : fopen(path, "rb");
 	if (f == NULL) {
-		fprintf(stderr, "ylexbor-demo: cannot open %s: %s\n",
+		fprintf(stderr, "ybrowser: cannot open %s: %s\n",
 			path, strerror(errno));
 		return NULL;
 	}
@@ -201,7 +193,7 @@ static char *slurp_file(const char *path, size_t *out_len, char **out_effective_
 }
 
 /* ===========================================================================
- * Output — yface emit helpers (clone of ynetsurf's pattern).
+ * One-shot output — yface emit helpers.
  * ===========================================================================*/
 
 static int emit_envelope(int osc_code, int compressed,
@@ -234,194 +226,6 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 			     &meta, sizeof(meta), bytes, blen);
 }
 
-static int redraw_and_push(struct yetty_ylexbor *yl)
-{
-	struct yetty_ydraw_draw_list_result br =
-		yetty_ydraw_draw_list_config_buffer_create(NULL);
-	if (YETTY_IS_ERR(br)) return 1;
-	struct yetty_ydraw_draw_list *buf = br.value;
-	struct yetty_ycore_void_result rd = yetty_ylexbor_render(yl, buf);
-	int rc = 1;
-	if (YETTY_IS_OK(rd)) {
-		const uint8_t *bytes = NULL;
-		size_t blen = yetty_ydraw_draw_list_serialize(buf, &bytes);
-		(void)emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
-		(void)emit_bin_osc(bytes, blen);
-		fflush(stdout);
-		rc = 0;
-	}
-	yetty_ydraw_draw_list_destroy(buf);
-	return rc;
-}
-
-/* ===========================================================================
- * Interactive scaffolding — same shape as tools/ynetsurf/main.c.
- * ===========================================================================*/
-
-static struct termios saved_tty;
-static int tty_active = 0;
-
-static void tty_restore(void)
-{
-	if (tty_active) {
-		tcsetattr(STDIN_FILENO, TCSANOW, &saved_tty);
-		tty_active = 0;
-	}
-}
-static int tty_raw(void)
-{
-	if (!isatty(STDIN_FILENO)) return 0;
-	if (tcgetattr(STDIN_FILENO, &saved_tty) < 0) return -1;
-	struct termios raw = saved_tty;
-	cfmakeraw(&raw);
-	raw.c_cc[VMIN] = 0; raw.c_cc[VTIME] = 0;
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0) return -1;
-	tty_active = 1;
-	atexit(tty_restore);
-	return 0;
-}
-
-static volatile sig_atomic_t signal_quit = 0;
-static void on_signal(int s) { (void)s; signal_quit = 1; }
-
-struct ev_state {
-	struct yetty_ylexbor *yl;
-	int dirty;
-	int want_quit;
-};
-
-static void term_input_subscribe(uint32_t flags)
-{
-	struct yetty_client_input_sub msg = {
-		.magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
-		.version = YMGUI_WIRE_VERSION,
-		.flags = flags,
-		._pad0 = 0,
-	};
-	(void)emit_envelope(YETTY_OSC_CS_CLIENT_INPUT_SUB, 0,
-			    NULL, 0, &msg, sizeof(msg));
-}
-
-/* Inbound: resize → set viewport, mouse/key → mark dirty (re-render).
- * No real navigation — this is just a previewer. */
-static void on_osc(void *user, int osc_code,
-		   const uint8_t *args, size_t args_len,
-		   const uint8_t *payload, size_t payload_len)
-{
-	(void)args; (void)args_len;
-	struct ev_state *st = user;
-
-	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE ||
-	    osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) {
-		if (payload_len < sizeof(struct yetty_client_input_resize))
-			return;
-		const struct yetty_client_input_resize *r =
-			(const struct yetty_client_input_resize *)payload;
-		if (r->width > 0 && r->height > 0) {
-			yetty_ylexbor_set_viewport(st->yl,
-				(int)r->width, (int)r->height);
-			st->dirty = 1;
-		}
-		return;
-	}
-	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_MOUSE ||
-	    osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE) {
-		if (payload_len < sizeof(struct yetty_client_input_mouse))
-			return;
-		const struct yetty_client_input_mouse *m =
-			(const struct yetty_client_input_mouse *)payload;
-		/* Click → fire JS handlers attached at (x,y). The handlers
-		 * may mutate the DOM; ylexbor's dom_dirty flag tells us so
-		 * the main loop knows to relayout before the next paint. */
-		if (m->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON && m->pressed) {
-			yetty_ylexbor_dispatch_click(st->yl, m->x, m->y);
-			st->dirty = 1;
-		}
-		return;
-	}
-	if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY) {
-		st->dirty = 1;
-	}
-}
-
-static void on_raw(void *user, const char *bytes, size_t n)
-{
-	struct ev_state *st = user;
-	for (size_t i = 0; i < n; i++) {
-		unsigned char c = (unsigned char)bytes[i];
-		if (c == 0x03 || c == 0x11) { st->want_quit = 1; return; }
-	}
-	st->dirty = 1;
-}
-
-static int interactive_loop(struct yetty_ylexbor *yl)
-{
-	struct ev_state st = { .yl = yl };
-
-	struct yetty_yface_ptr_result yr = yetty_yface_create();
-	if (YETTY_IS_ERR(yr)) return 1;
-	struct yetty_yface *yface = yr.value;
-	yetty_yface_set_handlers(yface, on_osc, on_raw, &st);
-
-	signal(SIGINT,  on_signal);
-	signal(SIGTERM, on_signal);
-	signal(SIGHUP,  on_signal);
-
-	if (tty_raw() < 0) {
-		yetty_yface_destroy(yface);
-		return 1;
-	}
-
-	term_input_subscribe(YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK |
-			     YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE  |
-			     YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL |
-			     YETTY_CLIENT_INPUT_SUB_KEY);
-	fflush(stdout);
-
-	(void)redraw_and_push(yl);
-
-	char buf[4096];
-	while (!signal_quit && !st.want_quit) {
-		fd_set rfds; FD_ZERO(&rfds); FD_SET(STDIN_FILENO, &rfds);
-		/* Cap the select timeout at whatever JS timer fires next.
-		 * pump_timers returns -1 when there are none — fall back to
-		 * 100ms so we still relayout if the JS loop posts work via
-		 * setTimeout(0,...) right after our last drain. */
-		int wait_ms = yetty_ylexbor_pump_timers(yl);
-		if (wait_ms < 0 || wait_ms > 100) wait_ms = 100;
-		struct timeval tv = {
-			.tv_sec  = wait_ms / 1000,
-			.tv_usec = (wait_ms % 1000) * 1000,
-		};
-		int rc = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
-		if (rc < 0) { if (errno == EINTR) continue; break; }
-
-		st.dirty = 0;
-		if (FD_ISSET(STDIN_FILENO, &rfds)) {
-			ssize_t got = read(STDIN_FILENO, buf, sizeof(buf));
-			if (got > 0) {
-				(void)yetty_yface_feed_bytes(yface, buf, (size_t)got);
-			} else if (got == 0 && !isatty(STDIN_FILENO)) {
-				break;
-			}
-		}
-		/* Tick timers again after handling input — JS timers, click
-		 * handlers and DOMContentLoaded may all have queued work. */
-		(void)yetty_ylexbor_pump_timers(yl);
-		if (st.dirty || yetty_ylexbor_dom_dirty(yl)) {
-			if (yetty_ylexbor_dom_dirty(yl)) {
-				(void)yetty_ylexbor_relayout(yl);
-			}
-			(void)redraw_and_push(yl);
-		}
-	}
-
-	term_input_subscribe(0);
-	fflush(stdout);
-	yetty_yface_destroy(yface);
-	return 0;
-}
-
 /* ===========================================================================
  * main
  * ===========================================================================*/
@@ -430,14 +234,16 @@ static void usage(const char *argv0)
 {
 	fprintf(stderr,
 		"usage: %s [--once|--interactive] [--osc|--raw]\n"
-		"            [-w W] [-H H] [--font-size PX] [<file>|-]\n"
+		"            [-w W] [-H H] [--font-size PX] [<file>|<url>|-]\n"
 		"\n"
-		"  Reads HTML from <file> (or '-' / no arg = stdin), renders\n"
-		"  via lexbor + ylexbor's block-flow layout, emits a ydraw\n"
-		"  OSC envelope on stdout (or raw YPB1 bytes with --raw).\n"
+		"  Interactive (default on a TTY): a Chrome-like browser — tabbar,\n"
+		"  address bar, back/forward/reload, scrollable page. <file>/<url>\n"
+		"  is the optional first page.\n"
 		"\n"
-		"  default mode: interactive when stdin+stdout are TTYs,\n"
-		"                one-shot otherwise.\n", argv0);
+		"  --once (legacy OSC mode; default when stdout is not a TTY):\n"
+		"  read HTML from <file> (or '-' / no arg = stdin) or a url, render\n"
+		"  it, and emit one ydraw OSC envelope on stdout (raw YPB1 bytes\n"
+		"  with --raw), then exit.\n", argv0);
 }
 
 /* Probe the terminal for its pixel viewport via TIOCGWINSZ. ws_xpixel /
@@ -483,8 +289,6 @@ int main(int argc, char **argv)
 	if (probe_terminal_size(&term_w, &term_h)) {
 		width = term_w;
 		height = term_h;
-		ydebug("ylexbor-demo: detected terminal viewport %dx%d",
-		       width, height);
 	}
 	float font_size = 16.0f;
 	const char *path = NULL;
@@ -505,23 +309,22 @@ int main(int argc, char **argv)
 		else if (a[0] != '-' || !strcmp(a, "-")) path = a;
 	}
 
-	/* Slurp HTML. If interactive AND no input, complain — interactive
-	 * mode reads keystrokes from stdin, so HTML must be a file. */
-	const char *src = path ? path : "-";
-	if (interactive && (!path || !strcmp(path, "-"))) {
-		/* Interactive mode reads keystrokes from stdin, so the
-		 * HTML source must be a file path or http(s):// URL. */
-		fprintf(stderr,
-		    "ylexbor-demo: interactive mode needs a file path or URL\n"
-		    "              (stdin is reserved for keystrokes). Try --once.\n");
-		return 2;
+	/* Interactive mode: hand off to the ygui browser UI. The positional
+	 * arg, if any, is the first page to open (URL or file); stdin carries
+	 * keystrokes, not HTML, so it is never read as a document here. */
+	if (interactive) {
+		curl_global_init(CURL_GLOBAL_DEFAULT);
+		return ybrowser_ui_run(path, width, height, font_size);
 	}
-	if (looks_like_url(src)) {
+
+	/* ---- One-shot: render the page and emit one OSC envelope. ---- */
+	const char *src = path ? path : "-";
+	if (ybrowser_looks_like_url(src)) {
 		curl_global_init(CURL_GLOBAL_DEFAULT);
 	}
 	size_t html_len = 0;
 	char *effective_url = NULL;
-	char *html = slurp_file(src, &html_len, &effective_url);
+	char *html = ybrowser_slurp_file(src, &html_len, &effective_url);
 	if (html == NULL) return 1;
 
 	struct yetty_ylexbor_config cfg = {
@@ -536,14 +339,14 @@ int main(int argc, char **argv)
 	}
 	struct yetty_ylexbor *yl = r.value;
 
-	/* Tell ylexbor where the document came from so JS fetch() and
-	 * external <script src=...> can resolve relative URLs. Prefer
-	 * the post-redirect effective URL — gets us onto HTTPS (HTTP/2
+	/* Tell the engine where the document came from so JS fetch() and
+	 * external <script src=...> can resolve relative URLs. Prefer the
+	 * post-redirect effective URL — gets us onto HTTPS (HTTP/2
 	 * multiplexed image fetches) when the user typed an http://. */
 	if (effective_url) {
 		(void)yetty_ylexbor_set_base_url(yl, effective_url);
 		free(effective_url);
-	} else if (looks_like_url(src)) {
+	} else if (ybrowser_looks_like_url(src)) {
 		(void)yetty_ylexbor_set_base_url(yl, src);
 	}
 
@@ -559,59 +362,51 @@ int main(int argc, char **argv)
 	 * chains that haven't fired by the time load_html returns. Pump
 	 * the timer queue for a bounded budget (default 2s wall-clock)
 	 * so the actual content has a chance to land in the DOM before
-	 * we paint. Skip in interactive mode — the loop pumps anyway. */
-	if (!interactive) {
-		long budget_ms = 2000;
-		const char *e = getenv("YLEXBOR_BOOT_BUDGET_MS");
-		if (e) budget_ms = atol(e);
-		struct timespec t0;
-		clock_gettime(CLOCK_MONOTONIC, &t0);
-		while (budget_ms > 0) {
-			int wait_ms = yetty_ylexbor_pump_timers(yl);
-			if (wait_ms < 0) break;  /* no more timers */
-			if (wait_ms > 50) wait_ms = 50;
-			struct timespec ts = {
-				.tv_sec  = wait_ms / 1000,
-				.tv_nsec = (wait_ms % 1000) * 1000000L,
-			};
-			nanosleep(&ts, NULL);
-			struct timespec t1;
-			clock_gettime(CLOCK_MONOTONIC, &t1);
-			long elapsed = (t1.tv_sec - t0.tv_sec) * 1000 +
-				       (t1.tv_nsec - t0.tv_nsec) / 1000000;
-			if (elapsed >= budget_ms) break;
-		}
-		if (yetty_ylexbor_dom_dirty(yl)) {
-			(void)yetty_ylexbor_relayout(yl);
-		}
+	 * we paint. */
+	long budget_ms = 2000;
+	const char *e = getenv("YLEXBOR_BOOT_BUDGET_MS");
+	if (e) budget_ms = atol(e);
+	struct timespec t0;
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+	while (budget_ms > 0) {
+		int wait_ms = yetty_ylexbor_pump_timers(yl);
+		if (wait_ms < 0) break;  /* no more timers */
+		if (wait_ms > 50) wait_ms = 50;
+		struct timespec ts = {
+			.tv_sec  = wait_ms / 1000,
+			.tv_nsec = (wait_ms % 1000) * 1000000L,
+		};
+		nanosleep(&ts, NULL);
+		struct timespec t1;
+		clock_gettime(CLOCK_MONOTONIC, &t1);
+		long elapsed = (t1.tv_sec - t0.tv_sec) * 1000 +
+			       (t1.tv_nsec - t0.tv_nsec) / 1000000;
+		if (elapsed >= budget_ms) break;
+	}
+	if (yetty_ylexbor_dom_dirty(yl)) {
+		(void)yetty_ylexbor_relayout(yl);
 	}
 
-	int rc;
-	if (interactive) {
-		rc = interactive_loop(yl);
-	} else {
-		struct yetty_ydraw_draw_list_result br =
-			yetty_ydraw_draw_list_config_buffer_create(NULL);
-		if (YETTY_IS_ERR(br)) {
-			yetty_ylexbor_destroy(yl); free(html); return 1;
-		}
-		struct yetty_ydraw_draw_list *buf = br.value;
-		struct yetty_ycore_void_result rr = yetty_ylexbor_render(yl, buf);
-		if (YETTY_IS_ERR(rr)) {
-			fprintf(stderr, "render: %s\n", rr.error.msg);
-			yetty_ydraw_draw_list_destroy(buf);
-			yetty_ylexbor_destroy(yl); free(html); return 1;
-		}
-		const uint8_t *bytes = NULL;
-		size_t blen = yetty_ydraw_draw_list_serialize(buf, &bytes);
-		if (osc) (void)emit_bin_osc(bytes, blen);
-		else     fwrite(bytes, 1, blen, stdout);
-		fflush(stdout);
-		yetty_ydraw_draw_list_destroy(buf);
-		rc = 0;
+	struct yetty_ydraw_draw_list_result br =
+		yetty_ydraw_draw_list_config_buffer_create(NULL);
+	if (YETTY_IS_ERR(br)) {
+		yetty_ylexbor_destroy(yl); free(html); return 1;
 	}
+	struct yetty_ydraw_draw_list *buf = br.value;
+	struct yetty_ycore_void_result rr = yetty_ylexbor_render(yl, buf);
+	if (YETTY_IS_ERR(rr)) {
+		fprintf(stderr, "render: %s\n", rr.error.msg);
+		yetty_ydraw_draw_list_destroy(buf);
+		yetty_ylexbor_destroy(yl); free(html); return 1;
+	}
+	const uint8_t *bytes = NULL;
+	size_t blen = yetty_ydraw_draw_list_serialize(buf, &bytes);
+	if (osc) (void)emit_bin_osc(bytes, blen);
+	else     fwrite(bytes, 1, blen, stdout);
+	fflush(stdout);
+	yetty_ydraw_draw_list_destroy(buf);
 
 	yetty_ylexbor_destroy(yl);
 	free(html);
-	return rc;
+	return 0;
 }

@@ -666,3 +666,56 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
     }
     return 0;
 }
+
+char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
+{
+    if (r == NULL) {
+        return NULL;
+    }
+    /* Hit-test the laid-out box vector for the deepest box containing
+     * (x, y) — same scan dispatch_click uses. (x, y) are document
+     * coordinates (the layout origin), so the caller must subtract the
+     * page's on-screen offset first. */
+    lxb_dom_element_t *target = NULL;
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->element == NULL) {
+            continue;
+        }
+        if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
+            target = b->element;
+        }
+    }
+    if (target == NULL) {
+        return NULL;
+    }
+    /* Walk up to the nearest element carrying an href (an <a>/<area>).
+     * Return it resolved against the base URL; NULL for in-page fragments
+     * or no link. */
+    for (lxb_dom_node_t *n = lxb_dom_interface_node(target); n; n = n->parent) {
+        if (n->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(n);
+        size_t hl = 0;
+        const lxb_char_t *href =
+            lxb_dom_element_get_attribute(el, (const lxb_char_t *)"href", 4, &hl);
+        if (href == NULL || hl == 0) {
+            continue;
+        }
+        char *h = malloc(hl + 1);
+        if (h == NULL) {
+            return NULL;
+        }
+        memcpy(h, href, hl);
+        h[hl] = '\0';
+        if (h[0] == '#') { /* same-page fragment — not a navigation */
+            free(h);
+            return NULL;
+        }
+        char *url = yetty_ylexbor_resolve_url(r, h);
+        free(h);
+        return url;
+    }
+    return NULL;
+}
