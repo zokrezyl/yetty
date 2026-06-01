@@ -52,6 +52,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yimage_create(struct yetty_ycla
 struct yetty_yclass_object_ptr_result yetty_ygui_yjungle_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_ymarkdown_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_ymaze_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_ygui_ynode_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_ygui_ynodes_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_yplot_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_yshadertoy_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ygui_yvideo_create(struct yetty_yclass_ctx *ctx);

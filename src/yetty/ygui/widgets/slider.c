@@ -183,10 +183,15 @@ static struct yetty_ycore_int_result slider_on_motion(struct yetty_yclass_ctx *y
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    /* Without explicit pointer capture the framework only delivers
-     * motion while the cursor is inside the slider's rect. That's
-     * good enough for click+drag inside the track — we route motion
-     * to the same code path as press so the value tracks the cursor. */
+    /* Only track the cursor while this slider holds the pointer capture —
+     * i.e. between its own press and release. The framework also delivers
+     * motion to whatever the pointer merely hovers (not just the capture
+     * target), so without this guard the value would change on a plain
+     * hover instead of a click-drag. */
+    struct yetty_ygui_runtime *engine = yetty_ygui_object_engine(obj);
+    if (!engine || yetty_ygui_framework_pressed_widget(engine) != obj) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
     return slider_on_press(NULL, (struct yetty_yclass_object *)obj, x, y, 0);
 }
 

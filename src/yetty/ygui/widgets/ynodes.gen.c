@@ -1,0 +1,53 @@
+/* GENERATED — do not edit. */
+#include "yetty/ygui/methods.gen.h"
+#include "yetty/ygui/primitive-widget.h"
+#include "yetty/ygui/widgets/ynodes.h"
+#include <yetty/ycore/result.h>
+#include <yetty/ytrace/ytrace.h>
+
+[[maybe_unused]]
+static yetty_ygui_constructor_fn yetty_ygui_ynodes_yetty_ygui_constructor_check = ynodes_constructor;
+[[maybe_unused]]
+static yetty_ygui_destructor_fn yetty_ygui_ynodes_yetty_ygui_destructor_check = ynodes_destructor;
+[[maybe_unused]]
+static yetty_ygui_widget_paint_fn yetty_ygui_ynodes_yetty_ygui_widget_paint_check = ynodes_paint;
+[[maybe_unused]]
+static yetty_ygui_widget_on_press_fn yetty_ygui_ynodes_yetty_ygui_widget_on_press_check = ynodes_on_press;
+[[maybe_unused]]
+static yetty_ygui_widget_on_motion_fn yetty_ygui_ynodes_yetty_ygui_widget_on_motion_check = ynodes_on_motion;
+[[maybe_unused]]
+static yetty_ygui_widget_on_release_fn yetty_ygui_ynodes_yetty_ygui_widget_on_release_check = ynodes_on_release;
+[[maybe_unused]]
+static yetty_ygui_widget_on_scroll_fn yetty_ygui_ynodes_yetty_ygui_widget_on_scroll_check = ynodes_on_scroll;
+
+struct yetty_yclass_ptr_result yetty_ygui_ynodes_class_get(void)
+{
+    static const struct yetty_yclass *cls = NULL;
+    if (cls) return YETTY_OK(yetty_yclass_ptr, cls);
+    ydebug("registering class=yetty_ygui_ynodes");
+
+    static const struct yetty_yclass_descriptor desc = {
+        .name = "yetty_ygui_ynodes",
+        .type = YETTY_YCLASS_TYPE_REGULAR,
+        .data_size = sizeof(struct nodes_data),
+    };
+    static const struct yetty_yclass_op ops[] = {
+        {"yetty_ygui", "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor, (yetty_yclass_impl_t)ynodes_constructor},
+        {"yetty_ygui", "destructor", (yetty_yclass_method_id_t)yetty_ygui_destructor, (yetty_yclass_impl_t)ynodes_destructor},
+        {"yetty_ygui", "widget_paint", (yetty_yclass_method_id_t)yetty_ygui_widget_paint, (yetty_yclass_impl_t)ynodes_paint},
+        {"yetty_ygui", "widget_on_press", (yetty_yclass_method_id_t)yetty_ygui_widget_on_press, (yetty_yclass_impl_t)ynodes_on_press},
+        {"yetty_ygui", "widget_on_motion", (yetty_yclass_method_id_t)yetty_ygui_widget_on_motion, (yetty_yclass_impl_t)ynodes_on_motion},
+        {"yetty_ygui", "widget_on_release", (yetty_yclass_method_id_t)yetty_ygui_widget_on_release, (yetty_yclass_impl_t)ynodes_on_release},
+        {"yetty_ygui", "widget_on_scroll", (yetty_yclass_method_id_t)yetty_ygui_widget_on_scroll, (yetty_yclass_impl_t)ynodes_on_scroll},
+    };
+    struct yetty_yclass_ptr_result parent_class_r = yetty_ygui_primitive_widget_class_get();
+    if (YETTY_IS_ERR(parent_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_ynodes_class_get: parent accessor failed", parent_class_r);
+    struct yetty_yclass_ptr_result register_class_r =
+        yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
+                              parent_class_r.value, NULL, 0);
+    if (YETTY_IS_ERR(register_class_r))
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_ynodes_class_get: class_register failed", register_class_r);
+    cls = register_class_r.value;
+    return register_class_r;
+}
