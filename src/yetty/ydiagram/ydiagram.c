@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include <yetty/ycore/result.h>
+#include <yetty/ydiagram/diagrams.h>
 #include <yetty/ydiagram/graph-ir.h>
 #include <yetty/ydiagram/layout.h>
 #include <yetty/ydiagram/mermaid-parser.h>
@@ -26,15 +27,44 @@ struct yetty_ydiagram_buffer_result yetty_ydiagram_render_mermaid_full(
     if (!input) {
         return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: NULL input");
     }
-    if (!yetty_ydiagram_mermaid_can_parse(input, len)) {
-        return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: input is not Mermaid");
+
+    enum yetty_ydiagram_kind kind = yetty_ydiagram_detect(input, len);
+
+    /* Sequence diagrams are not a layered graph — they own their layout and
+     * render straight into a buffer. */
+    if (kind == YETTY_YDIAGRAM_KIND_SEQUENCE) {
+        struct yetty_ydiagram_seq_buffer_result sr =
+            yetty_ydiagram_sequence_render(input, len, measure, measure_userdata);
+        if (YETTY_IS_ERR(sr)) {
+            return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: sequence render failed", sr);
+        }
+        return YETTY_OK(yetty_ydiagram_buffer, sr.value);
     }
 
     struct yetty_ydiagram_graph graph;
     struct yetty_ycore_void_result ir = yetty_ydiagram_graph_init(&graph);
     YETTY_RETURN_IF_ERR(yetty_ydiagram_buffer, ir, "ydiagram: graph_init failed");
 
-    struct yetty_ycore_void_result pr = yetty_ydiagram_mermaid_parse(input, len, &graph);
+    struct yetty_ycore_void_result pr;
+    switch (kind) {
+    case YETTY_YDIAGRAM_KIND_FLOWCHART:
+        pr = yetty_ydiagram_mermaid_parse(input, len, &graph);
+        break;
+    case YETTY_YDIAGRAM_KIND_STATE:
+        pr = yetty_ydiagram_state_parse(input, len, &graph);
+        break;
+    case YETTY_YDIAGRAM_KIND_CLASS:
+        pr = yetty_ydiagram_class_parse(input, len, &graph);
+        break;
+    case YETTY_YDIAGRAM_KIND_ER:
+        pr = yetty_ydiagram_er_parse(input, len, &graph);
+        break;
+    default:
+        yetty_ydiagram_graph_destroy(&graph);
+        return YETTY_ERR(yetty_ydiagram_buffer,
+                         "ydiagram: unrecognized diagram type (expected graph/flowchart, "
+                         "stateDiagram, classDiagram, erDiagram, or sequenceDiagram)");
+    }
     if (YETTY_IS_ERR(pr)) {
         yetty_ydiagram_graph_destroy(&graph);
         return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: parse failed", pr);

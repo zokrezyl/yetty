@@ -1,0 +1,25 @@
+%% Entity-relationship diagram — `erDiagram`. Entities render as record nodes
+%% (name compartment + attribute rows). Relationship cardinality uses
+%% crow's-foot notation per side:
+%%   ||  exactly one      |o / o|  zero or one
+%%   }| / |{  one or many  }o / o{  zero or many
+%% A `--` link is identifying (solid); `..` is non-identifying (dashed).
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    PRODUCT ||--o{ LINE-ITEM : "ordered in"
+    CUSTOMER }o--o| ADDRESS : "ships to"
+
+    CUSTOMER {
+        string name
+        string id PK
+        string email
+    }
+    ORDER {
+        int number PK
+        date placed
+    }
+    LINE-ITEM {
+        int qty
+        float price
+    }

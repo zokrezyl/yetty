@@ -44,9 +44,16 @@ enum yetty_ydiagram_arrow_style {
     YETTY_YDIAGRAM_ARROW_NONE,
     YETTY_YDIAGRAM_ARROW_NORMAL,
     YETTY_YDIAGRAM_ARROW_OPEN,
-    YETTY_YDIAGRAM_ARROW_DIAMOND,
+    YETTY_YDIAGRAM_ARROW_DIAMOND,      /* filled diamond  — UML composition  */
+    YETTY_YDIAGRAM_ARROW_DIAMOND_OPEN, /* hollow diamond  — UML aggregation  */
+    YETTY_YDIAGRAM_ARROW_TRIANGLE,     /* hollow triangle — UML inheritance  */
     YETTY_YDIAGRAM_ARROW_CIRCLE,
     YETTY_YDIAGRAM_ARROW_DOT,
+    /* Crow's-foot terminals for ER diagrams. */
+    YETTY_YDIAGRAM_ARROW_CROW_ONE,      /* exactly one  ( |  )            */
+    YETTY_YDIAGRAM_ARROW_CROW_MANY,     /* many         ( <  crow foot )  */
+    YETTY_YDIAGRAM_ARROW_CROW_ONE_OPT,  /* zero or one  ( o| )            */
+    YETTY_YDIAGRAM_ARROW_CROW_MANY_OPT, /* zero or many ( o< )            */
 };
 
 enum yetty_ydiagram_line_style {
@@ -102,6 +109,24 @@ struct yetty_ydiagram_node {
     int layer;
     int position;
     bool is_dummy;
+
+    /* When set, the layout engine must NOT resize this node from its label
+     * (pseudostate dots, fixed-size markers). width/height are taken as-is. */
+    bool fixed_size;
+
+    /* Record / compartment node (UML class, ER entity). When is_record is
+     * set the renderer draws a title compartment (`label`, optionally with a
+     * `stereotype` line above) followed by `row_count` body rows split into
+     * two compartments at `method_start` (attributes above, methods below).
+     * ER entities use method_start == row_count (single body compartment).
+     * `header_h` is the title-compartment height, computed by layout. */
+    bool is_record;
+    char *stereotype; /* heap, may be NULL */
+    char **rows;      /* heap array of heap strings */
+    size_t row_count;
+    size_t row_capacity;
+    size_t method_start; /* index in rows where the methods compartment begins */
+    float header_h;      /* title-compartment height (layout output) */
 };
 
 struct yetty_ydiagram_point {
@@ -186,6 +211,11 @@ struct yetty_ycore_int_result yetty_ydiagram_graph_add_cluster(struct yetty_ydia
 
 struct yetty_ycore_void_result yetty_ydiagram_cluster_add_node(struct yetty_ydiagram_cluster *c,
                                                                const char *node_id);
+
+/* Append a body row (attribute / method line) to a record node. Transfers a
+ * strdup'd copy; caller may pass a stack/scratch string. */
+struct yetty_ycore_void_result yetty_ydiagram_node_add_row(struct yetty_ydiagram_node *n,
+                                                           const char *text);
 
 /* Linear lookup. Returns NULL if not found. */
 struct yetty_ydiagram_node *yetty_ydiagram_graph_find_node(struct yetty_ydiagram_graph *g,

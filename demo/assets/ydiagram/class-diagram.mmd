@@ -1,0 +1,33 @@
+%% UML class diagram — `classDiagram`. Classes render as record nodes with a
+%% title compartment, an attributes compartment, and a methods compartment.
+%% Relationship operators map to UML terminals:
+%%   <|--  inheritance (hollow triangle)   ..|>  realization (dashed triangle)
+%%   *--   composition (filled diamond)     o--   aggregation (hollow diamond)
+%%   -->   association (arrow)               ..>   dependency (dashed arrow)
+classDiagram
+    class Animal {
+        +int age
+        +String name
+        +isMammal() bool
+        +mate() void
+    }
+    class Pet {
+        <<interface>>
+        +String owner
+        +greet() void
+    }
+    class Dog {
+        +String breed
+        +bark() void
+    }
+    class Leg {
+        +int length
+    }
+    class Vet {
+        +checkup(Animal) void
+    }
+
+    Animal <|-- Dog
+    Pet <|.. Dog
+    Animal *-- Leg
+    Vet ..> Animal

@@ -29,7 +29,24 @@ isolation:
 | `subgraphs.mmd`       | `subgraph … end` clusters                         |
 | `cycle.mmd`           | cycle removal phase                               |
 | `long-edges.mmd`      | dummy-node insertion for multi-layer edges        |
-| `state-machine.mmd`   | realistic mixed scene                             |
+| `state-machine.mmd`   | realistic mixed scene (flowchart approximation)   |
+
+## Diagram families
+
+Beyond flowcharts (`graph` / `flowchart`), the parser dispatches on the first
+line's keyword to four more diagram families. One demo each:
+
+| file                   | family         | keyword           |
+|------------------------|----------------|-------------------|
+| `state-diagram.mmd`    | state machine  | `stateDiagram-v2` |
+| `class-diagram.mmd`    | UML class      | `classDiagram`    |
+| `er-diagram.mmd`       | entity / ER    | `erDiagram`       |
+| `sequence-diagram.mmd` | sequence       | `sequenceDiagram` |
+
+state / class / ER fill the shared graph IR and flow through the Sugiyama
+layout + renderer (class & ER use compartmented "record" nodes; UML and
+crow's-foot arrow terminals); sequence diagrams own their layout (participant
+columns + lifelines + time-ordered messages) and render straight to a buffer.
 
 ## Running
 
