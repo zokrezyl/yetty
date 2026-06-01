@@ -51,7 +51,7 @@ struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
 
 /* Destroy the framework and its widget tree. Does NOT touch the
  * output_pty (borrowed). */
-struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_runtime *engine);
+struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_framework *framework);
 
 /* Wire the framework to a receiver-side yfigure container through the
  * yclass slot dispatch path. When set, framework_emit ships its
@@ -67,31 +67,31 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_ru
  * means the slot stub marshals the call over yrpc, and the same code
  * path drives a remote yfigure tree on the far end of the session. */
 struct yetty_ycore_void_result yetty_ygui_framework_set_container_obj(
-    struct yetty_ygui_runtime *engine, struct yetty_yclass_object *container);
+    struct yetty_ygui_framework *framework, struct yetty_yclass_object *container);
 
 struct yetty_ycore_void_result yetty_ygui_framework_set_session(
-    struct yetty_ygui_runtime *engine, struct yetty_yclass_rpc_session *session);
+    struct yetty_ygui_framework *framework, struct yetty_yclass_rpc_session *session);
 
 /* Run one full emit cycle: layout pass against the current viewport,
  * walk the widget tree twice (containers then bodies), concatenate
  * streams, wrap in a yface envelope, write through output_pty. */
-struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runtime *engine);
+struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_framework *framework);
 
 /* Emit a figure-tree CLEAR_ALL admin record straight to `fd` (blocking
  * write), telling the host to destroy every remote figure container this
- * engine produced. Call this at client-mode shutdown BEFORE destroy: once
+ * framework produced. Call this at client-mode shutdown BEFORE destroy: once
  * the event loop has stopped the async output_pty can no longer flush, so
  * the normal emit path silently drops the teardown and the host keeps the
  * client's last frame frozen on the pane. The blocking fd write mirrors how
  * ygreeter emits its ?1500l mouse-unsubscribe on exit. */
 struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
-    struct yetty_ygui_runtime *engine, int fd);
+    struct yetty_ygui_framework *framework, int fd);
 
 /*-----------------------------------------------------------------------------
  * Input — caller pushes raw byte stream (ASCII + CSI escapes) here.
  * The framework decodes and dispatches to widgets / the key callback.
  *---------------------------------------------------------------------------*/
-struct yetty_ycore_void_result yetty_ygui_framework_feed_input(struct yetty_ygui_runtime *engine,
+struct yetty_ycore_void_result yetty_ygui_framework_feed_input(struct yetty_ygui_framework *framework,
                                                                const char *bytes, size_t n);
 
 /*-----------------------------------------------------------------------------
@@ -103,74 +103,75 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_input(struct yetty_ygui
  * contains (x, y), bubbling up until something consumes the event.
  *---------------------------------------------------------------------------*/
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
-    struct yetty_ygui_runtime *engine, float x, float y, int button, int pressed, int mods);
+    struct yetty_ygui_framework *framework, float x, float y, int button, int pressed, int mods);
 
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
-    struct yetty_ygui_runtime *engine, float x, float y);
+    struct yetty_ygui_framework *framework, float x, float y);
 
 /* Wheel / trackpad scroll at (x, y) with deltas (dx, dy). Delivered to the
  * widget under the pointer, bubbling up until a scrollable consumes it. */
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
-    struct yetty_ygui_runtime *engine, float x, float y, float dx, float dy);
+    struct yetty_ygui_framework *framework, float x, float y, float dx, float dy);
 
 /*-----------------------------------------------------------------------------
  * Root + viewport.
  *---------------------------------------------------------------------------*/
-struct yetty_ygui_object *yetty_ygui_framework_root(struct yetty_ygui_runtime *engine);
+struct yetty_ygui_object *yetty_ygui_framework_root(struct yetty_ygui_framework *framework);
 
-struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_ygui_runtime *engine,
+struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_ygui_framework *framework,
                                                              struct yetty_ygui_object *root);
 
-struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(struct yetty_ygui_runtime *engine,
-                                                                 float width_px, float height_px);
+struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(
+    struct yetty_ygui_framework *framework, float width_px, float height_px);
 
-void yetty_ygui_framework_viewport(const struct yetty_ygui_runtime *engine, float *width_px,
+void yetty_ygui_framework_viewport(const struct yetty_ygui_framework *framework, float *width_px,
                                    float *height_px);
 
-/* Theme — the engine owns a default brand palette on create. Widget
- * paint code reads from this via yetty_ygui_framework_theme(engine).
+/* Theme — the framework owns a default brand palette on create. Widget
+ * paint code reads from this via yetty_ygui_framework_theme(framework).
  * Hosts that want config-driven theming call apply_config_to_theme
  * once with their loaded yconfig; missing keys leave the brand
  * defaults untouched.
  *
- * Lifetime: framework_create allocates the default theme; the engine
+ * Lifetime: framework_create allocates the default theme; the framework
  * owns + destroys it on framework_destroy. set_theme replaces the
- * owned theme (engine takes ownership of the new pointer and frees
+ * owned theme (framework takes ownership of the new pointer and frees
  * the old one). */
-struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_ygui_runtime *engine);
+struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_ygui_framework *framework);
 
-struct yetty_ycore_void_result yetty_ygui_framework_set_theme(struct yetty_ygui_runtime *engine,
+struct yetty_ycore_void_result yetty_ygui_framework_set_theme(struct yetty_ygui_framework *framework,
                                                               struct yetty_ygui_theme *theme);
 
 /* Convenience: overlay any `style.ygui.*` / `style.yui.*` keys from
- * `config` onto the engine's owned theme in place. Missing keys leave
+ * `config` onto the framework's owned theme in place. Missing keys leave
  * the field at its current value (brand default or earlier overlay). */
 struct yetty_ycore_void_result yetty_ygui_framework_apply_config_to_theme(
-    struct yetty_ygui_runtime *engine, const struct yetty_yconfig_config *config);
+    struct yetty_ygui_framework *framework, const struct yetty_yconfig_config *config);
 
-void yetty_ygui_framework_mark_dirty(struct yetty_ygui_runtime *engine);
+void yetty_ygui_framework_mark_dirty(struct yetty_ygui_framework *framework);
 
-int yetty_ygui_framework_is_dirty(const struct yetty_ygui_runtime *engine);
+int yetty_ygui_framework_is_dirty(const struct yetty_ygui_framework *framework);
 
 /* Non-zero while a widget holds the pointer capture (between a consumed
  * press and its release) — lets the host suppress other press routing
  * mid-drag. */
-int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_runtime *engine);
+int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_framework *framework);
 
 /* The widget currently holding the pointer capture (the one that
  * consumed the last press), or NULL. The hovered widget is the deepest
  * hit under the pointer on the last motion event, or NULL. Hosts use
  * these to drive cursor-shape decisions (e.g. resize cursor over a
  * splitter). Both are borrowed — do not destroy. */
-struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(struct yetty_ygui_runtime *engine);
-struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(struct yetty_ygui_runtime *engine);
+struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(struct yetty_ygui_framework *framework);
+struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(struct yetty_ygui_framework *framework);
 
 /* Transient notification ("toast"). The new toolkit has no overlay
  * surface yet, so these record the message to the trace log; the
  * signatures exist so the host (yui) can call them. `severity` is a
  * caller-defined level (0 = info … higher = more severe). */
-void yetty_ygui_framework_notify(struct yetty_ygui_runtime *engine, int severity, const char *msg);
-void yetty_ygui_framework_notify_ttl(struct yetty_ygui_runtime *engine, int severity,
+void yetty_ygui_framework_notify(struct yetty_ygui_framework *framework, int severity,
+                                 const char *msg);
+void yetty_ygui_framework_notify_ttl(struct yetty_ygui_framework *framework, int severity,
                                      const char *msg, float ttl_seconds);
 
 /*-----------------------------------------------------------------------------
@@ -181,10 +182,10 @@ void yetty_ygui_framework_notify_ttl(struct yetty_ygui_runtime *engine, int seve
  *
  * Special-key codes start at 0x100 and follow the constants below.
  *---------------------------------------------------------------------------*/
-typedef int (*yetty_ygui_key_cb)(struct yetty_ygui_runtime *engine, uint32_t key, int mods,
+typedef int (*yetty_ygui_key_cb)(struct yetty_ygui_framework *framework, uint32_t key, int mods,
                                  void *userdata);
 
-void yetty_ygui_framework_set_key_cb(struct yetty_ygui_runtime *engine, yetty_ygui_key_cb cb,
+void yetty_ygui_framework_set_key_cb(struct yetty_ygui_framework *framework, yetty_ygui_key_cb cb,
                                      void *userdata);
 
 #define YETTY_YGUI_KEY_ARROW_UP 0x100
@@ -205,18 +206,18 @@ void yetty_ygui_framework_set_key_cb(struct yetty_ygui_runtime *engine, yetty_yg
 /*-----------------------------------------------------------------------------
  * Wire id allocator — widgets request ids at construction time.
  *---------------------------------------------------------------------------*/
-struct uint32_result yetty_ygui_framework_alloc_id(struct yetty_ygui_runtime *engine);
+struct uint32_result yetty_ygui_framework_alloc_id(struct yetty_ygui_framework *framework);
 
-struct yetty_ycore_void_result yetty_ygui_framework_free_id(struct yetty_ygui_runtime *engine,
+struct yetty_ycore_void_result yetty_ygui_framework_free_id(struct yetty_ygui_framework *framework,
                                                             uint32_t id);
 
-uint32_t yetty_ygui_framework_ygrid_id(const struct yetty_ygui_runtime *engine);
+uint32_t yetty_ygui_framework_ygrid_id(const struct yetty_ygui_framework *framework);
 
 /*-----------------------------------------------------------------------------
  * Emit context — supplied to emit_container / emit_body / paint.
  *---------------------------------------------------------------------------*/
 struct yetty_ygui_emit_ctx {
-    struct yetty_ygui_runtime *engine;
+    struct yetty_ygui_framework *framework;
     struct yetty_ycore_buffer *container_records;
     struct yetty_ydraw_draw_list *ygrid_draw_list;
     struct yetty_ycore_buffer *figure_bodies;
@@ -224,15 +225,15 @@ struct yetty_ygui_emit_ctx {
 
     /* Sender-side bookkeeping that the receiver only learns about after
      * flush actually delivers the envelope. We stage the deltas here
-     * during emit; framework_emit copies them onto `engine` after
+     * during emit; framework_emit copies them onto `framework` after
      * flush returns OK and discards them on failure so the next tick
      * retries CREATE/DELETE rather than skipping them.
      *
      *  - staged_mints: figure ids whose CREATE_CHILD admin record was
-     *    appended this tick. Committed onto engine->minted_figures.
+     *    appended this tick. Committed onto framework->minted_figures.
      *  - staged_ygrid_created: ygrid CREATE_CHILD was appended this
-     *    tick (was not previously minted). Commits engine->ygrid_created.
-     *  - staged_deletes_consumed: prefix of engine->pending_deletes
+     *    tick (was not previously minted). Commits framework->ygrid_created.
+     *  - staged_deletes_consumed: prefix of framework->pending_deletes
      *    that has been turned into DELETE_CHILD records. On commit
      *    that prefix is dropped from the queue. */
     uint32_t *staged_mints;
@@ -285,11 +286,11 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_hidden(struct yetty_ygu
 /* Monotonic "bring to front" allocator: returns an ever-increasing z in
  * the floating band so the most recently raised window sorts above its
  * peers (but still below YETTY_YGUI_Z_MENU). */
-int32_t yetty_ygui_runtime_next_raise_z(struct yetty_ygui_runtime *engine);
+int32_t yetty_ygui_framework_next_raise_z(struct yetty_ygui_framework *framework);
 
 /* Idempotent helper for figure widgets: on first call for `child_id`
  * emits CREATE_CHILD; on subsequent calls emits SET_CHILD_RECT.
- * Tracks per-engine state so the receiver's binder cache is preserved
+ * Tracks per-framework state so the receiver's binder cache is preserved
  * across frames. Figure widgets should use this from emit_container
  * instead of calling yetty_ygui_emit_create_child unconditionally. */
 struct yetty_ycore_void_result yetty_ygui_emit_ensure_child(

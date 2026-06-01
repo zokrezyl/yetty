@@ -29,7 +29,7 @@ typedef struct yetty_ycore_void_result (*demo_build_fn)(struct demo_runner *runn
 int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build);
 
 /* Accessors for demos that need them. */
-struct yetty_ygui_runtime *demo_runner_engine(struct demo_runner *runner);
+struct yetty_ygui_framework *demo_runner_engine(struct demo_runner *runner);
 struct yetty_ygui_object *demo_runner_root(struct demo_runner *runner);
 
 #ifdef __cplusplus

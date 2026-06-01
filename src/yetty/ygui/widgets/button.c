@@ -182,7 +182,7 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
          * in user config reaches the button. Belt-and-braces fallback if
          * theme is somehow NULL (engine owns it post-create). */
         const struct yetty_ygui_theme *theme =
-            yetty_ygui_framework_theme(yetty_ygui_object_engine(obj));
+            yetty_ygui_framework_theme(yetty_ygui_object_framework(obj));
         float font_size = theme && theme->font_size > 0.0f ? theme->font_size : 14.0f;
         float x = r.min.x + 12.0f;
         float y = r.min.y + press_offset + (h + font_size) * 0.5f - 2.0f;

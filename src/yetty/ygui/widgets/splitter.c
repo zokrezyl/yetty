@@ -134,7 +134,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
      * the divider (no button held) would drag the panes. The framework
      * captures the pointer on a consumed press, so pressed_obj == this
      * splitter exactly during a real drag. */
-    struct yetty_ygui_runtime *eng = yetty_ygui_object_engine(obj);
+    struct yetty_ygui_framework *eng = yetty_ygui_object_framework(obj);
     if (!eng || eng->pressed_obj != obj) {
         return YETTY_OK(yetty_ycore_int, 0);
     }

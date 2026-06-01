@@ -28,7 +28,9 @@ static struct yetty_ycore_rectangle rect(float minx, float miny, float maxx, flo
 static int approx_eq(float a, float b)
 {
     float d = a - b;
-    if (d < 0) d = -d;
+    if (d < 0) {
+        d = -d;
+    }
     return d < 0.5f;
 }
 
@@ -60,8 +62,7 @@ static void test_hbox_two_children(void)
     lp.gap = 5.0f;
     yetty_ygui_widget_layout_set(root, &lp);
 
-    struct yetty_ycore_void_result lr =
-        yetty_ygui_layout_compute(root, rect(0, 0, 200, 100));
+    struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 200, 100));
     assert(YETTY_IS_OK(lr));
 
     /* Children appear in insertion order (yetty_ygui_add appends at
@@ -111,8 +112,7 @@ static void test_vbox_flex_grow(void)
     l3.width = 100.0f;
     yetty_ygui_widget_layout_set(c3, &l3);
 
-    struct yetty_ycore_void_result lr =
-        yetty_ygui_layout_compute(root, rect(0, 0, 200, 200));
+    struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 200, 200));
     assert(YETTY_IS_OK(lr));
 
     struct yetty_ycore_rectangle rc1 = yetty_ygui_widget_rect(c1);
@@ -164,7 +164,9 @@ static void test_padding(void)
 
 /* Click callback test. */
 static int click_fired = 0;
-static struct yetty_ycore_void_result on_click_cb(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *userdata)
+static struct yetty_ycore_void_result on_click_cb(struct yetty_yclass_ctx *_yc_ctx,
+                                                  struct yetty_yclass_object *_yc_obj,
+                                                  void *userdata)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
@@ -187,20 +189,23 @@ static void test_clickable_state_machine(void)
     assert(YETTY_IS_OK(sr));
 
     assert(!yetty_ygui_clickable_is_pressed(btn));
-    struct yetty_ycore_int_result pr = yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
+    struct yetty_ycore_int_result pr =
+        yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
     assert(yetty_ygui_clickable_is_pressed(btn));
     assert(click_fired == 0); /* not yet — press alone doesn't fire */
 
-    struct yetty_ycore_int_result rr = yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
+    struct yetty_ycore_int_result rr =
+        yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
     assert(YETTY_IS_OK(rr));
     assert(rr.value == 1);
     assert(!yetty_ygui_clickable_is_pressed(btn));
     assert(click_fired == 1);
 
     /* Release without prior press → no fire. */
-    struct yetty_ycore_int_result rr2 = yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
+    struct yetty_ycore_int_result rr2 =
+        yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
     assert(YETTY_IS_OK(rr2));
     assert(click_fired == 1);
 
@@ -212,9 +217,12 @@ static void test_widget_paint_emits_real_prims(void)
     /* Build a tree: panel (10,10)-(110,110) containing a label and a
      * button. Drive paint and verify real SDF prims + a TEXT_SPAN
      * land in the ydraw draw_list. */
-    struct yetty_ygui_object *panel = yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL).value;
-    struct yetty_ygui_object *label = yetty_ygui_add(yetty_ygui_label_class_get().value, panel).value;
-    struct yetty_ygui_object *btn = yetty_ygui_add(yetty_ygui_button_class_get().value, panel).value;
+    struct yetty_ygui_object *panel =
+        yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL).value;
+    struct yetty_ygui_object *label =
+        yetty_ygui_add(yetty_ygui_label_class_get().value, panel).value;
+    struct yetty_ygui_object *btn =
+        yetty_ygui_add(yetty_ygui_button_class_get().value, panel).value;
     yetty_ygui_label_set_text(label, "hi");
     yetty_ygui_button_set_label(btn, "go");
 
@@ -226,7 +234,7 @@ static void test_widget_paint_emits_real_prims(void)
     struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {
-        .engine = NULL,
+        .framework = NULL,
         .container_records = NULL,
         .ygrid_draw_list = dlr.value,
         .figure_bodies = NULL,
@@ -245,9 +253,15 @@ static void test_widget_paint_emits_real_prims(void)
     size_t off = 0;
     while (off + 4 <= sz) {
         uint32_t type = p[off / 4];
-        if (type == 0x7FFFFFFEu) saw_box = 1;
-        if (type == 0x7FFFFFF7u) saw_rounded = 1;
-        if (type == 0x40000002u) saw_text++;
+        if (type == 0x7FFFFFFEu) {
+            saw_box = 1;
+        }
+        if (type == 0x7FFFFFF7u) {
+            saw_rounded = 1;
+        }
+        if (type == 0x40000002u) {
+            saw_text++;
+        }
         /* Word count differs per prim — for this assertion we walk by
          * type-word locations using the known counts. SDF_BOX = 10
          * words; SDF_ROUNDED_BOX = 13; TEXT_SPAN is FAM with the size

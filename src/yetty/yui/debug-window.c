@@ -43,7 +43,7 @@ static struct yetty_ycore_rgba debug_rgba(uint32_t packed)
 }
 
 struct yetty_yui_debug_window {
-    struct yetty_ygui_runtime *engine; /* borrowed */
+    struct yetty_ygui_framework *engine; /* borrowed */
     struct yetty_ygui_object *window;
     /* Three separate labels — one per rolling window. ygui's label is
      * single-line, so multi-line text via "\n" doesn't render; stacking
@@ -59,7 +59,7 @@ struct yetty_yui_debug_window {
 };
 
 struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
-    struct yetty_ygui_runtime *engine, yetty_ycore_object_id pane_id)
+    struct yetty_ygui_framework *engine, yetty_ycore_object_id pane_id)
 {
     if (!engine) {
         return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: NULL engine");

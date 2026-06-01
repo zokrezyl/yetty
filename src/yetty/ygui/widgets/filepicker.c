@@ -271,7 +271,7 @@ static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_ctx *yclas
     (void)yclass_ctx;
     (void)x;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_runtime *eng = yetty_ygui_object_engine(obj);
+    struct yetty_ygui_framework *eng = yetty_ygui_object_framework(obj);
     if (!eng || eng->pressed_obj != obj) {
         return YETTY_OK(yetty_ycore_int, 0); /* only while we're the drag target */
     }

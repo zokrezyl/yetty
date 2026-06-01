@@ -190,7 +190,7 @@ struct tab_state {
 };
 
 struct app {
-    struct yetty_ygui_runtime *engine;
+    struct yetty_ygui_framework *engine;
     struct yetty_ygui_object *root;
     struct yetty_ygui_object *tabbar;
     struct yetty_ygui_object *body_panel;
@@ -2378,7 +2378,7 @@ struct key_ctx {
     void (*stop_cb)(struct app *app);
 };
 
-static int on_key(struct yetty_ygui_runtime *engine, uint32_t key, int mods, void *userdata)
+static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
 {
     (void)engine;
     (void)mods;

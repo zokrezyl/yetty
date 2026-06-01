@@ -139,12 +139,12 @@ static const uint8_t k_bmp_2x2[] = {
 
 /* Build a headless engine whose root panel holds one 100x100 yimage.
  * The stub pty must outlive the returned engine — the caller owns it. */
-static struct yetty_ygui_runtime *make_engine_with_yimage(struct yetty_platform_pty *stub,
+static struct yetty_ygui_framework *make_engine_with_yimage(struct yetty_platform_pty *stub,
                                                           struct yetty_ygui_object **out_img)
 {
     struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(stub);
     CHECK(YETTY_IS_OK(er), "engine_create");
-    struct yetty_ygui_runtime *engine = er.value;
+    struct yetty_ygui_framework *engine = er.value;
 
     struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
     CHECK(YETTY_IS_OK(rr), "add panel");
@@ -172,7 +172,7 @@ static void test_yimage_emit(void)
     /* Stub pty lives on the stack of this function. */
     struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
     struct yetty_ygui_object *img = NULL;
-    struct yetty_ygui_runtime *engine = make_engine_with_yimage(&stub, &img);
+    struct yetty_ygui_framework *engine = make_engine_with_yimage(&stub, &img);
 
     struct yetty_ycore_void_result br =
         yetty_ygui_yimage_set_bytes(img, k_bmp_2x2, sizeof(k_bmp_2x2));
@@ -280,7 +280,7 @@ static void test_yimage_emit_rejects_malformed(void)
 {
     struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
     struct yetty_ygui_object *img = NULL;
-    struct yetty_ygui_runtime *engine = make_engine_with_yimage(&stub, &img);
+    struct yetty_ygui_framework *engine = make_engine_with_yimage(&stub, &img);
 
     uint8_t garbage[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};
     struct yetty_ycore_void_result br =

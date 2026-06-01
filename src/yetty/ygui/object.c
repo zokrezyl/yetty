@@ -335,9 +335,9 @@ struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cl
     obj->klass = cls;
     object_link_to_parent(obj, parent);
 
-    struct yetty_ygui_runtime *engine = yetty_ygui_object_engine(obj);
-    if (engine) {
-        struct uint32_result idr = yetty_ygui_framework_alloc_id(engine);
+    struct yetty_ygui_framework *framework = yetty_ygui_object_framework(obj);
+    if (framework) {
+        struct uint32_result idr = yetty_ygui_framework_alloc_id(framework);
         if (YETTY_IS_ERR(idr)) {
             object_unlink_from_parent(obj);
             free(obj);
@@ -349,8 +349,8 @@ struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cl
     struct yetty_ycore_void_result cr =
         yetty_ygui_constructor(NULL, (struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(cr)) {
-        if (engine && obj->id) {
-            struct yetty_ycore_void_result fr = yetty_ygui_framework_free_id(engine, obj->id);
+        if (framework && obj->id) {
+            struct yetty_ycore_void_result fr = yetty_ygui_framework_free_id(framework, obj->id);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
             }
@@ -386,18 +386,18 @@ struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj)
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }
-    struct yetty_ygui_runtime *engine = yetty_ygui_object_engine(obj);
-    if (engine && obj->id != 0) {
-        struct yetty_ycore_void_result fr = yetty_ygui_framework_free_id(engine, obj->id);
+    struct yetty_ygui_framework *framework = yetty_ygui_object_framework(obj);
+    if (framework && obj->id != 0) {
+        struct yetty_ycore_void_result fr = yetty_ygui_framework_free_id(framework, obj->id);
         if (YETTY_IS_ERR(fr)) {
             yetty_ycore_error_destroy(fr.error);
         }
     }
-    if (engine && engine->hovered_obj == obj) {
-        engine->hovered_obj = NULL;
+    if (framework && framework->hovered_obj == obj) {
+        framework->hovered_obj = NULL;
     }
-    if (engine && engine->pressed_obj == obj) {
-        engine->pressed_obj = NULL;
+    if (framework && framework->pressed_obj == obj) {
+        framework->pressed_obj = NULL;
     }
     object_unlink_from_parent(obj);
     free(obj);
@@ -437,11 +437,11 @@ void yetty_ygui_object_raise(struct yetty_ygui_object *obj)
     object_link_to_parent(obj, parent);
 }
 
-struct yetty_ygui_runtime *yetty_ygui_object_engine(struct yetty_ygui_object *obj)
+struct yetty_ygui_framework *yetty_ygui_object_framework(struct yetty_ygui_object *obj)
 {
     while (obj) {
-        if (obj->engine) {
-            return obj->engine;
+        if (obj->framework) {
+            return obj->framework;
         }
         obj = obj->parent;
     }
@@ -459,9 +459,9 @@ struct yetty_ycore_void_result yetty_ygui_object_set_dirty(struct yetty_ygui_obj
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_object_set_dirty: NULL obj");
     }
     obj->dirty = 1;
-    struct yetty_ygui_runtime *engine = yetty_ygui_object_engine(obj);
-    if (engine) {
-        yetty_ygui_framework_mark_dirty(engine);
+    struct yetty_ygui_framework *framework = yetty_ygui_object_framework(obj);
+    if (framework) {
+        yetty_ygui_framework_mark_dirty(framework);
     }
     return YETTY_OK_VOID();
 }

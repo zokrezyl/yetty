@@ -28,10 +28,10 @@ extern "C" {
 #endif
 
 struct yetty_ygui_object;
-struct yetty_ygui_runtime;
+struct yetty_ygui_framework;
 
 YETTY_YRESULT_DECLARE(yetty_ygui_object_ptr, struct yetty_ygui_object *);
-YETTY_YRESULT_DECLARE(yetty_ygui_framework_ptr, struct yetty_ygui_runtime *);
+YETTY_YRESULT_DECLARE(yetty_ygui_framework_ptr, struct yetty_ygui_framework *);
 
 /* Slot-domain string every ygui class registers under. */
 #define YETTY_YGUI_DOMAIN "yetty_ygui"

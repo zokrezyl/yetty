@@ -436,7 +436,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
      * fallback literals are belt-and-braces — theme is engine-owned and
      * non-NULL after framework_create. */
     const struct yetty_ygui_theme *theme =
-        yetty_ygui_framework_theme(yetty_ygui_object_engine(obj));
+        yetty_ygui_framework_theme(yetty_ygui_object_framework(obj));
     uint32_t color_strip = theme ? theme->yui_strip : 0xFF1F1A14u;
     uint32_t color_active = theme ? theme->yui_tab_active : 0xFF14100Bu;
     uint32_t color_inactive = theme ? theme->yui_tab_inactive : 0xFF2C261Eu;
