@@ -53,6 +53,36 @@ terminal:
     # clipboard (no Ctrl+Shift+C needed). Set to false if you prefer
     # the Windows convention (explicit copy only).
     auto-copy: true
+  # Terminal colour palette. These define the RGB values the terminal
+  # resolves *indexed* colours to — the 16 ANSI colours (SGR 30-37/90-97
+  # and 38;5;n for n < 16) used by ls, tmux, nvim, prompts, etc.
+  # Truecolor (38;2;r;g;b) is sent verbatim by the app and does NOT go
+  # through this table. Each value is a #RRGGBB hex string; delete a key
+  # to fall back to the built-in default shown here.
+  colors:
+    # Default text / canvas colours for cells with no explicit colour.
+    foreground: "#f0f0f0"
+    background: "#000000"
+    # The 8 normal ANSI colours (SGR 30-37 / 40-47).
+    normal:
+      black:   "#1d1f21"
+      red:     "#cc6666"
+      green:   "#b5bd68"
+      yellow:  "#f0c674"
+      blue:    "#81a2be"
+      magenta: "#b294bb"
+      cyan:    "#8abeb7"
+      white:   "#c5c8c6"
+    # The 8 bright ANSI colours (SGR 90-97 / 100-107).
+    bright:
+      black:   "#666666"
+      red:     "#d54e53"
+      green:   "#b9ca4a"
+      yellow:  "#e7c547"
+      blue:    "#7aa6da"
+      magenta: "#c397d8"
+      cyan:    "#70c0ba"
+      white:   "#eaeaea"
   text-layer:
     font:
       # Font rendering method: "raster" or "msdf"
