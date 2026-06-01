@@ -16,6 +16,9 @@
 #ifdef YETTY_YCAT_HAS_DIAGRAM
 #include <yetty/ydiagram/mermaid-parser.h>
 #endif
+#ifdef YETTY_YCAT_HAS_LOTTIE
+#include <yetty/ylottie/ylottie.h>
+#endif
 #include <yetty/ytrace/ytrace.h>
 
 #include <stdlib.h>
@@ -118,6 +121,11 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     }
     if (strcasecmp(noleading, "svg") == 0) {
         return YETTY_YCAT_TYPE_SVG;
+    }
+    /* dotLottie containers are zips we don't unpack, but a raw Bodymovin JSON
+     * is often given the .lottie name — route it and let the handler parse. */
+    if (strcasecmp(noleading, "lottie") == 0) {
+        return YETTY_YCAT_TYPE_LOTTIE;
     }
     /* Raw H.264 Annex-B common extensions. (.mp4 / .mov / .m4v need a
      * demuxer we don't ship here yet — leave them unmapped for now.) */
@@ -245,7 +253,7 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     enum yetty_ycat_type by_ext = yetty_ycat_type_from_extension(path_extension(path));
     if (by_ext == YETTY_YCAT_TYPE_MARKDOWN || by_ext == YETTY_YCAT_TYPE_PDF ||
         by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID ||
-        by_ext == YETTY_YCAT_TYPE_VIDEO) {
+        by_ext == YETTY_YCAT_TYPE_VIDEO || by_ext == YETTY_YCAT_TYPE_LOTTIE) {
         return by_ext;
     }
 
@@ -268,6 +276,14 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
      * sniff and is cheap enough to run on every text/plain blob. */
     if (bytes && len > 0 && yetty_ydiagram_mermaid_can_parse((const char *)bytes, len)) {
         return YETTY_YCAT_TYPE_MERMAID;
+    }
+#endif
+
+#ifdef YETTY_YCAT_HAS_LOTTIE
+    /* Lottie has no libmagic signature and shares the .json extension with
+     * unrelated data, so sniff for its tell-tale top-level shape. */
+    if (bytes && len > 0 && yetty_ylottie_can_parse((const char *)bytes, len)) {
+        return YETTY_YCAT_TYPE_LOTTIE;
     }
 #endif
 

@@ -27,6 +27,12 @@ if(YETTY_ENABLE_FEATURE_YVIDEO)
     list(APPEND YCAT_SOURCES handler-video.c)
 endif()
 
+# Lottie handler — optional, only built when ylottie is enabled. detect.c's
+# content sniffer also calls into ylottie, guarded by the same flag.
+if(YETTY_ENABLE_FEATURE_YLOTTIE)
+    list(APPEND YCAT_SOURCES handler-lottie.c)
+endif()
+
 #=============================================================================
 # Tree-sitter highlight queries are embedded at configure time. Each grammar
 # exports TS_QUERIES_DIR_<name> (see build-tools/yetty/libs/tree-sitter.cmake).
@@ -114,6 +120,11 @@ endif()
 if(YETTY_ENABLE_FEATURE_YVIDEO)
     target_link_libraries(yetty_ycat PUBLIC yetty_yvideo_core)
     target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YVIDEO=1)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YLOTTIE)
+    target_link_libraries(yetty_ycat PUBLIC yetty_ylottie)
+    target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_LOTTIE=1)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBMAGIC AND TARGET magic)

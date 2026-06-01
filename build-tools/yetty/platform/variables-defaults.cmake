@@ -127,6 +127,7 @@ option(YETTY_ENABLE_FEATURE_YCAT      "ycat — MIME-dispatched cat for cards"  
 option(YETTY_ENABLE_FEATURE_YPDF      "ypdf — PDF to ydraw buffer"          ON)
 option(YETTY_ENABLE_FEATURE_YMARKDOWN "ymarkdown — Markdown to ydraw buffer" ON)
 option(YETTY_ENABLE_FEATURE_YSVG      "ysvg — SVG (Tiny 1.2) to ydraw buffer" ON)
+option(YETTY_ENABLE_FEATURE_YLOTTIE   "ylottie — Lottie (single frame) to ydraw buffer" ON)
 
 # Build pipeline
 option(YETTY_ENABLE_FEATURE_ASSETS    "assets — runtime asset copying"       ON)
@@ -166,6 +167,7 @@ option(YETTY_ENABLE_TOOL_YSHEET          "ysheet tool"                       ON)
 option(YETTY_ENABLE_TOOL_YSLIDE          "yslide tool"                       ON)
 option(YETTY_ENABLE_TOOL_QA              "qa static analysis tools"          ON)
 option(YETTY_ENABLE_TOOL_YTHORVG         "yetty-ythorvg CLI (SVG/Lottie -> OSC)" ON)
+option(YETTY_ENABLE_TOOL_YLOTTIE         "yetty-ylottie CLI (Lottie animation -> OSC)" ON)
 option(YETTY_ENABLE_TOOL_DECODE_YDRAW    "decode-ydraw diagnostic tool"     ON)
 option(YETTY_ENABLE_TOOL_YDIAGRAM         "ydiagram CLI (Mermaid → ydraw OSC)" ON)
 option(YETTY_ENABLE_FEATURE_YNETSURF     "ynetsurf — NetSurf frontend lib"   ON)
