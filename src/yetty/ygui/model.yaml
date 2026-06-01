@@ -1132,6 +1132,67 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: ymz_emit_body
+  - name: ynode
+    domain: ygui
+    accessor: yetty_ygui_ynode_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/ynode.c
+    parent:
+      domain: ygui
+      name: vbox
+    mixins: []
+    data: struct node_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ynode_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: ynode_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: ynode_paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: ynode_on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: ynode_on_motion
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: ynode_on_release
+  - name: ynodes
+    domain: ygui
+    accessor: yetty_ygui_ynodes_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/ynodes.c
+    parent:
+      domain: ygui
+      name: primitive_widget
+    mixins: []
+    data: struct nodes_data
+    ops:
+      - slot: constructor
+        slot_domain: ygui
+        impl: ynodes_constructor
+      - slot: destructor
+        slot_domain: ygui
+        impl: ynodes_destructor
+      - slot: widget_paint
+        slot_domain: ygui
+        impl: ynodes_paint
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: ynodes_on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: ynodes_on_motion
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: ynodes_on_release
+      - slot: widget_on_scroll
+        slot_domain: ygui
+        impl: ynodes_on_scroll
   - name: yplot
     domain: ygui
     accessor: yetty_ygui_yplot_class_get
