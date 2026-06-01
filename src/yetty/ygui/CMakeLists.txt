@@ -71,6 +71,7 @@ set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ynodes.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/ypdf.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yplot.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yrich_view.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yshadertoy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yvideo.c
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yzoo.c
@@ -112,6 +113,7 @@ target_link_libraries(ygui PUBLIC
     yetty_yplot_core
     yetty_yimage_core
     yetty_ymarkdown
+    yetty_yrich
     yetty_ymaze
     yetty_yzoo
     yetty_yjungle

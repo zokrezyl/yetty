@@ -1,134 +1,81 @@
 /*
- * ydoc — interactive rich-text document editor.
+ * ydoc — rich-text document editor.
  *
- * Builds a yetty_yrich_ydoc, hands it to the shared yrich-runner which
- * pumps stdin events into the document and emits ydraw frames to the
- * canvas via OSC 666674.
+ * Thin entry: builds (or loads) a yetty_yrich_ydoc and hands it to the
+ * shared yrich app host, which opens a window and runs the ygui-decorated
+ * editor (formatting toolbar + scrolling document view + statusbar),
+ * rendered through the in-process yfigure container — same path as the
+ * other ygui apps (no OSC).
+ *
+ * Press 'q' / Esc / close the window to quit.
  *
  * Usage:
  *   ydoc                       # built-in demo content
- *   ydoc -f path/to/sample.ydoc.yaml
- *   ydoc -f path/to/sample.ydoc.yaml --dump
+ *   ydoc path/to/sample.ydoc.yaml
  */
 
-#include <yrich-runner.h>
-
-#include <yetty/ydraw-core/draw-list.h>
-#include <yetty/yplatform/getopt.h>
 #include <yetty/yrich/ydoc.h>
+#include <yetty/yrich/yrich-app.h>
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-yaml.h>
 
-#include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 static void usage(FILE *out, const char *prog)
 {
 	fprintf(out,
-		"Usage: %s [options]\n"
-		"\n"
-		"Options:\n"
-		"  -f, --file PATH  load document from YAML file\n"
-		"  --dump           render once and exit (no interactive loop)\n"
-		"  -h, --help       show this help\n",
+		"Usage: %s [file.ydoc.yaml]\n"
+		"  With no file, opens built-in demo content.\n",
 		prog);
 }
 
 static void seed_demo(struct yetty_yrich_ydoc *d)
 {
-	struct {
-		const char *text;
-	} paras[] = {
-		{ "Welcome to ydoc — a rich text editor in your terminal." },
-		{ "" },
-		{ "Type, navigate with arrow keys, select with shift, and "
-		  "use Ctrl+Z / Ctrl+Y for undo / redo." },
-		{ "" },
-		{ "Press 'q' to quit." },
+	const char *paras[] = {
+		"Welcome to ydoc — a rich text editor.",
+		"",
+		"Click in the toolbar to undo / redo or add a paragraph.",
+		"",
+		"Press 'q' or Esc to quit.",
 	};
 	for (size_t i = 0; i < sizeof(paras) / sizeof(paras[0]); i++) {
-		yetty_yrich_ydoc_add_paragraph(d, paras[i].text,
-					       strlen(paras[i].text));
+		yetty_yrich_ydoc_add_paragraph(d, paras[i], strlen(paras[i]));
 	}
 }
 
 int main(int argc, char **argv)
 {
-	bool dump = false;
 	const char *file_path = NULL;
-
-	static const struct yetty_yplatform_option long_opts[] = {
-		{ "file", required_argument, NULL, 'f' },
-		{ "dump", no_argument,       NULL, 'D' },
-		{ "help", no_argument,       NULL, 'h' },
-		{ NULL,   0,                 NULL, 0   },
-	};
-
-	int c;
-	while ((c = yetty_yplatform_getopt_long(argc, argv, "f:h", long_opts, NULL)) != -1) {
-		switch (c) {
-		case 'f': file_path = yetty_yplatform_optarg; break;
-		case 'D': dump = true; break;
-		case 'h': usage(stdout, argv[0]); return 0;
-		default:  usage(stderr, argv[0]); return 2;
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+			usage(stdout, argv[0]);
+			return 0;
+		}
+		if (argv[i][0] != '-' && !file_path) {
+			file_path = argv[i];
 		}
 	}
 
 	struct yetty_yrich_ydoc *doc = NULL;
 	if (file_path) {
-		struct yetty_yrich_ydoc_ptr_result lr =
-			yetty_yrich_ydoc_load_yaml_file(file_path);
+		struct yetty_yrich_ydoc_ptr_result lr = yetty_yrich_ydoc_load_yaml_file(file_path);
 		if (YETTY_IS_ERR(lr)) {
-			fprintf(stderr, "ydoc: load %s: %s\n", file_path,
-				lr.error.msg);
+			fprintf(stderr, "ydoc: load %s: %s\n", file_path, lr.error.msg);
+			yetty_ycore_error_destroy(lr.error);
 			return 1;
 		}
 		doc = lr.value;
 	} else {
-		struct yetty_yrich_ydoc_ptr_result dr =
-			yetty_yrich_ydoc_create();
+		struct yetty_yrich_ydoc_ptr_result dr = yetty_yrich_ydoc_create();
 		if (YETTY_IS_ERR(dr)) {
 			fprintf(stderr, "ydoc: %s\n", dr.error.msg);
+			yetty_ycore_error_destroy(dr.error);
 			return 1;
 		}
 		doc = dr.value;
 		seed_demo(doc);
 	}
 
-	struct yetty_ydraw_draw_list_config bcfg = {0};
-	bcfg.scene_max_x = yetty_yrich_document_content_width(&doc->base);
-	bcfg.scene_max_y = yetty_yrich_document_content_height(&doc->base);
-	struct yetty_ydraw_draw_list_result br =
-		yetty_ydraw_draw_list_config_buffer_create(&bcfg);
-	if (YETTY_IS_ERR(br)) {
-		fprintf(stderr, "ydoc: %s\n", br.error.msg);
-		yetty_yrich_document_destroy(&doc->base);
-		return 1;
-	}
-	struct yetty_ydraw_draw_list *buf = br.value;
-	yetty_yrich_document_set_buffer(&doc->base, buf);
-
-	struct yrich_runner runner;
-	yrich_runner_init(&runner, &doc->base, buf);
-	runner.dump_once = dump;
-
-	if (!dump) {
-		yrich_runner_raw_mode_enable();
-		yrich_runner_subscribe(true);
-	}
-
-	struct yetty_ycore_void_result rr = yrich_runner_loop(&runner);
-	int rc = YETTY_IS_OK(rr) ? 0 : 1;
-	if (YETTY_IS_ERR(rr))
-		fprintf(stderr, "ydoc: %s\n", rr.error.msg);
-
-	if (!dump)
-		yrich_runner_subscribe(false);
-
-	yrich_runner_fini(&runner);
-	yetty_ydraw_draw_list_destroy(buf);
-	yetty_yrich_document_destroy(&doc->base);
-	return rc;
+	return yetty_yrich_app_run(argc, argv, &doc->base, YETTY_YRICH_APP_YDOC);
 }
