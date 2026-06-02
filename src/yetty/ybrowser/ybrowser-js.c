@@ -47,38 +47,60 @@
  * console.* binding — one C function per level.
  * ===========================================================================*/
 
-static void console_print(JSContext *ctx, FILE *out, const char *level, int argc,
-                          JSValueConst *argv)
+/* Page console.* goes through ytrace (off by default; visible with
+ * YTRACE_DEFAULT_ON). Real sites log copiously and many partially fail on
+ * this minimal JS surface — spewing that straight to stderr would clutter
+ * the operator's terminal in standalone, and corrupt the OSC stream when
+ * the engine runs under `yetty -e` (stderr → PTY slave). */
+static void console_print(JSContext *ctx, const char *level, int argc, JSValueConst *argv)
 {
-    fprintf(out, "[js:%s] ", level);
-    for (int i = 0; i < argc; i++) {
+    char buf[1024];
+    size_t off = 0;
+    for (int i = 0; i < argc && off < sizeof(buf) - 1; i++) {
         const char *s = JS_ToCString(ctx, argv[i]);
-        if (s) {
-            if (i > 0) {
-                fputc(' ', out);
-            }
-            fputs(s, out);
-            JS_FreeCString(ctx, s);
+        if (!s) {
+            continue;
         }
+        if (i > 0 && off < sizeof(buf) - 1) {
+            buf[off++] = ' ';
+        }
+        size_t room = sizeof(buf) - 1 - off;
+        size_t sl = strlen(s);
+        size_t cp = sl < room ? sl : room;
+        memcpy(buf + off, s, cp);
+        off += cp;
+        JS_FreeCString(ctx, s);
     }
-    fputc('\n', out);
-    fflush(out);
+    buf[off] = '\0';
+    ydebug("[js:%s] %s", level, buf);
+    /* Also mirror to stderr when YBROWSER_JS_CONSOLE is set — the ybrowser
+     * tool enables this in its standalone (own-window) mode so page JS
+     * errors are visible for debugging, while leaving it off under
+     * `yetty -e` (where stderr → the PTY would corrupt the OSC stream). */
+    static int to_stderr = -1;
+    if (to_stderr < 0) {
+        to_stderr = getenv("YBROWSER_JS_CONSOLE") != NULL;
+    }
+    if (to_stderr) {
+        fprintf(stderr, "[js:%s] %s\n", level, buf);
+        fflush(stderr);
+    }
 }
 
-#define DEFINE_CONSOLE_FN(name, level, fp)                                                         \
+#define DEFINE_CONSOLE_FN(name, level)                                                             \
     static JSValue js_console_##name(JSContext *ctx, JSValueConst this_val, int argc,              \
                                      JSValueConst *argv)                                           \
     {                                                                                              \
         (void)this_val;                                                                            \
-        console_print(ctx, fp, level, argc, argv);                                                 \
+        console_print(ctx, level, argc, argv);                                                     \
         return JS_UNDEFINED;                                                                       \
     }
 
-DEFINE_CONSOLE_FN(log, "log", stderr)
-DEFINE_CONSOLE_FN(info, "info", stderr)
-DEFINE_CONSOLE_FN(debug, "debug", stderr)
-DEFINE_CONSOLE_FN(warn, "warn", stderr)
-DEFINE_CONSOLE_FN(error, "error", stderr)
+DEFINE_CONSOLE_FN(log, "log")
+DEFINE_CONSOLE_FN(info, "info")
+DEFINE_CONSOLE_FN(debug, "debug")
+DEFINE_CONSOLE_FN(warn, "warn")
+DEFINE_CONSOLE_FN(error, "error")
 
 static const JSCFunctionListEntry console_funcs[] = {
     JS_CFUNC_DEF("log", 1, js_console_log),     JS_CFUNC_DEF("info", 1, js_console_info),

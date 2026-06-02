@@ -311,9 +311,23 @@ int main(int argc, char **argv)
 
 	/* Interactive mode: hand off to the ygui browser UI. The positional
 	 * arg, if any, is the first page to open (URL or file); stdin carries
-	 * keystrokes, not HTML, so it is never read as a document here. */
+	 * keystrokes, not HTML, so it is never read as a document here.
+	 *
+	 * Outside a host yetty we open our OWN GPU window (standalone) — that
+	 * is the mode where the mouse wheel scrolls the page (a host yetty eats
+	 * the wheel for its own scrollback). Inside a yetty we run as a client. */
 	if (interactive) {
 		curl_global_init(CURL_GLOBAL_DEFAULT);
+#ifdef YETTY_YBROWSER_HAS_STANDALONE
+		const char *term_program = getenv("TERM_PROGRAM");
+		int in_yetty = term_program && strcmp(term_program, "yetty") == 0;
+		if (!in_yetty) {
+			/* Hand yinit a clean argv (just the program name) so it does
+			 * not try to parse ybrowser's URL/flags as yetty options. */
+			char *clean_argv[2] = {argv[0], NULL};
+			return ybrowser_ui_run_standalone(path, font_size, 1, clean_argv);
+		}
+#endif
 		return ybrowser_ui_run(path, width, height, font_size);
 	}
 

@@ -218,8 +218,14 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_rect(struct yetty_ygui_obje
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_rect: NULL obj");
     }
     struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
-    wd->rect = rect;
-    obj->dirty = 1;
+    /* Only dirty on an actual change. The layout pass calls set_rect for
+     * every widget on every emit; marking dirty unconditionally would keep
+     * the whole tree perpetually dirty and defeat incremental emit. */
+    if (wd->rect.min.x != rect.min.x || wd->rect.min.y != rect.min.y ||
+        wd->rect.max.x != rect.max.x || wd->rect.max.y != rect.max.y) {
+        wd->rect = rect;
+        obj->dirty = 1;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -244,8 +250,10 @@ struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_yg
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_scroll_main_set: NULL obj");
     }
     struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
-    wd->scroll_main = offset;
-    obj->dirty = 1;
+    if (wd->scroll_main != offset) {
+        wd->scroll_main = offset;
+        obj->dirty = 1;
+    }
     return YETTY_OK_VOID();
 }
 

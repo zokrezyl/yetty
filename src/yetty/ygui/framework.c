@@ -921,6 +921,7 @@ struct yetty_ycore_void_result yetty_ygui_emit_figure_body(struct yetty_ygui_emi
     if (figure_id == 0) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_figure_body: figure_id is 0");
     }
+    ydebug("emit_figure_body id=%u size=%u", figure_id, payload_len);
     return yetty_ygui_wire_append_record(ctx->figure_bodies, figure_id, payload, payload_len);
 }
 
@@ -1062,6 +1063,41 @@ static int should_skip_subtree(const struct yetty_ygui_object *node)
         return 0;
     }
     return l->width <= 0.0f || l->height <= 0.0f;
+}
+
+/* Does `node` or any descendant that paints into the SAME figure body have
+ * its dirty flag set? Recursion stops at nested figure boundaries: a child
+ * figure is an independent receiver-side object shipped by its own
+ * walk_emit_body pass, so its dirtiness must not force the parent figure's
+ * body to be re-shipped. This gates the incremental figure-body skip — a
+ * figure whose body is unchanged keeps its last body on the receiver. */
+static int subtree_dirty(const struct yetty_ygui_object *node)
+{
+    if (node->dirty) {
+        return 1;
+    }
+    for (const struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+        if (yetty_ygui_widget_figure_kind(c) != 0) {
+            continue; /* shipped as its own figure body */
+        }
+        if (subtree_dirty(c)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Clear every widget's dirty flag after a successful emit, so the next emit
+ * only re-ships subtrees that actually changed since this one. */
+static void clear_subtree_dirty(struct yetty_ygui_object *node)
+{
+    if (!node) {
+        return;
+    }
+    node->dirty = 0;
+    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+        clear_subtree_dirty(c);
+    }
 }
 
 /* A hidden subtree is skipped from emission — but any figure descendants
@@ -1213,6 +1249,17 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     /* Non-boundary node: paint into whatever draw list is active. */
     if (yetty_ygui_widget_figure_kind(node) == 0) {
         return walk_emit_body_inline(node, ctx);
+    }
+
+    /* Incremental figure body: if this figure was already minted on the
+     * receiver (its body shipped at least once) and nothing in its body
+     * subtree changed, skip re-shipping. The receiver keeps the last body
+     * for this figure id; a pure rect move is handled separately by the
+     * pass-1 SET_CHILD_RECT. This is what stops an unchanged page (a
+     * scrollarea figure) from being re-serialized every emit. */
+    if (ctx->framework && figure_is_minted(ctx->framework, node->id) && !subtree_dirty(node)) {
+        ydebug("figure SKIP (clean, minted) id=%u", node->id);
+        return YETTY_OK_VOID();
     }
 
     /* Figure boundary: swap in a fresh draw list, paint the whole
@@ -1594,9 +1641,12 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_frame
     }
     free(ctx.staged_mints);
 
-    /* Mark the framework clean — every per-frame full re-emit is still the
-     * model; per-widget dirty tracking will gate the incremental emit
-     * in a follow-up. */
+    /* The envelope shipped — every widget's dirty flag has now been
+     * accounted for (either re-emitted, or skipped because its figure body
+     * was unchanged). Clear them so the next emit only re-ships subtrees
+     * that change after this point. The chrome ygrid is still full-redraw;
+     * the per-figure-body skip above is what gates incremental emit. */
+    clear_subtree_dirty(framework->root);
     framework->dirty = 0;
     return YETTY_OK_VOID();
 }
