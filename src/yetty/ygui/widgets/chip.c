@@ -21,11 +21,11 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_class_expect(yetty_ygui_chip_class_get(), "yetty_ygui_chip_class_get"),
+        obj, yetty_ygui_chip_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "chip: super");
     struct chip_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_chip_class_get(), "yetty_ygui_chip_class_get"));
+        obj, yetty_ygui_chip_class_get().value);
     d->label = NULL;
     d->closable = 0;
     return YETTY_OK_VOID();
@@ -38,10 +38,10 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct chip_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_chip_class_get(), "yetty_ygui_chip_class_get"));
+        obj, yetty_ygui_chip_class_get().value);
     free(d->label);
     return yetty_ygui_super_void(
-        obj, yetty_ygui_class_expect(yetty_ygui_chip_class_get(), "yetty_ygui_chip_class_get"),
+        obj, yetty_ygui_chip_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -56,7 +56,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_ERR(yetty_ycore_void, "chip paint: NULL ctx");
     }
     struct chip_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_chip_class_get(), "yetty_ygui_chip_class_get"));
+        obj, yetty_ygui_chip_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -88,7 +88,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_ygui_objec
         return YETTY_ERR(yetty_ycore_void, "chip_set_label: NULL");
     }
     struct chip_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_chip_class_get(), "yetty_ygui_chip_class_get"));
+        obj, yetty_ygui_chip_class_get().value);
     free(d->label);
     d->label = NULL;
     if (label) {
@@ -108,7 +108,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_ygui_ob
         return YETTY_ERR(yetty_ycore_void, "chip_set_closable: NULL");
     }
     struct chip_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_class_expect(yetty_ygui_chip_class_get(), "yetty_ygui_chip_class_get"));
+        obj, yetty_ygui_chip_class_get().value);
     d->closable = c ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }

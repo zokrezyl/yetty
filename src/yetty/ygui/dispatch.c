@@ -1,5 +1,5 @@
 /*
- * ygui-class.c — convenience wrappers over yclass.
+ * dispatch.c — convenience wrappers over yclass.
  *
  * ygui owns nothing of its own here: the slot allocator, dispatch
  * table, parent / mixin chain walk, and method-id registry all live
@@ -11,14 +11,13 @@
  *   - delegates dispatch lookup,
  *   - walks the parent chain for super dispatch.
  *
- * The historical `struct yetty_ygui_class` wrapper is gone; classes
- * registered through the codegen-emitted accessors hold their identity
- * directly as `const struct yetty_yclass *`.
+ * ygui has no class type of its own; classes registered through the
+ * codegen-emitted accessors hold their identity directly as
+ * `const struct yetty_yclass *`.
  */
 
-#include <yetty/ygui/class.h>
+#include "internal.h"
 
-#include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
 yetty_yclass_method_slot yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id)

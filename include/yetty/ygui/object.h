@@ -10,12 +10,15 @@
 
 #include <stdint.h>
 
+#include <yclass/class.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ygui/class.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct yetty_ygui_object;
+YETTY_YRESULT_DECLARE(yetty_ygui_object_ptr, struct yetty_ygui_object *);
 
 /* Create one instance of `cls` and link it under `parent` (NULL for the
  * root). Allocates one block sized to (header + sum of data slices).
@@ -47,18 +50,18 @@ struct yetty_ygui_object *yetty_ygui_object_next_sibling(struct yetty_ygui_objec
  * render order and hit order agree. No-op for a root / parentless obj. */
 void yetty_ygui_object_raise(struct yetty_ygui_object *obj);
 
-/* The engine that owns this widget tree. Resolves up the parent chain
- * to the root object, then returns the engine pointer associated with
- * the root. Returns NULL if the root has no engine attached. */
-struct yetty_ygui_runtime *yetty_ygui_object_engine(struct yetty_ygui_object *obj);
+/* The framework that owns this widget tree. Resolves up the parent chain
+ * to the root object, then returns the framework pointer associated with
+ * the root. Returns NULL if the root has no framework attached. */
+struct yetty_ygui_framework *yetty_ygui_object_framework(struct yetty_ygui_object *obj);
 
-/* The wire id allocated for this widget by the engine at construction
+/* The wire id allocated for this widget by the framework at construction
  * time. Used as a CMD_GROUP id (figure_kind==0) or a CREATE_CHILD
  * figure_id (figure_kind!=0). */
 uint32_t yetty_ygui_object_id(const struct yetty_ygui_object *obj);
 
 /* Mark this widget as dirty — content changed without geometry move.
- * The engine ORs dirty flags during emission and clears them after. */
+ * The framework ORs dirty flags during emission and clears them after. */
 struct yetty_ycore_void_result yetty_ygui_object_set_dirty(struct yetty_ygui_object *obj);
 
 int yetty_ygui_object_is_dirty(const struct yetty_ygui_object *obj);

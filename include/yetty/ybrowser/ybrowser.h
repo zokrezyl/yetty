@@ -82,6 +82,13 @@ int yetty_ylexbor_content_height(const struct yetty_ylexbor *r);
  * yetty_ylexbor_dom_dirty() afterwards and call _relayout() if set. */
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y);
 
+/* If a laid-out box at document coords (x, y) sits inside an <a>/<area>
+ * with an href, return that href resolved against the document base URL
+ * (caller frees). Returns NULL when there is no link there, or for an
+ * in-page "#fragment" target. Works without JavaScript — it reads the
+ * DOM/box tree directly — so plain hyperlinks are navigable. */
+char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y);
+
 /* True iff JS mutated the DOM since the last relayout. Cleared by
  * yetty_ylexbor_relayout. */
 int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r);

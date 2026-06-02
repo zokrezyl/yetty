@@ -49,7 +49,7 @@ struct path_bundle {
 };
 
 struct yetty_yui_config_dialog {
-    struct yetty_ygui_runtime *engine;         /* borrowed */
+    struct yetty_ygui_framework *framework;    /* borrowed */
     const struct yetty_yconfig_config *config; /* borrowed */
     struct yetty_ygui_object *window;
     struct yetty_ygui_object *textarea;
@@ -157,7 +157,8 @@ static void show_path(struct yetty_yui_config_dialog *dlg, const char *path)
 }
 
 static struct yetty_ycore_void_result on_tree_toggle(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *node, void *userdata)
+                                                     struct yetty_yclass_object *node,
+                                                     void *userdata)
 {
     (void)ctx;
     (void)node;
@@ -225,10 +226,10 @@ static void build_tree(struct yetty_yui_config_dialog *dlg, struct yetty_ygui_ob
 }
 
 struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
-    struct yetty_ygui_runtime *engine, const struct yetty_yconfig_config *config)
+    struct yetty_ygui_framework *framework, const struct yetty_yconfig_config *config)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: NULL framework");
     }
     if (!config || !config->ops) {
         return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: NULL config");
@@ -237,16 +238,16 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
         return YETTY_ERR(yetty_yui_config_dialog_ptr,
                          "config_dialog: yconfig missing child iteration ops");
     }
-    struct yetty_ygui_object *root = yetty_ygui_framework_root(engine);
+    struct yetty_ygui_object *root = yetty_ygui_framework_root(framework);
     if (!root) {
-        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: engine has no root");
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: framework has no root");
     }
 
     struct yetty_yui_config_dialog *dlg = calloc(1, sizeof(*dlg));
     if (!dlg) {
         return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: alloc");
     }
-    dlg->engine = engine;
+    dlg->framework = framework;
     dlg->config = config;
 
     /* Reserve room for every branch up front so the bundle array never
@@ -350,8 +351,8 @@ void yetty_yui_config_dialog_show(struct yetty_yui_config_dialog *dlg)
         return;
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dlg->window, 1));
-    if (dlg->engine) {
-        yetty_ygui_framework_mark_dirty(dlg->engine);
+    if (dlg->framework) {
+        yetty_ygui_framework_mark_dirty(dlg->framework);
     }
 }
 
@@ -361,8 +362,8 @@ void yetty_yui_config_dialog_hide(struct yetty_yui_config_dialog *dlg)
         return;
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dlg->window, 0));
-    if (dlg->engine) {
-        yetty_ygui_framework_mark_dirty(dlg->engine);
+    if (dlg->framework) {
+        yetty_ygui_framework_mark_dirty(dlg->framework);
     }
 }
 

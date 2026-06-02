@@ -259,7 +259,7 @@ yetty_ygrid_grid {
      * tracks the value the dispatcher was last regenerated for. The
      * dispatcher rebuild path triggers a shader-hash change which makes
      * the binder refinalize on the next update(). */
-    struct yetty_ydraw_font *fonts[YETTY_YRENDER_RS_MAX_CHILDREN - 1];
+    struct yetty_yfont_font *fonts[YETTY_YRENDER_RS_MAX_CHILDREN - 1];
     uint32_t font_count;
     uint32_t font_generation;
     uint32_t last_emitted_font_generation;
@@ -1010,7 +1010,7 @@ static struct yetty_ycore_void_result expand_text_span(
         ydebug("ygrid: TEXT_SPAN font_id=%d -> slot %u has no font; dropped", span->font_id, slot);
         return YETTY_OK_VOID();
     }
-    struct yetty_ydraw_font *font = grid->fonts[slot];
+    struct yetty_yfont_font *font = grid->fonts[slot];
 
     struct yetty_yrender_gpu_resource_set_result font_rs_result =
         font->ops->get_gpu_resource_set(font);
@@ -2417,7 +2417,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         }
         hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_TYPE_FONT,
                                                 YETTY_YDRAW_TYPE_FONT,
-                                                yetty_ydraw_font_drawable_handler);
+                                                yetty_yfont_font_drawable_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(&g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry font", hr);
@@ -2702,7 +2702,7 @@ struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *
 }
 
 struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *grid, uint32_t slot,
-                                                    struct yetty_ydraw_font *font)
+                                                    struct yetty_yfont_font *font)
 {
     if (!grid) {
         return YETTY_ERR(yetty_ycore_void, "ygrid_set_font: NULL grid");

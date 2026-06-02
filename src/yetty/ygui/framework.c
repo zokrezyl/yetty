@@ -1,12 +1,12 @@
 /*
- * ygui-engine.c — engine lifecycle, ID allocator, two-pass wire emission.
+ * framework.c — framework lifecycle, ID allocator, two-pass wire emission.
  *
- * The engine owns app-global state for one ygui instance: wire transport
- * (output_pty), id allocator with free-list, the engine-side container
+ * The framework owns app-global state for one ygui instance: wire transport
+ * (output_pty), id allocator with free-list, the framework-side container
  * + ygrid that hold every widget, and reusable per-emit buffers.
  *
  * One yetty_ygui_framework_emit cycle:
- *   1) Clear per-emit buffers; ensure the engine's container + ygrid
+ *   1) Clear per-emit buffers; ensure the framework's container + ygrid
  *      have been emitted at least once.
  *   2) Pass 1 — walk tree, dispatch yetty_ygui_widget_emit_container on
  *      every widget. Default impl writes CREATE_CHILD records for figure
@@ -34,18 +34,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The engine's ygrid id starts in a high range so it never collides
+/* The framework's ygrid id starts in a high range so it never collides
  * with the widget id allocator's first allocations. Per the wire
  * model, the receiver IS the root container — there is no
- * intermediate engine container; the ygrid is a direct child of the
- * root, alongside any figure widgets the engine emits.
+ * intermediate framework container; the ygrid is a direct child of the
+ * root, alongside any figure widgets the framework emits.
  *
  * Pending a yetty service for unique terminal-wide allocation, the
  * id is a placeholder constant. */
-#define YGUI_ENGINE_YGRID_ID_BASE 0xFE000001u
+#define YGUI_framework_YGRID_ID_BASE 0xFE000001u
 
 /*===========================================================================
- * Engine lifecycle.
+ * framework lifecycle.
  *=========================================================================*/
 
 struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
@@ -57,94 +57,95 @@ struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
      * the yface-over-pty fallback, which is taken only when no container
      * is wired — so a NULL pty is safe as long as a container is set
      * before the first emit. */
-    struct yetty_ygui_runtime *engine = calloc(1, sizeof(*engine));
-    if (!engine) {
+    struct yetty_ygui_framework *framework = calloc(1, sizeof(*framework));
+    if (!framework) {
         return YETTY_ERR(yetty_ygui_framework_ptr, "yetty_ygui_framework_create: calloc failed");
     }
-    engine->output_pty = output_pty;
+    framework->output_pty = output_pty;
     /* Widget ids start at 1; the receiver uses 0 to mean "admin". */
-    engine->next_id = 1;
-    engine->next_raise_z = YETTY_YGUI_Z_FLOATING_BASE;
-    engine->ygrid_id = YGUI_ENGINE_YGRID_ID_BASE;
-    engine->ygrid_created = 0;
-    engine->viewport_w = 800.0f;
-    engine->viewport_h = 600.0f;
+    framework->next_id = 1;
+    framework->next_raise_z = YETTY_YGUI_Z_FLOATING_BASE;
+    framework->ygrid_id = YGUI_framework_YGRID_ID_BASE;
+    framework->ygrid_created = 0;
+    framework->viewport_w = 800.0f;
+    framework->viewport_h = 600.0f;
     /* Brand theme — widgets consult this at paint time. Default
      * palette is the yetty brand; yetty_ygui_framework_set_theme (or
-     * apply_config_to_theme) overlays user config. The engine owns the
+     * apply_config_to_theme) overlays user config. The framework owns the
      * theme by default; replacement transfers ownership in. */
-    engine->theme = yetty_ygui_theme_create_default();
-    if (!engine->theme) {
-        free(engine);
+    framework->theme = yetty_ygui_theme_create_default();
+    if (!framework->theme) {
+        free(framework);
         return YETTY_ERR(yetty_ygui_framework_ptr,
                          "yetty_ygui_framework_create: theme alloc failed");
     }
-    engine->dirty = 1;
+    framework->dirty = 1;
     /* yclass dispatch defaults: in-process (no remote session), no
      * container wired yet. Host calls set_container_obj / set_session
      * after framework_create to opt into yclass-slot shipping. Until
      * then framework_flush falls back to the yface-over-pty path. */
-    engine->yclass_ctx.session = NULL;
-    engine->container_obj = NULL;
-    return YETTY_OK(yetty_ygui_framework_ptr, engine);
+    framework->yclass_ctx.session = NULL;
+    framework->container_obj = NULL;
+    return YETTY_OK(yetty_ygui_framework_ptr, framework);
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_set_container_obj(
-    struct yetty_ygui_runtime *engine, struct yetty_yclass_object *container)
+    struct yetty_ygui_framework *framework, struct yetty_yclass_object *container)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_container_obj: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_set_container_obj: NULL framework");
     }
-    engine->container_obj = container;
+    framework->container_obj = container;
     return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_set_session(
-    struct yetty_ygui_runtime *engine, struct yetty_yclass_rpc_session *session)
+    struct yetty_ygui_framework *framework, struct yetty_yclass_rpc_session *session)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_session: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_session: NULL framework");
     }
-    engine->yclass_ctx.session = session;
+    framework->yclass_ctx.session = session;
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_runtime *engine)
+struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_framework *framework)
 {
-    if (!engine) {
+    if (!framework) {
         return YETTY_OK_VOID();
     }
-    if (engine->root) {
-        struct yetty_ycore_void_result r = yetty_ygui_del(engine->root);
+    if (framework->root) {
+        struct yetty_ycore_void_result r = yetty_ygui_del(framework->root);
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
-        engine->root = NULL;
+        framework->root = NULL;
     }
     /* output_pty is borrowed — caller destroys it. */
-    free(engine->free_ids);
-    free(engine->pending_deletes);
-    free(engine->minted_figures);
-    yetty_ycore_buffer_destroy(&engine->container_records);
-    if (engine->ygrid_draw_list) {
-        yetty_ydraw_draw_list_destroy(engine->ygrid_draw_list);
-        engine->ygrid_draw_list = NULL;
+    free(framework->free_ids);
+    free(framework->pending_deletes);
+    free(framework->minted_figures);
+    yetty_ycore_buffer_destroy(&framework->container_records);
+    if (framework->ygrid_draw_list) {
+        yetty_ydraw_draw_list_destroy(framework->ygrid_draw_list);
+        framework->ygrid_draw_list = NULL;
     }
-    yetty_ycore_buffer_destroy(&engine->figure_bodies);
-    if (engine->theme) {
-        yetty_ygui_theme_destroy(engine->theme);
-        engine->theme = NULL;
+    yetty_ycore_buffer_destroy(&framework->figure_bodies);
+    if (framework->theme) {
+        yetty_ygui_theme_destroy(framework->theme);
+        framework->theme = NULL;
     }
-    free(engine);
+    free(framework);
     return YETTY_OK_VOID();
 }
 
 /* Membership probe + insert for the minted_figures set. Linear scan —
  * the set is small (handful of figure widgets per app). */
-static int figure_is_minted(const struct yetty_ygui_runtime *engine, uint32_t id)
+static int figure_is_minted(const struct yetty_ygui_framework *framework, uint32_t id)
 {
-    for (size_t i = 0; i < engine->minted_figure_count; ++i) {
-        if (engine->minted_figures[i] == id) {
+    for (size_t i = 0; i < framework->minted_figure_count; ++i) {
+        if (framework->minted_figures[i] == id) {
             return 1;
         }
     }
@@ -160,7 +161,7 @@ static int figure_is_minted_or_staged(const struct yetty_ygui_emit_ctx *ctx, uin
     if (!ctx) {
         return 0;
     }
-    if (figure_is_minted(ctx->engine, id)) {
+    if (figure_is_minted(ctx->framework, id)) {
         return 1;
     }
     for (size_t i = 0; i < ctx->staged_mint_count; ++i) {
@@ -171,7 +172,7 @@ static int figure_is_minted_or_staged(const struct yetty_ygui_emit_ctx *ctx, uin
     return 0;
 }
 
-/* Append `id` to the per-tick staged set. Pushed onto engine->minted_figures
+/* Append `id` to the per-tick staged set. Pushed onto framework->minted_figures
  * by framework_emit only after framework_flush returns OK. */
 static struct yetty_ycore_void_result figure_stage_mint(struct yetty_ygui_emit_ctx *ctx,
                                                         uint32_t id)
@@ -192,11 +193,12 @@ static struct yetty_ycore_void_result figure_stage_mint(struct yetty_ygui_emit_c
     return YETTY_OK_VOID();
 }
 
-static void figure_forget_minted(struct yetty_ygui_runtime *engine, uint32_t id)
+static void figure_forget_minted(struct yetty_ygui_framework *framework, uint32_t id)
 {
-    for (size_t i = 0; i < engine->minted_figure_count; ++i) {
-        if (engine->minted_figures[i] == id) {
-            engine->minted_figures[i] = engine->minted_figures[--engine->minted_figure_count];
+    for (size_t i = 0; i < framework->minted_figure_count; ++i) {
+        if (framework->minted_figures[i] == id) {
+            framework->minted_figures[i] =
+                framework->minted_figures[--framework->minted_figure_count];
             return;
         }
     }
@@ -208,12 +210,12 @@ struct yetty_ycore_void_result yetty_ygui_emit_ensure_child(
 {
     ydebug("ensure_child id=%u kind=%u rect=(%.1f,%.1f)-(%.1f,%.1f) minted=%d staged=%d", child_id,
            kind, min_x, min_y, max_x, max_y,
-           ctx && ctx->engine ? figure_is_minted(ctx->engine, child_id) : -1,
+           ctx && ctx->framework ? figure_is_minted(ctx->framework, child_id) : -1,
            ctx ? (int)ctx->staged_mint_count : -1);
-    if (!ctx || !ctx->engine) {
+    if (!ctx || !ctx->framework) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_ensure_child: NULL ctx");
     }
-    /* Consult both engine state (prior ticks) and the staged set
+    /* Consult both framework state (prior ticks) and the staged set
      * (this tick): if a CREATE_CHILD for `child_id` was already
      * appended this tick, fall through to SET_CHILD_RECT just like we
      * would for a previously committed mint — the receiver will see
@@ -227,62 +229,62 @@ struct yetty_ycore_void_result yetty_ygui_emit_ensure_child(
     return figure_stage_mint(ctx, child_id);
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(struct yetty_ygui_runtime *engine,
-                                                                 float width_px, float height_px)
+struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(
+    struct yetty_ygui_framework *framework, float width_px, float height_px)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_viewport: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_viewport: NULL framework");
     }
-    engine->viewport_w = width_px;
-    engine->viewport_h = height_px;
-    engine->dirty = 1;
+    framework->viewport_w = width_px;
+    framework->viewport_h = height_px;
+    framework->dirty = 1;
     return YETTY_OK_VOID();
 }
 
-struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_ygui_runtime *engine)
+struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_ygui_framework *framework)
 {
-    return engine ? engine->theme : NULL;
+    return framework ? framework->theme : NULL;
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_set_theme(struct yetty_ygui_runtime *engine,
-                                                              struct yetty_ygui_theme *theme)
+struct yetty_ycore_void_result yetty_ygui_framework_set_theme(
+    struct yetty_ygui_framework *framework, struct yetty_ygui_theme *theme)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_theme: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_theme: NULL framework");
     }
     if (!theme) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_theme: NULL theme");
     }
-    if (engine->theme && engine->theme != theme) {
-        yetty_ygui_theme_destroy(engine->theme);
+    if (framework->theme && framework->theme != theme) {
+        yetty_ygui_theme_destroy(framework->theme);
     }
-    engine->theme = theme;
-    engine->dirty = 1;
+    framework->theme = theme;
+    framework->dirty = 1;
     return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_apply_config_to_theme(
-    struct yetty_ygui_runtime *engine, const struct yetty_yconfig_config *config)
+    struct yetty_ygui_framework *framework, const struct yetty_yconfig_config *config)
 {
-    if (!engine) {
+    if (!framework) {
         return YETTY_ERR(yetty_ycore_void,
-                         "yetty_ygui_framework_apply_config_to_theme: NULL engine");
+                         "yetty_ygui_framework_apply_config_to_theme: NULL framework");
     }
-    if (!engine->theme) {
+    if (!framework->theme) {
         return YETTY_ERR(yetty_ycore_void,
-                         "yetty_ygui_framework_apply_config_to_theme: engine has no theme");
+                         "yetty_ygui_framework_apply_config_to_theme: framework has no theme");
     }
-    struct yetty_ycore_void_result r = yetty_ygui_theme_apply_config(engine->theme, config);
+    struct yetty_ycore_void_result r = yetty_ygui_theme_apply_config(framework->theme, config);
     if (YETTY_IS_OK(r)) {
-        engine->dirty = 1;
+        framework->dirty = 1;
     }
     return r;
 }
 
-void yetty_ygui_framework_viewport(const struct yetty_ygui_runtime *engine, float *width_px,
+void yetty_ygui_framework_viewport(const struct yetty_ygui_framework *framework, float *width_px,
                                    float *height_px)
 {
-    if (!engine) {
+    if (!framework) {
         if (width_px) {
             *width_px = 0;
         }
@@ -292,62 +294,65 @@ void yetty_ygui_framework_viewport(const struct yetty_ygui_runtime *engine, floa
         return;
     }
     if (width_px) {
-        *width_px = engine->viewport_w;
+        *width_px = framework->viewport_w;
     }
     if (height_px) {
-        *height_px = engine->viewport_h;
+        *height_px = framework->viewport_h;
     }
 }
 
-void yetty_ygui_framework_mark_dirty(struct yetty_ygui_runtime *engine)
+void yetty_ygui_framework_mark_dirty(struct yetty_ygui_framework *framework)
 {
-    if (engine) {
-        engine->dirty = 1;
+    if (framework) {
+        framework->dirty = 1;
     }
 }
 
-int yetty_ygui_framework_is_dirty(const struct yetty_ygui_runtime *engine)
+int yetty_ygui_framework_is_dirty(const struct yetty_ygui_framework *framework)
 {
-    return engine ? engine->dirty : 0;
+    return framework ? framework->dirty : 0;
 }
 
-int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_runtime *engine)
+int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_framework *framework)
 {
-    return engine && engine->pressed_obj ? 1 : 0;
+    return framework && framework->pressed_obj ? 1 : 0;
 }
 
-struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(struct yetty_ygui_runtime *engine)
+struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(
+    struct yetty_ygui_framework *framework)
 {
-    return engine ? engine->pressed_obj : NULL;
+    return framework ? framework->pressed_obj : NULL;
 }
 
-struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(struct yetty_ygui_runtime *engine)
+struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(
+    struct yetty_ygui_framework *framework)
 {
-    return engine ? engine->hovered_obj : NULL;
+    return framework ? framework->hovered_obj : NULL;
 }
 
-void yetty_ygui_framework_notify(struct yetty_ygui_runtime *engine, int severity, const char *msg)
+void yetty_ygui_framework_notify(struct yetty_ygui_framework *framework, int severity,
+                                 const char *msg)
 {
-    (void)engine;
+    (void)framework;
     ydebug("ygui notify[%d]: %s", severity, msg ? msg : "");
 }
 
-void yetty_ygui_framework_notify_ttl(struct yetty_ygui_runtime *engine, int severity,
+void yetty_ygui_framework_notify_ttl(struct yetty_ygui_framework *framework, int severity,
                                      const char *msg, float ttl_seconds)
 {
-    (void)engine;
+    (void)framework;
     (void)ttl_seconds;
     ydebug("ygui notify[%d]: %s", severity, msg ? msg : "");
 }
 
-void yetty_ygui_framework_set_key_cb(struct yetty_ygui_runtime *engine, yetty_ygui_key_cb cb,
+void yetty_ygui_framework_set_key_cb(struct yetty_ygui_framework *framework, yetty_ygui_key_cb cb,
                                      void *userdata)
 {
-    if (!engine) {
+    if (!framework) {
         return;
     }
-    engine->key_cb = cb;
-    engine->key_userdata = userdata;
+    framework->key_cb = cb;
+    framework->key_userdata = userdata;
 }
 
 /*-----------------------------------------------------------------------------
@@ -355,7 +360,7 @@ void yetty_ygui_framework_set_key_cb(struct yetty_ygui_runtime *engine, yetty_yg
  *
  * Caller pushes raw bytes (ASCII control codes + CSI escape sequences
  * for arrows / function keys). The decoder produces YETTY_YGUI_KEY_*
- * codes and dispatches to the engine's key callback. One code path —
+ * codes and dispatches to the framework's key callback. One code path —
  * works identically regardless of whether bytes came from real stdin
  * or were synthesised by an in-process KEY_DOWN→bytes adapter.
  *---------------------------------------------------------------------------*/
@@ -378,15 +383,15 @@ static int csi_decode_mods(const char *p, int len)
     return 0;
 }
 
-static void dispatch_key(struct yetty_ygui_runtime *engine, uint32_t key, int mods)
+static void dispatch_key(struct yetty_ygui_framework *framework, uint32_t key, int mods)
 {
-    if (engine->key_cb) {
-        (void)engine->key_cb(engine, key, mods, engine->key_userdata);
+    if (framework->key_cb) {
+        (void)framework->key_cb(framework, key, mods, framework->key_userdata);
     }
-    engine->dirty = 1;
+    framework->dirty = 1;
 }
 
-static void feed_byte(struct yetty_ygui_runtime *engine, struct yetty_ygui_input_state *st,
+static void feed_byte(struct yetty_ygui_framework *framework, struct yetty_ygui_input_state *st,
                       unsigned char c)
 {
     switch (st->st) {
@@ -396,7 +401,7 @@ static void feed_byte(struct yetty_ygui_runtime *engine, struct yetty_ygui_input
             st->params_len = 0;
             return;
         }
-        dispatch_key(engine, c, 0);
+        dispatch_key(framework, c, 0);
         return;
 
     case YETTY_YGUI_CSI_ESC:
@@ -405,9 +410,9 @@ static void feed_byte(struct yetty_ygui_runtime *engine, struct yetty_ygui_input
             return;
         }
         /* ESC followed by something else — emit ESC then re-process the byte. */
-        dispatch_key(engine, 0x1B, 0);
+        dispatch_key(framework, 0x1B, 0);
         st->st = YETTY_YGUI_CSI_NORMAL;
-        feed_byte(engine, st, c);
+        feed_byte(framework, st, c);
         return;
 
     case YETTY_YGUI_CSI_BRACKET:
@@ -463,7 +468,7 @@ static void feed_byte(struct yetty_ygui_runtime *engine, struct yetty_ygui_input
                 break;
             }
             if (key != 0) {
-                dispatch_key(engine, key, mods);
+                dispatch_key(framework, key, mods);
             }
         }
         st->st = YETTY_YGUI_CSI_NORMAL;
@@ -472,17 +477,17 @@ static void feed_byte(struct yetty_ygui_runtime *engine, struct yetty_ygui_input
     }
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_feed_input(struct yetty_ygui_runtime *engine,
-                                                               const char *bytes, size_t n)
+struct yetty_ycore_void_result yetty_ygui_framework_feed_input(
+    struct yetty_ygui_framework *framework, const char *bytes, size_t n)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_input: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_input: NULL framework");
     }
     if (!bytes || n == 0) {
         return YETTY_OK_VOID();
     }
     for (size_t i = 0; i < n; ++i) {
-        feed_byte(engine, &engine->input, (unsigned char)bytes[i]);
+        feed_byte(framework, &framework->input, (unsigned char)bytes[i]);
     }
     return YETTY_OK_VOID();
 }
@@ -534,18 +539,19 @@ static struct yetty_ygui_object *hit_test(struct yetty_ygui_object *node, float 
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
-    struct yetty_ygui_runtime *engine, float x, float y, int button, int pressed, int mods)
+    struct yetty_ygui_framework *framework, float x, float y, int button, int pressed, int mods)
 {
     (void)mods;
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_button: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_feed_mouse_button: NULL framework");
     }
-    if (!engine->root) {
+    if (!framework->root) {
         return YETTY_OK_VOID();
     }
     struct yetty_ygui_object *target;
     if (pressed) {
-        target = hit_test(engine->root, x, y);
+        target = hit_test(framework->root, x, y);
         /* Click-to-front: a press anywhere inside a floating overlay
          * (dialog / debug window) moves that overlay to the end of its
          * parent's child list, so it paints last (front) within the
@@ -556,15 +562,15 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
             if (a->floating) {
                 yetty_ygui_object_raise(a);
                 a->dirty = 1;
-                engine->dirty = 1;
+                framework->dirty = 1;
                 break;
             }
         }
     } else {
         /* Release goes to the capture target (if any) so the widget that
          * began a drag also sees its end, even off-rect. */
-        target = engine->pressed_obj ? engine->pressed_obj : hit_test(engine->root, x, y);
-        engine->pressed_obj = NULL;
+        target = framework->pressed_obj ? framework->pressed_obj : hit_test(framework->root, x, y);
+        framework->pressed_obj = NULL;
     }
     while (target) {
         struct yetty_ycore_int_result r =
@@ -578,9 +584,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
         }
         if (r.value) {
             if (pressed) {
-                engine->pressed_obj = target; /* capture for the drag */
+                framework->pressed_obj = target; /* capture for the drag */
             }
-            engine->dirty = 1;
+            framework->dirty = 1;
             return YETTY_OK_VOID();
         }
         target = target->parent;
@@ -589,19 +595,20 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
-    struct yetty_ygui_runtime *engine, float x, float y)
+    struct yetty_ygui_framework *framework, float x, float y)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_motion: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_feed_mouse_motion: NULL framework");
     }
-    if (!engine->root) {
+    if (!framework->root) {
         return YETTY_OK_VOID();
     }
     /* During a drag, route motion to the capture target regardless of
      * where the cursor is — that's what makes slider / splitter drags
      * track past the widget's own rect. */
-    if (engine->pressed_obj) {
-        struct yetty_ygui_object *cap = engine->pressed_obj;
+    if (framework->pressed_obj) {
+        struct yetty_ygui_object *cap = framework->pressed_obj;
         while (cap) {
             struct yetty_ycore_int_result r =
                 yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)cap, x, y);
@@ -616,21 +623,21 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
         }
         return YETTY_OK_VOID();
     }
-    struct yetty_ygui_object *target = hit_test(engine->root, x, y);
+    struct yetty_ygui_object *target = hit_test(framework->root, x, y);
     /* Hover bookkeeping — flip enter/leave when the deepest-hit widget
      * changes from the previous motion event. Mark both old and new
      * dirty so the next emit repaints them with the correct variant. */
-    if (target != engine->hovered_obj) {
-        if (engine->hovered_obj) {
-            engine->hovered_obj->hovered = 0;
-            engine->hovered_obj->dirty = 1;
+    if (target != framework->hovered_obj) {
+        if (framework->hovered_obj) {
+            framework->hovered_obj->hovered = 0;
+            framework->hovered_obj->dirty = 1;
         }
         if (target) {
             target->hovered = 1;
             target->dirty = 1;
         }
-        engine->hovered_obj = target;
-        engine->dirty = 1;
+        framework->hovered_obj = target;
+        framework->dirty = 1;
     }
     while (target) {
         struct yetty_ycore_int_result r =
@@ -648,26 +655,27 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
-    struct yetty_ygui_runtime *engine, float x, float y, float dx, float dy)
+    struct yetty_ygui_framework *framework, float x, float y, float dx, float dy)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_scroll: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_feed_mouse_scroll: NULL framework");
     }
-    if (!engine->root) {
+    if (!framework->root) {
         return YETTY_OK_VOID();
     }
     /* Deliver to the widget under the pointer, bubbling up until one
      * consumes it (a scrollarea / filepicker). Mirrors the press path. */
-    struct yetty_ygui_object *target = hit_test(engine->root, x, y);
+    struct yetty_ygui_object *target = hit_test(framework->root, x, y);
     while (target) {
         struct yetty_ycore_int_result r =
             yetty_ygui_widget_on_scroll(NULL, (struct yetty_yclass_object *)target, x, y, dx, dy);
         if (YETTY_IS_ERR(r)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_ygui_framework_feed_mouse_scroll: on_scroll", r);
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_scroll: on_scroll",
+                             r);
         }
         if (r.value) {
-            engine->dirty = 1;
+            framework->dirty = 1;
             return YETTY_OK_VOID();
         }
         target = target->parent;
@@ -675,22 +683,22 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ygui_object *yetty_ygui_framework_root(struct yetty_ygui_runtime *engine)
+struct yetty_ygui_object *yetty_ygui_framework_root(struct yetty_ygui_framework *framework)
 {
-    return engine ? engine->root : NULL;
+    return framework ? framework->root : NULL;
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_ygui_runtime *engine,
+struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_ygui_framework *framework,
                                                              struct yetty_ygui_object *root)
 {
-    if (!engine || !root) {
+    if (!framework || !root) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_root: NULL arg");
     }
-    engine->root = root;
-    root->engine = engine;
+    framework->root = root;
+    root->framework = framework;
     /* Allocate the root's wire id retroactively. */
     if (root->id == 0) {
-        struct uint32_result idr = yetty_ygui_framework_alloc_id(engine);
+        struct uint32_result idr = yetty_ygui_framework_alloc_id(framework);
         if (YETTY_IS_ERR(idr)) {
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_root: alloc_id failed",
                              idr);
@@ -704,58 +712,58 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_ygui_r
  * ID allocator.
  *=========================================================================*/
 
-struct uint32_result yetty_ygui_framework_alloc_id(struct yetty_ygui_runtime *engine)
+struct uint32_result yetty_ygui_framework_alloc_id(struct yetty_ygui_framework *framework)
 {
-    if (!engine) {
-        return YETTY_ERR(uint32, "yetty_ygui_framework_alloc_id: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(uint32, "yetty_ygui_framework_alloc_id: NULL framework");
     }
-    if (engine->free_id_count > 0) {
-        uint32_t id = engine->free_ids[--engine->free_id_count];
+    if (framework->free_id_count > 0) {
+        uint32_t id = framework->free_ids[--framework->free_id_count];
         return YETTY_OK(uint32, id);
     }
-    uint32_t id = engine->next_id++;
+    uint32_t id = framework->next_id++;
     return YETTY_OK(uint32, id);
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_free_id(struct yetty_ygui_runtime *engine,
+struct yetty_ycore_void_result yetty_ygui_framework_free_id(struct yetty_ygui_framework *framework,
                                                             uint32_t id)
 {
-    if (!engine || id == 0) {
+    if (!framework || id == 0) {
         return YETTY_OK_VOID();
     }
     /* If the id was a minted figure, drop it from the set so a later
      * id reuse re-fires CREATE_CHILD instead of SET_CHILD_RECT. */
-    figure_forget_minted(engine, id);
+    figure_forget_minted(framework, id);
     /* Queue a delete for the next envelope. */
-    if (engine->pending_delete_count == engine->pending_delete_cap) {
-        size_t ncap = engine->pending_delete_cap ? engine->pending_delete_cap * 2 : 16;
-        uint32_t *na = realloc(engine->pending_deletes, ncap * sizeof(*na));
+    if (framework->pending_delete_count == framework->pending_delete_cap) {
+        size_t ncap = framework->pending_delete_cap ? framework->pending_delete_cap * 2 : 16;
+        uint32_t *na = realloc(framework->pending_deletes, ncap * sizeof(*na));
         if (!na) {
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_ygui_framework_free_id: realloc pending failed");
         }
-        engine->pending_deletes = na;
-        engine->pending_delete_cap = ncap;
+        framework->pending_deletes = na;
+        framework->pending_delete_cap = ncap;
     }
-    engine->pending_deletes[engine->pending_delete_count++] = id;
+    framework->pending_deletes[framework->pending_delete_count++] = id;
 
     /* Push id back onto the free list. */
-    if (engine->free_id_count == engine->free_id_cap) {
-        size_t ncap = engine->free_id_cap ? engine->free_id_cap * 2 : 16;
-        uint32_t *na = realloc(engine->free_ids, ncap * sizeof(*na));
+    if (framework->free_id_count == framework->free_id_cap) {
+        size_t ncap = framework->free_id_cap ? framework->free_id_cap * 2 : 16;
+        uint32_t *na = realloc(framework->free_ids, ncap * sizeof(*na));
         if (!na) {
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_free_id: realloc free_ids");
         }
-        engine->free_ids = na;
-        engine->free_id_cap = ncap;
+        framework->free_ids = na;
+        framework->free_id_cap = ncap;
     }
-    engine->free_ids[engine->free_id_count++] = id;
+    framework->free_ids[framework->free_id_count++] = id;
     return YETTY_OK_VOID();
 }
 
-uint32_t yetty_ygui_framework_ygrid_id(const struct yetty_ygui_runtime *engine)
+uint32_t yetty_ygui_framework_ygrid_id(const struct yetty_ygui_framework *framework)
 {
-    return engine ? engine->ygrid_id : 0;
+    return framework ? framework->ygrid_id : 0;
 }
 
 /*===========================================================================
@@ -913,6 +921,7 @@ struct yetty_ycore_void_result yetty_ygui_emit_figure_body(struct yetty_ygui_emi
     if (figure_id == 0) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_figure_body: figure_id is 0");
     }
+    ydebug("emit_figure_body id=%u size=%u", figure_id, payload_len);
     return yetty_ygui_wire_append_record(ctx->figure_bodies, figure_id, payload, payload_len);
 }
 
@@ -955,18 +964,18 @@ fail:
     return YETTY_OK_VOID();
 }
 
-int32_t yetty_ygui_runtime_next_raise_z(struct yetty_ygui_runtime *engine)
+int32_t yetty_ygui_framework_next_raise_z(struct yetty_ygui_framework *framework)
 {
-    if (!engine) {
+    if (!framework) {
         return YETTY_YGUI_Z_FLOATING_BASE;
     }
     /* Pre-increment so the result is strictly above the previous raise.
      * Clamp below the menu band so a long-lived session that raises many
      * times can never climb on top of an open menu. */
-    if (engine->next_raise_z < YETTY_YGUI_Z_MENU - 1) {
-        engine->next_raise_z++;
+    if (framework->next_raise_z < YETTY_YGUI_Z_MENU - 1) {
+        framework->next_raise_z++;
     }
-    return engine->next_raise_z;
+    return framework->next_raise_z;
 }
 
 struct yetty_ycore_void_result yetty_ygui_emit_set_child_z(struct yetty_ygui_emit_ctx *ctx,
@@ -1056,6 +1065,41 @@ static int should_skip_subtree(const struct yetty_ygui_object *node)
     return l->width <= 0.0f || l->height <= 0.0f;
 }
 
+/* Does `node` or any descendant that paints into the SAME figure body have
+ * its dirty flag set? Recursion stops at nested figure boundaries: a child
+ * figure is an independent receiver-side object shipped by its own
+ * walk_emit_body pass, so its dirtiness must not force the parent figure's
+ * body to be re-shipped. This gates the incremental figure-body skip — a
+ * figure whose body is unchanged keeps its last body on the receiver. */
+static int subtree_dirty(const struct yetty_ygui_object *node)
+{
+    if (node->dirty) {
+        return 1;
+    }
+    for (const struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+        if (yetty_ygui_widget_figure_kind(c) != 0) {
+            continue; /* shipped as its own figure body */
+        }
+        if (subtree_dirty(c)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Clear every widget's dirty flag after a successful emit, so the next emit
+ * only re-ships subtrees that actually changed since this one. */
+static void clear_subtree_dirty(struct yetty_ygui_object *node)
+{
+    if (!node) {
+        return;
+    }
+    node->dirty = 0;
+    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+        clear_subtree_dirty(c);
+    }
+}
+
 /* A hidden subtree is skipped from emission — but any figure descendants
  * are independent receiver-side objects, so they must be explicitly told
  * to hide or they persist on screen (e.g. a scrollarea figure inside a
@@ -1066,8 +1110,8 @@ static struct yetty_ycore_void_result hide_subtree_figures(struct yetty_ygui_obj
     if (!node) {
         return YETTY_OK_VOID();
     }
-    if (yetty_ygui_widget_figure_kind(node) != 0 && ctx->engine &&
-        figure_is_minted(ctx->engine, yetty_ygui_object_id(node))) {
+    if (yetty_ygui_widget_figure_kind(node) != 0 && ctx->framework &&
+        figure_is_minted(ctx->framework, yetty_ygui_object_id(node))) {
         struct yetty_ycore_void_result hr =
             yetty_ygui_emit_set_child_hidden(ctx, yetty_ygui_object_id(node), 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "hide_subtree_figures: hide");
@@ -1117,9 +1161,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
         uint32_t fid = yetty_ygui_object_id(node);
         if (skip) {
             /* Hidden/zero-size: only flag it if it already exists. */
-            if (ctx->engine && figure_is_minted(ctx->engine, fid)) {
-                struct yetty_ycore_void_result hr =
-                    yetty_ygui_emit_set_child_hidden(ctx, fid, 1);
+            if (ctx->framework && figure_is_minted(ctx->framework, fid)) {
+                struct yetty_ycore_void_result hr = yetty_ygui_emit_set_child_hidden(ctx, fid, 1);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, hr,
                                     "yetty_ygui_framework_walk_emit_container: figure hide");
             }
@@ -1208,6 +1251,17 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
         return walk_emit_body_inline(node, ctx);
     }
 
+    /* Incremental figure body: if this figure was already minted on the
+     * receiver (its body shipped at least once) and nothing in its body
+     * subtree changed, skip re-shipping. The receiver keeps the last body
+     * for this figure id; a pure rect move is handled separately by the
+     * pass-1 SET_CHILD_RECT. This is what stops an unchanged page (a
+     * scrollarea figure) from being re-serialized every emit. */
+    if (ctx->framework && figure_is_minted(ctx->framework, node->id) && !subtree_dirty(node)) {
+        ydebug("figure SKIP (clean, minted) id=%u", node->id);
+        return YETTY_OK_VOID();
+    }
+
     /* Figure boundary: swap in a fresh draw list, paint the whole
      * subtree into it, ship it as the figure's body, then restore. The
      * leading CMD_ZERO wipes this figure's prims on the receiver each
@@ -1257,27 +1311,27 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
 /*===========================================================================
  * Chrome setup — ensure the shared ygrid exists on the receiver.
  *
- * The receiver IS the root container; no synthetic engine container
+ * The receiver IS the root container; no synthetic framework container
  * is needed (the registry has no factory for kind=CONTAINER). The
- * engine just mints one ygrid as a direct child of the root. Every
+ * framework just mints one ygrid as a direct child of the root. Every
  * chrome widget (figure_kind == 0) drops its prims into the ygrid's
  * body; figure widgets (figure_kind != 0) emit their own CREATE_CHILD
  * records at the same root level alongside the ygrid. */
-struct yetty_ycore_void_result yetty_ygui_framework_ensure_chrome(struct yetty_ygui_runtime *engine,
-                                                                  struct yetty_ygui_emit_ctx *ctx)
+struct yetty_ycore_void_result yetty_ygui_framework_ensure_chrome(
+    struct yetty_ygui_framework *framework, struct yetty_ygui_emit_ctx *ctx)
 {
-    if (!engine->ygrid_created) {
-        struct yetty_ycore_void_result r =
-            yetty_ygui_emit_create_child(ctx, engine->ygrid_id, YETTY_YFIGURE_KIND_YGRID, 0.0f,
-                                         0.0f, engine->viewport_w, engine->viewport_h, NULL, 0);
+    if (!framework->ygrid_created) {
+        struct yetty_ycore_void_result r = yetty_ygui_emit_create_child(
+            ctx, framework->ygrid_id, YETTY_YFIGURE_KIND_YGRID, 0.0f, 0.0f, framework->viewport_w,
+            framework->viewport_h, NULL, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                             "yetty_ygui_framework_ensure_chrome: ygrid CREATE_CHILD");
-        /* Staged — engine->ygrid_created flips only after flush succeeds. */
+        /* Staged — framework->ygrid_created flips only after flush succeeds. */
         ctx->staged_ygrid_created = 1;
     } else {
         /* Keep the ygrid's rect in sync with the viewport. */
         struct yetty_ycore_void_result r = yetty_ygui_emit_set_child_rect(
-            ctx, engine->ygrid_id, 0.0f, 0.0f, engine->viewport_w, engine->viewport_h);
+            ctx, framework->ygrid_id, 0.0f, 0.0f, framework->viewport_w, framework->viewport_h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                             "yetty_ygui_framework_ensure_chrome: ygrid SET_CHILD_RECT");
     }
@@ -1288,12 +1342,12 @@ struct yetty_ycore_void_result yetty_ygui_framework_ensure_chrome(struct yetty_y
  * Flush: concatenate streams + envelope + write to output pty.
  *=========================================================================*/
 
-static struct yetty_ycore_void_result flush_pending_deletes(struct yetty_ygui_runtime *engine,
+static struct yetty_ycore_void_result flush_pending_deletes(struct yetty_ygui_framework *framework,
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    for (size_t i = 0; i < engine->pending_delete_count; ++i) {
+    for (size_t i = 0; i < framework->pending_delete_count; ++i) {
         struct yetty_ycore_void_result r =
-            yetty_ygui_emit_delete_child(ctx, engine->pending_deletes[i]);
+            yetty_ygui_emit_delete_child(ctx, framework->pending_deletes[i]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "flush_pending_deletes: DELETE_CHILD");
         /* Track how far we got. The queue is shifted only after flush
          * succeeds; on partial failure the unsent prefix stays queued
@@ -1304,7 +1358,7 @@ static struct yetty_ycore_void_result flush_pending_deletes(struct yetty_ygui_ru
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_runtime *engine)
+struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_framework *framework)
 {
     /* Compose envelope body:
      *   - container_records (already record-framed as admin records id=0)
@@ -1314,30 +1368,30 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_runt
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r;
 
-    if (engine->container_records.size > 0) {
-        r = yetty_ycore_buffer_write(&envelope, engine->container_records.data,
-                                     engine->container_records.size);
+    if (framework->container_records.size > 0) {
+        r = yetty_ycore_buffer_write(&envelope, framework->container_records.data,
+                                     framework->container_records.size);
         if (YETTY_IS_ERR(r)) {
             goto fail;
         }
     }
-    /* Bytes accumulated by chrome widgets into the engine's per-emit
+    /* Bytes accumulated by chrome widgets into the framework's per-emit
      * ydraw draw_list. The list's primitives buffer is the raw ydraw
      * FAM stream that ygrid->process_bytes consumes. */
-    if (engine->ygrid_draw_list) {
-        size_t dl_size = yetty_ydraw_draw_list_size(engine->ygrid_draw_list);
+    if (framework->ygrid_draw_list) {
+        size_t dl_size = yetty_ydraw_draw_list_size(framework->ygrid_draw_list);
         if (dl_size > 0) {
-            const void *dl_data = yetty_ydraw_draw_list_data(engine->ygrid_draw_list);
-            r = yetty_ygui_wire_append_record(&envelope, engine->ygrid_id, dl_data,
+            const void *dl_data = yetty_ydraw_draw_list_data(framework->ygrid_draw_list);
+            r = yetty_ygui_wire_append_record(&envelope, framework->ygrid_id, dl_data,
                                               (uint32_t)dl_size);
             if (YETTY_IS_ERR(r)) {
                 goto fail;
             }
         }
     }
-    if (engine->figure_bodies.size > 0) {
-        r = yetty_ycore_buffer_write(&envelope, engine->figure_bodies.data,
-                                     engine->figure_bodies.size);
+    if (framework->figure_bodies.size > 0) {
+        r = yetty_ycore_buffer_write(&envelope, framework->figure_bodies.data,
+                                     framework->figure_bodies.size);
         if (YETTY_IS_ERR(r)) {
             goto fail;
         }
@@ -1357,14 +1411,14 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_runt
      * receiver-side container's `process_records` does exactly what
      * the consume_envelope coroutine would have done after PTY decode
      * — same record format, no yface framing in between. */
-    if (engine->container_obj) {
+    if (framework->container_obj) {
         struct yetty_ycore_buffer view = {
             .data = envelope.data,
             .capacity = envelope.capacity,
             .size = envelope.size,
         };
         struct yetty_ycore_void_result pr =
-            yetty_yfigure_process_records(&engine->yclass_ctx, engine->container_obj, view);
+            yetty_yfigure_process_records(&framework->yclass_ctx, framework->container_obj, view);
         yetty_ycore_buffer_destroy(&envelope);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
                             "yetty_ygui_framework_flush: process_records slot");
@@ -1390,10 +1444,10 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_runt
     }
     yetty_ycore_buffer_destroy(&envelope);
 
-    if (wire_out.size > 0 && engine->output_pty && engine->output_pty->ops &&
-        engine->output_pty->ops->write) {
-        struct yetty_ycore_size_result wr = engine->output_pty->ops->write(
-            engine->output_pty, (const char *)wire_out.data, wire_out.size);
+    if (wire_out.size > 0 && framework->output_pty && framework->output_pty->ops &&
+        framework->output_pty->ops->write) {
+        struct yetty_ycore_size_result wr = framework->output_pty->ops->write(
+            framework->output_pty, (const char *)wire_out.data, wire_out.size);
         if (YETTY_IS_ERR(wr)) {
             yetty_ycore_buffer_destroy(&wire_out);
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_flush: pty write", wr);
@@ -1412,9 +1466,9 @@ fail:
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
-    struct yetty_ygui_runtime *engine, int fd)
+    struct yetty_ygui_framework *framework, int fd)
 {
-    if (!engine || fd < 0) {
+    if (!framework || fd < 0) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_clear_remote_fd: bad args");
     }
     /* One CLEAR_ALL admin record on the root (id=0) — the host container's
@@ -1444,26 +1498,26 @@ struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runtime *engine)
+struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_framework *framework)
 {
-    if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: NULL engine");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: NULL framework");
     }
 
-    yetty_ycore_buffer_clear(&engine->container_records);
-    yetty_ycore_buffer_clear(&engine->figure_bodies);
+    yetty_ycore_buffer_clear(&framework->container_records);
+    yetty_ycore_buffer_clear(&framework->figure_bodies);
 
     /* Per-emit ydraw draw_list — created lazily on first emit, reused
      * across frames. clear() rewinds the primitives byte cursor without
      * freeing the allocation. */
-    if (!engine->ygrid_draw_list) {
+    if (!framework->ygrid_draw_list) {
         struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(dlr)) {
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: draw_list create", dlr);
         }
-        engine->ygrid_draw_list = dlr.value;
+        framework->ygrid_draw_list = dlr.value;
     } else {
-        yetty_ydraw_draw_list_clear(engine->ygrid_draw_list);
+        yetty_ydraw_draw_list_clear(framework->ygrid_draw_list);
     }
 
     /* Full-redraw model: prepend CMD_ZERO so the receiver wipes its
@@ -1472,15 +1526,15 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
      * documented in include/yetty/ydraw-core/cmds.h:89. */
     {
         struct yetty_ycore_void_result zr =
-            yetty_ydraw_draw_list_add_cmd_zero(engine->ygrid_draw_list);
+            yetty_ydraw_draw_list_add_cmd_zero(framework->ygrid_draw_list);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yetty_ygui_framework_emit: CMD_ZERO");
     }
 
     struct yetty_ygui_emit_ctx ctx = {
-        .engine = engine,
-        .container_records = &engine->container_records,
-        .ygrid_draw_list = engine->ygrid_draw_list,
-        .figure_bodies = &engine->figure_bodies,
+        .framework = framework,
+        .container_records = &framework->container_records,
+        .ygrid_draw_list = framework->ygrid_draw_list,
+        .figure_bodies = &framework->figure_bodies,
         .current_figure_id = 0,
         .staged_mints = NULL,
         .staged_mint_count = 0,
@@ -1493,11 +1547,11 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
 
     /* Run the layout pass — without this every widget's rect stays
      * (0,0)-(0,0) and paint emits zero-sized geometry. The root rect
-     * is the engine's viewport. */
-    if (engine->root) {
-        struct yetty_ycore_rectangle root_rect = {.min = {0.0f, 0.0f},
-                                                  .max = {engine->viewport_w, engine->viewport_h}};
-        r = yetty_ygui_layout_compute(engine->root, root_rect);
+     * is the framework's viewport. */
+    if (framework->root) {
+        struct yetty_ycore_rectangle root_rect = {
+            .min = {0.0f, 0.0f}, .max = {framework->viewport_w, framework->viewport_h}};
+        r = yetty_ygui_layout_compute(framework->root, root_rect);
         if (YETTY_IS_ERR(r)) {
             free(ctx.staged_mints);
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: layout_compute", r);
@@ -1509,21 +1563,21 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
      * between two emits can be assigned the id of a widget destroyed in
      * the same window. Emitting DELETE_CHILD ahead of any CREATE_CHILD
      * for that id keeps the receiver's view ordered: old gone, new in. */
-    r = flush_pending_deletes(engine, &ctx);
+    r = flush_pending_deletes(framework, &ctx);
     if (YETTY_IS_ERR(r)) {
         free(ctx.staged_mints);
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: flush_pending_deletes", r);
     }
 
-    r = yetty_ygui_framework_ensure_chrome(engine, &ctx);
+    r = yetty_ygui_framework_ensure_chrome(framework, &ctx);
     if (YETTY_IS_ERR(r)) {
         free(ctx.staged_mints);
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: ensure_chrome", r);
     }
 
     /* Pass 1: container records. */
-    if (engine->root) {
-        r = yetty_ygui_framework_walk_emit_container(engine->root, &ctx);
+    if (framework->root) {
+        r = yetty_ygui_framework_walk_emit_container(framework->root, &ctx);
         if (YETTY_IS_ERR(r)) {
             free(ctx.staged_mints);
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: walk pass 1", r);
@@ -1531,8 +1585,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
     }
 
     /* Pass 2: body records. */
-    if (engine->root) {
-        r = yetty_ygui_framework_walk_emit_body(engine->root, &ctx);
+    if (framework->root) {
+        r = yetty_ygui_framework_walk_emit_body(framework->root, &ctx);
         if (YETTY_IS_ERR(r)) {
             free(ctx.staged_mints);
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: walk pass 2", r);
@@ -1540,9 +1594,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
     }
 
     /* Concatenate streams and ship. */
-    r = yetty_ygui_framework_flush(engine);
+    r = yetty_ygui_framework_flush(framework);
     if (YETTY_IS_ERR(r)) {
-        /* Flush failure: leave engine state untouched so the next
+        /* Flush failure: leave framework state untouched so the next
          * emit replays CREATE/DELETE for everything staged this tick. */
         free(ctx.staged_mints);
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: flush", r);
@@ -1554,41 +1608,45 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_runti
      * was actually sent; the consumed prefix of pending_deletes is
      * dropped from the queue. */
     if (ctx.staged_mint_count > 0) {
-        size_t want = engine->minted_figure_count + ctx.staged_mint_count;
-        if (want > engine->minted_figure_cap) {
-            size_t ncap = engine->minted_figure_cap ? engine->minted_figure_cap : 8;
+        size_t want = framework->minted_figure_count + ctx.staged_mint_count;
+        if (want > framework->minted_figure_cap) {
+            size_t ncap = framework->minted_figure_cap ? framework->minted_figure_cap : 8;
             while (ncap < want) {
                 ncap *= 2;
             }
-            uint32_t *na = realloc(engine->minted_figures, ncap * sizeof(*na));
+            uint32_t *na = realloc(framework->minted_figures, ncap * sizeof(*na));
             if (!na) {
                 free(ctx.staged_mints);
                 return YETTY_ERR(yetty_ycore_void,
                                  "yetty_ygui_framework_emit: commit mints: realloc");
             }
-            engine->minted_figures = na;
-            engine->minted_figure_cap = ncap;
+            framework->minted_figures = na;
+            framework->minted_figure_cap = ncap;
         }
-        memcpy(engine->minted_figures + engine->minted_figure_count, ctx.staged_mints,
+        memcpy(framework->minted_figures + framework->minted_figure_count, ctx.staged_mints,
                ctx.staged_mint_count * sizeof(uint32_t));
-        engine->minted_figure_count += ctx.staged_mint_count;
+        framework->minted_figure_count += ctx.staged_mint_count;
     }
     if (ctx.staged_ygrid_created) {
-        engine->ygrid_created = 1;
+        framework->ygrid_created = 1;
     }
     if (ctx.staged_deletes_consumed > 0) {
-        size_t remaining = engine->pending_delete_count - ctx.staged_deletes_consumed;
+        size_t remaining = framework->pending_delete_count - ctx.staged_deletes_consumed;
         if (remaining > 0) {
-            memmove(engine->pending_deletes, engine->pending_deletes + ctx.staged_deletes_consumed,
+            memmove(framework->pending_deletes,
+                    framework->pending_deletes + ctx.staged_deletes_consumed,
                     remaining * sizeof(uint32_t));
         }
-        engine->pending_delete_count = remaining;
+        framework->pending_delete_count = remaining;
     }
     free(ctx.staged_mints);
 
-    /* Mark the engine clean — every per-frame full re-emit is still the
-     * model; per-widget dirty tracking will gate the incremental emit
-     * in a follow-up. */
-    engine->dirty = 0;
+    /* The envelope shipped — every widget's dirty flag has now been
+     * accounted for (either re-emitted, or skipped because its figure body
+     * was unchanged). Clear them so the next emit only re-ships subtrees
+     * that change after this point. The chrome ygrid is still full-redraw;
+     * the per-figure-body skip above is what gates incremental emit. */
+    clear_subtree_dirty(framework->root);
+    framework->dirty = 0;
     return YETTY_OK_VOID();
 }

@@ -40,7 +40,7 @@ struct yetty_ydraw_flyweight_registry_ptr_result yetty_ydraw_flyweight_create(vo
 
     // Flyweight prims — one handler per type id, registered like SDF/complex
     struct yetty_ycore_void_result r_font = yetty_ydraw_flyweight_registry_add(
-        reg, YETTY_YDRAW_TYPE_FONT, YETTY_YDRAW_TYPE_FONT, yetty_ydraw_font_drawable_handler);
+        reg, YETTY_YDRAW_TYPE_FONT, YETTY_YDRAW_TYPE_FONT, yetty_yfont_font_drawable_handler);
     if (YETTY_IS_ERR(r_font)) {
         yetty_ydraw_flyweight_registry_destroy(reg);
         return YETTY_ERR(yetty_ydraw_flyweight_registry_ptr,

@@ -153,7 +153,7 @@ struct yetty_yterm_terminal {
      * by each ygrid; terminal owns lifetime. Teardown destroys the
      * root container first (cascades into per-figure ygrids that hold
      * borrowed refs to this font) then the font. */
-    struct yetty_ydraw_font *compositor_font;
+    struct yetty_yfont_font *compositor_font;
 
     /* Complex-prim factory (yplot / yimage / yvideo / yzoo / yjungle …).
      * One instance per terminal — every ygrid the root container mints

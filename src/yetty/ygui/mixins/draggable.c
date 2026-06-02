@@ -39,8 +39,7 @@ static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_ctx 
     (void)button;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct draggable_data *dd =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_draggable_mixin_get(),
-                                                         "yetty_ygui_draggable_mixin_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_draggable_mixin_get().value);
     dd->dragging = 1;
     dd->last_x = x;
     dd->last_y = y;
@@ -61,8 +60,7 @@ static struct yetty_ycore_int_result draggable_on_motion(struct yetty_yclass_ctx
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct draggable_data *dd =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_draggable_mixin_get(),
-                                                         "yetty_ygui_draggable_mixin_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_draggable_mixin_get().value);
     /* The framework also delivers motion to whatever the pointer hovers,
      * not just the capture target — only act while a press of ours is in
      * flight, otherwise let the event bubble. */
@@ -93,8 +91,7 @@ static struct yetty_ycore_int_result draggable_on_release(struct yetty_yclass_ct
     (void)button;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct draggable_data *dd =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_draggable_mixin_get(),
-                                                         "yetty_ygui_draggable_mixin_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_draggable_mixin_get().value);
     dd->dragging = 0;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
@@ -111,8 +108,7 @@ struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_ygu
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_draggable_on_drag_set: NULL obj");
     }
     struct draggable_data *dd =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_draggable_mixin_get(),
-                                                         "yetty_ygui_draggable_mixin_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_draggable_mixin_get().value);
     dd->on_drag = cb;
     dd->userdata = userdata;
     return YETTY_OK_VOID();
@@ -124,8 +120,7 @@ int yetty_ygui_draggable_is_dragging(const struct yetty_ygui_object *obj)
         return 0;
     }
     struct draggable_data *dd = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj, yetty_ygui_class_expect(yetty_ygui_draggable_mixin_get(),
-                                                                 "yetty_ygui_draggable_mixin_get"));
+        (struct yetty_ygui_object *)obj, yetty_ygui_draggable_mixin_get().value);
     return dd->dragging;
 }
 

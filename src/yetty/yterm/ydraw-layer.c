@@ -623,7 +623,7 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
     /* Collect each font's resource set in slot order (slot 0 = default). */
     const struct yetty_ydraw_gpu_resource_set *font_rss[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
     for (uint32_t s = 0; s < font_count; s++) {
-        struct yetty_ydraw_font *f = layer->canvas->ops->get_font_at(layer->canvas, s);
+        struct yetty_yfont_font *f = layer->canvas->ops->get_font_at(layer->canvas, s);
         if (!f || !f->ops || !f->ops->get_gpu_resource_set) {
             continue;
         }
@@ -1147,7 +1147,7 @@ static struct yetty_ycore_void_result ydraw_layer_get_selection_text(
         last_row = gv_row;
 
         uint32_t slot = ctx.arr[i].font_slot >= 0 ? (uint32_t)ctx.arr[i].font_slot : 0;
-        struct yetty_ydraw_font *font = layer->canvas->ops->get_font_at(layer->canvas, slot);
+        struct yetty_yfont_font *font = layer->canvas->ops->get_font_at(layer->canvas, slot);
         uint32_t cp = 0xFFFD; /* fall back to U+FFFD on any failure */
         if (font && font->ops && font->ops->get_codepoint) {
             struct uint32_result cr = font->ops->get_codepoint(font, ctx.arr[i].glyph_idx);

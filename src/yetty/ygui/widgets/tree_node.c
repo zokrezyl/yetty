@@ -51,12 +51,11 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(), "yetty_ygui_tree_node_class_get"),
+        yetty_ygui_tree_node_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "tree_node: super");
     struct tn_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
-                                                         "yetty_ygui_tree_node_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     d->label = NULL;
     d->open = 1;
     d->on_toggle = NULL;
@@ -75,12 +74,11 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct tn_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
-                                                         "yetty_ygui_tree_node_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     free(d->label);
     return yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(), "yetty_ygui_tree_node_class_get"),
+        yetty_ygui_tree_node_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -94,8 +92,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     (void)x;
     (void)btn;
     struct tn_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
-                                                         "yetty_ygui_tree_node_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     if (y - r.min.y > HEADER_H) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -126,8 +123,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_ERR(yetty_ycore_void, "tree_node paint: NULL ctx");
     }
     struct tn_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
-                                                         "yetty_ygui_tree_node_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float fs = 13.0f;
     float ty = r.min.y + (HEADER_H + fs) * 0.5f - 3;
@@ -149,8 +145,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_label(struct yetty_ygui_
         return YETTY_ERR(yetty_ycore_void, "tn_set_label: NULL");
     }
     struct tn_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
-                                                         "yetty_ygui_tree_node_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     free(d->label);
     d->label = NULL;
     if (label) {
@@ -170,8 +165,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_ygui_o
         return YETTY_ERR(yetty_ycore_void, "tn_set_open: NULL");
     }
     struct tn_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
-                                                         "yetty_ygui_tree_node_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     d->open = o ? 1 : 0;
     tn_fold_children(obj, d->open);
     return yetty_ygui_object_set_dirty(obj);
@@ -184,8 +178,7 @@ int yetty_ygui_tree_node_is_open(const struct yetty_ygui_object *obj)
     }
     return ((struct tn_data *)yetty_ygui_data_get(
                 (struct yetty_ygui_object *)obj,
-                yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
-                                        "yetty_ygui_tree_node_class_get")))
+                yetty_ygui_tree_node_class_get().value))
         ->open;
 }
 
@@ -196,8 +189,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_on_toggle(struct yetty_ygui_
         return YETTY_ERR(yetty_ycore_void, "tn_on_toggle: NULL");
     }
     struct tn_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_tree_node_class_get(),
-                                                         "yetty_ygui_tree_node_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_tree_node_class_get().value);
     d->on_toggle = cb;
     d->on_toggle_ud = userdata;
     return YETTY_OK_VOID();

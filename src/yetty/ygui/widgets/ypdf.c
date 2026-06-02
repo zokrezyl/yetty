@@ -31,7 +31,7 @@ struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object
 }
 
 /* ypdf adds zero ops on top of ydraw_embed — the public class accessor
- * exists only so callers can `yetty_ygui_add(yetty_ygui_class_expect(yetty_ygui_ypdf_class_get(), "yetty_ygui_ypdf_class_get"), …)`
+ * exists only so callers can `yetty_ygui_add(yetty_ygui_ypdf_class_get().value, …)`
  * symbolically. Hand-written because YETTY_YGUI_DEFINE_CLASS computes the
  * ops count via sizeof and so requires at least one op entry. */
 static const struct yetty_yclass_descriptor ypdf_desc = {

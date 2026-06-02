@@ -38,15 +38,14 @@ struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget_data {
 };
 
 /* Convenience accessor — every internal helper that needs the widget
- * class pointer goes through this. The codegen-shaped accessor returns
- * a Result; this delegates to yetty_ygui_class_expect so a registration
- * failure aborts loudly with the chained cause rather than silently
- * casting the error union to a pointer. Registration only happens at
- * the first call and the result is cached — after that this is a
- * one-instruction Result unwrap. */
+ * class pointer goes through this. By the time any widget method runs,
+ * the class is already registered (you cannot dispatch a method on an
+ * unregistered class), so the accessor's Result is always OK here and
+ * .value is safe. Registration can only fail on the first call, which
+ * happens at widget-creation time where the Result is checked. */
 static const struct yetty_yclass *widget_class(void)
 {
-    return yetty_ygui_class_expect(yetty_ygui_widget_class_get(), "yetty_ygui_widget_class_get");
+    return yetty_ygui_widget_class_get().value;
 }
 
 /*===========================================================================
@@ -219,8 +218,14 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_rect(struct yetty_ygui_obje
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_rect: NULL obj");
     }
     struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
-    wd->rect = rect;
-    obj->dirty = 1;
+    /* Only dirty on an actual change. The layout pass calls set_rect for
+     * every widget on every emit; marking dirty unconditionally would keep
+     * the whole tree perpetually dirty and defeat incremental emit. */
+    if (wd->rect.min.x != rect.min.x || wd->rect.min.y != rect.min.y ||
+        wd->rect.max.x != rect.max.x || wd->rect.max.y != rect.max.y) {
+        wd->rect = rect;
+        obj->dirty = 1;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -245,8 +250,10 @@ struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_yg
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_scroll_main_set: NULL obj");
     }
     struct yetty_ygui_widget_data *wd = yetty_ygui_data_get(obj, widget_class());
-    wd->scroll_main = offset;
-    obj->dirty = 1;
+    if (wd->scroll_main != offset) {
+        wd->scroll_main = offset;
+        obj->dirty = 1;
+    }
     return YETTY_OK_VOID();
 }
 

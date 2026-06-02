@@ -77,7 +77,7 @@ set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets/yzoo.c
 )
 set(YGUI_SOURCES
-    class.c
+    dispatch.c
     object.c
     framework.c
     event.c

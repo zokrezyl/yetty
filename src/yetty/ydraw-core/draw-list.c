@@ -797,7 +797,7 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
 
     uint32_t name_len = name ? (uint32_t)strlen(name) : 0;
     uint32_t ttf_len = (uint32_t)ttf_data->size;
-    size_t drawable_size = yetty_ydraw_font_drawable_size_for(name_len, ttf_len);
+    size_t drawable_size = yetty_yfont_font_drawable_size_for(name_len, ttf_len);
 
     uint8_t *staging = malloc(drawable_size);
     if (!staging) {
@@ -831,7 +831,7 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
         }
     }
 
-    yetty_ydraw_font_drawable_write(staging, (int32_t)next_id, name, name_len, ttf_data->data,
+    yetty_yfont_font_drawable_write(staging, (int32_t)next_id, name, name_len, ttf_data->data,
                                     ttf_len);
 
     struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, staging, drawable_size);
@@ -859,7 +859,7 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(struct yetty_yd
         return YETTY_ERR(yetty_ycore_int, "hex16 must be exactly 16 hex chars");
     }
 
-    size_t drawable_size = yetty_ydraw_font_drawable_size_for(name_len, 0);
+    size_t drawable_size = yetty_yfont_font_drawable_size_for(name_len, 0);
     uint8_t *staging = malloc(drawable_size);
     if (!staging) {
         return YETTY_ERR(yetty_ycore_int, "alloc failed");
@@ -883,7 +883,7 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(struct yetty_yd
         }
     }
 
-    yetty_ydraw_font_drawable_write(staging, (int32_t)next_id, hex16, name_len, NULL, 0);
+    yetty_yfont_font_drawable_write(staging, (int32_t)next_id, hex16, name_len, NULL, 0);
 
     struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, staging, drawable_size);
     free(staging);

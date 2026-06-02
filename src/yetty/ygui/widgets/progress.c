@@ -28,12 +28,11 @@ static struct yetty_ycore_void_result progress_constructor(struct yetty_yclass_c
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj,
-        yetty_ygui_class_expect(yetty_ygui_progress_class_get(), "yetty_ygui_progress_class_get"),
+        yetty_ygui_progress_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "progress_constructor: super");
     struct progress_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_progress_class_get(),
-                                                         "yetty_ygui_progress_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_progress_class_get().value);
     d->value = 0.0f;
     d->accent = 0u;
     return YETTY_OK_VOID();
@@ -77,8 +76,7 @@ static struct yetty_ycore_void_result progress_paint(struct yetty_yclass_ctx *yc
         return YETTY_ERR(yetty_ycore_void, "progress_paint: NULL ctx");
     }
     struct progress_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_progress_class_get(),
-                                                         "yetty_ygui_progress_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_progress_class_get().value);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -111,8 +109,7 @@ struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_ygui_o
         value = 1.0f;
     }
     struct progress_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_progress_class_get(),
-                                                         "yetty_ygui_progress_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_progress_class_get().value);
     d->value = value;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -124,7 +121,7 @@ float yetty_ygui_progress_get_value(const struct yetty_ygui_object *obj)
     }
     struct progress_data *d = yetty_ygui_data_get(
         (struct yetty_ygui_object *)obj,
-        yetty_ygui_class_expect(yetty_ygui_progress_class_get(), "yetty_ygui_progress_class_get"));
+        yetty_ygui_progress_class_get().value);
     return d->value;
 }
 
@@ -135,8 +132,7 @@ struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_ygui_
         return YETTY_ERR(yetty_ycore_void, "progress_set_accent: NULL obj");
     }
     struct progress_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_class_expect(yetty_ygui_progress_class_get(),
-                                                         "yetty_ygui_progress_class_get"));
+        yetty_ygui_data_get(obj, yetty_ygui_progress_class_get().value);
     d->accent = color;
     return yetty_ygui_object_set_dirty(obj);
 }

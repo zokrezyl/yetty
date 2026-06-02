@@ -21,6 +21,24 @@
 
 #include <stb_image.h>
 
+int yetty_yimage_probe_size(const uint8_t *image_bytes, size_t len, int *out_w, int *out_h)
+{
+    if (!image_bytes || len == 0) {
+        return -1;
+    }
+    int w = 0, h = 0, comp = 0;
+    if (!stbi_info_from_memory(image_bytes, (int)len, &w, &h, &comp)) {
+        return -1;
+    }
+    if (out_w) {
+        *out_w = w;
+    }
+    if (out_h) {
+        *out_h = h;
+    }
+    return 0;
+}
+
 struct yetty_ydraw_draw_list_result yetty_yimage_render(
     const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config)
 {

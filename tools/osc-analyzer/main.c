@@ -344,7 +344,7 @@ static struct yetty_ydraw_flyweight_registry *make_full_registry(void)
     if (YETTY_IS_ERR(a)) goto err;
     a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_TYPE_FONT,
                                            YETTY_YDRAW_TYPE_FONT,
-                                           yetty_ydraw_font_drawable_handler);
+                                           yetty_yfont_font_drawable_handler);
     if (YETTY_IS_ERR(a)) goto err;
     a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_TYPE_TEXT_SPAN,
                                            YETTY_YDRAW_TYPE_TEXT_SPAN,
@@ -441,8 +441,8 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
         /* fallthrough on parse error */
     }
     if (type == YETTY_YDRAW_TYPE_FONT) {
-        struct yetty_ydraw_font_drawable_view v;
-        if (yetty_ydraw_font_drawable_parse((const uint32_t *)bytes, &v) == 0) {
+        struct yetty_yfont_font_drawable_view v;
+        if (yetty_yfont_font_drawable_parse((const uint32_t *)bytes, &v) == 0) {
             ind(depth); out("- # rec %d\n", idx);
             ind(depth); out("  kind: FONT\n");
             ind(depth); out("  font_id: %d\n", v.font_id);

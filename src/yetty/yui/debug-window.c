@@ -43,7 +43,7 @@ static struct yetty_ycore_rgba debug_rgba(uint32_t packed)
 }
 
 struct yetty_yui_debug_window {
-    struct yetty_ygui_runtime *engine; /* borrowed */
+    struct yetty_ygui_framework *engine; /* borrowed */
     struct yetty_ygui_object *window;
     /* Three separate labels — one per rolling window. ygui's label is
      * single-line, so multi-line text via "\n" doesn't render; stacking
@@ -59,7 +59,7 @@ struct yetty_yui_debug_window {
 };
 
 struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
-    struct yetty_ygui_runtime *engine, yetty_ycore_object_id pane_id)
+    struct yetty_ygui_framework *engine, yetty_ycore_object_id pane_id)
 {
     if (!engine) {
         return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: NULL engine");
@@ -77,8 +77,7 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     dw->pane_id = pane_id;
 
     struct yetty_ygui_object_ptr_result wr =
-        yetty_ygui_add(yetty_ygui_class_expect(yetty_ygui_window_class_get(),
-                                               "yetty_ygui_window_class_get"),
+        yetty_ygui_add(yetty_ygui_window_class_get().value,
                        root);
     if (YETTY_IS_ERR(wr)) {
         free(dw);
@@ -96,8 +95,7 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
      * a child of the same root and floats absolutely when opened. */
     {
         struct yetty_ygui_object_ptr_result mr =
-            yetty_ygui_add(yetty_ygui_class_expect(yetty_ygui_popup_menu_class_get(),
-                                                   "yetty_ygui_popup_menu_class_get"),
+            yetty_ygui_add(yetty_ygui_popup_menu_class_get().value,
                            root);
         if (YETTY_IS_OK(mr)) {
             yetty_ycore_error_destroy_safe(
@@ -113,7 +111,7 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
         struct yetty_ygui_object **slots[3] = {&dw->label_1s, &dw->label_10s, &dw->label_60s};
         for (int i = 0; i < 3; i++) {
             struct yetty_ygui_object_ptr_result lr = yetty_ygui_add(
-                yetty_ygui_class_expect(yetty_ygui_label_class_get(), "yetty_ygui_label_class_get"),
+                yetty_ygui_label_class_get().value,
                 body);
             if (YETTY_IS_OK(lr)) {
                 yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(lr.value, "—"));

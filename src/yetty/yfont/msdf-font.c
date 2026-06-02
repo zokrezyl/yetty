@@ -39,7 +39,7 @@ struct yetty_yfont_glyph_meta_gpu {
 };
 
 struct yetty_yfont_msdf_font {
-    struct yetty_ydraw_font base;
+    struct yetty_yfont_font base;
 
     struct yetty_ycdb_reader *cdb;
 
@@ -211,7 +211,7 @@ static struct uint32_result load_one(struct yetty_yfont_msdf_font *f, uint32_t c
  * Vtable
  *===========================================================================*/
 
-static void msdf_destroy(struct yetty_ydraw_font *self)
+static void msdf_destroy(struct yetty_yfont_font *self)
 {
     struct yetty_yfont_msdf_font *font = (struct yetty_yfont_msdf_font *)self;
     if (!font) {
@@ -226,7 +226,7 @@ static void msdf_destroy(struct yetty_ydraw_font *self)
     free(font);
 }
 
-static struct uint32_result msdf_get_codepoint(struct yetty_ydraw_font *self, uint32_t glyph_index)
+static struct uint32_result msdf_get_codepoint(struct yetty_yfont_font *self, uint32_t glyph_index)
 {
     struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
@@ -239,7 +239,7 @@ static struct uint32_result msdf_get_codepoint(struct yetty_ydraw_font *self, ui
     return YETTY_OK(uint32, *cp);
 }
 
-static struct uint32_result msdf_get_glyph_index(struct yetty_ydraw_font *self, uint32_t cp)
+static struct uint32_result msdf_get_glyph_index(struct yetty_yfont_font *self, uint32_t cp)
 {
     struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
@@ -248,14 +248,14 @@ static struct uint32_result msdf_get_glyph_index(struct yetty_ydraw_font *self, 
     return load_one(f, cp);
 }
 
-static struct uint32_result msdf_get_glyph_index_styled(struct yetty_ydraw_font *self, uint32_t cp,
+static struct uint32_result msdf_get_glyph_index_styled(struct yetty_yfont_font *self, uint32_t cp,
                                                         enum yetty_yfont_style style)
 {
     (void)style;
     return msdf_get_glyph_index(self, cp);
 }
 
-static struct yetty_ycore_void_result msdf_load_glyphs(struct yetty_ydraw_font *self,
+static struct yetty_ycore_void_result msdf_load_glyphs(struct yetty_yfont_font *self,
                                                        const uint32_t *cps, size_t count)
 {
     struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
@@ -268,7 +268,7 @@ static struct yetty_ycore_void_result msdf_load_glyphs(struct yetty_ydraw_font *
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result msdf_load_basic_latin(struct yetty_ydraw_font *self)
+static struct yetty_ycore_void_result msdf_load_basic_latin(struct yetty_yfont_font *self)
 {
     struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
@@ -280,7 +280,7 @@ static struct yetty_ycore_void_result msdf_load_basic_latin(struct yetty_ydraw_f
     return YETTY_OK_VOID();
 }
 
-static float msdf_get_base_size(const struct yetty_ydraw_font *self)
+static float msdf_get_base_size(const struct yetty_yfont_font *self)
 {
     const struct yetty_yfont_msdf_font *f = (const struct yetty_yfont_msdf_font *)self;
     return f ? f->base_size : 32.0f;
@@ -312,7 +312,7 @@ static struct float_result msdf_read_advance_units(struct yetty_yfont_msdf_font 
     return YETTY_OK(float, hdr.advance);
 }
 
-static struct float_result msdf_get_advance(struct yetty_ydraw_font *self, uint32_t cp,
+static struct float_result msdf_get_advance(struct yetty_yfont_font *self, uint32_t cp,
                                             float font_size)
 {
     struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
@@ -332,7 +332,7 @@ static struct float_result msdf_get_advance(struct yetty_ydraw_font *self, uint3
     return YETTY_OK(float, adv.value *font_size / f->base_size);
 }
 
-static struct float_result msdf_measure_text(struct yetty_ydraw_font *self, const char *utf8,
+static struct float_result msdf_measure_text(struct yetty_yfont_font *self, const char *utf8,
                                              size_t len, float font_size)
 {
     struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
@@ -380,13 +380,13 @@ static struct float_result msdf_measure_text(struct yetty_ydraw_font *self, cons
     return YETTY_OK(float, total *font_size / f->base_size);
 }
 
-static int msdf_is_dirty(const struct yetty_ydraw_font *self)
+static int msdf_is_dirty(const struct yetty_yfont_font *self)
 {
     return ((const struct yetty_yfont_msdf_font *)self)->dirty;
 }
 
 static struct yetty_yrender_gpu_resource_set_result msdf_get_gpu_resource_set(
-    struct yetty_ydraw_font *self)
+    struct yetty_yfont_font *self)
 {
     struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {

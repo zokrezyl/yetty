@@ -64,7 +64,7 @@ struct demo_runner {
     const char *name;
     demo_build_fn build;
 
-    struct yetty_ygui_runtime *engine;
+    struct yetty_ygui_framework *engine;
     struct yetty_ygui_object *root;
 
     struct yetty_yframework *yframework;
@@ -74,7 +74,7 @@ struct demo_runner {
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_raw_figure_factory *figure_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
-    struct yetty_ydraw_font *font;
+    struct yetty_yfont_font *font;
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
     /* ~30 fps animation pump: fires request_render so self-dirtying
@@ -102,7 +102,7 @@ static struct yetty_ycore_int_result frame_tick(struct yetty_yevent_event_listen
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-struct yetty_ygui_runtime *demo_runner_engine(struct demo_runner *r)
+struct yetty_ygui_framework *demo_runner_engine(struct demo_runner *r)
 {
     return r ? r->engine : NULL;
 }
@@ -132,7 +132,7 @@ static const char *encode_key(uint32_t key, char *scratch, size_t scratch_n, siz
     }
 }
 
-static int on_key(struct yetty_ygui_runtime *engine, uint32_t key, int mods, void *userdata)
+static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
 {
     (void)engine;
     (void)mods;
@@ -697,7 +697,7 @@ struct client_state {
     int running;
 };
 
-static int client_on_key(struct yetty_ygui_runtime *engine, uint32_t key, int mods, void *userdata)
+static int client_on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
 {
     (void)engine;
     (void)mods;

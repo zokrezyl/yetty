@@ -90,14 +90,14 @@ struct ycomp_ygui_app {
      * straight in (in-process, no PTY). */
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *registry;
-    struct yetty_ygui_runtime  *ygui;
+    struct yetty_ygui_framework  *ygui;
     /* Borrowed pointer to the outer window — it is the framework root,
      * so the layout pass stretches it to the viewport automatically. */
     struct yetty_ygui_object  *win;
     /* Default font handed to the compositor; every per-group ygrid the
      * compositor creates borrows this at slot 0 so TEXT_SPAN records
      * (button labels, etc.) expand into renderable glyphs. */
-    struct yetty_ydraw_font   *font;
+    struct yetty_yfont_font   *font;
     /* ygrid factory bundle — borrowed by every ygrid the registry mints;
      * must outlive every ygrid (i.e. outlive the container). */
     struct yetty_ygrid_factory_args figure_args;

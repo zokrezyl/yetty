@@ -40,6 +40,12 @@ struct yetty_yimage_render_config {
     float bounds_h; /* 0   — when 0, defaults to source height */
 };
 
+/* Probe the source pixel dimensions of `image_bytes` (PNG/JPG/...) without
+ * a full decode (stb_image header parse). Returns 0 and writes *out_w /
+ * *out_h on success, -1 on failure. Useful for aspect-correct layout
+ * before deciding the display bounds. */
+int yetty_yimage_probe_size(const uint8_t *image_bytes, size_t len, int *out_w, int *out_h);
+
 /* Decode `image_bytes` (PNG/JPG/...) and produce a fresh ydraw-core
  * buffer holding ONE yimage complex prim. Caller frees the buffer with
  * yetty_ydraw_draw_list_destroy. */

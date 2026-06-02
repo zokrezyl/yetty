@@ -190,7 +190,7 @@ struct tab_state {
 };
 
 struct app {
-    struct yetty_ygui_runtime *engine;
+    struct yetty_ygui_framework *engine;
     struct yetty_ygui_object *root;
     struct yetty_ygui_object *tabbar;
     struct yetty_ygui_object *body_panel;
@@ -256,7 +256,7 @@ struct app {
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_raw_figure_factory *figure_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
-    struct yetty_ydraw_font *font;
+    struct yetty_yfont_font *font;
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
     /* ~30 fps animation pump for self-animating widgets (ymaze, …). */
@@ -2378,7 +2378,7 @@ struct key_ctx {
     void (*stop_cb)(struct app *app);
 };
 
-static int on_key(struct yetty_ygui_runtime *engine, uint32_t key, int mods, void *userdata)
+static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
 {
     (void)engine;
     (void)mods;

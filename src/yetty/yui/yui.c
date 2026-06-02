@@ -78,14 +78,14 @@ struct yetty_yui {
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *figure_registry;
 
-    struct yetty_ydraw_font *font;
+    struct yetty_yfont_font *font;
 
     struct yetty_ydraw_raw_figure_factory *figure_factory;
     struct yetty_ygrid_factory_args figure_args;
 
     /* Producer engine (new yclass framework). framework_emit lays out the
      * widget tree and ships the envelope into root_container. */
-    struct yetty_ygui_runtime *engine;
+    struct yetty_ygui_framework *engine;
 
     /* Engine widget-tree root — a column vbox holding the titlebar
      * (top), a flex spacer, and the statusbar (bottom). Floating
@@ -1981,7 +1981,7 @@ struct yetty_ygui_object *yetty_yui_statusbar(struct yetty_yui *yui)
     return yui ? yui->statusbar : NULL;
 }
 
-struct yetty_ygui_runtime *yetty_yui_engine(struct yetty_yui *yui)
+struct yetty_ygui_framework *yetty_yui_engine(struct yetty_yui *yui)
 {
     return yui ? yui->engine : NULL;
 }

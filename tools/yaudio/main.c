@@ -549,7 +549,7 @@ static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_ctx *ctx
 
 static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt)
 {
-    struct yetty_ygui_runtime *engine = yetty_yui_engine(app->yui);
+    struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
     if (!engine) {
         yerror("yaudio: yui engine is NULL — yui allocation failed");
         return;
@@ -747,7 +747,7 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
  * yaudio_load_done() once the real plot UI replaces it. */
 static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime *rt)
 {
-    struct yetty_ygui_runtime *engine = yetty_yui_engine(app->yui);
+    struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
     if (!engine) {
         yerror("yaudio: yui engine is NULL — yui allocation failed");
         return;

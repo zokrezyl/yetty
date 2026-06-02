@@ -27,6 +27,11 @@ struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ygui_
 struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_ygui_object *tabbar,
                                                             int index);
 
+/* Replace the label of the tab at `index` (e.g. to show a page title once
+ * it is known). No-op if `index` is out of range. NULL clears the label. */
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_ygui_object *tabbar,
+                                                           int index, const char *label);
+
 int yetty_ygui_tabbar_count(const struct yetty_ygui_object *tabbar);
 
 int yetty_ygui_tabbar_active(const struct yetty_ygui_object *tabbar);

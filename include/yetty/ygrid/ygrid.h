@@ -41,7 +41,7 @@ extern "C" {
 #endif
 
 struct yetty_ygrid_grid;
-struct yetty_ydraw_font;
+struct yetty_yfont_font;
 struct yetty_yfigure_registry;
 struct yetty_ydraw_raw_figure_factory;
 
@@ -56,7 +56,7 @@ struct yetty_ydraw_raw_figure_factory;
  *                  NULL → complex-prim records silently drop, same as
  *                  the v1 behaviour. */
 struct yetty_ygrid_factory_args {
-    struct yetty_ydraw_font *default_font;
+    struct yetty_yfont_font *default_font;
     struct yetty_ydraw_raw_figure_factory *figure_factory;
 };
 
@@ -142,7 +142,7 @@ struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *
  * Caller retains ownership of the font — ygrid borrows the pointer and
  * does NOT destroy it on ygrid_destroy. */
 struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *grid, uint32_t slot,
-                                                    struct yetty_ydraw_font *font);
+                                                    struct yetty_yfont_font *font);
 
 /* Content extent in px. By default a ygrid's content fills its on-screen
  * rect; set a larger extent to make it a scroll viewport — the cell grid

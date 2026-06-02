@@ -139,12 +139,12 @@ static const uint8_t k_bmp_2x2[] = {
 
 /* Build a headless engine whose root panel holds one 100x100 yimage.
  * The stub pty must outlive the returned engine — the caller owns it. */
-static struct yetty_ygui_runtime *make_engine_with_yimage(struct yetty_platform_pty *stub,
+static struct yetty_ygui_framework *make_engine_with_yimage(struct yetty_platform_pty *stub,
                                                           struct yetty_ygui_object **out_img)
 {
     struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(stub);
     CHECK(YETTY_IS_OK(er), "engine_create");
-    struct yetty_ygui_runtime *engine = er.value;
+    struct yetty_ygui_framework *engine = er.value;
 
     struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
     CHECK(YETTY_IS_OK(rr), "add panel");
@@ -172,7 +172,7 @@ static void test_yimage_emit(void)
     /* Stub pty lives on the stack of this function. */
     struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
     struct yetty_ygui_object *img = NULL;
-    struct yetty_ygui_runtime *engine = make_engine_with_yimage(&stub, &img);
+    struct yetty_ygui_framework *engine = make_engine_with_yimage(&stub, &img);
 
     struct yetty_ycore_void_result br =
         yetty_ygui_yimage_set_bytes(img, k_bmp_2x2, sizeof(k_bmp_2x2));
@@ -273,6 +273,68 @@ static void test_yimage_emit(void)
     yetty_ygui_framework_destroy(engine);
 }
 
+/* Incremental figure-body emit: once a figure has been minted on the
+ * receiver, an emit where nothing in its body subtree changed must NOT
+ * re-ship the body — the receiver keeps the last one. A subsequent
+ * content change must re-ship it. This is what stops an unchanged page
+ * (a scrollarea figure) from being re-serialized on every emit. */
+static void test_incremental_figure_skip(void)
+{
+    struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
+    struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(&stub);
+    CHECK(YETTY_IS_OK(er), "skip: framework_create");
+    struct yetty_ygui_framework *engine = er.value;
+
+    struct yetty_ygui_object_ptr_result rr =
+        yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
+    CHECK(YETTY_IS_OK(rr), "skip: add panel");
+    struct yetty_ygui_object *root = rr.value;
+    CHECK(YETTY_IS_OK(yetty_ygui_framework_set_root(engine, root)), "skip: set_root");
+
+    /* A scrollarea promotes itself to its own YGRID figure (figure_kind !=
+     * 0) — the same figure mechanism the browser's page area uses. Its
+     * child label paints into that figure's body. */
+    struct yetty_ygui_object_ptr_result sr =
+        yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, root);
+    CHECK(YETTY_IS_OK(sr), "skip: add scrollarea");
+    struct yetty_ygui_object *scroll = sr.value;
+    struct yetty_ygui_layout sl = *yetty_ygui_widget_layout_get(scroll);
+    sl.width = 200.0f;
+    sl.height = 200.0f;
+    CHECK(YETTY_IS_OK(yetty_ygui_widget_layout_set(scroll, &sl)), "skip: scroll layout");
+
+    struct yetty_ygui_object_ptr_result lr =
+        yetty_ygui_add(yetty_ygui_label_class_get().value, scroll);
+    CHECK(YETTY_IS_OK(lr), "skip: add label");
+    struct yetty_ygui_object *label = lr.value;
+    CHECK(YETTY_IS_OK(yetty_ygui_label_set_text(label, "page content")), "skip: label text");
+    struct yetty_ygui_layout ll = *yetty_ygui_widget_layout_get(label);
+    ll.width = 180.0f;
+    ll.height = 22.0f;
+    CHECK(YETTY_IS_OK(yetty_ygui_widget_layout_set(label, &ll)), "skip: label layout");
+
+    /* Emit #1: scrollarea figure not yet minted → body shipped. */
+    CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #1");
+    CHECK(engine->figure_bodies.size > 8, "skip: emit #1 ships scrollarea figure body");
+
+    /* Emit #2: nothing changed and the figure is minted → body skipped.
+     * figure_bodies (reset at the start of each emit) holds no records. */
+    CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #2");
+    CHECK(engine->figure_bodies.size == 0, "skip: emit #2 omits clean figure body");
+
+    /* A content change re-dirties the figure → it re-ships on next emit. */
+    CHECK(YETTY_IS_OK(yetty_ygui_label_set_text(label, "different content")),
+          "skip: change text");
+    CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #3");
+    CHECK(engine->figure_bodies.size > 8, "skip: emit #3 re-ships dirtied figure body");
+
+    /* And once clean again, it is skipped once more. */
+    CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #4");
+    CHECK(engine->figure_bodies.size == 0, "skip: emit #4 omits clean figure body");
+
+    yetty_ygui_framework_destroy(engine);
+}
+
 /* Malformed image bytes must surface as a Result error from emit — not
  * be silently dropped or truncated. Exercises the strict-rejection path
  * in yimage_emit_body / yetty_yimage_render (issue #243 findings 4/5). */
@@ -280,7 +342,7 @@ static void test_yimage_emit_rejects_malformed(void)
 {
     struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
     struct yetty_ygui_object *img = NULL;
-    struct yetty_ygui_runtime *engine = make_engine_with_yimage(&stub, &img);
+    struct yetty_ygui_framework *engine = make_engine_with_yimage(&stub, &img);
 
     uint8_t garbage[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};
     struct yetty_ycore_void_result br =
@@ -297,6 +359,7 @@ static void test_yimage_emit_rejects_malformed(void)
 int main(void)
 {
     test_yimage_emit();
+    test_incremental_figure_skip();
     test_yimage_emit_rejects_malformed();
     puts("ygui-figure-test: OK");
     return 0;

@@ -15,7 +15,7 @@
 
 struct yetty_yfont_cache_entry {
     char key[KEY_MAX];
-    struct yetty_ydraw_font *font;
+    struct yetty_yfont_font *font;
     uint32_t refcount;
     bool in_use;
 };
@@ -207,7 +207,7 @@ void yetty_yfont_cache_release_font(struct yetty_yfont_cache *cache, yetty_yfont
     cache->free_slots[cache->free_count++] = h;
 }
 
-struct yetty_ydraw_font *yetty_yfont_cache_font_at(const struct yetty_yfont_cache *cache,
+struct yetty_yfont_font *yetty_yfont_cache_font_at(const struct yetty_yfont_cache *cache,
                                                    yetty_yfont_cache_handle h)
 {
     if (!cache || h == YETTY_YFONT_CACHE_HANDLE_INVALID || h >= cache->count) {

@@ -2,9 +2,8 @@
  * ygui-internal.h — private types shared across the ygui implementation.
  *
  * Held to the .c files (not installed). Exposes:
- *   - struct yetty_ygui_class (full definition; public API is opaque)
  *   - struct yetty_ygui_object (full definition; public API is opaque)
- *   - struct yetty_ygui_runtime (full definition; public API is opaque)
+ *   - struct yetty_ygui_framework (full definition; public API is opaque)
  *
  * Out-of-file callers go through the public API — including this
  * header from a widget or test .c is acceptable for unit tests that
@@ -20,7 +19,6 @@
 #include <yclass/class.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ygui/class.h>
 #include <yetty/ygui/framework.h>
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/object.h>
@@ -29,6 +27,29 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Slot-domain string every ygui class registers under. */
+#define YETTY_YGUI_DOMAIN "yetty_ygui"
+
+/*---------------------------------------------------------------------------
+ * yclass dispatch conveniences (impl in dispatch.c). ygui owns no class
+ * system of its own — these just wrap <yclass/class.h> with ygui's domain
+ * and its "missing override == no-op" convention.
+ *-------------------------------------------------------------------------*/
+
+/* Look up the slot owned by `method_id` in ygui's domain. Returns
+ * YETTY_YCLASS_METHOD_SLOT_UNDEFINED when the id isn't registered. */
+yetty_yclass_method_slot yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id);
+
+/* Resolve `slot` against `cls`'s dispatch table. NULL on miss (a missing
+ * override is a no-op, not an error). */
+yetty_yclass_impl_t yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls,
+                                               yetty_yclass_method_slot slot);
+
+/* Walk up the parent chain (skipping the leaf) and return the first
+ * non-NULL dispatch entry for `slot`. Super invokers chain through this. */
+yetty_yclass_impl_t yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
+                                                     yetty_yclass_method_slot slot);
 
 /*===========================================================================
  * Classes — `struct yetty_yclass` (from <yclass/class.h>) is the only
@@ -66,7 +87,7 @@ struct yetty_ygui_object {
     struct yetty_ygui_object *first_child;
     struct yetty_ygui_object *next_sibling;
 
-    /* Wire id allocated by the engine at construction. 0 = unassigned. */
+    /* Wire id allocated by the framework at construction. 0 = unassigned. */
     uint32_t id;
 
     /* Figure-boundary marker. When non-zero this widget is emitted as
@@ -98,9 +119,9 @@ struct yetty_ygui_object {
      * hover variant. */
     int hovered;
 
-    /* Engine that owns this widget tree. Stored only on the root; child
-     * widgets resolve via parent walk through yetty_ygui_object_engine. */
-    struct yetty_ygui_runtime *engine;
+    /* framework that owns this widget tree. Stored only on the root; child
+     * widgets resolve via parent walk through yetty_ygui_object_framework. */
+    struct yetty_ygui_framework *framework;
 
     /* Event subscriptions — singly-linked list, freed at object destroy. */
     struct yetty_ygui_event_subscription *subscriptions;
@@ -110,7 +131,7 @@ struct yetty_ygui_object {
 };
 
 /*===========================================================================
- * Engine.
+ * framework.
  *=========================================================================*/
 
 /* Byte-stream input decoder state. ASCII pass-through; ESC starts a
@@ -128,7 +149,7 @@ struct yetty_ygui_input_state {
     int params_len;
 };
 
-struct yetty_ygui_runtime {
+struct yetty_ygui_framework {
     /* Borrowed — caller owns the lifetime. */
     struct yetty_platform_pty *output_pty;
 
@@ -138,7 +159,7 @@ struct yetty_ygui_runtime {
     size_t free_id_cap;
 
     /* Monotonic floating-window raise allocator (see
-     * yetty_ygui_runtime_next_raise_z). Sits in the floating z band. */
+     * yetty_ygui_framework_next_raise_z). Sits in the floating z band. */
     int32_t next_raise_z;
 
     /* Pending deletes — ids whose receiver-side figures need to go
@@ -171,14 +192,14 @@ struct yetty_ygui_runtime {
     float viewport_w;
     float viewport_h;
 
-    /* Chrome palette + canonical sizes. Owned by the engine: created
+    /* Chrome palette + canonical sizes. Owned by the framework: created
      * in framework_create with the brand defaults; destroyed in
      * framework_destroy. yetty_ygui_framework_set_theme replaces the
      * owned theme (caller passes ownership in). Widget paint code
-     * consults this via yetty_ygui_framework_theme(engine). */
+     * consults this via yetty_ygui_framework_theme(framework). */
     struct yetty_ygui_theme *theme;
 
-    /* Engine-level dirty flag. Cleared by emit. */
+    /* framework-level dirty flag. Cleared by emit. */
     int dirty;
 
     /* Reusable per-emit buffers. Cleared at the start of each emit. */
@@ -238,8 +259,8 @@ struct yetty_ygui_runtime {
 
 /* Build the framework's own ygrid record if not yet created.
  * Idempotent — flips ygrid_created on first call. */
-struct yetty_ycore_void_result yetty_ygui_framework_ensure_chrome(struct yetty_ygui_runtime *engine,
-                                                                  struct yetty_ygui_emit_ctx *ctx);
+struct yetty_ycore_void_result yetty_ygui_framework_ensure_chrome(
+    struct yetty_ygui_framework *framework, struct yetty_ygui_emit_ctx *ctx);
 
 /* Walk the tree invoking emit_container on every widget (pre-order). */
 struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
@@ -251,13 +272,13 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
 
 /* Flush the three streams into the output pty as one yface envelope.
  * The envelope body is a sequence of {length, id, payload} records:
- *   - container_records appear with id = ENGINE'S CONTAINER ID and the
+ *   - container_records appear with id = framework'S CONTAINER ID and the
  *     bytes are admin-record payloads
  *   - ygrid_body appears with id = ygrid_id wrapped in one record
  *   - figure_bodies are already record-framed inside the buffer
- *     (engine wraps each figure's body at append time using
+ *     (framework wraps each figure's body at append time using
  *     current_figure_id). */
-struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_runtime *engine);
+struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_framework *framework);
 
 /* Append one {length, id, payload} record to `dst`. */
 struct yetty_ycore_void_result yetty_ygui_wire_append_record(struct yetty_ycore_buffer *dst,

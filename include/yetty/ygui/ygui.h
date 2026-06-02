@@ -3,12 +3,11 @@
  *
  * Re-exports every component header so apps can include one file and
  * get the full API. Apps that care about compile times may include
- * individual headers (ygui-class.h, ygui-object.h, …) directly.
+ * individual headers (ygui-object.h, ygui-framework.h, …) directly.
  */
 #ifndef YETTY_YGUI_YGUI_H
 #define YETTY_YGUI_YGUI_H
 
-#include <yetty/ygui/class.h>
 #include <yetty/ygui/framework.h>
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/object.h>
