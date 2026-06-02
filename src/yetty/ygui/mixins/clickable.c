@@ -18,6 +18,12 @@
 
 #include <yetty/ygui/mixins/clickable.h>
 
+#ifdef YCLASS_CODEGEN
+typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              void *userdata);
+#endif
+
 struct [[clang::annotate("mixin@ygui:clickable")]] clickable_data {
     int pressed;
     float press_x, press_y;
@@ -33,8 +39,10 @@ static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx 
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)button;
-    struct clickable_data *cd =
-        yetty_ygui_data_get(obj, yetty_ygui_clickable_mixin_get().value);
+    struct yetty_ygui_void_ptr_result cd_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_clickable_mixin_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, cd_dr, "clickable_on_press: data_get");
+    struct clickable_data *cd = cd_dr.value;
     cd->pressed = 1;
     cd->press_x = x;
     cd->press_y = y;
@@ -55,8 +63,10 @@ static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ct
     (void)x;
     (void)y;
     (void)button;
-    struct clickable_data *cd =
-        yetty_ygui_data_get(obj, yetty_ygui_clickable_mixin_get().value);
+    struct yetty_ygui_void_ptr_result cd_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_clickable_mixin_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, cd_dr, "clickable_on_release: data_get");
+    struct clickable_data *cd = cd_dr.value;
     int was_pressed = cd->pressed;
     cd->pressed = 0;
     /* Mark dirty BEFORE invoking on_click. The callback is free to
@@ -83,6 +93,7 @@ static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ct
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_ygui_object *obj,
                                                                  yetty_ygui_click_cb cb,
                                                                  void *userdata)
@@ -90,13 +101,16 @@ struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_yg
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_clickable_on_click_set: NULL obj");
     }
-    struct clickable_data *cd =
-        yetty_ygui_data_get(obj, yetty_ygui_clickable_mixin_get().value);
+    struct yetty_ygui_void_ptr_result cd_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_clickable_mixin_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cd_dr, "yetty_ygui_clickable_on_click_set: data_get");
+    struct clickable_data *cd = cd_dr.value;
     cd->on_click = cb;
     cd->userdata = userdata;
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
@@ -107,6 +121,7 @@ int yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj)
     return cd->pressed;
 }
 
+[[clang::annotate("expose")]]
 void yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj, float *x, float *y)
 {
     if (!obj) {

@@ -24,8 +24,10 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                               yetty_ygui_colorpicker_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "colorpicker: super");
-    struct cp_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_colorpicker_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
+    struct cp_data *d = d_dr.value;
     d->color = 0xFF92A86Bu; /* brand accent default */
     return YETTY_OK_VOID();
 }
@@ -40,8 +42,10 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "colorpicker paint: NULL ctx");
     }
-    struct cp_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_colorpicker_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
+    struct cp_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -61,18 +65,22 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     return yguix_text(ctx, hex, r.min.x + sw_w + 12, ty, fs, COLOR_TEXT);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_ygui_object *obj,
                                                                 uint32_t c)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "cp_set_color: NULL");
     }
-    struct cp_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_colorpicker_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_colorpicker_set_color: data_get");
+    struct cp_data *d = d_dr.value;
     d->color = c;
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 uint32_t yetty_ygui_colorpicker_get_color(const struct yetty_ygui_object *obj)
 {
     if (!obj) {

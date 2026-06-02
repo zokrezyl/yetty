@@ -36,8 +36,10 @@ static struct yetty_ycore_void_result on_click_toggle(struct yetty_yclass_ctx *y
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)userdata;
-    struct checkbox_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_checkbox_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click_toggle: data_get");
+    struct checkbox_data *d = d_dr.value;
     d->checked = !d->checked;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
@@ -61,8 +63,10 @@ static struct yetty_ycore_void_result checkbox_constructor(struct yetty_yclass_c
         yetty_ygui_checkbox_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "checkbox_constructor: super");
-    struct checkbox_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_checkbox_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "checkbox_constructor: data_get");
+    struct checkbox_data *d = d_dr.value;
     d->label = NULL;
     d->checked = 0;
     return yetty_ygui_clickable_on_click_set(obj, on_click_toggle, NULL);
@@ -74,8 +78,10 @@ static struct yetty_ycore_void_result checkbox_destructor(struct yetty_yclass_ct
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct checkbox_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_checkbox_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "checkbox_destructor: data_get");
+    struct checkbox_data *d = d_dr.value;
     free(d->label);
     d->label = NULL;
     return yetty_ygui_super_void(
@@ -121,8 +127,10 @@ static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_ctx *yc
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "checkbox_paint: NULL ctx");
     }
-    struct checkbox_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_checkbox_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "checkbox_paint: data_get");
+    struct checkbox_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float h = r.max.y - r.min.y;
     float box_size = h - 4.0f;
@@ -154,14 +162,17 @@ static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_ctx *yc
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_ygui_object *obj,
                                                              const char *label)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "checkbox_set_label: NULL obj");
     }
-    struct checkbox_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_checkbox_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_checkbox_set_label: data_get");
+    struct checkbox_data *d = d_dr.value;
     free(d->label);
     if (!label) {
         d->label = NULL;
@@ -176,18 +187,22 @@ struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_ygui_o
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_ygui_object *obj,
                                                                int checked)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "checkbox_set_checked: NULL obj");
     }
-    struct checkbox_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_checkbox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_checkbox_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_checkbox_set_checked: data_get");
+    struct checkbox_data *d = d_dr.value;
     d->checked = checked ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_checkbox_get_checked(const struct yetty_ygui_object *obj)
 {
     if (!obj) {

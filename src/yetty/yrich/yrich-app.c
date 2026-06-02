@@ -60,9 +60,9 @@ struct yrich_app {
     struct yetty_yfigure_container *root;
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *registry;
-    struct yetty_ygui_runtime *ygui;
+    struct yetty_ygui_framework *ygui;
     struct yetty_ygui_object *win; /* framework root widget */
-    struct yetty_ydraw_font *font;
+    struct yetty_yfont_font *font;
     struct yetty_ygrid_factory_args figure_args;
     void *surface;
     uint32_t surface_w;

@@ -1,10 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `container` (module: yfigure).
- * Codegen regenerates the section above the MANUAL markers;
- * hand-written content between the markers is preserved
- * across runs. Edit annotated source for accessor + slot
- * changes; edit between MANUAL markers for app-facing
- * helper declarations, enums, etc. */
+ * Fully generated from the source .c — do not edit. Function
+ * APIs come from `expose` annotations; types and other header
+ * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
 #ifndef YETTY_YCLASSGEN_YFIGURE_CONTAINER_H
 #define YETTY_YCLASSGEN_YFIGURE_CONTAINER_H
 
@@ -12,9 +10,5 @@
 #include <yetty/yfigure/methods.h>
 
 struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void);
-
-/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
-
-/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

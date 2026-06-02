@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include <yetty/ycore/result.h>
+#include <yetty/ytrace/ytrace.h>
 
 /*===========================================================================
  * Lifecycle method stubs.
@@ -199,6 +200,26 @@ static size_t data_offset(const struct yetty_yclass *leaf, const struct yetty_yc
     return SIZE_MAX;
 }
 
+struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_ygui_object *obj,
+                                                             const struct yetty_yclass *cls)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ygui_void_ptr, "yetty_ygui_data_get_result: NULL obj");
+    }
+    /* A NULL `cls` is the common failure: the call site passed the
+     * `.value` of a `*_class_get()` that errored. Report it instead of
+     * indexing a slice at offset 0 (which would alias the header). */
+    if (!cls) {
+        return YETTY_ERR(yetty_ygui_void_ptr, "yetty_ygui_data_get_result: NULL class");
+    }
+    size_t off = data_offset(obj->klass, cls);
+    if (off == SIZE_MAX) {
+        return YETTY_ERR(yetty_ygui_void_ptr,
+                         "yetty_ygui_data_get_result: class not in object's chain");
+    }
+    return YETTY_OK(yetty_ygui_void_ptr, (char *)obj + off);
+}
+
 void *yetty_ygui_data_get(struct yetty_ygui_object *obj, const struct yetty_yclass *cls)
 {
     assert(obj && cls);
@@ -305,6 +326,18 @@ static void object_link_to_parent(struct yetty_ygui_object *obj, struct yetty_yg
         t = t->next_sibling;
     }
     t->next_sibling = obj;
+}
+
+const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_result class_result,
+                                                   const char *name)
+{
+    if (YETTY_IS_ERR(class_result)) {
+        yerror("yetty_ygui_class_expect: %s failed: %s", name ? name : "(class)",
+               class_result.error.msg);
+        yetty_ycore_error_destroy(class_result.error);
+        return NULL;
+    }
+    return class_result.value;
 }
 
 struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cls,

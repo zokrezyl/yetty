@@ -38,8 +38,10 @@ static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_ctx 
     (void)yclass_ctx;
     (void)button;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct draggable_data *dd =
-        yetty_ygui_data_get(obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_void_ptr_result dd_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_draggable_mixin_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "draggable_on_press: data_get");
+    struct draggable_data *dd = dd_dr.value;
     dd->dragging = 1;
     dd->last_x = x;
     dd->last_y = y;
@@ -59,8 +61,10 @@ static struct yetty_ycore_int_result draggable_on_motion(struct yetty_yclass_ctx
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct draggable_data *dd =
-        yetty_ygui_data_get(obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_void_ptr_result dd_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_draggable_mixin_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "draggable_on_motion: data_get");
+    struct draggable_data *dd = dd_dr.value;
     /* The framework also delivers motion to whatever the pointer hovers,
      * not just the capture target — only act while a press of ours is in
      * flight, otherwise let the event bubble. */
@@ -90,8 +94,10 @@ static struct yetty_ycore_int_result draggable_on_release(struct yetty_yclass_ct
     (void)y;
     (void)button;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct draggable_data *dd =
-        yetty_ygui_data_get(obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_void_ptr_result dd_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_draggable_mixin_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "draggable_on_release: data_get");
+    struct draggable_data *dd = dd_dr.value;
     dd->dragging = 0;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
@@ -100,6 +106,7 @@ static struct yetty_ycore_int_result draggable_on_release(struct yetty_yclass_ct
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_ygui_object *obj,
                                                                 yetty_ygui_drag_cb cb,
                                                                 void *userdata)
@@ -107,13 +114,16 @@ struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_ygu
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_draggable_on_drag_set: NULL obj");
     }
-    struct draggable_data *dd =
-        yetty_ygui_data_get(obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_void_ptr_result dd_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_draggable_mixin_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dd_dr, "yetty_ygui_draggable_on_drag_set: data_get");
+    struct draggable_data *dd = dd_dr.value;
     dd->on_drag = cb;
     dd->userdata = userdata;
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_draggable_is_dragging(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
@@ -125,3 +135,9 @@ int yetty_ygui_draggable_is_dragging(const struct yetty_ygui_object *obj)
 }
 
 #include "draggable.gen.c"
+
+#ifdef YCLASS_CODEGEN
+struct yetty_ygui_object;
+typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_ygui_object *obj,
+                                                             float dx, float dy, void *userdata);
+#endif

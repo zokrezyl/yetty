@@ -377,7 +377,7 @@ endif()
 # the top of src/ (sibling of src/yetty) like ut/uthash on the include
 # side. Declared before src/yetty so any module under src/yetty/ can
 # link yetty_yclass.
-add_subdirectory(${YETTY_ROOT}/src/yclass ${CMAKE_BINARY_DIR}/src/yclass)
+add_subdirectory(${YETTY_ROOT}/src/yetty/yclass ${CMAKE_BINARY_DIR}/src/yetty/yclass)
 
 # Reusable render utilities (GPU tile diff, …). Lives outside src/yetty so it
 # can be consumed by both the main yetty modules and standalone tools. Must

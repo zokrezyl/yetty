@@ -29,8 +29,10 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
         obj, yetty_ygui_list_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "list: super");
-    struct list_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_list_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_list_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
+    struct list_data *d = d_dr.value;
     d->rows = NULL;
     d->n = 0;
     d->cap = 0;
@@ -44,8 +46,10 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct list_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_list_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_list_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
+    struct list_data *d = d_dr.value;
     for (int i = 0; i < d->n; i++) {
         free(d->rows[i]);
     }
@@ -64,8 +68,10 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)x;
     (void)btn;
-    struct list_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_list_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_list_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
+    struct list_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     int idx = (int)((y - r.min.y) / ROW_H);
     if (idx < 0 || idx >= d->n) {
@@ -94,8 +100,10 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "list paint: NULL ctx");
     }
-    struct list_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_list_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_list_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
+    struct list_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -143,13 +151,16 @@ static int grow(struct list_data *d, int n)
     return 1;
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_ygui_object *obj, const char *label)
 {
     if (!obj || !label) {
         return YETTY_ERR(yetty_ycore_void, "list_add: NULL");
     }
-    struct list_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_list_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_list_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_list_add: data_get");
+    struct list_data *d = d_dr.value;
     if (!grow(d, d->n + 1)) {
         return YETTY_ERR(yetty_ycore_void, "list_add: realloc");
     }
@@ -163,17 +174,21 @@ struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_ygui_object *obj
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_list_set_selected(struct yetty_ygui_object *obj, int i)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "list_set_selected: NULL");
     }
-    struct list_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_list_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_list_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_list_set_selected: data_get");
+    struct list_data *d = d_dr.value;
     d->selected = i;
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_list_get_selected(const struct yetty_ygui_object *obj)
 {
     if (!obj) {

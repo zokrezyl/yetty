@@ -29,6 +29,15 @@ YETTY_YRESULT_DECLARE(yetty_ygui_object_ptr, struct yetty_ygui_object *);
 struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cls,
                                                    struct yetty_ygui_object *parent);
 
+/* Unwrap a `*_class_get()` result for direct use as the `cls` argument
+ * of yetty_ygui_add / add helpers. Class registration is deterministic
+ * setup, so a failure is a configuration bug: log it (with `name` for
+ * context) and return NULL. yetty_ygui_add rejects a NULL class with a
+ * clear error, so the failure still propagates through the caller's
+ * Result chain rather than crashing. */
+const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_result class_result,
+                                                   const char *name);
+
 /* Destroy `obj`. Runs destructors leaf-first, detaches from parent,
  * cascades to children, and frees the block. NULL-safe. */
 struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj);
@@ -37,6 +46,11 @@ struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj);
  * casts to the slice struct type. Infallible: `cls` must be in `obj`'s
  * class chain (own class, parent chain, or any mixin). Debug builds
  * assert; release builds trust the call site. */
+YETTY_YRESULT_DECLARE(yetty_ygui_void_ptr, void *);
+
+struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_ygui_object *obj,
+                                                              const struct yetty_yclass *cls);
+
 void *yetty_ygui_data_get(struct yetty_ygui_object *obj, const struct yetty_yclass *cls);
 
 /* Parent / first-child / next-sibling access. NULL when no relation. */

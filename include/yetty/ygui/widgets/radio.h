@@ -1,10 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `radio` (module: ygui).
- * Codegen regenerates the section above the MANUAL markers;
- * hand-written content between the markers is preserved
- * across runs. Edit annotated source for accessor + slot
- * changes; edit between MANUAL markers for app-facing
- * helper declarations, enums, etc. */
+ * Fully generated from the source .c — do not edit. Function
+ * APIs come from `expose` annotations; types and other header
+ * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_RADIO_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_RADIO_H
 
@@ -13,12 +11,13 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_radio_class_get(void);
 
-/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
-struct yetty_ycore_void_result yetty_ygui_radio_set_label(struct yetty_ygui_object *obj,
-                                                          const char *label);
-struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_ygui_object *obj,
-                                                             int selected);
+struct yetty_ygui_object;
+struct radio_data;
+YETTY_YRESULT_DECLARE(yetty_ygui_radio_data_ptr, struct radio_data *);
+struct yetty_ygui_radio_data_ptr_result yetty_ygui_radio_data(struct yetty_ygui_object *obj);
+
+struct yetty_ycore_void_result yetty_ygui_radio_set_label(struct yetty_ygui_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_ygui_object *obj, int s);
 int yetty_ygui_radio_is_selected(const struct yetty_ygui_object *obj);
-/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

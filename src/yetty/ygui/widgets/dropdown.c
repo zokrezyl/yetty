@@ -40,8 +40,10 @@ static struct yetty_ycore_void_result on_pick_item(struct yetty_yclass_ctx *ycla
     struct yetty_ygui_object *menu = (struct yetty_ygui_object *)yclass_obj;
     (void)menu;
     struct yetty_ygui_object *dd = (struct yetty_ygui_object *)userdata;
-    struct dropdown_data *d =
-        yetty_ygui_data_get(dd, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(dd, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_pick_item: data_get");
+    struct dropdown_data *d = d_dr.value;
     if (item < 0 || item >= d->n_options) {
         return YETTY_OK_VOID();
     }
@@ -64,8 +66,10 @@ static struct yetty_ycore_void_result on_click_open(struct yetty_yclass_ctx *ycl
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)userdata;
-    struct dropdown_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click_open: data_get");
+    struct dropdown_data *d = d_dr.value;
     if (!d->menu) {
         return YETTY_OK_VOID();
     }
@@ -84,8 +88,10 @@ static struct yetty_ycore_void_result dropdown_constructor(struct yetty_yclass_c
         yetty_ygui_dropdown_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "dropdown_constructor: super");
-    struct dropdown_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dropdown_constructor: data_get");
+    struct dropdown_data *d = d_dr.value;
     d->options = NULL;
     d->n_options = 0;
     d->cap = 0;
@@ -100,8 +106,10 @@ static struct yetty_ycore_void_result dropdown_destructor(struct yetty_yclass_ct
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct dropdown_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dropdown_destructor: data_get");
+    struct dropdown_data *d = d_dr.value;
     for (int i = 0; i < d->n_options; ++i) {
         free(d->options[i]);
     }
@@ -155,8 +163,10 @@ static struct yetty_ycore_void_result dropdown_paint(struct yetty_yclass_ctx *yc
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "dropdown_paint: NULL ctx");
     }
-    struct dropdown_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dropdown_paint: data_get");
+    struct dropdown_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -203,14 +213,17 @@ static int options_grow(struct dropdown_data *d, int need)
     return 1;
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_ygui_object *obj,
                                                               const char *label)
 {
     if (!obj || !label) {
         return YETTY_ERR(yetty_ycore_void, "dropdown_add_option: NULL arg");
     }
-    struct dropdown_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_dropdown_add_option: data_get");
+    struct dropdown_data *d = d_dr.value;
     if (!options_grow(d, d->n_options + 1)) {
         return YETTY_ERR(yetty_ycore_void, "dropdown_add_option: realloc");
     }
@@ -233,14 +246,17 @@ struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_ygui_
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_ygui_object *obj,
                                                                 int index)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "dropdown_set_selected: NULL obj");
     }
-    struct dropdown_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_dropdown_set_selected: data_get");
+    struct dropdown_data *d = d_dr.value;
     if (index < -1 || index >= d->n_options) {
         return YETTY_OK_VOID();
     }
@@ -248,6 +264,7 @@ struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_ygu
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_dropdown_get_selected(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
@@ -259,14 +276,17 @@ int yetty_ygui_dropdown_get_selected(const struct yetty_ygui_object *obj)
     return d->selected;
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_ygui_object *obj,
                                                             struct yetty_ygui_object *menu)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "dropdown_set_menu: NULL obj");
     }
-    struct dropdown_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_dropdown_set_menu: data_get");
+    struct dropdown_data *d = d_dr.value;
     d->menu = menu;
     /* Mirror any options that were already added before the bind. */
     if (menu) {

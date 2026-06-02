@@ -1193,6 +1193,17 @@ classes:
       - slot: widget_on_scroll
         slot_domain: ygui
         impl: ynodes_on_scroll
+  - name: ypdf
+    domain: ygui
+    accessor: yetty_ygui_ypdf_class_get
+    type: regular
+    source_file: src/yetty/ygui/widgets/ypdf.c
+    parent:
+      domain: ygui
+      name: ydraw_embed
+    mixins: []
+    data: struct ypdf_data
+    ops: []
   - name: yplot
     domain: ygui
     accessor: yetty_ygui_yplot_class_get
@@ -1311,3 +1322,1591 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: yzoo_emit_body
+exposed:
+  - source_file: src/yetty/ygui/mixins/clickable.c
+    verbatim: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              void *userdata);"
+  - source_file: src/yetty/ygui/mixins/clickable.c
+    name: yetty_ygui_clickable_on_click_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: cb
+        type: yetty_ygui_click_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/mixins/clickable.c
+    name: yetty_ygui_clickable_is_pressed
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/mixins/clickable.c
+    name: yetty_ygui_clickable_press_pos
+    return_type: void
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+      - name: x
+        type: "float *"
+      - name: y
+        type: "float *"
+  - source_file: src/yetty/ygui/mixins/draggable.c
+    verbatim: "struct yetty_ygui_object;
+typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_ygui_object *obj,
+                                                             float dx, float dy, void *userdata);"
+  - source_file: src/yetty/ygui/mixins/draggable.c
+    name: yetty_ygui_draggable_on_drag_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: cb
+        type: yetty_ygui_drag_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/mixins/draggable.c
+    name: yetty_ygui_draggable_is_dragging
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widget.c
+    verbatim: "/* Header-destined content for the generated widget.h (skipped by the real build, which takes it from that header). */
+/*-----------------------------------------------------------------------------
+ * Flex / CSS layout — the field set the flex layout pass in layout.c
+ * consumes. Apps author these values directly or via apply_css.
+ *---------------------------------------------------------------------------*/
+enum yetty_ygui_flex_direction {
+    YETTY_YGUI_FLEX_ROW = 0,
+    YETTY_YGUI_FLEX_COLUMN = 1,
+};
+
+enum yetty_ygui_flex_justify {
+    YETTY_YGUI_JUSTIFY_START = 0,
+    YETTY_YGUI_JUSTIFY_CENTER,
+    YETTY_YGUI_JUSTIFY_END,
+    YETTY_YGUI_JUSTIFY_SPACE_BETWEEN,
+};
+
+enum yetty_ygui_flex_align {
+    YETTY_YGUI_ALIGN_START = 0,
+    YETTY_YGUI_ALIGN_CENTER,
+    YETTY_YGUI_ALIGN_END,
+    YETTY_YGUI_ALIGN_STRETCH,
+};
+
+struct yetty_ygui_layout {
+    enum yetty_ygui_flex_direction direction;
+    enum yetty_ygui_flex_justify justify;
+    enum yetty_ygui_flex_align align;
+    float gap;
+    float padding_top;
+    float padding_right;
+    float padding_bottom;
+    float padding_left;
+    /* Authored intrinsic size — used as the starting point for the main-
+     * axis distribution and as the cross-axis size unless overridden by
+     * align=stretch. -1.0f means \"unset\" (the layout treats as 0 on the
+     * main axis, parent-cross-content on the cross axis). */
+    float width;
+    float height;
+    /* flex factors — main-axis space distribution. */
+    float flex_grow;
+    float flex_shrink;
+    /* min / max constraints; -1.0f means \"unset\". */
+    float min_width;
+    float max_width;
+    float min_height;
+    float max_height;
+    /* Absolute positioning. When `absolute` is non-zero, the layout
+     * pass skips this widget in its parent's flex flow and instead
+     * places it at (parent_content_min.x + pos_x, parent_content_min.y +
+     * pos_y) with size (width, height). Used by overlays (popup_menu,
+     * dialog) that need to float over their siblings. */
+    int absolute;
+    float pos_x;
+    float pos_y;
+    /* When non-zero, this widget and its subtree are excluded from both
+     * the layout pass (consumes no main-axis space, contributes no flex
+     * sum) and the emit walk (no container record, no body prims). Used
+     * by collapsible containers (collapsing_header, tree_node) to fold
+     * away their children when closed without disturbing the children's
+     * authored sizes — restoring visibility is a single flag flip. */
+    int hidden;
+};
+
+/* Initial layout — all enums zeroed (row / start / start), no gap, no
+ * padding, no flex grow/shrink, unbounded min/max. */
+struct yetty_ygui_layout yetty_ygui_layout_default(void);
+
+/*-----------------------------------------------------------------------------
+ * Widget geometry / layout setters. Setters take effect on the next
+ * engine emit; the engine flags the widget dirty.
+ *---------------------------------------------------------------------------*/
+struct yetty_ycore_void_result yetty_ygui_widget_set_rect(struct yetty_ygui_object *obj,
+                                                          struct yetty_ycore_rectangle rect);
+
+struct yetty_ycore_rectangle yetty_ygui_widget_rect(const struct yetty_ygui_object *obj);
+
+struct yetty_ycore_void_result yetty_ygui_widget_layout_set(struct yetty_ygui_object *obj,
+                                                            const struct yetty_ygui_layout *layout);
+
+const struct yetty_ygui_layout *yetty_ygui_widget_layout_get(const struct yetty_ygui_object *obj);
+
+/*-----------------------------------------------------------------------------
+ * Convenience geometry / visibility setters — thin wrappers over the
+ * layout struct, exposing geometry/visibility as first-class widget
+ * calls. Each marks the widget dirty.
+ *---------------------------------------------------------------------------*/
+/* Toggle the widget (and its subtree) in/out of layout + paint via the
+ * layout `hidden` flag. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_visible(struct yetty_ygui_object *obj,
+                                                             int visible);
+int yetty_ygui_widget_is_visible(const struct yetty_ygui_object *obj);
+
+/* Author the widget's main/cross size (width, height). */
+struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_object *obj, float w,
+                                                          float h);
+
+/* Place the widget at an absolute (pos_x, pos_y) inside its parent's
+ * content box (sets layout.absolute). */
+struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
+                                                              float y);
+
+/* Promote this widget to its own receiver-side child figure of `kind`
+ * (e.g. YETTY_YFIGURE_KIND_YGRID) stacked at `z`. The whole subtree
+ * then paints into that figure's own draw list instead of the shared
+ * chrome ygrid — giving floating windows / menus an independent z and
+ * damage region. kind=0 reverts to inline. */
+struct yetty_ycore_void_result yetty_ygui_widget_make_figure(struct yetty_ygui_object *obj,
+                                                             uint32_t kind, int32_t z);
+
+/* Update only the figure z (for raise-on-click). No-op if unchanged. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_ygui_object *obj,
+                                                              int32_t z);
+
+uint32_t yetty_ygui_widget_figure_kind(const struct yetty_ygui_object *obj);
+int32_t yetty_ygui_widget_figure_z(const struct yetty_ygui_object *obj);
+
+/* Mark this widget a floating overlay (dialog / debug window): a press
+ * anywhere inside it moves it to the end of its parent's child list, so
+ * it paints last (front) and wins the hit-test — click-to-front, no
+ * figures involved. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_ygui_object *obj,
+                                                             int floating);
+int yetty_ygui_widget_is_floating(const struct yetty_ygui_object *obj);
+
+/* Apply a small CSS-like declaration string to the widget's layout.
+ * Supported properties (others ignored): width, height, flex,
+ * flex-grow, flex-shrink, gap, padding, align-items, justify-content,
+ * (flex-)direction, align-self. Values may carry a trailing \"px\".
+ * Eases the yui port, which authored layout via CSS strings. */
+struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_ygui_object *obj,
+                                                           const char *css);
+
+/* Background fill (packed 0xAABBGGRR; 0 = transparent). Painted by the
+ * primitive_widget base before the widget's own paint. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_ygui_object *obj,
+                                                              uint32_t color);
+
+/* Current background fill (0 = transparent). Used by primitive_widget. */
+uint32_t yetty_ygui_widget_bg(const struct yetty_ygui_object *obj);
+
+/*-----------------------------------------------------------------------------
+ * Flex layout pass.
+ *
+ * Walks the widget tree top-down assigning rects according to each
+ * widget's layout struct + the parent's content box. Call this before
+ * yetty_ygui_framework_emit when the tree's geometry might have changed
+ * (set_rect, set_layout, add / del). The engine's emit pass uses the
+ * rects assigned here.
+ *
+ * `root_rect` is the absolute pixel rect the root widget should fit
+ * into — typically the engine's viewport.
+ *---------------------------------------------------------------------------*/
+struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_ygui_object *root,
+                                                         struct yetty_ycore_rectangle root_rect);
+
+/*-----------------------------------------------------------------------------
+ * Wire emission — two explicit passes. The engine invokes these via
+ * dispatch as it walks the widget tree.
+ *
+ * Defaults (provided by the base widget class):
+ *
+ *   emit_container — if figure_kind != 0, writes CREATE_CHILD /
+ *     SET_CHILD_RECT / DELETE_CHILD admin records into the engine's
+ *     container record stream using obj->id as the figure id. Otherwise
+ *     no-op. Subclasses with figure_kind==0 do not override.
+ *
+ *   emit_body — if figure_kind == 0, opens CMD_GROUP(obj->id, ...) in
+ *     the engine's ygrid, calls the widget_paint hook to write prims,
+ *     closes the group. If figure_kind != 0, the widget's own override
+ *     writes figure-specific body bytes into the per-figure stream.
+ *---------------------------------------------------------------------------*/
+/* Method public-stub declarations — emit_container, emit_body,
+ * widget_paint, widget_on_press, widget_on_release, widget_on_motion
+ * — come from the codegen-emitted module-wide methods.h pulled
+ * in by class.h's include chain. The yclass slot signature is
+ * `(struct yetty_yclass_ctx *, struct yetty_yclass_object *, …)`. */"
+  - source_file: src/yetty/ygui/widgets/breadcrumbs.c
+    name: yetty_ygui_breadcrumbs_add
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/breadcrumbs.c
+    name: yetty_ygui_breadcrumbs_clear
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/button.c
+    name: yetty_ygui_button_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/button.c
+    name: yetty_ygui_button_get_label
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/checkbox.c
+    name: yetty_ygui_checkbox_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/checkbox.c
+    name: yetty_ygui_checkbox_set_checked
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: checked
+        type: int
+  - source_file: src/yetty/ygui/widgets/checkbox.c
+    name: yetty_ygui_checkbox_get_checked
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/chip.c
+    name: yetty_ygui_chip_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/chip.c
+    name: yetty_ygui_chip_set_closable
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: c
+        type: int
+  - source_file: src/yetty/ygui/widgets/choicebox.c
+    name: yetty_ygui_choicebox_add
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/choicebox.c
+    name: yetty_ygui_choicebox_is_selected
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+      - name: idx
+        type: int
+  - source_file: src/yetty/ygui/widgets/collapsing_header.c
+    name: yetty_ygui_collapsing_header_set_title
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: title
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/collapsing_header.c
+    name: yetty_ygui_collapsing_header_set_open
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: open
+        type: int
+  - source_file: src/yetty/ygui/widgets/collapsing_header.c
+    name: yetty_ygui_collapsing_header_is_open
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/colorpicker.c
+    name: yetty_ygui_colorpicker_set_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: c
+        type: uint32_t
+  - source_file: src/yetty/ygui/widgets/colorpicker.c
+    name: yetty_ygui_colorpicker_get_color
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/combobox.c
+    name: yetty_ygui_combobox_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: t
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/combobox.c
+    name: yetty_ygui_combobox_add_suggestion
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: t
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/combobox.c
+    name: yetty_ygui_combobox_set_menu
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: menu
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/combobox.c
+    name: yetty_ygui_combobox_get_text
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/datepicker.c
+    name: yetty_ygui_datepicker_set_date
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: year
+        type: int
+      - name: month_0_based
+        type: int
+      - name: day
+        type: int
+  - source_file: src/yetty/ygui/widgets/datepicker.c
+    name: yetty_ygui_datepicker_get_date
+    return_type: void
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+      - name: year
+        type: "int *"
+      - name: month_0_based
+        type: "int *"
+      - name: day
+        type: "int *"
+  - source_file: src/yetty/ygui/widgets/dialog.c
+    name: yetty_ygui_dialog_set_title
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: title
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/dialog.c
+    name: yetty_ygui_dialog_open_at
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - source_file: src/yetty/ygui/widgets/dialog.c
+    name: yetty_ygui_dialog_close
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/dialog.c
+    name: yetty_ygui_dialog_is_open
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/dropdown.c
+    name: yetty_ygui_dropdown_add_option
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/dropdown.c
+    name: yetty_ygui_dropdown_set_selected
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: index
+        type: int
+  - source_file: src/yetty/ygui/widgets/dropdown.c
+    name: yetty_ygui_dropdown_get_selected
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/dropdown.c
+    name: yetty_ygui_dropdown_set_menu
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: menu
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/filepicker.c
+    name: yetty_ygui_filepicker_set_dir
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: path
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/filepicker.c
+    name: yetty_ygui_filepicker_get_dir
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/label.c
+    name: yetty_ygui_label_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/label.c
+    name: yetty_ygui_label_get_text
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/label.c
+    name: yetty_ygui_label_set_font_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: size_px
+        type: float
+  - source_file: src/yetty/ygui/widgets/label.c
+    name: yetty_ygui_label_set_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: color
+        type: struct yetty_ycore_rgba
+  - source_file: src/yetty/ygui/widgets/list.c
+    name: yetty_ygui_list_add
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/list.c
+    name: yetty_ygui_list_set_selected
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: i
+        type: int
+  - source_file: src/yetty/ygui/widgets/list.c
+    name: yetty_ygui_list_get_selected
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/menubar.c
+    name: yetty_ygui_menubar_add
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: bar
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+      - name: menu
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/panel.c
+    name: yetty_ygui_panel_set_bg
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: color
+        type: struct yetty_ycore_rgba
+  - source_file: src/yetty/ygui/widgets/panel.c
+    name: yetty_ygui_panel_set_border
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: color
+        type: struct yetty_ycore_rgba
+      - name: width_px
+        type: float
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    verbatim: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
+                                                                  struct yetty_yclass_object *menu,
+                                                                  int item_index, void *userdata);"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_add_item
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+      - name: cb
+        type: yetty_ygui_menu_item_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_add_separator
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_open_at
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_close
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_is_open
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_toggle_at
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_clear
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_set_title
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: title
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_set_back
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+      - name: cb
+        type: yetty_ygui_menu_item_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_add_drill_item
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+      - name: cb
+        type: yetty_ygui_menu_item_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/widgets/popup_menu.c
+    name: yetty_ygui_popup_menu_set_modal
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: modal
+        type: int
+  - source_file: src/yetty/ygui/widgets/progress.c
+    name: yetty_ygui_progress_set_value
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: value
+        type: float
+  - source_file: src/yetty/ygui/widgets/progress.c
+    name: yetty_ygui_progress_get_value
+    return_type: float
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/progress.c
+    name: yetty_ygui_progress_set_accent
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: color
+        type: uint32_t
+  - source_file: src/yetty/ygui/widgets/radio.c
+    name: yetty_ygui_radio_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/radio.c
+    name: yetty_ygui_radio_set_selected
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: s
+        type: int
+  - source_file: src/yetty/ygui/widgets/radio.c
+    name: yetty_ygui_radio_is_selected
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/rich.c
+    name: yetty_ygui_rich_clear
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/rich.c
+    name: yetty_ygui_rich_add_line
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/rich.c
+    name: yetty_ygui_rich_add_span
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+      - name: font_size
+        type: float
+      - name: color_rgba
+        type: uint32_t
+  - source_file: src/yetty/ygui/widgets/selectable.c
+    name: yetty_ygui_selectable_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: t
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/selectable.c
+    name: yetty_ygui_selectable_set_selected
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: s
+        type: int
+  - source_file: src/yetty/ygui/widgets/selectable.c
+    name: yetty_ygui_selectable_is_selected
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/slider.c
+    name: yetty_ygui_slider_set_range
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: min
+        type: float
+      - name: max
+        type: float
+  - source_file: src/yetty/ygui/widgets/slider.c
+    name: yetty_ygui_slider_set_value
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: value
+        type: float
+  - source_file: src/yetty/ygui/widgets/slider.c
+    name: yetty_ygui_slider_get_value
+    return_type: float
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/spinner.c
+    name: yetty_ygui_spinner_set_value
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: v
+        type: float
+  - source_file: src/yetty/ygui/widgets/spinner.c
+    name: yetty_ygui_spinner_set_range
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: mn
+        type: float
+      - name: mx
+        type: float
+      - name: step
+        type: float
+  - source_file: src/yetty/ygui/widgets/spinner.c
+    name: yetty_ygui_spinner_get_value
+    return_type: float
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/splitter.c
+    verbatim: "struct yetty_ygui_object;
+typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_ygui_object *splitter, float delta,
+                                              void *userdata);"
+  - source_file: src/yetty/ygui/widgets/splitter.c
+    name: yetty_ygui_splitter_set_axis
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: row
+        type: int
+  - source_file: src/yetty/ygui/widgets/splitter.c
+    name: yetty_ygui_splitter_get_axis
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/splitter.c
+    name: yetty_ygui_splitter_set_min
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: min_size
+        type: float
+  - source_file: src/yetty/ygui/widgets/splitter.c
+    name: yetty_ygui_splitter_on_change
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: cb
+        type: yetty_ygui_splitter_change_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/widgets/statusbar.c
+    name: yetty_ygui_statusbar_set_left
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/statusbar.c
+    name: yetty_ygui_statusbar_set_right
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/stepper.c
+    name: yetty_ygui_stepper_add_step
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/stepper.c
+    name: yetty_ygui_stepper_set_current
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: i
+        type: int
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    verbatim: "struct yetty_ygui_object;
+typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index, void *userdata);
+typedef void (*yetty_ygui_tab_new_cb)(struct yetty_ygui_object *tabbar, void *userdata);"
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    name: yetty_ygui_tabbar_add_tab
+    return_type: struct yetty_ygui_object_ptr_result
+    args:
+      - name: tabbar
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    name: yetty_ygui_tabbar_remove_tab
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: tabbar
+        type: "struct yetty_ygui_object *"
+      - name: index
+        type: int
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    name: yetty_ygui_tabbar_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: tabbar
+        type: "struct yetty_ygui_object *"
+      - name: index
+        type: int
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    name: yetty_ygui_tabbar_count
+    return_type: int
+    args:
+      - name: tabbar
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    name: yetty_ygui_tabbar_active
+    return_type: int
+    args:
+      - name: tabbar
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    name: yetty_ygui_tabbar_set_active
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: tabbar
+        type: "struct yetty_ygui_object *"
+      - name: index
+        type: int
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    name: yetty_ygui_tabbar_set_on_close
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: tabbar
+        type: "struct yetty_ygui_object *"
+      - name: cb
+        type: yetty_ygui_tab_close_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/widgets/tabbar.c
+    name: yetty_ygui_tabbar_set_on_new_tab
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: tabbar
+        type: "struct yetty_ygui_object *"
+      - name: cb
+        type: yetty_ygui_tab_new_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/widgets/table.c
+    name: yetty_ygui_table_set_columns
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: n_cols
+        type: int
+      - name: headers
+        type: "const char *const *"
+  - source_file: src/yetty/ygui/widgets/table.c
+    name: yetty_ygui_table_add_row
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: cells
+        type: "const char *const *"
+      - name: n_cells
+        type: int
+  - source_file: src/yetty/ygui/widgets/table.c
+    name: yetty_ygui_table_clear_rows
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/textarea.c
+    name: yetty_ygui_textarea_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/textarea.c
+    name: yetty_ygui_textarea_get_text
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/textinput.c
+    name: yetty_ygui_textinput_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/textinput.c
+    name: yetty_ygui_textinput_get_text
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/textinput.c
+    name: yetty_ygui_textinput_set_placeholder
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: placeholder
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/textinput.c
+    name: yetty_ygui_textinput_set_focus
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: focused
+        type: int
+  - source_file: src/yetty/ygui/widgets/textinput.c
+    name: yetty_ygui_textinput_handle_key
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: key
+        type: uint32_t
+  - source_file: src/yetty/ygui/widgets/toggle.c
+    name: yetty_ygui_toggle_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/toggle.c
+    name: yetty_ygui_toggle_set_on
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: on
+        type: int
+  - source_file: src/yetty/ygui/widgets/toggle.c
+    name: yetty_ygui_toggle_get_on
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/tooltip.c
+    name: yetty_ygui_tooltip_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/tooltip.c
+    name: yetty_ygui_tooltip_get_text
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/tree_node.c
+    name: yetty_ygui_tree_node_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/tree_node.c
+    name: yetty_ygui_tree_node_set_open
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: o
+        type: int
+  - source_file: src/yetty/ygui/widgets/tree_node.c
+    name: yetty_ygui_tree_node_is_open
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/tree_node.c
+    name: yetty_ygui_tree_node_on_toggle
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: cb
+        type: yetty_ygui_click_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/widgets/window.c
+    name: yetty_ygui_window_body
+    return_type: "struct yetty_ygui_object *"
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/window.c
+    name: yetty_ygui_window_set_title
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: title
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/window.c
+    name: yetty_ygui_window_set_menu
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: menu
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/window.c
+    name: yetty_ygui_window_set_closable
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: closable
+        type: int
+  - source_file: src/yetty/ygui/widgets/ybrowser.c
+    name: yetty_ygui_ybrowser_set_html
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: html
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/ygui/widgets/ydiagram.c
+    name: yetty_ygui_ydiagram_set_source
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: source
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/ydiagram.c
+    name: yetty_ygui_ydiagram_get_source
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ydraw_embed.c
+    name: yetty_ygui_ydraw_embed_set_buffer
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: buf
+        type: "struct yetty_ydraw_draw_list *"
+  - source_file: src/yetty/ygui/widgets/yimage.c
+    name: yetty_ygui_yimage_set_bytes
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: bytes
+        type: "const uint8_t *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/ygui/widgets/yimage.c
+    name: yetty_ygui_yimage_bytes
+    return_type: "const uint8_t *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/yimage.c
+    name: yetty_ygui_yimage_bytes_len
+    return_type: size_t
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ymarkdown.c
+    name: yetty_ygui_ymarkdown_set_source
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: src
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/ygui/widgets/ymarkdown.c
+    name: yetty_ygui_ymarkdown_set_file
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: path
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_reflow
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: node
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_pin_pos
+    return_type: int
+    args:
+      - name: node
+        type: "const struct yetty_ygui_object *"
+      - name: output
+        type: int
+      - name: index
+        type: int
+      - name: x
+        type: "float *"
+      - name: y
+        type: "float *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_pin_at
+    return_type: int
+    args:
+      - name: node
+        type: "const struct yetty_ygui_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: output
+        type: "int *"
+      - name: index
+        type: "int *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_set_title
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: node
+        type: "struct yetty_ygui_object *"
+      - name: title
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_set_graph_pos
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: node
+        type: "struct yetty_ygui_object *"
+      - name: gx
+        type: float
+      - name: gy
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_graph_pos
+    return_type: void
+    args:
+      - name: node
+        type: "const struct yetty_ygui_object *"
+      - name: gx
+        type: "float *"
+      - name: gy
+        type: "float *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_set_graph_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: node
+        type: "struct yetty_ygui_object *"
+      - name: gw
+        type: float
+      - name: gh
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_graph_size
+    return_type: void
+    args:
+      - name: node
+        type: "const struct yetty_ygui_object *"
+      - name: gw
+        type: "float *"
+      - name: gh
+        type: "float *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_add_input
+    return_type: struct uint32_result
+    args:
+      - name: node
+        type: "struct yetty_ygui_object *"
+      - name: name
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_add_output
+    return_type: struct uint32_result
+    args:
+      - name: node
+        type: "struct yetty_ygui_object *"
+      - name: name
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_input_count
+    return_type: int
+    args:
+      - name: node
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ynode.c
+    name: yetty_ygui_ynode_output_count
+    return_type: int
+    args:
+      - name: node
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    verbatim: "#include <yetty/ycore/result.h>
+#include <yetty/ygui/object.h>
+typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
+    struct yetty_ygui_object *editor, struct yetty_ygui_object *from, int out_idx,
+    struct yetty_ygui_object *to, int in_idx, void *userdata);"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_view
+    return_type: void
+    args:
+      - name: editor
+        type: "const struct yetty_ygui_object *"
+      - name: pan_x
+        type: "float *"
+      - name: pan_y
+        type: "float *"
+      - name: zoom
+        type: "float *"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_zoom
+    return_type: float
+    args:
+      - name: editor
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_reflow
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_set_view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: pan_x
+        type: float
+      - name: pan_y
+        type: float
+      - name: zoom
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_link
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: from
+        type: "struct yetty_ygui_object *"
+      - name: out_idx
+        type: int
+      - name: to
+        type: "struct yetty_ygui_object *"
+      - name: in_idx
+        type: int
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_drop_links_for
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: node
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_on_link_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: cb
+        type: yetty_ygui_ynodes_link_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_begin_link
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: from
+        type: "struct yetty_ygui_object *"
+      - name: pin
+        type: int
+      - name: output
+        type: int
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_update_link
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_end_link
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_add_node
+    return_type: struct yetty_ygui_object_ptr_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: gx
+        type: float
+      - name: gy
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_register_widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: label
+        type: "const char *"
+      - name: cls
+        type: "const struct yetty_yclass *"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_open_canvas_menu
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_open_node_menu
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+      - name: node
+        type: "struct yetty_ygui_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_close_menu
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: editor
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ynodes.c
+    name: yetty_ygui_ynodes_menu_is_open
+    return_type: int
+    args:
+      - name: editor
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/ypdf.c
+    name: yetty_ygui_ypdf_set_file
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: path
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/yplot.c
+    verbatim: "#include <stddef.h>
+#include <stdint.h>
+struct yetty_ygui_object;
+struct yetty_ygui_yplot_config {
+    float x_min;
+    float x_max;
+    float y_min;
+    float y_max;
+    uint32_t flags;
+};
+struct yetty_yplot_buffer_input;"
+  - source_file: src/yetty/ygui/widgets/yplot.c
+    name: yetty_ygui_yplot_set_source
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: source
+        type: "const char *"
+  - source_file: src/yetty/ygui/widgets/yplot.c
+    name: yetty_ygui_yplot_set_config
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: cfg
+        type: "const struct yetty_ygui_yplot_config *"
+  - source_file: src/yetty/ygui/widgets/yplot.c
+    name: yetty_ygui_yplot_set_buffers
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: source
+        type: "const char *"
+      - name: source_len
+        type: size_t
+      - name: buffers
+        type: "const struct yetty_yplot_buffer_input *"
+      - name: buffer_count
+        type: size_t
+      - name: config
+        type: "const struct yetty_ygui_yplot_config *"
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
+    verbatim: "/* Header-destined: the exposed prototypes below take yrich document/key
+ * types, so the generated header must pull these in. */
+#include <yetty/yrich/yrich-document.h>
+#include <yetty/yrich/yrich-types.h>"
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
+    name: yetty_ygui_yrich_view_set_document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: doc
+        type: "struct yetty_yrich_document *"
+      - name: own
+        type: int
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
+    name: yetty_ygui_yrich_view_invalidate
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
+    name: yetty_ygui_yrich_view_document
+    return_type: "struct yetty_yrich_document *"
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
+    name: yetty_ygui_yrich_view_content_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "const struct yetty_ygui_object *"
+      - name: w
+        type: "float *"
+      - name: h
+        type: "float *"
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
+    name: yetty_ygui_yrich_view_feed_key
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: key
+        type: uint32_t
+      - name: mods
+        type: struct yetty_yrich_input_mods
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
+    name: yetty_ygui_yrich_view_feed_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/ygui/widgets/yshadertoy.c
+    name: yetty_ygui_yshadertoy_set_source
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: src
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/ygui/widgets/yvideo.c
+    name: yetty_ygui_yvideo_set_bytes
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: bytes
+        type: "const uint8_t *"
+      - name: len
+        type: size_t

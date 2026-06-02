@@ -32,9 +32,10 @@ static struct yetty_ycore_void_result yjungle_ctor(struct yetty_yclass_ctx *ycla
         yetty_ygui_yjungle_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yjungle_ctor: super");
-    struct yjungle_data *d = yetty_ygui_data_get(
-        obj,
-        yetty_ygui_yjungle_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_yjungle_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yjungle_ctor: data_get");
+    struct yjungle_data *d = d_dr.value;
 
     struct yetty_yjungle_config cfg = yetty_yjungle_config_default();
     struct yetty_yjungle_ptr_result jr = yetty_yjungle_create(&cfg, 0);
@@ -52,9 +53,10 @@ static struct yetty_ycore_void_result yjungle_dtor(struct yetty_yclass_ctx *ycla
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yjungle_data *d = yetty_ygui_data_get(
-        obj,
-        yetty_ygui_yjungle_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_yjungle_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yjungle_dtor: data_get");
+    struct yjungle_data *d = d_dr.value;
     yetty_yjungle_destroy(d->jungle);
     d->jungle = NULL;
     return yetty_ygui_super_void(
@@ -70,9 +72,10 @@ static struct yetty_ycore_void_result yjungle_emit_body(struct yetty_yclass_ctx 
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yjungle_data *d = yetty_ygui_data_get(
-        obj,
-        yetty_ygui_yjungle_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_yjungle_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yjungle_emit_body: data_get");
+    struct yjungle_data *d = d_dr.value;
 
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;

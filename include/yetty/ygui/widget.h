@@ -1,10 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `widget` (module: ygui).
- * Codegen regenerates the section above the MANUAL markers;
- * hand-written content between the markers is preserved
- * across runs. Edit annotated source for accessor + slot
- * changes; edit between MANUAL markers for app-facing
- * helper declarations, enums, etc. */
+ * Fully generated from the source .c — do not edit. Function
+ * APIs come from `expose` annotations; types and other header
+ * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGET_H
 #define YETTY_YCLASSGEN_YGUI_WIDGET_H
 
@@ -13,7 +11,12 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
 
-/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+struct yetty_ygui_object;
+struct yetty_ygui_widget_data;
+YETTY_YRESULT_DECLARE(yetty_ygui_widget_data_ptr, struct yetty_ygui_widget_data *);
+struct yetty_ygui_widget_data_ptr_result yetty_ygui_widget_data(struct yetty_ygui_object *obj);
+
+/* Header-destined content for the generated widget.h (skipped by the real build, which takes it from that header). */
 /*-----------------------------------------------------------------------------
  * Flex / CSS layout — the field set the flex layout pass in layout.c
  * consumes. Apps author these values directly or via apply_css.
@@ -190,6 +193,5 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_ygui_objec
  * — come from the codegen-emitted module-wide methods.h pulled
  * in by class.h's include chain. The yclass slot signature is
  * `(struct yetty_yclass_ctx *, struct yetty_yclass_object *, …)`. */
-/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

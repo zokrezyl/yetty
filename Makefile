@@ -157,19 +157,27 @@ YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yterm
 
 .PHONY: codegen
 codegen: ## Run yclass codegen for all annotated modules (output committed to git)
-	@for mod in $(YCLASS_MODULES); do \
-		src_dir="src/yetty/$$mod"; \
-		sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
-		if [ -z "$$sources" ]; then \
-			echo "ERROR: no annotated sources found under $$src_dir"; \
-			exit 1; \
-		fi; \
-		echo "==> yclass codegen: $$mod"; \
-		YCLASS_CODEGEN_INCLUDES="$(CURDIR)/include:$(CURDIR)/src" \
-			uv run src/yclass/gen/codegen.py "$$mod" \
-				"$(CURDIR)/include/yetty" \
-				"$(CURDIR)/$$src_dir" \
-				$$sources || exit $$?; \
+	@# Two passes: a header-destined type (exposed function arg, callback
+	@# typedef, vtable struct) only becomes visible to its consumers in
+	@# OTHER files once the first pass has rewritten the owning header.
+	@# The second pass re-parses with those headers in place so every
+	@# signature resolves to the real type instead of int via recovery.
+	@for pass in 1 2; do \
+		echo "==> yclass codegen: pass $$pass"; \
+		for mod in $(YCLASS_MODULES); do \
+			src_dir="src/yetty/$$mod"; \
+			sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
+			if [ -z "$$sources" ]; then \
+				echo "ERROR: no annotated sources found under $$src_dir"; \
+				exit 1; \
+			fi; \
+			echo "==> yclass codegen: $$mod"; \
+			YCLASS_CODEGEN_INCLUDES="$(CURDIR)/include:$(CURDIR)/src" \
+				uv run src/yclass/gen/codegen.py "$$mod" \
+					"$(CURDIR)/include/yetty" \
+					"$(CURDIR)/$$src_dir" \
+					$$sources || exit $$?; \
+		done; \
 	done
 
 #=============================================================================

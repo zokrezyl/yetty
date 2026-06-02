@@ -40,8 +40,10 @@ static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_ctx
         obj, yetty_ygui_dialog_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "dialog_constructor: super");
-    struct dialog_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_dialog_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dialog_constructor: data_get");
+    struct dialog_data *d = d_dr.value;
     d->title = NULL;
     d->open = 0;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -63,8 +65,10 @@ static struct yetty_ycore_void_result dialog_destructor(struct yetty_yclass_ctx 
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct dialog_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_dialog_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dialog_destructor: data_get");
+    struct dialog_data *d = d_dr.value;
     free(d->title);
     d->title = NULL;
     return yetty_ygui_super_void(
@@ -115,8 +119,10 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *ycla
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct dialog_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_dialog_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dialog_paint: data_get");
+    struct dialog_data *d = d_dr.value;
     if (!d->open) {
         return YETTY_OK_VOID();
     }
@@ -145,14 +151,17 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *ycla
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_ygui_object *obj,
                                                            const char *title)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "dialog_set_title: NULL obj");
     }
-    struct dialog_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_dialog_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_dialog_set_title: data_get");
+    struct dialog_data *d = d_dr.value;
     free(d->title);
     if (!title) {
         d->title = NULL;
@@ -167,14 +176,17 @@ struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_ygui_obj
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_ygui_object *obj, float x,
                                                          float y, float width, float height)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "dialog_open_at: NULL obj");
     }
-    struct dialog_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_dialog_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_dialog_open_at: data_get");
+    struct dialog_data *d = d_dr.value;
     d->open = 1;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
     l.absolute = 1;
@@ -187,13 +199,16 @@ struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_ygui_objec
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_ygui_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "dialog_close: NULL obj");
     }
-    struct dialog_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_dialog_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_dialog_close: data_get");
+    struct dialog_data *d = d_dr.value;
     if (!d->open) {
         return YETTY_OK_VOID();
     }
@@ -206,6 +221,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_ygui_object 
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_dialog_is_open(const struct yetty_ygui_object *obj)
 {
     if (!obj) {

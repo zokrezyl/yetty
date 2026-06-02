@@ -1,10 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `figure` (module: ymgui).
- * Codegen regenerates the section above the MANUAL markers;
- * hand-written content between the markers is preserved
- * across runs. Edit annotated source for accessor + slot
- * changes; edit between MANUAL markers for app-facing
- * helper declarations, enums, etc. */
+ * Fully generated from the source .c — do not edit. Function
+ * APIs come from `expose` annotations; types and other header
+ * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
 #ifndef YETTY_YCLASSGEN_YMGUI_FIGURE_H
 #define YETTY_YCLASSGEN_YMGUI_FIGURE_H
 
@@ -13,7 +11,7 @@
 
 struct yetty_yclass_ptr_result yetty_ymgui_figure_class_get(void);
 
-/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+/* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */
 struct yetty_context;
 struct yetty_yfigure_registry;
 struct yetty_ymgui_figure;
@@ -112,6 +110,5 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
  * an ymgui figure (identified by its ops vtable), NULL otherwise. Use
  * this to filter the heterogeneous children of a yfigure container. */
 struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base);
-/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif
