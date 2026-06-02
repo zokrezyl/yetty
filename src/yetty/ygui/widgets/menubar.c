@@ -46,6 +46,7 @@ static struct yetty_ycore_void_result on_trigger_click(struct yetty_yclass_ctx *
     return yetty_ygui_popup_menu_toggle_at(menu, r.min.x, r.max.y + 2.0f);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_ygui_object *bar,
                                                       const char *label,
                                                       struct yetty_ygui_object *menu)

@@ -24,8 +24,10 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
         yetty_ygui_textarea_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "textarea: super");
-    struct textarea_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_textarea_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
+    struct textarea_data *d = d_dr.value;
     d->text = NULL;
     return YETTY_OK_VOID();
 }
@@ -36,8 +38,10 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct textarea_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_textarea_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
+    struct textarea_data *d = d_dr.value;
     free(d->text);
     return yetty_ygui_super_void(
         obj,
@@ -55,8 +59,10 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "textarea paint: NULL ctx");
     }
-    struct textarea_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_textarea_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
+    struct textarea_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -93,14 +99,17 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_ygui_object *obj,
                                                             const char *text)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "textarea_set_text: NULL");
     }
-    struct textarea_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_textarea_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_textarea_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textarea_set_text: data_get");
+    struct textarea_data *d = d_dr.value;
     free(d->text);
     d->text = NULL;
     if (text) {
@@ -114,6 +123,7 @@ struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_ygui_ob
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 const char *yetty_ygui_textarea_get_text(const struct yetty_ygui_object *obj)
 {
     if (!obj) {

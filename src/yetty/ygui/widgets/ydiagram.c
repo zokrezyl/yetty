@@ -57,9 +57,10 @@ static struct yetty_ycore_void_result ydiagram_constructor(struct yetty_yclass_c
         yetty_ygui_ydiagram_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ydiagram_constructor: super");
-    struct ydiagram_data *d = yetty_ygui_data_get(
-        obj,
-        yetty_ygui_ydiagram_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_ydiagram_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ydiagram_constructor: data_get");
+    struct ydiagram_data *d = d_dr.value;
     d->source = NULL;
     d->source_len = 0;
     return YETTY_OK_VOID();
@@ -71,9 +72,10 @@ static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_ct
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct ydiagram_data *d = yetty_ygui_data_get(
-        obj,
-        yetty_ygui_ydiagram_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_ydiagram_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ydiagram_destructor: data_get");
+    struct ydiagram_data *d = d_dr.value;
     free(d->source);
     d->source = NULL;
     /* The rendered buffer is owned by ydraw_embed; its destructor frees it. */
@@ -83,15 +85,17 @@ static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_ct
         (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_ygui_object *obj,
                                                               const char *source)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "ydiagram_set_source: NULL obj");
     }
-    struct ydiagram_data *d = yetty_ygui_data_get(
-        obj,
-        yetty_ygui_ydiagram_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_ydiagram_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_ydiagram_set_source: data_get");
+    struct ydiagram_data *d = d_dr.value;
 
     /* Drop the previous source; clearing the embedded buffer too keeps a
      * stale diagram from lingering if the new source is empty or fails. */
@@ -149,6 +153,7 @@ struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_ygui_
 #endif
 }
 
+[[clang::annotate("expose")]]
 const char *yetty_ygui_ydiagram_get_source(const struct yetty_ygui_object *obj)
 {
     if (!obj) {

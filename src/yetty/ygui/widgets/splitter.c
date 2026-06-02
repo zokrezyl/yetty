@@ -125,7 +125,9 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct splitter_data *sd = yetty_ygui_data_get(obj, splitter_class());
+    struct yetty_ygui_void_ptr_result sd_dr = yetty_ygui_data_get_result(obj, splitter_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, sd_dr, "on_motion: data_get");
+    struct splitter_data *sd = sd_dr.value;
 
     /* Only resize while this splitter is the actively-dragged widget.
      * The framework also delivers on_motion to whatever the pointer is
@@ -203,6 +205,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
  * drives the resize itself off the reported delta.
  *---------------------------------------------------------------------------*/
 
+[[clang::annotate("expose")]]
 void yetty_ygui_splitter_set_axis(struct yetty_ygui_object *obj, int row)
 {
     if (!obj) {
@@ -220,6 +223,7 @@ void yetty_ygui_splitter_set_axis(struct yetty_ygui_object *obj, int row)
     d->axis_plus1 = (row ? 2 : 1);
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_splitter_get_axis(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
@@ -238,6 +242,7 @@ int yetty_ygui_splitter_get_axis(const struct yetty_ygui_object *obj)
     return d->axis_plus1 == 0 ? -1 : d->axis_plus1 - 1;
 }
 
+[[clang::annotate("expose")]]
 void yetty_ygui_splitter_set_min(struct yetty_ygui_object *obj, float min_size)
 {
     if (!obj) {
@@ -255,6 +260,7 @@ void yetty_ygui_splitter_set_min(struct yetty_ygui_object *obj, float min_size)
     d->min_size = min_size;
 }
 
+[[clang::annotate("expose")]]
 void yetty_ygui_splitter_on_change(struct yetty_ygui_object *obj,
                                    yetty_ygui_splitter_change_cb cb, void *userdata)
 {
@@ -275,3 +281,9 @@ void yetty_ygui_splitter_on_change(struct yetty_ygui_object *obj,
 }
 
 #include "splitter.gen.c"
+
+#ifdef YCLASS_CODEGEN
+struct yetty_ygui_object;
+typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_ygui_object *splitter, float delta,
+                                              void *userdata);
+#endif

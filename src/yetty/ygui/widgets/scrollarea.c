@@ -58,7 +58,9 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_ygui_objec
 {
     (void)dx;
     (void)userdata;
-    struct scrollarea_data *d = yetty_ygui_data_get(obj, scrollarea_class());
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, scrollarea_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "scrollarea_on_drag: data_get");
+    struct scrollarea_data *d = d_dr.value;
     if (d->max_offset <= 0.0f || d->thumb_travel <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -82,7 +84,9 @@ static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_ctx *yclass_c
     (void)y;
     (void)dx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct scrollarea_data *d = yetty_ygui_data_get(obj, scrollarea_class());
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, scrollarea_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_scroll: data_get");
+    struct scrollarea_data *d = d_dr.value;
     if (d->max_offset <= 0.0f) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -128,7 +132,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "scrollarea paint: NULL ctx");
     }
-    struct scrollarea_data *d = yetty_ygui_data_get(obj, scrollarea_class());
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, scrollarea_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
+    struct scrollarea_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {

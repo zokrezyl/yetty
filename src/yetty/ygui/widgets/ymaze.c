@@ -30,8 +30,10 @@ static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_ctx *y
         obj, yetty_ygui_ymaze_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymaze_ctor: super");
-    struct ymaze_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_ymaze_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_ymaze_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymz_constructor: data_get");
+    struct ymaze_data *d = d_dr.value;
 
     struct yetty_ymaze_config cfg = yetty_ymaze_config_default();
     struct yetty_ymaze_ptr_result mr = yetty_ymaze_create(&cfg, 0);
@@ -49,8 +51,10 @@ static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_ctx *yc
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct ymaze_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_ymaze_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_ymaze_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymz_destructor: data_get");
+    struct ymaze_data *d = d_dr.value;
     yetty_ymaze_destroy(d->maze);
     d->maze = NULL;
     return yetty_ygui_super_void(
@@ -65,8 +69,10 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *ycl
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct ymaze_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_ymaze_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_ymaze_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymz_emit_body: data_get");
+    struct ymaze_data *d = d_dr.value;
 
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;

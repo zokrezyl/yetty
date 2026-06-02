@@ -97,7 +97,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, dp_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "datepicker: super");
-    struct dp_data *d = yetty_ygui_data_get(obj, dp_class());
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, dp_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
+    struct dp_data *d = d_dr.value;
     d->shown_year = 2025;
     d->shown_month = 0;
     d->sel_year = -1;
@@ -116,7 +118,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "datepicker paint: NULL ctx");
     }
-    struct dp_data *d = yetty_ygui_data_get(obj, dp_class());
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, dp_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
+    struct dp_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -186,7 +190,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     (void)yclass_ctx;
     (void)btn;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct dp_data *d = yetty_ygui_data_get(obj, dp_class());
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, dp_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
+    struct dp_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float lx = x - r.min.x;
     float ly = y - r.min.y;
@@ -241,13 +247,16 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_datepicker_set_date(struct yetty_ygui_object *obj,
                                                               int year, int month_0_based, int day)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "datepicker_set_date: NULL");
     }
-    struct dp_data *d = yetty_ygui_data_get(obj, dp_class());
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, dp_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_datepicker_set_date: data_get");
+    struct dp_data *d = d_dr.value;
     d->shown_year = year;
     d->shown_month = month_0_based;
     d->sel_year = year;
@@ -256,6 +265,7 @@ struct yetty_ycore_void_result yetty_ygui_datepicker_set_date(struct yetty_ygui_
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 void yetty_ygui_datepicker_get_date(const struct yetty_ygui_object *obj, int *year,
                                     int *month_0_based, int *day)
 {

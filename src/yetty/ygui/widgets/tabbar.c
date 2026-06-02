@@ -127,8 +127,10 @@ static struct yetty_ycore_void_result header_on_click(struct yetty_yclass_ctx *y
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     (void)userdata;
-    struct header_data *hd =
-        yetty_ygui_data_get(obj, header_class_get().value);
+    struct yetty_ygui_void_ptr_result hd_dr =
+        yetty_ygui_data_get_result(obj, header_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hd_dr, "header_on_click: data_get");
+    struct header_data *hd = hd_dr.value;
     if (!hd->tabbar) {
         return YETTY_OK_VOID();
     }
@@ -138,8 +140,10 @@ static struct yetty_ycore_void_result header_on_click(struct yetty_yclass_ctx *y
     }
     /* If the tabbar has a close handler and the click landed in the
      * pill's right close band, fire close instead of activate. */
-    struct tabbar_data *td =
-        yetty_ygui_data_get(hd->tabbar, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(hd->tabbar, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "header_on_click: data_get");
+    struct tabbar_data *td = td_dr.value;
     if (td->close_cb) {
         float px = 0.0f, py = 0.0f;
         yetty_ygui_clickable_press_pos(obj, &px, &py);
@@ -161,8 +165,10 @@ static struct yetty_ycore_void_result header_constructor(struct yetty_yclass_ctx
         yetty_ygui_super_void(obj, header_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "header_constructor: super");
-    struct header_data *hd =
-        yetty_ygui_data_get(obj, header_class_get().value);
+    struct yetty_ygui_void_ptr_result hd_dr =
+        yetty_ygui_data_get_result(obj, header_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hd_dr, "header_constructor: data_get");
+    struct header_data *hd = hd_dr.value;
     hd->label = NULL;
     hd->tabbar = NULL;
     /* Each header gets a fixed preferred width so the row lays out
@@ -180,8 +186,10 @@ static struct yetty_ycore_void_result header_destructor(struct yetty_yclass_ctx 
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct header_data *hd =
-        yetty_ygui_data_get(obj, header_class_get().value);
+    struct yetty_ygui_void_ptr_result hd_dr =
+        yetty_ygui_data_get_result(obj, header_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hd_dr, "header_destructor: data_get");
+    struct header_data *hd = hd_dr.value;
     free(hd->label);
     hd->label = NULL;
     return yetty_ygui_super_void(obj,
@@ -234,8 +242,10 @@ static struct yetty_ycore_void_result header_set_label(struct yetty_yclass_ctx *
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct header_data *hd =
-        yetty_ygui_data_get(obj, header_class_get().value);
+    struct yetty_ygui_void_ptr_result hd_dr =
+        yetty_ygui_data_get_result(obj, header_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hd_dr, "header_set_label: data_get");
+    struct header_data *hd = hd_dr.value;
     free(hd->label);
     if (!label) {
         hd->label = NULL;
@@ -307,8 +317,10 @@ static struct yetty_ycore_int_result tabbar_on_press(struct yetty_yclass_ctx *yc
     (void)yclass_ctx;
     (void)button;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct tabbar_data *td = yetty_ygui_data_get(
-        obj, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, td_dr, "tabbar_on_press: data_get");
+    struct tabbar_data *td = td_dr.value;
     if (!tabbar_pt_in_plus(obj, x, y)) {
         td->plus_pressed = 0;
         return YETTY_OK(yetty_ycore_int, 0);
@@ -325,8 +337,10 @@ static struct yetty_ycore_int_result tabbar_on_release(struct yetty_yclass_ctx *
     (void)yclass_ctx;
     (void)button;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct tabbar_data *td = yetty_ygui_data_get(
-        obj, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, td_dr, "tabbar_on_release: data_get");
+    struct tabbar_data *td = td_dr.value;
     int was_pressed = td->plus_pressed;
     td->plus_pressed = 0;
     if (!was_pressed) {
@@ -349,8 +363,10 @@ static struct yetty_ycore_void_result tabbar_constructor(struct yetty_yclass_ctx
         obj, yetty_ygui_tabbar_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "tabbar_constructor: super");
-    struct tabbar_data *td = yetty_ygui_data_get(
-        obj, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tabbar_constructor: data_get");
+    struct tabbar_data *td = td_dr.value;
     td->active_index = -1;
     /* Default to the canonical 32-px tall strip; apps can override via
      * yetty_ygui_widget_layout_set before the first emit. */
@@ -452,8 +468,10 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
         paint_pill(ctx, r.min.x, r.min.y, strip_w, strip_h, color_strip, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: strip bg");
 
-    struct tabbar_data *td = yetty_ygui_data_get(
-        obj, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tabbar_paint: data_get");
+    struct tabbar_data *td = td_dr.value;
     int active = td->active_index;
     ydebug("tabbar_paint: active_index=%d", active);
 
@@ -495,8 +513,10 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
         }
 
         /* Label — vertically centered, TABBAR_PILL_PAD_X from the left. */
-        struct header_data *hd =
-            yetty_ygui_data_get(c, header_class_get().value);
+        struct yetty_ygui_void_ptr_result hd_dr =
+            yetty_ygui_data_get_result(c, header_class_get().value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, hd_dr, "tabbar_paint: data_get");
+        struct header_data *hd = hd_dr.value;
         if (hd->label && hd->label[0]) {
             float font_size = base_font_size;
             float tx = pr.min.x + TABBAR_PILL_PAD_X;
@@ -555,6 +575,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ygui_object *tabbar,
                                                               const char *label)
 {
@@ -567,8 +588,10 @@ struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ygui_
         return r;
     }
     struct yetty_ygui_object *header = r.value;
-    struct header_data *hd = yetty_ygui_data_get(
-        header, header_class_get().value);
+    struct yetty_ygui_void_ptr_result hd_dr =
+        yetty_ygui_data_get_result(header, header_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, hd_dr, "yetty_ygui_tabbar_add_tab: data_get");
+    struct header_data *hd = hd_dr.value;
     hd->tabbar = tabbar;
     if (label) {
         struct yetty_ycore_void_result lr =
@@ -577,8 +600,10 @@ struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ygui_
             yetty_ycore_error_destroy(lr.error);
         }
     }
-    struct tabbar_data *td =
-        yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(tabbar, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, td_dr, "yetty_ygui_tabbar_add_tab: data_get");
+    struct tabbar_data *td = td_dr.value;
     if (td->active_index < 0) {
         td->active_index = 0;
         struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(tabbar);
@@ -589,6 +614,7 @@ struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ygui_
     return YETTY_OK(yetty_ygui_object_ptr, header);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_ygui_object *tabbar,
                                                             int index)
 {
@@ -603,8 +629,10 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_ygui_ob
             if (YETTY_IS_ERR(dr)) {
                 return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tabbar_remove_tab: del", dr);
             }
-            struct tabbar_data *td =
-                yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get().value);
+            struct yetty_ygui_void_ptr_result td_dr =
+                yetty_ygui_data_get_result(tabbar, yetty_ygui_tabbar_class_get().value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "yetty_ygui_tabbar_remove_tab: data_get");
+            struct tabbar_data *td = td_dr.value;
             int n = yetty_ygui_tabbar_count(tabbar);
             if (td->active_index >= n) {
                 td->active_index = n - 1;
@@ -617,6 +645,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_ygui_ob
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_ygui_object *tabbar,
                                                            int index, const char *label)
 {
@@ -637,6 +666,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_ygui_obj
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_tabbar_count(const struct yetty_ygui_object *tabbar)
 {
     if (!tabbar) {
@@ -651,6 +681,7 @@ int yetty_ygui_tabbar_count(const struct yetty_ygui_object *tabbar)
     return n;
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_tabbar_active(const struct yetty_ygui_object *tabbar)
 {
     if (!tabbar) {
@@ -662,6 +693,7 @@ int yetty_ygui_tabbar_active(const struct yetty_ygui_object *tabbar)
     return td->active_index;
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_ygui_object *tabbar,
                                                             int index)
 {
@@ -678,8 +710,10 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_ygui_ob
     if (index >= n) {
         index = n - 1;
     }
-    struct tabbar_data *td =
-        yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(tabbar, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "yetty_ygui_tabbar_set_active: data_get");
+    struct tabbar_data *td = td_dr.value;
     if (td->active_index == index) {
         return YETTY_OK_VOID();
     }
@@ -695,6 +729,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_ygui_ob
     return yetty_ygui_object_emit(tabbar, &ev);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_ygui_object *tabbar,
                                                              yetty_ygui_tab_close_cb cb,
                                                              void *userdata)
@@ -702,13 +737,16 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_ygui_
     if (!tabbar) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tabbar_set_on_close: NULL tabbar");
     }
-    struct tabbar_data *td =
-        yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(tabbar, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "yetty_ygui_tabbar_set_on_close: data_get");
+    struct tabbar_data *td = td_dr.value;
     td->close_cb = cb;
     td->close_userdata = userdata;
     return yetty_ygui_object_set_dirty(tabbar);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_ygui_object *tabbar,
                                                                 yetty_ygui_tab_new_cb cb,
                                                                 void *userdata)
@@ -716,8 +754,10 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_ygu
     if (!tabbar) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tabbar_set_on_new_tab: NULL tabbar");
     }
-    struct tabbar_data *td =
-        yetty_ygui_data_get(tabbar, yetty_ygui_tabbar_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(tabbar, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "yetty_ygui_tabbar_set_on_new_tab: data_get");
+    struct tabbar_data *td = td_dr.value;
     td->new_tab_cb = cb;
     td->new_tab_userdata = userdata;
     return yetty_ygui_object_set_dirty(tabbar);
@@ -729,3 +769,9 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_ygu
  *---------------------------------------------------------------------------*/
 
 #include "tabbar.gen.c"
+
+#ifdef YCLASS_CODEGEN
+struct yetty_ygui_object;
+typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index, void *userdata);
+typedef void (*yetty_ygui_tab_new_cb)(struct yetty_ygui_object *tabbar, void *userdata);
+#endif

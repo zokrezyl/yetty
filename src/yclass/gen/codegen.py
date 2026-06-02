@@ -201,8 +201,15 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
     # the placeholder methods.h is intentionally empty. We let
     # clang emit "undeclared identifier" errors but still produce JSON
     # AST as long as the file parses syntactically.
+    # -DYCLASS_CODEGEN: header-destined content (types, typedefs, enums,
+    # vtable structs, result-decls, forward-decls, includes) is written in
+    # the .c inside `#ifdef YCLASS_CODEGEN` blocks. Defining it here makes
+    # those declarations visible to the parse (so function signatures that
+    # use them resolve to the real type, not int via error-recovery); the
+    # real build leaves it undefined so the single definition lives in the
+    # generated header the .c includes.
     cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-std=c2x",
-           "-ferror-limit=0", "-Wno-error", "-Wno-everything"]
+           "-DYCLASS_CODEGEN", "-ferror-limit=0", "-Wno-error", "-Wno-everything"]
     for d in include_dirs:
         cmd.append(f"-I{d}")
     extra = os.environ.get("YCLASS_CODEGEN_INCLUDES", "")
@@ -277,6 +284,65 @@ def _fn_args(decl: dict) -> list:
     return args
 
 
+def _fmt_param(a: dict) -> str:
+    """Render one arg as a C parameter `<type> <name>` (or just `<type>`
+    for an unnamed param). No space before a pointer star so the output
+    reads like hand-written prototypes (`const char *src`, not
+    `const char * src`)."""
+    t = a["type"]
+    n = a["name"]
+    if not n:
+        return t
+    return f"{t}{n}" if t.endswith("*") else f"{t} {n}"
+
+
+def _fmt_params(args: list) -> str:
+    return ", ".join(_fmt_param(a) for a in args) if args else "void"
+
+
+def _fmt_proto(return_type: str, name: str, args: list) -> str:
+    """A function prototype line. No space between a pointer return type
+    and the name (`const char *foo(...)`, not `const char * foo(...)`)."""
+    sep = "" if return_type.endswith("*") else " "
+    return f"{return_type}{sep}{name}({_fmt_params(args)});"
+
+
+def _scan_codegen_blocks(text: str) -> list:
+    """Bodies of `#ifdef YCLASS_CODEGEN ... #endif` blocks in a source
+    file. This is the header-destined content the real build skips
+    (types, typedefs, enums, vtable structs, result-decls, forward-decls,
+    includes); codegen copies each block verbatim into the generated
+    header. Matches the closing #endif with proper nesting so a block may
+    itself contain feature `#if`/#ifdef/#ifndef ... #endif pairs."""
+    out = []
+    lines = text.split("\n")
+    i = 0
+    open_re = re.compile(r'^[ \t]*#[ \t]*(if|ifdef|ifndef)\b')
+    endif_re = re.compile(r'^[ \t]*#[ \t]*endif\b')
+    start_re = re.compile(r'^[ \t]*#[ \t]*ifdef[ \t]+YCLASS_CODEGEN[ \t]*$')
+    while i < len(lines):
+        if start_re.match(lines[i]):
+            depth = 1
+            j = i + 1
+            body = []
+            while j < len(lines) and depth > 0:
+                if open_re.match(lines[j]):
+                    depth += 1
+                elif endif_re.match(lines[j]):
+                    depth -= 1
+                    if depth == 0:
+                        break
+                body.append(lines[j])
+                j += 1
+            chunk = "\n".join(body).strip("\n")
+            if chunk.strip():
+                out.append(chunk)
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
 def _parse_return_type(qual_type: str) -> str:
     m = re.match(r"^(.*?)\s*\((.*)\)$", qual_type.strip())
     return m.group(1).strip() if m else qual_type
@@ -339,6 +405,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     methods: dict = {}
     classes: dict = {}
     local_slots: set = set()
+    exposed: list = []
 
     def bucket(name: str) -> dict:
         if name not in classes:
@@ -371,6 +438,13 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
         # of whether clang emits a `loc.file` on its top-level decls
         # (it usually does, but seeding here removes the dependency).
         file_bytes_cache[str(path)] = path.read_bytes()
+        # Header-destined content authored in `#ifdef YCLASS_CODEGEN` blocks
+        # is copied verbatim into this file's header (before its exposed
+        # function prototypes, since types must precede the functions
+        # that use them).
+        for block in _scan_codegen_blocks(
+                file_bytes_cache[str(path)].decode("utf-8", errors="replace")):
+            exposed.append({"source_file": str(path), "verbatim": block})
         tu = ast_dump(path, include_dirs)
         # The .c being processed is the default "current file" for the
         # top-level translation unit — clang annotates the file change
@@ -379,6 +453,21 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             anns = _collect_annotations(decl, file_bytes_cache, decl_file)
             if not anns: continue
             kind = decl.get("kind")
+
+            # `expose` on a function — emit its prototype into the generated
+            # header for the file it is DEFINED in (not one seen via an
+            # #include). Non-function header content (types, result-decls,
+            # includes, forward-decls) is authored in `#ifdef YCLASS_CODEGEN`
+            # blocks instead and copied verbatim (see _scan_codegen_blocks).
+            if "expose" in anns and decl_file == str(path) and kind == "FunctionDecl":
+                qt = decl.get("type", {}).get("qualType", "")
+                exposed.append({
+                    "source_file": str(path),
+                    "name": decl["name"],
+                    "return_type": _parse_return_type(qt),
+                    "args": _fn_args(decl),
+                })
+                continue
 
             if kind == "FunctionDecl":
                 for ann in anns:
@@ -524,10 +613,15 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             f"impl in this module: {dangling}. Each local-marked slot must "
             f"have at least one override@ in the same module.\n")
         sys.exit(1)
-    return {
+    model = {
         "methods": list(methods.values()),
         "classes": [c for c in classes.values() if c["accessor"]],
     }
+    # Only carry `exposed` when something used it — keeps an empty
+    # `exposed: []` out of every other module's model.yaml.
+    if exposed:
+        model["exposed"] = exposed
+    return model
 
 
 # Signature validation for cross-domain (and same-domain) overrides is
@@ -1050,6 +1144,16 @@ def emit_class_accessor(cls: dict) -> str:
         for op in cls["ops"]
     ]
     ops_block = "\n".join(op_lines)
+    # A class may legitimately add zero ops (e.g. a marker subclass that
+    # only exists so callers can name it in yetty_ygui_add). C rejects an
+    # empty array initializer, so emit no `ops[]` and pass NULL/0.
+    if cls["ops"]:
+        ops_decl = ("    static const struct yetty_yclass_op ops[] = {\n"
+                    + ops_block + "\n    };\n")
+        ops_args = "ops, sizeof(ops) / sizeof(ops[0])"
+    else:
+        ops_decl = ""
+        ops_args = "NULL, 0"
 
     qname = qualified_class(cls)
 
@@ -1092,6 +1196,29 @@ def emit_class_accessor(cls: dict) -> str:
         mixin_arg = "NULL"
         mixin_count = "0"
 
+    # ygui widget/mixin classes carry their per-instance state as a data
+    # slice inside the shared yetty_ygui_object block; the runtime resolves
+    # the slice offset from the class. Emit a typed accessor so a method
+    # never hand-writes `data_get(obj, X_class_get().value)` + a cast: the
+    # generator already knows both the class accessor and the concrete data
+    # struct. The accessor is file-local (the data struct is file-local) and
+    # returns a Result — a wrong-class obj or unregistered class surfaces as
+    # an error instead of a NULL deref. Only ygui uses the data-slice object
+    # model; yfigure/yterm/... place their body at obj+1 and are excluded.
+    data_accessor_block = ""
+    if cls["domain"] == "ygui" and cls.get("data"):
+        result_id = f"{qcls}_data_ptr"
+        data_accessor_block = (
+            f"\nstruct {result_id}_result {qcls}_data(struct yetty_ygui_object *obj)\n"
+            f"{{\n"
+            f"    struct yetty_ygui_void_ptr_result data_slice_r =\n"
+            f"        yetty_ygui_data_get_result(obj, {accessor}().value);\n"
+            f"    if (YETTY_IS_ERR(data_slice_r))\n"
+            f'        return YETTY_ERR({result_id}, "{qcls}_data", data_slice_r);\n'
+            f"    return YETTY_OK({result_id}, ({data} *)data_slice_r.value);\n"
+            f"}}\n"
+        )
+
     return f"""\
 {typecheck_block}\
 struct yetty_yclass_ptr_result {accessor}(void)
@@ -1105,41 +1232,20 @@ struct yetty_yclass_ptr_result {accessor}(void)
         .type = {type_const},
         .data_size = sizeof({data}),
     }};
-    static const struct yetty_yclass_op ops[] = {{
-{ops_block}
-    }};
+{ops_decl}\
 {parent_block}\
 {mixin_block}\
     struct yetty_yclass_ptr_result register_class_r =
-        yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
+        yetty_yclass_register(&desc, {ops_args},
                               {parent_expr}, {mixin_arg}, {mixin_count});
     if (YETTY_IS_ERR(register_class_r))
         return YETTY_ERR(yetty_yclass_ptr, "{qname}_class_get: class_register failed", register_class_r);
     cls = register_class_r.value;
     return register_class_r;
 }}
-"""
+{data_accessor_block}"""
 
 
-_MANUAL_BEGIN = "/* === MANUAL CONTENT BELOW — preserved across codegen runs === */"
-_MANUAL_END = "/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */"
-
-
-def _extract_manual_block(existing_text: str) -> str:
-    """Pull the hand-written content out of a previously-emitted
-    `<class>.h` between the explicit BEGIN/END markers. Strict: if
-    the markers aren't present we return empty — first-migration
-    callers have to move their hand-written content into the marker
-    block by hand once codegen has run once. (The auto-salvage path
-    proved too fragile in practice — it routinely grabbed file-guard
-    `#endif`s and stray `extern \"C\"` braces.)"""
-    if not existing_text:
-        return ""
-    bi = existing_text.find(_MANUAL_BEGIN)
-    ei = existing_text.find(_MANUAL_END)
-    if bi >= 0 and ei > bi:
-        return existing_text[bi + len(_MANUAL_BEGIN):ei].strip("\n")
-    return ""
 
 
 def emit_class_public_headers(model: dict, module: str, include_module_dir: Path):
@@ -1150,13 +1256,11 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
     IS the public interface; consumers don't care that it's
     generated).
 
-    Hand-written content (helper declarations, custom enums, etc.)
-    that lives in the same file is preserved across regenerations
-    via the `/* === MANUAL CONTENT === */` marker block. On the
-    first emission for a file that previously held a hand-written
-    `<class>.h`, the salvage path lifts everything between the last
-    pre-existing #include and the final #endif (minus the now-
-    redundant class accessor declaration) into the manual block."""
+    The header is 100% generated — there is no hand-written section.
+    Function APIs come from `expose` annotations; any other header-
+    destined content (types, typedefs, enums, vtable structs,
+    result-decls, forward-decls, includes) is authored in the source's
+    `#ifdef YCLASS_CODEGEN` blocks and copied verbatim here."""
     # Group classes by source file: each output header is named after
     # the source's stem (so `widgets/button.c` → `widgets/button.h`,
     # `primitive-widget.c` → `primitive-widget.h` — preserving the
@@ -1178,8 +1282,6 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         out_dir = include_module_dir / rel_subdir
         out_dir.mkdir(parents=True, exist_ok=True)
         header_path = out_dir / f"{stem}.h"
-        existing = header_path.read_text() if header_path.exists() else ""
-        manual = _extract_manual_block(existing)
         # Distinct guard per file path under the module — prevents
         # collisions between widgets/button.h and any other button.h
         # that might exist in the tree.
@@ -1192,6 +1294,41 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             f"(void);"
             for c in classes
         )
+        # ygui classes carry per-instance state as a data slice inside the
+        # shared object block. Declare a typed accessor (defined in the
+        # matching .gen.c) so widget methods never hand-write
+        # `data_get(obj, X_class_get().value)` + a cast. Declared here in the
+        # top-included header so calls above the bottom `#include "X.gen.c"`
+        # resolve — same shape as the class accessor. The data struct is
+        # file-local, so forward-declare its tag (the result holds a pointer).
+        data_decls = ""
+        if module == "ygui":
+            blocks = []
+            for c in classes:
+                if not c.get("data"):
+                    continue
+                q = qualified_class(c)
+                rid = f"{q}_data_ptr"
+                blocks.append(
+                    f"{c['data']};\n"
+                    f"YETTY_YRESULT_DECLARE({rid}, {c['data']} *);\n"
+                    f"struct {rid}_result {q}_data(struct yetty_ygui_object *obj);"
+                )
+            if blocks:
+                data_decls = ("\n\nstruct yetty_ygui_object;\n"
+                              + "\n\n".join(blocks))
+        # `expose`d functions defined in this source file — concrete,
+        # non-slot public API. Emit their prototypes here so they live in
+        # the generated section instead of the hand-maintained MANUAL block.
+        exposed_protos = []
+        for e in model.get("exposed", []):
+            if e["source_file"] != src_file:
+                continue
+            if "verbatim" in e:
+                exposed_protos.append(e["verbatim"])
+            else:
+                exposed_protos.append(_fmt_proto(e["return_type"], e["name"], e["args"]))
+        method_decls = "\n\n" + "\n".join(exposed_protos) if exposed_protos else ""
         kind = "mixin" if all(c['type'] == "mixin" for c in classes) else "regular class"
         # Class-name list for the file header banner.
         name_list = ", ".join(c["name"] for c in classes)
@@ -1199,21 +1336,30 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             HEADER
             + f"/* Public interface for {kind}(es) `{name_list}` "
             + f"(module: {module}).\n"
-            + " * Codegen regenerates the section above the MANUAL markers;\n"
-            + " * hand-written content between the markers is preserved\n"
-            + " * across runs. Edit annotated source for accessor + slot\n"
-            + " * changes; edit between MANUAL markers for app-facing\n"
-            + " * helper declarations, enums, etc. */\n"
+            + " * Fully generated from the source .c — do not edit. Function\n"
+            + " * APIs come from `expose` annotations; types and other header\n"
+            + " * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */\n"
             + f"#ifndef {guard}\n#define {guard}\n\n"
             + '#include <yclass/class.h>\n'
             + f'#include <yetty/{module}/methods.h>\n\n'
-            + decls + "\n\n"
-            + _MANUAL_BEGIN + "\n"
-            + (manual + "\n" if manual else "\n")
-            + _MANUAL_END + "\n\n"
+            + decls + data_decls + method_decls + "\n\n"
             + "#endif\n"
         )
         header_path.write_text(body)
+
+    # An `expose`d function only reaches a header through a source file
+    # that also declares at least one class (that's what produces a
+    # header). A file with `expose` but no class@/mixin@ would silently
+    # drop the prototype — fail loudly instead.
+    covered = set(groups.keys())
+    uncovered = sorted({e["source_file"] for e in model.get("exposed", [])
+                        if e["source_file"] not in covered})
+    if uncovered:
+        sys.stderr.write(
+            f"error: 'expose' used in file(s) with no class@/mixin@, so no "
+            f"header is generated for them: {uncovered}. Add a class to the "
+            f"file or drop the expose annotation.\n")
+        sys.exit(1)
 
 
 def emit_class_gen_c(model: dict, module: str, module_dir: Path):

@@ -35,8 +35,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
         yetty_ygui_yshadertoy_class_get().value,
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yshadertoy: super");
-    struct yshadertoy_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_yshadertoy_class_get().value);
+    struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "ctor: data");
+    struct yshadertoy_data *d = d_r.value;
     d->src = NULL;
     d->len = 0;
     d->dirty = 0;
@@ -49,8 +50,9 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yshadertoy_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_yshadertoy_class_get().value);
+    struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "dtor: data");
+    struct yshadertoy_data *d = d_r.value;
     free(d->src);
     return yetty_ygui_super_void(
         obj,
@@ -78,8 +80,9 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yshadertoy_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_yshadertoy_class_get().value);
+    struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "emit_body: data");
+    struct yshadertoy_data *d = d_r.value;
     /* Ship the WGSL only when it changed — the figure recompiles on
      * receipt, so re-sending every frame would thrash the pipeline. The
      * figure runs its own animation timer once it has a shader. */
@@ -96,14 +99,16 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_ygui_object *obj,
                                                                 const char *src, size_t len)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yshadertoy_set_source: NULL");
     }
-    struct yshadertoy_data *d = yetty_ygui_data_get(
-        obj, yetty_ygui_yshadertoy_class_get().value);
+    struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "yetty_ygui_yshadertoy_set_source: data");
+    struct yshadertoy_data *d = d_r.value;
     free(d->src);
     d->src = NULL;
     d->len = 0;

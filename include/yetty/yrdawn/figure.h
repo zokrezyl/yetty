@@ -1,10 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `figure` (module: yrdawn).
- * Codegen regenerates the section above the MANUAL markers;
- * hand-written content between the markers is preserved
- * across runs. Edit annotated source for accessor + slot
- * changes; edit between MANUAL markers for app-facing
- * helper declarations, enums, etc. */
+ * Fully generated from the source .c — do not edit. Function
+ * APIs come from `expose` annotations; types and other header
+ * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
 #ifndef YETTY_YCLASSGEN_YRDAWN_FIGURE_H
 #define YETTY_YCLASSGEN_YRDAWN_FIGURE_H
 
@@ -13,7 +11,7 @@
 
 struct yetty_yclass_ptr_result yetty_yrdawn_figure_class_get(void);
 
-/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+/* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */
 /*
  * yetty_yrdawn_figure — one remote yrdawn canvas as a compositor figure.
  *
@@ -115,6 +113,5 @@ struct yetty_yrdawn_figure *yetty_yrdawn_figure_from_base(struct yetty_yfigure_f
 #ifdef __cplusplus
 }
 #endif
-/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

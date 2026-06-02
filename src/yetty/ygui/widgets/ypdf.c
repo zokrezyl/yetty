@@ -8,6 +8,14 @@
 #include <yetty/ypdf/ypdf.h>
 #endif
 
+/* ypdf adds no ops or state on top of ydraw_embed; the class exists only
+ * so callers can name it in yetty_ygui_add. The 1-byte slice is unused. */
+struct [[clang::annotate("class@ygui:ypdf")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
+ypdf_data {
+    char unused;
+};
+
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object *obj,
                                                         const char *path)
 {
@@ -30,30 +38,4 @@ struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object
 #endif
 }
 
-/* ypdf adds zero ops on top of ydraw_embed — the public class accessor
- * exists only so callers can `yetty_ygui_add(yetty_ygui_ypdf_class_get().value, …)`
- * symbolically. Hand-written because YETTY_YGUI_DEFINE_CLASS computes the
- * ops count via sizeof and so requires at least one op entry. */
-static const struct yetty_yclass_descriptor ypdf_desc = {
-    .name = "yetty_ygui_ypdf",
-    .type = YETTY_YCLASS_TYPE_REGULAR,
-    .data_size = 0,
-};
-
-struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void)
-{
-    static const struct yetty_yclass *cls = NULL;
-    if (cls) {
-        return YETTY_OK(yetty_yclass_ptr, cls);
-    }
-    struct yetty_yclass_ptr_result _pr = yetty_ygui_ydraw_embed_class_get();
-    if (YETTY_IS_ERR(_pr)) {
-        return YETTY_ERR(yetty_yclass_ptr, "yetty_ygui_ypdf_class_get: parent failed", _pr);
-    }
-    struct yetty_yclass_ptr_result r =
-        yetty_yclass_register(&ypdf_desc, NULL, 0, _pr.value, NULL, 0);
-    if (YETTY_IS_OK(r)) {
-        cls = r.value;
-    }
-    return r;
-}
+#include "ypdf.gen.c"

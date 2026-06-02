@@ -179,6 +179,7 @@ static struct yetty_ycore_void_result ynodes_destructor(struct yetty_yclass_ctx 
 /*-----------------------------------------------------------------------------
  * View.
  *---------------------------------------------------------------------------*/
+[[clang::annotate("expose")]]
 void yetty_ygui_ynodes_view(const struct yetty_ygui_object *editor, float *pan_x, float *pan_y,
                             float *zoom)
 {
@@ -200,6 +201,7 @@ void yetty_ygui_ynodes_view(const struct yetty_ygui_object *editor, float *pan_x
     }
 }
 
+[[clang::annotate("expose")]]
 float yetty_ygui_ynodes_zoom(const struct yetty_ygui_object *editor)
 {
     if (!editor) {
@@ -208,6 +210,7 @@ float yetty_ygui_ynodes_zoom(const struct yetty_ygui_object *editor)
     return ynodes_data((struct yetty_ygui_object *)editor)->zoom;
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_reflow(struct yetty_ygui_object *editor)
 {
     if (!editor) {
@@ -224,6 +227,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_reflow(struct yetty_ygui_object
     return yetty_ygui_object_set_dirty(editor);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_set_view(struct yetty_ygui_object *editor,
                                                           float pan_x, float pan_y, float zoom)
 {
@@ -287,6 +291,7 @@ static struct yetty_ycore_int_result ynodes_add_link(struct yetty_ygui_object *e
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_link(struct yetty_ygui_object *editor,
                                                       struct yetty_ygui_object *from, int out_idx,
                                                       struct yetty_ygui_object *to, int in_idx)
@@ -299,6 +304,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_link(struct yetty_ygui_object *
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_drop_links_for(struct yetty_ygui_object *editor,
                                                                 struct yetty_ygui_object *node)
 {
@@ -320,6 +326,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_drop_links_for(struct yetty_ygu
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_on_link_set(struct yetty_ygui_object *editor,
                                                              yetty_ygui_ynodes_link_cb cb,
                                                              void *userdata)
@@ -337,6 +344,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_on_link_set(struct yetty_ygui_o
  * Pending-link drag (driven by a ynode that captured the pointer on a pin
  * press).
  *---------------------------------------------------------------------------*/
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_begin_link(struct yetty_ygui_object *editor,
                                                             struct yetty_ygui_object *from, int pin,
                                                             int output, float x, float y)
@@ -354,6 +362,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_begin_link(struct yetty_ygui_ob
     return yetty_ygui_object_set_dirty(editor);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_update_link(struct yetty_ygui_object *editor,
                                                              float x, float y)
 {
@@ -369,6 +378,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_update_link(struct yetty_ygui_o
     return yetty_ygui_object_set_dirty(editor);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_end_link(struct yetty_ygui_object *editor, float x,
                                                           float y)
 {
@@ -425,6 +435,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_end_link(struct yetty_ygui_obje
 /*-----------------------------------------------------------------------------
  * Add-node convenience.
  *---------------------------------------------------------------------------*/
+[[clang::annotate("expose")]]
 struct yetty_ygui_object_ptr_result yetty_ygui_ynodes_add_node(struct yetty_ygui_object *editor,
                                                                float gx, float gy)
 {
@@ -552,6 +563,7 @@ static struct yetty_ycore_void_result insert_widget_cb(struct yetty_yclass_ctx *
     return yetty_ygui_ynode_set_graph_size(node, gw, gh + 32.0f);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_register_widget(struct yetty_ygui_object *editor,
                                                                  const char *label,
                                                                  const struct yetty_yclass *cls)
@@ -596,6 +608,7 @@ static struct yetty_ygui_object_ptr_result ynodes_ensure_menu(struct yetty_ygui_
     return YETTY_OK(yetty_ygui_object_ptr, d->menu);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_open_canvas_menu(struct yetty_ygui_object *editor,
                                                                   float x, float y)
 {
@@ -627,6 +640,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_open_canvas_menu(struct yetty_y
     return yetty_ygui_popup_menu_open_at(menu, x - r.min.x, y - r.min.y);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_open_node_menu(struct yetty_ygui_object *editor,
                                                                 struct yetty_ygui_object *node,
                                                                 float x, float y)
@@ -674,6 +688,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_open_node_menu(struct yetty_ygu
     return yetty_ygui_popup_menu_open_at(menu, x - r.min.x, y - r.min.y);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ynodes_close_menu(struct yetty_ygui_object *editor)
 {
     if (!editor) {
@@ -686,6 +701,7 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_close_menu(struct yetty_ygui_ob
     return YETTY_OK_VOID();
 }
 
+[[clang::annotate("expose")]]
 int yetty_ygui_ynodes_menu_is_open(const struct yetty_ygui_object *editor)
 {
     if (!editor) {
@@ -930,3 +946,11 @@ static struct yetty_ycore_int_result ynodes_on_scroll(struct yetty_yclass_ctx *y
 }
 
 #include "ynodes.gen.c"
+
+#ifdef YCLASS_CODEGEN
+#include <yetty/ycore/result.h>
+#include <yetty/ygui/object.h>
+typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
+    struct yetty_ygui_object *editor, struct yetty_ygui_object *from, int out_idx,
+    struct yetty_ygui_object *to, int in_idx, void *userdata);
+#endif

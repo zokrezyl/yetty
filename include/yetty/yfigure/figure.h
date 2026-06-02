@@ -1,10 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `figure` (module: yfigure).
- * Codegen regenerates the section above the MANUAL markers;
- * hand-written content between the markers is preserved
- * across runs. Edit annotated source for accessor + slot
- * changes; edit between MANUAL markers for app-facing
- * helper declarations, enums, etc. */
+ * Fully generated from the source .c — do not edit. Function
+ * APIs come from `expose` annotations; types and other header
+ * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
 #ifndef YETTY_YCLASSGEN_YFIGURE_FIGURE_H
 #define YETTY_YCLASSGEN_YFIGURE_FIGURE_H
 
@@ -13,7 +11,7 @@
 
 struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void);
 
-/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
+/* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */
 struct yetty_yfigure_figure;
 struct yetty_ydraw_target;
 struct yetty_ywire_wire_statemachine;
@@ -302,6 +300,5 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
  * Caller owns the returned string and frees with free(). NULL on OOM.
  *=========================================================================*/
 char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent);
-/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

@@ -1,10 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `yzoo` (module: ygui).
- * Codegen regenerates the section above the MANUAL markers;
- * hand-written content between the markers is preserved
- * across runs. Edit annotated source for accessor + slot
- * changes; edit between MANUAL markers for app-facing
- * helper declarations, enums, etc. */
+ * Fully generated from the source .c — do not edit. Function
+ * APIs come from `expose` annotations; types and other header
+ * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YZOO_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_YZOO_H
 
@@ -13,8 +11,9 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_yzoo_class_get(void);
 
-/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
-
-/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
+struct yetty_ygui_object;
+struct yzoo_data;
+YETTY_YRESULT_DECLARE(yetty_ygui_yzoo_data_ptr, struct yzoo_data *);
+struct yetty_ygui_yzoo_data_ptr_result yetty_ygui_yzoo_data(struct yetty_ygui_object *obj);
 
 #endif

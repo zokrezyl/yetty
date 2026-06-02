@@ -73,6 +73,12 @@ static const struct yetty_yui_view_ops terminal_view_ops = {
     .on_event = terminal_view_on_event,
 };
 
+/* Terminal context - contains yetty context plus terminal-owned objects */
+struct yetty_yterm_terminal_context {
+    struct yetty_context yetty_context;
+    struct yetty_platform_pty *pty;
+};
+
 /* The compositor's wire-SM entry now lives in yfigure/container.c as
  * yetty_yfigure_container_process_input — it's registered directly with
  * userdata = terminal->root_container, no terminal-local wrapper. */
@@ -731,7 +737,9 @@ static struct yetty_ycore_void_result terminal_mouse_sub_callback(int click_enab
         terminal->applied_h > 0.0f) {
         struct yetty_ycore_void_result rr = terminal_emit_card_resize(
             terminal, terminal->focused_figure_id, terminal->applied_w, terminal->applied_h);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
     }
     /* Subscription drop = the figure no longer wants client input. The
      * figure itself may persist in the compositor (apps that exit with
@@ -2167,7 +2175,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed) {
             struct yetty_ycore_void_result er =
                 terminal_emit_card_resize(terminal, terminal->focused_figure_id, width, height);
-            if (YETTY_IS_ERR(er)) yetty_ycore_error_destroy(er.error);
+            if (YETTY_IS_ERR(er)) {
+                yetty_ycore_error_destroy(er.error);
+            }
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }

@@ -1,10 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `collapsing_header` (module: ygui).
- * Codegen regenerates the section above the MANUAL markers;
- * hand-written content between the markers is preserved
- * across runs. Edit annotated source for accessor + slot
- * changes; edit between MANUAL markers for app-facing
- * helper declarations, enums, etc. */
+ * Fully generated from the source .c — do not edit. Function
+ * APIs come from `expose` annotations; types and other header
+ * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_COLLAPSING_HEADER_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_COLLAPSING_HEADER_H
 
@@ -13,12 +11,13 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_collapsing_header_class_get(void);
 
-/* === MANUAL CONTENT BELOW — preserved across codegen runs === */
-struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(struct yetty_ygui_object *obj,
-                                                                      const char *title);
-struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(struct yetty_ygui_object *obj,
-                                                                     int open);
+struct yetty_ygui_object;
+struct ch_data;
+YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_data_ptr, struct ch_data *);
+struct yetty_ygui_collapsing_header_data_ptr_result yetty_ygui_collapsing_header_data(struct yetty_ygui_object *obj);
+
+struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(struct yetty_ygui_object *obj, const char *title);
+struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(struct yetty_ygui_object *obj, int open);
 int yetty_ygui_collapsing_header_is_open(const struct yetty_ygui_object *obj);
-/* === MANUAL CONTENT ABOVE — preserved across codegen runs === */
 
 #endif

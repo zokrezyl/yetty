@@ -40,8 +40,10 @@ static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ct
         (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "tooltip_constructor: super");
 
-    struct tooltip_data *td =
-        yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_tooltip_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tooltip_constructor: data_get");
+    struct tooltip_data *td = td_dr.value;
     td->text = NULL;
     return YETTY_OK_VOID();
 }
@@ -52,8 +54,10 @@ static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct tooltip_data *td =
-        yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_tooltip_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tooltip_destructor: data_get");
+    struct tooltip_data *td = td_dr.value;
     free(td->text);
     td->text = NULL;
     return yetty_ygui_super_void(
@@ -72,8 +76,10 @@ static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *ycl
     if (!ctx || !ctx->ygrid_draw_list) {
         return YETTY_ERR(yetty_ycore_void, "tooltip_paint: NULL ctx");
     }
-    struct tooltip_data *td =
-        yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_tooltip_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tooltip_paint: data_get");
+    struct tooltip_data *td = td_dr.value;
     if (!td->text || td->text[0] == '\0') {
         return YETTY_OK_VOID();
     }
@@ -90,14 +96,17 @@ static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *ycl
                                           /*font_id=*/-1, /*rotation=*/0.0f);
 }
 
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_ygui_object *obj,
                                                            const char *text)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tooltip_set_text: NULL obj");
     }
-    struct tooltip_data *td =
-        yetty_ygui_data_get(obj, yetty_ygui_tooltip_class_get().value);
+    struct yetty_ygui_void_ptr_result td_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_tooltip_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "yetty_ygui_tooltip_set_text: data_get");
+    struct tooltip_data *td = td_dr.value;
     free(td->text);
     if (!text) {
         td->text = NULL;
@@ -112,6 +121,7 @@ struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_ygui_obj
     return yetty_ygui_object_set_dirty(obj);
 }
 
+[[clang::annotate("expose")]]
 const char *yetty_ygui_tooltip_get_text(const struct yetty_ygui_object *obj)
 {
     if (!obj) {

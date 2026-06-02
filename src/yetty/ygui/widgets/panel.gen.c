@@ -36,3 +36,12 @@ struct yetty_yclass_ptr_result yetty_ygui_panel_class_get(void)
     cls = register_class_r.value;
     return register_class_r;
 }
+
+struct yetty_ygui_panel_data_ptr_result yetty_ygui_panel_data(struct yetty_ygui_object *obj)
+{
+    struct yetty_ygui_void_ptr_result data_slice_r =
+        yetty_ygui_data_get_result(obj, yetty_ygui_panel_class_get().value);
+    if (YETTY_IS_ERR(data_slice_r))
+        return YETTY_ERR(yetty_ygui_panel_data_ptr, "yetty_ygui_panel_data", data_slice_r);
+    return YETTY_OK(yetty_ygui_panel_data_ptr, (struct panel_data *)data_slice_r.value);
+}

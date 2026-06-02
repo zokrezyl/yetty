@@ -245,12 +245,6 @@ struct yetty_yrender_terminal_layer {
     void *clear_screen_userdata;
 };
 
-/* Terminal context - contains yetty context plus terminal-owned objects */
-struct yetty_yterm_terminal_context {
-    struct yetty_context yetty_context;
-    struct yetty_platform_pty *pty;
-};
-
 /* Terminal creation/destruction.
  *
  * The pane background colour is read from the config in yetty_context as
