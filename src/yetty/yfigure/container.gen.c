@@ -19,6 +19,12 @@ static yetty_yfigure_remove_child_by_id_fn yetty_yfigure_container_yetty_yfigure
 static yetty_yfigure_raise_child_by_id_fn yetty_yfigure_container_yetty_yfigure_raise_child_by_id_check = yetty_yfigure_container_raise_child_by_id_impl;
 [[maybe_unused]]
 static yetty_yfigure_process_records_fn yetty_yfigure_container_yetty_yfigure_process_records_check = yetty_yfigure_container_process_records_impl;
+[[maybe_unused]]
+static yetty_yfigure_process_input_fn yetty_yfigure_container_yetty_yfigure_process_input_check = container_process_input_slot;
+[[maybe_unused]]
+static yetty_yfigure_process_bytes_fn yetty_yfigure_container_yetty_yfigure_process_bytes_check = container_process_bytes_slot;
+[[maybe_unused]]
+static yetty_yfigure_dump_state_fn yetty_yfigure_container_yetty_yfigure_dump_state_check = container_dump_state_slot;
 
 struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void)
 {
@@ -39,6 +45,9 @@ struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void)
         {"yetty_yfigure", "remove_child_by_id", (yetty_yclass_method_id_t)yetty_yfigure_remove_child_by_id, (yetty_yclass_impl_t)yetty_yfigure_container_remove_child_by_id_impl},
         {"yetty_yfigure", "raise_child_by_id", (yetty_yclass_method_id_t)yetty_yfigure_raise_child_by_id, (yetty_yclass_impl_t)yetty_yfigure_container_raise_child_by_id_impl},
         {"yetty_yfigure", "process_records", (yetty_yclass_method_id_t)yetty_yfigure_process_records, (yetty_yclass_impl_t)yetty_yfigure_container_process_records_impl},
+        {"yetty_yfigure", "process_input", (yetty_yclass_method_id_t)yetty_yfigure_process_input, (yetty_yclass_impl_t)container_process_input_slot},
+        {"yetty_yfigure", "process_bytes", (yetty_yclass_method_id_t)yetty_yfigure_process_bytes, (yetty_yclass_impl_t)container_process_bytes_slot},
+        {"yetty_yfigure", "dump_state", (yetty_yclass_method_id_t)yetty_yfigure_dump_state, (yetty_yclass_impl_t)container_dump_state_slot},
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_yfigure_figure_class_get();
     if (YETTY_IS_ERR(parent_class_r))

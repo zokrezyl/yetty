@@ -2,15 +2,18 @@
  * yfigure:figure base-class host TU.
  *
  * `struct yetty_yfigure_figure` is the yclass base class for every
- * concrete figure kind (container, ygrid, ymgui, …). The struct is
- * defined in `<yetty/yfigure/figure.h>` and embedded as the first
- * member by every concrete class; the `parent@yfigure:figure`
- * annotation on each concrete class wires the inheritance to yclass.
+ * concrete figure kind (container, ygrid, ymgui, …). Its layout is
+ * PRIVATE to this TU: it is the figure base's yclass data slice, the
+ * first slice in every figure object. Concrete kinds inherit via
+ * `parent@yfigure:figure`, reach the slice with
+ * `yetty_yfigure_figure_data(obj)`, and read/write its fields only
+ * through the accessors defined here — figure.h merely forward-
+ * declares the struct, so no other module depends on its layout.
  *
- * This TU owns no yclass slots at this stage. Per-figure-kind
- * lifecycle still flows through `struct yetty_yfigure_figure_ops` —
- * an intentionally transitional vtable kept until every concrete kind
- * routes render/destroy/process via yclass dispatch directly.
+ * This TU defines the figure-base polymorphic slots (render, destroy,
+ * process_input, process_bytes, reset_content, dump_state) with their
+ * default impls; concrete kinds override them. All figure dispatch is
+ * through yclass — there is no ops vtable.
  *
  * The codegen-generated accessor for the base class
  * (`yetty_yfigure_figure_class_get`) is included from `figure.gen.c`
@@ -61,8 +64,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_destroy(
  * Base default rejects — a purely visual figure ignores wire updates.
  * The container only routes here for kinds that override it (capability
  * detected via yetty_yfigure_figure_implements). */
-[[clang::annotate("override@yfigure:figure:process_input")]]
-[[clang::annotate("local@yfigure:process_input")]]
+[[clang::annotate("override@yfigure:figure:process_input")]] [[clang::annotate(
+    "local@yfigure:process_input")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
     struct yetty_ywire_wire_statemachine *statemachine)
@@ -74,8 +77,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input
 }
 
 /* process_bytes: apply a buffered wire body. Base default rejects. */
-[[clang::annotate("override@yfigure:figure:process_bytes")]]
-[[clang::annotate("local@yfigure:process_bytes")]]
+[[clang::annotate("override@yfigure:figure:process_bytes")]] [[clang::annotate(
+    "local@yfigure:process_bytes")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_bytes(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
     size_t bytes_len)
@@ -89,8 +92,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_bytes
 
 /* reset_content: drop content, keep GPU state. Base default rejects so the
  * container falls back to destroy + mint for kinds that don't support it. */
-[[clang::annotate("override@yfigure:figure:reset_content")]]
-[[clang::annotate("local@yfigure:reset_content")]]
+[[clang::annotate("override@yfigure:figure:reset_content")]] [[clang::annotate(
+    "local@yfigure:reset_content")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_reset_content(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
 {
@@ -101,8 +104,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_reset_content
 
 /* dump_state: heap text snapshot for tests. Base default yields a NULL
  * string so the yetty_yfigure_dump wrapper emits its rect fallback. */
-[[clang::annotate("override@yfigure:figure:dump_state")]]
-[[clang::annotate("local@yfigure:dump_state")]]
+[[clang::annotate("override@yfigure:figure:dump_state")]] [[clang::annotate(
+    "local@yfigure:dump_state")]]
 static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_state(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
 {
@@ -112,7 +115,112 @@ static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_stat
     return YETTY_OK(yetty_ycore_char_ptr, NULL);
 }
 
-#include "figure.gen.c"
+/* ---- figure base data slice (PRIVATE) -----------------------------------
+ * The yclass data slice for the figure base class. It sits first in every
+ * figure object (right after the yclass object header), so a kind reaches
+ * it with yetty_yfigure_figure_data(obj) — or equivalently the first slice
+ * at (object + 1) — and touches its fields only through the accessors
+ * below. The layout is intentionally not exported: figure.h forward-
+ * declares the struct, nothing else may depend on its fields.
+ *
+ *   self_obj : owning yclass object header (body sits at self_obj + 1).
+ *   rect     : AABB in target pixel space; moves go through the parent's
+ *              set_rect so damage tracking stays correct. (No `id` field —
+ *              id is a parent-scoped name the container assigns, not a
+ *              property of the child.)
+ *   z        : stacking order within the parent (higher renders later /
+ *              wins hit-tests); ties break on insertion order.
+ *   hidden   : parent skips this child entirely (no render, no hit).
+ *   dirty    : contents changed without geometry moving; parent ORs this
+ *              into its damage region next render pass and clears it. */
+struct yetty_yfigure_figure {
+    struct yetty_yclass_object *self_obj;
+    struct yetty_ycore_rectangle rect;
+    int32_t z;
+    int hidden;
+    int dirty;
+};
+
+/* Resolve the figure base slice inside `obj`. The base is the first slice
+ * of every figure object, so this is `(object + 1)` typed — but it routes
+ * through the yclass data model so a wrong-class object surfaces as an
+ * error rather than a bad cast. Kinds that already hold the base handle
+ * (their slot wrappers pass `(object + 1)`) can skip this. */
+[[clang::annotate("expose")]]
+struct yetty_yfigure_figure_ptr_result yetty_yfigure_figure_data(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result cls_r = yetty_yfigure_figure_class_get();
+    if (YETTY_IS_ERR(cls_r))
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "yfigure_figure_data: class_get", cls_r);
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, cls_r.value);
+    if (YETTY_IS_ERR(slice_r))
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "yfigure_figure_data: object_data", slice_r);
+    return YETTY_OK(yetty_yfigure_figure_ptr, (struct yetty_yfigure_figure *)slice_r.value);
+}
+
+/* ---- base-field accessors (the only way to touch the slice) -------------- */
+
+[[clang::annotate("expose")]]
+struct yetty_yclass_object *yetty_yfigure_figure_self_obj(const struct yetty_yfigure_figure *fig)
+{
+    return fig->self_obj;
+}
+
+[[clang::annotate("expose")]]
+void yetty_yfigure_figure_set_self_obj(struct yetty_yfigure_figure *fig,
+                                       struct yetty_yclass_object *self_obj)
+{
+    fig->self_obj = self_obj;
+}
+
+[[clang::annotate("expose")]]
+struct yetty_ycore_rectangle yetty_yfigure_figure_rect(const struct yetty_yfigure_figure *fig)
+{
+    return fig->rect;
+}
+
+[[clang::annotate("expose")]]
+void yetty_yfigure_figure_set_rect(struct yetty_yfigure_figure *fig,
+                                   struct yetty_ycore_rectangle rect)
+{
+    fig->rect = rect;
+}
+
+[[clang::annotate("expose")]]
+int32_t yetty_yfigure_figure_z(const struct yetty_yfigure_figure *fig)
+{
+    return fig->z;
+}
+
+[[clang::annotate("expose")]]
+void yetty_yfigure_figure_set_z(struct yetty_yfigure_figure *fig, int32_t z)
+{
+    fig->z = z;
+}
+
+[[clang::annotate("expose")]]
+int yetty_yfigure_figure_hidden(const struct yetty_yfigure_figure *fig)
+{
+    return fig->hidden;
+}
+
+[[clang::annotate("expose")]]
+void yetty_yfigure_figure_set_hidden(struct yetty_yfigure_figure *fig, int hidden)
+{
+    fig->hidden = hidden;
+}
+
+[[clang::annotate("expose")]]
+int yetty_yfigure_figure_dirty(const struct yetty_yfigure_figure *fig)
+{
+    return fig->dirty;
+}
+
+[[clang::annotate("expose")]]
+void yetty_yfigure_figure_set_dirty(struct yetty_yfigure_figure *fig, int dirty)
+{
+    fig->dirty = dirty;
+}
 
 #ifdef YCLASS_CODEGEN
 /* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */
@@ -122,121 +230,6 @@ struct yetty_ywire_wire_statemachine;
 
 YETTY_YRESULT_DECLARE(yetty_yfigure_figure_ptr, struct yetty_yfigure_figure *);
 
-struct yetty_yfigure_figure_ops {
-    /* Destroy concrete state and free `self`. For composite figures
-     * (groups) this cascades to children. The base struct guarantees
-     * `self` is non-NULL when ops are invoked. */
-    struct yetty_ycore_void_result (*destroy)(struct yetty_yfigure_figure *self);
-
-    /* Paint into `target`. The figure already knows its position and
-     * size from `self->rect` (absolute, target pixel space). It uses
-     * `target` polymorphically — view via `target->ops->get_view`,
-     * pane via `target->viewport`. The figure owns its own pipeline
-     * + binder (yplot-pattern); the concrete kind of target sitting
-     * behind the handle doesn't matter to it. */
-    struct yetty_ycore_void_result (*render)(struct yetty_yfigure_figure *self,
-                                             struct yetty_ydraw_target *target);
-
-    /* Consume input directly from the wire-statemachine. A coroutine —
-     * yields when the SM has no bytes ready and resumes when the next
-     * chunk arrives. Same shape every figure speaks; no buffered
-     * payload, no length argument. The figure reads what it needs from
-     * the SM in its own format.
-     *
-     * For composite figures (yfigure_container), the body is a stream
-     * of `{length, id, body}` records — process_input loops reading
-     * record headers from the SM and dispatches each to either its own
-     * admin handler (id=0) or the matching child's process_input.
-     *
-     * For leaf figures (ygrid, ymgui, yrdawn, …), the body is the
-     * figure-kind's own self-describing format. The figure reads from
-     * the SM directly and decodes as it goes.
-     *
-     * NULL = figure is purely visual and rejects wire updates. */
-    struct yetty_ycore_void_result (*process_input)(struct yetty_yfigure_figure *self,
-                                                    struct yetty_ywire_wire_statemachine *sm);
-
-    /* Apply a wire update from an in-memory byte buffer. TEMPORARY —
-     * the migration target is `process_input` above. Kept while ygrid
-     * and the container's admin records still go through the buffered
-     * path; will be deleted once every figure kind speaks `process_input`. */
-    struct yetty_ycore_void_result (*process_bytes)(struct yetty_yfigure_figure *self,
-                                                    const uint8_t *bytes, size_t bytes_len);
-
-    /* Drop the figure's content (prims / record buffer / per-frame
-     * scratch) WITHOUT touching its GPU resources (buffers, textures,
-     * binder, pipeline). Followed by process_bytes(new_payload), this
-     * gives "refresh content, keep GPU state" — the receiver path for
-     * CREATE_CHILD on an existing id with the same kind. Without it
-     * the only option is destroy + mint, which throws away the binder
-     * cache and forces a full pipeline rebuild on the next render
-     * (visible as ~100 ms hover lag in yui chrome). NULL = figure
-     * doesn't support in-place content reset; CREATE_CHILD on an
-     * existing id falls back to destroy + mint. */
-    struct yetty_ycore_void_result (*reset_content)(struct yetty_yfigure_figure *self);
-
-    /* Return a heap-allocated text snapshot of this figure's state in a
-     * YAML-ish form (no real YAML library is involved — just direct
-     * text formatting). Caller frees with free(). NULL on OOM.
-     *
-     * `indent` is the number of spaces every emitted top-level line
-     * should be prefixed with. Composite figures (containers) emit
-     * their own fields at `indent`, then recurse into children at
-     * `indent + 4` after a `children:` key — the receiver state is
-     * a tree, so the dump is too.
-     *
-     * Used by unit tests to assert receiver state after a wire-byte
-     * stream has been processed. NULL = figure provides no dump (the
-     * base wrapper returns just the kind + rect). */
-    char *(*dump)(const struct yetty_yfigure_figure *self, int indent);
-};
-
-/* figure is a concrete yclass base class — concrete kinds (container,
- * ygrid, ymgui, …) inherit via `parent@yfigure:figure`, not via
- * `uses@`. The yclass annotation lives on the forward declaration in
- * `src/yetty/yfigure/figure.c` so the figure module's codegen pass
- * groups the class under figure.c (its natural host TU) rather than
- * the first .c that transitively includes this header. The struct
- * still carries the legacy `yetty_yfigure_figure_ops` vtable head
- * member; that vtable remains intentionally transitional until every
- * concrete figure kind speaks yclass dispatch end-to-end. */
-struct yetty_yfigure_figure {
-    const struct yetty_yfigure_figure_ops *ops;
-    /* The owning yclass object header, set by every yclass-allocated
-     * figure right after object_alloc (body sits at object + 1, so this
-     * equals `(struct yetty_yclass_object *)figure - 1`). NULL for
-     * figures not allocated through yclass (e.g. unit-test mocks that
-     * still ride the transitional ops vtable). The container uses this
-     * to route render/destroy through yclass dispatch when present and
-     * the ops vtable otherwise — the bridge that lets migrated and
-     * not-yet-migrated figure kinds coexist. */
-    struct yetty_yclass_object *self_obj;
-    /* AABB in target pixel space. Set at construction by the concrete
-     * figure; subsequent moves go through the parent's set_rect so
-     * damage tracking stays correct.
-     *
-     * NOTE: the figure has no `id` field — id is a parent-scoped name
-     * the parent group uses to address its children, not a property of
-     * the child itself. See yetty_yfigure_container_add_child. */
-    struct yetty_ycore_rectangle rect;
-    /* Stacking order within the parent container. Higher z renders
-     * later (in front) and wins hit-tests. Default 0. The parent sorts
-     * its children by (z, insertion-seq) — equal z falls back to
-     * insertion order, so single-z trees behave exactly as before.
-     * Set over the wire via the SET_CHILD_Z admin record; coarse bands
-     * (chrome < floating windows < menus) keep layers from interleaving. */
-    int32_t z;
-    /* When set, the parent container skips this child entirely — no
-     * render, no hit. Lets a producer hide a figure (e.g. a closed
-     * dialog) without deleting it and re-shipping its whole body on the
-     * next show. Toggled over the wire via the SET_CHILD_HIDDEN admin
-     * record. Default 0 (visible). */
-    int hidden;
-    /* Set by the figure when its contents change without geometry
-     * moving. The parent ORs this into its damage region during the
-     * next render pass and clears it after. */
-    int dirty;
-};
 
 /*===========================================================================
  * Group — a figure that contains other figures.
@@ -338,8 +331,8 @@ struct yetty_yfigure_figure *yetty_yfigure_container_as_figure(
  * "no wire address") and rejected; the wire-decode path always supplies
  * a non-zero id read from the producer's envelope.
  *
- * The group takes ownership: child->ops->destroy runs when the group
- * is destroyed or the child is removed by id. */
+ * The group takes ownership: the child's yclass destroy slot runs when
+ * the group is destroyed or the child is removed by id. */
 struct yetty_ycore_void_result yetty_yfigure_container_add_child(
     struct yetty_yfigure_container *group, struct yetty_yfigure_figure *child, uint32_t id);
 
@@ -398,10 +391,12 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
 /*===========================================================================
  * Polymorphic dump.
  *
- * `yetty_yfigure_dump` dispatches to self->ops->dump when present; if the
- * concrete kind doesn't implement dump it returns a one-line fallback
- * with the rect (so tests can still see SOMETHING for unknown kinds).
+ * `yetty_yfigure_dump` dispatches to the figure's yclass dump_state slot
+ * when the concrete kind overrides it; otherwise it returns a one-line
+ * fallback with the rect (so tests can still see SOMETHING for unknown kinds).
  * Caller owns the returned string and frees with free(). NULL on OOM.
  *=========================================================================*/
 char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent);
 #endif
+
+#include "figure.gen.c"

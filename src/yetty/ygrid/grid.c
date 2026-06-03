@@ -2110,16 +2110,6 @@ static struct yetty_ycore_void_result ygrid_destroy_slot(struct yetty_yclass_ctx
     return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-static const struct yetty_yfigure_figure_ops *ygrid_ops(void)
-{
-    static const struct yetty_yfigure_figure_ops ops = {
-        .process_bytes = ygrid_process_bytes,
-        .reset_content = ygrid_reset_content,
-        .dump = ygrid_dump,
-    };
-    return &ops;
-}
-
 /*===========================================================================
  * Resource set + pipeline setup
  *=========================================================================*/
@@ -2354,7 +2344,6 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, grid_obj_r, "ygrid_create: object_alloc");
     struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)(grid_obj_r.value + 1);
 
-    g->base.ops = ygrid_ops();
     g->base.self_obj = grid_obj_r.value;
     g->base.rect = rect;
     g->base.dirty = 1;
@@ -2782,21 +2771,30 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(struct yetty
     return ygrid_destroy((struct yetty_yfigure_figure *)obj);
 }
 
-[[clang::annotate("override@ygrid:grid:process_bytes")]]
+[[clang::annotate("override@ygrid:grid:yfigure:process_bytes")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_process_bytes_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ycore_buffer payload)
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
+    size_t bytes_len)
 {
     (void)ctx;
-    return ygrid_process_bytes((struct yetty_yfigure_figure *)obj, payload.data, payload.size);
+    return ygrid_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
 }
 
-[[clang::annotate("override@ygrid:grid:reset_content")]]
+[[clang::annotate("override@ygrid:grid:yfigure:reset_content")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_reset_content_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    return ygrid_reset_content((struct yetty_yfigure_figure *)obj);
+    return ygrid_reset_content((struct yetty_yfigure_figure *)(obj + 1));
+}
+
+[[clang::annotate("override@ygrid:grid:yfigure:dump_state")]]
+static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
+{
+    (void)ctx;
+    return YETTY_OK(yetty_ycore_char_ptr,
+                    ygrid_dump((struct yetty_yfigure_figure *)(obj + 1), indent));
 }
 
 #include "grid.gen.c"

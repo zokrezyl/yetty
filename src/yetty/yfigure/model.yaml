@@ -83,7 +83,7 @@ methods:
     local: false
   - slot: process_input
     domain: yfigure
-    owning_class: figure
+    owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
@@ -95,7 +95,7 @@ methods:
     local: true
   - slot: process_bytes
     domain: yfigure
-    owning_class: figure
+    owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
@@ -107,6 +107,18 @@ methods:
       - name: bytes_len
         type: size_t
     local: true
+  - slot: dump_state
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: indent
+        type: int
+    local: true
   - slot: reset_content
     domain: yfigure
     owning_class: figure
@@ -116,18 +128,6 @@ methods:
         type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
-    local: true
-  - slot: dump_state
-    domain: yfigure
-    owning_class: figure
-    return_type: struct yetty_ycore_char_ptr_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: indent
-        type: int
     local: true
 classes:
   - name: container
@@ -162,6 +162,15 @@ classes:
       - slot: process_records
         slot_domain: yfigure
         impl: yetty_yfigure_container_process_records_impl
+      - slot: process_input
+        slot_domain: yfigure
+        impl: container_process_input_slot
+      - slot: process_bytes
+        slot_domain: yfigure
+        impl: container_process_bytes_slot
+      - slot: dump_state
+        slot_domain: yfigure
+        impl: container_dump_state_slot
   - name: figure
     domain: yfigure
     accessor: yetty_yfigure_figure_class_get
@@ -198,94 +207,17 @@ struct yetty_ywire_wire_statemachine;
 
 YETTY_YRESULT_DECLARE(yetty_yfigure_figure_ptr, struct yetty_yfigure_figure *);
 
-struct yetty_yfigure_figure_ops {
-    /* Destroy concrete state and free `self`. For composite figures
-     * (groups) this cascades to children. The base struct guarantees
-     * `self` is non-NULL when ops are invoked. */
-    struct yetty_ycore_void_result (*destroy)(struct yetty_yfigure_figure *self);
-
-    /* Paint into `target`. The figure already knows its position and
-     * size from `self->rect` (absolute, target pixel space). It uses
-     * `target` polymorphically — view via `target->ops->get_view`,
-     * pane via `target->viewport`. The figure owns its own pipeline
-     * + binder (yplot-pattern); the concrete kind of target sitting
-     * behind the handle doesn't matter to it. */
-    struct yetty_ycore_void_result (*render)(struct yetty_yfigure_figure *self,
-                                             struct yetty_ydraw_target *target);
-
-    /* Consume input directly from the wire-statemachine. A coroutine —
-     * yields when the SM has no bytes ready and resumes when the next
-     * chunk arrives. Same shape every figure speaks; no buffered
-     * payload, no length argument. The figure reads what it needs from
-     * the SM in its own format.
-     *
-     * For composite figures (yfigure_container), the body is a stream
-     * of `{length, id, body}` records — process_input loops reading
-     * record headers from the SM and dispatches each to either its own
-     * admin handler (id=0) or the matching child's process_input.
-     *
-     * For leaf figures (ygrid, ymgui, yrdawn, …), the body is the
-     * figure-kind's own self-describing format. The figure reads from
-     * the SM directly and decodes as it goes.
-     *
-     * NULL = figure is purely visual and rejects wire updates. */
-    struct yetty_ycore_void_result (*process_input)(struct yetty_yfigure_figure *self,
-                                                    struct yetty_ywire_wire_statemachine *sm);
-
-    /* Apply a wire update from an in-memory byte buffer. TEMPORARY —
-     * the migration target is `process_input` above. Kept while ygrid
-     * and the container's admin records still go through the buffered
-     * path; will be deleted once every figure kind speaks `process_input`. */
-    struct yetty_ycore_void_result (*process_bytes)(struct yetty_yfigure_figure *self,
-                                                    const uint8_t *bytes, size_t bytes_len);
-
-    /* Drop the figure's content (prims / record buffer / per-frame
-     * scratch) WITHOUT touching its GPU resources (buffers, textures,
-     * binder, pipeline). Followed by process_bytes(new_payload), this
-     * gives \"refresh content, keep GPU state\" — the receiver path for
-     * CREATE_CHILD on an existing id with the same kind. Without it
-     * the only option is destroy + mint, which throws away the binder
-     * cache and forces a full pipeline rebuild on the next render
-     * (visible as ~100 ms hover lag in yui chrome). NULL = figure
-     * doesn't support in-place content reset; CREATE_CHILD on an
-     * existing id falls back to destroy + mint. */
-    struct yetty_ycore_void_result (*reset_content)(struct yetty_yfigure_figure *self);
-
-    /* Return a heap-allocated text snapshot of this figure's state in a
-     * YAML-ish form (no real YAML library is involved — just direct
-     * text formatting). Caller frees with free(). NULL on OOM.
-     *
-     * `indent` is the number of spaces every emitted top-level line
-     * should be prefixed with. Composite figures (containers) emit
-     * their own fields at `indent`, then recurse into children at
-     * `indent + 4` after a `children:` key — the receiver state is
-     * a tree, so the dump is too.
-     *
-     * Used by unit tests to assert receiver state after a wire-byte
-     * stream has been processed. NULL = figure provides no dump (the
-     * base wrapper returns just the kind + rect). */
-    char *(*dump)(const struct yetty_yfigure_figure *self, int indent);
-};
-
 /* figure is a concrete yclass base class — concrete kinds (container,
- * ygrid, ymgui, …) inherit via `parent@yfigure:figure`, not via
- * `uses@`. The yclass annotation lives on the forward declaration in
- * `src/yetty/yfigure/figure.c` so the figure module's codegen pass
- * groups the class under figure.c (its natural host TU) rather than
- * the first .c that transitively includes this header. The struct
- * still carries the legacy `yetty_yfigure_figure_ops` vtable head
- * member; that vtable remains intentionally transitional until every
- * concrete figure kind speaks yclass dispatch end-to-end. */
+ * ygrid, ymgui, …) inherit via `parent@yfigure:figure`. Every figure-base
+ * op (render, destroy, process_input, process_bytes, reset_content,
+ * dump_state) is a yclass slot dispatched via the object header below;
+ * there is no legacy ops vtable. */
 struct yetty_yfigure_figure {
-    const struct yetty_yfigure_figure_ops *ops;
-    /* The owning yclass object header, set by every yclass-allocated
-     * figure right after object_alloc (body sits at object + 1, so this
-     * equals `(struct yetty_yclass_object *)figure - 1`). NULL for
-     * figures not allocated through yclass (e.g. unit-test mocks that
-     * still ride the transitional ops vtable). The container uses this
-     * to route render/destroy through yclass dispatch when present and
-     * the ops vtable otherwise — the bridge that lets migrated and
-     * not-yet-migrated figure kinds coexist. */
+    /* The owning yclass object header, set by every figure right after
+     * object_alloc (body sits at object + 1, so this equals
+     * `(struct yetty_yclass_object *)figure - 1`). The container routes
+     * render, destroy, process_input, process_bytes and dump through
+     * yclass dispatch via this. */
     struct yetty_yclass_object *self_obj;
     /* AABB in target pixel space. Set at construction by the concrete
      * figure; subsequent moves go through the parent's set_rect so
@@ -414,8 +346,8 @@ struct yetty_yfigure_figure *yetty_yfigure_container_as_figure(
  * \"no wire address\") and rejected; the wire-decode path always supplies
  * a non-zero id read from the producer's envelope.
  *
- * The group takes ownership: child->ops->destroy runs when the group
- * is destroyed or the child is removed by id. */
+ * The group takes ownership: the child's yclass destroy slot runs when
+ * the group is destroyed or the child is removed by id. */
 struct yetty_ycore_void_result yetty_yfigure_container_add_child(
     struct yetty_yfigure_container *group, struct yetty_yfigure_figure *child, uint32_t id);
 
@@ -474,9 +406,9 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
 /*===========================================================================
  * Polymorphic dump.
  *
- * `yetty_yfigure_dump` dispatches to self->ops->dump when present; if the
- * concrete kind doesn't implement dump it returns a one-line fallback
- * with the rect (so tests can still see SOMETHING for unknown kinds).
+ * `yetty_yfigure_dump` dispatches to the figure's yclass dump_state slot
+ * when the concrete kind overrides it; otherwise it returns a one-line
+ * fallback with the rect (so tests can still see SOMETHING for unknown kinds).
  * Caller owns the returned string and frees with free(). NULL on OOM.
  *=========================================================================*/
 char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent);"

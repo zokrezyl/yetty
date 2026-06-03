@@ -7,7 +7,5 @@
 typedef struct yetty_ycore_void_result (*yetty_ygrid_add_record_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_ygrid_clear_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ygrid_destroy_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_ygrid_process_bytes_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ycore_buffer);
-typedef struct yetty_ycore_void_result (*yetty_ygrid_reset_content_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
 
 #endif

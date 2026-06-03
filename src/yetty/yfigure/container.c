@@ -84,26 +84,55 @@ yetty_yfigure_container {
  * Internal helpers
  *=========================================================================*/
 
-/* Transitional render/destroy dispatch bridge. A migrated figure carries
- * its yclass object (`self_obj`) and dispatches through yclass; a figure
- * that still rides the ops vtable (e.g. a unit-test mock) has self_obj ==
- * NULL and dispatches through ops. Goes away once every figure kind is a
- * yclass object. */
+/* render/destroy dispatch through the figure's yclass object. Every figure
+ * kind is a yclass object (self_obj set at construction); the slots are
+ * local@ (in-process) so ctx is NULL. */
 static struct yetty_ycore_void_result figure_dispatch_render(struct yetty_yfigure_figure *fig,
                                                              struct yetty_ydraw_target *target)
 {
-    if (fig->self_obj) {
-        return yetty_yfigure_render(NULL, fig->self_obj, target);
-    }
-    return fig->ops->render(fig, target);
+    return yetty_yfigure_render(NULL, fig->self_obj, target);
 }
 
 static struct yetty_ycore_void_result figure_dispatch_destroy(struct yetty_yfigure_figure *fig)
 {
-    if (fig->self_obj) {
-        return yetty_yfigure_destroy(NULL, fig->self_obj);
+    return yetty_yfigure_destroy(NULL, fig->self_obj);
+}
+
+/* True when fig's concrete class overrides the given figure-base slot
+ * (rather than inheriting the base no-op/reject default). This is the
+ * yclass replacement for the old "is this vtable op non-NULL" capability
+ * check: a figure that doesn't implement, say, process_input inherits the
+ * base default, so its dispatch impl equals the base class's impl. */
+static bool figure_implements(struct yetty_yfigure_figure *fig, yetty_yclass_method_id_t method_id)
+{
+    if (!fig || !fig->self_obj) {
+        return false;
     }
-    return fig->ops->destroy(fig);
+    struct yetty_yclass_method_slot_result slot_r =
+        yetty_yclass_method_slot_get("yetty_yfigure", method_id);
+    if (YETTY_IS_ERR(slot_r)) {
+        yetty_ycore_error_destroy(slot_r.error);
+        return false;
+    }
+    struct yetty_yclass_ptr_result base_r = yetty_yfigure_figure_class_get();
+    if (YETTY_IS_ERR(base_r)) {
+        yetty_ycore_error_destroy(base_r.error);
+        return false;
+    }
+    struct yetty_yclass_impl_t_result obj_impl =
+        yetty_yclass_dispatch_lookup(fig->self_obj->klass, slot_r.value);
+    struct yetty_yclass_impl_t_result base_impl =
+        yetty_yclass_dispatch_lookup(base_r.value, slot_r.value);
+    if (YETTY_IS_ERR(obj_impl)) {
+        yetty_ycore_error_destroy(obj_impl.error);
+    }
+    if (YETTY_IS_ERR(base_impl)) {
+        yetty_ycore_error_destroy(base_impl.error);
+    }
+    if (YETTY_IS_ERR(obj_impl) || YETTY_IS_ERR(base_impl)) {
+        return false;
+    }
+    return obj_impl.value != base_impl.value;
 }
 
 static void entry_destroy(struct child_entry *e, struct yetty_ycore_void_result *first_err,
@@ -202,8 +231,14 @@ char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent)
         }
         return out;
     }
-    if (self->ops && self->ops->dump) {
-        return self->ops->dump(self, indent);
+    if (figure_implements((struct yetty_yfigure_figure *)self,
+                          (yetty_yclass_method_id_t)yetty_yfigure_dump_state)) {
+        struct yetty_ycore_char_ptr_result dr =
+            yetty_yfigure_dump_state(NULL, (struct yetty_yclass_object *)self->self_obj, indent);
+        if (YETTY_IS_OK(dr)) {
+            return dr.value;
+        }
+        yetty_ycore_error_destroy(dr.error);
     }
     /* Fallback: just rect + dirty. Concrete kinds that haven't migrated
      * to a real dump still produce something testable. */
@@ -480,19 +515,22 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
          * rebuild on the next render — visible as ~100 ms hover lag. */
         struct child_entry *existing;
         HASH_FIND_INT(container->children, &child_id, existing);
-        if (existing && existing->kind == kind && existing->figure->ops->reset_content) {
+        if (existing && existing->kind == kind &&
+            figure_implements(existing->figure,
+                              (yetty_yclass_method_id_t)yetty_yfigure_reset_content)) {
             struct yetty_ycore_void_result rc =
-                existing->figure->ops->reset_content(existing->figure);
+                yetty_yfigure_reset_content(NULL, existing->figure->self_obj);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rc,
                                 "container admin CREATE_CHILD: reset_content");
             existing->figure->rect = rect;
             if (init_bytes > 0) {
-                if (!existing->figure->ops->process_bytes) {
+                if (!figure_implements(existing->figure,
+                                       (yetty_yclass_method_id_t)yetty_yfigure_process_bytes)) {
                     return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: "
                                                        "no process_bytes for non-empty init");
                 }
-                struct yetty_ycore_void_result pr =
-                    existing->figure->ops->process_bytes(existing->figure, body + 28, init_bytes);
+                struct yetty_ycore_void_result pr = yetty_yfigure_process_bytes(
+                    NULL, existing->figure->self_obj, body + 28, init_bytes);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
                                     "container admin CREATE_CHILD: child re-init");
             }
@@ -539,13 +577,13 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
             }
         }
         if (init_bytes > 0) {
-            if (!child->ops->process_bytes) {
+            if (!figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_process_bytes)) {
                 return YETTY_ERR(
                     yetty_ycore_void,
                     "container admin CREATE_CHILD: child has no process_bytes but init_bytes > 0");
             }
             struct yetty_ycore_void_result pr =
-                child->ops->process_bytes(child, body + 28, init_bytes);
+                yetty_yfigure_process_bytes(NULL, child->self_obj, body + 28, init_bytes);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "container admin CREATE_CHILD: child init");
         }
         container->base.dirty = 1;
@@ -685,12 +723,13 @@ static struct yetty_ycore_void_result container_process_bytes(struct yetty_yfigu
             if (!child) {
                 ydebug("container_process_bytes: routed id=%u not bound, skipping %u", hdr.id,
                        hdr.length);
-            } else if (!child->ops->process_bytes) {
+            } else if (!figure_implements(child,
+                                          (yetty_yclass_method_id_t)yetty_yfigure_process_bytes)) {
                 ydebug("container_process_bytes: id=%u no process_bytes, skipping %u", hdr.id,
                        hdr.length);
             } else {
                 struct yetty_ycore_void_result cr =
-                    child->ops->process_bytes(child, payload, hdr.length);
+                    yetty_yfigure_process_bytes(NULL, child->self_obj, payload, hdr.length);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "container_process_bytes: child");
                 child->dirty = 1;
             }
@@ -771,16 +810,6 @@ static char *container_dump(const struct yetty_yfigure_figure *self, int indent)
         }
     }
     return buf;
-}
-
-static const struct yetty_yfigure_figure_ops *container_ops(void)
-{
-    static const struct yetty_yfigure_figure_ops ops = {
-        .process_input = container_process_input,
-        .process_bytes = container_process_bytes,
-        .dump = container_dump,
-    };
-    return &ops;
 }
 
 /*===========================================================================
@@ -892,12 +921,13 @@ struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
          *
          * Note: dump_fp can't see this record's payload because we
          * never buffer it. That's a known cost of the streaming path. */
-        if (child && child->ops->process_input) {
+        if (child &&
+            figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_process_input)) {
             if (dump_fp) {
                 fwrite(&hdr, 1, sizeof(hdr), dump_fp);
                 fwrite("<<streamed>>", 1, 12, dump_fp);
             }
-            dr = child->ops->process_input(child, sm);
+            dr = yetty_yfigure_process_input(NULL, child->self_obj, sm);
             if (YETTY_IS_OK(dr)) {
                 child->dirty = 1;
                 container->base.dirty = 1;
@@ -950,10 +980,11 @@ struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
             dr = handle_admin_bytes(container, payload, hdr.length);
         } else if (!child) {
             ydebug("consume_envelope: id=%u not bound, skipping %u bytes", hdr.id, hdr.length);
-        } else if (!child->ops->process_bytes) {
+        } else if (!figure_implements(child,
+                                      (yetty_yclass_method_id_t)yetty_yfigure_process_bytes)) {
             ydebug("consume_envelope: id=%u no process_bytes / process_input", hdr.id);
         } else {
-            dr = child->ops->process_bytes(child, payload, hdr.length);
+            dr = yetty_yfigure_process_bytes(NULL, child->self_obj, payload, hdr.length);
             if (YETTY_IS_OK(dr)) {
                 child->dirty = 1;
                 container->base.dirty = 1;
@@ -1017,13 +1048,13 @@ struct yetty_ycore_void_result yetty_yfigure_container_add_child(
     if (id == 0) {
         return YETTY_ERR(yetty_ycore_void, "yfigure_container_add_child: id=0 is reserved");
     }
-    /* Boundary check — verify the concrete figure carries an ops vtable.
-     * `render` and `destroy` now dispatch through yclass; the remaining
-     * ops (process_input/process_bytes/…) still use the transitional
-     * vtable, so it must be present. */
-    if (!child->ops) {
+    /* Boundary check — every figure is a yclass object carrying its class
+     * header in self_obj; the container dispatches all of its ops (render,
+     * destroy, process_input, process_bytes, reset_content, dump) through
+     * yclass via that header. */
+    if (!child->self_obj) {
         return YETTY_ERR(yetty_ycore_void,
-                         "yfigure_container_add_child: child ops vtable incomplete");
+                         "yfigure_container_add_child: child has no yclass object");
     }
     struct child_entry *existing;
     HASH_FIND_INT(container->children, &id, existing);
@@ -1198,7 +1229,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_constructor_impl(
      * The yclass header sits in front of the body; YCLASS_TO_CONTAINER
      * advances past it. */
     struct yetty_yfigure_container *container = YCLASS_TO_CONTAINER(obj);
-    container->base.ops = container_ops();
     container->base.self_obj = obj;
     return YETTY_OK_VOID();
 }
@@ -1235,6 +1265,33 @@ static struct yetty_ycore_void_result yetty_yfigure_container_process_records_im
     (void)ctx;
     return yetty_yfigure_container_process_records(YCLASS_TO_CONTAINER(obj), bytes.data,
                                                    bytes.size);
+}
+
+[[clang::annotate("override@yfigure:container:process_input")]]
+static struct yetty_ycore_void_result container_process_input_slot(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ywire_wire_statemachine *statemachine)
+{
+    (void)ctx;
+    return container_process_input((struct yetty_yfigure_figure *)(obj + 1), statemachine);
+}
+
+[[clang::annotate("override@yfigure:container:process_bytes")]]
+static struct yetty_ycore_void_result container_process_bytes_slot(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
+    size_t bytes_len)
+{
+    (void)ctx;
+    return container_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
+}
+
+[[clang::annotate("override@yfigure:container:dump_state")]]
+static struct yetty_ycore_char_ptr_result container_dump_state_slot(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
+{
+    (void)ctx;
+    return YETTY_OK(yetty_ycore_char_ptr,
+                   container_dump((struct yetty_yfigure_figure *)(obj + 1), indent));
 }
 
 #include "container.gen.c"

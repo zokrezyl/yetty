@@ -99,6 +99,7 @@ YETTY_YRESULT_DECLARE(yetty_yclass_method_slot, yetty_yclass_method_slot);
 YETTY_YRESULT_DECLARE(yetty_yclass_impl, yetty_yclass_impl_t);
 YETTY_YRESULT_DECLARE(yetty_yclass_impl_t, yetty_yclass_impl_t);
 YETTY_YRESULT_DECLARE(yetty_yclass_const_char_ptr, const char *);
+YETTY_YRESULT_DECLARE(yetty_yclass_void_ptr, void *); /* opaque ptr (data slice / handle) */
 
 /* --- Per-domain slot_table ---------------------------------------- */
 
@@ -200,5 +201,12 @@ yetty_yclass_type_str(const struct yetty_yclass *cls); /* "regular" or "mixin" *
 
 struct yetty_yclass_object_ptr_result yetty_yclass_object_alloc(const struct yetty_yclass *cls);
 struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_object *obj);
+
+/* Pointer to `cls`'s data slice inside `obj` — the yclass data model
+ * (each class in the chain contributes a slice, parent slices first).
+ * `cls` must be in `obj`'s class chain. Modules wrap this in a typed,
+ * per-class accessor (codegen emits `yetty_<module>_<class>_data`). */
+struct yetty_yclass_void_ptr_result yetty_yclass_object_data(struct yetty_yclass_object *obj,
+                                                             const struct yetty_yclass *cls);
 
 #endif /* YCLASS_CLASS_H */

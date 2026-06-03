@@ -67,7 +67,7 @@
 
 struct [[clang::annotate("class@yshadertoy:figure")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_yshadertoy_figure {
-    struct yetty_yfigure_figure base;
+    struct yetty_yfigure_figure *base;
 
     /* Borrowed. Held to mint the binder on first render (GPU handles),
      * to reach the event loop (anim timer + repaint nudge), and config. */
@@ -99,6 +99,16 @@ yetty_yshadertoy_figure {
     int timer_running;
     struct yetty_yevent_event_listener listener;
 };
+
+/* This kind's own data slice (its fields sit after the figure
+ * base slice in the shared yclass object). */
+static struct yetty_yshadertoy_figure *yshadertoy_figure_from_obj(struct yetty_yclass_object *obj)
+{
+    return (struct yetty_yshadertoy_figure *)yetty_yclass_object_data(
+               obj, yetty_yshadertoy_figure_class_get().value)
+        .value;
+}
+
 
 /* ===========================================================================
  * WGSL assembly
@@ -252,7 +262,7 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
 {
     (void)event;
     struct yetty_yshadertoy_figure *f = figure_from_listener(listener);
-    f->base.dirty = 1;
+    yetty_yfigure_figure_set_dirty(f->base, 1);
     figure_request_render(f);
     return YETTY_OK(yetty_ycore_int, 0);
 }
@@ -315,7 +325,7 @@ static struct yetty_ycore_void_result figure_apply_shader(struct yetty_yshaderto
         f->binder = NULL;
     }
     f->binder_finalized = 0;
-    f->base.dirty = 1;
+    yetty_yfigure_figure_set_dirty(f->base, 1);
     return YETTY_OK_VOID();
 }
 
@@ -339,12 +349,12 @@ static struct yetty_ycore_void_result figure_ensure_binder(struct yetty_yshadert
 static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure *self,
                                                     struct yetty_ydraw_target *target)
 {
-    struct yetty_yshadertoy_figure *f = (struct yetty_yshadertoy_figure *)self;
+    struct yetty_yshadertoy_figure *f = yshadertoy_figure_from_obj((struct yetty_yclass_object *)self - 1);
 
-    float x = self->rect.min.x;
-    float y = self->rect.min.y;
-    float w = self->rect.max.x - self->rect.min.x;
-    float h = self->rect.max.y - self->rect.min.y;
+    float x = yetty_yfigure_figure_rect(self).min.x;
+    float y = yetty_yfigure_figure_rect(self).min.y;
+    float w = yetty_yfigure_figure_rect(self).max.x - yetty_yfigure_figure_rect(self).min.x;
+    float h = yetty_yfigure_figure_rect(self).max.y - yetty_yfigure_figure_rect(self).min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -463,7 +473,7 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
 static struct yetty_ycore_void_result figure_process_bytes(struct yetty_yfigure_figure *self,
                                                            const uint8_t *bytes, size_t bytes_len)
 {
-    struct yetty_yshadertoy_figure *f = (struct yetty_yshadertoy_figure *)self;
+    struct yetty_yshadertoy_figure *f = yshadertoy_figure_from_obj((struct yetty_yclass_object *)self - 1);
     struct yetty_ycore_void_result r = figure_apply_shader(f, (const char *)bytes, bytes_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yshadertoy figure: process_bytes apply");
     figure_request_render(f);
@@ -479,7 +489,7 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yfigure_figure
     if (!self) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yshadertoy_figure *f = (struct yetty_yshadertoy_figure *)self;
+    struct yetty_yshadertoy_figure *f = yshadertoy_figure_from_obj((struct yetty_yclass_object *)self - 1);
     if (f->timer_created && f->event_loop && f->event_loop->ops) {
         if (f->timer_running && f->event_loop->ops->stop_timer) {
             f->event_loop->ops->stop_timer(f->event_loop, f->timer_id);
@@ -518,14 +528,15 @@ static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_ct
     return figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-static const struct yetty_yfigure_figure_ops *figure_ops(void)
+[[clang::annotate("override@yshadertoy:figure:yfigure:process_bytes")]]
+static struct yetty_ycore_void_result figure_process_bytes_slot(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
+    size_t bytes_len)
 {
-    static const struct yetty_yfigure_figure_ops ops = {
-        .process_input = NULL,
-        .process_bytes = figure_process_bytes,
-    };
-    return &ops;
+    (void)ctx;
+    return figure_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
 }
+
 
 /* ===========================================================================
  * Construction — shared by create() and the registry factory.
@@ -547,12 +558,12 @@ static struct yetty_yshadertoy_figure_ptr_result figure_construct(
     if (YETTY_IS_ERR(obj_r)) {
         return YETTY_ERR(yetty_yshadertoy_figure_ptr, "yshadertoy figure: object_alloc", obj_r);
     }
-    struct yetty_yshadertoy_figure *f = (struct yetty_yshadertoy_figure *)(obj_r.value + 1);
+    struct yetty_yshadertoy_figure *f = yshadertoy_figure_from_obj(obj_r.value);
+    f->base = (struct yetty_yfigure_figure *)(obj_r.value + 1);
 
-    f->base.ops = figure_ops();
-    f->base.self_obj = obj_r.value;
-    f->base.rect = rect;
-    f->base.dirty = 1;
+    yetty_yfigure_figure_set_self_obj(f->base, obj_r.value);
+    yetty_yfigure_figure_set_rect(f->base, rect);
+    yetty_yfigure_figure_set_dirty(f->base, 1);
 
     f->context = context;
 

@@ -13,7 +13,7 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_raise_child_by_id_fn)(str
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_records_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_input_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ywire_wire_statemachine *);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_bytes_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, const uint8_t *, size_t);
-typedef struct yetty_ycore_void_result (*yetty_yfigure_reset_content_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
 typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, int);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_reset_content_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
 
 #endif

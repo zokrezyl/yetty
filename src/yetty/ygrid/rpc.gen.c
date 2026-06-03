@@ -137,91 +137,6 @@ static size_t yetty_ygrid_destroy_skel(const void *body, size_t body_len,
     return 1;
 }
 
-static size_t yetty_ygrid_process_bytes_skel(const void *body, size_t body_len,
-                          void *resp, size_t resp_max)
-{
-/* Byte-exact wire layout — #pragma pack matches the first-party
- * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
- * packed attribute. */
-#pragma pack(push, 1)
-    struct {
-        uint64_t obj_handle;
-        uint32_t payload_len;
-    } wire_args;
-#pragma pack(pop)
-    if (body_len < sizeof(wire_args)) return 0;
-    memcpy(&wire_args, body, sizeof(wire_args));
-    if (body_len != sizeof(wire_args) + (size_t)wire_args.payload_len) return 0;
-    size_t body_offset = sizeof(wire_args);
-    struct yetty_ycore_buffer payload_buf = {
-        .data = (uint8_t *)((const uint8_t *)body + body_offset),
-        .size = (size_t)wire_args.payload_len,
-        .capacity = (size_t)wire_args.payload_len,
-    };
-    body_offset += (size_t)wire_args.payload_len;
-    struct yetty_yclass_ctx local_ctx = {0};
-    struct yetty_yclass_void_ptr_result obj_resolve_r =
-        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
-    if (YETTY_IS_ERR(obj_resolve_r)) {
-        yetty_ycore_error_print(stderr,
-            "[skel] yetty_ygrid_process_bytes: handle_resolve", obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
-        if (resp_max < 1) return 0;
-        ((uint8_t *)resp)[0] = 1;
-        return 1;
-    }
-    struct yetty_ycore_void_result call_r = yetty_ygrid_process_bytes(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, payload_buf);
-    if (resp_max < 1) return 0;
-    if (YETTY_IS_ERR(call_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_ygrid_process_bytes", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
-        ((uint8_t *)resp)[0] = 1;
-        return 1;
-    }
-    ((uint8_t *)resp)[0] = 0;
-    return 1;
-}
-
-static size_t yetty_ygrid_reset_content_skel(const void *body, size_t body_len,
-                          void *resp, size_t resp_max)
-{
-/* Byte-exact wire layout — #pragma pack matches the first-party
- * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
- * packed attribute. */
-#pragma pack(push, 1)
-    struct {
-        uint64_t obj_handle;
-    } wire_args;
-#pragma pack(pop)
-    /* Strict length match — both sides regenerate from the same
-     * annotated source; a size mismatch means signature drift, and
-     * silently truncating to the local prefix would let the server
-     * execute against a misaligned struct. */
-    if (body_len != sizeof(wire_args)) return 0;
-    memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
-    struct yetty_yclass_void_ptr_result obj_resolve_r =
-        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
-    if (YETTY_IS_ERR(obj_resolve_r)) {
-        yetty_ycore_error_print(stderr,
-            "[skel] yetty_ygrid_reset_content: handle_resolve", obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
-        if (resp_max < 1) return 0;
-        ((uint8_t *)resp)[0] = 1;
-        return 1;
-    }
-    struct yetty_ycore_void_result call_r = yetty_ygrid_reset_content(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
-    if (resp_max < 1) return 0;
-    if (YETTY_IS_ERR(call_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_ygrid_reset_content", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
-        ((uint8_t *)resp)[0] = 1;
-        return 1;
-    }
-    ((uint8_t *)resp)[0] = 0;
-    return 1;
-}
-
 struct yetty_yclass_object_ptr_result yetty_ygrid_grid_create(struct yetty_yclass_ctx *ctx)
 {
     ydebug("class=yetty_ygrid_grid");
@@ -300,9 +215,7 @@ struct yetty_ygrid_skel_row { const char *name; yetty_yclass_rpc_skel_fn fn; };
 static const struct yetty_ygrid_skel_row yetty_ygrid_skel_rows[] = {
     {"yetty_ygrid_add_record", yetty_ygrid_add_record_skel},
     {"yetty_ygrid_clear", yetty_ygrid_clear_skel},
-    {"yetty_ygrid_destroy", yetty_ygrid_destroy_skel},
-    {"yetty_ygrid_process_bytes", yetty_ygrid_process_bytes_skel},
-    {"yetty_ygrid_reset_content", yetty_ygrid_reset_content_skel}
+    {"yetty_ygrid_destroy", yetty_ygrid_destroy_skel}
 };
 
 static yetty_yclass_rpc_skel_fn yetty_ygrid_skel_lookup(yetty_yclass_method_slot slot)

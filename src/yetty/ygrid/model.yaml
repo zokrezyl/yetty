@@ -31,28 +31,6 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
-  - slot: process_bytes
-    domain: ygrid
-    owning_class: grid
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: payload
-        type: struct yetty_ycore_buffer
-    local: false
-  - slot: reset_content
-    domain: ygrid
-    owning_class: grid
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-    local: false
 classes:
   - name: grid
     domain: ygrid
@@ -81,8 +59,11 @@ classes:
         slot_domain: ygrid
         impl: yetty_ygrid_grid_destroy_impl
       - slot: process_bytes
-        slot_domain: ygrid
+        slot_domain: yfigure
         impl: yetty_ygrid_grid_process_bytes_impl
       - slot: reset_content
-        slot_domain: ygrid
+        slot_domain: yfigure
         impl: yetty_ygrid_grid_reset_content_impl
+      - slot: dump_state
+        slot_domain: yfigure
+        impl: yetty_ygrid_grid_dump_state_impl

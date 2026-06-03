@@ -775,3 +775,52 @@ struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_obje
     free(obj);
     return YETTY_OK_VOID();
 }
+
+/* Byte offset of `target`'s data slice inside an instance of `leaf`. Walks
+ * the chain in the SAME order class_register laid the slices out (class.c
+ * above): direct parent → root (each class's data then its mixins), then
+ * `leaf`'s own data + mixins. SIZE_MAX if `target` isn't in the chain. */
+static size_t class_data_offset(const struct yetty_yclass *leaf, const struct yetty_yclass *target)
+{
+    size_t offset = sizeof(struct yetty_yclass_object);
+    for (const struct yetty_yclass *parent = leaf->parent; parent != NULL;
+         parent = parent->parent) {
+        if (parent == target) {
+            return offset;
+        }
+        offset += parent->desc->data_size;
+        for (size_t mixin = 0; mixin < parent->mixin_count; ++mixin) {
+            if (parent->mixins[mixin] == target) {
+                return offset;
+            }
+            offset += parent->mixins[mixin]->desc->data_size;
+        }
+    }
+    if (leaf == target) {
+        return offset;
+    }
+    offset += leaf->desc->data_size;
+    for (size_t mixin = 0; mixin < leaf->mixin_count; ++mixin) {
+        if (leaf->mixins[mixin] == target) {
+            return offset;
+        }
+        offset += leaf->mixins[mixin]->desc->data_size;
+    }
+    return SIZE_MAX;
+}
+
+struct yetty_yclass_void_ptr_result yetty_yclass_object_data(struct yetty_yclass_object *obj,
+                                                             const struct yetty_yclass *cls)
+{
+    if (!obj || !obj->klass) {
+        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: NULL object");
+    }
+    if (!cls) {
+        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: NULL class");
+    }
+    size_t offset = class_data_offset(obj->klass, cls);
+    if (offset == SIZE_MAX) {
+        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: class not in object's chain");
+    }
+    return YETTY_OK(yetty_yclass_void_ptr, (char *)obj + offset);
+}

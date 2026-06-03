@@ -10,6 +10,8 @@
 static yetty_yfigure_render_fn yetty_yshadertoy_figure_yetty_yfigure_render_check = figure_render_slot;
 [[maybe_unused]]
 static yetty_yfigure_destroy_fn yetty_yshadertoy_figure_yetty_yfigure_destroy_check = figure_destroy_slot;
+[[maybe_unused]]
+static yetty_yfigure_process_bytes_fn yetty_yshadertoy_figure_yetty_yfigure_process_bytes_check = figure_process_bytes_slot;
 
 struct yetty_yclass_ptr_result yetty_yshadertoy_figure_class_get(void)
 {
@@ -25,6 +27,7 @@ struct yetty_yclass_ptr_result yetty_yshadertoy_figure_class_get(void)
     static const struct yetty_yclass_op ops[] = {
         {"yetty_yfigure", "render", (yetty_yclass_method_id_t)yetty_yfigure_render, (yetty_yclass_impl_t)figure_render_slot},
         {"yetty_yfigure", "destroy", (yetty_yclass_method_id_t)yetty_yfigure_destroy, (yetty_yclass_impl_t)figure_destroy_slot},
+        {"yetty_yfigure", "process_bytes", (yetty_yclass_method_id_t)yetty_yfigure_process_bytes, (yetty_yclass_impl_t)figure_process_bytes_slot},
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_yfigure_figure_class_get();
     if (YETTY_IS_ERR(parent_class_r))

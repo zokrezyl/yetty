@@ -21,7 +21,7 @@ struct yetty_ycore_void_result yetty_yfigure_raise_child_by_id(struct yetty_ycla
 struct yetty_ycore_void_result yetty_yfigure_process_records(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yetty_ycore_buffer bytes);
 struct yetty_ycore_void_result yetty_yfigure_process_input(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yetty_ywire_wire_statemachine * statemachine);
 struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, const uint8_t * bytes, size_t bytes_len);
-struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
 struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, int indent);
+struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
 
 #endif

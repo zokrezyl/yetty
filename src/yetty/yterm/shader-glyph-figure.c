@@ -756,15 +756,6 @@ static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_ct
     return figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-static const struct yetty_yfigure_figure_ops *figure_ops(void)
-{
-    static const struct yetty_yfigure_figure_ops ops = {
-        /* No process_input / process_bytes — purely visual, not wire-driven. */
-        .process_input = NULL,
-        .process_bytes = NULL,
-    };
-    return &ops;
-}
 
 /* ===========================================================================
  * Public API
@@ -838,7 +829,6 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
     struct yetty_yterm_shader_glyph_figure *f =
         (struct yetty_yterm_shader_glyph_figure *)(glyph_obj_r.value + 1);
 
-    f->base.ops = figure_ops();
     f->base.self_obj = glyph_obj_r.value;
     f->base.rect = rect;
     /* Start dirty so the first frame uploads the buffer pointer + uniforms. */

@@ -11,7 +11,5 @@ struct yetty_ycore_void_result;
 struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yetty_ycore_buffer record);
 struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
 struct yetty_ycore_void_result yetty_ygrid_destroy(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
-struct yetty_ycore_void_result yetty_ygrid_process_bytes(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yetty_ycore_buffer payload);
-struct yetty_ycore_void_result yetty_ygrid_reset_content(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
 
 #endif

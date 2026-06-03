@@ -784,18 +784,35 @@ static struct yetty_ycore_void_result yrdawn_figure_destroy_slot(struct yetty_yc
     return yrdawn_figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-static const struct yetty_yfigure_figure_ops *yrdawn_figure_ops(void)
+[[clang::annotate("override@yrdawn:figure:yfigure:process_input")]]
+static struct yetty_ycore_void_result yrdawn_figure_process_input_slot(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ywire_wire_statemachine *statemachine)
 {
-    static const struct yetty_yfigure_figure_ops ops = {
-        .process_input = yrdawn_figure_process_input,
-        .process_bytes = yrdawn_figure_process_bytes,
-    };
-    return &ops;
+    (void)ctx;
+    return yrdawn_figure_process_input((struct yetty_yfigure_figure *)(obj + 1), statemachine);
+}
+
+[[clang::annotate("override@yrdawn:figure:yfigure:process_bytes")]]
+static struct yetty_ycore_void_result yrdawn_figure_process_bytes_slot(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
+    size_t bytes_len)
+{
+    (void)ctx;
+    return yrdawn_figure_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
 }
 
 struct yetty_yrdawn_figure *yetty_yrdawn_figure_from_base(struct yetty_yfigure_figure *base)
 {
-    if (!base || base->ops != yrdawn_figure_ops()) {
+    if (!base || !base->self_obj) {
+        return NULL;
+    }
+    struct yetty_yclass_ptr_result cls_r = yetty_yrdawn_figure_class_get();
+    if (YETTY_IS_ERR(cls_r)) {
+        yetty_ycore_error_destroy(cls_r.error);
+        return NULL;
+    }
+    if (base->self_obj->klass != cls_r.value) {
         return NULL;
     }
     return (struct yetty_yrdawn_figure *)base;
@@ -838,7 +855,6 @@ static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_
         yetty_yclass_object_alloc(figure_class_r.value);
     YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_obj_r, "yrdawn_factory: object_alloc");
     struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)(figure_obj_r.value + 1);
-    f->base.ops = yrdawn_figure_ops();
     f->base.self_obj = figure_obj_r.value;
     f->base.rect = rect;
     f->base.dirty = 1;

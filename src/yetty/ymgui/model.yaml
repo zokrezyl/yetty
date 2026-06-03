@@ -17,6 +17,12 @@ classes:
       - slot: destroy
         slot_domain: yfigure
         impl: ymgui_figure_destroy_slot
+      - slot: process_input
+        slot_domain: yfigure
+        impl: ymgui_figure_process_input_slot
+      - slot: process_bytes
+        slot_domain: yfigure
+        impl: ymgui_figure_process_bytes_slot
 exposed:
   - source_file: src/yetty/ymgui/figure.c
     verbatim: "/* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */
