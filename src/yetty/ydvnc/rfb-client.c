@@ -275,38 +275,46 @@ static struct yetty_ycore_void_result process_recv(struct yetty_ydvnc_rfb_client
         enum ydvnc_state st_before = c->state;
 
         switch (c->state) {
-        case YDVNC_ST_PROTO_VERSION:
+        case YDVNC_ST_PROTO_VERSION: {
             struct yetty_ycore_void_result result_279 = handle_proto_version(c);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_279, "proto version handler failed");
             break;
-        case YDVNC_ST_SECURITY_TYPES:
+        }
+        case YDVNC_ST_SECURITY_TYPES: {
             struct yetty_ycore_void_result result_283 = handle_security_types(c);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_283, "security types handler failed");
             break;
-        case YDVNC_ST_SECURITY_REASON:
+        }
+        case YDVNC_ST_SECURITY_REASON: {
             struct yetty_ycore_void_result result_287 = handle_security_reason(c);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_287, "security reason handler failed");
             break;
-        case YDVNC_ST_AUTH_CHALLENGE:
+        }
+        case YDVNC_ST_AUTH_CHALLENGE: {
             struct yetty_ycore_void_result result_291 = handle_auth_challenge(c);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_291, "auth challenge handler failed");
             break;
-        case YDVNC_ST_AUTH_RESULT:
+        }
+        case YDVNC_ST_AUTH_RESULT: {
             struct yetty_ycore_void_result result_295 = handle_auth_result(c);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_295, "auth result handler failed");
             break;
-        case YDVNC_ST_AUTH_FAIL_REASON:
+        }
+        case YDVNC_ST_AUTH_FAIL_REASON: {
             struct yetty_ycore_void_result result_299 = handle_auth_fail_reason(c);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_299, "auth fail reason handler failed");
             break;
-        case YDVNC_ST_SERVER_INIT:
+        }
+        case YDVNC_ST_SERVER_INIT: {
             struct yetty_ycore_void_result result_303 = handle_server_init(c);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_303, "server init handler failed");
             break;
-        case YDVNC_ST_MAIN:
+        }
+        case YDVNC_ST_MAIN: {
             struct yetty_ycore_void_result result_307 = handle_main(c);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_307, "main handler failed");
             break;
+        }
         case YDVNC_ST_DISCONNECTED:
             return YETTY_OK_VOID();
         }
