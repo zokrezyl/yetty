@@ -38,3 +38,67 @@ struct class_ptr_result yanimal_animal_class_get(void)
     cls = _r.value;
     return _r;
 }
+
+struct animal_data *yanimal_animal_data(struct object *obj)
+{
+    if (!obj) {
+        ydebug("yanimal_animal_data: NULL object");
+        return NULL;
+    }
+    struct class_ptr_result class_result = yanimal_animal_class_get();
+    if (YETTY_IS_ERR(class_result)) {
+        yetty_ycore_error_print(stderr, "yanimal_animal_data", class_result.error);
+        yetty_ycore_error_destroy(class_result.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    if (YETTY_IS_ERR(offset_result)) {
+        yetty_ycore_error_print(stderr, "yanimal_animal_data", offset_result.error);
+        yetty_ycore_error_destroy(offset_result.error);
+        return NULL;
+    }
+    return (struct animal_data *)((char *)obj + offset_result.value);
+}
+
+int yanimal_animal_age_get(struct object *obj)
+{
+    struct animal_data *data = yanimal_animal_data(obj);
+    if (!data) {
+        ydebug("yanimal_animal_age_get: no data block for obj=%p", (void *)obj);
+        int fallback = {0};
+        return fallback;
+    }
+    return data->age;
+}
+
+void yanimal_animal_age_set(struct object *obj, int value)
+{
+    struct animal_data *data = yanimal_animal_data(obj);
+    if (!data) {
+        ydebug("yanimal_animal_age_set: no data block for obj=%p", (void *)obj);
+        return;
+    }
+    data->age = value;
+}
+
+int yanimal_animal_energy_get(struct object *obj)
+{
+    struct animal_data *data = yanimal_animal_data(obj);
+    if (!data) {
+        ydebug("yanimal_animal_energy_get: no data block for obj=%p", (void *)obj);
+        int fallback = {0};
+        return fallback;
+    }
+    return data->energy;
+}
+
+void yanimal_animal_energy_set(struct object *obj, int value)
+{
+    struct animal_data *data = yanimal_animal_data(obj);
+    if (!data) {
+        ydebug("yanimal_animal_energy_set: no data block for obj=%p", (void *)obj);
+        return;
+    }
+    data->energy = value;
+}

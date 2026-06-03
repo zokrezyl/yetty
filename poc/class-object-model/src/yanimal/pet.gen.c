@@ -26,3 +26,46 @@ struct class_ptr_result yanimal_pet_mixin_get(void)
     cls = _r.value;
     return _r;
 }
+
+struct pet_data *yanimal_pet_data(struct object *obj)
+{
+    if (!obj) {
+        ydebug("yanimal_pet_data: NULL object");
+        return NULL;
+    }
+    struct class_ptr_result class_result = yanimal_pet_mixin_get();
+    if (YETTY_IS_ERR(class_result)) {
+        yetty_ycore_error_print(stderr, "yanimal_pet_data", class_result.error);
+        yetty_ycore_error_destroy(class_result.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    if (YETTY_IS_ERR(offset_result)) {
+        yetty_ycore_error_print(stderr, "yanimal_pet_data", offset_result.error);
+        yetty_ycore_error_destroy(offset_result.error);
+        return NULL;
+    }
+    return (struct pet_data *)((char *)obj + offset_result.value);
+}
+
+int yanimal_pet_treats_today_get(struct object *obj)
+{
+    struct pet_data *data = yanimal_pet_data(obj);
+    if (!data) {
+        ydebug("yanimal_pet_treats_today_get: no data block for obj=%p", (void *)obj);
+        int fallback = {0};
+        return fallback;
+    }
+    return data->treats_today;
+}
+
+void yanimal_pet_treats_today_set(struct object *obj, int value)
+{
+    struct pet_data *data = yanimal_pet_data(obj);
+    if (!data) {
+        ydebug("yanimal_pet_treats_today_set: no data block for obj=%p", (void *)obj);
+        return;
+    }
+    data->treats_today = value;
+}

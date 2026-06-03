@@ -230,6 +230,54 @@ def _fn_args(decl: dict) -> list:
     return args
 
 
+def _field_access(decl: dict, src: bytes) -> tuple:
+    """Read a data member's `[[clang::annotate(...)]]` attributes and decide
+    which accessors to expose. A member is exposed by annotating it:
+
+        [[clang::annotate("property")]]     read + write  (getter + setter)
+        [[clang::annotate("property:ro")]]  read-only      (getter only)
+        [[clang::annotate("property:wo")]]  write-only     (setter only)
+
+    A member with no `property` annotation stays private — no accessor is
+    generated and only the owning class (which sees the struct definition)
+    can touch it. Returns (emit_getter, emit_setter)."""
+    emit_getter = emit_setter = False
+    for ann in _collect_annotations(decl, src):
+        parts = [p.strip() for p in ann.split(":")]
+        if parts[0] != "property":
+            continue
+        mode = parts[1] if len(parts) > 1 else "rw"
+        if mode == "rw":
+            emit_getter = emit_setter = True
+        elif mode == "ro":
+            emit_getter = True
+        elif mode == "wo":
+            emit_setter = True
+        else:
+            sys.stderr.write(
+                f"error: member '{decl.get('name')}' has property mode "
+                f"'{mode}'; expected rw, ro or wo\n")
+            sys.exit(1)
+    return emit_getter, emit_setter
+
+
+def _record_fields(decl: dict, src: bytes) -> list:
+    """Name, C type and exposed-accessor flags for each member of a data
+    struct. The struct definition never leaves the owning .c; this drives the
+    generated getter/setter API other classes use instead."""
+    fields = []
+    for child in decl.get("inner", []):
+        if child.get("kind") == "FieldDecl":
+            emit_getter, emit_setter = _field_access(child, src)
+            fields.append({
+                "name": child.get("name") or "",
+                "type": child.get("type", {}).get("qualType", ""),
+                "get": emit_getter,
+                "set": emit_setter,
+            })
+    return fields
+
+
 def _parse_return_type(qual_type: str) -> str:
     m = re.match(r"^(.*?)\s*\((.*)\)$", qual_type.strip())
     return m.group(1).strip() if m else qual_type
@@ -269,7 +317,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             classes[name] = {
                 "name": name, "domain": None, "accessor": None, "type": None,
                 "source_file": None, "parent": None, "mixins": [],
-                "data": None, "ops": [],
+                "data": None, "data_fields": [], "ops": [],
             }
         return classes[name]
 
@@ -357,6 +405,9 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                     tag = decl.get("name")
                     if tag:
                         b["data"] = f"struct {tag}"
+                        fields = _record_fields(decl, src)
+                        if fields:
+                            b["data_fields"] = fields
                     for ann in anns:
                         role, args = _split_ann(ann)
                         if role == "parent":
@@ -736,11 +787,107 @@ struct class_ptr_result {accessor}(void)
 """
 
 
+def emit_data_accessor(cls: dict) -> str:
+    """The owning class's data-block handle. Returns `struct <tag> *` — a
+    pointer into the instance located via object_data_offset. The tag is
+    completed only inside the owning .c, so this is dereferenceable there
+    (the class reaching its own members, including private / read-only
+    ones) but opaque everywhere else. Other classes never touch the struct;
+    they use the generated getters/setters. Returns NULL on misuse (NULL
+    obj, or obj's layout does not contain this class) after logging."""
+    tag = data_tag(cls)
+    accessor = cls["accessor"]
+    fn = data_accessor(cls)
+    return f"""\
+struct {tag} *{fn}(struct object *obj)
+{{
+    if (!obj) {{
+        ydebug("{fn}: NULL object");
+        return NULL;
+    }}
+    struct class_ptr_result class_result = {accessor}();
+    if (YETTY_IS_ERR(class_result)) {{
+        yetty_ycore_error_print(stderr, "{fn}", class_result.error);
+        yetty_ycore_error_destroy(class_result.error);
+        return NULL;
+    }}
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    if (YETTY_IS_ERR(offset_result)) {{
+        yetty_ycore_error_print(stderr, "{fn}", offset_result.error);
+        yetty_ycore_error_destroy(offset_result.error);
+        return NULL;
+    }}
+    return (struct {tag} *)((char *)obj + offset_result.value);
+}}
+"""
+
+
+def emit_field_accessors(cls: dict) -> str:
+    """Getter/setter bodies for every `property`-annotated member — the way
+    OTHER classes (subclasses, a mixin's host) read and write this class's
+    members without ever seeing the struct. Each resolves the data block via
+    the owning class's handle, so the same accessor works whatever the
+    most-derived class of `obj` is. A misuse (no such block in obj's layout)
+    logs and yields a zero value / no-op."""
+    tag = data_tag(cls)
+    handle = data_accessor(cls)
+    out = []
+    for field in cls.get("data_fields", []):
+        ftype = field["type"]
+        fname = field["name"]
+        base = field_accessor_base(cls, field)
+        if field.get("get"):
+            out.append(f"""\
+{ftype} {base}_get(struct object *obj)
+{{
+    struct {tag} *data = {handle}(obj);
+    if (!data) {{
+        ydebug("{base}_get: no data block for obj=%p", (void *)obj);
+        {ftype} fallback = {{0}};
+        return fallback;
+    }}
+    return data->{fname};
+}}
+""")
+        if field.get("set"):
+            out.append(f"""\
+void {base}_set(struct object *obj, {ftype} value)
+{{
+    struct {tag} *data = {handle}(obj);
+    if (!data) {{
+        ydebug("{base}_set: no data block for obj=%p", (void *)obj);
+        return;
+    }}
+    data->{fname} = value;
+}}
+""")
+    return "\n".join(out)
+
+
+def field_accessor_decls(cls: dict) -> str:
+    """Public getter/setter prototypes for a class's exposed members."""
+    out = []
+    for field in cls.get("data_fields", []):
+        base = field_accessor_base(cls, field)
+        if field.get("get"):
+            out.append(f"{field['type']} {base}_get(struct object *obj);")
+        if field.get("set"):
+            out.append(f"void {base}_set(struct object *obj, {field['type']} value);")
+    return "\n".join(out)
+
+
 def emit_class_public_headers(model: dict, module: str, include_module_dir: Path):
-    """One generated public header per class. Declares the accessor and
-    pulls the module's public method stubs (sibling header in the same
+    """One generated public header per class. Declares the class accessor
+    and pulls the module's public method stubs (sibling header in the same
     directory) so a single `#include "<module>/<class>.h"` is enough to
-    instantiate AND call methods on that class."""
+    instantiate AND call methods on that class.
+
+    For data, it declares the per-member getters/setters — the ONLY way
+    another class reads or writes this class's members. The struct body is
+    never exposed: just a `struct <tag>` forward declaration and the opaque
+    `<domain>_<class>_data()` handle. Parent/mixin public headers are pulled
+    in so a subclass sees their getters/setters."""
     for cls in model.get("classes", []):
         is_mixin = cls["type"] == "mixin"
         suffix = "_mixin_get" if is_mixin else "_class_get"
@@ -748,6 +895,32 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         name = cls["name"]
         qname = qualified_class(cls)
         guard = f"POC_{module.upper()}_{name.upper()}_H"
+        tag = data_tag(cls)
+
+        relatives = []
+        parent = cls.get("parent")
+        if parent:
+            relatives.append((parent["domain"], parent["name"]))
+        for mixin in cls.get("mixins", []):
+            relatives.append((mixin["domain"], mixin["name"]))
+        # A subclass calls its parent's and mixins' getters/setters, so pull
+        # their public headers in. No struct ever crosses this boundary.
+        relative_includes = "".join(
+            f'#include "{dom}/{rel}.h"\n' for dom, rel in relatives
+        )
+
+        data_block = ""
+        if tag:
+            decls = field_accessor_decls(cls)
+            data_block = (
+                "/* Data-block handle — opaque outside the owning .c. */\n"
+                f"struct {tag};\n"
+                f"struct {tag} *{data_accessor(cls)}(struct object *obj);\n"
+                + (f"/* Member accessors — the public way to reach the data. */\n"
+                   f"{decls}\n" if decls else "")
+                + "\n"
+            )
+
         header_path = include_module_dir / f"{name}.h"
         header_path.write_text(
             HEADER
@@ -756,7 +929,10 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             + f"src/{module}/ instead. */\n"
             + f"#ifndef {guard}\n#define {guard}\n\n"
             + '#include "class.h"\n'
-            + '#include "methods.gen.h"  /* every public method stub in this module */\n\n'
+            + '#include "methods.gen.h"  /* every public method stub in this module */\n'
+            + relative_includes
+            + "\n"
+            + data_block
             + f"struct class_ptr_result {qname}{suffix}(void);\n\n"
             + "#endif\n"
         )
@@ -795,8 +971,15 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
                     needed.add(f"{sd}/methods.gen.h")
         include_block = "".join(f'#include "{h}"\n' for h in sorted(needed))
 
-        body = HEADER + include_block + "\n" \
-             + "\n".join(emit_class_accessor(c) for c in classes)
+        sections = []
+        for c in classes:
+            sections.append(emit_class_accessor(c))
+            if data_tag(c):
+                sections.append(emit_data_accessor(c))
+                field_block = emit_field_accessors(c)
+                if field_block:
+                    sections.append(field_block)
+        body = HEADER + include_block + "\n" + "\n".join(sections)
         inc_path.write_text(body)
 
 

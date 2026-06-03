@@ -30,3 +30,46 @@ struct class_ptr_result yvehicle_motorbike_class_get(void)
     cls = _r.value;
     return _r;
 }
+
+struct motorbike_data *yvehicle_motorbike_data(struct object *obj)
+{
+    if (!obj) {
+        ydebug("yvehicle_motorbike_data: NULL object");
+        return NULL;
+    }
+    struct class_ptr_result class_result = yvehicle_motorbike_class_get();
+    if (YETTY_IS_ERR(class_result)) {
+        yetty_ycore_error_print(stderr, "yvehicle_motorbike_data", class_result.error);
+        yetty_ycore_error_destroy(class_result.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    if (YETTY_IS_ERR(offset_result)) {
+        yetty_ycore_error_print(stderr, "yvehicle_motorbike_data", offset_result.error);
+        yetty_ycore_error_destroy(offset_result.error);
+        return NULL;
+    }
+    return (struct motorbike_data *)((char *)obj + offset_result.value);
+}
+
+int yvehicle_motorbike_has_sidecar_get(struct object *obj)
+{
+    struct motorbike_data *data = yvehicle_motorbike_data(obj);
+    if (!data) {
+        ydebug("yvehicle_motorbike_has_sidecar_get: no data block for obj=%p", (void *)obj);
+        int fallback = {0};
+        return fallback;
+    }
+    return data->has_sidecar;
+}
+
+void yvehicle_motorbike_has_sidecar_set(struct object *obj, int value)
+{
+    struct motorbike_data *data = yvehicle_motorbike_data(obj);
+    if (!data) {
+        ydebug("yvehicle_motorbike_has_sidecar_set: no data block for obj=%p", (void *)obj);
+        return;
+    }
+    data->has_sidecar = value;
+}

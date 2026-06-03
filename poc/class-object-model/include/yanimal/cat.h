@@ -6,6 +6,15 @@
 
 #include "class.h"
 #include "methods.gen.h"  /* every public method stub in this module */
+#include "yanimal/animal.h"
+#include "yanimal/pet.h"
+
+/* Data-block handle — opaque outside the owning .c. */
+struct cat_data;
+struct cat_data *yanimal_cat_data(struct object *obj);
+/* Member accessors — the public way to reach the data. */
+int yanimal_cat_lives_remaining_get(struct object *obj);
+void yanimal_cat_lives_remaining_set(struct object *obj, int value);
 
 struct class_ptr_result yanimal_cat_class_get(void);
 

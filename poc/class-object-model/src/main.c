@@ -38,7 +38,7 @@
         }                                                                                  \
     } while (0)
 
-static void exercise_sportscar(struct ctx *ctx, struct object *obj)
+static void exercise_vehicle(struct ctx *ctx, struct object *obj)
 {
     struct yetty_ycore_void_result vr;
     struct yetty_ycore_int_result ir;
@@ -97,10 +97,22 @@ static void run_client(int fd)
 
     struct object_ptr_result obj_r;
 
+    /* Plain base vehicle — its describe shows the PRIVATE fuel_level member
+     * (no accessor is generated for it; only vehicle's own code can read
+     * it). Subclasses below cannot reach fuel_level at all. */
+    yinfo("=== local vehicle (yvehicle, base) ===");
+    obj_r = yvehicle_vehicle_create(&local);
+    if (YETTY_IS_OK(obj_r)) {
+        exercise_vehicle(&local, obj_r.value);
+        object_free(obj_r.value);
+    } else {
+        ABSORB("local vehicle create", obj_r);
+    }
+
     yinfo("=== local sportscar (yvehicle) ===");
     obj_r = yvehicle_sportscar_create(&local);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_sportscar(&local, obj_r.value);
+        exercise_vehicle(&local, obj_r.value);
         object_free(obj_r.value);
     } else {
         ABSORB("local sportscar create", obj_r);
@@ -118,7 +130,7 @@ static void run_client(int fd)
     yinfo("=== local tuned_sportscar (ytuning extends yvehicle) ===");
     obj_r = ytuning_tuned_sportscar_create(&local);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_sportscar(&local, obj_r.value);
+        exercise_vehicle(&local, obj_r.value);
         object_free(obj_r.value);
     } else {
         ABSORB("local tuned_sportscar create", obj_r);
@@ -127,7 +139,7 @@ static void run_client(int fd)
     yinfo("=== remote sportscar (yvehicle) ===");
     obj_r = yvehicle_sportscar_create(&remote);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_sportscar(&remote, obj_r.value);
+        exercise_vehicle(&remote, obj_r.value);
         free(obj_r.value);
     } else {
         ABSORB("remote sportscar create", obj_r);
@@ -145,7 +157,7 @@ static void run_client(int fd)
     yinfo("=== remote tuned_sportscar (ytuning extends yvehicle) ===");
     obj_r = ytuning_tuned_sportscar_create(&remote);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_sportscar(&remote, obj_r.value);
+        exercise_vehicle(&remote, obj_r.value);
         free(obj_r.value);
     } else {
         ABSORB("remote tuned_sportscar create", obj_r);

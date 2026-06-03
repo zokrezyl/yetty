@@ -41,3 +41,67 @@ struct class_ptr_result yvehicle_vehicle_class_get(void)
     cls = _r.value;
     return _r;
 }
+
+struct vehicle_data *yvehicle_vehicle_data(struct object *obj)
+{
+    if (!obj) {
+        ydebug("yvehicle_vehicle_data: NULL object");
+        return NULL;
+    }
+    struct class_ptr_result class_result = yvehicle_vehicle_class_get();
+    if (YETTY_IS_ERR(class_result)) {
+        yetty_ycore_error_print(stderr, "yvehicle_vehicle_data", class_result.error);
+        yetty_ycore_error_destroy(class_result.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    if (YETTY_IS_ERR(offset_result)) {
+        yetty_ycore_error_print(stderr, "yvehicle_vehicle_data", offset_result.error);
+        yetty_ycore_error_destroy(offset_result.error);
+        return NULL;
+    }
+    return (struct vehicle_data *)((char *)obj + offset_result.value);
+}
+
+int yvehicle_vehicle_mileage_get(struct object *obj)
+{
+    struct vehicle_data *data = yvehicle_vehicle_data(obj);
+    if (!data) {
+        ydebug("yvehicle_vehicle_mileage_get: no data block for obj=%p", (void *)obj);
+        int fallback = {0};
+        return fallback;
+    }
+    return data->mileage;
+}
+
+void yvehicle_vehicle_mileage_set(struct object *obj, int value)
+{
+    struct vehicle_data *data = yvehicle_vehicle_data(obj);
+    if (!data) {
+        ydebug("yvehicle_vehicle_mileage_set: no data block for obj=%p", (void *)obj);
+        return;
+    }
+    data->mileage = value;
+}
+
+int yvehicle_vehicle_speed_get(struct object *obj)
+{
+    struct vehicle_data *data = yvehicle_vehicle_data(obj);
+    if (!data) {
+        ydebug("yvehicle_vehicle_speed_get: no data block for obj=%p", (void *)obj);
+        int fallback = {0};
+        return fallback;
+    }
+    return data->speed;
+}
+
+void yvehicle_vehicle_speed_set(struct object *obj, int value)
+{
+    struct vehicle_data *data = yvehicle_vehicle_data(obj);
+    if (!data) {
+        ydebug("yvehicle_vehicle_speed_set: no data block for obj=%p", (void *)obj);
+        return;
+    }
+    data->speed = value;
+}
