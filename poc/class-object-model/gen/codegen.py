@@ -78,6 +78,28 @@ def op_c_name(op: dict) -> str:
     return f"{op['slot_domain']}_{op['slot']}"
 
 
+def data_tag(cls: dict) -> str:
+    """Struct tag of the class's data block (e.g. "vehicle_data"), or None
+    if the class declares no annotated data struct."""
+    if not cls.get("data"):
+        return None
+    return cls["data"].split()[-1]
+
+
+def data_accessor(cls: dict) -> str:
+    """The owning class's data-block handle — `<domain>_<class>_data`. It
+    returns `struct <tag> *`, but the tag is only completed inside the owning
+    .c, so other translation units get an opaque pointer they cannot
+    dereference. The owning class uses it to reach its own members (including
+    private / read-only ones); everyone else goes through getters/setters."""
+    return f"{cls['domain']}_{cls['name']}_data"
+
+
+def field_accessor_base(cls: dict, field: dict) -> str:
+    """Prefix of a member's getter/setter — `<domain>_<class>_<field>`."""
+    return f"{cls['domain']}_{cls['name']}_{field['name']}"
+
+
 def result_type_id(ret: str) -> str:
     """Map an impl's return type to the YETTY_YRESULT_DECLARE identifier.
     Every impl now returns a Result, so the canonical input here is a
@@ -158,11 +180,22 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
     for d in include_dirs:
         cmd.append(f"-I{d}")
     cmd.append(str(path))
-    r = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if r.returncode != 0:
-        sys.stderr.write(r.stderr)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    # We only need declarations (the annotated data structs + their members,
+    # and the impl function signatures). clang still emits a complete JSON
+    # AST for those even when a function *body* references something not yet
+    # generated — the bootstrap case on a clean tree, where an impl calls a
+    # getter/setter whose header is still a placeholder. So a non-zero exit
+    # is not fatal on its own: parse the JSON regardless, and only bail if
+    # the JSON itself is unusable (a real syntax error that derailed parsing).
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        sys.stderr.write(result.stderr)
+        sys.stderr.write(
+            f"\nerror: clang produced no usable AST for {path} "
+            f"(exit {result.returncode}).\n")
         sys.exit(1)
-    return json.loads(r.stdout)
 
 
 def _annotate_value(attr_node: dict, src: bytes):

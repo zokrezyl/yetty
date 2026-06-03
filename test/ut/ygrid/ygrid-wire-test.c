@@ -72,7 +72,7 @@ static void feed_grid(struct yetty_ygrid_grid *grid, const struct yetty_ydraw_dr
     const uint8_t *bytes = (const uint8_t *)yetty_ydraw_draw_list_data(buf);
     size_t len = yetty_ydraw_draw_list_size(buf);
     struct yetty_ycore_void_result r =
-        yetty_yfigure_process_bytes(NULL, fig->self_obj, bytes, len);
+        yetty_yfigure_process_bytes(NULL, yetty_yfigure_figure_self_obj(fig), bytes, len);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "ygrid process_bytes failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);

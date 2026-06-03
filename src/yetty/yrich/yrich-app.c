@@ -144,11 +144,11 @@ static void handle_event(struct yrich_app *app, const struct yetty_yui_event *ev
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
         destroy_safe(app->target->ops->resize(app->target, vp));
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-        rf->rect = (struct yetty_ycore_rectangle){
+        yetty_yfigure_figure_set_rect(rf, (struct yetty_ycore_rectangle){
             .min = {.x = 0.0f, .y = 0.0f},
             .max = {.x = (float)w, .y = (float)h},
-        };
-        rf->dirty = 1;
+        });
+        yetty_yfigure_figure_set_dirty(rf, 1);
         destroy_safe(push_scene(app));
         return;
     }
@@ -283,7 +283,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
         struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
-        if (!(needs_render || had_events || rrf->dirty)) {
+        if (!(needs_render || had_events || yetty_yfigure_figure_dirty(rrf))) {
             continue;
         }
         destroy_safe(app->target->ops->clear(app->target));
@@ -293,7 +293,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             yerror("yrich-app: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            rrf->dirty = 0;
+            yetty_yfigure_figure_set_dirty(rrf, 0);
         }
         destroy_safe(app->target->ops->present(app->target));
         needs_render = 0;

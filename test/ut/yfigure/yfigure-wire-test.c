@@ -71,10 +71,19 @@ static int g_tests = 0;
 #define TEST_LEAF_KIND 0x70000001u
 
 struct test_leaf {
-    struct yetty_yfigure_figure base;
+    struct yetty_yfigure_figure *base;
     size_t bytes_seen;       /* total bytes through process_bytes */
     uint32_t call_count;     /* number of process_bytes calls */
 };
+
+static struct yetty_yclass_ptr_result test_leaf_class_get(void);
+/* test_leaf's own data slice (after the figure base slice). */
+static struct test_leaf *test_leaf_from_obj(struct yetty_yclass_object *obj)
+{
+    return (struct test_leaf *)yetty_yclass_object_data(
+               obj, test_leaf_class_get().value)
+        .value;
+}
 
 /* test_leaf is a yclass figure (manually registered — test TUs aren't run
  * through codegen). Each slot impl takes the yclass object; the typed body
@@ -102,7 +111,7 @@ static struct yetty_ycore_void_result test_leaf_process_bytes(struct yetty_yclas
 {
     (void)ctx;
     (void)bytes;
-    struct test_leaf *l = (struct test_leaf *)(obj + 1);
+    struct test_leaf *l = test_leaf_from_obj(obj);
     l->bytes_seen += bytes_len;
     l->call_count++;
     return YETTY_OK_VOID();
@@ -112,7 +121,7 @@ static struct yetty_ycore_void_result test_leaf_reset_content(struct yetty_yclas
                                                               struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    struct test_leaf *l = (struct test_leaf *)(obj + 1);
+    struct test_leaf *l = test_leaf_from_obj(obj);
     l->bytes_seen = 0;
     l->call_count = 0;
     return YETTY_OK_VOID();
@@ -122,8 +131,8 @@ static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx
                                                          struct yetty_yclass_object *obj, int indent)
 {
     (void)ctx;
-    const struct test_leaf *l = (const struct test_leaf *)(obj + 1);
-    const struct yetty_yfigure_figure *self = &l->base;
+    const struct test_leaf *l = test_leaf_from_obj(obj);
+    const struct yetty_yfigure_figure *self = l->base;
     char pad[64];
     int n = indent < 0 ? 0 : indent;
     if ((size_t)n + 1 > sizeof(pad)) {
@@ -142,7 +151,7 @@ static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx
              "%srect: [%.1f, %.1f, %.1f, %.1f]\n"
              "%sbytes_seen: %zu\n"
              "%scall_count: %u\n",
-             pad, pad, self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y,
+             pad, pad, yetty_yfigure_figure_rect(self).min.x, yetty_yfigure_figure_rect(self).min.y, yetty_yfigure_figure_rect(self).max.x, yetty_yfigure_figure_rect(self).max.y,
              pad, l->bytes_seen, pad, l->call_count);
     return YETTY_OK(yetty_ycore_char_ptr, buf);
 }
@@ -196,11 +205,12 @@ static struct yetty_yfigure_figure_ptr_result test_leaf_factory(struct yetty_yco
     if (YETTY_IS_ERR(obj_r)) {
         return YETTY_ERR(yetty_yfigure_figure_ptr, "test_leaf_factory: alloc", obj_r);
     }
-    struct test_leaf *l = (struct test_leaf *)(obj_r.value + 1);
-    l->base.self_obj = obj_r.value;
-    l->base.rect = rect;
-    l->base.dirty = 1;
-    return YETTY_OK(yetty_yfigure_figure_ptr, &l->base);
+    struct test_leaf *l = test_leaf_from_obj(obj_r.value);
+    l->base = (struct yetty_yfigure_figure *)(obj_r.value + 1);
+    yetty_yfigure_figure_set_self_obj(l->base, obj_r.value);
+    yetty_yfigure_figure_set_rect(l->base, rect);
+    yetty_yfigure_figure_set_dirty(l->base, 1);
+    return YETTY_OK(yetty_yfigure_figure_ptr, l->base);
 }
 
 /*===========================================================================

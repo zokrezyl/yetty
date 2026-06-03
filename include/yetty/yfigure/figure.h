@@ -18,44 +18,6 @@ struct yetty_ywire_wire_statemachine;
 
 YETTY_YRESULT_DECLARE(yetty_yfigure_figure_ptr, struct yetty_yfigure_figure *);
 
-/* figure is a concrete yclass base class — concrete kinds (container,
- * ygrid, ymgui, …) inherit via `parent@yfigure:figure`. Every figure-base
- * op (render, destroy, process_input, process_bytes, reset_content,
- * dump_state) is a yclass slot dispatched via the object header below;
- * there is no legacy ops vtable. */
-struct yetty_yfigure_figure {
-    /* The owning yclass object header, set by every figure right after
-     * object_alloc (body sits at object + 1, so this equals
-     * `(struct yetty_yclass_object *)figure - 1`). The container routes
-     * render, destroy, process_input, process_bytes and dump through
-     * yclass dispatch via this. */
-    struct yetty_yclass_object *self_obj;
-    /* AABB in target pixel space. Set at construction by the concrete
-     * figure; subsequent moves go through the parent's set_rect so
-     * damage tracking stays correct.
-     *
-     * NOTE: the figure has no `id` field — id is a parent-scoped name
-     * the parent group uses to address its children, not a property of
-     * the child itself. See yetty_yfigure_container_add_child. */
-    struct yetty_ycore_rectangle rect;
-    /* Stacking order within the parent container. Higher z renders
-     * later (in front) and wins hit-tests. Default 0. The parent sorts
-     * its children by (z, insertion-seq) — equal z falls back to
-     * insertion order, so single-z trees behave exactly as before.
-     * Set over the wire via the SET_CHILD_Z admin record; coarse bands
-     * (chrome < floating windows < menus) keep layers from interleaving. */
-    int32_t z;
-    /* When set, the parent container skips this child entirely — no
-     * render, no hit. Lets a producer hide a figure (e.g. a closed
-     * dialog) without deleting it and re-shipping its whole body on the
-     * next show. Toggled over the wire via the SET_CHILD_HIDDEN admin
-     * record. Default 0 (visible). */
-    int hidden;
-    /* Set by the figure when its contents change without geometry
-     * moving. The parent ORs this into its damage region during the
-     * next render pass and clears it after. */
-    int dirty;
-};
 
 /*===========================================================================
  * Group — a figure that contains other figures.
@@ -223,5 +185,16 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_c
  * Caller owns the returned string and frees with free(). NULL on OOM.
  *=========================================================================*/
 char *yetty_yfigure_dump(const struct yetty_yfigure_figure *self, int indent);
+struct yetty_yfigure_figure_ptr_result yetty_yfigure_figure_data(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yfigure_figure_self_obj(const struct yetty_yfigure_figure *fig);
+void yetty_yfigure_figure_set_self_obj(struct yetty_yfigure_figure *fig, struct yetty_yclass_object *self_obj);
+struct yetty_ycore_rectangle yetty_yfigure_figure_rect(const struct yetty_yfigure_figure *fig);
+void yetty_yfigure_figure_set_rect(struct yetty_yfigure_figure *fig, struct yetty_ycore_rectangle rect);
+int32_t yetty_yfigure_figure_z(const struct yetty_yfigure_figure *fig);
+void yetty_yfigure_figure_set_z(struct yetty_yfigure_figure *fig, int32_t z);
+int yetty_yfigure_figure_hidden(const struct yetty_yfigure_figure *fig);
+void yetty_yfigure_figure_set_hidden(struct yetty_yfigure_figure *fig, int hidden);
+int yetty_yfigure_figure_dirty(const struct yetty_yfigure_figure *fig);
+void yetty_yfigure_figure_set_dirty(struct yetty_yfigure_figure *fig, int dirty);
 
 #endif

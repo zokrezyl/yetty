@@ -600,7 +600,7 @@ struct yetty_yshadertoy_figure_ptr_result yetty_yshadertoy_create(
 
 struct yetty_yfigure_figure *yetty_yshadertoy_as_figure(struct yetty_yshadertoy_figure *f)
 {
-    return f ? &f->base : NULL;
+    return f ? f->base : NULL;
 }
 
 struct yetty_ycore_void_result yetty_yshadertoy_set_source(struct yetty_yshadertoy_figure *f,

@@ -46,6 +46,11 @@ typedef uint32_t method_slot;
 
 #define METHOD_SLOT_DOMAIN_BITS 4
 #define METHOD_SLOT_MAX_DOMAINS (1u << METHOD_SLOT_DOMAIN_BITS)
+
+/* Deepest inheritance chain object_data_offset walks (root → derived).
+ * The PoC hierarchies are shallow; this is a generous safety cap. */
+#define OBJECT_MAX_DEPTH 32
+
 #define METHOD_SLOT_INDEX_SHIFT 24
 #define METHOD_SLOT_INDEX_MASK ((1u << METHOD_SLOT_INDEX_SHIFT) - 1)
 #define METHOD_SLOT_DOMAIN_OF(s) (((s) >> METHOD_SLOT_INDEX_SHIFT) & 0xFu)
@@ -153,5 +158,18 @@ void class_for_each_slot(const struct class *cls,
 
 struct object_ptr_result object_alloc(const struct class *cls);
 void object_free(struct object *obj);
+
+/* --- Data-member access ------------------------------------------- */
+
+/* Byte offset (from the object header) of `target`'s data block inside an
+ * instance whose most-derived class is `obj_class`. `target` may be
+ * `obj_class` itself, any ancestor, or any mixin used along the chain. The
+ * walk reproduces the layout object_alloc reserves: object header, then each
+ * class root → derived, each immediately followed by that class's mixins.
+ * Errors if `target` is not in `obj_class`'s layout. The generated per-class
+ * data handle (`<domain>_<class>_data`) and the member getters/setters are
+ * thin typed wrappers over this. */
+struct yetty_ycore_size_result object_data_offset(const struct class *obj_class,
+                                                   const struct class *target);
 
 #endif /* POC_CLASS_H */

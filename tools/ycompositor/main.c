@@ -555,7 +555,7 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
         }
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(app->root);
-        if (!(needs_render || had_events || rf->dirty)) {
+        if (!(needs_render || had_events || yetty_yfigure_figure_dirty(rf))) {
             continue;
         }
 
@@ -571,7 +571,7 @@ ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
             yerror("ycompositor: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            rf->dirty = 0;
+            yetty_yfigure_figure_set_dirty(rf, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) {

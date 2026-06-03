@@ -42,7 +42,7 @@
 
 struct [[clang::annotate("class@ymgui:figure")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_ymgui_figure {
-    struct yetty_yfigure_figure base;
+    struct yetty_yfigure_figure *base;
 
     /* Borrowed — shared shader/pipeline/sampler. */
     struct yetty_ymgui_pipeline *pipeline;
@@ -68,6 +68,16 @@ yetty_ymgui_figure {
     size_t idx_buf_capacity;
     WGPUBindGroup bind_group; /* rebuilt when atlas changes */
 };
+
+/* This kind's own data slice (its fields sit after the figure
+ * base slice in the shared yclass object). */
+static struct yetty_ymgui_figure *ymgui_figure_from_obj(struct yetty_yclass_object *obj)
+{
+    return (struct yetty_ymgui_figure *)yetty_yclass_object_data(
+               obj, yetty_ymgui_figure_class_get().value)
+        .value;
+}
+
 
 /*===========================================================================
  * GPU helpers — lifted from the old ymgui-layer, stripped of all card
@@ -270,7 +280,7 @@ static int frame_upload(struct yetty_ymgui_figure *f, struct cl_offsets *cls, si
 
 static struct yetty_ycore_void_result ymgui_figure_destroy(struct yetty_yfigure_figure *self)
 {
-    struct yetty_ymgui_figure *f = (struct yetty_ymgui_figure *)self;
+    struct yetty_ymgui_figure *f = ymgui_figure_from_obj((struct yetty_yclass_object *)self - 1);
     if (!f) {
         return YETTY_OK_VOID();
     }
@@ -301,10 +311,10 @@ static struct yetty_ycore_void_result ymgui_figure_destroy(struct yetty_yfigure_
 static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_figure *self,
                                                           struct yetty_ydraw_target *target)
 {
-    struct yetty_ymgui_figure *f = (struct yetty_ymgui_figure *)self;
+    struct yetty_ymgui_figure *f = ymgui_figure_from_obj((struct yetty_yclass_object *)self - 1);
     ydebug("ymgui_figure_render: has_frame=%d atlas_ready=%d rect=(%.1f,%.1f)-(%.1f,%.1f)",
-           f->has_frame, f->atlas_ready, self->rect.min.x, self->rect.min.y, self->rect.max.x,
-           self->rect.max.y);
+           f->has_frame, f->atlas_ready, yetty_yfigure_figure_rect(self).min.x, yetty_yfigure_figure_rect(self).min.y, yetty_yfigure_figure_rect(self).max.x,
+           yetty_yfigure_figure_rect(self).max.y);
     if (!f->has_frame || !f->atlas_ready) {
         return YETTY_OK_VOID();
     }
@@ -358,8 +368,8 @@ static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_f
     const struct yetty_ymgui_wire_frame *fh = (const struct yetty_ymgui_wire_frame *)f->frame_bytes;
     float frame_w = fh->display_size_x;
     float frame_h = fh->display_size_y;
-    float ox = self->rect.min.x;
-    float oy = self->rect.min.y;
+    float ox = yetty_yfigure_figure_rect(self).min.x;
+    float oy = yetty_yfigure_figure_rect(self).min.y;
     float uniforms[8] = {frame_w, frame_h, 0.0f, 0.0f, 0, 0, 0, 0};
     wgpuQueueWriteBuffer(f->pipeline->queue, f->uniform_buffer, 0, uniforms, sizeof(uniforms));
 
@@ -390,8 +400,8 @@ static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_f
      * target->viewport tells us the pane the compositor draws into;
      * we honour it as an outer clamp. */
     struct yetty_yrender_viewport vp = target->viewport;
-    float fig_w = self->rect.max.x - self->rect.min.x;
-    float fig_h = self->rect.max.y - self->rect.min.y;
+    float fig_w = yetty_yfigure_figure_rect(self).max.x - yetty_yfigure_figure_rect(self).min.x;
+    float fig_h = yetty_yfigure_figure_rect(self).max.y - yetty_yfigure_figure_rect(self).min.y;
     if (fig_w > 0.0f && fig_h > 0.0f) {
         wgpuRenderPassEncoderSetViewport(pass, ox, oy, fig_w, fig_h, 0.0f, 1.0f);
     }
@@ -400,8 +410,8 @@ static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_f
     float sy0 = oy > vp.y ? oy : vp.y;
     float vp_max_x = vp.x + vp.w;
     float vp_max_y = vp.y + vp.h;
-    float fx1 = self->rect.max.x;
-    float fy1 = self->rect.max.y;
+    float fx1 = yetty_yfigure_figure_rect(self).max.x;
+    float fy1 = yetty_yfigure_figure_rect(self).max.y;
     float sx1 = fx1 < vp_max_x ? fx1 : vp_max_x;
     float sy1 = fy1 < vp_max_y ? fy1 : vp_max_y;
     if (sx1 <= sx0 || sy1 <= sy0) {
@@ -621,7 +631,7 @@ static struct yetty_ycore_void_result stream_tex(struct yetty_ymgui_figure *f,
 static struct yetty_ycore_void_result ymgui_figure_process_input(
     struct yetty_yfigure_figure *self, struct yetty_ywire_wire_statemachine *sm)
 {
-    struct yetty_ymgui_figure *f = (struct yetty_ymgui_figure *)self;
+    struct yetty_ymgui_figure *f = ymgui_figure_from_obj((struct yetty_yclass_object *)self - 1);
     uint32_t tag;
     struct yetty_ycore_void_result r = ymgui_sm_read_exact(sm, &tag, sizeof(tag));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ymgui process_input: tag");
@@ -645,7 +655,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_input(
         f->frame_bytes = NULL;
         f->frame_size = 0;
         f->has_frame = 0;
-        f->base.dirty = 1;
+        yetty_yfigure_figure_set_dirty(f->base, 1);
         return YETTY_OK_VOID();
     case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
     case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
@@ -674,7 +684,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yf
                                                                  const uint8_t *bytes,
                                                                  size_t bytes_len)
 {
-    struct yetty_ymgui_figure *f = (struct yetty_ymgui_figure *)self;
+    struct yetty_ymgui_figure *f = ymgui_figure_from_obj((struct yetty_yclass_object *)self - 1);
     if (bytes_len < 4) {
         return YETTY_ERR(yetty_ycore_void, "ymgui_figure_process_bytes: too small for tag");
     }
@@ -705,7 +715,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yf
         f->frame_bytes = NULL;
         f->frame_size = 0;
         f->has_frame = 0;
-        f->base.dirty = 1;
+        yetty_yfigure_figure_set_dirty(f->base, 1);
         return YETTY_OK_VOID();
     case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
     case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
@@ -779,18 +789,19 @@ struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_yclass_object_ptr_result figure_obj_r =
         yetty_yclass_object_alloc(figure_class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ymgui_figure_ptr, figure_obj_r, "ymgui_figure_create: object_alloc");
-    struct yetty_ymgui_figure *f = (struct yetty_ymgui_figure *)(figure_obj_r.value + 1);
+    struct yetty_ymgui_figure *f = ymgui_figure_from_obj(figure_obj_r.value);
+    f->base = (struct yetty_yfigure_figure *)(figure_obj_r.value + 1);
 
-    f->base.self_obj = figure_obj_r.value;
-    f->base.rect = rect;
-    f->base.dirty = 1;
+    yetty_yfigure_figure_set_self_obj(f->base, figure_obj_r.value);
+    yetty_yfigure_figure_set_rect(f->base, rect);
+    yetty_yfigure_figure_set_dirty(f->base, 1);
     f->pipeline = pipeline;
     return YETTY_OK(yetty_ymgui_figure_ptr, f);
 }
 
 struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base)
 {
-    if (!base || !base->self_obj) {
+    if (!base || !yetty_yfigure_figure_self_obj(base)) {
         return NULL;
     }
     struct yetty_yclass_ptr_result cls_r = yetty_ymgui_figure_class_get();
@@ -798,15 +809,15 @@ struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_fig
         yetty_ycore_error_destroy(cls_r.error);
         return NULL;
     }
-    if (base->self_obj->klass != cls_r.value) {
+    if (yetty_yfigure_figure_self_obj(base)->klass != cls_r.value) {
         return NULL;
     }
-    return (struct yetty_ymgui_figure *)base;
+    return ymgui_figure_from_obj((struct yetty_yclass_object *)base - 1);
 }
 
 struct yetty_yfigure_figure *yetty_ymgui_figure_as_figure(struct yetty_ymgui_figure *f)
 {
-    return &f->base;
+    return f->base;
 }
 
 struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_ymgui_figure *f,
@@ -839,7 +850,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_ymgui_f
     f->frame_bytes = copy;
     f->frame_size = frame_size;
     f->has_frame = 1;
-    f->base.dirty = 1;
+    yetty_yfigure_figure_set_dirty(f->base, 1);
     return YETTY_OK_VOID();
 }
 
@@ -904,7 +915,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_ymgui_f
     f->atlas_w = atlas_w;
     f->atlas_h = atlas_h;
     f->atlas_ready = 1;
-    f->base.dirty = 1;
+    yetty_yfigure_figure_set_dirty(f->base, 1);
     ydebug("ymgui_figure_set_atlas: %ux%u R8", atlas_w, atlas_h);
     return YETTY_OK_VOID();
 }

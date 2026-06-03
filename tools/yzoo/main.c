@@ -98,7 +98,7 @@ static struct yetty_ycore_void_result render_zoo(struct yzoo_app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_zoo: push to grid");
 
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-    rf->dirty = 1;
+    yetty_yfigure_figure_set_dirty(rf, 1);
     return YETTY_OK_VOID();
 }
 
@@ -251,7 +251,7 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
         if (YETTY_IS_ERR(rrr)) {
             yetty_ycore_error_destroy(rrr.error);
         } else {
-            rf->dirty = 0;
+            yetty_yfigure_figure_set_dirty(rf, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
