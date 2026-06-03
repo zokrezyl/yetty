@@ -35,8 +35,8 @@
 #ifndef YCLASS_RPC_H
 #define YCLASS_RPC_H
 
-#include <yclass/class.h>
-#include <yclass/transport.h>
+#include <yetty/yclass/class.h>
+#include <yetty/yclass/transport.h>
 
 #include <stddef.h>
 #include <stdint.h>

@@ -15,7 +15,7 @@
  * headers from the SM and dispatches `length` bytes to the child found
  * by id (or to the container itself when id=0 = admin/self-target).
  */
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>

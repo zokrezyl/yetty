@@ -6,7 +6,7 @@
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_COLLAPSING_HEADER_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_COLLAPSING_HEADER_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ygui/methods.h>
 
 struct yetty_yclass_ptr_result yetty_ygui_collapsing_header_class_get(void);

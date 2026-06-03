@@ -1,10 +1,10 @@
 /* GENERATED — do not edit. */
-#include <yclass/rpc.h>
+#include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 #include "yetty/ygrid/rpc.h"
 #include "yetty/ygrid/methods.h"
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include "yetty/ygrid/grid.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -272,7 +272,7 @@ struct yetty_yclass_object_ptr_result yetty_ygrid_grid_create(struct yetty_yclas
     /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
      * and writing the handle past the header was misaligned on 32-bit
      * ABIs where sizeof(struct yetty_yclass_object) == 4. The proxy
-     * struct in <yclass/class.h> uses natural alignment for both
+     * struct in <yetty/yclass/class.h> uses natural alignment for both
      * fields. The class accessor is the same on both sides — proxies
      * never local-dispatch, so the class's data_size contract isn't
      * honoured for this allocation. */

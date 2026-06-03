@@ -6,7 +6,7 @@
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YJUNGLE_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_YJUNGLE_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ygui/methods.h>
 
 struct yetty_yclass_ptr_result yetty_ygui_yjungle_class_get(void);

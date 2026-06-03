@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus

@@ -6,7 +6,7 @@
 #ifndef YETTY_YCLASSGEN_YFIGURE_CONTAINER_H
 #define YETTY_YCLASSGEN_YFIGURE_CONTAINER_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yfigure/methods.h>
 
 struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void);

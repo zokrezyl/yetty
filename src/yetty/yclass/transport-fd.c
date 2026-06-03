@@ -1,6 +1,6 @@
 /* fd transport — bidirectional byte stream over read(2) / write(2). */
 
-#include <yclass/transport-fd.h>
+#include <yetty/yclass/transport-fd.h>
 
 #include <yetty/ycore/result.h>
 

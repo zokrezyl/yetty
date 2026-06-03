@@ -2,7 +2,7 @@
 #ifndef YETTY_YCLASSGEN_YGRID_METHODS_H
 #define YETTY_YCLASSGEN_YGRID_METHODS_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ycore/types.h>
 #include "yetty/ygrid/types.h"
 

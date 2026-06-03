@@ -6,7 +6,7 @@
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YDRAW_EMBED_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_YDRAW_EMBED_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ygui/methods.h>
 
 struct yetty_yclass_ptr_result yetty_ygui_ydraw_embed_class_get(void);

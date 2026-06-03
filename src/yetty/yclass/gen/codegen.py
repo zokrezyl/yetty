@@ -848,7 +848,7 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
     guard = f"YETTY_YCLASSGEN_{module.upper()}_METHODS_H"
     parts = [HEADER]
     parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
-    parts.append('#include <yclass/class.h>\n')
+    parts.append('#include <yetty/yclass/class.h>\n')
     # ycore/types.h carries the buffer struct codegen recognises as a
     # blob arg. Public-stub signatures use it by value, so the full
     # definition must be in scope — a forward-decl isn't enough.
@@ -1082,7 +1082,7 @@ def emit_methods_c(model: dict, module: str, out_path: Path):
     # the include also works from .gen.c files in subdirs.
     parts = [HEADER,
              f'#include "yetty/{module}/methods.gen.h"\n',
-             '#include <yclass/rpc.h>\n',
+             '#include <yetty/yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ycore/types.h>  /* container_of */\n',
              '#include <yetty/ytrace/ytrace.h>\n',
@@ -1340,7 +1340,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             + " * APIs come from `expose` annotations; types and other header\n"
             + " * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */\n"
             + f"#ifndef {guard}\n#define {guard}\n\n"
-            + '#include <yclass/class.h>\n'
+            + '#include <yetty/yclass/class.h>\n'
             + f'#include <yetty/{module}/methods.h>\n\n'
             + decls + data_decls + method_decls + "\n\n"
             + "#endif\n"
@@ -1374,7 +1374,7 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
     The generator pulls every header the accessor body needs (the
     class's own .h for the prototype, any parent and mixin headers
     for their accessor calls) so the hand-written .c stays minimal —
-    typically only `#include <yclass/class.h>`."""
+    typically only `#include <yetty/yclass/class.h>`."""
     groups: dict = {}
     for c in model["classes"]:
         groups.setdefault(c["source_file"], []).append(c)
@@ -1680,7 +1680,7 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
     /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
      * and writing the handle past the header was misaligned on 32-bit
      * ABIs where sizeof(struct yetty_yclass_object) == 4. The proxy
-     * struct in <yclass/class.h> uses natural alignment for both
+     * struct in <yetty/yclass/class.h> uses natural alignment for both
      * fields. The class accessor is the same on both sides — proxies
      * never local-dispatch, so the class's data_size contract isn't
      * honoured for this allocation. */
@@ -1806,7 +1806,7 @@ def emit_rpc_h(model: dict, module: str, out_path: Path):
     out_path.write_text(
         HEADER
         + f"#ifndef {guard}\n#define {guard}\n\n"
-        + '#include <yclass/rpc.h>\n'
+        + '#include <yetty/yclass/rpc.h>\n'
         + '#include <yetty/ycore/result.h>\n\n'
         + (decls + "\n\n" if decls else "")
         + "/* Installs this module's yclass-RPC server-side discovery hooks\n"
@@ -1826,12 +1826,12 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
         for c in model.get("classes", [])
     )
     parts = [HEADER,
-             '#include <yclass/rpc.h>\n',
+             '#include <yetty/yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ytrace/ytrace.h>\n',
              f'#include "yetty/{module}/rpc.h"\n',
              f'#include "yetty/{module}/methods.h"\n',
-             '#include <yclass/class.h>\n',
+             '#include <yetty/yclass/class.h>\n',
              class_includes,
              '#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n'
              '#include <stdlib.h>\n#include <string.h>\n\n']
@@ -1868,9 +1868,9 @@ def main():
     # Pre-touch placeholders so clang -fsyntax-only can resolve the
     # #includes the annotated sources pull in before the real generated
     # content has been emitted on the very first invocation. Per-class
-    # headers seed with `#include <yclass/class.h>` so the runtime structs
+    # headers seed with `#include <yetty/yclass/class.h>` so the runtime structs
     # (ctx, object, class) are visible during AST parsing.
-    placeholder_class_h = '#include <yclass/class.h>\n'
+    placeholder_class_h = '#include <yetty/yclass/class.h>\n'
     for s in sources:
         if s.suffix == ".c":
             # Place the per-source .gen.c next to its annotated source

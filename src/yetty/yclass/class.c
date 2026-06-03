@@ -11,7 +11,7 @@
  * Every fallible entry point returns a Result. Internal helpers do
  * too, propagating via YETTY_RETURN_IF_ERR. */
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 
 #include <ut/uthash.h>
 #include <yetty/ycore/result.h>

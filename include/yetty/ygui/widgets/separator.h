@@ -6,7 +6,7 @@
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_SEPARATOR_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_SEPARATOR_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ygui/methods.h>
 
 struct yetty_yclass_ptr_result yetty_ygui_separator_class_get(void);

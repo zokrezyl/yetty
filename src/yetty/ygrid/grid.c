@@ -53,7 +53,7 @@
  * file. The codegen-generated grid.gen.c at the foot needs both the
  * class machinery (yclass_ctx, yclass_object) and the per-class
  * accessor/typedef declarations. */
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ygrid/grid.h>
 #include <yetty/yetty/yetty.h>
 

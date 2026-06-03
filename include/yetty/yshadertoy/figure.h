@@ -6,7 +6,7 @@
 #ifndef YETTY_YCLASSGEN_YSHADERTOY_FIGURE_H
 #define YETTY_YCLASSGEN_YSHADERTOY_FIGURE_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yshadertoy/methods.h>
 
 struct yetty_yclass_ptr_result yetty_yshadertoy_figure_class_get(void);

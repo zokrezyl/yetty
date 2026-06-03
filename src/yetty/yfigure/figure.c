@@ -57,6 +57,61 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_destroy(
     return YETTY_OK_VOID();
 }
 
+/* process_input: consume the figure's wire body straight off the SM.
+ * Base default rejects — a purely visual figure ignores wire updates.
+ * The container only routes here for kinds that override it (capability
+ * detected via yetty_yfigure_figure_implements). */
+[[clang::annotate("override@yfigure:figure:process_input")]]
+[[clang::annotate("local@yfigure:process_input")]]
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ywire_wire_statemachine *statemachine)
+{
+    (void)ctx;
+    (void)obj;
+    (void)statemachine;
+    return YETTY_ERR(yetty_ycore_void, "yfigure: process_input not implemented by this figure");
+}
+
+/* process_bytes: apply a buffered wire body. Base default rejects. */
+[[clang::annotate("override@yfigure:figure:process_bytes")]]
+[[clang::annotate("local@yfigure:process_bytes")]]
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_bytes(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
+    size_t bytes_len)
+{
+    (void)ctx;
+    (void)obj;
+    (void)bytes;
+    (void)bytes_len;
+    return YETTY_ERR(yetty_ycore_void, "yfigure: process_bytes not implemented by this figure");
+}
+
+/* reset_content: drop content, keep GPU state. Base default rejects so the
+ * container falls back to destroy + mint for kinds that don't support it. */
+[[clang::annotate("override@yfigure:figure:reset_content")]]
+[[clang::annotate("local@yfigure:reset_content")]]
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_reset_content(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    (void)obj;
+    return YETTY_ERR(yetty_ycore_void, "yfigure: reset_content not implemented by this figure");
+}
+
+/* dump_state: heap text snapshot for tests. Base default yields a NULL
+ * string so the yetty_yfigure_dump wrapper emits its rect fallback. */
+[[clang::annotate("override@yfigure:figure:dump_state")]]
+[[clang::annotate("local@yfigure:dump_state")]]
+static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_state(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
+{
+    (void)ctx;
+    (void)obj;
+    (void)indent;
+    return YETTY_OK(yetty_ycore_char_ptr, NULL);
+}
+
 #include "figure.gen.c"
 
 #ifdef YCLASS_CODEGEN

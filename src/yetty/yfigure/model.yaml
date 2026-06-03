@@ -81,6 +81,54 @@ methods:
       - name: bytes
         type: struct yetty_ycore_buffer
     local: false
+  - slot: process_input
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: statemachine
+        type: "struct yetty_ywire_wire_statemachine *"
+    local: true
+  - slot: process_bytes
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const uint8_t *"
+      - name: bytes_len
+        type: size_t
+    local: true
+  - slot: reset_content
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: dump_state
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: indent
+        type: int
+    local: true
 classes:
   - name: container
     domain: yfigure
@@ -129,6 +177,18 @@ classes:
       - slot: destroy
         slot_domain: yfigure
         impl: yetty_yfigure_figure_default_destroy
+      - slot: process_input
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_process_input
+      - slot: process_bytes
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_process_bytes
+      - slot: reset_content
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_reset_content
+      - slot: dump_state
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_dump_state
 exposed:
   - source_file: src/yetty/yfigure/figure.c
     verbatim: "/* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */

@@ -6,7 +6,7 @@
 #ifndef YETTY_YCLASSGEN_YTERM_SHADER_GLYPH_FIGURE_H
 #define YETTY_YCLASSGEN_YTERM_SHADER_GLYPH_FIGURE_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yterm/methods.h>
 
 struct yetty_yclass_ptr_result yetty_yterm_shader_glyph_class_get(void);

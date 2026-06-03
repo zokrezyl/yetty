@@ -29,7 +29,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/dcs-codes.h>
 #include <yetty/yterm/osc-codes.h>
-#include <yclass/rpc-dcs-server.h>
+#include <yetty/yclass/rpc-dcs-server.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ydraw-factory/figure-factory.h>

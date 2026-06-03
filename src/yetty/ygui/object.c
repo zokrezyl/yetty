@@ -2,7 +2,7 @@
  * ygui-object.c — runtime instance lifecycle + data slice access +
  * super invokers + lifecycle method stubs.
  *
- * Now built on top of <yclass/class.h> — no ygui-side class system.
+ * Now built on top of <yetty/yclass/class.h> — no ygui-side class system.
  * The per-instance memory layout ygui needs (object header followed
  * by every reachable class's data slice in inheritance order) is
  * computed on the fly by walking the yclass parent / mixin chain.
