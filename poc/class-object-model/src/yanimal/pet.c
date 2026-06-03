@@ -1,7 +1,8 @@
 /* Pet mixin — overrides animal_eat with portion control.
  *
  * Reaches its OWN member (treats_today) through the data handle, and the
- * host animal's `energy` through animal's generated getter/setter. */
+ * host animal's `energy` through animal's generated getter/setter. Every
+ * accessor returns a Result, propagated with YETTY_RETURN_IF_ERR. */
 
 #include "class.h"
 #include "result.h"
@@ -20,20 +21,24 @@ struct [[clang::annotate("mixin@yanimal:pet")]] pet_data {
 static struct yetty_ycore_int_result pet_eat(struct ctx *ctx, struct object *obj, float amount)
 {
     (void)ctx;
-    struct pet_data *self = yanimal_pet_data(obj); /* own (mixin) */
-    self->treats_today += 1;
+    struct yanimal_pet_data_ptr_result self = yanimal_pet_data_get(obj); /* own */
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, self, "pet_eat: data block");
+    self.value->treats_today += 1;
 
     /* portion control: at most 0.5kg counts toward energy */
     float effective = amount > 0.5f ? 0.5f : amount;
-    int energy = yanimal_animal_energy_get(obj) + (int)(effective * 20.0f); /* host */
-    if (energy > 100) {
-        energy = 100;
+    struct yetty_ycore_int_result energy = yanimal_animal_energy_get(obj); /* host */
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, energy, "pet_eat: energy get");
+    int fed = energy.value + (int)(effective * 20.0f);
+    if (fed > 100) {
+        fed = 100;
     }
-    yanimal_animal_energy_set(obj, energy);
+    struct yetty_ycore_void_result wr = yanimal_animal_energy_set(obj, fed);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, wr, "pet_eat: energy set");
 
-    ydebug("portion-controlled: %.1fkg requested, treats=%d energy=%d", amount, self->treats_today,
-           energy);
-    return YETTY_OK(yetty_ycore_int, self->treats_today);
+    ydebug("portion-controlled: %.1fkg requested, treats=%d energy=%d", amount,
+           self.value->treats_today, fed);
+    return YETTY_OK(yetty_ycore_int, self.value->treats_today);
 }
 
 #include "pet.gen.c"

@@ -70,17 +70,17 @@ struct yetty_ycore_void_result yetty_yfigure_registry_register(
     return YETTY_OK_VOID();
 }
 
-struct yetty_yfigure_figure_ptr_result yetty_yfigure_registry_mint(
+struct yetty_yfigure_figure_data_ptr_result yetty_yfigure_registry_mint(
     struct yetty_yfigure_registry *registry, uint32_t kind, struct yetty_ycore_rectangle rect,
     const struct yetty_context *context)
 {
     if (!registry) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "yfigure_registry_mint: NULL registry");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yfigure_registry_mint: NULL registry");
     }
     struct kind_entry *e;
     HASH_FIND_INT(registry->kinds, &kind, e);
     if (!e) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "yfigure_registry_mint: kind not registered");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yfigure_registry_mint: kind not registered");
     }
     return e->factory(rect, context, e->user);
 }

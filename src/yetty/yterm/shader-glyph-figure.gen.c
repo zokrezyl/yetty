@@ -2,7 +2,6 @@
 #include "yetty/yfigure/figure.h"
 #include "yetty/yfigure/methods.gen.h"
 #include "yetty/yterm/methods.gen.h"
-#include "yetty/yterm/shader-glyph-figure.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 

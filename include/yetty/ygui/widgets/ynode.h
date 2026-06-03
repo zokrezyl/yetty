@@ -1,8 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `ynode` (module: ygui).
  * Fully generated from the source .c — do not edit. Function
- * APIs come from `expose` annotations; types and other header
- * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
+ * and public-type APIs come from `expose` annotations; the
+ * forward declarations are derived from the prototype types. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YNODE_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_YNODE_H
 
@@ -15,6 +15,8 @@ struct yetty_ygui_object;
 struct node_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_ynode_data_ptr, struct node_data *);
 struct yetty_ygui_ynode_data_ptr_result yetty_ygui_ynode_data(struct yetty_ygui_object *obj);
+
+struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_ynode_reflow(struct yetty_ygui_object *node);
 int yetty_ygui_ynode_pin_pos(const struct yetty_ygui_object *node, int output, int index, float *x, float *y);

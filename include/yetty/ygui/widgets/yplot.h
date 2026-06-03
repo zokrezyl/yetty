@@ -1,8 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `yplot` (module: ygui).
  * Fully generated from the source .c — do not edit. Function
- * APIs come from `expose` annotations; types and other header
- * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
+ * and public-type APIs come from `expose` annotations; the
+ * forward declarations are derived from the prototype types. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YPLOT_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_YPLOT_H
 
@@ -15,6 +15,10 @@ struct yetty_ygui_object;
 struct yplot_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_yplot_data_ptr, struct yplot_data *);
 struct yetty_ygui_yplot_data_ptr_result yetty_ygui_yplot_data(struct yetty_ygui_object *obj);
+
+struct yetty_ygui_object;
+struct yetty_ygui_yplot_config;
+struct yetty_yplot_buffer_input;
 
 #include <stddef.h>
 #include <stdint.h>

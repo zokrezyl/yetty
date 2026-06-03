@@ -109,26 +109,23 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4),
-                        "list: bg");
+    struct yetty_ycore_void_result result_112 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_112, "list: bg");
     for (int i = 0; i < d->n; i++) {
         float y = r.min.y + i * ROW_H;
         if (y > r.max.y) {
             break;
         }
         int on = i == d->selected;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_box(ctx, r.min.x, y, w, ROW_H, on ? COLOR_ROW_ON : COLOR_ROW, 0),
-                            "list: row");
+        struct yetty_ycore_void_result result_120 = yguix_box(ctx, r.min.x, y, w, ROW_H, on ? COLOR_ROW_ON : COLOR_ROW, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_120, "list: row");
         if (on) {
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                yguix_box(ctx, r.min.x, y, 3, ROW_H, COLOR_BAR, 0), "list: bar");
+            struct yetty_ycore_void_result result_124 = yguix_box(ctx, r.min.x, y, 3, ROW_H, COLOR_BAR, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_124, "list: bar");
         }
         float fs = 13.0f;
-        YETTY_RETURN_IF_ERR(
-            yetty_ycore_void,
-            yguix_text(ctx, d->rows[i], r.min.x + 10, y + (ROW_H + fs) * 0.5f - 3, fs, COLOR_TEXT),
-            "list: text");
+        struct yetty_ycore_void_result result_128 = yguix_text(ctx, d->rows[i], r.min.x + 10, y + (ROW_H + fs) * 0.5f - 3, fs, COLOR_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_128, "list: text");
     }
     return YETTY_OK_VOID();
 }

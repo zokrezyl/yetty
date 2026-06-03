@@ -674,10 +674,10 @@ static struct yetty_ycore_void_result yrdawn_figure_render(struct yetty_yfigure_
         return YETTY_OK_VOID();
     }
 
-    float x = yetty_yfigure_figure_rect(self).min.x;
-    float y = yetty_yfigure_figure_rect(self).min.y;
-    float w = yetty_yfigure_figure_rect(self).max.x - yetty_yfigure_figure_rect(self).min.x;
-    float h = yetty_yfigure_figure_rect(self).max.y - yetty_yfigure_figure_rect(self).min.y;
+    float x = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x;
+    float y = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y;
+    float w = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x;
+    float h = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -814,7 +814,7 @@ static struct yetty_ycore_void_result yrdawn_figure_process_bytes_slot(
 
 struct yetty_yrdawn_figure *yetty_yrdawn_figure_from_base(struct yetty_yfigure_figure *base)
 {
-    if (!base || !yetty_yfigure_figure_self_obj(base)) {
+    if (!base || !((struct yetty_yclass_object *)(base) - 1)) {
         return NULL;
     }
     struct yetty_yclass_ptr_result cls_r = yetty_yrdawn_figure_class_get();
@@ -822,7 +822,7 @@ struct yetty_yrdawn_figure *yetty_yrdawn_figure_from_base(struct yetty_yfigure_f
         yetty_ycore_error_destroy(cls_r.error);
         return NULL;
     }
-    if (yetty_yfigure_figure_self_obj(base)->klass != cls_r.value) {
+    if (((struct yetty_yclass_object *)(base) - 1)->klass != cls_r.value) {
         return NULL;
     }
     return yrdawn_figure_from_obj((struct yetty_yclass_object *)base - 1);
@@ -833,21 +833,21 @@ struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_f
     return f->base;
 }
 
-static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_rectangle rect,
+static struct yetty_yfigure_figure_data_ptr_result yrdawn_factory(struct yetty_ycore_rectangle rect,
                                                              const struct yetty_context *context,
                                                              void *user)
 {
     struct yetty_yrdawn_factory_args *args = (struct yetty_yrdawn_factory_args *)user;
     if (!args) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: NULL args");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yrdawn_factory: NULL args");
     }
     if (!context && !args->context) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: no context");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yrdawn_factory: no context");
     }
     if (!args->state) {
         args->state = calloc(1, sizeof(*args->state));
         if (!args->state) {
-            return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: state oom");
+            return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yrdawn_factory: state oom");
         }
     }
     /* args->context may have been registered without a context (tooling).
@@ -860,19 +860,18 @@ static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_
      * (enables yclass dispatch). Typed body lives at obj + 1; the
      * embedded `base` is its first member. */
     struct yetty_yclass_ptr_result figure_class_r = yetty_yrdawn_figure_class_get();
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_class_r, "yrdawn_factory: figure class");
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, figure_class_r, "yrdawn_factory: figure class");
     struct yetty_yclass_object_ptr_result figure_obj_r =
         yetty_yclass_object_alloc(figure_class_r.value);
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_obj_r, "yrdawn_factory: object_alloc");
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, figure_obj_r, "yrdawn_factory: object_alloc");
     struct yetty_yrdawn_figure *f = yrdawn_figure_from_obj(figure_obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(figure_obj_r.value + 1);
-    yetty_yfigure_figure_set_self_obj(f->base, figure_obj_r.value);
-    yetty_yfigure_figure_set_rect(f->base, rect);
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     f->args = args;
     f->target_format = args->context->runtime->gpu.surface_format;
     /* figure_id, session, pipeline assigned when SUB_HELLO arrives. */
-    return YETTY_OK(yetty_yfigure_figure_ptr, f->base);
+    return YETTY_OK(yetty_yfigure_figure_data_ptr, f->base);
 }
 
 struct yetty_ycore_void_result yetty_yrdawn_register_factory(
@@ -1020,7 +1019,7 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width
            height, bytes);
 
     f->has_frame = 1;
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     if (f->args && f->args->request_render_fn) {
         struct yetty_ycore_void_result rr =
             f->args->request_render_fn(f->args->request_render_user);

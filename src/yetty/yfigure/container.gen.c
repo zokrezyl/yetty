@@ -1,5 +1,4 @@
 /* GENERATED — do not edit. */
-#include "yetty/yfigure/container.h"
 #include "yetty/yfigure/figure.h"
 #include "yetty/yfigure/methods.gen.h"
 #include <yetty/ycore/result.h>

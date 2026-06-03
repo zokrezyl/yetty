@@ -9,12 +9,15 @@
 #include "yanimal/animal.h"
 #include "yanimal/pet.h"
 
-/* Data-block handle — opaque outside the owning .c. */
+/* Data-block handle — opaque outside the owning .c. The
+ * struct stays private; only its pointer crosses here, in a
+ * Result so a bad object surfaces rather than corrupting. */
 struct dog_data;
-struct dog_data *yanimal_dog_data(struct object *obj);
+YETTY_YRESULT_DECLARE(yanimal_dog_data_ptr, struct dog_data *);
+struct yanimal_dog_data_ptr_result yanimal_dog_data_get(struct object *obj);
 /* Member accessors — the public way to reach the data. */
-int yanimal_dog_loyalty_get(struct object *obj);
-void yanimal_dog_loyalty_set(struct object *obj, int value);
+struct yetty_ycore_int_result yanimal_dog_loyalty_get(struct object *obj);
+struct yetty_ycore_void_result yanimal_dog_loyalty_set(struct object *obj, int value);
 
 struct class_ptr_result yanimal_dog_class_get(void);
 

@@ -68,8 +68,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4),
-                        "textarea: bg");
+    struct yetty_ycore_void_result result_71 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_71, "textarea: bg");
     if (!d->text || !d->text[0]) {
         return YETTY_OK_VOID();
     }
@@ -88,8 +88,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         }
         memcpy(tmp, p, n);
         tmp[n] = 0;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_text(ctx, tmp, r.min.x + 8, ly, fs, COLOR_TEXT),
-                            "textarea: line");
+        struct yetty_ycore_void_result result_91 = yguix_text(ctx, tmp, r.min.x + 8, ly, fs, COLOR_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_91, "textarea: line");
         ly += fs * 1.3f;
         if (*eol == '\n') {
             eol++;

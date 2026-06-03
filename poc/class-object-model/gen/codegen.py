@@ -87,12 +87,19 @@ def data_tag(cls: dict) -> str:
 
 
 def data_accessor(cls: dict) -> str:
-    """The owning class's data-block handle — `<domain>_<class>_data`. It
-    returns `struct <tag> *`, but the tag is only completed inside the owning
-    .c, so other translation units get an opaque pointer they cannot
-    dereference. The owning class uses it to reach its own members (including
-    private / read-only ones); everyone else goes through getters/setters."""
-    return f"{cls['domain']}_{cls['name']}_data"
+    """The owning class's data-block handle — `<domain>_<class>_data_get`. It
+    returns a `<domain>_<class>_data_ptr_result` wrapping `struct <tag> *`.
+    The tag is only completed inside the owning .c, so other translation
+    units get an opaque pointer they cannot dereference. The owning class
+    uses it to reach its own members (including private / read-only ones);
+    everyone else goes through the getters/setters."""
+    return f"{cls['domain']}_{cls['name']}_data_get"
+
+
+def data_ptr_result_id(cls: dict) -> str:
+    """Result-type identifier for the data handle — `<domain>_<class>_data_ptr`
+    (so the C type is `struct <domain>_<class>_data_ptr_result`)."""
+    return f"{cls['domain']}_{cls['name']}_data_ptr"
 
 
 def field_accessor_base(cls: dict, field: dict) -> str:
@@ -788,37 +795,30 @@ struct class_ptr_result {accessor}(void)
 
 
 def emit_data_accessor(cls: dict) -> str:
-    """The owning class's data-block handle. Returns `struct <tag> *` — a
-    pointer into the instance located via object_data_offset. The tag is
-    completed only inside the owning .c, so this is dereferenceable there
-    (the class reaching its own members, including private / read-only
-    ones) but opaque everywhere else. Other classes never touch the struct;
-    they use the generated getters/setters. Returns NULL on misuse (NULL
-    obj, or obj's layout does not contain this class) after logging."""
+    """The owning class's data-block handle. Returns a Result wrapping
+    `struct <tag> *` — a pointer into the instance located via
+    object_data_offset. Resolving the class or the offset can genuinely fail
+    (NULL obj, or obj is not an instance whose layout contains this class),
+    so the failure is surfaced, never swallowed. The tag is completed only
+    inside the owning .c, so the pointer is dereferenceable there (the class
+    reaching its own members, including private / read-only ones) but opaque
+    everywhere else."""
     tag = data_tag(cls)
     accessor = cls["accessor"]
     fn = data_accessor(cls)
+    rid = data_ptr_result_id(cls)
     return f"""\
-struct {tag} *{fn}(struct object *obj)
+struct {rid}_result {fn}(struct object *obj)
 {{
     if (!obj) {{
-        ydebug("{fn}: NULL object");
-        return NULL;
+        return YETTY_ERR({rid}, "{fn}: NULL object");
     }}
     struct class_ptr_result class_result = {accessor}();
-    if (YETTY_IS_ERR(class_result)) {{
-        yetty_ycore_error_print(stderr, "{fn}", class_result.error);
-        yetty_ycore_error_destroy(class_result.error);
-        return NULL;
-    }}
+    YETTY_RETURN_IF_ERR({rid}, class_result, "{fn}: class accessor failed");
     struct yetty_ycore_size_result offset_result =
         object_data_offset(object_class(obj), class_result.value);
-    if (YETTY_IS_ERR(offset_result)) {{
-        yetty_ycore_error_print(stderr, "{fn}", offset_result.error);
-        yetty_ycore_error_destroy(offset_result.error);
-        return NULL;
-    }}
-    return (struct {tag} *)((char *)obj + offset_result.value);
+    YETTY_RETURN_IF_ERR({rid}, offset_result, "{fn}: object_data_offset failed");
+    return YETTY_OK({rid}, (struct {tag} *)((char *)obj + offset_result.value));
 }}
 """
 
@@ -827,39 +827,34 @@ def emit_field_accessors(cls: dict) -> str:
     """Getter/setter bodies for every `property`-annotated member — the way
     OTHER classes (subclasses, a mixin's host) read and write this class's
     members without ever seeing the struct. Each resolves the data block via
-    the owning class's handle, so the same accessor works whatever the
-    most-derived class of `obj` is. A misuse (no such block in obj's layout)
-    logs and yields a zero value / no-op."""
-    tag = data_tag(cls)
+    the owning class's handle (so it works whatever the most-derived class of
+    `obj` is) and propagates any failure as a Result rather than guessing a
+    value: a getter returns a `<type>_result`, a setter a void result."""
     handle = data_accessor(cls)
+    rid = data_ptr_result_id(cls)
     out = []
     for field in cls.get("data_fields", []):
         ftype = field["type"]
         fname = field["name"]
         base = field_accessor_base(cls, field)
+        getter_rid = result_type_id(ftype)
         if field.get("get"):
             out.append(f"""\
-{ftype} {base}_get(struct object *obj)
+{result_type(ftype)} {base}_get(struct object *obj)
 {{
-    struct {tag} *data = {handle}(obj);
-    if (!data) {{
-        ydebug("{base}_get: no data block for obj=%p", (void *)obj);
-        {ftype} fallback = {{0}};
-        return fallback;
-    }}
-    return data->{fname};
+    struct {rid}_result data = {handle}(obj);
+    YETTY_RETURN_IF_ERR({getter_rid}, data, "{base}_get: data block");
+    return YETTY_OK({getter_rid}, data.value->{fname});
 }}
 """)
         if field.get("set"):
             out.append(f"""\
-void {base}_set(struct object *obj, {ftype} value)
+struct yetty_ycore_void_result {base}_set(struct object *obj, {ftype} value)
 {{
-    struct {tag} *data = {handle}(obj);
-    if (!data) {{
-        ydebug("{base}_set: no data block for obj=%p", (void *)obj);
-        return;
-    }}
-    data->{fname} = value;
+    struct {rid}_result data = {handle}(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "{base}_set: data block");
+    data.value->{fname} = value;
+    return YETTY_OK_VOID();
 }}
 """)
     return "\n".join(out)
@@ -871,9 +866,11 @@ def field_accessor_decls(cls: dict) -> str:
     for field in cls.get("data_fields", []):
         base = field_accessor_base(cls, field)
         if field.get("get"):
-            out.append(f"{field['type']} {base}_get(struct object *obj);")
+            out.append(f"{result_type(field['type'])} {base}_get(struct object *obj);")
         if field.get("set"):
-            out.append(f"void {base}_set(struct object *obj, {field['type']} value);")
+            out.append(
+                f"struct yetty_ycore_void_result {base}_set(struct object *obj, "
+                f"{field['type']} value);")
     return "\n".join(out)
 
 
@@ -912,10 +909,14 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         data_block = ""
         if tag:
             decls = field_accessor_decls(cls)
+            rid = data_ptr_result_id(cls)
             data_block = (
-                "/* Data-block handle — opaque outside the owning .c. */\n"
+                "/* Data-block handle — opaque outside the owning .c. The\n"
+                " * struct stays private; only its pointer crosses here, in a\n"
+                " * Result so a bad object surfaces rather than corrupting. */\n"
                 f"struct {tag};\n"
-                f"struct {tag} *{data_accessor(cls)}(struct object *obj);\n"
+                f"YETTY_YRESULT_DECLARE({rid}, struct {tag} *);\n"
+                f"struct {rid}_result {data_accessor(cls)}(struct object *obj);\n"
                 + (f"/* Member accessors — the public way to reach the data. */\n"
                    f"{decls}\n" if decls else "")
                 + "\n"

@@ -98,38 +98,32 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_OK_VOID();
     }
     float col_w = w / (float)d->n_cols;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4),
-                        "table: bg");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_box(ctx, r.min.x, r.min.y, w, ROW_H, COLOR_HEADER, 0),
-                        "table: header_bg");
+    struct yetty_ycore_void_result result_101 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_101, "table: bg");
+    struct yetty_ycore_void_result result_103 = yguix_box(ctx, r.min.x, r.min.y, w, ROW_H, COLOR_HEADER, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_103, "table: header_bg");
     float fs = 13.0f;
     for (int c = 0; c < d->n_cols; c++) {
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, d->headers[c] ? d->headers[c] : "",
+        struct yetty_ycore_void_result result_108 = yguix_text(ctx, d->headers[c] ? d->headers[c] : "",
                                        r.min.x + c * col_w + 8, r.min.y + (ROW_H + fs) * 0.5f - 3,
-                                       fs, COLOR_HEADER_TEXT),
-                            "table: header");
+                                       fs, COLOR_HEADER_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_108, "table: header");
     }
     /* Separator hairline below header. */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_box(ctx, r.min.x, r.min.y + ROW_H, w, 1, COLOR_BORDER, 0),
-                        "table: hsep");
+    struct yetty_ycore_void_result result_115 = yguix_box(ctx, r.min.x, r.min.y + ROW_H, w, 1, COLOR_BORDER, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_115, "table: hsep");
     for (int rr = 0; rr < d->n_rows; rr++) {
         float ry = r.min.y + (rr + 1) * ROW_H + 1;
         if (ry > r.max.y) {
             break;
         }
-        YETTY_RETURN_IF_ERR(
-            yetty_ycore_void,
-            yguix_box(ctx, r.min.x, ry, w, ROW_H, (rr % 2) ? COLOR_ROW_B : COLOR_ROW_A, 0),
-            "table: row");
+        struct yetty_ycore_void_result result_123 = yguix_box(ctx, r.min.x, ry, w, ROW_H, (rr % 2) ? COLOR_ROW_B : COLOR_ROW_A, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_123, "table: row");
         for (int c = 0; c < d->n_cols; c++) {
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                yguix_text(ctx, d->rows[rr][c] ? d->rows[rr][c] : "",
+            struct yetty_ycore_void_result result_128 = yguix_text(ctx, d->rows[rr][c] ? d->rows[rr][c] : "",
                                            r.min.x + c * col_w + 8, ry + (ROW_H + fs) * 0.5f - 3,
-                                           fs, COLOR_TEXT),
-                                "table: cell");
+                                           fs, COLOR_TEXT);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_128, "table: cell");
         }
     }
     return YETTY_OK_VOID();

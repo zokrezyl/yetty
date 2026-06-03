@@ -73,14 +73,14 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_TRACK, 0),
-                        "splitter: track");
+    struct yetty_ycore_void_result result_76 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_TRACK, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_76, "splitter: track");
     /* Grip dots — three small marks centred. */
     float cx = r.min.x + w * 0.5f;
     float cy = r.min.y + h * 0.5f;
     for (int i = -1; i <= 1; i++) {
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_circle(ctx, cx, cy + i * 6, 2, COLOR_GRIP),
-                            "splitter: dot");
+        struct yetty_ycore_void_result result_82 = yguix_circle(ctx, cx, cy + i * 6, 2, COLOR_GRIP);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_82, "splitter: dot");
     }
     return YETTY_OK_VOID();
 }

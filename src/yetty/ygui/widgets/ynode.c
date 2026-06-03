@@ -335,11 +335,10 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
         .radius_bottom_left = corner,
     };
     uint32_t border = d->selected ? YNODE_BORDER_SEL : YNODE_BORDER;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yetty_ydraw_draw_list_add_cmd_add_rounded_box(
+    struct yetty_ycore_void_result result_338 = yetty_ydraw_draw_list_add_cmd_add_rounded_box(
                             ctx->ygrid_draw_list, 0, 0, YNODE_BG, border, d->selected ? 2.0f : 1.0f,
-                            &frame),
-                        "ynode_paint: frame");
+                            &frame);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_338, "ynode_paint: frame");
 
     /* Title bar — a filled strip across the top. Square bottom corners,
      * rounded top to match the frame. */
@@ -358,17 +357,15 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
             .radius_top_left = 0.0f,
             .radius_bottom_left = corner,
         };
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yetty_ydraw_draw_list_add_cmd_add_rounded_box(
-                                ctx->ygrid_draw_list, 0, 0, YNODE_TITLE_BG, 0, 0.0f, &title),
-                            "ynode_paint: title bar");
+        struct yetty_ycore_void_result result_361 = yetty_ydraw_draw_list_add_cmd_add_rounded_box(
+                                ctx->ygrid_draw_list, 0, 0, YNODE_TITLE_BG, 0, 0.0f, &title);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_361, "ynode_paint: title bar");
         if (d->title && d->title[0]) {
             float font_size = YNODE_TITLE_FONT * zoom;
             float ty = r.min.y + (title_h + font_size) * 0.5f - 2.0f;
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                yguix_text(ctx, d->title, r.min.x + 10.0f * zoom, ty, font_size,
-                                           YNODE_TITLE_FG),
-                                "ynode_paint: title text");
+            struct yetty_ycore_void_result result_368 = yguix_text(ctx, d->title, r.min.x + 10.0f * zoom, ty, font_size,
+                                           YNODE_TITLE_FG);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_368, "ynode_paint: title text");
         }
     }
 
@@ -382,10 +379,8 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
             if (!yetty_ygui_ynode_pin_pos(obj, side, (int)i, &px, &py)) {
                 continue;
             }
-            YETTY_RETURN_IF_ERR(
-                yetty_ycore_void,
-                yguix_circle(ctx, px, py, pin_r, pins[i].color ? pins[i].color : YNODE_PIN),
-                "ynode_paint: pin");
+            struct yetty_ycore_void_result result_385 = yguix_circle(ctx, px, py, pin_r, pins[i].color ? pins[i].color : YNODE_PIN);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_385, "ynode_paint: pin");
         }
     }
 
@@ -406,10 +401,9 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
                 .end_x = xc + sx * far * grip,
                 .end_y = r.max.y - 0.18f * grip,
             };
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                yetty_ydraw_draw_list_add_cmd_add_segment(
-                                    ctx->ygrid_draw_list, 0, 0, 0u, YNODE_GRIP, grip_w, &seg),
-                                "ynode_paint: grip");
+            struct yetty_ycore_void_result result_409 = yetty_ydraw_draw_list_add_cmd_add_segment(
+                                    ctx->ygrid_draw_list, 0, 0, 0u, YNODE_GRIP, grip_w, &seg);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_409, "ynode_paint: grip");
         }
     }
     return YETTY_OK_VOID();

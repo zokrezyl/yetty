@@ -262,7 +262,7 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
 {
     (void)event;
     struct yetty_yshadertoy_figure *f = figure_from_listener(listener);
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     figure_request_render(f);
     return YETTY_OK(yetty_ycore_int, 0);
 }
@@ -325,7 +325,7 @@ static struct yetty_ycore_void_result figure_apply_shader(struct yetty_yshaderto
         f->binder = NULL;
     }
     f->binder_finalized = 0;
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     return YETTY_OK_VOID();
 }
 
@@ -351,10 +351,10 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
 {
     struct yetty_yshadertoy_figure *f = yshadertoy_figure_from_obj((struct yetty_yclass_object *)self - 1);
 
-    float x = yetty_yfigure_figure_rect(self).min.x;
-    float y = yetty_yfigure_figure_rect(self).min.y;
-    float w = yetty_yfigure_figure_rect(self).max.x - yetty_yfigure_figure_rect(self).min.x;
-    float h = yetty_yfigure_figure_rect(self).max.y - yetty_yfigure_figure_rect(self).min.y;
+    float x = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x;
+    float y = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y;
+    float w = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x;
+    float h = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -561,9 +561,8 @@ static struct yetty_yshadertoy_figure_ptr_result figure_construct(
     struct yetty_yshadertoy_figure *f = yshadertoy_figure_from_obj(obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(obj_r.value + 1);
 
-    yetty_yfigure_figure_set_self_obj(f->base, obj_r.value);
-    yetty_yfigure_figure_set_rect(f->base, rect);
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
 
     f->context = context;
 
@@ -620,18 +619,18 @@ struct yetty_ycore_void_result yetty_yshadertoy_set_source(struct yetty_yshadert
  * later via process_bytes (the record's init payload).
  * ========================================================================= */
 
-static struct yetty_yfigure_figure_ptr_result yshadertoy_factory(
+static struct yetty_yfigure_figure_data_ptr_result yshadertoy_factory(
     struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
 {
     (void)user;
     if (!context) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "yshadertoy_factory: no context");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yshadertoy_factory: no context");
     }
     /* No shader yet — the default gradient stands in until the init
      * payload (process_bytes) supplies the real source. */
     struct yetty_yshadertoy_figure_ptr_result fr = figure_construct(rect, NULL, 0, context);
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, fr, "yshadertoy_factory: construct");
-    return YETTY_OK(yetty_yfigure_figure_ptr, &fr.value->base);
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, fr, "yshadertoy_factory: construct");
+    return YETTY_OK(yetty_yfigure_figure_data_ptr, fr.value->base);
 }
 
 struct yetty_ycore_void_result yetty_yshadertoy_register_factory(

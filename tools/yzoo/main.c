@@ -19,6 +19,7 @@
 #include <yetty/yplatform/time.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
@@ -98,7 +99,7 @@ static struct yetty_ycore_void_result render_zoo(struct yzoo_app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_zoo: push to grid");
 
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-    yetty_yfigure_figure_set_dirty(rf, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
     return YETTY_OK_VOID();
 }
 
@@ -251,7 +252,7 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
         if (YETTY_IS_ERR(rrr)) {
             yetty_ycore_error_destroy(rrr.error);
         } else {
-            yetty_yfigure_figure_set_dirty(rf, 0);
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);

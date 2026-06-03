@@ -195,6 +195,8 @@ struct yetty_yclass_ptr_result yetty_yclass_parent(const struct yetty_yclass *cl
 struct yetty_ycore_size_result yetty_yclass_mixin_count(const struct yetty_yclass *cls);
 struct yetty_yclass_ptr_result yetty_yclass_mixin_at(const struct yetty_yclass *cls, size_t index);
 struct yetty_ycore_size_result yetty_yclass_data_size(const struct yetty_yclass *cls);
+struct yetty_ycore_size_result yetty_yclass_object_data_offset(const struct yetty_yclass *leaf,
+                                                               const struct yetty_yclass *cls);
 struct yetty_yclass_const_char_ptr_result yetty_yclass_name(const struct yetty_yclass *cls);
 struct yetty_yclass_const_char_ptr_result
 yetty_yclass_type_str(const struct yetty_yclass *cls); /* "regular" or "mixin" */

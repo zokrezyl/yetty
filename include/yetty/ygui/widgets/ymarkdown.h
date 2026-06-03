@@ -1,8 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `ymarkdown` (module: ygui).
  * Fully generated from the source .c — do not edit. Function
- * APIs come from `expose` annotations; types and other header
- * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
+ * and public-type APIs come from `expose` annotations; the
+ * forward declarations are derived from the prototype types. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_YMARKDOWN_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_YMARKDOWN_H
 
@@ -15,6 +15,8 @@ struct yetty_ygui_object;
 struct ymarkdown_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_ymarkdown_data_ptr, struct ymarkdown_data *);
 struct yetty_ygui_ymarkdown_data_ptr_result yetty_ygui_ymarkdown_data(struct yetty_ygui_object *obj);
+
+struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_source(struct yetty_ygui_object *obj, const char *src, size_t len);
 struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_file(struct yetty_ygui_object *obj, const char *path);

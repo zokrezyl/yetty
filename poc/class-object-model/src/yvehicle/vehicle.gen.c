@@ -42,66 +42,45 @@ struct class_ptr_result yvehicle_vehicle_class_get(void)
     return _r;
 }
 
-struct vehicle_data *yvehicle_vehicle_data(struct object *obj)
+struct yvehicle_vehicle_data_ptr_result yvehicle_vehicle_data_get(struct object *obj)
 {
     if (!obj) {
-        ydebug("yvehicle_vehicle_data: NULL object");
-        return NULL;
+        return YETTY_ERR(yvehicle_vehicle_data_ptr, "yvehicle_vehicle_data_get: NULL object");
     }
     struct class_ptr_result class_result = yvehicle_vehicle_class_get();
-    if (YETTY_IS_ERR(class_result)) {
-        yetty_ycore_error_print(stderr, "yvehicle_vehicle_data", class_result.error);
-        yetty_ycore_error_destroy(class_result.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yvehicle_vehicle_data_ptr, class_result, "yvehicle_vehicle_data_get: class accessor failed");
     struct yetty_ycore_size_result offset_result =
         object_data_offset(object_class(obj), class_result.value);
-    if (YETTY_IS_ERR(offset_result)) {
-        yetty_ycore_error_print(stderr, "yvehicle_vehicle_data", offset_result.error);
-        yetty_ycore_error_destroy(offset_result.error);
-        return NULL;
-    }
-    return (struct vehicle_data *)((char *)obj + offset_result.value);
+    YETTY_RETURN_IF_ERR(yvehicle_vehicle_data_ptr, offset_result, "yvehicle_vehicle_data_get: object_data_offset failed");
+    return YETTY_OK(yvehicle_vehicle_data_ptr, (struct vehicle_data *)((char *)obj + offset_result.value));
 }
 
-int yvehicle_vehicle_mileage_get(struct object *obj)
+struct yetty_ycore_int_result yvehicle_vehicle_mileage_get(struct object *obj)
 {
-    struct vehicle_data *data = yvehicle_vehicle_data(obj);
-    if (!data) {
-        ydebug("yvehicle_vehicle_mileage_get: no data block for obj=%p", (void *)obj);
-        int fallback = {0};
-        return fallback;
-    }
-    return data->mileage;
+    struct yvehicle_vehicle_data_ptr_result data = yvehicle_vehicle_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yvehicle_vehicle_mileage_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->mileage);
 }
 
-void yvehicle_vehicle_mileage_set(struct object *obj, int value)
+struct yetty_ycore_void_result yvehicle_vehicle_mileage_set(struct object *obj, int value)
 {
-    struct vehicle_data *data = yvehicle_vehicle_data(obj);
-    if (!data) {
-        ydebug("yvehicle_vehicle_mileage_set: no data block for obj=%p", (void *)obj);
-        return;
-    }
-    data->mileage = value;
+    struct yvehicle_vehicle_data_ptr_result data = yvehicle_vehicle_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yvehicle_vehicle_mileage_set: data block");
+    data.value->mileage = value;
+    return YETTY_OK_VOID();
 }
 
-int yvehicle_vehicle_speed_get(struct object *obj)
+struct yetty_ycore_int_result yvehicle_vehicle_speed_get(struct object *obj)
 {
-    struct vehicle_data *data = yvehicle_vehicle_data(obj);
-    if (!data) {
-        ydebug("yvehicle_vehicle_speed_get: no data block for obj=%p", (void *)obj);
-        int fallback = {0};
-        return fallback;
-    }
-    return data->speed;
+    struct yvehicle_vehicle_data_ptr_result data = yvehicle_vehicle_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yvehicle_vehicle_speed_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->speed);
 }
 
-void yvehicle_vehicle_speed_set(struct object *obj, int value)
+struct yetty_ycore_void_result yvehicle_vehicle_speed_set(struct object *obj, int value)
 {
-    struct vehicle_data *data = yvehicle_vehicle_data(obj);
-    if (!data) {
-        ydebug("yvehicle_vehicle_speed_set: no data block for obj=%p", (void *)obj);
-        return;
-    }
-    data->speed = value;
+    struct yvehicle_vehicle_data_ptr_result data = yvehicle_vehicle_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yvehicle_vehicle_speed_set: data block");
+    data.value->speed = value;
+    return YETTY_OK_VOID();
 }

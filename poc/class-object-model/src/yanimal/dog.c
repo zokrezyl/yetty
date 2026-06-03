@@ -1,5 +1,6 @@
 /* Dog — animal subclass, uses the pet mixin. Own member (loyalty) via the
- * data handle; parent (animal) + mixin (pet) members via their accessors. */
+ * data handle; parent (animal) + mixin (pet) members via their accessors —
+ * all Result-returning. */
 
 #include "class.h"
 #include "result.h"
@@ -19,15 +20,19 @@ struct [[clang::annotate("class@yanimal:dog")]]
 static struct yetty_ycore_void_result dog_ctor(struct ctx *ctx, struct object *obj)
 {
     (void)ctx;
-    struct dog_data *self = yanimal_dog_data(obj); /* own */
-    self->loyalty = 100;
+    struct yanimal_dog_data_ptr_result self = yanimal_dog_data_get(obj); /* own */
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "dog_ctor: data block");
+    self.value->loyalty = 100;
 
-    yanimal_animal_age_set(obj, 5); /* parent */
-    yanimal_animal_energy_set(obj, 90);
-    yanimal_pet_treats_today_set(obj, 0); /* mixin */
+    struct yetty_ycore_void_result wr;
+    wr = yanimal_animal_age_set(obj, 5); /* parent */
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "dog_ctor: set age");
+    wr = yanimal_animal_energy_set(obj, 90);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "dog_ctor: set energy");
+    wr = yanimal_pet_treats_today_set(obj, 0); /* mixin */
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "dog_ctor: set treats");
 
-    ydebug("obj=%p loyalty=%d age=%d energy=%d", (void *)obj, self->loyalty,
-           yanimal_animal_age_get(obj), yanimal_animal_energy_get(obj));
+    ydebug("obj=%p loyalty=%d", (void *)obj, self.value->loyalty);
     return YETTY_OK_VOID();
 }
 
@@ -35,12 +40,18 @@ static struct yetty_ycore_void_result dog_ctor(struct ctx *ctx, struct object *o
 static struct str_result dog_speak(struct ctx *ctx, struct object *obj, int volume)
 {
     (void)ctx;
-    struct dog_data *self = yanimal_dog_data(obj); /* own */
-    yanimal_animal_energy_set(obj, yanimal_animal_energy_get(obj) - 1);
+    struct yanimal_dog_data_ptr_result self = yanimal_dog_data_get(obj); /* own */
+    YETTY_RETURN_IF_ERR(str, self, "dog_speak: data block");
+    struct yetty_ycore_int_result energy = yanimal_animal_energy_get(obj); /* parent */
+    YETTY_RETURN_IF_ERR(str, energy, "dog_speak: energy get");
+    struct yetty_ycore_void_result wr = yanimal_animal_energy_set(obj, energy.value - 1);
+    YETTY_RETURN_IF_ERR(str, wr, "dog_speak: energy set");
+    struct yetty_ycore_int_result treats = yanimal_pet_treats_today_get(obj); /* mixin */
+    YETTY_RETURN_IF_ERR(str, treats, "dog_speak: treats get");
+
     struct str r;
     snprintf(r.buf, sizeof(r.buf), "dog@%p: woof! energy=%d loyalty=%d treats=%d (volume=%d)",
-             (void *)obj, yanimal_animal_energy_get(obj), self->loyalty,
-             yanimal_pet_treats_today_get(obj), volume);
+             (void *)obj, energy.value - 1, self.value->loyalty, treats.value, volume);
     ydebug("-> '%s'", r.buf);
     return YETTY_OK(str, r);
 }

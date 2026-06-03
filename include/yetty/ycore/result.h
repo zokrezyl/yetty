@@ -144,7 +144,14 @@ size_t yetty_ycore_error_snprint(char *buf, size_t bufsize, struct yetty_ycore_e
  *   struct yetty_yrich_cell_ptr_result cr = ...ensure_cell(s, addr);
  *   YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "set_cell_value: ensure failed");
  *
- * Note: `res` is evaluated twice. Pass a local variable, not a call expression.
+ * `res` is evaluated TWICE — pass a local variable, NOT a call expression.
+ * The macro can't capture `res` into a single local: `type` is the CURRENT
+ * function's result-type id, which is usually DIFFERENT from `res`'s type
+ * (that's the point — it re-wraps an upstream error into this function's
+ * type; e.g. `YETTY_RETURN_IF_ERR(yetty_ycore_void, some_ptr_r, …)`), so a
+ * `struct type##_result` temp can't hold `res`; and `__typeof__(res)` is not
+ * portable to MSVC. Double-evaluating a plain variable is free, so the
+ * contract is simply: assign the call to a variable, then pass the variable.
  */
 #define YETTY_RETURN_IF_ERR(type, res, msg)                                                        \
     do {                                                                                           \

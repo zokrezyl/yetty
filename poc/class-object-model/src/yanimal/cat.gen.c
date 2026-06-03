@@ -39,45 +39,30 @@ struct class_ptr_result yanimal_cat_class_get(void)
     return _r;
 }
 
-struct cat_data *yanimal_cat_data(struct object *obj)
+struct yanimal_cat_data_ptr_result yanimal_cat_data_get(struct object *obj)
 {
     if (!obj) {
-        ydebug("yanimal_cat_data: NULL object");
-        return NULL;
+        return YETTY_ERR(yanimal_cat_data_ptr, "yanimal_cat_data_get: NULL object");
     }
     struct class_ptr_result class_result = yanimal_cat_class_get();
-    if (YETTY_IS_ERR(class_result)) {
-        yetty_ycore_error_print(stderr, "yanimal_cat_data", class_result.error);
-        yetty_ycore_error_destroy(class_result.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yanimal_cat_data_ptr, class_result, "yanimal_cat_data_get: class accessor failed");
     struct yetty_ycore_size_result offset_result =
         object_data_offset(object_class(obj), class_result.value);
-    if (YETTY_IS_ERR(offset_result)) {
-        yetty_ycore_error_print(stderr, "yanimal_cat_data", offset_result.error);
-        yetty_ycore_error_destroy(offset_result.error);
-        return NULL;
-    }
-    return (struct cat_data *)((char *)obj + offset_result.value);
+    YETTY_RETURN_IF_ERR(yanimal_cat_data_ptr, offset_result, "yanimal_cat_data_get: object_data_offset failed");
+    return YETTY_OK(yanimal_cat_data_ptr, (struct cat_data *)((char *)obj + offset_result.value));
 }
 
-int yanimal_cat_lives_remaining_get(struct object *obj)
+struct yetty_ycore_int_result yanimal_cat_lives_remaining_get(struct object *obj)
 {
-    struct cat_data *data = yanimal_cat_data(obj);
-    if (!data) {
-        ydebug("yanimal_cat_lives_remaining_get: no data block for obj=%p", (void *)obj);
-        int fallback = {0};
-        return fallback;
-    }
-    return data->lives_remaining;
+    struct yanimal_cat_data_ptr_result data = yanimal_cat_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yanimal_cat_lives_remaining_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->lives_remaining);
 }
 
-void yanimal_cat_lives_remaining_set(struct object *obj, int value)
+struct yetty_ycore_void_result yanimal_cat_lives_remaining_set(struct object *obj, int value)
 {
-    struct cat_data *data = yanimal_cat_data(obj);
-    if (!data) {
-        ydebug("yanimal_cat_lives_remaining_set: no data block for obj=%p", (void *)obj);
-        return;
-    }
-    data->lives_remaining = value;
+    struct yanimal_cat_data_ptr_result data = yanimal_cat_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yanimal_cat_lives_remaining_set: data block");
+    data.value->lives_remaining = value;
+    return YETTY_OK_VOID();
 }

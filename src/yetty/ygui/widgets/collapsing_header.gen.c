@@ -1,6 +1,5 @@
 /* GENERATED — do not edit. */
 #include "yetty/ygui/methods.gen.h"
-#include "yetty/ygui/widgets/collapsing_header.h"
 #include "yetty/ygui/widgets/vbox.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>

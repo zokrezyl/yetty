@@ -128,6 +128,27 @@ classes:
     parent: null
     mixins: []
     data: struct clickable_data
+    data_fields:
+      - name: pressed
+        type: int
+        get: false
+        set: false
+      - name: press_x
+        type: float
+        get: false
+        set: false
+      - name: press_y
+        type: float
+        get: false
+        set: false
+      - name: on_click
+        type: yetty_ygui_click_cb
+        get: false
+        set: false
+      - name: userdata
+        type: "void *"
+        get: false
+        set: false
     ops:
       - slot: widget_on_press
         slot_domain: ygui
@@ -143,6 +164,27 @@ classes:
     parent: null
     mixins: []
     data: struct draggable_data
+    data_fields:
+      - name: dragging
+        type: int
+        get: false
+        set: false
+      - name: last_x
+        type: float
+        get: false
+        set: false
+      - name: last_y
+        type: float
+        get: false
+        set: false
+      - name: on_drag
+        type: yetty_ygui_drag_cb
+        get: false
+        set: false
+      - name: userdata
+        type: "void *"
+        get: false
+        set: false
     ops:
       - slot: widget_on_press
         slot_domain: ygui
@@ -163,6 +205,11 @@ classes:
       name: widget
     mixins: []
     data: struct primitive_widget_data
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
     ops:
       - slot: widget_emit_body
         slot_domain: ygui
@@ -175,6 +222,23 @@ classes:
     parent: null
     mixins: []
     data: struct yetty_ygui_widget_data
+    data_fields:
+      - name: rect
+        type: struct yetty_ycore_rectangle
+        get: false
+        set: false
+      - name: layout
+        type: struct yetty_ygui_layout
+        get: false
+        set: false
+      - name: bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: scroll_main
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -213,6 +277,19 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct bc_data
+    data_fields:
+      - name: items
+        type: "char **"
+        get: false
+        set: false
+      - name: n_items
+        type: int
+        get: false
+        set: false
+      - name: cap
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -235,6 +312,11 @@ classes:
       - domain: ygui
         name: clickable
     data: struct button_data
+    data_fields:
+      - name: label
+        type: "char *"
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -257,6 +339,15 @@ classes:
       - domain: ygui
         name: clickable
     data: struct checkbox_data
+    data_fields:
+      - name: label
+        type: "char *"
+        get: false
+        set: false
+      - name: checked
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -279,6 +370,15 @@ classes:
       - domain: ygui
         name: clickable
     data: struct chip_data
+    data_fields:
+      - name: label
+        type: "char *"
+        get: false
+        set: false
+      - name: closable
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -299,6 +399,19 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct cb_data
+    data_fields:
+      - name: rows
+        type: "struct cb_row *"
+        get: false
+        set: false
+      - name: n
+        type: int
+        get: false
+        set: false
+      - name: cap
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -322,6 +435,19 @@ classes:
       name: vbox
     mixins: []
     data: struct ch_data
+    data_fields:
+      - name: title
+        type: "char *"
+        get: false
+        set: false
+      - name: open
+        type: int
+        get: false
+        set: false
+      - name: open_height
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -345,6 +471,11 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct cp_data
+    data_fields:
+      - name: color
+        type: uint32_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -364,6 +495,15 @@ classes:
       - domain: ygui
         name: clickable
     data: struct combo_data
+    data_fields:
+      - name: text
+        type: "char *"
+        get: false
+        set: false
+      - name: menu
+        type: "struct yetty_ygui_object *"
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -384,6 +524,27 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct dp_data
+    data_fields:
+      - name: shown_year
+        type: int
+        get: false
+        set: false
+      - name: shown_month
+        type: int
+        get: false
+        set: false
+      - name: sel_year
+        type: int
+        get: false
+        set: false
+      - name: sel_month
+        type: int
+        get: false
+        set: false
+      - name: sel_day
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -404,6 +565,15 @@ classes:
       name: vbox
     mixins: []
     data: struct dialog_data
+    data_fields:
+      - name: title
+        type: "char *"
+        get: false
+        set: false
+      - name: open
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -426,6 +596,27 @@ classes:
       - domain: ygui
         name: clickable
     data: struct dropdown_data
+    data_fields:
+      - name: options
+        type: "char **"
+        get: false
+        set: false
+      - name: n_options
+        type: int
+        get: false
+        set: false
+      - name: cap
+        type: int
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
+      - name: menu
+        type: "struct yetty_ygui_object *"
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -446,6 +637,35 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct fp_data
+    data_fields:
+      - name: cwd
+        type: "char *"
+        get: false
+        set: false
+      - name: entries
+        type: "char **"
+        get: false
+        set: false
+      - name: entry_count
+        type: int
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
+      - name: scroll
+        type: int
+        get: false
+        set: false
+      - name: press_y
+        type: float
+        get: false
+        set: false
+      - name: press_scroll
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -475,6 +695,11 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct hbox_data
+    data_fields:
+      - name: _empty
+        type: char
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -489,6 +714,19 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct label_data
+    data_fields:
+      - name: text
+        type: "char *"
+        get: false
+        set: false
+      - name: font_size
+        type: float
+        get: false
+        set: false
+      - name: color
+        type: struct yetty_ycore_rgba
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -509,6 +747,23 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct list_data
+    data_fields:
+      - name: rows
+        type: "char **"
+        get: false
+        set: false
+      - name: n
+        type: int
+        get: false
+        set: false
+      - name: cap
+        type: int
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -532,6 +787,11 @@ classes:
       name: hbox
     mixins: []
     data: struct menubar_data
+    data_fields:
+      - name: _empty
+        type: char
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -546,6 +806,19 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct panel_data
+    data_fields:
+      - name: bg
+        type: struct yetty_ycore_rgba
+        get: false
+        set: false
+      - name: border
+        type: struct yetty_ycore_rgba
+        get: false
+        set: false
+      - name: border_width
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -563,6 +836,39 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct popup_menu_data
+    data_fields:
+      - name: items
+        type: "struct menu_item *"
+        get: false
+        set: false
+      - name: n_items
+        type: int
+        get: false
+        set: false
+      - name: cap
+        type: int
+        get: false
+        set: false
+      - name: open
+        type: int
+        get: false
+        set: false
+      - name: hover_index
+        type: int
+        get: false
+        set: false
+      - name: width
+        type: float
+        get: false
+        set: false
+      - name: title
+        type: "char *"
+        get: false
+        set: false
+      - name: modal
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -589,6 +895,15 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct progress_data
+    data_fields:
+      - name: value
+        type: float
+        get: false
+        set: false
+      - name: accent
+        type: uint32_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -608,6 +923,15 @@ classes:
       - domain: ygui
         name: clickable
     data: struct radio_data
+    data_fields:
+      - name: label
+        type: "char *"
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -628,6 +952,19 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct rich_data
+    data_fields:
+      - name: lines
+        type: "struct rich_line *"
+        get: false
+        set: false
+      - name: n_lines
+        type: int
+        get: false
+        set: false
+      - name: cap
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -650,6 +987,19 @@ classes:
       - domain: ygui
         name: draggable
     data: struct scrollarea_data
+    data_fields:
+      - name: offset
+        type: float
+        get: false
+        set: false
+      - name: max_offset
+        type: float
+        get: false
+        set: false
+      - name: thumb_travel
+        type: float
+        get: false
+        set: false
     ops:
       - slot: widget_on_scroll
         slot_domain: ygui
@@ -672,6 +1022,15 @@ classes:
       - domain: ygui
         name: clickable
     data: struct sel_data
+    data_fields:
+      - name: text
+        type: "char *"
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -692,6 +1051,11 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct separator_data
+    data_fields:
+      - name: _empty
+        type: char
+        get: false
+        set: false
     ops:
       - slot: widget_paint
         slot_domain: ygui
@@ -706,6 +1070,19 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct slider_data
+    data_fields:
+      - name: min_val
+        type: float
+        get: false
+        set: false
+      - name: max_val
+        type: float
+        get: false
+        set: false
+      - name: value
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -729,6 +1106,23 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct spinner_data
+    data_fields:
+      - name: value
+        type: float
+        get: false
+        set: false
+      - name: min_v
+        type: float
+        get: false
+        set: false
+      - name: max_v
+        type: float
+        get: false
+        set: false
+      - name: step
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -749,6 +1143,23 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct splitter_data
+    data_fields:
+      - name: axis_plus1
+        type: int
+        get: false
+        set: false
+      - name: min_size
+        type: float
+        get: false
+        set: false
+      - name: change_cb
+        type: yetty_ygui_splitter_change_cb
+        get: false
+        set: false
+      - name: change_userdata
+        type: "void *"
+        get: false
+        set: false
     ops:
       - slot: widget_paint
         slot_domain: ygui
@@ -769,6 +1180,15 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct statusbar_data
+    data_fields:
+      - name: left
+        type: "char *"
+        get: false
+        set: false
+      - name: right
+        type: "char *"
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -789,6 +1209,23 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct stepper_data
+    data_fields:
+      - name: labels
+        type: "char **"
+        get: false
+        set: false
+      - name: n
+        type: int
+        get: false
+        set: false
+      - name: cap
+        type: int
+        get: false
+        set: false
+      - name: current
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -809,6 +1246,31 @@ classes:
       name: hbox
     mixins: []
     data: struct tabbar_data
+    data_fields:
+      - name: active_index
+        type: int
+        get: false
+        set: false
+      - name: close_cb
+        type: yetty_ygui_tab_close_cb
+        get: false
+        set: false
+      - name: close_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: new_tab_cb
+        type: yetty_ygui_tab_new_cb
+        get: false
+        set: false
+      - name: new_tab_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: plus_pressed
+        type: int
+        get: false
+        set: false
     ops:
       - slot: widget_on_press
         slot_domain: ygui
@@ -832,6 +1294,27 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct table_data
+    data_fields:
+      - name: headers
+        type: "char **"
+        get: false
+        set: false
+      - name: n_cols
+        type: int
+        get: false
+        set: false
+      - name: rows
+        type: "char ***"
+        get: false
+        set: false
+      - name: n_rows
+        type: int
+        get: false
+        set: false
+      - name: rows_cap
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -852,6 +1335,11 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct textarea_data
+    data_fields:
+      - name: text
+        type: "char *"
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -874,6 +1362,31 @@ classes:
       - domain: ygui
         name: clickable
     data: struct textinput_data
+    data_fields:
+      - name: text
+        type: "char *"
+        get: false
+        set: false
+      - name: text_len
+        type: size_t
+        get: false
+        set: false
+      - name: cap
+        type: size_t
+        get: false
+        set: false
+      - name: placeholder
+        type: "char *"
+        get: false
+        set: false
+      - name: focused
+        type: int
+        get: false
+        set: false
+      - name: cursor
+        type: size_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -896,6 +1409,15 @@ classes:
       - domain: ygui
         name: clickable
     data: struct toggle_data
+    data_fields:
+      - name: label
+        type: "char *"
+        get: false
+        set: false
+      - name: on
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -916,6 +1438,11 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct tooltip_data
+    data_fields:
+      - name: text
+        type: "char *"
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -936,6 +1463,23 @@ classes:
       name: vbox
     mixins: []
     data: struct tn_data
+    data_fields:
+      - name: label
+        type: "char *"
+        get: false
+        set: false
+      - name: open
+        type: int
+        get: false
+        set: false
+      - name: on_toggle
+        type: yetty_ygui_click_cb
+        get: false
+        set: false
+      - name: on_toggle_ud
+        type: "void *"
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -959,6 +1503,11 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct vbox_data
+    data_fields:
+      - name: _empty
+        type: char
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -973,6 +1522,43 @@ classes:
       name: vbox
     mixins: []
     data: struct window_data
+    data_fields:
+      - name: title
+        type: "char *"
+        get: false
+        set: false
+      - name: body
+        type: "struct yetty_ygui_object *"
+        get: false
+        set: false
+      - name: menu
+        type: "struct yetty_ygui_object *"
+        get: false
+        set: false
+      - name: closable
+        type: int
+        get: false
+        set: false
+      - name: dragging
+        type: int
+        get: false
+        set: false
+      - name: drag_pos_x
+        type: float
+        get: false
+        set: false
+      - name: drag_pos_y
+        type: float
+        get: false
+        set: false
+      - name: drag_cursor_x
+        type: float
+        get: false
+        set: false
+      - name: drag_cursor_y
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1002,6 +1588,23 @@ classes:
       name: ydraw_embed
     mixins: []
     data: struct ybrowser_data
+    data_fields:
+      - name: html
+        type: "char *"
+        get: false
+        set: false
+      - name: html_len
+        type: size_t
+        get: false
+        set: false
+      - name: rendered_w
+        type: float
+        get: false
+        set: false
+      - name: rendered_h
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1022,6 +1625,15 @@ classes:
       name: ydraw_embed
     mixins: []
     data: struct ydiagram_data
+    data_fields:
+      - name: source
+        type: "char *"
+        get: false
+        set: false
+      - name: source_len
+        type: size_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1039,6 +1651,11 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct embed_data
+    data_fields:
+      - name: buf
+        type: "struct yetty_ydraw_draw_list *"
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1059,6 +1676,15 @@ classes:
       name: widget
     mixins: []
     data: struct yimage_data
+    data_fields:
+      - name: bytes
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: len
+        type: size_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1082,6 +1708,23 @@ classes:
       name: ydraw_embed
     mixins: []
     data: struct yjungle_data
+    data_fields:
+      - name: jungle
+        type: "struct yetty_yjungle *"
+        get: false
+        set: false
+      - name: start_time
+        type: double
+        get: false
+        set: false
+      - name: scene_w
+        type: float
+        get: false
+        set: false
+      - name: scene_h
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1102,6 +1745,23 @@ classes:
       name: ydraw_embed
     mixins: []
     data: struct ymarkdown_data
+    data_fields:
+      - name: source
+        type: "char *"
+        get: false
+        set: false
+      - name: source_len
+        type: size_t
+        get: false
+        set: false
+      - name: rendered_w
+        type: float
+        get: false
+        set: false
+      - name: rendered_h
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1122,6 +1782,23 @@ classes:
       name: ydraw_embed
     mixins: []
     data: struct ymaze_data
+    data_fields:
+      - name: maze
+        type: "struct yetty_ymaze *"
+        get: false
+        set: false
+      - name: start_time
+        type: double
+        get: false
+        set: false
+      - name: scene_w
+        type: float
+        get: false
+        set: false
+      - name: scene_h
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1142,6 +1819,71 @@ classes:
       name: vbox
     mixins: []
     data: struct node_data
+    data_fields:
+      - name: title
+        type: "char *"
+        get: false
+        set: false
+      - name: gx
+        type: float
+        get: false
+        set: false
+      - name: gy
+        type: float
+        get: false
+        set: false
+      - name: gw
+        type: float
+        get: false
+        set: false
+      - name: gh
+        type: float
+        get: false
+        set: false
+      - name: inputs
+        type: "struct ynode_pin *"
+        get: false
+        set: false
+      - name: in_count
+        type: size_t
+        get: false
+        set: false
+      - name: in_cap
+        type: size_t
+        get: false
+        set: false
+      - name: outputs
+        type: "struct ynode_pin *"
+        get: false
+        set: false
+      - name: out_count
+        type: size_t
+        get: false
+        set: false
+      - name: out_cap
+        type: size_t
+        get: false
+        set: false
+      - name: drag_mode
+        type: enum ynode_drag_mode
+        get: false
+        set: false
+      - name: resize_corner
+        type: int
+        get: false
+        set: false
+      - name: last_x
+        type: float
+        get: false
+        set: false
+      - name: last_y
+        type: float
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1171,6 +1913,103 @@ classes:
       name: primitive_widget
     mixins: []
     data: struct nodes_data
+    data_fields:
+      - name: pan_x
+        type: float
+        get: false
+        set: false
+      - name: pan_y
+        type: float
+        get: false
+        set: false
+      - name: zoom
+        type: float
+        get: false
+        set: false
+      - name: links
+        type: "struct ynodes_link *"
+        get: false
+        set: false
+      - name: link_count
+        type: size_t
+        get: false
+        set: false
+      - name: link_cap
+        type: size_t
+        get: false
+        set: false
+      - name: panning
+        type: int
+        get: false
+        set: false
+      - name: last_x
+        type: float
+        get: false
+        set: false
+      - name: last_y
+        type: float
+        get: false
+        set: false
+      - name: linking
+        type: int
+        get: false
+        set: false
+      - name: link_from
+        type: "struct yetty_ygui_object *"
+        get: false
+        set: false
+      - name: link_from_pin
+        type: int
+        get: false
+        set: false
+      - name: link_from_output
+        type: int
+        get: false
+        set: false
+      - name: link_cur_x
+        type: float
+        get: false
+        set: false
+      - name: link_cur_y
+        type: float
+        get: false
+        set: false
+      - name: link_cb
+        type: yetty_ygui_ynodes_link_cb
+        get: false
+        set: false
+      - name: link_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: menu
+        type: "struct yetty_ygui_object *"
+        get: false
+        set: false
+      - name: menu_graph_x
+        type: float
+        get: false
+        set: false
+      - name: menu_graph_y
+        type: float
+        get: false
+        set: false
+      - name: menu_node
+        type: "struct yetty_ygui_object *"
+        get: false
+        set: false
+      - name: palette
+        type: "struct ynodes_palette_entry *"
+        get: false
+        set: false
+      - name: palette_count
+        type: size_t
+        get: false
+        set: false
+      - name: palette_cap
+        type: size_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1203,6 +2042,11 @@ classes:
       name: ydraw_embed
     mixins: []
     data: struct ypdf_data
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
     ops: []
   - name: yplot
     domain: ygui
@@ -1214,6 +2058,31 @@ classes:
       name: widget
     mixins: []
     data: struct yplot_data
+    data_fields:
+      - name: source
+        type: "char *"
+        get: false
+        set: false
+      - name: source_len
+        type: size_t
+        get: false
+        set: false
+      - name: cfg
+        type: struct yetty_ygui_yplot_config
+        get: false
+        set: false
+      - name: has_cfg
+        type: int
+        get: false
+        set: false
+      - name: buffers
+        type: "struct yplot_buf_slot *"
+        get: false
+        set: false
+      - name: buffer_count
+        type: size_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1237,6 +2106,27 @@ classes:
       name: ydraw_embed
     mixins: []
     data: struct yrich_view_data
+    data_fields:
+      - name: doc
+        type: "struct yetty_yrich_document *"
+        get: false
+        set: false
+      - name: own
+        type: int
+        get: false
+        set: false
+      - name: rendered_w
+        type: float
+        get: false
+        set: false
+      - name: rendered_h
+        type: float
+        get: false
+        set: false
+      - name: pressed
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1266,6 +2156,19 @@ classes:
       name: widget
     mixins: []
     data: struct yshadertoy_data
+    data_fields:
+      - name: src
+        type: "char *"
+        get: false
+        set: false
+      - name: len
+        type: size_t
+        get: false
+        set: false
+      - name: dirty
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1289,6 +2192,15 @@ classes:
       name: widget
     mixins: []
     data: struct yvideo_data
+    data_fields:
+      - name: bytes
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: len
+        type: size_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1312,6 +2224,23 @@ classes:
       name: ydraw_embed
     mixins: []
     data: struct yzoo_data
+    data_fields:
+      - name: zoo
+        type: "struct yetty_yzoo *"
+        get: false
+        set: false
+      - name: start_time
+        type: double
+        get: false
+        set: false
+      - name: scene_w
+        type: float
+        get: false
+        set: false
+      - name: scene_h
+        type: float
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui

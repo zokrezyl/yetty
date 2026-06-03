@@ -38,6 +38,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yfont/msdf-font.h>
@@ -3111,7 +3112,7 @@ static struct yetty_ycore_int_result standalone_event_handler(
             struct yetty_ycore_void_result rr =
                 yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, app->render_target);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
-            yetty_yfigure_figure_set_dirty(rf, 0);
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
         }
         struct yetty_ycore_void_result pp =
             app->render_target->ops->present(app->render_target);
@@ -3145,8 +3146,8 @@ static struct yetty_ycore_int_result standalone_event_handler(
                 .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
             struct yetty_yfigure_figure *rf =
                 yetty_yfigure_container_as_figure(app->root_container);
-            yetty_yfigure_figure_set_rect(rf, root_rect);
-            yetty_yfigure_figure_set_dirty(rf, 1);
+            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, root_rect);
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);

@@ -30,6 +30,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
@@ -151,7 +152,7 @@ static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx
              "%srect: [%.1f, %.1f, %.1f, %.1f]\n"
              "%sbytes_seen: %zu\n"
              "%scall_count: %u\n",
-             pad, pad, yetty_yfigure_figure_rect(self).min.x, yetty_yfigure_figure_rect(self).min.y, yetty_yfigure_figure_rect(self).max.x, yetty_yfigure_figure_rect(self).max.y,
+             pad, pad, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y,
              pad, l->bytes_seen, pad, l->call_count);
     return YETTY_OK(yetty_ycore_char_ptr, buf);
 }
@@ -191,7 +192,7 @@ static struct yetty_yclass_ptr_result test_leaf_class_get(void)
     return r;
 }
 
-static struct yetty_yfigure_figure_ptr_result test_leaf_factory(struct yetty_ycore_rectangle rect,
+static struct yetty_yfigure_figure_data_ptr_result test_leaf_factory(struct yetty_ycore_rectangle rect,
                                                                  const struct yetty_context *ctx,
                                                                  void *user)
 {
@@ -199,18 +200,17 @@ static struct yetty_yfigure_figure_ptr_result test_leaf_factory(struct yetty_yco
     (void)user;
     struct yetty_yclass_ptr_result cls_r = test_leaf_class_get();
     if (YETTY_IS_ERR(cls_r)) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "test_leaf_factory: class", cls_r);
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "test_leaf_factory: class", cls_r);
     }
     struct yetty_yclass_object_ptr_result obj_r = yetty_yclass_object_alloc(cls_r.value);
     if (YETTY_IS_ERR(obj_r)) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "test_leaf_factory: alloc", obj_r);
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "test_leaf_factory: alloc", obj_r);
     }
     struct test_leaf *l = test_leaf_from_obj(obj_r.value);
     l->base = (struct yetty_yfigure_figure *)(obj_r.value + 1);
-    yetty_yfigure_figure_set_self_obj(l->base, obj_r.value);
-    yetty_yfigure_figure_set_rect(l->base, rect);
-    yetty_yfigure_figure_set_dirty(l->base, 1);
-    return YETTY_OK(yetty_yfigure_figure_ptr, l->base);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(l->base) - 1, rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(l->base) - 1, 1);
+    return YETTY_OK(yetty_yfigure_figure_data_ptr, l->base);
 }
 
 /*===========================================================================

@@ -35,45 +35,30 @@ struct class_ptr_result ytuning_tuned_sportscar_class_get(void)
     return _r;
 }
 
-struct tuned_sportscar_data *ytuning_tuned_sportscar_data(struct object *obj)
+struct ytuning_tuned_sportscar_data_ptr_result ytuning_tuned_sportscar_data_get(struct object *obj)
 {
     if (!obj) {
-        ydebug("ytuning_tuned_sportscar_data: NULL object");
-        return NULL;
+        return YETTY_ERR(ytuning_tuned_sportscar_data_ptr, "ytuning_tuned_sportscar_data_get: NULL object");
     }
     struct class_ptr_result class_result = ytuning_tuned_sportscar_class_get();
-    if (YETTY_IS_ERR(class_result)) {
-        yetty_ycore_error_print(stderr, "ytuning_tuned_sportscar_data", class_result.error);
-        yetty_ycore_error_destroy(class_result.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(ytuning_tuned_sportscar_data_ptr, class_result, "ytuning_tuned_sportscar_data_get: class accessor failed");
     struct yetty_ycore_size_result offset_result =
         object_data_offset(object_class(obj), class_result.value);
-    if (YETTY_IS_ERR(offset_result)) {
-        yetty_ycore_error_print(stderr, "ytuning_tuned_sportscar_data", offset_result.error);
-        yetty_ycore_error_destroy(offset_result.error);
-        return NULL;
-    }
-    return (struct tuned_sportscar_data *)((char *)obj + offset_result.value);
+    YETTY_RETURN_IF_ERR(ytuning_tuned_sportscar_data_ptr, offset_result, "ytuning_tuned_sportscar_data_get: object_data_offset failed");
+    return YETTY_OK(ytuning_tuned_sportscar_data_ptr, (struct tuned_sportscar_data *)((char *)obj + offset_result.value));
 }
 
-int ytuning_tuned_sportscar_boost_level_get(struct object *obj)
+struct yetty_ycore_int_result ytuning_tuned_sportscar_boost_level_get(struct object *obj)
 {
-    struct tuned_sportscar_data *data = ytuning_tuned_sportscar_data(obj);
-    if (!data) {
-        ydebug("ytuning_tuned_sportscar_boost_level_get: no data block for obj=%p", (void *)obj);
-        int fallback = {0};
-        return fallback;
-    }
-    return data->boost_level;
+    struct ytuning_tuned_sportscar_data_ptr_result data = ytuning_tuned_sportscar_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "ytuning_tuned_sportscar_boost_level_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->boost_level);
 }
 
-void ytuning_tuned_sportscar_boost_level_set(struct object *obj, int value)
+struct yetty_ycore_void_result ytuning_tuned_sportscar_boost_level_set(struct object *obj, int value)
 {
-    struct tuned_sportscar_data *data = ytuning_tuned_sportscar_data(obj);
-    if (!data) {
-        ydebug("ytuning_tuned_sportscar_boost_level_set: no data block for obj=%p", (void *)obj);
-        return;
-    }
-    data->boost_level = value;
+    struct ytuning_tuned_sportscar_data_ptr_result data = ytuning_tuned_sportscar_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "ytuning_tuned_sportscar_boost_level_set: data block");
+    data.value->boost_level = value;
+    return YETTY_OK_VOID();
 }

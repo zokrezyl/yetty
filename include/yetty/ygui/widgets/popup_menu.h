@@ -1,8 +1,8 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `popup_menu` (module: ygui).
  * Fully generated from the source .c — do not edit. Function
- * APIs come from `expose` annotations; types and other header
- * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
+ * and public-type APIs come from `expose` annotations; the
+ * forward declarations are derived from the prototype types. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_POPUP_MENU_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_POPUP_MENU_H
 
@@ -15,6 +15,8 @@ struct yetty_ygui_object;
 struct popup_menu_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_popup_menu_data_ptr, struct popup_menu_data *);
 struct yetty_ygui_popup_menu_data_ptr_result yetty_ygui_popup_menu_data(struct yetty_ygui_object *obj);
+
+struct yetty_ygui_object;
 
 typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
                                                                   struct yetty_yclass_object *menu,

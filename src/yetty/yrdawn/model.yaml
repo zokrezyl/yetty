@@ -10,6 +10,75 @@ classes:
       name: figure
     mixins: []
     data: struct yetty_yrdawn_figure
+    data_fields:
+      - name: base
+        type: "struct yetty_yfigure_figure *"
+        get: false
+        set: false
+      - name: figure_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: connected
+        type: int
+        get: false
+        set: false
+      - name: disconnected
+        type: int
+        get: false
+        set: false
+      - name: session
+        type: "struct yetty_yrdawn_session *"
+        get: false
+        set: false
+      - name: args
+        type: "struct yetty_yrdawn_factory_args *"
+        get: false
+        set: false
+      - name: pipeline_ready
+        type: int
+        get: false
+        set: false
+      - name: has_frame
+        type: int
+        get: false
+        set: false
+      - name: target_format
+        type: WGPUTextureFormat
+        get: false
+        set: false
+      - name: shader_module
+        type: WGPUShaderModule
+        get: false
+        set: false
+      - name: bind_group_layout
+        type: WGPUBindGroupLayout
+        get: false
+        set: false
+      - name: pipeline_layout
+        type: WGPUPipelineLayout
+        get: false
+        set: false
+      - name: pipeline
+        type: WGPURenderPipeline
+        get: false
+        set: false
+      - name: sampler
+        type: WGPUSampler
+        get: false
+        set: false
+      - name: frame_texture
+        type: WGPUTexture
+        get: false
+        set: false
+      - name: frame_view
+        type: WGPUTextureView
+        get: false
+        set: false
+      - name: frame_bind_group
+        type: WGPUBindGroup
+        get: false
+        set: false
     ops:
       - slot: render
         slot_domain: yfigure

@@ -208,14 +208,12 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     }
     d->thumb_travel = thumb_travel;
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_box(ctx, track_x, track_y, SCROLLBAR_W, track_h, COLOR_TRACK,
-                                  SCROLLBAR_W * 0.5f),
-                        "scrollarea: track");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_box(ctx, track_x, thumb_y, SCROLLBAR_W, thumb_h, COLOR_THUMB,
-                                  SCROLLBAR_W * 0.5f),
-                        "scrollarea: thumb");
+    struct yetty_ycore_void_result result_211 = yguix_box(ctx, track_x, track_y, SCROLLBAR_W, track_h, COLOR_TRACK,
+                                  SCROLLBAR_W * 0.5f);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_211, "scrollarea: track");
+    struct yetty_ycore_void_result result_215 = yguix_box(ctx, track_x, thumb_y, SCROLLBAR_W, thumb_h, COLOR_THUMB,
+                                  SCROLLBAR_W * 0.5f);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_215, "scrollarea: thumb");
     return YETTY_OK_VOID();
 }
 

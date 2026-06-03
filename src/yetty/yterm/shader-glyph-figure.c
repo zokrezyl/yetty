@@ -15,7 +15,7 @@
  *
  * Animation timer: owned here, registered on the borrowed event loop.
  * Self-stops when is_empty() — idle terminals cost nothing. The tick
- * sets yetty_yfigure_figure_set_dirty(self, 1 and calls request_render_fn); the next render frame
+ * marks the figure dirty and calls request_render_fn; the next render frame
  * lands here through the container's render walk.
  */
 #include <yetty/yplatform/compat.h> /* clock_gettime shim on MSVC */
@@ -577,7 +577,7 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
         anim_timer_stop(f);
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     if (f->request_render_fn) {
         struct yetty_ycore_void_result r = f->request_render_fn(f->request_render_userdata);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "shader-glyph anim tick: request_render failed");
@@ -839,10 +839,9 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
     struct yetty_yterm_shader_glyph_figure *f = shader_glyph_figure_from_obj(glyph_obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(glyph_obj_r.value + 1);
 
-    yetty_yfigure_figure_set_self_obj(f->base, glyph_obj_r.value);
-    yetty_yfigure_figure_set_rect(f->base, rect);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
     /* Start dirty so the first frame uploads the buffer pointer + uniforms. */
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
 
     f->text_layer = text_layer;
     f->context = context;
@@ -944,11 +943,11 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_resize(
     set_cell_size(&f->rs, cell_size.width, cell_size.height);
     f->rs.pixel_size.width = (float)grid_size.cols * cell_size.width;
     f->rs.pixel_size.height = (float)grid_size.rows * cell_size.height;
-    yetty_yfigure_figure_set_rect(f->base, (struct yetty_ycore_rectangle){
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, (struct yetty_ycore_rectangle){
         .min = {.x = 0.0f, .y = 0.0f},
         .max = {.x = f->rs.pixel_size.width, .y = f->rs.pixel_size.height},
     });
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     return YETTY_OK_VOID();
 }
 
@@ -959,7 +958,7 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_set_visual_zoom(
         return YETTY_ERR(yetty_ycore_void, "shader-glyph figure set_visual_zoom: NULL figure");
     }
     set_visual_zoom(&f->rs, scale, offset_x, offset_y);
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     return YETTY_OK_VOID();
 }
 

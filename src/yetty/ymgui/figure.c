@@ -313,8 +313,8 @@ static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_f
 {
     struct yetty_ymgui_figure *f = ymgui_figure_from_obj((struct yetty_yclass_object *)self - 1);
     ydebug("ymgui_figure_render: has_frame=%d atlas_ready=%d rect=(%.1f,%.1f)-(%.1f,%.1f)",
-           f->has_frame, f->atlas_ready, yetty_yfigure_figure_rect(self).min.x, yetty_yfigure_figure_rect(self).min.y, yetty_yfigure_figure_rect(self).max.x,
-           yetty_yfigure_figure_rect(self).max.y);
+           f->has_frame, f->atlas_ready, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x,
+           yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y);
     if (!f->has_frame || !f->atlas_ready) {
         return YETTY_OK_VOID();
     }
@@ -368,8 +368,8 @@ static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_f
     const struct yetty_ymgui_wire_frame *fh = (const struct yetty_ymgui_wire_frame *)f->frame_bytes;
     float frame_w = fh->display_size_x;
     float frame_h = fh->display_size_y;
-    float ox = yetty_yfigure_figure_rect(self).min.x;
-    float oy = yetty_yfigure_figure_rect(self).min.y;
+    float ox = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x;
+    float oy = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y;
     float uniforms[8] = {frame_w, frame_h, 0.0f, 0.0f, 0, 0, 0, 0};
     wgpuQueueWriteBuffer(f->pipeline->queue, f->uniform_buffer, 0, uniforms, sizeof(uniforms));
 
@@ -400,8 +400,8 @@ static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_f
      * target->viewport tells us the pane the compositor draws into;
      * we honour it as an outer clamp. */
     struct yetty_yrender_viewport vp = target->viewport;
-    float fig_w = yetty_yfigure_figure_rect(self).max.x - yetty_yfigure_figure_rect(self).min.x;
-    float fig_h = yetty_yfigure_figure_rect(self).max.y - yetty_yfigure_figure_rect(self).min.y;
+    float fig_w = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x;
+    float fig_h = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y;
     if (fig_w > 0.0f && fig_h > 0.0f) {
         wgpuRenderPassEncoderSetViewport(pass, ox, oy, fig_w, fig_h, 0.0f, 1.0f);
     }
@@ -410,8 +410,8 @@ static struct yetty_ycore_void_result ymgui_figure_render(struct yetty_yfigure_f
     float sy0 = oy > vp.y ? oy : vp.y;
     float vp_max_x = vp.x + vp.w;
     float vp_max_y = vp.y + vp.h;
-    float fx1 = yetty_yfigure_figure_rect(self).max.x;
-    float fy1 = yetty_yfigure_figure_rect(self).max.y;
+    float fx1 = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x;
+    float fy1 = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y;
     float sx1 = fx1 < vp_max_x ? fx1 : vp_max_x;
     float sy1 = fy1 < vp_max_y ? fy1 : vp_max_y;
     if (sx1 <= sx0 || sy1 <= sy0) {
@@ -655,7 +655,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_input(
         f->frame_bytes = NULL;
         f->frame_size = 0;
         f->has_frame = 0;
-        yetty_yfigure_figure_set_dirty(f->base, 1);
+        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
         return YETTY_OK_VOID();
     case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
     case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
@@ -715,7 +715,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yf
         f->frame_bytes = NULL;
         f->frame_size = 0;
         f->has_frame = 0;
-        yetty_yfigure_figure_set_dirty(f->base, 1);
+        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
         return YETTY_OK_VOID();
     case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
     case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
@@ -792,16 +792,15 @@ struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_ymgui_figure *f = ymgui_figure_from_obj(figure_obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(figure_obj_r.value + 1);
 
-    yetty_yfigure_figure_set_self_obj(f->base, figure_obj_r.value);
-    yetty_yfigure_figure_set_rect(f->base, rect);
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     f->pipeline = pipeline;
     return YETTY_OK(yetty_ymgui_figure_ptr, f);
 }
 
 struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base)
 {
-    if (!base || !yetty_yfigure_figure_self_obj(base)) {
+    if (!base || !((struct yetty_yclass_object *)(base) - 1)) {
         return NULL;
     }
     struct yetty_yclass_ptr_result cls_r = yetty_ymgui_figure_class_get();
@@ -809,7 +808,7 @@ struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_fig
         yetty_ycore_error_destroy(cls_r.error);
         return NULL;
     }
-    if (yetty_yfigure_figure_self_obj(base)->klass != cls_r.value) {
+    if (((struct yetty_yclass_object *)(base) - 1)->klass != cls_r.value) {
         return NULL;
     }
     return ymgui_figure_from_obj((struct yetty_yclass_object *)base - 1);
@@ -850,7 +849,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_ymgui_f
     f->frame_bytes = copy;
     f->frame_size = frame_size;
     f->has_frame = 1;
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     return YETTY_OK_VOID();
 }
 
@@ -915,7 +914,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_ymgui_f
     f->atlas_w = atlas_w;
     f->atlas_h = atlas_h;
     f->atlas_ready = 1;
-    yetty_yfigure_figure_set_dirty(f->base, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     ydebug("ymgui_figure_set_atlas: %ux%u R8", atlas_w, atlas_h);
     return YETTY_OK_VOID();
 }
@@ -927,13 +926,13 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_ymgui_f
  * builds it and the host releases it via yetty_ymgui_factory_args_release.
  *=========================================================================*/
 
-static struct yetty_yfigure_figure_ptr_result ymgui_factory(struct yetty_ycore_rectangle rect,
+static struct yetty_yfigure_figure_data_ptr_result ymgui_factory(struct yetty_ycore_rectangle rect,
                                                             const struct yetty_context *context,
                                                             void *user)
 {
     struct yetty_ymgui_factory_args *args = (struct yetty_ymgui_factory_args *)user;
     if (!args) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "ymgui_factory: NULL factory args");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "ymgui_factory: NULL factory args");
     }
 
     if (!args->pipeline) {
@@ -943,18 +942,18 @@ static struct yetty_yfigure_figure_ptr_result ymgui_factory(struct yetty_ycore_r
          * for tooling that registers without a context. */
         const struct yetty_context *ctx = context ? context : args->context;
         if (!ctx) {
-            return YETTY_ERR(yetty_yfigure_figure_ptr,
+            return YETTY_ERR(yetty_yfigure_figure_data_ptr,
                              "ymgui_factory: no context to build pipeline");
         }
         struct yetty_ymgui_pipeline_ptr_result pr = yetty_ymgui_pipeline_create(ctx);
-        YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, pr, "ymgui_factory: pipeline create");
+        YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, pr, "ymgui_factory: pipeline create");
         args->pipeline = pr.value;
     }
 
     struct yetty_ymgui_figure_ptr_result fr =
         yetty_ymgui_figure_create_local(rect, args->pipeline, context);
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, fr, "ymgui_factory: figure create");
-    return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ymgui_figure_as_figure(fr.value));
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, fr, "ymgui_factory: figure create");
+    return YETTY_OK(yetty_yfigure_figure_data_ptr, yetty_ymgui_figure_as_figure(fr.value));
 }
 
 struct yetty_ycore_void_result yetty_ymgui_register_factory(struct yetty_yfigure_registry *registry,

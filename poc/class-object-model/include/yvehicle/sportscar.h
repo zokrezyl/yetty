@@ -9,13 +9,16 @@
 #include "yvehicle/car.h"
 #include "yvehicle/electric.h"
 
-/* Data-block handle — opaque outside the owning .c. */
+/* Data-block handle — opaque outside the owning .c. The
+ * struct stays private; only its pointer crosses here, in a
+ * Result so a bad object surfaces rather than corrupting. */
 struct sportscar_data;
-struct sportscar_data *yvehicle_sportscar_data(struct object *obj);
+YETTY_YRESULT_DECLARE(yvehicle_sportscar_data_ptr, struct sportscar_data *);
+struct yvehicle_sportscar_data_ptr_result yvehicle_sportscar_data_get(struct object *obj);
 /* Member accessors — the public way to reach the data. */
-int yvehicle_sportscar_top_speed_get(struct object *obj);
-int yvehicle_sportscar_turbo_engaged_get(struct object *obj);
-void yvehicle_sportscar_turbo_engaged_set(struct object *obj, int value);
+struct yetty_ycore_int_result yvehicle_sportscar_top_speed_get(struct object *obj);
+struct yetty_ycore_int_result yvehicle_sportscar_turbo_engaged_get(struct object *obj);
+struct yetty_ycore_void_result yvehicle_sportscar_turbo_engaged_set(struct object *obj, int value);
 
 struct class_ptr_result yvehicle_sportscar_class_get(void);
 

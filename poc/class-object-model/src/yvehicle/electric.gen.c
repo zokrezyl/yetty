@@ -27,45 +27,30 @@ struct class_ptr_result yvehicle_electric_mixin_get(void)
     return _r;
 }
 
-struct electric_data *yvehicle_electric_data(struct object *obj)
+struct yvehicle_electric_data_ptr_result yvehicle_electric_data_get(struct object *obj)
 {
     if (!obj) {
-        ydebug("yvehicle_electric_data: NULL object");
-        return NULL;
+        return YETTY_ERR(yvehicle_electric_data_ptr, "yvehicle_electric_data_get: NULL object");
     }
     struct class_ptr_result class_result = yvehicle_electric_mixin_get();
-    if (YETTY_IS_ERR(class_result)) {
-        yetty_ycore_error_print(stderr, "yvehicle_electric_data", class_result.error);
-        yetty_ycore_error_destroy(class_result.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yvehicle_electric_data_ptr, class_result, "yvehicle_electric_data_get: class accessor failed");
     struct yetty_ycore_size_result offset_result =
         object_data_offset(object_class(obj), class_result.value);
-    if (YETTY_IS_ERR(offset_result)) {
-        yetty_ycore_error_print(stderr, "yvehicle_electric_data", offset_result.error);
-        yetty_ycore_error_destroy(offset_result.error);
-        return NULL;
-    }
-    return (struct electric_data *)((char *)obj + offset_result.value);
+    YETTY_RETURN_IF_ERR(yvehicle_electric_data_ptr, offset_result, "yvehicle_electric_data_get: object_data_offset failed");
+    return YETTY_OK(yvehicle_electric_data_ptr, (struct electric_data *)((char *)obj + offset_result.value));
 }
 
-int yvehicle_electric_battery_percent_get(struct object *obj)
+struct yetty_ycore_int_result yvehicle_electric_battery_percent_get(struct object *obj)
 {
-    struct electric_data *data = yvehicle_electric_data(obj);
-    if (!data) {
-        ydebug("yvehicle_electric_battery_percent_get: no data block for obj=%p", (void *)obj);
-        int fallback = {0};
-        return fallback;
-    }
-    return data->battery_percent;
+    struct yvehicle_electric_data_ptr_result data = yvehicle_electric_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yvehicle_electric_battery_percent_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->battery_percent);
 }
 
-void yvehicle_electric_battery_percent_set(struct object *obj, int value)
+struct yetty_ycore_void_result yvehicle_electric_battery_percent_set(struct object *obj, int value)
 {
-    struct electric_data *data = yvehicle_electric_data(obj);
-    if (!data) {
-        ydebug("yvehicle_electric_battery_percent_set: no data block for obj=%p", (void *)obj);
-        return;
-    }
-    data->battery_percent = value;
+    struct yvehicle_electric_data_ptr_result data = yvehicle_electric_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yvehicle_electric_battery_percent_set: data block");
+    data.value->battery_percent = value;
+    return YETTY_OK_VOID();
 }

@@ -1,5 +1,4 @@
 /* GENERATED — do not edit. */
-#include "yetty/yfigure/figure.h"
 #include "yetty/yfigure/methods.gen.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
@@ -43,4 +42,84 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
         return YETTY_ERR(yetty_yclass_ptr, "yetty_yfigure_figure_class_get: class_register failed", register_class_r);
     cls = register_class_r.value;
     return register_class_r;
+}
+
+struct yetty_yfigure_figure_data_ptr_result yetty_yfigure_figure_data_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result class_r = yetty_yfigure_figure_class_get();
+    if (YETTY_IS_ERR(class_r))
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yetty_yfigure_figure_data_get: class accessor", class_r);
+    struct yetty_yclass_void_ptr_result slice_r =
+        yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r))
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yetty_yfigure_figure_data_get: object_data", slice_r);
+    return YETTY_OK(yetty_yfigure_figure_data_ptr, (struct yetty_yfigure_figure *)slice_r.value);
+}
+
+struct rectangle_result yetty_yfigure_figure_rect_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(rectangle, "yetty_yfigure_figure_rect_get: data block", data);
+    return YETTY_OK(rectangle, data.value->rect);
+}
+
+struct yetty_ycore_void_result yetty_yfigure_figure_rect_set(struct yetty_yclass_object *obj, struct yetty_ycore_rectangle value)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_rect_set: data block", data);
+    data.value->rect = value;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_int_result yetty_yfigure_figure_z_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_int, "yetty_yfigure_figure_z_get: data block", data);
+    return YETTY_OK(yetty_ycore_int, data.value->z);
+}
+
+struct yetty_ycore_void_result yetty_yfigure_figure_z_set(struct yetty_yclass_object *obj, int32_t value)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_z_set: data block", data);
+    data.value->z = value;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_int_result yetty_yfigure_figure_hidden_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_int, "yetty_yfigure_figure_hidden_get: data block", data);
+    return YETTY_OK(yetty_ycore_int, data.value->hidden);
+}
+
+struct yetty_ycore_void_result yetty_yfigure_figure_hidden_set(struct yetty_yclass_object *obj, int value)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_hidden_set: data block", data);
+    data.value->hidden = value;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_int_result yetty_yfigure_figure_dirty_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_int, "yetty_yfigure_figure_dirty_get: data block", data);
+    return YETTY_OK(yetty_ycore_int, data.value->dirty);
+}
+
+struct yetty_ycore_void_result yetty_yfigure_figure_dirty_set(struct yetty_yclass_object *obj, int value)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_dirty_set: data block", data);
+    data.value->dirty = value;
+    return YETTY_OK_VOID();
 }

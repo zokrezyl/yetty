@@ -260,7 +260,8 @@ static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_ctx
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_down(d->doc, dx, dy, (uint32_t)button, mods);
     d->pressed = 1;
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, yetty_ygui_object_set_dirty(obj), "yrich_view_on_press");
+    struct yetty_ycore_void_result result_263 = yetty_ygui_object_set_dirty(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, result_263, "yrich_view_on_press");
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
@@ -282,7 +283,8 @@ static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_c
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_up(d->doc, dx, dy, (uint32_t)button, mods);
     d->pressed = 0;
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, yetty_ygui_object_set_dirty(obj), "yrich_view_on_release");
+    struct yetty_ycore_void_result result_285 = yetty_ygui_object_set_dirty(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, result_285, "yrich_view_on_release");
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
@@ -303,7 +305,8 @@ static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ct
     to_doc_coords(obj, x, y, &dx, &dy);
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_drag(d->doc, dx, dy, 0, mods);
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, yetty_ygui_object_set_dirty(obj), "yrich_view_on_motion");
+    struct yetty_ycore_void_result result_306 = yetty_ygui_object_set_dirty(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, result_306, "yrich_view_on_motion");
     return YETTY_OK(yetty_ycore_int, 1);
 }
 

@@ -39,6 +39,7 @@
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
@@ -296,7 +297,7 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
         if (terminal->root_container) {
             struct yetty_yfigure_figure *rf =
                 yetty_yfigure_container_as_figure(terminal->root_container);
-            if (rf && yetty_yfigure_figure_dirty(rf)) {
+            if (rf && yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rf) - 1).value) {
                 terminal->context.yetty_context.event_loop->ops->request_render(
                     terminal->context.yetty_context.event_loop);
             }
@@ -1130,7 +1131,7 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     if (!force && terminal->root_container) {
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container);
-        if (rf && yetty_yfigure_figure_dirty(rf)) {
+        if (rf && yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rf) - 1).value) {
             force = 1;
         }
     }
@@ -1174,7 +1175,7 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
         struct yetty_ycore_void_result rr =
             yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "terminal_render_frame: root container render");
-        yetty_yfigure_figure_set_dirty(rf, 0);
+        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
     }
 
     ydebug("terminal_render_frame: done (all %zu layers direct, no blend)", terminal->layer_count);
@@ -1813,8 +1814,8 @@ struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
         };
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container);
-        yetty_yfigure_figure_set_rect(rf, new_rect);
-        yetty_yfigure_figure_set_dirty(rf, 1);
+        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, new_rect);
+        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
     }
     /* Shader-glyph figure lives in the root container and doesn't get
      * resize via the layers[] broadcast. Push the new grid + cell size

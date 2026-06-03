@@ -1,7 +1,6 @@
 /* GENERATED — do not edit. */
 #include "yetty/yfigure/figure.h"
 #include "yetty/yfigure/methods.gen.h"
-#include "yetty/ygrid/grid.h"
 #include "yetty/ygrid/methods.gen.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>

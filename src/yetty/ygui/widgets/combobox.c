@@ -101,15 +101,14 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4),
-                        "combo: bg");
+    struct yetty_ycore_void_result result_104 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_104, "combo: bg");
     float fs = 14.0f;
     float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_text(ctx, d->text ? d->text : "", r.min.x + 10, ty, fs, COLOR_TEXT),
-                        "combo: text");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_text(ctx, "v", r.max.x - 16, ty, fs, COLOR_CHEV),
-                        "combo: chev");
+    struct yetty_ycore_void_result result_108 = yguix_text(ctx, d->text ? d->text : "", r.min.x + 10, ty, fs, COLOR_TEXT);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_108, "combo: text");
+    struct yetty_ycore_void_result result_111 = yguix_text(ctx, "v", r.max.x - 16, ty, fs, COLOR_CHEV);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_111, "combo: chev");
     return YETTY_OK_VOID();
 }
 
