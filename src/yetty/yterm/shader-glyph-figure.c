@@ -24,6 +24,7 @@
 #include <string.h>
 #include <time.h>
 
+#include <vterm.h> /* VTermScreenCell — cell buffer stride */
 #include <webgpu/webgpu.h>
 
 #include <yetty/yconfig/config.h>
@@ -455,22 +456,22 @@ static char *splice_marker(const char *template, size_t template_size, const cha
  * Cell scan helpers
  * ========================================================================= */
 
-/* Cheap branchless scan over the cell buffer (12B stride). Returns 1 iff
- * at least one cell has glyph_index with bit-31 set. Used to short-circuit
- * the anim timer when the grid is idle. */
+/* Cheap branchless scan over the cell buffer (16B stride = sizeof
+ * VTermScreenCell). Returns 1 iff at least one cell has glyph_index with
+ * bit-31 set. Used to short-circuit the anim timer when the grid is idle. */
 static int figure_is_empty(struct yetty_yterm_shader_glyph_figure *f)
 {
     const uint8_t *data = NULL;
     size_t size = 0;
     yetty_yterm_terminal_layer_terminal_text_layer_get_cells(f->text_layer, &data, &size);
-    if (!data || size < 12) {
+    if (!data || size < sizeof(VTermScreenCell)) {
         return 1;
     }
     const uint32_t *p = (const uint32_t *)data;
-    size_t cells = size / 12u;
+    size_t cells = size / sizeof(VTermScreenCell);
     int found = 0;
     for (size_t i = 0; i < cells; i++) {
-        uint32_t g = p[i * 3u];
+        uint32_t g = p[i * 4u];
         found |= (int)(g >> 31);
     }
     return found ? 0 : 1;
@@ -484,7 +485,7 @@ static uint32_t figure_pack_instances(struct yetty_yterm_shader_glyph_figure *f)
     size_t cells_size = 0;
     yetty_yterm_terminal_layer_terminal_text_layer_get_cells(f->text_layer, &cells_data,
                                                              &cells_size);
-    if (!cells_data || cells_size < 12) {
+    if (!cells_data || cells_size < sizeof(VTermScreenCell)) {
         f->instance_count = 0;
         return 0;
     }
@@ -494,8 +495,8 @@ static uint32_t figure_pack_instances(struct yetty_yterm_shader_glyph_figure *f)
     uint32_t cols = (uint32_t)f->grid_size.cols;
     uint32_t rows = (uint32_t)f->grid_size.rows;
     size_t live_cells = (size_t)cols * (size_t)rows;
-    if (cells_size < live_cells * 12u) {
-        live_cells = cells_size / 12u;
+    if (cells_size < live_cells * sizeof(VTermScreenCell)) {
+        live_cells = cells_size / sizeof(VTermScreenCell);
     }
 
     if (f->instance_cap < live_cells) {
@@ -510,7 +511,7 @@ static uint32_t figure_pack_instances(struct yetty_yterm_shader_glyph_figure *f)
     if (f->instances) {
         const uint32_t *p = (const uint32_t *)cells_data;
         for (size_t i = 0; i < live_cells; i++) {
-            uint32_t g = p[i * 3u];
+            uint32_t g = p[i * 4u];
             if (g >> 31) {
                 f->instances[n].cell_index = (uint32_t)i;
                 f->instances[n].local_id = 0xFFFFFFFFu - g;

@@ -3,7 +3,7 @@
 // =============================================================================
 //
 // Reads two storage buffers populated by shader-glyph-layer.c:
-//   cells     : the full vterm cell array (12 bytes/cell), same layout as
+//   cells     : the full vterm cell array (16 bytes/cell), same layout as
 //                text-layer.wgsl. Used to fetch fg/bg for the rendered cell.
 //   instances : packed (cell_index, local_id) pairs, one per shader-glyph
 //                cell visible this frame.
@@ -44,9 +44,10 @@ struct VertexOutput {
     @location(3) @interpolate(linear) pixel_pos: vec2<f32>,
 };
 
-// 12-byte cell layout — same as text-layer.wgsl.
+// 16-byte cell layout (4 u32) — same as text-layer.wgsl. Stride must equal
+// sizeof(VTermScreenCell)/4; only u32[1]/u32[2] hold fg/bg.
 fn read_cell_fg(cell_index: u32) -> vec3<f32> {
-    let packed = storage_buffer[shader_glyph_cells_offset + cell_index * 3u + 1u];
+    let packed = storage_buffer[shader_glyph_cells_offset + cell_index * 4u + 1u];
     return vec3<f32>(
         f32( packed        & 0xFFu) / 255.0,
         f32((packed >>  8u) & 0xFFu) / 255.0,
@@ -55,8 +56,8 @@ fn read_cell_fg(cell_index: u32) -> vec3<f32> {
 }
 
 fn read_cell_bg(cell_index: u32) -> vec3<f32> {
-    let packed1 = storage_buffer[shader_glyph_cells_offset + cell_index * 3u + 1u];
-    let packed2 = storage_buffer[shader_glyph_cells_offset + cell_index * 3u + 2u];
+    let packed1 = storage_buffer[shader_glyph_cells_offset + cell_index * 4u + 1u];
+    let packed2 = storage_buffer[shader_glyph_cells_offset + cell_index * 4u + 2u];
     return vec3<f32>(
         f32((packed1 >> 24u) & 0xFFu) / 255.0,
         f32( packed2         & 0xFFu) / 255.0,
