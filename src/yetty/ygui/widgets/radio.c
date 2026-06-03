@@ -91,24 +91,18 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (radius < 7.0f) {
         radius = 7.0f;
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_circle(ctx, r.min.x + radius + 2, cy, radius, COLOR_OUTER),
-                        "radio: outer");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_circle(ctx, r.min.x + radius + 2, cy, radius - 2, COLOR_INNER_OFF),
-                        "radio: inner_bg");
+    struct yetty_ycore_void_result result_94 = yguix_circle(ctx, r.min.x + radius + 2, cy, radius, COLOR_OUTER);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_94, "radio: outer");
+    struct yetty_ycore_void_result result_97 = yguix_circle(ctx, r.min.x + radius + 2, cy, radius - 2, COLOR_INNER_OFF);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_97, "radio: inner_bg");
     if (d->selected) {
-        YETTY_RETURN_IF_ERR(
-            yetty_ycore_void,
-            yguix_circle(ctx, r.min.x + radius + 2, cy, radius * 0.5f, COLOR_INNER_ON),
-            "radio: dot");
+        struct yetty_ycore_void_result result_101 = yguix_circle(ctx, r.min.x + radius + 2, cy, radius * 0.5f, COLOR_INNER_ON);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_101, "radio: dot");
     }
     if (d->label) {
         float fs = 14.0f;
-        YETTY_RETURN_IF_ERR(
-            yetty_ycore_void,
-            yguix_text(ctx, d->label, r.min.x + 2 * radius + 12, cy + fs * 0.4f, fs, COLOR_TEXT),
-            "radio: label");
+        struct yetty_ycore_void_result result_108 = yguix_text(ctx, d->label, r.min.x + 2 * radius + 12, cy + fs * 0.4f, fs, COLOR_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_108, "radio: label");
     }
     return YETTY_OK_VOID();
 }

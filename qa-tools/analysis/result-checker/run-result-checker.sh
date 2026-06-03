@@ -1,5 +1,12 @@
 #!/bin/bash
-# Run result-checker on all yetty C files
+# Run result-checker on all yetty C files.
+#
+# Any extra arguments are forwarded to the checker, so the second mode can be
+# enabled per invocation:
+#
+#   ./run-result-checker.sh                                   # propagation check (default)
+#   ./run-result-checker.sh --check-double-eval               # both checks
+#   ./run-result-checker.sh --check-double-eval --check-propagation=false  # double-eval only
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 YETTY_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -18,4 +25,4 @@ if [ ! -f "${BUILD_DIR}/compile_commands.json" ]; then
 fi
 
 find "${YETTY_ROOT}/src/yetty" -name "*.c" -type f | \
-    xargs "$CHECKER" -p "$BUILD_DIR" 2>&1
+    xargs "$CHECKER" -p "$BUILD_DIR" "$@" 2>&1

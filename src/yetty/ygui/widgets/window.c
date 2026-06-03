@@ -171,19 +171,17 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_OK_VOID();
     }
     /* Frame + title strip. */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        win_rounded(ctx, r.min.x, r.min.y, w, h, WIN_BG, WIN_BORDER, 1.0f,
-                                    WINDOW_RADIUS),
-                        "window: frame");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        win_rounded(ctx, r.min.x, r.min.y, w, WINDOW_TITLE_H, WIN_TITLE_BG, 0, 0.0f,
-                                    WINDOW_RADIUS),
-                        "window: titlebar");
+    struct yetty_ycore_void_result result_174 = win_rounded(ctx, r.min.x, r.min.y, w, h, WIN_BG, WIN_BORDER, 1.0f,
+                                    WINDOW_RADIUS);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_174, "window: frame");
+    struct yetty_ycore_void_result result_178 = win_rounded(ctx, r.min.x, r.min.y, w, WINDOW_TITLE_H, WIN_TITLE_BG, 0, 0.0f,
+                                    WINDOW_RADIUS);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_178, "window: titlebar");
     if (d->title) {
         float fs = 14.0f;
         float ty = r.min.y + (WINDOW_TITLE_H + fs) * 0.5f - 3.0f;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_text(ctx, d->title, r.min.x + 10.0f, ty, fs, WIN_TEXT),
-                            "window: title");
+        struct yetty_ycore_void_result result_185 = yguix_text(ctx, d->title, r.min.x + 10.0f, ty, fs, WIN_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_185, "window: title");
     }
     float by = r.min.y + (WINDOW_TITLE_H - WINDOW_BTN) * 0.5f;
 
@@ -192,19 +190,17 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (close_bx >= 0.0f) {
         float fs = 16.0f;
         float ty = r.min.y + (WINDOW_TITLE_H + fs) * 0.5f - 3.0f;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, "\xC3\x97", close_bx + 4.0f, ty, fs, WIN_CLOSE),
-                            "window: close x");
+        struct yetty_ycore_void_result result_195 = yguix_text(ctx, "\xC3\x97", close_bx + 4.0f, ty, fs, WIN_CLOSE);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_195, "window: close x");
     }
 
     /* Hamburger — three lines, left of the close button (if any). */
     float ham_bx = window_hamburger_x(d, r);
     if (ham_bx >= 0.0f) {
         for (int i = 0; i < 3; i++) {
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                yguix_box(ctx, ham_bx + 3.0f, by + 4.0f + (float)i * 5.0f,
-                                          WINDOW_BTN - 6.0f, 2.0f, WIN_GRIP, 0),
-                                "window: hamburger");
+            struct yetty_ycore_void_result result_204 = yguix_box(ctx, ham_bx + 3.0f, by + 4.0f + (float)i * 5.0f,
+                                          WINDOW_BTN - 6.0f, 2.0f, WIN_GRIP, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_204, "window: hamburger");
         }
     }
     return YETTY_OK_VOID();

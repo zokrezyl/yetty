@@ -1460,6 +1460,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
@@ -1549,7 +1550,7 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
 			if (YETTY_IS_ERR(rr)) {
 				yetty_ycore_error_destroy(rr.error);
 			}
-			rf->dirty = 0;
+			yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
 		}
 		struct yetty_ycore_void_result pp = s->render_target->ops->present(s->render_target);
 		if (YETTY_IS_ERR(pp)) {
@@ -1586,8 +1587,8 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
 				.max = {(float)ev->resize.width, (float)ev->resize.height}};
 			struct yetty_yfigure_figure *rf =
 				yetty_yfigure_container_as_figure(s->root_container);
-			rf->rect = rr;
-			rf->dirty = 1;
+			yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, rr);
+			yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
 		}
 		s->app.tabs[s->app.active].needs_render = 1;
 		s->app.pending_render = 1;

@@ -68,6 +68,19 @@ classes:
     parent: null
     mixins: []
     data: struct vehicle_data
+    data_fields:
+      - name: mileage
+        type: int
+        get: true
+        set: true
+      - name: speed
+        type: int
+        get: true
+        set: true
+      - name: fuel_level
+        type: int
+        get: false
+        set: false
     ops:
       - slot: vehicle_ctor
         slot_domain: yvehicle
@@ -97,6 +110,11 @@ classes:
       name: vehicle
     mixins: []
     data: struct motorbike_data
+    data_fields:
+      - name: has_sidecar
+        type: int
+        get: true
+        set: true
     ops:
       - slot: vehicle_describe
         slot_domain: yvehicle
@@ -111,6 +129,11 @@ classes:
       name: vehicle
     mixins: []
     data: struct car_data
+    data_fields:
+      - name: doors
+        type: int
+        get: true
+        set: true
     ops:
       - slot: vehicle_describe
         slot_domain: yvehicle
@@ -127,13 +150,25 @@ classes:
       - domain: yvehicle
         name: electric
     data: struct sportscar_data
+    data_fields:
+      - name: top_speed
+        type: int
+        get: true
+        set: false
+      - name: turbo_engaged
+        type: int
+        get: true
+        set: true
     ops:
-      - slot: vehicle_describe
+      - slot: vehicle_ctor
         slot_domain: yvehicle
-        impl: sportscar_describe
+        impl: sportscar_ctor
       - slot: vehicle_accelerate
         slot_domain: yvehicle
         impl: sportscar_accelerate
+      - slot: vehicle_describe
+        slot_domain: yvehicle
+        impl: sportscar_describe
   - name: electric
     domain: yvehicle
     accessor: yvehicle_electric_mixin_get
@@ -142,6 +177,11 @@ classes:
     parent: null
     mixins: []
     data: struct electric_data
+    data_fields:
+      - name: battery_percent
+        type: int
+        get: true
+        set: true
     ops:
       - slot: vehicle_brake
         slot_domain: yvehicle

@@ -2,7 +2,6 @@
 #include "yetty/ygui/methods.gen.h"
 #include "yetty/ygui/mixins/clickable.h"
 #include "yetty/ygui/primitive-widget.h"
-#include "yetty/ygui/widgets/chip.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 

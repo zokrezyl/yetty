@@ -36,7 +36,7 @@ YETTY_YRESULT_DECLARE(yetty_yfigure_registry_ptr, struct yetty_yfigure_registry 
  * supplied at register time. The factory mints a freshly-allocated
  * figure; ownership passes to the caller (typically a container that
  * will add it via add_child). */
-typedef struct yetty_yfigure_figure_ptr_result (*yetty_yfigure_factory_fn)(
+typedef struct yetty_yfigure_figure_data_ptr_result (*yetty_yfigure_factory_fn)(
     struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user);
 
 struct yetty_yfigure_registry_ptr_result yetty_yfigure_registry_create(void);
@@ -53,7 +53,7 @@ struct yetty_ycore_void_result yetty_yfigure_registry_register(
 
 /* Mint a figure of `kind` at `rect`. Returns YETTY_ERR with a clear
  * cause when `kind` isn't registered. */
-struct yetty_yfigure_figure_ptr_result yetty_yfigure_registry_mint(
+struct yetty_yfigure_figure_data_ptr_result yetty_yfigure_registry_mint(
     struct yetty_yfigure_registry *registry, uint32_t kind, struct yetty_ycore_rectangle rect,
     const struct yetty_context *context);
 

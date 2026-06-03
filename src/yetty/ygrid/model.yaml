@@ -31,28 +31,6 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
-  - slot: process_bytes
-    domain: ygrid
-    owning_class: grid
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: payload
-        type: struct yetty_ycore_buffer
-    local: false
-  - slot: reset_content
-    domain: ygrid
-    owning_class: grid
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-    local: false
 classes:
   - name: grid
     domain: ygrid
@@ -64,6 +42,215 @@ classes:
       name: figure
     mixins: []
     data: struct yetty_ygrid_grid
+    data_fields:
+      - name: base
+        type: "struct yetty_yfigure_figure *"
+        get: false
+        set: false
+      - name: registry
+        type: "struct yetty_ydraw_flyweight_registry *"
+        get: false
+        set: false
+      - name: grid_cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: grid_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: content_w
+        type: float
+        get: false
+        set: false
+      - name: content_h
+        type: float
+        get: false
+        set: false
+      - name: scroll_x
+        type: float
+        get: false
+        set: false
+      - name: scroll_y
+        type: float
+        get: false
+        set: false
+      - name: content_scale
+        type: float
+        get: false
+        set: false
+      - name: absolute_coords
+        type: int
+        get: false
+        set: false
+      - name: bytes
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: bytes_len
+        type: size_t
+        get: false
+        set: false
+      - name: bytes_cap
+        type: size_t
+        get: false
+        set: false
+      - name: prims
+        type: "struct ygrid_prim_meta *"
+        get: false
+        set: false
+      - name: prim_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: prim_cap
+        type: uint32_t
+        get: false
+        set: false
+      - name: cells
+        type: "struct ygrid_cell *"
+        get: false
+        set: false
+      - name: device
+        type: int
+        get: false
+        set: false
+      - name: queue
+        type: int
+        get: false
+        set: false
+      - name: target_format
+        type: int
+        get: false
+        set: false
+      - name: allocator
+        type: "struct yetty_ydraw_gpu_allocator *"
+        get: false
+        set: false
+      - name: grid_staging
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: grid_staging_words
+        type: size_t
+        get: false
+        set: false
+      - name: grid_staging_cap
+        type: size_t
+        get: false
+        set: false
+      - name: prim_staging
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: prim_staging_words
+        type: size_t
+        get: false
+        set: false
+      - name: prim_staging_cap
+        type: size_t
+        get: false
+        set: false
+      - name: rs
+        type: struct yetty_ydraw_gpu_resource_set
+        get: false
+        set: false
+      - name: sdf_lib_rs
+        type: struct yetty_ydraw_gpu_resource_set
+        get: false
+        set: false
+      - name: sdf_lib_code
+        type: struct yetty_ycore_buffer
+        get: false
+        set: false
+      - name: layer_shader_code
+        type: struct yetty_ycore_buffer
+        get: false
+        set: false
+      - name: combined_shader
+        type: "char *"
+        get: false
+        set: false
+      - name: combined_shader_size
+        type: size_t
+        get: false
+        set: false
+      - name: binder
+        type: "struct yetty_yrender_gpu_resource_binder *"
+        get: false
+        set: false
+      - name: binder_finalized
+        type: int
+        get: false
+        set: false
+      - name: fonts
+        type: "struct yetty_yfont_font *[63]"
+        get: false
+        set: false
+      - name: font_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: font_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: last_emitted_font_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: staging_dirty
+        type: int
+        get: false
+        set: false
+      - name: figure_factory
+        type: "struct yetty_ydraw_raw_figure_factory *"
+        get: false
+        set: false
+      - name: figure_instances
+        type: "struct yetty_ydraw_figure **"
+        get: false
+        set: false
+      - name: figure_instance_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: figure_instance_cap
+        type: uint32_t
+        get: false
+        set: false
+      - name: entities
+        type: "struct ygrid_entity *"
+        get: false
+        set: false
+      - name: entity_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: entity_high_water
+        type: uint32_t
+        get: false
+        set: false
+      - name: free_slot_head
+        type: uint32_t
+        get: false
+        set: false
+      - name: id_index
+        type: "struct ygrid_id_index_entry *"
+        get: false
+        set: false
+      - name: id_index_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: id_index_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: current_entity_slot
+        type: uint32_t
+        get: false
+        set: false
     ops:
       - slot: render
         slot_domain: yfigure
@@ -81,8 +268,11 @@ classes:
         slot_domain: ygrid
         impl: yetty_ygrid_grid_destroy_impl
       - slot: process_bytes
-        slot_domain: ygrid
+        slot_domain: yfigure
         impl: yetty_ygrid_grid_process_bytes_impl
       - slot: reset_content
-        slot_domain: ygrid
+        slot_domain: yfigure
         impl: yetty_ygrid_grid_reset_content_impl
+      - slot: dump_state
+        slot_domain: yfigure
+        impl: yetty_ygrid_grid_dump_state_impl

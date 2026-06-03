@@ -17,6 +17,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfont/font.h>
@@ -144,11 +145,11 @@ static void handle_event(struct yrich_app *app, const struct yetty_yui_event *ev
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
         destroy_safe(app->target->ops->resize(app->target, vp));
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-        rf->rect = (struct yetty_ycore_rectangle){
+        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, (struct yetty_ycore_rectangle){
             .min = {.x = 0.0f, .y = 0.0f},
             .max = {.x = (float)w, .y = (float)h},
-        };
-        rf->dirty = 1;
+        });
+        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
         destroy_safe(push_scene(app));
         return;
     }
@@ -220,8 +221,8 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             yetty_yfont_msdf_font_create(cdb_path, shader_path, "yrich_app");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, font_result, "msdf_font_create failed");
         app->font = font_result.value;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, app->font->ops->load_basic_latin(app->font),
-                            "font load_basic_latin failed");
+        struct yetty_ycore_void_result result_224 = app->font->ops->load_basic_latin(app->font);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_224, "font load_basic_latin failed");
     }
 
     /* Registry + ygrid factory + in-process root container. */
@@ -230,9 +231,8 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     app->registry = reg_r.value;
     app->figure_args.default_font = app->font;
     app->figure_args.figure_factory = NULL;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yetty_ygrid_register_factory(app->registry, &app->figure_args),
-                        "ygrid_register_factory failed");
+    struct yetty_ycore_void_result result_234 = yetty_ygrid_register_factory(app->registry, &app->figure_args);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_234, "ygrid_register_factory failed");
 
     struct yetty_ycore_rectangle root_rect = {
         .min = {.x = 0.0f, .y = 0.0f},
@@ -251,12 +251,13 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     struct yetty_ygui_framework_ptr_result eng_r = yetty_ygui_framework_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, eng_r, "ygui framework alloc failed");
     app->ygui = eng_r.value;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yetty_ygui_framework_set_container_obj(app->ygui, app->container_obj),
-                        "framework set_container_obj failed");
+    struct yetty_ycore_void_result result_255 = yetty_ygui_framework_set_container_obj(app->ygui, app->container_obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_255, "framework set_container_obj failed");
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, build_editor(app), "build_editor failed");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, push_scene(app), "initial push_scene failed");
+    struct yetty_ycore_void_result result_259 = build_editor(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_259, "build_editor failed");
+    struct yetty_ycore_void_result result_260 = push_scene(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_260, "initial push_scene failed");
 
     struct yetty_ycore_int_result fdr = rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fdr, "pipe read_fd failed");
@@ -283,7 +284,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
         struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
-        if (!(needs_render || had_events || rrf->dirty)) {
+        if (!(needs_render || had_events || yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf) - 1).value)) {
             continue;
         }
         destroy_safe(app->target->ops->clear(app->target));
@@ -293,7 +294,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             yerror("yrich-app: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            rrf->dirty = 0;
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf) - 1, 0);
         }
         destroy_safe(app->target->ops->present(app->target));
         needs_render = 0;

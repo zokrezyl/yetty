@@ -625,17 +625,14 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_open_canvas_menu(struct yetty_y
     d->menu_graph_x = (x - r.min.x - d->pan_x) / zoom;
     d->menu_graph_y = (y - r.min.y - d->pan_y) / zoom;
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yetty_ygui_popup_menu_clear(menu),
-                        "open_canvas_menu: clear");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yetty_ygui_popup_menu_add_item(menu, "Add node", menu_add_node_cb, editor),
-                        "open_canvas_menu: add-node item");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yetty_ygui_popup_menu_add_separator(menu),
-                        "open_canvas_menu: sep");
-    YETTY_RETURN_IF_ERR(
-        yetty_ycore_void,
-        yetty_ygui_popup_menu_add_item(menu, "Reset view", menu_reset_view_cb, editor),
-        "open_canvas_menu: reset item");
+    struct yetty_ycore_void_result result_628 = yetty_ygui_popup_menu_clear(menu);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_628, "open_canvas_menu: clear");
+    struct yetty_ycore_void_result result_630 = yetty_ygui_popup_menu_add_item(menu, "Add node", menu_add_node_cb, editor);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_630, "open_canvas_menu: add-node item");
+    struct yetty_ycore_void_result result_633 = yetty_ygui_popup_menu_add_separator(menu);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_633, "open_canvas_menu: sep");
+    struct yetty_ycore_void_result result_635 = yetty_ygui_popup_menu_add_item(menu, "Reset view", menu_reset_view_cb, editor);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_635, "open_canvas_menu: reset item");
     yetty_ygui_object_raise(menu);
     return yetty_ygui_popup_menu_open_at(menu, x - r.min.x, y - r.min.y);
 }
@@ -655,35 +652,28 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_open_node_menu(struct yetty_ygu
     d->menu_node = node;
 
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(editor);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yetty_ygui_popup_menu_clear(menu), "open_node_menu: clear");
-    YETTY_RETURN_IF_ERR(
-        yetty_ycore_void,
-        yetty_ygui_popup_menu_add_item(menu, "Add input", menu_node_add_input_cb, node),
-        "open_node_menu: add-input item");
-    YETTY_RETURN_IF_ERR(
-        yetty_ycore_void,
-        yetty_ygui_popup_menu_add_item(menu, "Add output", menu_node_add_output_cb, node),
-        "open_node_menu: add-output item");
+    struct yetty_ycore_void_result result_658 = yetty_ygui_popup_menu_clear(menu);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_658, "open_node_menu: clear");
+    struct yetty_ycore_void_result result_659 = yetty_ygui_popup_menu_add_item(menu, "Add input", menu_node_add_input_cb, node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_659, "open_node_menu: add-input item");
+    struct yetty_ycore_void_result result_663 = yetty_ygui_popup_menu_add_item(menu, "Add output", menu_node_add_output_cb, node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_663, "open_node_menu: add-output item");
     /* Insertable-widget palette: one "Add <label>" row per registered kind. */
     if (d->palette_count > 0) {
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, yetty_ygui_popup_menu_add_separator(menu),
-                            "open_node_menu: palette sep");
+        struct yetty_ycore_void_result result_669 = yetty_ygui_popup_menu_add_separator(menu);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_669, "open_node_menu: palette sep");
         for (size_t i = 0; i < d->palette_count; i++) {
             char label[80];
             snprintf(label, sizeof(label), "Add %s", d->palette[i].label);
-            YETTY_RETURN_IF_ERR(
-                yetty_ycore_void,
-                yetty_ygui_popup_menu_add_item(menu, label, insert_widget_cb,
-                                               (void *)(intptr_t)i),
-                "open_node_menu: palette item");
+            struct yetty_ycore_void_result result_674 = yetty_ygui_popup_menu_add_item(menu, label, insert_widget_cb,
+                                               (void *)(intptr_t)i);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_674, "open_node_menu: palette item");
         }
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yetty_ygui_popup_menu_add_separator(menu),
-                        "open_node_menu: sep");
-    YETTY_RETURN_IF_ERR(
-        yetty_ycore_void,
-        yetty_ygui_popup_menu_add_item(menu, "Delete node", menu_node_delete_cb, node),
-        "open_node_menu: delete item");
+    struct yetty_ycore_void_result result_681 = yetty_ygui_popup_menu_add_separator(menu);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_681, "open_node_menu: sep");
+    struct yetty_ycore_void_result result_683 = yetty_ygui_popup_menu_add_item(menu, "Delete node", menu_node_delete_cb, node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_683, "open_node_menu: delete item");
     yetty_ygui_object_raise(menu);
     return yetty_ygui_popup_menu_open_at(menu, x - r.min.x, y - r.min.y);
 }
@@ -741,10 +731,9 @@ static struct yetty_ycore_void_result ynodes_draw_link(struct yetty_ygui_emit_ct
         float py = cubic_at(y0, y0, y1, y1, t);
         struct yetty_ysdf_segment seg = {
             .start_x = prev_x, .start_y = prev_y, .end_x = px, .end_y = py};
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
-                                                                      color, width, &seg),
-                            "ynodes_draw_link: segment");
+        struct yetty_ycore_void_result result_744 = yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
+                                                                      color, width, &seg);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_744, "ynodes_draw_link: segment");
         prev_x = px;
         prev_y = py;
     }
@@ -769,9 +758,8 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
     }
 
     /* Canvas background. */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_box(ctx, r.min.x, r.min.y, w, h, YNODES_CANVAS_BG, 0.0f),
-                        "ynodes_paint: bg");
+    struct yetty_ycore_void_result result_772 = yguix_box(ctx, r.min.x, r.min.y, w, h, YNODES_CANVAS_BG, 0.0f);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_772, "ynodes_paint: bg");
 
     /* Grid. */
     float step = YNODES_GRID_SIZE * d->zoom;
@@ -785,10 +773,9 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
     for (float sx = r.min.x + offx; sx <= r.max.x; sx += step) {
         struct yetty_ysdf_segment seg = {
             .start_x = sx, .start_y = r.min.y, .end_x = sx, .end_y = r.max.y};
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
-                                                                      YNODES_GRID, 1.0f, &seg),
-                            "ynodes_paint: grid vline");
+        struct yetty_ycore_void_result result_788 = yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
+                                                                      YNODES_GRID, 1.0f, &seg);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_788, "ynodes_paint: grid vline");
     }
     float offy = fmodf(d->pan_y, step);
     if (offy < 0.0f) {
@@ -797,10 +784,9 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
     for (float sy = r.min.y + offy; sy <= r.max.y; sy += step) {
         struct yetty_ysdf_segment seg = {
             .start_x = r.min.x, .start_y = sy, .end_x = r.max.x, .end_y = sy};
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
-                                                                      YNODES_GRID, 1.0f, &seg),
-                            "ynodes_paint: grid hline");
+        struct yetty_ycore_void_result result_800 = yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
+                                                                      YNODES_GRID, 1.0f, &seg);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_800, "ynodes_paint: grid hline");
     }
 
     /* Committed links: output pin → input pin. */
@@ -815,9 +801,8 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
             !yetty_ygui_ynode_pin_pos(l->to, 0, l->to_pin, &x1, &y1)) {
             continue;
         }
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            ynodes_draw_link(ctx, x0, y0, x1, y1, 1, l->color, link_w),
-                            "ynodes_paint: link");
+        struct yetty_ycore_void_result result_818 = ynodes_draw_link(ctx, x0, y0, x1, y1, 1, l->color, link_w);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_818, "ynodes_paint: link");
     }
 
     /* Pending link following the cursor. */
@@ -825,10 +810,9 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
         float x0 = 0.0f, y0 = 0.0f;
         if (yetty_ygui_ynode_pin_pos(d->link_from, d->link_from_output, d->link_from_pin, &x0,
                                      &y0)) {
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                ynodes_draw_link(ctx, x0, y0, d->link_cur_x, d->link_cur_y,
-                                                 d->link_from_output, YNODES_LINK_PENDING, link_w),
-                                "ynodes_paint: pending link");
+            struct yetty_ycore_void_result result_828 = ynodes_draw_link(ctx, x0, y0, d->link_cur_x, d->link_cur_y,
+                                                 d->link_from_output, YNODES_LINK_PENDING, link_w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_828, "ynodes_paint: pending link");
         }
     }
     return YETTY_OK_VOID();

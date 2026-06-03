@@ -638,6 +638,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
                     yetty_yterm_terminal_create(gs, &yetty->context);
                 if (YETTY_IS_ERR(tr)) {
                     yerror("yetty: PANE_SPLIT: terminal create: %s", tr.error.msg);
+                    //
                     yetty_ycore_error_destroy(tr.error);
                 } else {
                     yetty_yui_tile_pane_push_view(new_pane, yetty_yterm_terminal_as_view(tr.value));
@@ -754,7 +755,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
             /* The context menu is ygui chrome laid out in logical pixels;
              * convert the framebuffer-pixel click to logical for its anchor. */
-            float menu_cs = yetty->runtime ? yetty->runtime->gpu.app_gpu_context.content_scale : 1.0f;
+            float menu_cs =
+                yetty->runtime ? yetty->runtime->gpu.app_gpu_context.content_scale : 1.0f;
             if (menu_cs <= 0.0f) {
                 menu_cs = 1.0f;
             }
@@ -1118,8 +1120,8 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
         yetty_yui_tabbar_add_workspace_from_config(yetty->tabbar, config, &yetty->context);
     if (!YETTY_IS_OK(layout_res)) {
         yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty_yetty,
-                         "yetty_create: load initial workspace failed", layout_res);
+        return YETTY_ERR(yetty_yetty_yetty, "yetty_create: load initial workspace failed",
+                         layout_res);
     }
     ydebug("yetty_create: initial workspace loaded");
 

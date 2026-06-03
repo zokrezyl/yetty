@@ -35,8 +35,8 @@
 #ifndef YCLASS_RPC_H
 #define YCLASS_RPC_H
 
-#include <yclass/class.h>
-#include <yclass/transport.h>
+#include <yetty/yclass/class.h>
+#include <yetty/yclass/transport.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -47,7 +47,7 @@ struct yetty_yclass_rpc_session;
 /* --- Result types for yclass-specific values ----------------------- */
 YETTY_YRESULT_DECLARE(yetty_yclass_rpc_session_ptr, struct yetty_yclass_rpc_session *);
 YETTY_YRESULT_DECLARE(yetty_yclass_handle, uint64_t); /* server-minted object id */
-YETTY_YRESULT_DECLARE(yetty_yclass_void_ptr, void *); /* user-stored opaque ptr */
+/* yetty_yclass_void_ptr_result is declared in <yetty/yclass/class.h>. */
 
 /* Wire-bytes → typed-call bridge for one slot. Generator emits one body
  * per method; the RPC layer owns the slot→skel table. The class layer

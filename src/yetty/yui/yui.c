@@ -18,6 +18,7 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/ydraw-factory/figure-factory.h>
@@ -1257,7 +1258,7 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
         struct yetty_ycore_void_result rr =
             yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui root_container render");
-        rf->dirty = 0;
+        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
     }
     return YETTY_OK_VOID();
 }
@@ -2255,10 +2256,10 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
             (float)surface_h / yui->content_scale));
     }
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container);
-    rf->rect = (struct yetty_ycore_rectangle){
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, (struct yetty_ycore_rectangle){
         .min = {.x = 0.0f, .y = 0.0f},
         .max = {.x = (float)surface_w, .y = (float)surface_h},
-    };
-    rf->dirty = 1;
+    });
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
     return YETTY_OK_VOID();
 }

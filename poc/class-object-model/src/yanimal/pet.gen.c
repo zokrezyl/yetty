@@ -26,3 +26,31 @@ struct class_ptr_result yanimal_pet_mixin_get(void)
     cls = _r.value;
     return _r;
 }
+
+struct yanimal_pet_data_ptr_result yanimal_pet_data_get(struct object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yanimal_pet_data_ptr, "yanimal_pet_data_get: NULL object");
+    }
+    struct class_ptr_result class_result = yanimal_pet_mixin_get();
+    YETTY_RETURN_IF_ERR(yanimal_pet_data_ptr, class_result, "yanimal_pet_data_get: class accessor failed");
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    YETTY_RETURN_IF_ERR(yanimal_pet_data_ptr, offset_result, "yanimal_pet_data_get: object_data_offset failed");
+    return YETTY_OK(yanimal_pet_data_ptr, (struct pet_data *)((char *)obj + offset_result.value));
+}
+
+struct yetty_ycore_int_result yanimal_pet_treats_today_get(struct object *obj)
+{
+    struct yanimal_pet_data_ptr_result data = yanimal_pet_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yanimal_pet_treats_today_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->treats_today);
+}
+
+struct yetty_ycore_void_result yanimal_pet_treats_today_set(struct object *obj, int value)
+{
+    struct yanimal_pet_data_ptr_result data = yanimal_pet_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yanimal_pet_treats_today_set: data block");
+    data.value->treats_today = value;
+    return YETTY_OK_VOID();
+}

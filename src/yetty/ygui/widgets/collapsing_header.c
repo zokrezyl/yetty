@@ -218,36 +218,29 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     /* Framed body behind the children, painted first so the strip and
      * its contents sit on top. */
     if (d->open && h > HEADER_H + 0.5f) {
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            ch_rounded(ctx, r.min.x, r.min.y + HEADER_H, w, h - HEADER_H, CH_BG_BODY,
-                                       CH_BORDER, 1.0f, CH_RADIUS),
-                            "ch: body");
+        struct yetty_ycore_void_result result_221 = ch_rounded(ctx, r.min.x, r.min.y + HEADER_H, w, h - HEADER_H, CH_BG_BODY,
+                                       CH_BORDER, 1.0f, CH_RADIUS);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_221, "ch: body");
     }
 
     /* Header strip. */
-    YETTY_RETURN_IF_ERR(
-        yetty_ycore_void,
-        ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, CH_BG_HEADER, 0, 0.0f, CH_RADIUS),
-        "ch: header");
+    struct yetty_ycore_void_result result_228 = ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, CH_BG_HEADER, 0, 0.0f, CH_RADIUS);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_228, "ch: header");
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        ch_chevron(ctx, r.min.x + 14.0f, r.min.y + HEADER_H * 0.5f, d->open),
-                        "ch: chevron");
+    struct yetty_ycore_void_result result_233 = ch_chevron(ctx, r.min.x + 14.0f, r.min.y + HEADER_H * 0.5f, d->open);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_233, "ch: chevron");
 
     if (d->title) {
         float fs = 14.0f;
         float ty = r.min.y + (HEADER_H + fs) * 0.5f - 3.0f;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, d->title, r.min.x + 26.0f, ty, fs, CH_TITLE),
-                            "ch: title");
+        struct yetty_ycore_void_result result_240 = yguix_text(ctx, d->title, r.min.x + 26.0f, ty, fs, CH_TITLE);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_240, "ch: title");
     }
 
     /* Accent outline over the strip while hovered. */
     if (yetty_ygui_object_is_hovered(obj)) {
-        YETTY_RETURN_IF_ERR(
-            yetty_ycore_void,
-            ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, 0u, CH_HOVER, 1.5f, CH_RADIUS),
-            "ch: hover");
+        struct yetty_ycore_void_result result_247 = ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, 0u, CH_HOVER, 1.5f, CH_RADIUS);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_247, "ch: hover");
     }
     return YETTY_OK_VOID();
 }

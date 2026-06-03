@@ -30,6 +30,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
@@ -71,47 +72,68 @@ static int g_tests = 0;
 #define TEST_LEAF_KIND 0x70000001u
 
 struct test_leaf {
-    struct yetty_yfigure_figure base;
+    struct yetty_yfigure_figure *base;
     size_t bytes_seen;       /* total bytes through process_bytes */
     uint32_t call_count;     /* number of process_bytes calls */
 };
 
-static struct yetty_ycore_void_result test_leaf_destroy(struct yetty_yfigure_figure *self)
+static struct yetty_yclass_ptr_result test_leaf_class_get(void);
+/* test_leaf's own data slice (after the figure base slice). */
+static struct test_leaf *test_leaf_from_obj(struct yetty_yclass_object *obj)
 {
-    free(self);
-    return YETTY_OK_VOID();
+    return (struct test_leaf *)yetty_yclass_object_data(
+               obj, test_leaf_class_get().value)
+        .value;
 }
 
-static struct yetty_ycore_void_result test_leaf_render(struct yetty_yfigure_figure *self,
+/* test_leaf is a yclass figure (manually registered — test TUs aren't run
+ * through codegen). Each slot impl takes the yclass object; the typed body
+ * sits at obj + 1, base is its first member. */
+static struct yetty_ycore_void_result test_leaf_destroy(struct yetty_yclass_ctx *ctx,
+                                                        struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    return yetty_yclass_object_free(obj);
+}
+
+static struct yetty_ycore_void_result test_leaf_render(struct yetty_yclass_ctx *ctx,
+                                                       struct yetty_yclass_object *obj,
                                                        struct yetty_ydraw_target *target)
 {
-    (void)self;
+    (void)ctx;
+    (void)obj;
     (void)target;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result test_leaf_process_bytes(struct yetty_yfigure_figure *self,
-                                                              const uint8_t *bytes,
-                                                              size_t bytes_len)
+static struct yetty_ycore_void_result test_leaf_process_bytes(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              const uint8_t *bytes, size_t bytes_len)
 {
+    (void)ctx;
     (void)bytes;
-    struct test_leaf *l = (struct test_leaf *)self;
+    struct test_leaf *l = test_leaf_from_obj(obj);
     l->bytes_seen += bytes_len;
     l->call_count++;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result test_leaf_reset_content(struct yetty_yfigure_figure *self)
+static struct yetty_ycore_void_result test_leaf_reset_content(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj)
 {
-    struct test_leaf *l = (struct test_leaf *)self;
+    (void)ctx;
+    struct test_leaf *l = test_leaf_from_obj(obj);
     l->bytes_seen = 0;
     l->call_count = 0;
     return YETTY_OK_VOID();
 }
 
-static char *test_leaf_dump(const struct yetty_yfigure_figure *self, int indent)
+static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx *ctx,
+                                                         struct yetty_yclass_object *obj, int indent)
 {
-    const struct test_leaf *l = (const struct test_leaf *)self;
+    (void)ctx;
+    const struct test_leaf *l = test_leaf_from_obj(obj);
+    const struct yetty_yfigure_figure *self = l->base;
     char pad[64];
     int n = indent < 0 ? 0 : indent;
     if ((size_t)n + 1 > sizeof(pad)) {
@@ -123,44 +145,72 @@ static char *test_leaf_dump(const struct yetty_yfigure_figure *self, int indent)
     pad[n] = '\0';
     char *buf = (char *)malloc(512);
     if (!buf) {
-        return NULL;
+        return YETTY_OK(yetty_ycore_char_ptr, NULL);
     }
     snprintf(buf, 512,
              "%skind: test_leaf\n"
              "%srect: [%.1f, %.1f, %.1f, %.1f]\n"
              "%sbytes_seen: %zu\n"
              "%scall_count: %u\n",
-             pad, pad, self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y,
+             pad, pad, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y,
              pad, l->bytes_seen, pad, l->call_count);
-    return buf;
+    return YETTY_OK(yetty_ycore_char_ptr, buf);
 }
 
-static const struct yetty_yfigure_figure_ops *test_leaf_ops(void)
+static struct yetty_yclass_ptr_result test_leaf_class_get(void)
 {
-    static const struct yetty_yfigure_figure_ops ops = {
-        .destroy = test_leaf_destroy,
-        .render = test_leaf_render,
-        .process_bytes = test_leaf_process_bytes,
-        .reset_content = test_leaf_reset_content,
-        .dump = test_leaf_dump,
+    static const struct yetty_yclass *cls = NULL;
+    if (cls) {
+        return YETTY_OK(yetty_yclass_ptr, cls);
+    }
+    static const struct yetty_yclass_descriptor desc = {
+        .name = "test_leaf",
+        .type = YETTY_YCLASS_TYPE_REGULAR,
+        .data_size = sizeof(struct test_leaf),
     };
-    return &ops;
+    static const struct yetty_yclass_op ops[] = {
+        {"yetty_yfigure", "render", (yetty_yclass_method_id_t)yetty_yfigure_render,
+         (yetty_yclass_impl_t)test_leaf_render},
+        {"yetty_yfigure", "destroy", (yetty_yclass_method_id_t)yetty_yfigure_destroy,
+         (yetty_yclass_impl_t)test_leaf_destroy},
+        {"yetty_yfigure", "process_bytes", (yetty_yclass_method_id_t)yetty_yfigure_process_bytes,
+         (yetty_yclass_impl_t)test_leaf_process_bytes},
+        {"yetty_yfigure", "reset_content", (yetty_yclass_method_id_t)yetty_yfigure_reset_content,
+         (yetty_yclass_impl_t)test_leaf_reset_content},
+        {"yetty_yfigure", "dump_state", (yetty_yclass_method_id_t)yetty_yfigure_dump_state,
+         (yetty_yclass_impl_t)test_leaf_dump},
+    };
+    struct yetty_yclass_ptr_result parent_r = yetty_yfigure_figure_class_get();
+    if (YETTY_IS_ERR(parent_r)) {
+        return parent_r;
+    }
+    struct yetty_yclass_ptr_result r =
+        yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]), parent_r.value, NULL, 0);
+    if (YETTY_IS_OK(r)) {
+        cls = r.value;
+    }
+    return r;
 }
 
-static struct yetty_yfigure_figure_ptr_result test_leaf_factory(struct yetty_ycore_rectangle rect,
+static struct yetty_yfigure_figure_data_ptr_result test_leaf_factory(struct yetty_ycore_rectangle rect,
                                                                  const struct yetty_context *ctx,
                                                                  void *user)
 {
     (void)ctx;
     (void)user;
-    struct test_leaf *l = (struct test_leaf *)calloc(1, sizeof(*l));
-    if (!l) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "test_leaf_factory: oom");
+    struct yetty_yclass_ptr_result cls_r = test_leaf_class_get();
+    if (YETTY_IS_ERR(cls_r)) {
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "test_leaf_factory: class", cls_r);
     }
-    l->base.ops = test_leaf_ops();
-    l->base.rect = rect;
-    l->base.dirty = 1;
-    return YETTY_OK(yetty_yfigure_figure_ptr, &l->base);
+    struct yetty_yclass_object_ptr_result obj_r = yetty_yclass_object_alloc(cls_r.value);
+    if (YETTY_IS_ERR(obj_r)) {
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "test_leaf_factory: alloc", obj_r);
+    }
+    struct test_leaf *l = test_leaf_from_obj(obj_r.value);
+    l->base = (struct yetty_yfigure_figure *)(obj_r.value + 1);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(l->base) - 1, rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(l->base) - 1, 1);
+    return YETTY_OK(yetty_yfigure_figure_data_ptr, l->base);
 }
 
 /*===========================================================================

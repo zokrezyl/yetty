@@ -78,14 +78,13 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     float cx = r.min.x;
     for (int i = 0; i < d->n_items; i++) {
         if (i > 0) {
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_text(ctx, ">", cx + 4, ty, fs, COLOR_SEP),
-                                "bc: sep");
+            struct yetty_ycore_void_result result_81 = yguix_text(ctx, ">", cx + 4, ty, fs, COLOR_SEP);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_81, "bc: sep");
             cx += 18;
         }
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, d->items[i], cx, ty, fs,
-                                       i == d->n_items - 1 ? 0xFF92A86Bu : COLOR_TEXT),
-                            "bc: item");
+        struct yetty_ycore_void_result result_85 = yguix_text(ctx, d->items[i], cx, ty, fs,
+                                       i == d->n_items - 1 ? 0xFF92A86Bu : COLOR_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_85, "bc: item");
         cx += (float)strlen(d->items[i]) * fs * 0.55f + 8;
     }
     return YETTY_OK_VOID();

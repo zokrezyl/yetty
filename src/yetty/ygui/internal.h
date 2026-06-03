@@ -16,7 +16,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ygui/framework.h>
@@ -33,7 +33,7 @@ extern "C" {
 
 /*---------------------------------------------------------------------------
  * yclass dispatch conveniences (impl in dispatch.c). ygui owns no class
- * system of its own — these just wrap <yclass/class.h> with ygui's domain
+ * system of its own — these just wrap <yetty/yclass/class.h> with ygui's domain
  * and its "missing override == no-op" convention.
  *-------------------------------------------------------------------------*/
 
@@ -52,7 +52,7 @@ yetty_yclass_impl_t yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *
                                                      yetty_yclass_method_slot slot);
 
 /*===========================================================================
- * Classes — `struct yetty_yclass` (from <yclass/class.h>) is the only
+ * Classes — `struct yetty_yclass` (from <yetty/yclass/class.h>) is the only
  * class type ygui knows about. Slot allocation, dispatch, and parent /
  * mixin walks all go through the yclass runtime. ygui adds:
  *   - the heavier `struct yetty_ygui_object` instance header

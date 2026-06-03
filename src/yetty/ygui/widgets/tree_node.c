@@ -135,13 +135,11 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float fs = 13.0f;
     float ty = r.min.y + (HEADER_H + fs) * 0.5f - 3;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_text(ctx, d->open ? "v" : ">", r.min.x + 4, ty, fs, COLOR_CHEV),
-                        "tree_node: chev");
+    struct yetty_ycore_void_result result_138 = yguix_text(ctx, d->open ? "v" : ">", r.min.x + 4, ty, fs, COLOR_CHEV);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_138, "tree_node: chev");
     if (d->label) {
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, d->label, r.min.x + 20, ty, fs, COLOR_TEXT),
-                            "tree_node: label");
+        struct yetty_ycore_void_result result_142 = yguix_text(ctx, d->label, r.min.x + 20, ty, fs, COLOR_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_142, "tree_node: label");
     }
     return YETTY_OK_VOID();
 }

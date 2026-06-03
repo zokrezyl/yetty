@@ -128,31 +128,28 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     }
     float fs = 13.0f;
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dp_frame(ctx, r.min.x, r.min.y, w, h, DP_BG, DP_BORDER, 1.0f),
-                        "dp: frame");
+    struct yetty_ycore_void_result result_131 = dp_frame(ctx, r.min.x, r.min.y, w, h, DP_BG, DP_BORDER, 1.0f);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_131, "dp: frame");
 
     /* Header: ◂ Month Year ▸ */
     float hdr_ty = r.min.y + (DP_HEADER_H + fs) * 0.5f - 3.0f;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_text(ctx, "<", r.min.x + DP_PAD, hdr_ty, fs, DP_MUTED),
-                        "dp: prev");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_text(ctx, ">", r.min.x + w - DP_NAV_W + DP_PAD, hdr_ty, fs, DP_MUTED),
-                        "dp: next");
+    struct yetty_ycore_void_result result_136 = yguix_text(ctx, "<", r.min.x + DP_PAD, hdr_ty, fs, DP_MUTED);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_136, "dp: prev");
+    struct yetty_ycore_void_result result_138 = yguix_text(ctx, ">", r.min.x + w - DP_NAV_W + DP_PAD, hdr_ty, fs, DP_MUTED);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_138, "dp: next");
     char hdr[64];
     snprintf(hdr, sizeof(hdr), "%s %d", dp_month_name(d->shown_month), d->shown_year);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_text(ctx, hdr, r.min.x + DP_NAV_W + DP_PAD, hdr_ty, fs, DP_TEXT),
-                        "dp: title");
+    struct yetty_ycore_void_result result_143 = yguix_text(ctx, hdr, r.min.x + DP_NAV_W + DP_PAD, hdr_ty, fs, DP_TEXT);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_143, "dp: title");
 
     /* Weekday header row. */
     static const char *wd[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
     float grid_x = r.min.x + DP_PAD;
     float row_y = r.min.y + DP_HEADER_H + 4.0f;
     for (int i = 0; i < 7; i++) {
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, wd[i], grid_x + (float)i * DP_CELL_W + 6.0f,
-                                       row_y + fs, fs, DP_MUTED),
-                            "dp: weekday");
+        struct yetty_ycore_void_result result_152 = yguix_text(ctx, wd[i], grid_x + (float)i * DP_CELL_W + 6.0f,
+                                       row_y + fs, fs, DP_MUTED);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_152, "dp: weekday");
     }
 
     /* Day cells. */
@@ -168,16 +165,14 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         int is_sel = (d->sel_year == d->shown_year && d->sel_month == d->shown_month &&
                       d->sel_day == day);
         if (is_sel) {
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                yguix_box(ctx, cx, cy, DP_CELL_W, DP_CELL_H, DP_ACCENT, 4.0f),
-                                "dp: sel");
+            struct yetty_ycore_void_result result_171 = yguix_box(ctx, cx, cy, DP_CELL_W, DP_CELL_H, DP_ACCENT, 4.0f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_171, "dp: sel");
         }
         char buf[8];
         snprintf(buf, sizeof(buf), "%d", day);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, buf, cx + 7.0f, cy + fs + 2.0f, fs,
-                                       is_sel ? DP_BG : DP_TEXT),
-                            "dp: day");
+        struct yetty_ycore_void_result result_177 = yguix_text(ctx, buf, cx + 7.0f, cy + fs + 2.0f, fs,
+                                       is_sel ? DP_BG : DP_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_177, "dp: day");
     }
     return YETTY_OK_VOID();
 }

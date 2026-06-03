@@ -1,7 +1,6 @@
 /* GENERATED — do not edit. */
 #include "yetty/ygui/methods.gen.h"
 #include "yetty/ygui/widgets/hbox.h"
-#include "yetty/ygui/widgets/menubar.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 

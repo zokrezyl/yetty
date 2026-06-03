@@ -53,7 +53,7 @@
  * file. The codegen-generated grid.gen.c at the foot needs both the
  * class machinery (yclass_ctx, yclass_object) and the per-class
  * accessor/typedef declarations. */
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ygrid/grid.h>
 #include <yetty/yetty/yetty.h>
 
@@ -167,7 +167,7 @@ struct ygrid_id_index_entry {
 
 struct [[clang::annotate("class@ygrid:grid")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_ygrid_grid {
-    struct yetty_yfigure_figure base;
+    struct yetty_yfigure_figure *base;
 
     /* Owned. Built at create time. Used by process_input to walk the
      * routed-record payload as a stream of SDF/glyph/TEXT_SPAN records
@@ -296,6 +296,18 @@ yetty_ygrid_grid {
      * to YGRID_ROOT_SLOT so plain (no-CMD_GROUP) traffic still works. */
     uint32_t current_entity_slot;
 };
+
+/* This kind's own data slice (its fields sit after the figure
+ * base slice in the shared yclass object). */
+static struct yetty_ygrid_grid_ptr_result ygrid_from_obj(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result class_r = yetty_ygrid_grid_class_get();
+    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, class_r, "ygrid_from_obj: class");
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, slice_r, "ygrid_from_obj: object_data");
+    return YETTY_OK(yetty_ygrid_grid_ptr, (struct yetty_ygrid_grid *)slice_r.value);
+}
+
 
 /*===========================================================================
  * Entity helpers — ported from scene-canvas (commit 39adaca).
@@ -828,33 +840,42 @@ static void cells_clear(struct yetty_ygrid_grid *g)
  * scale_record_coords; scale the fallback to match so cells, prim AABBs and
  * the render-time content_w all live in the same space. Local figures keep
  * a framebuffer-pixel rect, so the scale stays 1. */
-static float ygrid_content_extent_w(const struct yetty_ygrid_grid *g)
+/* base_rect is the figure's rect (resolved + checked by the caller) — these
+ * helpers are infallible value math, so the fallible figure-base read stays in
+ * the Result-returning callers. */
+static float ygrid_content_extent_w(const struct yetty_ygrid_grid *g,
+                                    struct yetty_ycore_rectangle base_rect)
 {
     if (g->content_w > 0.0f) {
         return g->content_w;
     }
-    float rect_w = g->base.rect.max.x - g->base.rect.min.x;
+    float rect_w = base_rect.max.x - base_rect.min.x;
     return (g->absolute_coords && g->content_scale > 0.0f) ? rect_w * g->content_scale : rect_w;
 }
 
-static float ygrid_content_extent_h(const struct yetty_ygrid_grid *g)
+static float ygrid_content_extent_h(const struct yetty_ygrid_grid *g,
+                                    struct yetty_ycore_rectangle base_rect)
 {
     if (g->content_h > 0.0f) {
         return g->content_h;
     }
-    float rect_h = g->base.rect.max.y - g->base.rect.min.y;
+    float rect_h = base_rect.max.y - base_rect.min.y;
     return (g->absolute_coords && g->content_scale > 0.0f) ? rect_h * g->content_scale : rect_h;
 }
 
 static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, uint32_t prim_index)
 {
+    struct rectangle_result base_rect_r =
+        yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)g->base - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, base_rect_r, "ygrid: rect");
+    struct yetty_ycore_rectangle base_rect = base_rect_r.value;
     const struct ygrid_prim_meta *p = &g->prims[prim_index];
     /* Cell size spans the content extent (matches the shader's
      * grid_size*cell_size), so prims past the visible rect bucket into
      * real cell rows instead of clamping into the last visible one.
      * Content defaults to the rect when unset. */
-    float content_w = ygrid_content_extent_w(g);
-    float content_h = ygrid_content_extent_h(g);
+    float content_w = ygrid_content_extent_w(g, base_rect);
+    float content_h = ygrid_content_extent_h(g, base_rect);
     float cw = content_w / (float)g->grid_cols;
     float ch = content_h / (float)g->grid_rows;
     if (cw <= 0.0f || ch <= 0.0f) {
@@ -1229,7 +1250,11 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
         }
         g->figure_instances[g->figure_instance_count++] = ir.value;
         ir.value->dirty = 1;
-        g->base.dirty = 1;
+    {
+        struct yetty_ycore_void_result set_dirty_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(g->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
+    }
         return YETTY_OK_VOID();
     } else {
         struct yetty_ydraw_drawable_base_ops_ptr_result ops_r = yetty_ysdf_handler(type);
@@ -1395,7 +1420,10 @@ static struct yetty_ycore_void_result rebuild_prim_staging(struct yetty_ygrid_gr
 
 static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure *self)
 {
-    struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
+    struct yetty_ygrid_grid_ptr_result g_r =
+        ygrid_from_obj((struct yetty_yclass_object *)self - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, g_r, "ygrid: from_obj");
+    struct yetty_ygrid_grid *g = g_r.value;
 
     if (g->binder) {
         g->binder->ops->destroy(g->binder);
@@ -1491,13 +1519,17 @@ static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *ou
  * staging rebuild sees correctly-bucketed cells. */
 static struct yetty_ycore_void_result resize_grid_dims_if_needed(struct yetty_ygrid_grid *g)
 {
+    struct rectangle_result base_rect_r =
+        yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)g->base - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, base_rect_r, "ygrid: rect");
+    struct yetty_ycore_rectangle base_rect = base_rect_r.value;
     uint32_t want_cols;
     uint32_t want_rows;
     /* Size the cell grid to the content, not the on-screen rect, so a
      * scrolling figure's off-screen prims bucket into real cells. Content
      * defaults to the rect when unset (non-scrolling figures: identical). */
-    float cw = ygrid_content_extent_w(g);
-    float ch = ygrid_content_extent_h(g);
+    float cw = ygrid_content_extent_w(g, base_rect);
+    float ch = ygrid_content_extent_h(g, base_rect);
     struct yetty_ycore_rectangle content_rect = {{0.0f, 0.0f}, {cw, ch}};
     ygrid_dims_from_rect(content_rect, &want_cols, &want_rows);
     if (want_cols == g->grid_cols && want_rows == g->grid_rows) {
@@ -1524,9 +1556,15 @@ static struct yetty_ycore_void_result resize_grid_dims_if_needed(struct yetty_yg
 static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *self,
                                                    struct yetty_ydraw_target *target)
 {
-    struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
-    ydebug("ygrid_render: rect=(%.1f,%.1f)-(%.1f,%.1f) prims=%u staging_dirty=%d", self->rect.min.x,
-           self->rect.min.y, self->rect.max.x, self->rect.max.y, g->prim_count, g->staging_dirty);
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)self - 1;
+    struct yetty_ygrid_grid_ptr_result g_r = ygrid_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, g_r, "ygrid_render: from_obj");
+    struct yetty_ygrid_grid *g = g_r.value;
+    struct rectangle_result base_rect_r = yetty_yfigure_figure_rect_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, base_rect_r, "ygrid_render: rect");
+    struct yetty_ycore_rectangle base_rect = base_rect_r.value;
+    ydebug("ygrid_render: rect=(%.1f,%.1f)-(%.1f,%.1f) prims=%u staging_dirty=%d", base_rect.min.x,
+           base_rect.min.y, base_rect.max.x, base_rect.max.y, g->prim_count, g->staging_dirty);
 
     /* Absolute-coords figures span the whole target (their prims are in
      * screen coords); the GPU scissor below clips to the figure's own rect.
@@ -1567,8 +1605,8 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
 
     g->rs.uniforms[U_GRID_SIZE].vec2[0] = (float)g->grid_cols;
     g->rs.uniforms[U_GRID_SIZE].vec2[1] = (float)g->grid_rows;
-    float w = self->rect.max.x - self->rect.min.x;
-    float h = self->rect.max.y - self->rect.min.y;
+    float w = base_rect.max.x - base_rect.min.x;
+    float h = base_rect.max.y - base_rect.min.y;
     /* Cells span the content, not the rect: grid_size * cell_size is the
      * content extent the shader bounds-checks + buckets against. Content
      * defaults to the rect when unset (the figure fills itself). Use the
@@ -1578,8 +1616,8 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
      * cell extent. Mismatch here clips the right/bottom half of the
      * framebuffer to transparent on HiDPI (cells too small → shader
      * grid_pixel_w/h bounds check trips at fb x >= logical_w). */
-    float cw = ygrid_content_extent_w(g);
-    float ch = ygrid_content_extent_h(g);
+    float cw = ygrid_content_extent_w(g, base_rect);
+    float ch = ygrid_content_extent_h(g, base_rect);
     g->rs.uniforms[U_CELL_SIZE].vec2[0] = cw / (float)g->grid_cols;
     g->rs.uniforms[U_CELL_SIZE].vec2[1] = ch / (float)g->grid_rows;
     /* View size = what the NDC quad maps onto. Local figures map the rect;
@@ -1611,8 +1649,8 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
         return YETTY_ERR(yetty_ycore_void, "ygrid_render: target view NULL");
     }
 
-    float vx = self->rect.min.x;
-    float vy = self->rect.min.y;
+    float vx = base_rect.min.x;
+    float vy = base_rect.min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -1679,7 +1717,11 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
         wgpuQueueSubmit(g->queue, 1, &cb_skip);
         wgpuCommandBufferRelease(cb_skip);
         wgpuCommandEncoderRelease(enc);
-        self->dirty = 0;
+        {
+            struct yetty_ycore_void_result set_dirty_r =
+                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(self) - 1, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
+        }
         return YETTY_OK_VOID();
     }
     wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)sx0, (uint32_t)sy0, (uint32_t)(sx1 - sx0),
@@ -1714,8 +1756,8 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
         if (!inst || !inst->render) {
             continue;
         }
-        float sx = self->rect.min.x + inst->bounds.min.x;
-        float sy = self->rect.min.y + inst->bounds.min.y;
+        float sx = base_rect.min.x + inst->bounds.min.x;
+        float sy = base_rect.min.y + inst->bounds.min.y;
         struct yetty_ycore_void_result fr = inst->render(inst, target, sx, sy);
         if (YETTY_IS_ERR(fr)) {
             ydebug("ygrid_render: figure instance render failed: %s", fr.error.msg);
@@ -1724,7 +1766,11 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
         inst->dirty = 0;
     }
 
-    self->dirty = 0;
+    {
+        struct yetty_ycore_void_result set_dirty_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(self) - 1, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -1797,7 +1843,7 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
         /* cmd.kind == ADD */
         uint32_t drawable_type = cmd.flyweight.data ? cmd.flyweight.data[0] : 0u;
         if (drawable_type == YETTY_YDRAW_CMD_ZERO) {
-            struct yetty_ycore_void_result rc = ygrid_reset_content(&g->base);
+            struct yetty_ycore_void_result rc = ygrid_reset_content(g->base);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rc, "ygrid_process_bytes: CMD_ZERO");
             /* reset_content rebuilds the root slot — recur to ROOT for any
              * records following CMD_ZERO in this body. */
@@ -1849,7 +1895,10 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
 static struct yetty_ycore_void_result ygrid_process_bytes(struct yetty_yfigure_figure *self,
                                                           const uint8_t *bytes, size_t bytes_len)
 {
-    struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
+    struct yetty_ygrid_grid_ptr_result g_r =
+        ygrid_from_obj((struct yetty_yclass_object *)self - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, g_r, "ygrid: from_obj");
+    struct yetty_ygrid_grid *g = g_r.value;
     return process_group_body(g, YGRID_ROOT_SLOT, bytes, bytes_len);
 }
 
@@ -1861,7 +1910,10 @@ static struct yetty_ycore_void_result ygrid_process_bytes(struct yetty_yfigure_f
  * render is a cheap upload instead of a full pipeline rebuild. */
 static struct yetty_ycore_void_result ygrid_reset_content(struct yetty_yfigure_figure *self)
 {
-    struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)self;
+    struct yetty_ygrid_grid_ptr_result g_r =
+        ygrid_from_obj((struct yetty_yclass_object *)self - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, g_r, "ygrid: from_obj");
+    struct yetty_ygrid_grid *g = g_r.value;
     g->bytes_len = 0;
     g->prim_count = 0;
     for (uint32_t i = 0; i < g->figure_instance_count; i++) {
@@ -1975,7 +2027,27 @@ static uint32_t ygrid_live_prim_count(const struct yetty_ygrid_grid *g)
 
 static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
 {
-    const struct yetty_ygrid_grid *g = (const struct yetty_ygrid_grid *)self;
+    struct yetty_ygrid_grid_ptr_result g_r =
+        ygrid_from_obj((struct yetty_yclass_object *)self - 1);
+    if (YETTY_IS_ERR(g_r)) {
+        yetty_ycore_error_destroy(g_r.error);
+        return NULL;
+    }
+    const struct yetty_ygrid_grid *g = g_r.value;
+    struct rectangle_result base_rect_r =
+        yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)self - 1);
+    if (YETTY_IS_ERR(base_rect_r)) {
+        yetty_ycore_error_destroy(base_rect_r.error);
+        return NULL;
+    }
+    struct yetty_ycore_rectangle base_rect = base_rect_r.value;
+    struct yetty_ycore_int_result base_dirty_r =
+        yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)self - 1);
+    if (YETTY_IS_ERR(base_dirty_r)) {
+        yetty_ycore_error_destroy(base_dirty_r.error);
+        return NULL;
+    }
+    int base_dirty = base_dirty_r.value;
     char pad[64];
     ygrid_dump_pad(pad, sizeof(pad), indent);
     size_t len = 0, cap = 0;
@@ -1986,11 +2058,11 @@ static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
     }
     buf =
         ygrid_dump_appendf(buf, &len, &cap, "%srect: [%.1f, %.1f, %.1f, %.1f]\n", pad,
-                           self->rect.min.x, self->rect.min.y, self->rect.max.x, self->rect.max.y);
+                           base_rect.min.x, base_rect.min.y, base_rect.max.x, base_rect.max.y);
     if (!buf) {
         return NULL;
     }
-    buf = ygrid_dump_appendf(buf, &len, &cap, "%sdirty: %d\n", pad, self->dirty);
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%sdirty: %d\n", pad, base_dirty);
     if (!buf) {
         return NULL;
     }
@@ -2108,16 +2180,6 @@ static struct yetty_ycore_void_result ygrid_destroy_slot(struct yetty_yclass_ctx
 {
     (void)ctx;
     return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
-}
-
-static const struct yetty_yfigure_figure_ops *ygrid_ops(void)
-{
-    static const struct yetty_yfigure_figure_ops ops = {
-        .process_bytes = ygrid_process_bytes,
-        .reset_content = ygrid_reset_content,
-        .dump = ygrid_dump,
-    };
-    return &ops;
 }
 
 /*===========================================================================
@@ -2352,12 +2414,19 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     struct yetty_yclass_object_ptr_result grid_obj_r =
         yetty_yclass_object_alloc(grid_class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, grid_obj_r, "ygrid_create: object_alloc");
-    struct yetty_ygrid_grid *g = (struct yetty_ygrid_grid *)(grid_obj_r.value + 1);
+    struct yetty_ygrid_grid_ptr_result g_r = ygrid_from_obj(grid_obj_r.value);
+    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, g_r, "yetty_ygrid_create: from_obj");
+    struct yetty_ygrid_grid *g = g_r.value;
+    g->base = (struct yetty_yfigure_figure *)(grid_obj_r.value + 1);
 
-    g->base.ops = ygrid_ops();
-    g->base.self_obj = grid_obj_r.value;
-    g->base.rect = rect;
-    g->base.dirty = 1;
+    {
+        struct yetty_ycore_void_result set_rect_r =
+            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(g->base) - 1, rect);
+        YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, set_rect_r, "yetty_ygrid_create: set rect");
+        struct yetty_ycore_void_result set_dirty_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(g->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, set_dirty_r, "yetty_ygrid_create: set dirty");
+    }
     g->grid_cols = grid_cols;
     g->grid_rows = grid_rows;
     g->content_scale = 1.0f;
@@ -2388,7 +2457,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         uint32_t root_slot;
         struct yetty_ycore_void_result ar = entity_alloc_slot(g, &root_slot);
         if (YETTY_IS_ERR(ar)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: alloc root slot", ar);
         }
         g->entities[root_slot].parent_slot = YGRID_INVALID_SLOT;
@@ -2403,7 +2472,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         struct yetty_ydraw_flyweight_registry_ptr_result rr =
             yetty_ydraw_flyweight_registry_create();
         if (YETTY_IS_ERR(rr)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry", rr);
         }
         g->registry = rr.value;
@@ -2412,50 +2481,50 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_CMD_BASE,
                                                 YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
         if (YETTY_IS_ERR(hr)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry cmd", hr);
         }
         hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_TYPE_FONT,
                                                 YETTY_YDRAW_TYPE_FONT,
                                                 yetty_yfont_font_drawable_handler);
         if (YETTY_IS_ERR(hr)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry font", hr);
         }
         hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_TYPE_TEXT_SPAN,
                                                 YETTY_YDRAW_TYPE_TEXT_SPAN,
                                                 yetty_ydraw_text_span_drawable_handler);
         if (YETTY_IS_ERR(hr)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
         }
         hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_COMPLEX_TYPE_BASE,
                                                 0xFFFFFFFFu, yetty_ydraw_raw_figure_handler);
         if (YETTY_IS_ERR(hr)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);
         }
     }
 
     struct yetty_ycore_void_result cr = cells_alloc(g);
     if (YETTY_IS_ERR(cr)) {
-        ygrid_destroy(&g->base);
+        ygrid_destroy(g->base);
         return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: cells_alloc", cr);
     }
     if (!headless) {
         struct yetty_ycore_void_result lr = load_sdf_lib(g, context);
         if (YETTY_IS_ERR(lr)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_sdf_lib", lr);
         }
         struct yetty_ycore_void_result ls = load_layer_shader(g, context);
         if (YETTY_IS_ERR(ls)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_layer_shader", ls);
         }
         struct yetty_ycore_void_result br = build_binder(g);
         if (YETTY_IS_ERR(br)) {
-            ygrid_destroy(&g->base);
+            ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: build_binder", br);
         }
     }
@@ -2497,7 +2566,7 @@ static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *ou
  * (optional) complex-prim factory. NULL `user` is allowed — produces
  * an ygrid with no font and no complex-prim support, useful for tests
  * and tooling. */
-static struct yetty_yfigure_figure_ptr_result ygrid_factory_impl(struct yetty_ycore_rectangle rect,
+static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_impl(struct yetty_ycore_rectangle rect,
                                                                  const struct yetty_context *context,
                                                                  void *user, int absolute_coords)
 {
@@ -2505,7 +2574,7 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory_impl(struct yetty_yc
     ygrid_dims_from_rect(rect, &grid_cols, &grid_rows);
     struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, grid_cols, grid_rows, context);
     if (YETTY_IS_ERR(gr)) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: create", gr);
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "ygrid_factory: create", gr);
     }
     gr.value->absolute_coords = absolute_coords;
     if (user) {
@@ -2522,12 +2591,12 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory_impl(struct yetty_yc
             yetty_ygrid_set_figure_factory(gr.value, args->figure_factory);
         }
     }
-    return YETTY_OK(yetty_yfigure_figure_ptr, yetty_ygrid_as_figure(gr.value));
+    return YETTY_OK(yetty_yfigure_figure_data_ptr, yetty_ygrid_as_figure(gr.value));
 }
 
 /* KIND_YGRID figures (the chrome grid + ygui widgets promoted via
  * make_figure) carry absolute-coord content. */
-static struct yetty_yfigure_figure_ptr_result ygrid_factory_absolute(
+static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_absolute(
     struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
 {
     return ygrid_factory_impl(rect, context, user, 1);
@@ -2535,7 +2604,7 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory_absolute(
 
 /* Producer-kind figures (yimage/yplot/…) draw their content in local
  * coords from (0,0). */
-static struct yetty_yfigure_figure_ptr_result ygrid_factory_local(
+static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_local(
     struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
 {
     return ygrid_factory_impl(rect, context, user, 0);
@@ -2560,7 +2629,7 @@ struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid
     if (!grid) {
         return NULL;
     }
-    return &grid->base;
+    return grid->base;
 }
 
 /* Multiply one little-endian f32 wire word in place by `scale`. The
@@ -2684,7 +2753,11 @@ struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_g
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid_add_record: parse_and_index");
 
     grid->staging_dirty = 1;
-    grid->base.dirty = 1;
+    {
+        struct yetty_ycore_void_result set_dirty_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(grid->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -2697,7 +2770,11 @@ struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *
     grid->prim_count = 0;
     cells_clear(grid);
     grid->staging_dirty = 1;
-    grid->base.dirty = 1;
+    {
+        struct yetty_ycore_void_result set_dirty_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(grid->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -2720,7 +2797,11 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
         grid->font_count = slot + 1u;
     }
     grid->font_generation++;
-    grid->base.dirty = 1;
+    {
+        struct yetty_ycore_void_result set_dirty_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(grid->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -2761,7 +2842,9 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, struct yetty_ycore_buffer record)
 {
     (void)ctx;
-    struct yetty_ygrid_grid *grid = (struct yetty_ygrid_grid *)obj;
+    struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
+    struct yetty_ygrid_grid *grid = grid_r.value;
     return yetty_ygrid_add_record_local(grid, record.data, record.size);
 }
 
@@ -2770,7 +2853,9 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_y
                                                                   struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    struct yetty_ygrid_grid *grid = (struct yetty_ygrid_grid *)obj;
+    struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
+    struct yetty_ygrid_grid *grid = grid_r.value;
     return yetty_ygrid_clear_local(grid);
 }
 
@@ -2779,24 +2864,33 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(struct yetty
                                                                     struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    return ygrid_destroy((struct yetty_yfigure_figure *)obj);
+    return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-[[clang::annotate("override@ygrid:grid:process_bytes")]]
+[[clang::annotate("override@ygrid:grid:yfigure:process_bytes")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_process_bytes_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ycore_buffer payload)
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
+    size_t bytes_len)
 {
     (void)ctx;
-    return ygrid_process_bytes((struct yetty_yfigure_figure *)obj, payload.data, payload.size);
+    return ygrid_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
 }
 
-[[clang::annotate("override@ygrid:grid:reset_content")]]
+[[clang::annotate("override@ygrid:grid:yfigure:reset_content")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_reset_content_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    return ygrid_reset_content((struct yetty_yfigure_figure *)obj);
+    return ygrid_reset_content((struct yetty_yfigure_figure *)(obj + 1));
+}
+
+[[clang::annotate("override@ygrid:grid:yfigure:dump_state")]]
+static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
+{
+    (void)ctx;
+    return YETTY_OK(yetty_ycore_char_ptr,
+                    ygrid_dump((struct yetty_yfigure_figure *)(obj + 1), indent));
 }
 
 #include "grid.gen.c"

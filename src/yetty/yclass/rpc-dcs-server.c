@@ -6,8 +6,8 @@
  * yetty_yclass_rpc_dispatch_one, then ship the response back as one
  * DCS envelope via the caller-supplied `emit` callback. */
 
-#include <yclass/rpc-dcs-server.h>
-#include <yclass/rpc.h>
+#include <yetty/yclass/rpc-dcs-server.h>
+#include <yetty/yclass/rpc.h>
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>

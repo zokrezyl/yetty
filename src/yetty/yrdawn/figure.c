@@ -48,7 +48,7 @@
 
 struct [[clang::annotate("class@yrdawn:figure")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_yrdawn_figure {
-    struct yetty_yfigure_figure base;
+    struct yetty_yfigure_figure *base;
 
     /* Set by SUB_HELLO. Until then the figure rejects CMD/BULK/BYE. */
     uint32_t figure_id;
@@ -76,6 +76,16 @@ yetty_yrdawn_figure {
     WGPUTextureView frame_view;
     WGPUBindGroup frame_bind_group;
 };
+
+/* This kind's own data slice (its fields sit after the figure
+ * base slice in the shared yclass object). */
+static struct yetty_yrdawn_figure *yrdawn_figure_from_obj(struct yetty_yclass_object *obj)
+{
+    return (struct yetty_yrdawn_figure *)yetty_yclass_object_data(
+               obj, yetty_yrdawn_figure_class_get().value)
+        .value;
+}
+
 
 /*===========================================================================
  * Factory state — opaque from the header
@@ -585,7 +595,7 @@ static struct yetty_ycore_void_result yrdawn_figure_process_bytes(struct yetty_y
                                                                   const uint8_t *bytes,
                                                                   size_t bytes_len)
 {
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
+    struct yetty_yrdawn_figure *f = yrdawn_figure_from_obj((struct yetty_yclass_object *)self - 1);
     if (bytes_len < 4) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn process_bytes: too small for sub_op");
     }
@@ -606,7 +616,7 @@ static struct yetty_ycore_void_result yrdawn_figure_process_bytes(struct yetty_y
 static struct yetty_ycore_void_result yrdawn_figure_process_input(
     struct yetty_yfigure_figure *self, struct yetty_ywire_wire_statemachine *sm)
 {
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
+    struct yetty_yrdawn_figure *f = yrdawn_figure_from_obj((struct yetty_yclass_object *)self - 1);
 
     /* The container handed us one record's body bytes via the SM. We
      * drain everything available right now into a buffer, then dispatch.
@@ -654,7 +664,7 @@ static struct yetty_ycore_void_result yrdawn_figure_process_input(
 static struct yetty_ycore_void_result yrdawn_figure_render(struct yetty_yfigure_figure *self,
                                                            struct yetty_ydraw_target *target)
 {
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
+    struct yetty_yrdawn_figure *f = yrdawn_figure_from_obj((struct yetty_yclass_object *)self - 1);
     if (!f->pipeline_ready || !f->frame_bind_group || !f->has_frame) {
         return YETTY_OK_VOID();
     }
@@ -664,10 +674,10 @@ static struct yetty_ycore_void_result yrdawn_figure_render(struct yetty_yfigure_
         return YETTY_OK_VOID();
     }
 
-    float x = self->rect.min.x;
-    float y = self->rect.min.y;
-    float w = self->rect.max.x - self->rect.min.x;
-    float h = self->rect.max.y - self->rect.min.y;
+    float x = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x;
+    float y = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y;
+    float w = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x;
+    float h = yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -740,7 +750,7 @@ static struct yetty_ycore_void_result yrdawn_figure_destroy(struct yetty_yfigure
     if (!self) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)self;
+    struct yetty_yrdawn_figure *f = yrdawn_figure_from_obj((struct yetty_yclass_object *)self - 1);
     release_gpu(f);
 
     if (f->session) {
@@ -784,43 +794,60 @@ static struct yetty_ycore_void_result yrdawn_figure_destroy_slot(struct yetty_yc
     return yrdawn_figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-static const struct yetty_yfigure_figure_ops *yrdawn_figure_ops(void)
+[[clang::annotate("override@yrdawn:figure:yfigure:process_input")]]
+static struct yetty_ycore_void_result yrdawn_figure_process_input_slot(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ywire_wire_statemachine *statemachine)
 {
-    static const struct yetty_yfigure_figure_ops ops = {
-        .process_input = yrdawn_figure_process_input,
-        .process_bytes = yrdawn_figure_process_bytes,
-    };
-    return &ops;
+    (void)ctx;
+    return yrdawn_figure_process_input((struct yetty_yfigure_figure *)(obj + 1), statemachine);
+}
+
+[[clang::annotate("override@yrdawn:figure:yfigure:process_bytes")]]
+static struct yetty_ycore_void_result yrdawn_figure_process_bytes_slot(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
+    size_t bytes_len)
+{
+    (void)ctx;
+    return yrdawn_figure_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
 }
 
 struct yetty_yrdawn_figure *yetty_yrdawn_figure_from_base(struct yetty_yfigure_figure *base)
 {
-    if (!base || base->ops != yrdawn_figure_ops()) {
+    if (!base || !((struct yetty_yclass_object *)(base) - 1)) {
         return NULL;
     }
-    return (struct yetty_yrdawn_figure *)base;
+    struct yetty_yclass_ptr_result cls_r = yetty_yrdawn_figure_class_get();
+    if (YETTY_IS_ERR(cls_r)) {
+        yetty_ycore_error_destroy(cls_r.error);
+        return NULL;
+    }
+    if (((struct yetty_yclass_object *)(base) - 1)->klass != cls_r.value) {
+        return NULL;
+    }
+    return yrdawn_figure_from_obj((struct yetty_yclass_object *)base - 1);
 }
 
 struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_figure *f)
 {
-    return &f->base;
+    return f->base;
 }
 
-static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_rectangle rect,
+static struct yetty_yfigure_figure_data_ptr_result yrdawn_factory(struct yetty_ycore_rectangle rect,
                                                              const struct yetty_context *context,
                                                              void *user)
 {
     struct yetty_yrdawn_factory_args *args = (struct yetty_yrdawn_factory_args *)user;
     if (!args) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: NULL args");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yrdawn_factory: NULL args");
     }
     if (!context && !args->context) {
-        return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: no context");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yrdawn_factory: no context");
     }
     if (!args->state) {
         args->state = calloc(1, sizeof(*args->state));
         if (!args->state) {
-            return YETTY_ERR(yetty_yfigure_figure_ptr, "yrdawn_factory: state oom");
+            return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yrdawn_factory: state oom");
         }
     }
     /* args->context may have been registered without a context (tooling).
@@ -833,19 +860,18 @@ static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_
      * (enables yclass dispatch). Typed body lives at obj + 1; the
      * embedded `base` is its first member. */
     struct yetty_yclass_ptr_result figure_class_r = yetty_yrdawn_figure_class_get();
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_class_r, "yrdawn_factory: figure class");
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, figure_class_r, "yrdawn_factory: figure class");
     struct yetty_yclass_object_ptr_result figure_obj_r =
         yetty_yclass_object_alloc(figure_class_r.value);
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_obj_r, "yrdawn_factory: object_alloc");
-    struct yetty_yrdawn_figure *f = (struct yetty_yrdawn_figure *)(figure_obj_r.value + 1);
-    f->base.ops = yrdawn_figure_ops();
-    f->base.self_obj = figure_obj_r.value;
-    f->base.rect = rect;
-    f->base.dirty = 1;
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, figure_obj_r, "yrdawn_factory: object_alloc");
+    struct yetty_yrdawn_figure *f = yrdawn_figure_from_obj(figure_obj_r.value);
+    f->base = (struct yetty_yfigure_figure *)(figure_obj_r.value + 1);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     f->args = args;
     f->target_format = args->context->runtime->gpu.surface_format;
     /* figure_id, session, pipeline assigned when SUB_HELLO arrives. */
-    return YETTY_OK(yetty_yfigure_figure_ptr, &f->base);
+    return YETTY_OK(yetty_yfigure_figure_data_ptr, f->base);
 }
 
 struct yetty_ycore_void_result yetty_yrdawn_register_factory(
@@ -993,7 +1019,7 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width
            height, bytes);
 
     f->has_frame = 1;
-    f->base.dirty = 1;
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     if (f->args && f->args->request_render_fn) {
         struct yetty_ycore_void_result rr =
             f->args->request_render_fn(f->args->request_render_user);

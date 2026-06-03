@@ -533,3 +533,41 @@ void object_free(struct object *obj)
     ydebug("obj=%p", (void *)obj);
     free(obj);
 }
+
+struct yetty_ycore_size_result object_data_offset(const struct class *obj_class,
+                                                   const struct class *target)
+{
+    ydebug("obj_class=%s target=%s", obj_class && obj_class->desc ? obj_class->desc->name : "(null)",
+           target && target->desc ? target->desc->name : "(null)");
+    if (!obj_class || !target) {
+        return YETTY_ERR(yetty_ycore_size, "object_data_offset: NULL class");
+    }
+
+    /* parent links run derived → root; collect them so we can replay the
+     * layout root → derived, matching the instance_size accumulation in
+     * class_register (and therefore object_alloc's allocation). */
+    const struct class *chain[OBJECT_MAX_DEPTH];
+    size_t depth = 0;
+    for (const struct class *cursor = obj_class; cursor; cursor = cursor->parent) {
+        if (depth >= OBJECT_MAX_DEPTH) {
+            return YETTY_ERR(yetty_ycore_size, "object_data_offset: inheritance chain too deep");
+        }
+        chain[depth++] = cursor;
+    }
+
+    size_t offset = sizeof(struct object);
+    for (size_t level = depth; level-- > 0;) {
+        const struct class *cls = chain[level];
+        if (cls == target) {
+            return YETTY_OK(yetty_ycore_size, offset);
+        }
+        offset += cls->desc->data_size;
+        for (size_t mixin = 0; mixin < cls->mixin_count; ++mixin) {
+            if (cls->mixins[mixin] == target) {
+                return YETTY_OK(yetty_ycore_size, offset);
+            }
+            offset += cls->mixins[mixin]->desc->data_size;
+        }
+    }
+    return YETTY_ERR(yetty_ycore_size, "object_data_offset: target class not in object layout");
+}

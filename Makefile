@@ -173,7 +173,7 @@ codegen: ## Run yclass codegen for all annotated modules (output committed to gi
 			fi; \
 			echo "==> yclass codegen: $$mod"; \
 			YCLASS_CODEGEN_INCLUDES="$(CURDIR)/include:$(CURDIR)/src" \
-				uv run src/yclass/gen/codegen.py "$$mod" \
+				uv run src/yetty/yclass/gen/codegen.py "$$mod" \
 					"$(CURDIR)/include/yetty" \
 					"$(CURDIR)/$$src_dir" \
 					$$sources || exit $$?; \

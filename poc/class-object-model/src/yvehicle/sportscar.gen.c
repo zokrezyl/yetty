@@ -4,9 +4,11 @@
 #include "yvehicle/sportscar.h"
 
 __attribute__((unused))
-static yvehicle_vehicle_describe_fn _yvehicle_sportscar_yvehicle_vehicle_describe_check = sportscar_describe;
+static yvehicle_vehicle_ctor_fn _yvehicle_sportscar_yvehicle_vehicle_ctor_check = sportscar_ctor;
 __attribute__((unused))
 static yvehicle_vehicle_accelerate_fn _yvehicle_sportscar_yvehicle_vehicle_accelerate_check = sportscar_accelerate;
+__attribute__((unused))
+static yvehicle_vehicle_describe_fn _yvehicle_sportscar_yvehicle_vehicle_describe_check = sportscar_describe;
 
 struct class_ptr_result yvehicle_sportscar_class_get(void)
 {
@@ -20,8 +22,9 @@ struct class_ptr_result yvehicle_sportscar_class_get(void)
         .data_size = sizeof(struct sportscar_data),
     };
     static const struct op ops[] = {
-        {"yvehicle", "vehicle_describe", (method_id_t)yvehicle_vehicle_describe, (impl_t)sportscar_describe},
+        {"yvehicle", "vehicle_ctor", (method_id_t)yvehicle_vehicle_ctor, (impl_t)sportscar_ctor},
         {"yvehicle", "vehicle_accelerate", (method_id_t)yvehicle_vehicle_accelerate, (impl_t)sportscar_accelerate},
+        {"yvehicle", "vehicle_describe", (method_id_t)yvehicle_vehicle_describe, (impl_t)sportscar_describe},
     };
     struct class_ptr_result _parent_r = yvehicle_car_class_get();
     if (YETTY_IS_ERR(_parent_r))
@@ -37,4 +40,39 @@ struct class_ptr_result yvehicle_sportscar_class_get(void)
         return YETTY_ERR(class_ptr, "yvehicle_sportscar_class_get: class_register failed", _r);
     cls = _r.value;
     return _r;
+}
+
+struct yvehicle_sportscar_data_ptr_result yvehicle_sportscar_data_get(struct object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yvehicle_sportscar_data_ptr, "yvehicle_sportscar_data_get: NULL object");
+    }
+    struct class_ptr_result class_result = yvehicle_sportscar_class_get();
+    YETTY_RETURN_IF_ERR(yvehicle_sportscar_data_ptr, class_result, "yvehicle_sportscar_data_get: class accessor failed");
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    YETTY_RETURN_IF_ERR(yvehicle_sportscar_data_ptr, offset_result, "yvehicle_sportscar_data_get: object_data_offset failed");
+    return YETTY_OK(yvehicle_sportscar_data_ptr, (struct sportscar_data *)((char *)obj + offset_result.value));
+}
+
+struct yetty_ycore_int_result yvehicle_sportscar_top_speed_get(struct object *obj)
+{
+    struct yvehicle_sportscar_data_ptr_result data = yvehicle_sportscar_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yvehicle_sportscar_top_speed_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->top_speed);
+}
+
+struct yetty_ycore_int_result yvehicle_sportscar_turbo_engaged_get(struct object *obj)
+{
+    struct yvehicle_sportscar_data_ptr_result data = yvehicle_sportscar_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yvehicle_sportscar_turbo_engaged_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->turbo_engaged);
+}
+
+struct yetty_ycore_void_result yvehicle_sportscar_turbo_engaged_set(struct object *obj, int value)
+{
+    struct yvehicle_sportscar_data_ptr_result data = yvehicle_sportscar_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yvehicle_sportscar_turbo_engaged_set: data block");
+    data.value->turbo_engaged = value;
+    return YETTY_OK_VOID();
 }

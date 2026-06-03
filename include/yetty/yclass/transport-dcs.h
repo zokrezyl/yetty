@@ -26,8 +26,8 @@
 #ifndef YCLASS_TRANSPORT_DCS_H
 #define YCLASS_TRANSPORT_DCS_H
 
-#include <yclass/transport.h>
-#include <yclass/transport-fd.h> /* for yetty_yclass_transport_ptr_result */
+#include <yetty/yclass/transport.h>
+#include <yetty/yclass/transport-fd.h> /* for yetty_yclass_transport_ptr_result */
 
 #ifdef __cplusplus
 extern "C" {

@@ -38,3 +38,46 @@ struct class_ptr_result yanimal_animal_class_get(void)
     cls = _r.value;
     return _r;
 }
+
+struct yanimal_animal_data_ptr_result yanimal_animal_data_get(struct object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yanimal_animal_data_ptr, "yanimal_animal_data_get: NULL object");
+    }
+    struct class_ptr_result class_result = yanimal_animal_class_get();
+    YETTY_RETURN_IF_ERR(yanimal_animal_data_ptr, class_result, "yanimal_animal_data_get: class accessor failed");
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    YETTY_RETURN_IF_ERR(yanimal_animal_data_ptr, offset_result, "yanimal_animal_data_get: object_data_offset failed");
+    return YETTY_OK(yanimal_animal_data_ptr, (struct animal_data *)((char *)obj + offset_result.value));
+}
+
+struct yetty_ycore_int_result yanimal_animal_age_get(struct object *obj)
+{
+    struct yanimal_animal_data_ptr_result data = yanimal_animal_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yanimal_animal_age_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->age);
+}
+
+struct yetty_ycore_void_result yanimal_animal_age_set(struct object *obj, int value)
+{
+    struct yanimal_animal_data_ptr_result data = yanimal_animal_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yanimal_animal_age_set: data block");
+    data.value->age = value;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_int_result yanimal_animal_energy_get(struct object *obj)
+{
+    struct yanimal_animal_data_ptr_result data = yanimal_animal_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yanimal_animal_energy_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->energy);
+}
+
+struct yetty_ycore_void_result yanimal_animal_energy_set(struct object *obj, int value)
+{
+    struct yanimal_animal_data_ptr_result data = yanimal_animal_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yanimal_animal_energy_set: data block");
+    data.value->energy = value;
+    return YETTY_OK_VOID();
+}

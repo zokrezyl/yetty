@@ -10,6 +10,71 @@ classes:
       name: figure
     mixins: []
     data: struct yetty_ymgui_figure
+    data_fields:
+      - name: base
+        type: "struct yetty_yfigure_figure *"
+        get: false
+        set: false
+      - name: pipeline
+        type: "struct yetty_ymgui_pipeline *"
+        get: false
+        set: false
+      - name: frame_bytes
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: frame_size
+        type: size_t
+        get: false
+        set: false
+      - name: has_frame
+        type: int
+        get: false
+        set: false
+      - name: atlas_ready
+        type: int
+        get: false
+        set: false
+      - name: atlas_w
+        type: uint32_t
+        get: false
+        set: false
+      - name: atlas_h
+        type: uint32_t
+        get: false
+        set: false
+      - name: atlas_texture
+        type: int
+        get: false
+        set: false
+      - name: atlas_view
+        type: int
+        get: false
+        set: false
+      - name: uniform_buffer
+        type: int
+        get: false
+        set: false
+      - name: vtx_buf
+        type: int
+        get: false
+        set: false
+      - name: vtx_buf_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: idx_buf
+        type: int
+        get: false
+        set: false
+      - name: idx_buf_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: bind_group
+        type: int
+        get: false
+        set: false
     ops:
       - slot: render
         slot_domain: yfigure
@@ -17,6 +82,12 @@ classes:
       - slot: destroy
         slot_domain: yfigure
         impl: ymgui_figure_destroy_slot
+      - slot: process_input
+        slot_domain: yfigure
+        impl: ymgui_figure_process_input_slot
+      - slot: process_bytes
+        slot_domain: yfigure
+        impl: ymgui_figure_process_bytes_slot
 exposed:
   - source_file: src/yetty/ymgui/figure.c
     verbatim: "/* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */

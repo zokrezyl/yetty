@@ -6,7 +6,7 @@
  * into `inbuf`, and hands the caller bytes from `inbuf` as they're
  * requested. */
 
-#include <yclass/transport-dcs.h>
+#include <yetty/yclass/transport-dcs.h>
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>

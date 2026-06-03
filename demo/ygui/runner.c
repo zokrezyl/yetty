@@ -25,6 +25,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
@@ -181,7 +182,7 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
             struct yetty_ycore_void_result rr =
                 yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, r->render_target);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
-            rf->dirty = 0;
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
         }
         struct yetty_ycore_void_result pp = r->render_target->ops->present(r->render_target);
         if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
@@ -221,8 +222,8 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
             struct yetty_ycore_rectangle rr = {
                 .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
             struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
-            rf->rect = rr;
-            rf->dirty = 1;
+            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, rr);
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
         }
         if (r->yframework->event_loop->ops->request_render) {
             r->yframework->event_loop->ops->request_render(r->yframework->event_loop);

@@ -30,3 +30,31 @@ struct class_ptr_result yvehicle_car_class_get(void)
     cls = _r.value;
     return _r;
 }
+
+struct yvehicle_car_data_ptr_result yvehicle_car_data_get(struct object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yvehicle_car_data_ptr, "yvehicle_car_data_get: NULL object");
+    }
+    struct class_ptr_result class_result = yvehicle_car_class_get();
+    YETTY_RETURN_IF_ERR(yvehicle_car_data_ptr, class_result, "yvehicle_car_data_get: class accessor failed");
+    struct yetty_ycore_size_result offset_result =
+        object_data_offset(object_class(obj), class_result.value);
+    YETTY_RETURN_IF_ERR(yvehicle_car_data_ptr, offset_result, "yvehicle_car_data_get: object_data_offset failed");
+    return YETTY_OK(yvehicle_car_data_ptr, (struct car_data *)((char *)obj + offset_result.value));
+}
+
+struct yetty_ycore_int_result yvehicle_car_doors_get(struct object *obj)
+{
+    struct yvehicle_car_data_ptr_result data = yvehicle_car_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data, "yvehicle_car_doors_get: data block");
+    return YETTY_OK(yetty_ycore_int, data.value->doors);
+}
+
+struct yetty_ycore_void_result yvehicle_car_doors_set(struct object *obj, int value)
+{
+    struct yvehicle_car_data_ptr_result data = yvehicle_car_data_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "yvehicle_car_doors_set: data block");
+    data.value->doors = value;
+    return YETTY_OK_VOID();
+}

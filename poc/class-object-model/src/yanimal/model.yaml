@@ -57,6 +57,15 @@ classes:
     parent: null
     mixins: []
     data: struct animal_data
+    data_fields:
+      - name: age
+        type: int
+        get: true
+        set: true
+      - name: energy
+        type: int
+        get: true
+        set: true
     ops:
       - slot: animal_ctor
         slot_domain: yanimal
@@ -85,7 +94,15 @@ classes:
       - domain: yanimal
         name: pet
     data: struct cat_data
+    data_fields:
+      - name: lives_remaining
+        type: int
+        get: true
+        set: true
     ops:
+      - slot: animal_ctor
+        slot_domain: yanimal
+        impl: cat_ctor
       - slot: animal_speak
         slot_domain: yanimal
         impl: cat_speak
@@ -101,7 +118,15 @@ classes:
       - domain: yanimal
         name: pet
     data: struct dog_data
+    data_fields:
+      - name: loyalty
+        type: int
+        get: true
+        set: true
     ops:
+      - slot: animal_ctor
+        slot_domain: yanimal
+        impl: dog_ctor
       - slot: animal_speak
         slot_domain: yanimal
         impl: dog_speak
@@ -113,6 +138,11 @@ classes:
     parent: null
     mixins: []
     data: struct pet_data
+    data_fields:
+      - name: treats_today
+        type: int
+        get: true
+        set: true
     ops:
       - slot: animal_eat
         slot_domain: yanimal

@@ -6,6 +6,17 @@
 
 #include "class.h"
 #include "methods.gen.h"  /* every public method stub in this module */
+#include "yvehicle/vehicle.h"
+
+/* Data-block handle — opaque outside the owning .c. The
+ * struct stays private; only its pointer crosses here, in a
+ * Result so a bad object surfaces rather than corrupting. */
+struct motorbike_data;
+YETTY_YRESULT_DECLARE(yvehicle_motorbike_data_ptr, struct motorbike_data *);
+struct yvehicle_motorbike_data_ptr_result yvehicle_motorbike_data_get(struct object *obj);
+/* Member accessors — the public way to reach the data. */
+struct yetty_ycore_int_result yvehicle_motorbike_has_sidecar_get(struct object *obj);
+struct yetty_ycore_void_result yvehicle_motorbike_has_sidecar_set(struct object *obj, int value);
 
 struct class_ptr_result yvehicle_motorbike_class_get(void);
 

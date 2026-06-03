@@ -10,6 +10,91 @@ classes:
       name: figure
     mixins: []
     data: struct yetty_yterm_shader_glyph_figure
+    data_fields:
+      - name: base
+        type: "struct yetty_yfigure_figure *"
+        get: false
+        set: false
+      - name: text_layer
+        type: "struct yetty_yrender_terminal_layer *"
+        get: false
+        set: false
+      - name: context
+        type: "const struct yetty_context *"
+        get: false
+        set: false
+      - name: request_render_fn
+        type: yetty_yterm_request_render_fn
+        get: false
+        set: false
+      - name: request_render_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: grid_size
+        type: struct yetty_ycore_grid_size
+        get: false
+        set: false
+      - name: cell_size
+        type: struct yetty_ycore_pixel_size
+        get: false
+        set: false
+      - name: shader_source
+        type: "char *"
+        get: false
+        set: false
+      - name: shader_source_size
+        type: size_t
+        get: false
+        set: false
+      - name: rs
+        type: struct yetty_ydraw_gpu_resource_set
+        get: false
+        set: false
+      - name: binder
+        type: "struct yetty_yrender_gpu_resource_binder *"
+        get: false
+        set: false
+      - name: binder_finalized
+        type: int
+        get: false
+        set: false
+      - name: t0
+        type: struct timespec
+        get: false
+        set: false
+      - name: instances
+        type: "struct shader_glyph_instance *"
+        get: false
+        set: false
+      - name: instance_cap
+        type: size_t
+        get: false
+        set: false
+      - name: instance_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: event_loop
+        type: "struct yetty_yevent_event_loop *"
+        get: false
+        set: false
+      - name: timer_id
+        type: yetty_yevent_timer_id
+        get: false
+        set: false
+      - name: timer_created
+        type: int
+        get: false
+        set: false
+      - name: timer_running
+        type: int
+        get: false
+        set: false
+      - name: listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
     ops:
       - slot: render
         slot_domain: yfigure

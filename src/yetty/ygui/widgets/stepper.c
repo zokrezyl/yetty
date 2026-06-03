@@ -95,23 +95,21 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         float x0 = cx + (cr + gap * 0.5f) * (i == 0 ? 1 : 0) + i * (2 * cr + gap) + cr;
         (void)x0;
         float lx = r.min.x + cr + i * (2 * cr + gap) + cr;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_box(ctx, lx, cy - 1, 2 * cr + gap, 2,
-                                      i < d->current ? COLOR_DONE : COLOR_LINE, 1),
-                            "stepper: line");
+        struct yetty_ycore_void_result result_98 = yguix_box(ctx, lx, cy - 1, 2 * cr + gap, 2,
+                                      i < d->current ? COLOR_DONE : COLOR_LINE, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_98, "stepper: line");
     }
     for (int i = 0; i < d->n; i++) {
         uint32_t col = i <= d->current ? COLOR_DONE : COLOR_TODO;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_circle(ctx, cx, cy, cr, col), "stepper: c");
+        struct yetty_ycore_void_result result_105 = yguix_circle(ctx, cx, cy, cr, col);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_105, "stepper: c");
         char buf[8];
         snprintf(buf, sizeof(buf), "%d", i + 1);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, buf, cx - 4, cy + 5, 13.0f, COLOR_NUM), "stepper: num");
+        struct yetty_ycore_void_result result_108 = yguix_text(ctx, buf, cx - 4, cy + 5, 13.0f, COLOR_NUM);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_108, "stepper: num");
         if (d->labels[i]) {
-            YETTY_RETURN_IF_ERR(
-                yetty_ycore_void,
-                yguix_text(ctx, d->labels[i], cx - 24, cy + cr + 14, 12.0f, COLOR_TEXT),
-                "stepper: label");
+            struct yetty_ycore_void_result result_111 = yguix_text(ctx, d->labels[i], cx - 24, cy + cr + 14, 12.0f, COLOR_TEXT);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_111, "stepper: label");
         }
         cx += 2 * cr + gap;
     }

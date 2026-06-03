@@ -1,12 +1,12 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `textarea` (module: ygui).
  * Fully generated from the source .c — do not edit. Function
- * APIs come from `expose` annotations; types and other header
- * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
+ * and public-type APIs come from `expose` annotations; the
+ * forward declarations are derived from the prototype types. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_TEXTAREA_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_TEXTAREA_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ygui/methods.h>
 
 struct yetty_yclass_ptr_result yetty_ygui_textarea_class_get(void);
@@ -15,6 +15,8 @@ struct yetty_ygui_object;
 struct textarea_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_textarea_data_ptr, struct textarea_data *);
 struct yetty_ygui_textarea_data_ptr_result yetty_ygui_textarea_data(struct yetty_ygui_object *obj);
+
+struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_ygui_object *obj, const char *text);
 const char *yetty_ygui_textarea_get_text(const struct yetty_ygui_object *obj);

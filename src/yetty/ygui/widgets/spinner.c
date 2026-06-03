@@ -149,23 +149,18 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_ctx *ycl
         return YETTY_OK_VOID();
     }
     float third = w / 3.0f;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, paint_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4),
-                        "spinner_paint: bg");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        paint_box(ctx, r.min.x + 2, r.min.y + 2, third - 4, h - 4, COLOR_BTN, 3),
-                        "spinner_paint: minus_bg");
-    YETTY_RETURN_IF_ERR(
-        yetty_ycore_void,
-        paint_box(ctx, r.min.x + 2 * third + 2, r.min.y + 2, third - 4, h - 4, COLOR_BTN, 3),
-        "spinner_paint: plus_bg");
+    struct yetty_ycore_void_result result_152 = paint_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_152, "spinner_paint: bg");
+    struct yetty_ycore_void_result result_154 = paint_box(ctx, r.min.x + 2, r.min.y + 2, third - 4, h - 4, COLOR_BTN, 3);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_154, "spinner_paint: minus_bg");
+    struct yetty_ycore_void_result result_157 = paint_box(ctx, r.min.x + 2 * third + 2, r.min.y + 2, third - 4, h - 4, COLOR_BTN, 3);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_157, "spinner_paint: plus_bg");
     float fs = 14.0f;
     float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        paint_text(ctx, "-", r.min.x + third * 0.5f - 4, ty, fs, COLOR_ACC),
-                        "spinner_paint: minus");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        paint_text(ctx, "+", r.min.x + 2.5f * third - 4, ty, fs, COLOR_ACC),
-                        "spinner_paint: plus");
+    struct yetty_ycore_void_result result_163 = paint_text(ctx, "-", r.min.x + third * 0.5f - 4, ty, fs, COLOR_ACC);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_163, "spinner_paint: minus");
+    struct yetty_ycore_void_result result_166 = paint_text(ctx, "+", r.min.x + 2.5f * third - 4, ty, fs, COLOR_ACC);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_166, "spinner_paint: plus");
     char buf[32];
     snprintf(buf, sizeof(buf), "%g", d->value);
     return paint_text(ctx, buf, r.min.x + third + 8, ty, fs, COLOR_TEXT);

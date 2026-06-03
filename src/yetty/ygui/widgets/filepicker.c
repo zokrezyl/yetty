@@ -195,18 +195,15 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                    .half_width = w * 0.5f,
                                    .half_height = h * 0.5f,
                                    .corner_radius = 0.0f};
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0, 0, FP_BG,
-                                                              FP_BORDER, 1.0f, &frame),
-                        "fp: frame");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_box(ctx, r.min.x, r.min.y, w, FP_HEADER_H, FP_HEADER_BG, 0.0f),
-                        "fp: header");
+    struct yetty_ycore_void_result result_198 = yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0, 0, FP_BG,
+                                                              FP_BORDER, 1.0f, &frame);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_198, "fp: frame");
+    struct yetty_ycore_void_result result_202 = yguix_box(ctx, r.min.x, r.min.y, w, FP_HEADER_H, FP_HEADER_BG, 0.0f);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_202, "fp: header");
     if (d->cwd) {
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, d->cwd, r.min.x + FP_PAD,
-                                       r.min.y + (FP_HEADER_H + fs) * 0.5f - 3.0f, fs, FP_TEXT),
-                            "fp: cwd");
+        struct yetty_ycore_void_result result_206 = yguix_text(ctx, d->cwd, r.min.x + FP_PAD,
+                                       r.min.y + (FP_HEADER_H + fs) * 0.5f - 3.0f, fs, FP_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_206, "fp: cwd");
     }
 
     float list_y = r.min.y + FP_HEADER_H + 2.0f;
@@ -223,16 +220,14 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     for (int i = first; i < last; i++) {
         float ry = list_y + (float)(i - first) * FP_ROW_H;
         if (i == d->selected) {
-            YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                yguix_box(ctx, r.min.x + 2.0f, ry, w - 4.0f, FP_ROW_H, FP_SEL_BG, 0.0f),
-                                "fp: sel");
+            struct yetty_ycore_void_result result_226 = yguix_box(ctx, r.min.x + 2.0f, ry, w - 4.0f, FP_ROW_H, FP_SEL_BG, 0.0f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_226, "fp: sel");
         }
         const char *e = d->entries[i];
         uint32_t col = (e && strchr(e, '/')) ? FP_DIR : FP_TEXT;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, e ? e : "", r.min.x + FP_PAD,
-                                       ry + (FP_ROW_H + fs) * 0.5f - 3.0f, fs, col),
-                            "fp: row");
+        struct yetty_ycore_void_result result_232 = yguix_text(ctx, e ? e : "", r.min.x + FP_PAD,
+                                       ry + (FP_ROW_H + fs) * 0.5f - 3.0f, fs, col);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_232, "fp: row");
     }
 
     /* Scrollbar — shown whenever the list overflows the visible rows. The
@@ -245,9 +240,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         if (track_h > list_h) {
             track_h = list_h;
         }
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_box(ctx, sb_x, list_y, sb_w, track_h, FP_SEL_BG, sb_w * 0.5f),
-                            "fp: sb track");
+        struct yetty_ycore_void_result result_248 = yguix_box(ctx, sb_x, list_y, sb_w, track_h, FP_SEL_BG, sb_w * 0.5f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_248, "fp: sb track");
         float thumb_h = track_h * (float)visible / (float)d->entry_count;
         if (thumb_h < 16.0f) {
             thumb_h = 16.0f;
@@ -258,9 +252,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         int max_scroll = d->entry_count - visible;
         float frac = max_scroll > 0 ? (float)d->scroll / (float)max_scroll : 0.0f;
         float thumb_y = list_y + frac * (track_h - thumb_h);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_box(ctx, sb_x, thumb_y, sb_w, thumb_h, FP_DIR, sb_w * 0.5f),
-                            "fp: sb thumb");
+        struct yetty_ycore_void_result result_261 = yguix_box(ctx, sb_x, thumb_y, sb_w, thumb_h, FP_DIR, sb_w * 0.5f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_261, "fp: sb thumb");
     }
     return YETTY_OK_VOID();
 }

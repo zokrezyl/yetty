@@ -11,7 +11,7 @@
  * Every fallible entry point returns a Result. Internal helpers do
  * too, propagating via YETTY_RETURN_IF_ERR. */
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 
 #include <ut/uthash.h>
 #include <yetty/ycore/result.h>
@@ -50,6 +50,11 @@ struct yetty_yclass {
     } dispatch_by_domain[YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS];
 
     size_t instance_size;
+    struct data_slice {
+        const struct yetty_yclass *cls;
+        size_t offset;
+    } *data_slices;
+    size_t data_slice_count;
     UT_hash_handle hh; /* keyed by desc->name */
 };
 
@@ -454,7 +459,25 @@ static void class_destroy(struct yetty_yclass *cls)
         free(cls->dispatch_by_domain[d].impls);
     }
     free((void *)cls->mixins);
+    free(cls->data_slices);
     free(cls);
+}
+
+static struct yetty_ycore_void_result class_add_data_slice(struct yetty_yclass *cls,
+                                                           const struct yetty_yclass *slice_cls,
+                                                           size_t offset)
+{
+    struct data_slice *slices =
+        realloc(cls->data_slices, (cls->data_slice_count + 1) * sizeof(*slices));
+    if (!slices) {
+        return YETTY_ERR(yetty_ycore_void, "class_add_data_slice: realloc failed");
+    }
+    cls->data_slices = slices;
+    cls->data_slices[cls->data_slice_count++] = (struct data_slice){
+        .cls = slice_cls,
+        .offset = offset,
+    };
+    return YETTY_OK_VOID();
 }
 
 struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_descriptor *desc,
@@ -515,12 +538,24 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
      * too-small object_alloc later. */
     size_t offset = sizeof(struct yetty_yclass_object);
     for (const struct yetty_yclass *p = parent; p != NULL; p = p->parent) {
+        struct yetty_ycore_void_result so = class_add_data_slice(cls, p, offset);
+        if (YETTY_IS_ERR(so)) {
+            class_destroy(cls);
+            return YETTY_ERR(yetty_yclass_ptr,
+                             "class_register: add parent data slice failed", so);
+        }
         if (size_add_check(offset, p->desc->data_size, &offset)) {
             class_destroy(cls);
             return YETTY_ERR(yetty_yclass_ptr,
                              "class_register: instance_size overflow (parent data)");
         }
         for (size_t m = 0; m < p->mixin_count; ++m) {
+            so = class_add_data_slice(cls, p->mixins[m], offset);
+            if (YETTY_IS_ERR(so)) {
+                class_destroy(cls);
+                return YETTY_ERR(yetty_yclass_ptr,
+                                 "class_register: add parent mixin data slice failed", so);
+            }
             if (size_add_check(offset, p->mixins[m]->desc->data_size, &offset)) {
                 class_destroy(cls);
                 return YETTY_ERR(yetty_yclass_ptr,
@@ -528,12 +563,24 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
             }
         }
     }
+    struct yetty_ycore_void_result so = class_add_data_slice(cls, cls, offset);
+    if (YETTY_IS_ERR(so)) {
+        class_destroy(cls);
+        return YETTY_ERR(yetty_yclass_ptr,
+                         "class_register: add own data slice failed", so);
+    }
     if (size_add_check(offset, desc->data_size, &offset)) {
         class_destroy(cls);
         return YETTY_ERR(yetty_yclass_ptr,
                          "class_register: instance_size overflow (own data)");
     }
     for (size_t m = 0; m < mixin_count; ++m) {
+        so = class_add_data_slice(cls, mixins[m], offset);
+        if (YETTY_IS_ERR(so)) {
+            class_destroy(cls);
+            return YETTY_ERR(yetty_yclass_ptr,
+                             "class_register: add own mixin data slice failed", so);
+        }
         if (size_add_check(offset, mixins[m]->desc->data_size, &offset)) {
             class_destroy(cls);
             return YETTY_ERR(yetty_yclass_ptr,
@@ -774,4 +821,47 @@ struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_obje
     ydebug("obj=%p", (void *)obj);
     free(obj);
     return YETTY_OK_VOID();
+}
+
+static size_t class_data_offset(const struct yetty_yclass *leaf, const struct yetty_yclass *target)
+{
+    if (!leaf || !target) {
+        return SIZE_MAX;
+    }
+    for (size_t i = 0; i < leaf->data_slice_count; ++i) {
+        if (leaf->data_slices[i].cls == target) {
+            return leaf->data_slices[i].offset;
+        }
+    }
+    return SIZE_MAX;
+}
+
+struct yetty_ycore_size_result yetty_yclass_object_data_offset(const struct yetty_yclass *leaf,
+                                                               const struct yetty_yclass *cls)
+{
+    size_t offset = class_data_offset(leaf, cls);
+    if (offset == SIZE_MAX) {
+        return YETTY_ERR(yetty_ycore_size,
+                         "yclass_object_data_offset: class not in leaf object's chain");
+    }
+    return YETTY_OK(yetty_ycore_size, offset);
+}
+struct yetty_yclass_void_ptr_result yetty_yclass_object_data(struct yetty_yclass_object *obj,
+                                                             const struct yetty_yclass *cls)
+{
+    if (!obj || !obj->klass) {
+        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: NULL object");
+    }
+    if (!cls) {
+        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: NULL class");
+    }
+    size_t offset = class_data_offset(obj->klass, cls);
+    if (offset == SIZE_MAX) {
+        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: class not in object's chain");
+    }
+    if (offset > obj->klass->instance_size ||
+        cls->desc->data_size > obj->klass->instance_size - offset) {
+        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: data slice outside object");
+    }
+    return YETTY_OK(yetty_yclass_void_ptr, (char *)obj + offset);
 }

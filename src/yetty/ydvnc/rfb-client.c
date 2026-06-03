@@ -275,37 +275,46 @@ static struct yetty_ycore_void_result process_recv(struct yetty_ydvnc_rfb_client
         enum ydvnc_state st_before = c->state;
 
         switch (c->state) {
-        case YDVNC_ST_PROTO_VERSION:
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_proto_version(c),
-                                "proto version handler failed");
+        case YDVNC_ST_PROTO_VERSION: {
+            struct yetty_ycore_void_result result_279 = handle_proto_version(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_279, "proto version handler failed");
             break;
-        case YDVNC_ST_SECURITY_TYPES:
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_security_types(c),
-                                "security types handler failed");
+        }
+        case YDVNC_ST_SECURITY_TYPES: {
+            struct yetty_ycore_void_result result_283 = handle_security_types(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_283, "security types handler failed");
             break;
-        case YDVNC_ST_SECURITY_REASON:
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_security_reason(c),
-                                "security reason handler failed");
+        }
+        case YDVNC_ST_SECURITY_REASON: {
+            struct yetty_ycore_void_result result_287 = handle_security_reason(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_287, "security reason handler failed");
             break;
-        case YDVNC_ST_AUTH_CHALLENGE:
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_auth_challenge(c),
-                                "auth challenge handler failed");
+        }
+        case YDVNC_ST_AUTH_CHALLENGE: {
+            struct yetty_ycore_void_result result_291 = handle_auth_challenge(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_291, "auth challenge handler failed");
             break;
-        case YDVNC_ST_AUTH_RESULT:
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_auth_result(c),
-                                "auth result handler failed");
+        }
+        case YDVNC_ST_AUTH_RESULT: {
+            struct yetty_ycore_void_result result_295 = handle_auth_result(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_295, "auth result handler failed");
             break;
-        case YDVNC_ST_AUTH_FAIL_REASON:
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_auth_fail_reason(c),
-                                "auth fail reason handler failed");
+        }
+        case YDVNC_ST_AUTH_FAIL_REASON: {
+            struct yetty_ycore_void_result result_299 = handle_auth_fail_reason(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_299, "auth fail reason handler failed");
             break;
-        case YDVNC_ST_SERVER_INIT:
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_server_init(c),
-                                "server init handler failed");
+        }
+        case YDVNC_ST_SERVER_INIT: {
+            struct yetty_ycore_void_result result_303 = handle_server_init(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_303, "server init handler failed");
             break;
-        case YDVNC_ST_MAIN:
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_main(c), "main handler failed");
+        }
+        case YDVNC_ST_MAIN: {
+            struct yetty_ycore_void_result result_307 = handle_main(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, result_307, "main handler failed");
             break;
+        }
         case YDVNC_ST_DISCONNECTED:
             return YETTY_OK_VOID();
         }
@@ -335,10 +344,8 @@ static struct yetty_ycore_void_result handle_proto_version(struct yetty_ydvnc_rf
     yinfo("ydvnc: server version: %.*s", YETTY_YDVNC_RFB_PROTO_VERSION_LEN - 1, server_version);
 
     /* Always reply 003.008 — that's what every modern server supports. */
-    YETTY_RETURN_IF_ERR(
-        yetty_ycore_void,
-        transport_send(c, YETTY_YDVNC_RFB_PROTO_VERSION_38, YETTY_YDVNC_RFB_PROTO_VERSION_LEN),
-        "sending client version failed");
+    struct yetty_ycore_void_result result_338 = transport_send(c, YETTY_YDVNC_RFB_PROTO_VERSION_38, YETTY_YDVNC_RFB_PROTO_VERSION_LEN);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_338, "sending client version failed");
 
     c->state = YDVNC_ST_SECURITY_TYPES;
     return YETTY_OK_VOID();
@@ -398,8 +405,8 @@ static struct yetty_ycore_void_result handle_security_types(struct yetty_ydvnc_r
                          "ydvnc: no compatible security type offered (need None or VNC auth)");
     }
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, transport_send(c, &chosen, 1),
-                        "sending chosen security type failed");
+    struct yetty_ycore_void_result result_401 = transport_send(c, &chosen, 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_401, "sending chosen security type failed");
     yinfo("ydvnc: security type chosen: %s",
           chosen == YETTY_YDVNC_RFB_SEC_NONE ? "None" : "VNC (DES)");
     c->state = next;
@@ -445,8 +452,8 @@ static struct yetty_ycore_void_result handle_auth_challenge(struct yetty_ydvnc_r
     uint8_t response[YETTY_YDVNC_RFB_VNC_AUTH_CHALLENGE_LEN];
     yetty_ydvnc_vnc_auth_response(c->password, challenge, response);
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, transport_send(c, response, sizeof(response)),
-                        "VNC auth response send failed");
+    struct yetty_ycore_void_result result_448 = transport_send(c, response, sizeof(response));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_448, "VNC auth response send failed");
     c->state = YDVNC_ST_AUTH_RESULT;
     return YETTY_OK_VOID();
 }
@@ -470,7 +477,8 @@ static struct yetty_ycore_void_result handle_auth_result(struct yetty_ydvnc_rfb_
         return YETTY_OK_VOID();
     }
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_client_init(c), "send_client_init failed");
+    struct yetty_ycore_void_result result_473 = send_client_init(c);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_473, "send_client_init failed");
     c->state = YDVNC_ST_SERVER_INIT;
     return YETTY_OK_VOID();
 }
@@ -535,18 +543,21 @@ static struct yetty_ycore_void_result handle_server_init(struct yetty_ydvnc_rfb_
 
     yinfo("ydvnc: server init: %ux%u \"%s\"", w, h, name);
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_framebuffer(c, w, h), "framebuffer resize failed");
+    struct yetty_ycore_void_result result_538 = resize_framebuffer(c, w, h);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_538, "framebuffer resize failed");
 
     /* Tell server we want native BGRA8 little-endian — straight memcpy
      * into a WGPU BGRA8Unorm texture. */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_set_pixel_format(c), "SetPixelFormat send failed");
+    struct yetty_ycore_void_result result_542 = send_set_pixel_format(c);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_542, "SetPixelFormat send failed");
 
     /* Advertise encodings (POC: Raw + CopyRect + DesktopSize). */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_set_encodings(c), "SetEncodings send failed");
+    struct yetty_ycore_void_result result_545 = send_set_encodings(c);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_545, "SetEncodings send failed");
 
     /* Initial full update request. */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_full_fb_update_request(c, 0),
-                        "initial FramebufferUpdateRequest send failed");
+    struct yetty_ycore_void_result result_548 = send_full_fb_update_request(c, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_548, "initial FramebufferUpdateRequest send failed");
 
     c->state = YDVNC_ST_MAIN;
     if (c->on_connected) {
@@ -598,8 +609,8 @@ static struct yetty_ycore_void_result send_set_encodings(struct yetty_ydvnc_rfb_
     uint16_t n_be = htons(n);
     memcpy(header + 2, &n_be, 2);
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, transport_send(c, header, sizeof(header)),
-                        "SetEncodings header send failed");
+    struct yetty_ycore_void_result result_601 = transport_send(c, header, sizeof(header));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_601, "SetEncodings header send failed");
     return transport_send(c, encs, sizeof(int32_t) * n);
 }
 
@@ -628,8 +639,8 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
             if (c->fb_rects_remaining == 0) {
                 c->in_fb_update = 0;
                 /* Ask for the next incremental update. */
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, send_full_fb_update_request(c, 1),
-                                    "incremental FramebufferUpdateRequest failed");
+                struct yetty_ycore_void_result result_631 = send_full_fb_update_request(c, 1);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, result_631, "incremental FramebufferUpdateRequest failed");
                 if (c->on_frame) {
                     c->on_frame(c->on_frame_userdata);
                 }
@@ -657,10 +668,8 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
             int32_t enc = c->current_rect.encoding;
             if (enc == YETTY_YDVNC_RFB_PSEUDO_DESKTOP_SIZE) {
                 /* No payload — width/height are in the rect header itself. */
-                YETTY_RETURN_IF_ERR(
-                    yetty_ycore_void,
-                    resize_framebuffer(c, c->current_rect.width, c->current_rect.height),
-                    "DesktopSize: resize_framebuffer failed");
+                struct yetty_ycore_void_result result_660 = resize_framebuffer(c, c->current_rect.width, c->current_rect.height);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, result_660, "DesktopSize: resize_framebuffer failed");
                 c->have_rect_header = 0;
                 c->fb_rects_remaining--;
                 continue;
@@ -671,8 +680,8 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
                 if (c->rb_off < needed) {
                     return YETTY_OK_VOID();
                 }
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, decode_raw_rect(c, c->rb, needed),
-                                    "Raw decode failed");
+                struct yetty_ycore_void_result result_674 = decode_raw_rect(c, c->rb, needed);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, result_674, "Raw decode failed");
                 consume(c, needed);
                 c->have_rect_header = 0;
                 c->fb_rects_remaining--;
@@ -684,8 +693,8 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
                 if (c->rb_off < 4) {
                     return YETTY_OK_VOID();
                 }
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, decode_copyrect(c, c->rb, 4),
-                                    "CopyRect decode failed");
+                struct yetty_ycore_void_result result_687 = decode_copyrect(c, c->rb, 4);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, result_687, "CopyRect decode failed");
                 consume(c, 4);
                 c->have_rect_header = 0;
                 c->fb_rects_remaining--;
@@ -893,7 +902,8 @@ static struct yetty_ycore_void_result resize_framebuffer(struct yetty_ydvnc_rfb_
         }
     }
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, ensure_gpu_pipeline(c), "ensure_gpu_pipeline failed");
+    struct yetty_ycore_void_result result_896 = ensure_gpu_pipeline(c);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_896, "ensure_gpu_pipeline failed");
 
     WGPUBindGroupEntry e[2] = {0};
     e[0].binding = 0;

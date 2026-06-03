@@ -119,26 +119,22 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4),
-                        "choicebox: bg");
+    struct yetty_ycore_void_result result_122 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_122, "choicebox: bg");
     for (int i = 0; i < d->n; i++) {
         float y = r.min.y + i * ROW_H;
         if (y > r.max.y) {
             break;
         }
-        YETTY_RETURN_IF_ERR(
-            yetty_ycore_void,
-            yguix_box(ctx, r.min.x, y, w, ROW_H, d->rows[i].selected ? COLOR_ROW_ON : COLOR_ROW, 0),
-            "choicebox: row");
+        struct yetty_ycore_void_result result_129 = yguix_box(ctx, r.min.x, y, w, ROW_H, d->rows[i].selected ? COLOR_ROW_ON : COLOR_ROW, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_129, "choicebox: row");
         float fs = 13.0f;
         float ty = y + (ROW_H + fs) * 0.5f - 3;
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, d->rows[i].selected ? "[x]" : "[ ]", r.min.x + 8, ty,
-                                       fs, d->rows[i].selected ? COLOR_CHECK : COLOR_TEXT),
-                            "choicebox: marker");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                            yguix_text(ctx, d->rows[i].label, r.min.x + 40, ty, fs, COLOR_TEXT),
-                            "choicebox: text");
+        struct yetty_ycore_void_result result_135 = yguix_text(ctx, d->rows[i].selected ? "[x]" : "[ ]", r.min.x + 8, ty,
+                                       fs, d->rows[i].selected ? COLOR_CHECK : COLOR_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_135, "choicebox: marker");
+        struct yetty_ycore_void_result result_139 = yguix_text(ctx, d->rows[i].label, r.min.x + 40, ty, fs, COLOR_TEXT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, result_139, "choicebox: text");
     }
     return YETTY_OK_VOID();
 }

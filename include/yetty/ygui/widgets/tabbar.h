@@ -1,12 +1,12 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `tabbar` (module: ygui).
  * Fully generated from the source .c — do not edit. Function
- * APIs come from `expose` annotations; types and other header
- * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */
+ * and public-type APIs come from `expose` annotations; the
+ * forward declarations are derived from the prototype types. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_TABBAR_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_TABBAR_H
 
-#include <yclass/class.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ygui/methods.h>
 
 struct yetty_yclass_ptr_result yetty_ygui_tabbar_class_get(void);
@@ -15,6 +15,8 @@ struct yetty_ygui_object;
 struct tabbar_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_tabbar_data_ptr, struct tabbar_data *);
 struct yetty_ygui_tabbar_data_ptr_result yetty_ygui_tabbar_data(struct yetty_ygui_object *obj);
+
+struct yetty_ygui_object;
 
 struct yetty_ygui_object;
 typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index, void *userdata);

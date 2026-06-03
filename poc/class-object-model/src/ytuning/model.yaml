@@ -10,7 +10,15 @@ classes:
       name: sportscar
     mixins: []
     data: struct tuned_sportscar_data
+    data_fields:
+      - name: boost_level
+        type: int
+        get: true
+        set: true
     ops:
+      - slot: vehicle_start
+        slot_domain: yvehicle
+        impl: tuned_sportscar_start
       - slot: vehicle_describe
         slot_domain: yvehicle
         impl: tuned_sportscar_describe

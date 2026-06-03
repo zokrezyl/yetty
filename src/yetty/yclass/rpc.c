@@ -1,6 +1,6 @@
 /* RPC runtime — packed-header wire, op enum, uthash translations. */
 
-#include <yclass/rpc.h>
+#include <yetty/yclass/rpc.h>
 
 #include <ut/uthash.h>
 #include <yetty/ycore/result.h>

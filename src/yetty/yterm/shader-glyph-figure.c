@@ -15,7 +15,7 @@
  *
  * Animation timer: owned here, registered on the borrowed event loop.
  * Self-stops when is_empty() — idle terminals cost nothing. The tick
- * sets self->dirty = 1 and calls request_render_fn; the next render frame
+ * marks the figure dirty and calls request_render_fn; the next render frame
  * lands here through the container's render walk.
  */
 #include <yetty/yplatform/compat.h> /* clock_gettime shim on MSVC */
@@ -61,7 +61,7 @@ struct shader_glyph_instance {
 
 struct [[clang::annotate("class@yterm:shader_glyph")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_yterm_shader_glyph_figure {
-    struct yetty_yfigure_figure base;
+    struct yetty_yfigure_figure *base;
 
     /* Borrowed — text-layer owns the cell buffer; we just point at it. */
     struct yetty_yrender_terminal_layer *text_layer;
@@ -105,6 +105,16 @@ yetty_yterm_shader_glyph_figure {
     int timer_running;
     struct yetty_yevent_event_listener listener;
 };
+
+/* This kind's own data slice (its fields sit after the figure
+ * base slice in the shared yclass object). */
+static struct yetty_yterm_shader_glyph_figure *shader_glyph_figure_from_obj(struct yetty_yclass_object *obj)
+{
+    return (struct yetty_yterm_shader_glyph_figure *)yetty_yclass_object_data(
+               obj, yetty_yterm_shader_glyph_class_get().value)
+        .value;
+}
+
 
 /* ===========================================================================
  * Uniform helpers
@@ -567,7 +577,7 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
         anim_timer_stop(f);
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    f->base.dirty = 1;
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     if (f->request_render_fn) {
         struct yetty_ycore_void_result r = f->request_render_fn(f->request_render_userdata);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "shader-glyph anim tick: request_render failed");
@@ -584,7 +594,7 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yfigure_figure
     if (!self) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yterm_shader_glyph_figure *f = (struct yetty_yterm_shader_glyph_figure *)self;
+    struct yetty_yterm_shader_glyph_figure *f = shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
 
     if (f->timer_created && f->event_loop && f->event_loop->ops) {
         if (f->timer_running && f->event_loop->ops->stop_timer) {
@@ -630,7 +640,7 @@ static struct yetty_ycore_void_result figure_ensure_binder(
 static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure *self,
                                                     struct yetty_ydraw_target *target)
 {
-    struct yetty_yterm_shader_glyph_figure *f = (struct yetty_yterm_shader_glyph_figure *)self;
+    struct yetty_yterm_shader_glyph_figure *f = shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
 
     /* No shader-glyph cells visible → stop ticking, skip the draw.
      * Without this the layer would burn a render pass every frame for an
@@ -756,15 +766,6 @@ static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_ct
     return figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-static const struct yetty_yfigure_figure_ops *figure_ops(void)
-{
-    static const struct yetty_yfigure_figure_ops ops = {
-        /* No process_input / process_bytes — purely visual, not wire-driven. */
-        .process_input = NULL,
-        .process_bytes = NULL,
-    };
-    return &ops;
-}
 
 /* ===========================================================================
  * Public API
@@ -835,14 +836,12 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
         return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: object_alloc",
                          glyph_obj_r);
     }
-    struct yetty_yterm_shader_glyph_figure *f =
-        (struct yetty_yterm_shader_glyph_figure *)(glyph_obj_r.value + 1);
+    struct yetty_yterm_shader_glyph_figure *f = shader_glyph_figure_from_obj(glyph_obj_r.value);
+    f->base = (struct yetty_yfigure_figure *)(glyph_obj_r.value + 1);
 
-    f->base.ops = figure_ops();
-    f->base.self_obj = glyph_obj_r.value;
-    f->base.rect = rect;
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
     /* Start dirty so the first frame uploads the buffer pointer + uniforms. */
-    f->base.dirty = 1;
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
 
     f->text_layer = text_layer;
     f->context = context;
@@ -925,7 +924,7 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
 struct yetty_yfigure_figure *yetty_yterm_shader_glyph_figure_as_figure(
     struct yetty_yterm_shader_glyph_figure *figure)
 {
-    return figure ? &figure->base : NULL;
+    return figure ? figure->base : NULL;
 }
 
 struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_resize(
@@ -944,11 +943,11 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_resize(
     set_cell_size(&f->rs, cell_size.width, cell_size.height);
     f->rs.pixel_size.width = (float)grid_size.cols * cell_size.width;
     f->rs.pixel_size.height = (float)grid_size.rows * cell_size.height;
-    f->base.rect = (struct yetty_ycore_rectangle){
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, (struct yetty_ycore_rectangle){
         .min = {.x = 0.0f, .y = 0.0f},
         .max = {.x = f->rs.pixel_size.width, .y = f->rs.pixel_size.height},
-    };
-    f->base.dirty = 1;
+    });
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     return YETTY_OK_VOID();
 }
 
@@ -959,7 +958,7 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_set_visual_zoom(
         return YETTY_ERR(yetty_ycore_void, "shader-glyph figure set_visual_zoom: NULL figure");
     }
     set_visual_zoom(&f->rs, scale, offset_x, offset_y);
-    f->base.dirty = 1;
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
     return YETTY_OK_VOID();
 }
 

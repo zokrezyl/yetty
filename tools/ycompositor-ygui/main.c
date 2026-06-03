@@ -34,6 +34,7 @@
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
@@ -409,7 +410,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             }
             struct yetty_yfigure_figure *rf =
                 yetty_yfigure_container_as_figure(app->root);
-            if (rf) rf->dirty = 1;
+            if (rf) yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
         }
     } else {
         app->n_osc_other++;
@@ -540,10 +541,10 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
          * SET_CHILD_RECT records embedded in that re-emit. */
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(app->root);
-        rf->rect = (struct yetty_ycore_rectangle){
+        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, (struct yetty_ycore_rectangle){
             .min = {.x = 0.0f, .y = 0.0f}, .max = {.x = (float)w, .y = (float)h},
-        };
-        rf->dirty = 1;
+        });
+        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
         if (app->child_argv) {
             /* Interpose: tell the child the new pane size. The child
              * decides how to re-emit (the ymgui demo re-runs
@@ -780,7 +781,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         }
         struct yetty_yfigure_figure *rrf =
             yetty_yfigure_container_as_figure(app->root);
-        if (!(needs_render || had_events || rrf->dirty)) {
+        if (!(needs_render || had_events || yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf) - 1).value)) {
             continue;
         }
 
@@ -796,7 +797,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
             yerror("ycompositor-ygui: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            rrf->dirty = 0;
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf) - 1, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) {

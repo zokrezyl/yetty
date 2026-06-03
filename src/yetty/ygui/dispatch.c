@@ -3,7 +3,7 @@
  *
  * ygui owns nothing of its own here: the slot allocator, dispatch
  * table, parent / mixin chain walk, and method-id registry all live
- * in `<yclass/class.h>`. This file:
+ * in `<yetty/yclass/class.h>`. This file:
  *   - resolves an ygui method id to its yclass slot (without
  *     allocating — the slot must already have been registered, which
  *     happens at class registration time inside the codegen-emitted

@@ -102,16 +102,30 @@ def result_type_id(ret: str) -> str:
         return m.group(1)
     if r == "void":
         return "yetty_ycore_void"
-    if r == "int":
+    if r in ("int", "int32_t"):
+        # int holds an int32_t value, so the read accessor reports both
+        # through the shared yetty_ycore_int result (the setter still takes
+        # the field's own width).
         return "yetty_ycore_int"
     if r == "size_t":
         return "yetty_ycore_size"
+    if r == "uint32_t":
+        return "uint32"
     m = re.match(r"^struct\s+(\w+)\s*\*\s*$", r)
     if m:
         return f"{m.group(1)}_ptr"
     m = re.match(r"^struct\s+(\w+)\s*$", r)
     if m:
-        return m.group(1)
+        # A few ycore struct result types drop the `yetty_ycore_` namespace
+        # in their YETTY_YRESULT_DECLARE name (see ycore/types.h); map them
+        # so the generic struct→result rule resolves to the real symbol.
+        struct_result_overrides = {
+            "yetty_ycore_rectangle": "rectangle",
+            "yetty_ycore_pixel_size": "pixel_size",
+            "yetty_ycore_pixel_coord": "pixel_coord",
+        }
+        name = m.group(1)
+        return struct_result_overrides.get(name, name)
     return r
 
 
@@ -273,6 +287,53 @@ def _collect_annotations(decl: dict, file_bytes_cache: dict, current_file: str) 
     return out
 
 
+def _field_access(field: dict, file_bytes_cache: dict, current_file: str) -> tuple:
+    """Decide which accessors a data member exposes, from its annotations:
+
+        [[clang::annotate("property")]]     read + write  (getter + setter)
+        [[clang::annotate("property:ro")]]  read-only      (getter only)
+        [[clang::annotate("property:wo")]]  write-only     (setter only)
+
+    A member with no `property` annotation stays private — no accessor is
+    generated, so only the owning class (which sees the struct definition)
+    can touch it. Returns (emit_getter, emit_setter)."""
+    emit_getter = emit_setter = False
+    for ann in _collect_annotations(field, file_bytes_cache, current_file):
+        parts = [p.strip() for p in ann.split(":")]
+        if parts[0] != "property":
+            continue
+        mode = parts[1] if len(parts) > 1 else "rw"
+        if mode == "rw":
+            emit_getter = emit_setter = True
+        elif mode == "ro":
+            emit_getter = True
+        elif mode == "wo":
+            emit_setter = True
+        else:
+            sys.stderr.write(
+                f"error: member '{field.get('name')}' has property mode "
+                f"'{mode}'; expected rw, ro or wo\n")
+            sys.exit(1)
+    return emit_getter, emit_setter
+
+
+def _record_fields(decl: dict, file_bytes_cache: dict, current_file: str) -> list:
+    """Name, C type and exposed-accessor flags for each member of a data
+    struct. The struct definition never leaves the owning .c; this drives the
+    generated getter/setter API other classes use instead of touching it."""
+    fields = []
+    for child in decl.get("inner", []):
+        if child.get("kind") == "FieldDecl":
+            emit_getter, emit_setter = _field_access(child, file_bytes_cache, current_file)
+            fields.append({
+                "name": child.get("name") or "",
+                "type": child.get("type", {}).get("qualType", ""),
+                "get": emit_getter,
+                "set": emit_setter,
+            })
+    return fields
+
+
 def _fn_args(decl: dict) -> list:
     args = []
     for child in decl.get("inner", []):
@@ -412,7 +473,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             classes[name] = {
                 "name": name, "domain": None, "accessor": None, "type": None,
                 "source_file": None, "parent": None, "mixins": [],
-                "data": None, "ops": [],
+                "data": None, "data_fields": [], "ops": [],
             }
         return classes[name]
 
@@ -456,9 +517,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
 
             # `expose` on a function — emit its prototype into the generated
             # header for the file it is DEFINED in (not one seen via an
-            # #include). Non-function header content (types, result-decls,
-            # includes, forward-decls) is authored in `#ifdef YCLASS_CODEGEN`
-            # blocks instead and copied verbatim (see _scan_codegen_blocks).
+            # #include).
             if "expose" in anns and decl_file == str(path) and kind == "FunctionDecl":
                 qt = decl.get("type", {}).get("qualType", "")
                 exposed.append({
@@ -469,8 +528,29 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                 })
                 continue
 
+            # `expose` on a struct — public type. A definition (has fields)
+            # emits the full `struct X { … };`; a bare forward declaration
+            # emits `struct X;`. Same single-source model as functions: the
+            # type is authored ONCE in the owning .c and reproduced into its
+            # header, so there is no `#ifdef YCLASS_CODEGEN` verbatim block to
+            # keep in sync. (The owning .c must NOT include its own generated
+            # header, or its definition would clash with the emitted copy.)
+            if "expose" in anns and decl_file == str(path) and kind == "RecordDecl":
+                name = decl.get("name")
+                if name:
+                    fields = _record_fields(decl, file_bytes_cache, decl_file)
+                    if fields:
+                        body = "\n".join(f"    {fld['type']} {fld['name']};" for fld in fields)
+                        type_text = f"struct {name} {{\n{body}\n}};"
+                    else:
+                        type_text = f"struct {name};"
+                    exposed.append({"source_file": str(path), "type_text": type_text})
+                continue
+
             if kind == "FunctionDecl":
                 for ann in anns:
+                    if "@" not in ann:
+                        continue  # expose/property handled elsewhere
                     role, args = _split_ann(ann)
                     if role == "local":
                         # `local@<DOMAIN>:<SLOT>` — every public stub
@@ -534,6 +614,8 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                 # class@<D>:<C> / mixin@<D>:<C> sit on the data struct.
                 primary, kind2, primary_dom = None, None, None
                 for ann in anns:
+                    if "@" not in ann:
+                        continue  # expose/property handled elsewhere
                     role, args = _split_ann(ann)
                     if role == "class":
                         require_segments(role, args, 2, "class@<DOMAIN>:<CLASS>")
@@ -573,7 +655,13 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         tag = decl.get("name")
                         if tag:
                             b["data"] = f"struct {tag}"
+                            # Member accessors come from `property` annotations
+                            # on the struct's fields (only visible where the
+                            # struct is defined, i.e. the owning .c).
+                            b["data_fields"] = _record_fields(decl, file_bytes_cache, decl_file)
                         for ann in anns:
+                            if "@" not in ann:
+                                continue  # expose/property handled elsewhere
                             role, args = _split_ann(ann)
                             if role == "parent":
                                 require_segments(role, args, 2, "parent@<DOMAIN>:<CLASS>")
@@ -848,7 +936,7 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
     guard = f"YETTY_YCLASSGEN_{module.upper()}_METHODS_H"
     parts = [HEADER]
     parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
-    parts.append('#include <yclass/class.h>\n')
+    parts.append('#include <yetty/yclass/class.h>\n')
     # ycore/types.h carries the buffer struct codegen recognises as a
     # blob arg. Public-stub signatures use it by value, so the full
     # definition must be in scope — a forward-decl isn't enough.
@@ -1082,7 +1170,7 @@ def emit_methods_c(model: dict, module: str, out_path: Path):
     # the include also works from .gen.c files in subdirs.
     parts = [HEADER,
              f'#include "yetty/{module}/methods.gen.h"\n',
-             '#include <yclass/rpc.h>\n',
+             '#include <yetty/yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ycore/types.h>  /* container_of */\n',
              '#include <yetty/ytrace/ytrace.h>\n',
@@ -1219,6 +1307,57 @@ def emit_class_accessor(cls: dict) -> str:
             f"}}\n"
         )
 
+    # `property`-annotated members → standardized data handle + per-member
+    # getters/setters, all keyed on the yclass object. The data struct stays
+    # private to the owning .c; every other class reaches members only through
+    # these. Built on the core yclass slice model (yetty_yclass_object_data),
+    # so this works for any class whose body is a yclass data slice.
+    property_block = ""
+    property_fields = [f for f in cls.get("data_fields", []) if f.get("get") or f.get("set")]
+    if property_fields:
+        data_ptr_rid = f"{qcls}_data_ptr"
+        parts = [
+            f"\nstruct {data_ptr_rid}_result {qcls}_data_get(struct yetty_yclass_object *obj)\n"
+            f"{{\n"
+            f"    struct yetty_yclass_ptr_result class_r = {accessor}();\n"
+            f"    if (YETTY_IS_ERR(class_r))\n"
+            f'        return YETTY_ERR({data_ptr_rid}, "{qcls}_data_get: class accessor", class_r);\n'
+            f"    struct yetty_yclass_void_ptr_result slice_r =\n"
+            f"        yetty_yclass_object_data(obj, class_r.value);\n"
+            f"    if (YETTY_IS_ERR(slice_r))\n"
+            f'        return YETTY_ERR({data_ptr_rid}, "{qcls}_data_get: object_data", slice_r);\n'
+            f"    return YETTY_OK({data_ptr_rid}, ({data} *)slice_r.value);\n"
+            f"}}\n"
+        ]
+        for field in property_fields:
+            fname = field["name"]
+            ftype = field["type"]
+            base = f"{qcls}_{fname}"
+            field_rid = result_type_id(ftype)
+            if field.get("get"):
+                parts.append(
+                    f"\n{result_type(ftype)} {base}_get(struct yetty_yclass_object *obj)\n"
+                    f"{{\n"
+                    f"    struct {data_ptr_rid}_result data = {qcls}_data_get(obj);\n"
+                    f"    if (YETTY_IS_ERR(data))\n"
+                    f'        return YETTY_ERR({field_rid}, "{base}_get: data block", data);\n'
+                    f"    return YETTY_OK({field_rid}, data.value->{fname});\n"
+                    f"}}\n"
+                )
+            if field.get("set"):
+                parts.append(
+                    f"\nstruct yetty_ycore_void_result {base}_set(struct yetty_yclass_object *obj, "
+                    f"{ftype} value)\n"
+                    f"{{\n"
+                    f"    struct {data_ptr_rid}_result data = {qcls}_data_get(obj);\n"
+                    f"    if (YETTY_IS_ERR(data))\n"
+                    f'        return YETTY_ERR(yetty_ycore_void, "{base}_set: data block", data);\n'
+                    f"    data.value->{fname} = value;\n"
+                    f"    return YETTY_OK_VOID();\n"
+                    f"}}\n"
+                )
+        property_block = "".join(parts)
+
     return f"""\
 {typecheck_block}\
 struct yetty_yclass_ptr_result {accessor}(void)
@@ -1243,7 +1382,7 @@ struct yetty_yclass_ptr_result {accessor}(void)
     cls = register_class_r.value;
     return register_class_r;
 }}
-{data_accessor_block}"""
+{data_accessor_block}{property_block}"""
 
 
 
@@ -1317,18 +1456,76 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             if blocks:
                 data_decls = ("\n\nstruct yetty_ygui_object;\n"
                               + "\n\n".join(blocks))
+        # `property`-annotated members → opaque data-block handle + per-member
+        # getters/setters, keyed on the yclass object. The struct body never
+        # leaves its owning .c; only a forward decl + the accessors cross here.
+        property_decls = ""
+        prop_blocks = []
+        for c in classes:
+            pfields = [f for f in c.get("data_fields", []) if f.get("get") or f.get("set")]
+            if not pfields:
+                continue
+            q = qualified_class(c)
+            rid = f"{q}_data_ptr"
+            lines = [
+                "/* Data-block handle — opaque outside the owning .c. The struct\n"
+                " * stays private; only its pointer crosses here, in a Result so a\n"
+                " * bad object surfaces rather than corrupting. Reach members\n"
+                " * through the per-property getters/setters below. */",
+                f"{c['data']};",
+                f"YETTY_YRESULT_DECLARE({rid}, {c['data']} *);",
+                f"struct {rid}_result {q}_data_get(struct yetty_yclass_object *obj);",
+            ]
+            for field in pfields:
+                base = f"{q}_{field['name']}"
+                if field.get("get"):
+                    lines.append(
+                        f"{result_type(field['type'])} {base}_get(struct yetty_yclass_object *obj);")
+                if field.get("set"):
+                    lines.append(
+                        f"struct yetty_ycore_void_result {base}_set("
+                        f"struct yetty_yclass_object *obj, {field['type']} value);")
+            prop_blocks.append("\n".join(lines))
+        if prop_blocks:
+            property_decls = "\n\n" + "\n\n".join(prop_blocks)
         # `expose`d functions defined in this source file — concrete,
         # non-slot public API. Emit their prototypes here so they live in
         # the generated section instead of the hand-maintained MANUAL block.
         exposed_protos = []
+        exposed_type_names = set()
+        proto_struct_types = set()
         for e in model.get("exposed", []):
             if e["source_file"] != src_file:
                 continue
             if "verbatim" in e:
                 exposed_protos.append(e["verbatim"])
+            elif "type_text" in e:
+                exposed_protos.append(e["type_text"])
+                for m in re.finditer(r"struct\s+(\w+)", e["type_text"]):
+                    exposed_type_names.add(m.group(1))
             else:
                 exposed_protos.append(_fmt_proto(e["return_type"], e["name"], e["args"]))
-        method_decls = "\n\n" + "\n".join(exposed_protos) if exposed_protos else ""
+                for typ in [e["return_type"]] + [a["type"] for a in e["args"]]:
+                    for m in re.finditer(r"struct\s+(\w+)", typ):
+                        proto_struct_types.add(m.group(1))
+        # Forward declarations for the struct types named in the exposed
+        # prototypes. A forward declaration is sufficient even for by-value
+        # parameters here — completeness is only required at the call site and
+        # the definition, both of which include the full type. This is what
+        # lets the public types be authored once (in the owning .c, with the
+        # `expose` annotation) and reproduced into the header with no `#ifdef
+        # YCLASS_CODEGEN` verbatim block. Skip result structs and yclass core
+        # types (already provided by the always-included class.h) and anything
+        # this header fully defines itself (an exposed type like a hit struct).
+        proto_struct_types -= exposed_type_names
+        fwd_decls = "".join(
+            f"struct {n};\n" for n in sorted(proto_struct_types)
+            if not n.endswith("_result") and not n.startswith("yetty_yclass"))
+        method_decls = ""
+        if fwd_decls:
+            method_decls += "\n\n" + fwd_decls.rstrip()
+        if exposed_protos:
+            method_decls += "\n\n" + "\n".join(exposed_protos)
         kind = "mixin" if all(c['type'] == "mixin" for c in classes) else "regular class"
         # Class-name list for the file header banner.
         name_list = ", ".join(c["name"] for c in classes)
@@ -1337,12 +1534,12 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             + f"/* Public interface for {kind}(es) `{name_list}` "
             + f"(module: {module}).\n"
             + " * Fully generated from the source .c — do not edit. Function\n"
-            + " * APIs come from `expose` annotations; types and other header\n"
-            + " * content from the source's `#ifdef YCLASS_CODEGEN` blocks. */\n"
+            + " * and public-type APIs come from `expose` annotations; the\n"
+            + " * forward declarations are derived from the prototype types. */\n"
             + f"#ifndef {guard}\n#define {guard}\n\n"
-            + '#include <yclass/class.h>\n'
+            + '#include <yetty/yclass/class.h>\n'
             + f'#include <yetty/{module}/methods.h>\n\n'
-            + decls + data_decls + method_decls + "\n\n"
+            + decls + data_decls + property_decls + method_decls + "\n\n"
             + "#endif\n"
         )
         header_path.write_text(body)
@@ -1374,7 +1571,7 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
     The generator pulls every header the accessor body needs (the
     class's own .h for the prototype, any parent and mixin headers
     for their accessor calls) so the hand-written .c stays minimal —
-    typically only `#include <yclass/class.h>`."""
+    typically only `#include <yetty/yclass/class.h>`."""
     groups: dict = {}
     for c in model["classes"]:
         groups.setdefault(c["source_file"], []).append(c)
@@ -1394,7 +1591,11 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
         needed = set()
         needed.add(f"yetty/{module}/methods.gen.h")
         for c in classes:
-            needed.add(class_header_for(c, module))
+            # NOT the class's own header: this .gen.c is `#include`d at the
+            # foot of the hand-written .c, which already provides the class's
+            # struct + impls above the include (and its own public types). Re-
+            # including the self-header here would re-introduce any `expose`d
+            # type the .c defines (e.g. a hit struct), redefining it.
             p = c.get("parent")
             if p:
                 # Parent path can't be derived from this class's
@@ -1680,7 +1881,7 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
     /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
      * and writing the handle past the header was misaligned on 32-bit
      * ABIs where sizeof(struct yetty_yclass_object) == 4. The proxy
-     * struct in <yclass/class.h> uses natural alignment for both
+     * struct in <yetty/yclass/class.h> uses natural alignment for both
      * fields. The class accessor is the same on both sides — proxies
      * never local-dispatch, so the class's data_size contract isn't
      * honoured for this allocation. */
@@ -1806,7 +2007,7 @@ def emit_rpc_h(model: dict, module: str, out_path: Path):
     out_path.write_text(
         HEADER
         + f"#ifndef {guard}\n#define {guard}\n\n"
-        + '#include <yclass/rpc.h>\n'
+        + '#include <yetty/yclass/rpc.h>\n'
         + '#include <yetty/ycore/result.h>\n\n'
         + (decls + "\n\n" if decls else "")
         + "/* Installs this module's yclass-RPC server-side discovery hooks\n"
@@ -1826,12 +2027,12 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
         for c in model.get("classes", [])
     )
     parts = [HEADER,
-             '#include <yclass/rpc.h>\n',
+             '#include <yetty/yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ytrace/ytrace.h>\n',
              f'#include "yetty/{module}/rpc.h"\n',
              f'#include "yetty/{module}/methods.h"\n',
-             '#include <yclass/class.h>\n',
+             '#include <yetty/yclass/class.h>\n',
              class_includes,
              '#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n'
              '#include <stdlib.h>\n#include <string.h>\n\n']
@@ -1868,9 +2069,9 @@ def main():
     # Pre-touch placeholders so clang -fsyntax-only can resolve the
     # #includes the annotated sources pull in before the real generated
     # content has been emitted on the very first invocation. Per-class
-    # headers seed with `#include <yclass/class.h>` so the runtime structs
+    # headers seed with `#include <yetty/yclass/class.h>` so the runtime structs
     # (ctx, object, class) are visible during AST parsing.
-    placeholder_class_h = '#include <yclass/class.h>\n'
+    placeholder_class_h = '#include <yetty/yclass/class.h>\n'
     for s in sources:
         if s.suffix == ".c":
             # Place the per-source .gen.c next to its annotated source

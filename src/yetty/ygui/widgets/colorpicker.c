@@ -52,11 +52,10 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_OK_VOID();
     }
     float sw_w = h; /* square swatch on the left */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, yguix_box(ctx, r.min.x, r.min.y, sw_w, h, d->color, 4),
-                        "colorpicker: swatch");
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                        yguix_box(ctx, r.min.x + sw_w + 4, r.min.y, w - sw_w - 4, h, COLOR_BG, 4),
-                        "colorpicker: text_bg");
+    struct yetty_ycore_void_result result_55 = yguix_box(ctx, r.min.x, r.min.y, sw_w, h, d->color, 4);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_55, "colorpicker: swatch");
+    struct yetty_ycore_void_result result_57 = yguix_box(ctx, r.min.x + sw_w + 4, r.min.y, w - sw_w - 4, h, COLOR_BG, 4);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_57, "colorpicker: text_bg");
     char hex[16];
     snprintf(hex, sizeof(hex), "#%02X%02X%02X", (unsigned)(d->color & 0xFFu),
              (unsigned)((d->color >> 8) & 0xFFu), (unsigned)((d->color >> 16) & 0xFFu));
