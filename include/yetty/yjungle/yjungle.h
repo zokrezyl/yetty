@@ -15,14 +15,14 @@
  * canvas's process_group_body recursion.
  *
  * The library is a pure producer. Each call to _tick() writes only the
- * INCREMENTAL wire commands for this frame into the supplied draw_list:
+ * INCREMENTAL wire commands for this frame into the supplied drawable_list:
  *
  *   - first ever tick: CMD_ZERO + a GROUP per initial segment.
  *   - other ticks: if it's time for an "event":
  *       * extend  : append GROUP(new_id) for a new tail segment.
  *       * replace : DELETE(old_id) + GROUP(new_id) keeping the same
  *                   (start, end) so neighbours stay connected.
- *     otherwise the draw_list is left empty (frontend may skip emit).
+ *     otherwise the drawable_list is left empty (frontend may skip emit).
  *
  * The event cadence and parameters are randomised within the bounds in
  * yjungle_config. Identity (group_id) is monotonic — the producer never
@@ -34,7 +34,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -117,7 +117,7 @@ struct yetty_ycore_void_result yetty_yjungle_set_scene_size(struct yetty_yjungle
  * `now_ms` is a monotonic millisecond clock — used to decide whether an
  * event fires this tick. */
 struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *jungle,
-                                                  struct yetty_ydraw_draw_list *buf,
+                                                  struct yetty_ydraw_drawable_list *buf,
                                                   uint64_t now_ms);
 
 /* Full-redraw variant of yetty_yjungle_tick: advance the simulation to
@@ -127,7 +127,7 @@ struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *jungle,
  * `ymaze`-style ydraw_embed widget — rather than accumulating deltas on a
  * persistent scene canvas. */
 struct yetty_ycore_void_result yetty_yjungle_render(struct yetty_yjungle *jungle,
-                                                    struct yetty_ydraw_draw_list *buf,
+                                                    struct yetty_ydraw_drawable_list *buf,
                                                     uint64_t now_ms);
 
 const struct yetty_yjungle_config *yetty_yjungle_config_get(const struct yetty_yjungle *jungle);

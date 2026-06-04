@@ -11,7 +11,7 @@
  * ypdf's screen-y output. We expect ypdf's text-span x ≈ 213.76 and
  * the span y ≈ 84.96 (baseline) ± a few pixels.
  *
- * The test scans every TEXT_SPAN prim emitted by ypdf, finds the one
+ * The test scans every TEXT_DRAWABLE_LIST prim emitted by ypdf, finds the one
  * whose content is the title (or starts with "Adobe"), and asserts:
  *   1. font_size ≈ 14 (PDF text-state Tfs).
  *   2. x is within ±5 px of 213.76.
@@ -29,10 +29,10 @@
  */
 
 #include <pdfio.h>
-#include <yetty/ydraw-core/draw-list.h>
-#include <yetty/ydraw-core/font-prim.h>
-#include <yetty/ydraw-core/text-span-prim.h>
-#include <yetty/ydraw/flyweight.h>
+#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw/drawable-list-registry.h>
 #include <yetty/ypdf/ypdf.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/raster-font.h>
@@ -85,7 +85,7 @@ static bool error_cb(struct _pdfio_file_s *f, const char *s, void *d)
 
 /* True if `view->text` contains `needle` as a substring. text is NOT
  * NUL-terminated. */
-static int text_contains(const struct yetty_ydraw_text_span_drawable_view *view,
+static int text_contains(const struct yetty_ydraw_text_drawable_list_view *view,
                          const char *needle)
 {
     size_t nlen = strlen(needle);
@@ -121,9 +121,9 @@ int main(void)
     REQUIRE(out->buffer, "buffer is NULL");
     REQUIRE(out->page_count == 1, "expected 1 page");
 
-    struct yetty_ydraw_flyweight_registry_ptr_result rfr = yetty_ydraw_flyweight_create();
-    REQUIRE(rfr.ok, "flyweight_create failed");
-    struct yetty_ydraw_flyweight_registry *reg = rfr.value;
+    struct yetty_ydraw_drawable_list_registry_ptr_result rfr = yetty_ydraw_drawable_list_registry_create_default();
+    REQUIRE(rfr.ok, "drawable-list entry_create failed");
+    struct yetty_ydraw_drawable_list_registry *reg = rfr.value;
 
     struct span_summary sum = {0};
     sum.min_x = sum.min_y = sum.min_font_size = 1e9f;
@@ -152,16 +152,16 @@ int main(void)
     float print_y = 0;
 
     struct yetty_ydraw_drawable_iter_result ir =
-        yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
+        yetty_ydraw_drawable_list_drawable_first(out->buffer, reg);
     REQUIRE(ir.ok, "iterator first failed");
     struct yetty_ydraw_drawable_iter it = ir.value;
 
     int dump_count = 0;
     for (;;) {
         uint32_t t = it.fw.data[0];
-        if (t == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-            struct yetty_ydraw_text_span_drawable_view v;
-            if (yetty_ydraw_text_span_drawable_parse(it.fw.data, &v) == 0) {
+        if (t == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+            struct yetty_ydraw_text_drawable_list_view v;
+            if (yetty_ydraw_text_drawable_list_parse(it.fw.data, &v) == 0) {
                 if (dump_count++ < 320) {
                     char snippet[64];
                     size_t n = v.text_len < sizeof(snippet) - 1 ? v.text_len : sizeof(snippet) - 1;
@@ -211,7 +211,7 @@ int main(void)
             }
         }
         struct yetty_ydraw_drawable_iter_result nx =
-            yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &it);
+            yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &it);
         if (!nx.ok) break;
         it = nx.value;
     }
@@ -292,7 +292,7 @@ int main(void)
 
     /* Re-scan: the first iter consumed everything; iterate again. */
     struct yetty_ydraw_drawable_iter_result ir2 =
-        yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
+        yetty_ydraw_drawable_list_drawable_first(out->buffer, reg);
     REQUIRE(ir2.ok, "iterator first (rescan) failed");
 
     const float Y_TOL = 2.0f;
@@ -313,9 +313,9 @@ int main(void)
         float ypdf_left = 1e9f, ypdf_right_estimate = -1e9f;
         int found = 0;
         for (;;) {
-            if (it3.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-                struct yetty_ydraw_text_span_drawable_view v;
-                if (yetty_ydraw_text_span_drawable_parse(it3.fw.data, &v) == 0 &&
+            if (it3.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+                struct yetty_ydraw_text_drawable_list_view v;
+                if (yetty_ydraw_text_drawable_list_parse(it3.fw.data, &v) == 0 &&
                     v.text_len > 0 && fabsf(v.y - ml->y) <= Y_TOL &&
                     fabsf(v.font_size - ml->font_size) <= SZ_TOL) {
                     found = 1;
@@ -330,7 +330,7 @@ int main(void)
                 }
             }
             struct yetty_ydraw_drawable_iter_result nx3 =
-                yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &it3);
+                yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &it3);
             if (!nx3.ok) break;
             it3 = nx3.value;
         }
@@ -380,7 +380,7 @@ int main(void)
 
     /* === Per-character position match (strongest invariant) ============== *
      *
-     * For each TEXT_SPAN, materialise its FONT prim into a raster_font,
+     * For each TEXT_DRAWABLE_LIST, materialise its FONT prim into a raster_font,
      * then walk char-by-char accumulating each glyph's advance to
      * compute the on-screen position the canvas WILL render at. Compare
      * against mutool's per-character ground truth.
@@ -401,14 +401,14 @@ int main(void)
     enum { MAX_FONTS_LOCAL = 32 };
     struct yetty_yfont_font *fonts[MAX_FONTS_LOCAL] = {0};
     struct yetty_ydraw_drawable_iter_result ir3 =
-        yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
+        yetty_ydraw_drawable_list_drawable_first(out->buffer, reg);
     REQUIRE(ir3.ok, "iterator first (font scan) failed");
     struct yetty_ydraw_drawable_iter it4 = ir3.value;
     int loaded_fonts = 0;
     for (;;) {
-        if (it4.fw.data[0] == YETTY_YDRAW_TYPE_FONT) {
-            struct yetty_yfont_font_drawable_view fv;
-            if (yetty_yfont_font_drawable_parse(it4.fw.data, &fv) == 0 && fv.font_id >= 0 &&
+        if (it4.fw.data[0] == YETTY_YDRAW_RESOURCE_FONT) {
+            struct yetty_ydraw_font_resource_view fv;
+            if (yetty_ydraw_font_resource_parse(it4.fw.data, &fv) == 0 && fv.font_id >= 0 &&
                 fv.font_id < MAX_FONTS_LOCAL && fv.ttf && fv.ttf_len > 0) {
                 struct yetty_font_font_result rf =
                     yetty_yfont_raster_font_create_from_data(fv.ttf, fv.ttf_len, "test", NULL,
@@ -420,13 +420,13 @@ int main(void)
             }
         }
         struct yetty_ydraw_drawable_iter_result nx4 =
-            yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &it4);
+            yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &it4);
         if (!nx4.ok) break;
         it4 = nx4.value;
     }
     fprintf(stderr, "loaded %d fonts from FONT prims for per-char layout sim\n", loaded_fonts);
 
-    /* Walk TEXT_SPANs and emit (computed_x, y, c) for each char. Compare
+    /* Walk TEXT_DRAWABLE_LISTs and emit (computed_x, y, c) for each char. Compare
      * each to mutool's expected per-char position. */
     const float CHAR_X_TOL = 3.0f;
     const float CHAR_Y_TOL = 2.0f;
@@ -434,20 +434,20 @@ int main(void)
     int char_misses_dumped = 0;
 
     struct yetty_ydraw_drawable_iter_result ir4 =
-        yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
+        yetty_ydraw_drawable_list_drawable_first(out->buffer, reg);
     REQUIRE(ir4.ok, "iterator first (char layout sim) failed");
     struct yetty_ydraw_drawable_iter it5 = ir4.value;
     for (;;) {
-        if (it5.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-            struct yetty_ydraw_text_span_drawable_view v;
-            if (yetty_ydraw_text_span_drawable_parse(it5.fw.data, &v) == 0 && v.text_len > 0 &&
+        if (it5.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+            struct yetty_ydraw_text_drawable_list_view v;
+            if (yetty_ydraw_text_drawable_list_parse(it5.fw.data, &v) == 0 && v.text_len > 0 &&
                 v.font_id >= 0 && v.font_id < MAX_FONTS_LOCAL && fonts[v.font_id]) {
                 struct yetty_yfont_font *f = fonts[v.font_id];
                 float cursor_x = v.x;
                 /* Walk UTF-8: decode each codepoint, advance the cursor
                  * by the FULL multi-byte sequence's measure plus the PDF
                  * Tc/Tw spacing the producer baked into the prim. The
-                 * canvas's expand_text_span_to_glyphs uses the same
+                 * canvas's expand_text_drawable_list_to_glyphs uses the same
                  * formula, so this simulation matches what gets rendered. */
                 uint32_t k = 0;
                 while (k < v.text_len) {
@@ -497,7 +497,7 @@ int main(void)
             }
         }
         struct yetty_ydraw_drawable_iter_result nx5 =
-            yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &it5);
+            yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &it5);
         if (!nx5.ok) break;
         it5 = nx5.value;
     }
@@ -512,13 +512,13 @@ int main(void)
      * advances). */
     fprintf(stderr, "\n=== smaller-line diagnostic (per-char canvas-side cursor) ===\n");
     struct yetty_ydraw_drawable_iter_result ir5 =
-        yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
+        yetty_ydraw_drawable_list_drawable_first(out->buffer, reg);
     if (ir5.ok) {
         struct yetty_ydraw_drawable_iter dit = ir5.value;
         for (;;) {
-            if (dit.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-                struct yetty_ydraw_text_span_drawable_view dv;
-                if (yetty_ydraw_text_span_drawable_parse(dit.fw.data, &dv) == 0 &&
+            if (dit.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+                struct yetty_ydraw_text_drawable_list_view dv;
+                if (yetty_ydraw_text_drawable_list_parse(dit.fw.data, &dv) == 0 &&
                     dv.text_len > 0 && dv.font_id >= 0 && dv.font_id < MAX_FONTS_LOCAL &&
                     fonts[dv.font_id]) {
                     int has_sma = 0;
@@ -550,7 +550,7 @@ int main(void)
                 }
             }
             struct yetty_ydraw_drawable_iter_result nxd =
-                yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &dit);
+                yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &dit);
             if (!nxd.ok) break;
             dit = nxd.value;
         }
@@ -582,8 +582,8 @@ int main(void)
            sum.total_spans, n_lines, n_lines, matched_chars, total_chars, title_min_x, title_size,
            body_min_x, body_size);
 
-    yetty_ydraw_flyweight_registry_destroy(reg);
-    yetty_ydraw_draw_list_destroy(out->buffer);
+    yetty_ydraw_drawable_list_registry_destroy(reg);
+    yetty_ydraw_drawable_list_destroy(out->buffer);
     pdfioFileClose(pdf);
     return 0;
 }

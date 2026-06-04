@@ -97,7 +97,7 @@ struct page_bridge_ctx {
 };
 
 static struct yetty_ycore_void_result page_to_ycat_emit(
-    void *ud, int page_index, int page_count, const struct yetty_ydraw_draw_list *envelope)
+    void *ud, int page_index, int page_count, const struct yetty_ydraw_drawable_list *envelope)
 {
     (void)page_index;
     (void)page_count;

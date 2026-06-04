@@ -230,7 +230,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
     app->figure_args.default_font = app->font;
-    app->figure_args.figure_factory = NULL;
+    app->figure_args.composite_factory = NULL;
     struct yetty_ycore_void_result result_234 = yetty_ygrid_register_factory(app->registry, &app->figure_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_234, "ygrid_register_factory failed");
 

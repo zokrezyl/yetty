@@ -8,7 +8,7 @@
  * Owns the ThorVG engine lifetime (ref-counted) and drives a tvg::Picture
  * (wrapped in tvg::Animation for Lottie support) through our custom
  * RenderMethod, which emits ydraw SDF primitives into the supplied
- * yetty_ydraw_draw_list.
+ * yetty_ydraw_drawable_list.
  */
 
 #include <yetty/ythorvg/ythorvg.h>
@@ -132,7 +132,7 @@ const char* detect_mimetype(const void* data, size_t size) {
 extern "C" {
 
 struct yetty_ythorvg_renderer_ptr_result
-yetty_ythorvg_renderer_create(struct yetty_ydraw_draw_list* buf) {
+yetty_ythorvg_renderer_create(struct yetty_ydraw_drawable_list* buf) {
     if (!buf) {
         return rp_err("yetty_ythorvg_renderer_create: buffer is NULL");
     }

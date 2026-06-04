@@ -17,18 +17,18 @@
  *   - strikethrough (~~..~~)
  *   - links ([text](url)) rendered as the accent-coloured link text
  *
- * It emits text spans via yetty_ydraw_draw_list_add_text, SDF boxes for
+ * It emits text spans via yetty_ydraw_drawable_list_add_text, SDF boxes for
  * code/table/rule fills, and SDF segments for table grid lines, then
  * populates the scene bounds on the buffer from the config.
  *
  * The result carries the buffer ownership; caller frees it via
- * yetty_ydraw_draw_list_destroy.
+ * yetty_ydraw_drawable_list_destroy.
  */
 
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +42,7 @@ struct yetty_ymarkdown_render_config {
 };
 
 struct yetty_ymarkdown_render_output {
-    struct yetty_ydraw_draw_list *buffer;
+    struct yetty_ydraw_drawable_list *buffer;
     float scene_width;
     float scene_height;
 };
@@ -71,7 +71,7 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
  *===========================================================================*/
 
 typedef struct yetty_ycore_void_result (*yetty_ymarkdown_chunk_emit_fn)(
-    void *user_data, int chunk_index, const struct yetty_ydraw_draw_list *envelope);
+    void *user_data, int chunk_index, const struct yetty_ydraw_drawable_list *envelope);
 
 struct yetty_ymarkdown_stream_render_output {
     int chunk_count;

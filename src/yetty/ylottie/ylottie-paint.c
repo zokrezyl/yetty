@@ -19,14 +19,14 @@
  * shape is approximated by tracing its perimeter in the fill colour (same
  * compromise ysvg makes); ellipses and axis-aligned rects fill natively.
  *
- * Text layers (ty 5) emit MSDF TEXT_SPAN flyweights via add_text.
+ * Text layers (ty 5) emit MSDF TEXT_DRAWABLE_LIST drawable-list entries via add_text.
  */
 
 #include "ylottie-internal.h"
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -83,7 +83,7 @@ static bool item_hidden(const struct yetty_ylottie_json *item)
  * Segment emit
  *===========================================================================*/
 
-static struct yetty_ycore_void_result emit_segment(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result emit_segment(struct yetty_ydraw_drawable_list *buf,
                                                     const struct yetty_ylottie_xform *m, float x0,
                                                     float y0, float x1, float y1, uint32_t color,
                                                     float width)
@@ -93,14 +93,14 @@ static struct yetty_ycore_void_result emit_segment(struct yetty_ydraw_draw_list 
     yetty_ylottie_xform_point(m, x1, y1, &bx, &by);
     struct yetty_ysdf_segment seg = {.start_x = ax, .start_y = ay, .end_x = bx, .end_y = by};
     struct yetty_ycore_void_result r =
-        yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, 0, 0, color, width, &seg);
+        yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, 0, 0, color, width, &seg);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ylottie: segment emit failed");
     return YETTY_OK_VOID();
 }
 
 /* Emit a polyline as either a stroked outline (when a stroke is present) or a
  * perimeter trace in the fill colour (the SDF-fill compromise). */
-static struct yetty_ycore_void_result emit_polyline_shape(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result emit_polyline_shape(struct yetty_ydraw_drawable_list *buf,
                                                           const struct yetty_ylottie_xform *m,
                                                           const struct yetty_ylottie_polyline *pl,
                                                           const struct ylottie_paint *fill,
@@ -208,7 +208,7 @@ static struct yetty_ycore_void_result emit_ellipse(struct ylottie_walk *w,
     if (rx <= 0.0f || ry <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ydraw_draw_list *buf = w->ctx->buf;
+    struct yetty_ydraw_drawable_list *buf = w->ctx->buf;
     float cx, cy;
     yetty_ylottie_xform_point(m, pos[0], pos[1], &cx, &cy);
     float sx = sqrtf(m->a * m->a + m->b * m->b);
@@ -221,7 +221,7 @@ static struct yetty_ycore_void_result emit_ellipse(struct ylottie_walk *w,
     if (is_circle) {
         struct yetty_ysdf_circle geom = {.center_x = cx, .center_y = cy, .radius = rx * sx};
         struct yetty_ycore_void_result r =
-            yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, 0, fc, sc, sw, &geom);
+            yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, 0, fc, sc, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ylottie: ellipse(circle) emit failed");
         return YETTY_OK_VOID();
     }
@@ -229,7 +229,7 @@ static struct yetty_ycore_void_result emit_ellipse(struct ylottie_walk *w,
         struct yetty_ysdf_ellipse geom = {
             .center_x = cx, .center_y = cy, .radius_x = rx * sx, .radius_y = ry * sy};
         struct yetty_ycore_void_result r =
-            yetty_ydraw_draw_list_add_cmd_add_ellipse(buf, 0, 0, fc, sc, sw, &geom);
+            yetty_ydraw_drawable_list_add_cmd_add_ellipse(buf, 0, 0, fc, sc, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ylottie: ellipse emit failed");
         return YETTY_OK_VOID();
     }
@@ -264,7 +264,7 @@ static struct yetty_ycore_void_result emit_rect(struct ylottie_walk *w,
     if (hw <= 0.0f || hh <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ydraw_draw_list *buf = w->ctx->buf;
+    struct yetty_ydraw_drawable_list *buf = w->ctx->buf;
     uint32_t fc = fill->present ? fill->color : 0;
     uint32_t sc = stroke->present ? stroke->color : 0;
     float sw = stroke->present ? stroke->width * yetty_ylottie_xform_avg_scale(m) : 0.0f;
@@ -284,7 +284,7 @@ static struct yetty_ycore_void_result emit_rect(struct ylottie_walk *w,
                                                   .radius_top_left = rr,
                                                   .radius_bottom_left = rr};
             struct yetty_ycore_void_result r =
-                yetty_ydraw_draw_list_add_cmd_add_rounded_box(buf, 0, 0, fc, sc, sw, &geom);
+                yetty_ydraw_drawable_list_add_cmd_add_rounded_box(buf, 0, 0, fc, sc, sw, &geom);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ylottie: rounded-rect emit failed");
             return YETTY_OK_VOID();
         }
@@ -294,7 +294,7 @@ static struct yetty_ycore_void_result emit_rect(struct ylottie_walk *w,
                                       .half_height = hh * scy,
                                       .corner_radius = 0.0f};
         struct yetty_ycore_void_result r =
-            yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, 0, fc, sc, sw, &geom);
+            yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, 0, fc, sc, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ylottie: rect emit failed");
         return YETTY_OK_VOID();
     }
@@ -555,7 +555,7 @@ static struct yetty_ycore_void_result emit_text_layer(struct ylottie_walk *w,
             }
             struct yetty_ycore_buffer tb = {
                 .data = (uint8_t *)(uintptr_t)cursor, .size = len, .capacity = len};
-            struct yetty_ycore_void_result tr = yetty_ydraw_draw_list_add_text(
+            struct yetty_ycore_void_result tr = yetty_ydraw_drawable_list_add_text(
                 w->ctx->buf, line_x, line_y, &tb, pixel_size, color, 0, -1, 0.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "ylottie: text span emit failed");
         }
@@ -600,7 +600,7 @@ static struct yetty_ycore_void_result emit_solid_layer(struct ylottie_walk *w,
                                   .half_height = sh * 0.5f * scy,
                                   .corner_radius = 0.0f};
     struct yetty_ycore_void_result rr =
-        yetty_ydraw_draw_list_add_cmd_add_box(w->ctx->buf, 0, 0, color, 0, 0.0f, &geom);
+        yetty_ydraw_drawable_list_add_cmd_add_box(w->ctx->buf, 0, 0, color, 0, 0.0f, &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ylottie: solid layer emit failed");
     return YETTY_OK_VOID();
 }

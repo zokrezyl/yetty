@@ -1,6 +1,6 @@
-/* ygui-ypdf.c — opens a PDF via pdfio, renders to draw_list. */
+/* ygui-ypdf.c — opens a PDF via pdfio, renders to drawable_list. */
 #include "../internal.h"
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/ypdf.h>
 #if YETTY_YGUI_HAVE_YPDF

@@ -17,7 +17,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h> /* container_of */
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yplot/yplot.h> /* YETTY_YPLOT_FLAG_USES_TIME */

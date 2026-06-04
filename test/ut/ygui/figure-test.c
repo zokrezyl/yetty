@@ -7,8 +7,8 @@
  *   - Pass 1 emits CREATE_CHILD for the chrome (container + ygrid) and
  *     a CREATE_CHILD(kind=YIMAGE) for the yimage widget.
  *   - Pass 2 emits a record with id = yimage's obj id whose body is the
- *     rendered draw_list for the image we handed to set_bytes (the wire
- *     body is the rendered draw_list, not the encoded image bytes).
+ *     rendered drawable_list for the image we handed to set_bytes (the wire
+ *     body is the rendered drawable_list, not the encoded image bytes).
  *   - Second emit doesn't re-emit chrome.
  *   - Destroying a widget queues DELETE_CHILD for the next envelope.
  *   - Malformed image bytes surface as a Result error from emit rather
@@ -112,7 +112,7 @@ static uint32_t read_u32_le(const uint8_t *p)
 }
 
 /* Minimal valid 2x2 24-bit BMP. stb_image (used by yetty_yimage_render)
- * decodes this into RGBA8, so the emit path produces a real draw_list —
+ * decodes this into RGBA8, so the emit path produces a real drawable_list —
  * handcrafted inline so the headless test needs no on-disk asset. */
 static const uint8_t k_bmp_2x2[] = {
     /* BITMAPFILEHEADER (14) */
@@ -183,7 +183,7 @@ static void test_yimage_emit(void)
     CHECK(YETTY_IS_OK(rer), "engine_emit #1");
 
     /* figure_bodies holds one record: {u32 len, u32 id, body[len]}. The
-     * body is the rendered draw_list (CMD_ZERO + one yimage prim), not
+     * body is the rendered drawable_list (CMD_ZERO + one yimage prim), not
      * the encoded image bytes — so we assert the record framing and id
      * rather than an exact byte match. */
     CHECK(engine->figure_bodies.size > 8, "figure_bodies has one record");

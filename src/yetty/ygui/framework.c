@@ -22,7 +22,7 @@
 #include "internal.h"
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/methods.h>
@@ -127,9 +127,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_fr
     free(framework->pending_deletes);
     free(framework->minted_figures);
     yetty_ycore_buffer_destroy(&framework->container_records);
-    if (framework->ygrid_draw_list) {
-        yetty_ydraw_draw_list_destroy(framework->ygrid_draw_list);
-        framework->ygrid_draw_list = NULL;
+    if (framework->ygrid_drawable_list) {
+        yetty_ydraw_drawable_list_destroy(framework->ygrid_drawable_list);
+        framework->ygrid_drawable_list = NULL;
     }
     yetty_ycore_buffer_destroy(&framework->figure_bodies);
     if (framework->theme) {
@@ -1221,7 +1221,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
 }
 
 /* Emit `node` and its subtree's prims into the currently-active draw
- * list (ctx->ygrid_draw_list). Shared by the normal path and the
+ * list (ctx->ygrid_drawable_list). Shared by the normal path and the
  * figure-boundary path below. */
 static struct yetty_ycore_void_result walk_emit_body_inline(struct yetty_ygui_object *node,
                                                             struct yetty_ygui_emit_ctx *ctx)
@@ -1266,45 +1266,45 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
      * subtree into it, ship it as the figure's body, then restore. The
      * leading CMD_ZERO wipes this figure's prims on the receiver each
      * frame (full-redraw model, same as the chrome ygrid). */
-    struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dlr,
-                        "yetty_ygui_framework_walk_emit_body: figure draw_list create");
-    struct yetty_ydraw_draw_list *figure_dl = dlr.value;
-    struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(figure_dl);
+                        "yetty_ygui_framework_walk_emit_body: figure drawable_list create");
+    struct yetty_ydraw_drawable_list *figure_dl = dlr.value;
+    struct yetty_ycore_void_result zr = yetty_ydraw_drawable_list_add_cmd_zero(figure_dl);
     if (YETTY_IS_ERR(zr)) {
-        yetty_ydraw_draw_list_destroy(figure_dl);
+        yetty_ydraw_drawable_list_destroy(figure_dl);
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_walk_emit_body: figure CMD_ZERO",
                          zr);
     }
 
-    struct yetty_ydraw_draw_list *saved_dl = ctx->ygrid_draw_list;
+    struct yetty_ydraw_drawable_list *saved_dl = ctx->ygrid_drawable_list;
     uint32_t saved_fid = ctx->current_figure_id;
-    ctx->ygrid_draw_list = figure_dl;
+    ctx->ygrid_drawable_list = figure_dl;
     ctx->current_figure_id = node->id;
 
     struct yetty_ycore_void_result br = walk_emit_body_inline(node, ctx);
 
-    ctx->ygrid_draw_list = saved_dl;
+    ctx->ygrid_drawable_list = saved_dl;
     ctx->current_figure_id = saved_fid;
 
     if (YETTY_IS_ERR(br)) {
-        yetty_ydraw_draw_list_destroy(figure_dl);
+        yetty_ydraw_drawable_list_destroy(figure_dl);
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_walk_emit_body: figure subtree",
                          br);
     }
 
-    size_t body_size = yetty_ydraw_draw_list_size(figure_dl);
+    size_t body_size = yetty_ydraw_drawable_list_size(figure_dl);
     if (body_size > 0) {
-        const void *body_data = yetty_ydraw_draw_list_data(figure_dl);
+        const void *body_data = yetty_ydraw_drawable_list_data(figure_dl);
         struct yetty_ycore_void_result fr = yetty_ygui_emit_figure_body(
             ctx, node->id, (const uint8_t *)body_data, (uint32_t)body_size);
         if (YETTY_IS_ERR(fr)) {
-            yetty_ydraw_draw_list_destroy(figure_dl);
+            yetty_ydraw_drawable_list_destroy(figure_dl);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_ygui_framework_walk_emit_body: figure body emit", fr);
         }
     }
-    yetty_ydraw_draw_list_destroy(figure_dl);
+    yetty_ydraw_drawable_list_destroy(figure_dl);
     return YETTY_OK_VOID();
 }
 
@@ -1376,12 +1376,12 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_fram
         }
     }
     /* Bytes accumulated by chrome widgets into the framework's per-emit
-     * ydraw draw_list. The list's primitives buffer is the raw ydraw
+     * ydraw drawable_list. The list's primitives buffer is the raw ydraw
      * FAM stream that ygrid->process_bytes consumes. */
-    if (framework->ygrid_draw_list) {
-        size_t dl_size = yetty_ydraw_draw_list_size(framework->ygrid_draw_list);
+    if (framework->ygrid_drawable_list) {
+        size_t dl_size = yetty_ydraw_drawable_list_size(framework->ygrid_drawable_list);
         if (dl_size > 0) {
-            const void *dl_data = yetty_ydraw_draw_list_data(framework->ygrid_draw_list);
+            const void *dl_data = yetty_ydraw_drawable_list_data(framework->ygrid_drawable_list);
             r = yetty_ygui_wire_append_record(&envelope, framework->ygrid_id, dl_data,
                                               (uint32_t)dl_size);
             if (YETTY_IS_ERR(r)) {
@@ -1507,17 +1507,17 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_frame
     yetty_ycore_buffer_clear(&framework->container_records);
     yetty_ycore_buffer_clear(&framework->figure_bodies);
 
-    /* Per-emit ydraw draw_list — created lazily on first emit, reused
+    /* Per-emit ydraw drawable_list — created lazily on first emit, reused
      * across frames. clear() rewinds the primitives byte cursor without
      * freeing the allocation. */
-    if (!framework->ygrid_draw_list) {
-        struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    if (!framework->ygrid_drawable_list) {
+        struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(dlr)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: draw_list create", dlr);
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: drawable_list create", dlr);
         }
-        framework->ygrid_draw_list = dlr.value;
+        framework->ygrid_drawable_list = dlr.value;
     } else {
-        yetty_ydraw_draw_list_clear(framework->ygrid_draw_list);
+        yetty_ydraw_drawable_list_clear(framework->ygrid_drawable_list);
     }
 
     /* Full-redraw model: prepend CMD_ZERO so the receiver wipes its
@@ -1526,14 +1526,14 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_frame
      * documented in include/yetty/ydraw-core/cmds.h:89. */
     {
         struct yetty_ycore_void_result zr =
-            yetty_ydraw_draw_list_add_cmd_zero(framework->ygrid_draw_list);
+            yetty_ydraw_drawable_list_add_cmd_zero(framework->ygrid_drawable_list);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yetty_ygui_framework_emit: CMD_ZERO");
     }
 
     struct yetty_ygui_emit_ctx ctx = {
         .framework = framework,
         .container_records = &framework->container_records,
-        .ygrid_draw_list = framework->ygrid_draw_list,
+        .ygrid_drawable_list = framework->ygrid_drawable_list,
         .figure_bodies = &framework->figure_bodies,
         .current_figure_id = 0,
         .staged_mints = NULL,

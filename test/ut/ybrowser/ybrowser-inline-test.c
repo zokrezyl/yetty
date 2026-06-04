@@ -346,7 +346,7 @@ static void test_em_italic_propagation(void)
  *
  * `<a>foo</a> <a>bar</a>` must render with at least one glyph-width of
  * horizontal gap between the "foo" and "bar" fragments. Pre-P1.2 the
- * space appeared as its own " " TEXT_SPAN; after the whitespace-only
+ * space appeared as its own " " TEXT_DRAWABLE_LIST; after the whitespace-only
  * fragment skip (added to stop fonts from rendering placeholder
  * glyphs for the lone space) the "bar" fragment starts at "foo".x +
  * "foo".w + space-width — same visual, one less prim.
@@ -588,7 +588,7 @@ static void test_span_display_block(void)
 /* ============================================================================
  * Test 12 — text-align: justify line start is at content origin (the
  * line is left-anchored and only the inter-word slack is distributed
- * via TEXT_SPAN v2 word_spacing — P2.12). The first fragment x for the
+ * via TEXT_DRAWABLE_LIST v2 word_spacing — P2.12). The first fragment x for the
  * justified paragraph therefore equals the first fragment x for a
  * normal paragraph. word_spacing itself can't be read through the
  * public test API today; see the wikipedia-test prim counts for the
@@ -846,7 +846,7 @@ static void test_nbsp_collapsed_to_space(void)
 
 /* ============================================================================
  * Test 19 — Whitespace-only seg fragments (e.g. the `" "` text node
- * between `<a>x</a> <b>y</b>`) are NOT emitted as their own TEXT_SPAN
+ * between `<a>x</a> <b>y</b>`) are NOT emitted as their own TEXT_DRAWABLE_LIST
  * prims. The visual gap between fragments is preserved via frag_x
  * advancement; the prim stream just doesn't contain a standalone " "
  * span that some fonts would render as a placeholder glyph.
@@ -884,7 +884,7 @@ static void test_no_whitespace_only_fragments(void)
         }
     }
     fprintf(stderr, "  whitespace-only fragments: %d\n", ws_only_count);
-    ASSERT_TRUE("no whitespace-only TEXT_SPAN fragments", ws_only_count == 0);
+    ASSERT_TRUE("no whitespace-only TEXT_DRAWABLE_LIST fragments", ws_only_count == 0);
 
     yetty_ylexbor_destroy(yl);
 }
@@ -894,7 +894,7 @@ static void test_no_whitespace_only_fragments(void)
  *
  * `<a><span>[</span>12<span>]</span></a>` is exactly what MediaWiki
  * emits for every `[N]` citation. The old per-element seg tracking
- * (P1.2 original) split this into THREE TEXT_SPAN prims at
+ * (P1.2 original) split this into THREE TEXT_DRAWABLE_LIST prims at
  * adjacent x positions computed from our naive `font_size*0.55`
  * per-glyph estimate. The canvas's real font advances differ — the
  * cumulative drift across thousands of such fragments produced

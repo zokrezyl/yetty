@@ -13,7 +13,7 @@
  *   - destructor chain runs leaf-first without leaking
  */
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/widgets/tooltip.h>
 
@@ -237,18 +237,18 @@ static void test_tooltip_pilot(void)
     assert(strcmp(yetty_ygui_tooltip_get_text(obj), "hello") == 0);
     assert(yetty_ygui_object_is_dirty(obj));
 
-    /* Position the widget so paint emits a TEXT_SPAN at a known coord. */
+    /* Position the widget so paint emits a TEXT_DRAWABLE_LIST at a known coord. */
     struct yetty_ycore_rectangle wr = {{10.0f, 20.0f}, {200.0f, 60.0f}};
     yetty_ygui_widget_set_rect(obj, wr);
 
-    /* Drive a minimal pass-2 emit: set up an ad-hoc draw_list, call
-     * paint, and verify a TEXT_SPAN flyweight record landed. */
-    struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    /* Drive a minimal pass-2 emit: set up an ad-hoc drawable_list, call
+     * paint, and verify a TEXT_DRAWABLE_LIST drawable-list entry record landed. */
+    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {
         .framework = NULL,
         .container_records = NULL,
-        .ygrid_draw_list = dlr.value,
+        .ygrid_drawable_list = dlr.value,
         .figure_bodies = NULL,
         .current_figure_id = 0,
     };
@@ -256,12 +256,12 @@ static void test_tooltip_pilot(void)
         yetty_ygui_widget_paint(NULL, (struct yetty_yclass_object *)obj, &ctx);
     assert(YETTY_IS_OK(er));
     /* First u32 in the primitives buffer is the type word —
-     * YETTY_YDRAW_TYPE_TEXT_SPAN = 0x40000002 (no id flag, anonymous). */
-    const uint32_t *prims = (const uint32_t *)yetty_ydraw_draw_list_data(dlr.value);
-    size_t prims_size = yetty_ydraw_draw_list_size(dlr.value);
+     * YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST = 0x40000002 (no id flag, anonymous). */
+    const uint32_t *prims = (const uint32_t *)yetty_ydraw_drawable_list_data(dlr.value);
+    size_t prims_size = yetty_ydraw_drawable_list_size(dlr.value);
     assert(prims_size >= 8);
     assert(prims[0] == 0x40000002u);
-    yetty_ydraw_draw_list_destroy(dlr.value);
+    yetty_ydraw_drawable_list_destroy(dlr.value);
     yetty_ygui_del(obj);
 }
 

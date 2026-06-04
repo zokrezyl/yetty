@@ -20,7 +20,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,7 +77,7 @@ struct yetty_ycat_config {
  *
  * path_hint may be NULL (for stdin / URL). If the handler needs a real file
  * and path_hint is NULL, it is expected to spill to a temp file. */
-typedef struct yetty_ydraw_draw_list_result (*yetty_ycat_handler_fn)(
+typedef struct yetty_ydraw_drawable_list_result (*yetty_ycat_handler_fn)(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 
@@ -90,7 +90,7 @@ yetty_ycat_handler_fn yetty_ycat_get_handler(enum yetty_ycat_type type);
 int yetty_ycat_register_handler(enum yetty_ycat_type type, yetty_ycat_handler_fn fn);
 
 /* One-shot: detect → render. */
-struct yetty_ydraw_draw_list_result yetty_ycat_render(const uint8_t *bytes, size_t len,
+struct yetty_ydraw_drawable_list_result yetty_ycat_render(const uint8_t *bytes, size_t len,
                                                       const char *path_hint,
                                                       const struct yetty_ycat_config *config);
 
@@ -112,7 +112,7 @@ struct yetty_ydraw_draw_list_result yetty_ycat_render(const uint8_t *bytes, size
  * handler must not retain the pointer. Return an error to abort the
  * streaming render. */
 typedef struct yetty_ycore_void_result (*yetty_ycat_emit_fn)(
-    void *user_data, const struct yetty_ydraw_draw_list *envelope);
+    void *user_data, const struct yetty_ydraw_drawable_list *envelope);
 
 typedef struct yetty_ycore_void_result (*yetty_ycat_handler_streaming_fn)(
     const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config,
@@ -133,7 +133,7 @@ const char *yetty_ycat_grammar_lookup(const char *mime, const char *path);
 
 /* Parse bytes with `grammar_name`, emit coloured spans into a fresh ydraw
  * buffer. Useful when targeting a yetty terminal (via the OSC envelope). */
-struct yetty_ydraw_draw_list_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
+struct yetty_ydraw_drawable_list_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
                                                          const char *grammar_name,
                                                          const struct yetty_ycat_config *config);
 
@@ -160,7 +160,7 @@ int yetty_ycat_fetch_url(const char *url, uint8_t **out, size_t *out_len, char *
 /* Emit an OSC 666674 (YDRAW_SCROLL) sequence wrapping the buffer's primitive
  * bytes (base64-encoded, `--bin` format) to `out`. Returns number of bytes
  * written, 0 on failure. */
-struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                        FILE *out);
 
 #ifdef __cplusplus

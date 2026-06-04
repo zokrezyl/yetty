@@ -10,7 +10,7 @@
 #include <yetty/yimage/yimage.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yterm/osc-codes.h>
 
@@ -39,18 +39,18 @@ int yetty_yimage_probe_size(const uint8_t *image_bytes, size_t len, int *out_w, 
     return 0;
 }
 
-struct yetty_ydraw_draw_list_result yetty_yimage_render(
+struct yetty_ydraw_drawable_list_result yetty_yimage_render(
     const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config)
 {
     if (!image_bytes || len == 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage: image_bytes is NULL/empty");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: image_bytes is NULL/empty");
     }
 
     /* Decode via stb_image — force 4-channel RGBA8. */
     int w = 0, h = 0, channels = 0;
     stbi_uc *pixels = stbi_load_from_memory(image_bytes, (int)len, &w, &h, &channels, 4);
     if (!pixels) {
-        return YETTY_ERR(yetty_ydraw_draw_list, stbi_failure_reason());
+        return YETTY_ERR(yetty_ydraw_drawable_list, stbi_failure_reason());
     }
 
     /* Resolve config defaults — fall back to source dimensions when caller
@@ -73,7 +73,7 @@ struct yetty_ydraw_draw_list_result yetty_yimage_render(
     uint8_t *drawable_buf = malloc(required);
     if (!drawable_buf) {
         stbi_image_free(pixels);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage: prim alloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
         yetty_yimage_uniforms_serialize(&u, &bufs, drawable_buf, required);
@@ -82,78 +82,78 @@ struct yetty_ydraw_draw_list_result yetty_yimage_render(
     stbi_image_free(pixels);
     if (YETTY_IS_ERR(ser)) {
         free(drawable_buf);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage: serialize failed", ser);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: serialize failed", ser);
     }
 
-    struct yetty_ydraw_draw_list_config bcfg = {
+    struct yetty_ydraw_drawable_list_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = u.bounds_x + u.bounds_w,
         .scene_max_y = u.bounds_y + u.bounds_h,
     };
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(drawable_buf);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage: ydraw buffer create failed", br);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: ydraw buffer create failed", br);
     }
 
     struct yetty_ydraw_id_result idr =
-        yetty_ydraw_draw_list_add_prim(br.value, drawable_buf, required);
+        yetty_ydraw_drawable_list_add_prim(br.value, drawable_buf, required);
     free(drawable_buf);
     if (YETTY_IS_ERR(idr)) {
-        yetty_ydraw_draw_list_destroy(br.value);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage: ydraw add_prim failed", idr);
+        yetty_ydraw_drawable_list_destroy(br.value);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: ydraw add_prim failed", idr);
     }
 
-    return YETTY_OK(yetty_ydraw_draw_list, br.value);
+    return YETTY_OK(yetty_ydraw_drawable_list, br.value);
 }
 
-struct yetty_ydraw_draw_list_result yetty_yimage_render_path(
+struct yetty_ydraw_drawable_list_result yetty_yimage_render_path(
     const char *path, const struct yetty_yimage_render_config *config)
 {
     if (!path) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage_render_path: path is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage_render_path: path is NULL");
     }
 
     FILE *f = fopen(path, "rb");
     if (!f) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage_render_path: fopen failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage_render_path: fopen failed");
     }
     if (fseek(f, 0, SEEK_END) != 0) {
         fclose(f);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage_render_path: fseek failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage_render_path: fseek failed");
     }
     long size = ftell(f);
     if (size <= 0) {
         fclose(f);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage_render_path: empty or unreadable");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage_render_path: empty or unreadable");
     }
     rewind(f);
     uint8_t *bytes = malloc((size_t)size);
     if (!bytes) {
         fclose(f);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage_render_path: malloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage_render_path: malloc failed");
     }
     size_t nread = fread(bytes, 1, (size_t)size, f);
     fclose(f);
     if (nread != (size_t)size) {
         free(bytes);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yimage_render_path: short read");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage_render_path: short read");
     }
 
-    struct yetty_ydraw_draw_list_result r = yetty_yimage_render(bytes, (size_t)size, config);
+    struct yetty_ydraw_drawable_list_result r = yetty_yimage_render(bytes, (size_t)size, config);
     free(bytes);
     return r;
 }
 
-struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                          FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yimage_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
-    size_t raw_size = yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)buffer, &raw);
+    size_t raw_size = yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yimage_osc_bin_emit: empty serialize");
     }

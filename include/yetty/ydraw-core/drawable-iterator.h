@@ -4,8 +4,8 @@
  * them into commands. Each call to _next() returns one command of one of
  * two kinds:
  *
- *   ADD     — followed by a flyweight: a drawable to place on the canvas.
- *             For ADD, command.flyweight is valid; .data points into the
+ *   ADD     — followed by a drawable-list entry: a drawable to place on the canvas.
+ *             For ADD, command.entry is valid; .data points into the
  *             iter's scratch and is stable until the next _next call.
  *   DELETE  — followed by an id: an addressable entity to remove.
  *
@@ -13,12 +13,12 @@
  *
  *   type == YETTY_YDRAW_CMD_DELETE           → DELETE  (12 bytes:
  *                                              type | id | payload_size=0)
- *   anything else                            → ADD     (flyweight via the
+ *   anything else                            → ADD     (drawable-list entry via the
  *                                              registry, FAM or fixed)
  *
  * Future addressable-ADD producers may set the HAS_ID bit on the type
  * word to embed an id alongside the drawable; that id lives in the
- * flyweight bytes — the iter does not unpack it.
+ * drawable-list entry bytes — the iter does not unpack it.
  *
  * The iter runs inside the layer's process_input coro. When the
  * wire-statemachine has no more bytes right now and the envelope
@@ -33,8 +33,8 @@
  *   - destroy: frees scratch.
  *
  * Single-use scratch: after _next returns OK with kind=ADD and the caller
- * has consumed command.flyweight, the next _next call may overwrite the
- * scratch. Do NOT cache flyweight.data beyond the next iter step.
+ * has consumed command.entry, the next _next call may overwrite the
+ * scratch. Do NOT cache entry.data beyond the next iter step.
  */
 #ifndef YETTY_YDRAW_CORE_DRAWABLE_ITERATOR_H
 #define YETTY_YDRAW_CORE_DRAWABLE_ITERATOR_H
@@ -42,7 +42,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/flyweight.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,14 +61,14 @@ YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_iterator_status,
 
 /* Verb / kind of the yielded command. */
 enum yetty_ydraw_command_kind {
-    YETTY_YDRAW_COMMAND_ADD,    /* operand: a drawable flyweight */
+    YETTY_YDRAW_COMMAND_ADD,    /* operand: a drawable drawable-list entry */
     YETTY_YDRAW_COMMAND_DELETE, /* operand: the id of the target entity */
     YETTY_YDRAW_COMMAND_UPDATE, /* operand: target id + opaque prim payload */
 };
 
 /* CMD_UPDATE payload view: id + a slice pointing into iter scratch.
  * Bytes belong to the targeted primitive's factory — no canvas-level
- * interpretation. Lifetime mirrors flyweight.data: valid only until the
+ * interpretation. Lifetime mirrors entry.data: valid only until the
  * next iter step. */
 struct yetty_ydraw_command_update {
     uint32_t id;
@@ -81,7 +81,7 @@ struct yetty_ydraw_command {
     enum yetty_ydraw_command_kind kind;
     union {
         /* kind == ADD: the drawable. data points into iter scratch. */
-        struct yetty_ydraw_drawable_flyweight flyweight;
+        struct yetty_ydraw_drawable_list_entry entry;
         /* kind == DELETE: the named entity to remove. */
         uint32_t id;
         /* kind == UPDATE: target id + per-prim opaque payload. */
@@ -106,14 +106,14 @@ struct yetty_ydraw_drawable_iterator {
     bool header_done;       /* envelope header parsed and validated */
 
     struct yetty_ywire_wire_statemachine *wire_statemachine;
-    const struct yetty_ydraw_flyweight_registry *reg;
+    const struct yetty_ydraw_drawable_list_registry *reg;
 };
 
 /* Initialise. No allocation; scratch grows on demand. */
 struct yetty_ycore_void_result yetty_ydraw_drawable_iterator_init(
     struct yetty_ydraw_drawable_iterator *iter,
     struct yetty_ywire_wire_statemachine *wire_statemachine,
-    const struct yetty_ydraw_flyweight_registry *reg);
+    const struct yetty_ydraw_drawable_list_registry *reg);
 
 /* Free the scratch. Safe on a zero-inited iter (no-op). */
 void yetty_ydraw_drawable_iterator_destroy(struct yetty_ydraw_drawable_iterator *iter);
@@ -126,21 +126,21 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
  * involvement). Used for the GROUP-body inner loop in scene-canvas where
  * the bytes are already buffered as the GROUP record's payload.
  *
- * On success: populates *out_command with .flyweight.data pointing into
+ * On success: populates *out_command with .entry.data pointing into
  * `bytes` (caller-owned, must stay alive while command is used) and
  * returns the number of bytes consumed.
  *
  * Layouts mirror the wire iter:
  *   - DELETE             : 12 bytes, kind=DELETE, command.id = bytes[4..8].
  *   - HAS_ID record (e.g. GROUP)
- *                        : 12 + payload_size bytes, kind=ADD, flyweight
+ *                        : 12 + payload_size bytes, kind=ADD, drawable-list entry
  *                          points at the full record (data[0] carries
  *                          the type, data[1] the id, data[2] the size).
- *   - Plain flyweight    : ops->size bytes, kind=ADD, flyweight populated
+ *   - Plain drawable-list entry    : ops->size bytes, kind=ADD, drawable-list entry populated
  *                          via the registry.
  */
 struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
-    const struct yetty_ydraw_flyweight_registry *reg, const uint8_t *bytes, uint32_t bytes_len,
+    const struct yetty_ydraw_drawable_list_registry *reg, const uint8_t *bytes, uint32_t bytes_len,
     struct yetty_ydraw_command *out_command);
 
 #ifdef __cplusplus

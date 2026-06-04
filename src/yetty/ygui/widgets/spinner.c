@@ -4,7 +4,7 @@
  * increment. Each click adjusts value by `step` (default 1.0).
  */
 #include "../internal.h"
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/spinner.h>
@@ -101,7 +101,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                    .center_y = y + h * 0.5f,
                                    .half_width = w * 0.5f,
                                    .half_height = h * 0.5f};
-        return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0, 0, fill, 0, 0, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0, &g);
     }
     if (radius > w * 0.5f) {
         radius = w * 0.5f;
@@ -117,7 +117,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                        .radius_bottom_right = radius,
                                        .radius_top_left = radius,
                                        .radius_bottom_left = radius};
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0, 0, fill, 0, 0,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0,
                                                          &g);
 }
 
@@ -126,7 +126,7 @@ static struct yetty_ycore_void_result paint_text(struct yetty_ygui_emit_ctx *ctx
 {
     size_t n = strlen(t);
     struct yetty_ycore_buffer tb = {.data = (uint8_t *)t, .capacity = n, .size = n};
-    return yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, x, y, &tb, fs, c, 0, -1, 0);
+    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &tb, fs, c, 0, -1, 0);
 }
 
 [[clang::annotate("override@ygui:spinner:widget_paint")]]
@@ -136,7 +136,7 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_ctx *ycl
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "spinner_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =

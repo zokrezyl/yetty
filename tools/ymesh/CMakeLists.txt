@@ -1,4 +1,4 @@
-# ymesh tool — emits a ymesh complex-prim OSC envelope from a .glb file.
+# ymesh tool — emits a ymesh composite OSC envelope from a .glb file.
 # Pure C frontend over the yetty_ymesh library.
 
 add_executable(ymesh

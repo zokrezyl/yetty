@@ -3,30 +3,30 @@
 // The buffer is a single byte stream of primitives. Everything — SDF shapes,
 // fonts, text spans, complex prims — is a primitive identified by the type
 // word at the start of each entry. Iteration is type-agnostic via the
-// flyweight registry (size + aabb come from per-type base ops).
+// drawable-list registry (size + aabb come from per-type base ops).
 //
 // add_font / add_text exist as convenience wrappers that pack the
-// flyweight wire layout (font-prim.c / text-span-prim.c) and call
+// drawable-list entry wire layout (font-resource.c / text-drawable-list.c) and call
 // add_prim — same path SDF emitters take.
 
 #include <stdlib.h>
 #include <string.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
-#include <yetty/ydraw-core/font-prim.h>
-#include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
 
-#include "draw-list-internal.h"
-#include "flyweight-internal.h"
-#include "font-prim-internal.h"
-#include "text-span-prim-internal.h"
+#include "drawable-list-internal.h"
+#include "drawable-list-registry-internal.h"
+#include "font-resource-internal.h"
+#include "text-drawable-list-internal.h"
 
 #define YDRAW_BUFFER_INITIAL_CAPACITY 1024
 
-struct yetty_ydraw_draw_list {
+struct yetty_ydraw_drawable_list {
     struct yetty_ycore_named_buffer primitives;
 
     float scene_min_x, scene_min_y, scene_max_x, scene_max_y;
@@ -47,7 +47,7 @@ struct yetty_ydraw_draw_list {
 #define YDRAW_SERIAL_MAGIC 0x31425059u /* 'YPB1' little-endian */
 #define YDRAW_SERIAL_HEADER_BYTES (4 + 16 + 4)
 
-static struct yetty_ycore_void_result parse_framed_payload(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result parse_framed_payload(struct yetty_ydraw_drawable_list *buf,
                                                            const uint8_t *data, size_t size)
 {
     if (size < YDRAW_SERIAL_HEADER_BYTES) {
@@ -84,16 +84,16 @@ static struct yetty_ycore_void_result parse_framed_payload(struct yetty_ydraw_dr
 }
 
 /* Construct from already-decoded bytes. Owns a private copy. */
-struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_create_from_bytes(const uint8_t *data,
+struct yetty_ydraw_drawable_list_result yetty_ydraw_drawable_list_create_from_bytes(const uint8_t *data,
                                                                             size_t len)
 {
     if (!data || len == 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "null or empty bytes");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "null or empty bytes");
     }
 
-    struct yetty_ydraw_draw_list *buf = calloc(1, sizeof(struct yetty_ydraw_draw_list));
+    struct yetty_ydraw_drawable_list *buf = calloc(1, sizeof(struct yetty_ydraw_drawable_list));
     if (!buf) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "calloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "calloc failed");
     }
 
     /* Framed (magic-tagged) payload = scene_bounds + raw prim stream.
@@ -105,15 +105,15 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_create_from_bytes(cons
     if (len >= 4 && magic == YDRAW_SERIAL_MAGIC) {
         struct yetty_ycore_void_result pr = parse_framed_payload(buf, data, len);
         if (YETTY_IS_ERR(pr)) {
-            yetty_ydraw_draw_list_destroy(buf);
-            return YETTY_ERR(yetty_ydraw_draw_list,
+            yetty_ydraw_drawable_list_destroy(buf);
+            return YETTY_ERR(yetty_ydraw_drawable_list,
                              "create_from_bytes: framed payload parse failed", pr);
         }
     } else {
         uint8_t *copy = malloc(len);
         if (!copy) {
             free(buf);
-            return YETTY_ERR(yetty_ydraw_draw_list, "malloc failed");
+            return YETTY_ERR(yetty_ydraw_drawable_list, "malloc failed");
         }
         memcpy(copy, data, len);
         buf->primitives.buf.data = copy;
@@ -121,42 +121,42 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_create_from_bytes(cons
         buf->primitives.buf.size = len;
     }
     strncpy(buf->primitives.name, "prims", YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH - 1);
-    return YETTY_OK(yetty_ydraw_draw_list, buf);
+    return YETTY_OK(yetty_ydraw_drawable_list, buf);
 }
 
-struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_create_from_base64(
+struct yetty_ydraw_drawable_list_result yetty_ydraw_drawable_list_create_from_base64(
     const struct yetty_ycore_buffer *base64_buf)
 {
     if (!base64_buf || !base64_buf->data || base64_buf->size == 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "null or empty base64 buffer");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "null or empty base64 buffer");
     }
 
     size_t decoded_cap = (base64_buf->size * 3) / 4 + 4;
     uint8_t *decoded = malloc(decoded_cap);
     if (!decoded) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "malloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "malloc failed");
     }
     size_t decoded_len = yetty_ycore_base64_decode((const char *)base64_buf->data, base64_buf->size,
                                                    (char *)decoded, decoded_cap);
 
-    struct yetty_ydraw_draw_list_result r =
-        yetty_ydraw_draw_list_create_from_bytes(decoded, decoded_len);
+    struct yetty_ydraw_drawable_list_result r =
+        yetty_ydraw_drawable_list_create_from_bytes(decoded, decoded_len);
     free(decoded);
     return r;
 }
 
-struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_config_buffer_create(
-    const struct yetty_ydraw_draw_list_config *config)
+struct yetty_ydraw_drawable_list_result yetty_ydraw_drawable_list_config_buffer_create(
+    const struct yetty_ydraw_drawable_list_config *config)
 {
-    struct yetty_ydraw_draw_list *buf = calloc(1, sizeof(struct yetty_ydraw_draw_list));
+    struct yetty_ydraw_drawable_list *buf = calloc(1, sizeof(struct yetty_ydraw_drawable_list));
     if (!buf) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "calloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "calloc failed");
     }
 
     buf->primitives.buf.data = calloc(1, YDRAW_BUFFER_INITIAL_CAPACITY);
     if (!buf->primitives.buf.data) {
         free(buf);
-        return YETTY_ERR(yetty_ydraw_draw_list, "calloc for prims failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "calloc for prims failed");
     }
 
     buf->primitives.buf.capacity = YDRAW_BUFFER_INITIAL_CAPACITY;
@@ -170,27 +170,27 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_config_buffer_create(
         buf->scene_max_y = config->scene_max_y;
     }
 
-    return YETTY_OK(yetty_ydraw_draw_list, buf);
+    return YETTY_OK(yetty_ydraw_drawable_list, buf);
 }
 
-float yetty_ydraw_draw_list_scene_min_x(const struct yetty_ydraw_draw_list *buf)
+float yetty_ydraw_drawable_list_scene_min_x(const struct yetty_ydraw_drawable_list *buf)
 {
     return buf ? buf->scene_min_x : 0.0f;
 }
-float yetty_ydraw_draw_list_scene_min_y(const struct yetty_ydraw_draw_list *buf)
+float yetty_ydraw_drawable_list_scene_min_y(const struct yetty_ydraw_drawable_list *buf)
 {
     return buf ? buf->scene_min_y : 0.0f;
 }
-float yetty_ydraw_draw_list_scene_max_x(const struct yetty_ydraw_draw_list *buf)
+float yetty_ydraw_drawable_list_scene_max_x(const struct yetty_ydraw_drawable_list *buf)
 {
     return buf ? buf->scene_max_x : 0.0f;
 }
-float yetty_ydraw_draw_list_scene_max_y(const struct yetty_ydraw_draw_list *buf)
+float yetty_ydraw_drawable_list_scene_max_y(const struct yetty_ydraw_drawable_list *buf)
 {
     return buf ? buf->scene_max_y : 0.0f;
 }
 
-void yetty_ydraw_draw_list_destroy(struct yetty_ydraw_draw_list *buf)
+void yetty_ydraw_drawable_list_destroy(struct yetty_ydraw_drawable_list *buf)
 {
     if (!buf) {
         return;
@@ -201,39 +201,39 @@ void yetty_ydraw_draw_list_destroy(struct yetty_ydraw_draw_list *buf)
     free(buf);
 }
 
-void yetty_ydraw_draw_list_clear(struct yetty_ydraw_draw_list *buf)
+void yetty_ydraw_drawable_list_clear(struct yetty_ydraw_drawable_list *buf)
 {
     if (!buf) {
-        yerror("yetty_ydraw_draw_list_clear: buf is NULL");
+        yerror("yetty_ydraw_drawable_list_clear: buf is NULL");
         return;
     }
     buf->primitives.buf.size = 0;
 }
 
-const void *yetty_ydraw_draw_list_data(const struct yetty_ydraw_draw_list *buf)
+const void *yetty_ydraw_drawable_list_data(const struct yetty_ydraw_drawable_list *buf)
 {
     return buf ? buf->primitives.buf.data : NULL;
 }
 
-size_t yetty_ydraw_draw_list_size(const struct yetty_ydraw_draw_list *buf)
+size_t yetty_ydraw_drawable_list_size(const struct yetty_ydraw_drawable_list *buf)
 {
     return buf ? buf->primitives.buf.size : 0;
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_truncate(struct yetty_ydraw_draw_list *buf,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_truncate(struct yetty_ydraw_drawable_list *buf,
                                                               size_t size)
 {
     if (!buf) {
-        return YETTY_ERR(yetty_ycore_void, "draw_list_truncate: NULL buf");
+        return YETTY_ERR(yetty_ycore_void, "drawable_list_truncate: NULL buf");
     }
     if (size > buf->primitives.buf.size) {
-        return YETTY_ERR(yetty_ycore_void, "draw_list_truncate: size beyond current buffer size");
+        return YETTY_ERR(yetty_ycore_void, "drawable_list_truncate: size beyond current buffer size");
     }
     buf->primitives.buf.size = size;
     return YETTY_OK_VOID();
 }
 
-void yetty_ydraw_draw_list_set_scene_bounds(struct yetty_ydraw_draw_list *buf, float min_x,
+void yetty_ydraw_drawable_list_set_scene_bounds(struct yetty_ydraw_drawable_list *buf, float min_x,
                                             float min_y, float max_x, float max_y)
 {
     if (!buf) {
@@ -245,7 +245,7 @@ void yetty_ydraw_draw_list_set_scene_bounds(struct yetty_ydraw_draw_list *buf, f
     buf->scene_max_y = max_y;
 }
 
-size_t yetty_ydraw_draw_list_serialize(struct yetty_ydraw_draw_list *buf, const uint8_t **out_data)
+size_t yetty_ydraw_drawable_list_serialize(struct yetty_ydraw_drawable_list *buf, const uint8_t **out_data)
 {
     if (!buf || !out_data) {
         if (out_data) {
@@ -293,8 +293,8 @@ size_t yetty_ydraw_draw_list_serialize(struct yetty_ydraw_draw_list *buf, const 
 static const char YDRAW_B64_ALPHABET[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-struct yetty_ycore_buffer_result yetty_ydraw_draw_list_to_base64(
-    const struct yetty_ydraw_draw_list *buf)
+struct yetty_ycore_buffer_result yetty_ydraw_drawable_list_to_base64(
+    const struct yetty_ydraw_drawable_list *buf)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ycore_buffer, "buf is NULL");
@@ -368,8 +368,8 @@ struct yetty_ycore_buffer_result yetty_ydraw_draw_list_to_base64(
     return YETTY_OK(yetty_ycore_buffer, b);
 }
 
-const struct yetty_ycore_buffer *yetty_ydraw_draw_list_primitives(
-    const struct yetty_ydraw_draw_list *buf)
+const struct yetty_ycore_buffer *yetty_ydraw_drawable_list_primitives(
+    const struct yetty_ydraw_drawable_list *buf)
 {
     if (!buf) {
         return NULL;
@@ -377,7 +377,7 @@ const struct yetty_ycore_buffer *yetty_ydraw_draw_list_primitives(
     return &buf->primitives.buf;
 }
 
-struct yetty_ydraw_id_result yetty_ydraw_draw_list_add_prim(struct yetty_ydraw_draw_list *buf,
+struct yetty_ydraw_id_result yetty_ydraw_drawable_list_add_prim(struct yetty_ydraw_drawable_list *buf,
                                                             const void *data, size_t size)
 {
     if (!buf) {
@@ -412,7 +412,7 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_add_prim(struct yetty_ydraw_d
     return YETTY_OK(yetty_ydraw_id, id);
 }
 
-/* GROUP / DELETE producer helpers — see the comment in draw-list.h.
+/* GROUP / DELETE producer helpers — see the comment in drawable-list.h.
  *
  * Wire layout for both records:
  *   GROUP(id)   : u32 type=CMD_GROUP | u32 id | u32 payload_size | …payload…
@@ -424,18 +424,18 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_add_prim(struct yetty_ydraw_d
  * already counts against the buffer; end_group only patches, it doesn't
  * append.
  */
-struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group(struct yetty_ydraw_draw_list *buf,
+struct yetty_ydraw_id_result yetty_ydraw_drawable_list_begin_group(struct yetty_ydraw_drawable_list *buf,
                                                                uint32_t group_id)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ydraw_id, "begin_group: buf is NULL");
     }
     uint32_t header[3] = {YETTY_YDRAW_CMD_GROUP, group_id, 0u};
-    return yetty_ydraw_draw_list_add_prim(buf, header, sizeof(header));
+    return yetty_ydraw_drawable_list_add_prim(buf, header, sizeof(header));
 }
 
-struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group_with_rect(
-    struct yetty_ydraw_draw_list *buf, uint32_t group_id, float x, float y, float w, float h)
+struct yetty_ydraw_id_result yetty_ydraw_drawable_list_begin_group_with_rect(
+    struct yetty_ydraw_drawable_list *buf, uint32_t group_id, float x, float y, float w, float h)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ydraw_id, "begin_group_with_rect: buf is NULL");
@@ -456,10 +456,10 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group_with_rect(
     memcpy(&header[8], &y, sizeof(float));
     memcpy(&header[9], &w, sizeof(float));
     memcpy(&header[10], &h, sizeof(float));
-    return yetty_ydraw_draw_list_add_prim(buf, header, sizeof(header));
+    return yetty_ydraw_drawable_list_add_prim(buf, header, sizeof(header));
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(struct yetty_ydraw_draw_list *buf,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_end_group(struct yetty_ydraw_drawable_list *buf,
                                                                uint32_t group_marker_offset)
 {
     if (!buf) {
@@ -474,20 +474,20 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(struct yetty_ydra
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
-    struct yetty_ydraw_draw_list *buf, uint32_t group_id)
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_delete(
+    struct yetty_ydraw_drawable_list *buf, uint32_t group_id)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ycore_void, "add_cmd_delete: buf is NULL");
     }
     uint32_t record[3] = {YETTY_YDRAW_CMD_DELETE, group_id, 0u};
-    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, record, sizeof(record));
+    struct yetty_ydraw_id_result r = yetty_ydraw_drawable_list_add_prim(buf, record, sizeof(record));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_delete: add_prim failed");
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_group_ref(
-    struct yetty_ydraw_draw_list *buf, uint32_t target_id)
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_group_ref(
+    struct yetty_ydraw_drawable_list *buf, uint32_t target_id)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ycore_void, "add_cmd_group_ref: buf is NULL");
@@ -495,13 +495,13 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_group_ref(
     /* kind=REF (bits 31:30 = 10) is encoded in the constant itself; no
      * payload_size word — the record is exactly 2 u32s. */
     uint32_t record[2] = {YETTY_YDRAW_CMD_GROUP_REF, target_id};
-    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, record, sizeof(record));
+    struct yetty_ydraw_id_result r = yetty_ydraw_drawable_list_add_prim(buf, record, sizeof(record));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_group_ref: add_prim failed");
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_update(
-    struct yetty_ydraw_draw_list *buf, uint32_t target_id, const void *payload, size_t payload_size)
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_update(
+    struct yetty_ydraw_drawable_list *buf, uint32_t target_id, const void *payload, size_t payload_size)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ycore_void, "add_cmd_update: buf is NULL");
@@ -524,7 +524,7 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_update(
     if (payload_size > 0) {
         memcpy(tmp + sizeof(header), payload, payload_size);
     }
-    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, tmp, total);
+    struct yetty_ydraw_id_result r = yetty_ydraw_drawable_list_add_prim(buf, tmp, total);
     free(tmp);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_update: add_prim failed");
     return YETTY_OK_VOID();
@@ -537,7 +537,7 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_update(
  * id=0 payloads.
  *=========================================================================*/
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_record(struct yetty_ydraw_draw_list *buf,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_record(struct yetty_ydraw_drawable_list *buf,
                                                                 uint32_t id, const void *payload,
                                                                 size_t payload_size)
 {
@@ -561,13 +561,13 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_record(struct yetty_ydr
     if (payload_size > 0) {
         memcpy(tmp + sizeof(header), payload, payload_size);
     }
-    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, tmp, total);
+    struct yetty_ydraw_id_result r = yetty_ydraw_drawable_list_add_prim(buf, tmp, total);
     free(tmp);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_record: add_prim failed");
     return YETTY_OK_VOID();
 }
 
-struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_record(struct yetty_ydraw_draw_list *buf,
+struct yetty_ydraw_id_result yetty_ydraw_drawable_list_begin_record(struct yetty_ydraw_drawable_list *buf,
                                                                 uint32_t id)
 {
     if (!buf) {
@@ -577,10 +577,10 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_record(struct yetty_ydr
      * of the written 8 bytes; end_record backfills the length field at
      * marker+0. */
     uint32_t header[2] = {0u, id};
-    return yetty_ydraw_draw_list_add_prim(buf, header, sizeof(header));
+    return yetty_ydraw_drawable_list_add_prim(buf, header, sizeof(header));
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_end_record(struct yetty_ydraw_draw_list *buf,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_end_record(struct yetty_ydraw_drawable_list *buf,
                                                                 uint32_t record_marker_offset)
 {
     if (!buf) {
@@ -597,7 +597,7 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_end_record(struct yetty_ydr
 
 /* Internal helper — emit an admin record (id=0) with the given
  * sub-cmd + body. Body bytes are admin-op specific. */
-static struct yetty_ycore_void_result add_admin_record(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result add_admin_record(struct yetty_ydraw_drawable_list *buf,
                                                        uint32_t admin_op, const void *body,
                                                        size_t body_size)
 {
@@ -612,32 +612,32 @@ static struct yetty_ycore_void_result add_admin_record(struct yetty_ydraw_draw_l
         memcpy(payload + sizeof(admin_op), body, body_size);
     }
     struct yetty_ycore_void_result r =
-        yetty_ydraw_draw_list_add_record(buf, /*id=*/0u, payload, payload_size);
+        yetty_ydraw_drawable_list_add_record(buf, /*id=*/0u, payload, payload_size);
     free(payload);
     return r;
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_clear_all(
-    struct yetty_ydraw_draw_list *buf)
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_clear_all(
+    struct yetty_ydraw_drawable_list *buf)
 {
     return add_admin_record(buf, YETTY_YFIGURE_ADMIN_CLEAR_ALL, NULL, 0);
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_delete_child(
-    struct yetty_ydraw_draw_list *buf, uint32_t child_id)
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_delete_child(
+    struct yetty_ydraw_drawable_list *buf, uint32_t child_id)
 {
     return add_admin_record(buf, YETTY_YFIGURE_ADMIN_DELETE_CHILD, &child_id, sizeof(child_id));
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_set_rect(
-    struct yetty_ydraw_draw_list *buf, float min_x, float min_y, float max_x, float max_y)
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_set_rect(
+    struct yetty_ydraw_drawable_list *buf, float min_x, float min_y, float max_x, float max_y)
 {
     float r[4] = {min_x, min_y, max_x, max_y};
     return add_admin_record(buf, YETTY_YFIGURE_ADMIN_SET_RECT, r, sizeof(r));
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_set_child_rect(
-    struct yetty_ydraw_draw_list *buf, uint32_t child_id, float min_x, float min_y, float max_x,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_set_child_rect(
+    struct yetty_ydraw_drawable_list *buf, uint32_t child_id, float min_x, float min_y, float max_x,
     float max_y)
 {
     uint8_t body[20];
@@ -647,8 +647,8 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_set_child_rect(
     return add_admin_record(buf, YETTY_YFIGURE_ADMIN_SET_CHILD_RECT, body, sizeof(body));
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_create_child(
-    struct yetty_ydraw_draw_list *buf, uint32_t child_id, uint32_t kind, float min_x, float min_y,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_create_child(
+    struct yetty_ydraw_drawable_list *buf, uint32_t child_id, uint32_t kind, float min_x, float min_y,
     float max_x, float max_y, const void *init_payload, size_t init_payload_size)
 {
     if (init_payload_size > UINT32_MAX) {
@@ -675,8 +675,8 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_admin_create_child(
     return rr;
 }
 
-struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_admin_create_child(
-    struct yetty_ydraw_draw_list *buf, uint32_t child_id, uint32_t kind, float min_x, float min_y,
+struct yetty_ydraw_id_result yetty_ydraw_drawable_list_begin_admin_create_child(
+    struct yetty_ydraw_drawable_list *buf, uint32_t child_id, uint32_t kind, float min_x, float min_y,
     float max_x, float max_y)
 {
     if (!buf) {
@@ -702,11 +702,11 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_admin_create_child(
     float r[4] = {min_x, min_y, max_x, max_y};
     memcpy(hdr + 20, r, sizeof(r));
     memcpy(hdr + 36, &zero32, 4);
-    return yetty_ydraw_draw_list_add_prim(buf, hdr, sizeof(hdr));
+    return yetty_ydraw_drawable_list_add_prim(buf, hdr, sizeof(hdr));
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_end_admin_create_child(
-    struct yetty_ydraw_draw_list *buf, uint32_t record_marker_offset)
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_end_admin_create_child(
+    struct yetty_ydraw_drawable_list *buf, uint32_t record_marker_offset)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ycore_void, "end_admin_create_child: buf is NULL");
@@ -723,8 +723,8 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_end_admin_create_child(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ydraw_drawable_iter_result yetty_ydraw_draw_list_drawable_first(
-    const struct yetty_ydraw_draw_list *buf, const struct yetty_ydraw_flyweight_registry *reg)
+struct yetty_ydraw_drawable_iter_result yetty_ydraw_drawable_list_drawable_first(
+    const struct yetty_ydraw_drawable_list *buf, const struct yetty_ydraw_drawable_list_registry *reg)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ydraw_drawable_iter, "buf is NULL");
@@ -737,8 +737,8 @@ struct yetty_ydraw_drawable_iter_result yetty_ydraw_draw_list_drawable_first(
     }
 
     const uint32_t *prim = (const uint32_t *)buf->primitives.buf.data;
-    struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-        yetty_ydraw_flyweight_registry_get(reg, prim);
+    struct yetty_ydraw_drawable_list_entry_ptr_result fw_res =
+        yetty_ydraw_drawable_list_registry_get(reg, prim);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_iter, fw_res,
                         "drawable_first: registry lookup failed");
 
@@ -746,8 +746,8 @@ struct yetty_ydraw_drawable_iter_result yetty_ydraw_draw_list_drawable_first(
     return YETTY_OK(yetty_ydraw_drawable_iter, iter);
 }
 
-struct yetty_ydraw_drawable_iter_result yetty_ydraw_draw_list_drawable_next(
-    const struct yetty_ydraw_draw_list *buf, const struct yetty_ydraw_flyweight_registry *reg,
+struct yetty_ydraw_drawable_iter_result yetty_ydraw_drawable_list_drawable_next(
+    const struct yetty_ydraw_drawable_list *buf, const struct yetty_ydraw_drawable_list_registry *reg,
     const struct yetty_ydraw_drawable_iter *iter)
 {
     if (!buf) {
@@ -771,8 +771,8 @@ struct yetty_ydraw_drawable_iter_result yetty_ydraw_draw_list_drawable_next(
         return YETTY_ERR(yetty_ydraw_drawable_iter, "end of buffer");
     }
 
-    struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-        yetty_ydraw_flyweight_registry_get(reg, next);
+    struct yetty_ydraw_drawable_list_entry_ptr_result fw_res =
+        yetty_ydraw_drawable_list_registry_get(reg, next);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_iter, fw_res,
                         "drawable_next: registry lookup failed");
 
@@ -781,12 +781,12 @@ struct yetty_ydraw_drawable_iter_result yetty_ydraw_draw_list_drawable_next(
 }
 
 /*=============================================================================
- * Producer convenience: pack flyweight FONT / TEXT_SPAN prims into the stream.
+ * Producer convenience: pack drawable-list entry FONT / TEXT_DRAWABLE_LIST prims into the stream.
  * Same path as add_prim — these just pack the FAM payload first.
  *===========================================================================*/
 
-struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
-    struct yetty_ydraw_draw_list *buf, const struct yetty_ycore_buffer *ttf_data, const char *name)
+struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font(
+    struct yetty_ydraw_drawable_list *buf, const struct yetty_ycore_buffer *ttf_data, const char *name)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ycore_int, "buf is NULL");
@@ -797,7 +797,7 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
 
     uint32_t name_len = name ? (uint32_t)strlen(name) : 0;
     uint32_t ttf_len = (uint32_t)ttf_data->size;
-    size_t drawable_size = yetty_yfont_font_drawable_size_for(name_len, ttf_len);
+    size_t drawable_size = yetty_ydraw_font_resource_size_for(name_len, ttf_len);
 
     uint8_t *staging = malloc(drawable_size);
     if (!staging) {
@@ -816,10 +816,10 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
         uint32_t t, ps;
         memcpy(&t, p, 4);
         memcpy(&ps, p + 4, 4);
-        if (t == YETTY_YDRAW_TYPE_FONT) {
+        if (t == YETTY_YDRAW_RESOURCE_FONT) {
             next_id++;
         }
-        /* Walk by FAM size for flyweight/complex; otherwise stop — we'd need
+        /* Walk by FAM size for drawable-list entry/complex; otherwise stop — we'd need
      * the registry to walk SDF prims correctly. We only need to count
      * FONTs that precede this insertion, and producers add fonts before
      * other prims in practice (PDF, markdown). If a producer interleaves,
@@ -831,16 +831,16 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
         }
     }
 
-    yetty_yfont_font_drawable_write(staging, (int32_t)next_id, name, name_len, ttf_data->data,
+    yetty_ydraw_font_resource_write(staging, (int32_t)next_id, name, name_len, ttf_data->data,
                                     ttf_len);
 
-    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, staging, drawable_size);
+    struct yetty_ydraw_id_result r = yetty_ydraw_drawable_list_add_prim(buf, staging, drawable_size);
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font: add_prim failed");
     return YETTY_OK(yetty_ycore_int, next_id);
 }
 
-struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(struct yetty_ydraw_draw_list *buf,
+struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_ref(struct yetty_ydraw_drawable_list *buf,
                                                                  const char *hex16)
 {
     if (!buf) {
@@ -859,7 +859,7 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(struct yetty_yd
         return YETTY_ERR(yetty_ycore_int, "hex16 must be exactly 16 hex chars");
     }
 
-    size_t drawable_size = yetty_yfont_font_drawable_size_for(name_len, 0);
+    size_t drawable_size = yetty_ydraw_font_resource_size_for(name_len, 0);
     uint8_t *staging = malloc(drawable_size);
     if (!staging) {
         return YETTY_ERR(yetty_ycore_int, "alloc failed");
@@ -873,7 +873,7 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(struct yetty_yd
         uint32_t t, ps;
         memcpy(&t, p, 4);
         memcpy(&ps, p + 4, 4);
-        if (t == YETTY_YDRAW_TYPE_FONT) {
+        if (t == YETTY_YDRAW_RESOURCE_FONT) {
             next_id++;
         }
         if (t >= 0x40000000u) {
@@ -883,16 +883,16 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(struct yetty_yd
         }
     }
 
-    yetty_yfont_font_drawable_write(staging, (int32_t)next_id, hex16, name_len, NULL, 0);
+    yetty_ydraw_font_resource_write(staging, (int32_t)next_id, hex16, name_len, NULL, 0);
 
-    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, staging, drawable_size);
+    struct yetty_ydraw_id_result r = yetty_ydraw_drawable_list_add_prim(buf, staging, drawable_size);
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font_ref: add_prim failed");
     return YETTY_OK(yetty_ycore_int, next_id);
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_text_full(
-    struct yetty_ydraw_draw_list *buf, float x, float y, const struct yetty_ycore_buffer *text,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_text_full(
+    struct yetty_ydraw_drawable_list *buf, float x, float y, const struct yetty_ycore_buffer *text,
     float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation,
     float char_spacing, float word_spacing)
 {
@@ -904,27 +904,27 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_text_full(
     }
 
     uint32_t text_len = (uint32_t)text->size;
-    size_t drawable_size = yetty_ydraw_text_span_drawable_size_for(text_len);
+    size_t drawable_size = yetty_ydraw_text_drawable_list_size_for(text_len);
 
     uint8_t *staging = malloc(drawable_size);
     if (!staging) {
         return YETTY_ERR(yetty_ycore_void, "alloc failed");
     }
 
-    yetty_ydraw_text_span_drawable_write_full(staging, x, y, font_size, rotation, color, layer,
+    yetty_ydraw_text_drawable_list_write_full(staging, x, y, font_size, rotation, color, layer,
                                               font_id, (const char *)text->data, text_len,
                                               char_spacing, word_spacing);
 
-    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, staging, drawable_size);
+    struct yetty_ydraw_id_result r = yetty_ydraw_drawable_list_add_prim(buf, staging, drawable_size);
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_text: add_prim failed");
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_text(
-    struct yetty_ydraw_draw_list *buf, float x, float y, const struct yetty_ycore_buffer *text,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_text(
+    struct yetty_ydraw_drawable_list *buf, float x, float y, const struct yetty_ycore_buffer *text,
     float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation)
 {
-    return yetty_ydraw_draw_list_add_text_full(buf, x, y, text, font_size, color, layer, font_id,
+    return yetty_ydraw_drawable_list_add_text_full(buf, x, y, text, font_size, color, layer, font_id,
                                                rotation, 0.0f, 0.0f);
 }

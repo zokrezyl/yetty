@@ -4,7 +4,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/statusbar.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -71,7 +71,7 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "statusbar_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =
@@ -90,15 +90,15 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
         .half_width = w * 0.5f,
         .half_height = h * 0.5f,
     };
-    struct yetty_ycore_void_result rr = yetty_ydraw_draw_list_add_cmd_add_box(
-        ctx->ygrid_draw_list, 0u, 0u, COLOR_BG, 0u, 0.0f, &geom);
+    struct yetty_ycore_void_result rr = yetty_ydraw_drawable_list_add_cmd_add_box(
+        ctx->ygrid_drawable_list, 0u, 0u, COLOR_BG, 0u, 0.0f, &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "statusbar_paint: bg");
     float fs = 12.0f;
     float ty = r.min.y + (h + fs) * 0.5f - 2.0f;
     if (d->left && d->left[0]) {
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)d->left, .capacity = strlen(d->left), .size = strlen(d->left)};
-        rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, r.min.x + 12.0f, ty, &tb, fs,
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + 12.0f, ty, &tb, fs,
                                             COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "statusbar_paint: left");
     }
@@ -109,7 +109,7 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
          * measurement lands in a follow-up; this is the same heuristic
          * the old toolkit used. */
         float text_w = (float)n * fs * 0.55f;
-        rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, r.max.x - 12.0f - text_w, ty, &tb,
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.max.x - 12.0f - text_w, ty, &tb,
                                             fs, COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "statusbar_paint: right");
     }

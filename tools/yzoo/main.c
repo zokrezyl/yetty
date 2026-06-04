@@ -24,7 +24,7 @@
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yzoo/yzoo.h>
@@ -44,7 +44,7 @@ struct yzoo_app {
     struct yetty_yfigure_container *root;
     struct yetty_ygrid_grid        *grid;
     struct yetty_yzoo              *zoo;
-    struct yetty_ydraw_draw_list   *buf;
+    struct yetty_ydraw_drawable_list   *buf;
     double                          start_time;
     void                           *surface;
     uint32_t                        surface_w;
@@ -54,10 +54,10 @@ struct yzoo_app {
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
 static struct yetty_ycore_void_result push_buffer_to_grid(struct yetty_ygrid_grid *grid,
-                                                          const struct yetty_ydraw_draw_list *buf)
+                                                          const struct yetty_ydraw_drawable_list *buf)
 {
-    const uint8_t *data = (const uint8_t *)yetty_ydraw_draw_list_data(buf);
-    size_t total = yetty_ydraw_draw_list_size(buf);
+    const uint8_t *data = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
+    size_t total = yetty_ydraw_drawable_list_size(buf);
     size_t off = 0;
     while (off + sizeof(uint32_t) <= total) {
         const uint32_t *prim = (const uint32_t *)(data + off);
@@ -210,8 +210,8 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
     struct yetty_yzoo_ptr_result zr = yetty_yzoo_create(&cfg, 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yzoo_create failed");
     app->zoo = zr.value;
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "draw_list create failed");
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "drawable_list create failed");
     app->buf = br.value;
     app->start_time = yetty_yplatform_ytime_monotonic_sec();
 
@@ -266,7 +266,7 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
     }
     app->root = NULL;
     app->grid = NULL;
-    yetty_ydraw_draw_list_destroy(app->buf);
+    yetty_ydraw_drawable_list_destroy(app->buf);
     app->buf = NULL;
     yetty_yzoo_destroy(app->zoo);
     app->zoo = NULL;

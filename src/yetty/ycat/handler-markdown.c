@@ -44,7 +44,7 @@ struct yetty_ycore_void_result yetty_ycat_handler_markdown_streaming(
     }
 
     struct yetty_ycore_void_result er = emit(emit_user_data, r.value.buffer);
-    yetty_ydraw_draw_list_destroy(r.value.buffer);
+    yetty_ydraw_drawable_list_destroy(r.value.buffer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "ycat emit failed");
     return YETTY_OK_VOID();
 }

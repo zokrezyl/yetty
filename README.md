@@ -38,7 +38,7 @@ Terminal
                      ydiagram · ysvg · ypdf · yvnc · ...
 ```
 
-A **figure** is a complex primitive that integrates with the terminal grid: it
+A **figure** is a composite that integrates with the terminal grid: it
 scrolls with text, shares the GPU resource model, and can be nested (figures may
 contain other figures). The terminal renders two real layers (text and ydraw)
 plus a `yfigure` container that hosts the rich content.
@@ -49,7 +49,7 @@ plus a `yfigure` container that hosts the rich content.
 
 ## Rich Content Figures
 
-Figures are complex primitives that integrate seamlessly with the terminal grid.
+Figures are composites that integrate seamlessly with the terminal grid.
 They scroll with text, share the GPU resource model, and can be nested.
 
 | Figure | Description | Status |

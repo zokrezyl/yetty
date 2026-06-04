@@ -2,7 +2,7 @@
 #
 # Sibling of tools/ycompositor (which is a pure direct-API ygrid demo).
 # This one allocates an in-process (headless) ygui engine, builds a tiny
-# widget tree, calls engine_rebuild to produce the canonical draw_list
+# widget tree, calls engine_rebuild to produce the canonical drawable_list
 # bytes, and feeds them straight into the compositor via
 # root container_process_records. No PTY / no OSC / no parent yetty.
 #

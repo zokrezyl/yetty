@@ -1,6 +1,6 @@
 // Auto-generated from yvideo.yaml - DO NOT EDIT
 //
-// Two-tier complex-prim model:
+// Two-tier composite model:
 //   - factory owns ONE shared yetty_yrender_pipeline (compiled once at
 //     compile_pipeline time from a template resource_set; the pipeline
 //     carries the WGPUShaderModule + bind_group_layout + WGPURenderPipeline
@@ -18,8 +18,8 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ydraw-core/figure-types.h>
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -516,7 +516,7 @@ static struct yetty_ydraw_figure_ptr_result yvideo_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_drawable)) {
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite)) {
         return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
     }
 
@@ -543,7 +543,7 @@ static struct yetty_ydraw_figure_ptr_result yvideo_create_instance(
     instance->render = yvideo_instance_render;
     instance->ops = &yvideo_figure_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_complex_drawable_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_composite_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         instance->bounds = aabb_res.value;
     }

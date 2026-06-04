@@ -18,14 +18,14 @@
  *   polyline    → sequence of SDF segments.
  *   polygon     → sequence of SDF segments + closing edge.
  *   path        → flattened to polyline segments per the path module.
- *   text/tspan  → TEXT_SPAN flyweight via add_text.
+ *   text/tspan  → TEXT_DRAWABLE_LIST drawable-list entry via add_text.
  *   g/a/svg/    → recurse.
  */
 
 #include "ysvg-internal.h"
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ycore/types.h>
@@ -137,7 +137,7 @@ static struct yetty_ycore_void_result emit_segment(struct yetty_ysvg_paint_ctx *
      * fill. Pass `color` as the stroke argument (fill=0). Mirrors how
      * pdf-renderer.c / yzoo.c invoke add_segment. */
     struct yetty_ycore_void_result r =
-        yetty_ydraw_draw_list_add_cmd_add_segment(ctx->buf, 0, 0, 0, color, width, &seg);
+        yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->buf, 0, 0, 0, color, width, &seg);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysvg: segment emit failed");
     return YETTY_OK_VOID();
 }
@@ -196,7 +196,7 @@ static struct yetty_ycore_void_result emit_rect(struct ysvg_paint_state *ps,
                 .radius_top_left = rx * rs,
                 .radius_bottom_left = rx * rs,
             };
-            struct yetty_ycore_void_result r = yetty_ydraw_draw_list_add_cmd_add_rounded_box(
+            struct yetty_ycore_void_result r = yetty_ydraw_drawable_list_add_cmd_add_rounded_box(
                 ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysvg: rect emit failed");
             return YETTY_OK_VOID();
@@ -207,7 +207,7 @@ static struct yetty_ycore_void_result emit_rect(struct ysvg_paint_state *ps,
                                       .half_height = hh,
                                       .corner_radius = 0.0f};
         struct yetty_ycore_void_result r =
-            yetty_ydraw_draw_list_add_cmd_add_box(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
+            yetty_ydraw_drawable_list_add_cmd_add_box(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysvg: rect emit failed");
         return YETTY_OK_VOID();
     }
@@ -259,13 +259,13 @@ static struct yetty_ycore_void_result emit_circle(struct ysvg_paint_state *ps,
     if (fabsf(sx - sy) < 1e-4f) {
         struct yetty_ysdf_circle geom = {.center_x = cx, .center_y = cy, .radius = r * sx};
         struct yetty_ycore_void_result q =
-            yetty_ydraw_draw_list_add_cmd_add_circle(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
+            yetty_ydraw_drawable_list_add_cmd_add_circle(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, q, "ysvg: circle emit failed");
     } else {
         struct yetty_ysdf_ellipse geom = {
             .center_x = cx, .center_y = cy, .radius_x = r * sx, .radius_y = r * sy};
         struct yetty_ycore_void_result q =
-            yetty_ydraw_draw_list_add_cmd_add_ellipse(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
+            yetty_ydraw_drawable_list_add_cmd_add_ellipse(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, q, "ysvg: circle-as-ellipse emit failed");
     }
     return YETTY_OK_VOID();
@@ -295,7 +295,7 @@ static struct yetty_ycore_void_result emit_ellipse(struct ysvg_paint_state *ps,
     struct yetty_ysdf_ellipse geom = {
         .center_x = cx, .center_y = cy, .radius_x = rx * sx, .radius_y = ry * sy};
     struct yetty_ycore_void_result q =
-        yetty_ydraw_draw_list_add_cmd_add_ellipse(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
+        yetty_ydraw_drawable_list_add_cmd_add_ellipse(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, q, "ysvg: ellipse emit failed");
     return YETTY_OK_VOID();
 }
@@ -423,7 +423,7 @@ static struct yetty_ycore_void_result emit_path(struct ysvg_paint_state *ps,
 /*=============================================================================
  * Text
  *
- * We flatten <text> + <tspan> children into a single TEXT_SPAN per node
+ * We flatten <text> + <tspan> children into a single TEXT_DRAWABLE_LIST per node
  * for now — that's sufficient for the common SVG-tiny case where tspans
  * are used for inline styling. A future pass can split into multiple
  * spans when colours / anchors differ between tspans.
@@ -486,7 +486,7 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
         .capacity = blen,
     };
     struct yetty_ycore_void_result tr =
-        yetty_ydraw_draw_list_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1, 0.0f);
+        yetty_ydraw_drawable_list_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1, 0.0f);
     if (YETTY_IS_ERR(tr)) {
         return tr;
     }

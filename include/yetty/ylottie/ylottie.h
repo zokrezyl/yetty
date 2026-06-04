@@ -26,14 +26,14 @@
  *      Fills approximate a solid interior by tracing the perimeter (the SDF
  *      set has no arbitrary-polygon fill); strokes map straight to SDF
  *      stroke width.
- *   4. Text layers (ty 5) emit MSDF TEXT_SPAN flyweights via
- *      yetty_ydraw_draw_list_add_text.
+ *   4. Text layers (ty 5) emit MSDF TEXT_DRAWABLE_LIST drawable-list entries via
+ *      yetty_ydraw_drawable_list_add_text.
  *
  * The composition `w`/`h` determine the user-space bounds; a width-fit policy
  * (same as ysvg) maps them to display pixels.
  *
  * The output buffer is owned by the caller (free with
- * yetty_ydraw_draw_list_destroy).
+ * yetty_ydraw_drawable_list_destroy).
  *
  * Not covered: image/precomp layers, masks, track mattes, effects, gradients
  * (approximated by their first stop colour), trim paths, blend modes,
@@ -43,7 +43,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,7 +61,7 @@ struct yetty_ylottie_render_config {
 };
 
 struct yetty_ylottie_render_output {
-    struct yetty_ydraw_draw_list *buffer;
+    struct yetty_ydraw_drawable_list *buffer;
     float scene_width;
     float scene_height;
 };
@@ -130,7 +130,7 @@ struct yetty_ylottie_animation_ptr_result yetty_ylottie_animation_create(
 struct yetty_ylottie_info yetty_ylottie_animation_info(const struct yetty_ylottie_animation *anim);
 
 /* Render one frame into a fresh ydraw buffer (caller owns it; free with
- * yetty_ydraw_draw_list_destroy). `bg_abgr` is the background fill in ydraw's
+ * yetty_ydraw_drawable_list_destroy). `bg_abgr` is the background fill in ydraw's
  * ABGR layout, or 0 for a transparent background. The returned buffer is fully
  * self-contained — it does NOT reference the animation, so the animation may
  * be destroyed while emitted buffers are still in flight. */

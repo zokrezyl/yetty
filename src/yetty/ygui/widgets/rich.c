@@ -10,7 +10,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/rich.h>
 
@@ -94,7 +94,7 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "rich_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =
@@ -131,7 +131,7 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
             size_t n = strlen(sp->text);
             struct yetty_ycore_buffer tb = {.data = (uint8_t *)sp->text, .capacity = n, .size = n};
             struct yetty_ycore_void_result tr =
-                yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, cursor_x, baseline, &tb,
+                yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, cursor_x, baseline, &tb,
                                                sp->font_size, sp->color, 0, -1, 0.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "rich_paint: text");
             cursor_x += (float)n * sp->font_size * 0.55f;

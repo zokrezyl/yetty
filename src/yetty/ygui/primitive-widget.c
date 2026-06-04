@@ -4,14 +4,14 @@
  * Subclass of the base widget. Overrides emit_body so paint() does
  * the heavy lifting — chrome widget subclasses (label, button, panel,
  * hbox, vbox, tabbar, tooltip) only need to override paint to write
- * their SDF / glyph prim records into ctx->ygrid_draw_list.
+ * their SDF / glyph prim records into ctx->ygrid_drawable_list.
  *
  * NOTE on CMD_GROUP: the widget.h header documents an emit_body that
  * wraps paint() in CMD_GROUP(obj->id, rect) so each widget's prims are
  * entity-scoped. The current ygrid receiver, however, has no exact-
  * match disambiguation for CMD_GROUP (type=0x80000002): the type word
- * falls into the complex-prim range [0x80000000, 0xffffffff] and is
- * routed to the complex-prim handler, which reads the next u32 as
+ * falls into the composite range [0x80000000, 0xffffffff] and is
+ * routed to the composite handler, which reads the next u32 as
  * `payload_size`, advances the stride wrong, and the rest of the
  * stream becomes garbage. Until the ygrid iterator special-cases the
  * three cmd constants (CMD_GROUP / CMD_DELETE / CMD_UPDATE) the way
@@ -26,7 +26,7 @@
 
 #include "internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ysdf/funcs.gen.h>
 
@@ -50,7 +50,7 @@ static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ct
      * painted under the widget's own paint. Skipped when transparent so
      * widgets that never set a bg are unchanged. */
     uint32_t bg = yetty_ygui_widget_bg(obj);
-    if (ctx && ctx->ygrid_draw_list && (bg >> 24) != 0u) {
+    if (ctx && ctx->ygrid_drawable_list && (bg >> 24) != 0u) {
         struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
         float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
         if (w > 0.0f && h > 0.0f) {
@@ -59,8 +59,8 @@ static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ct
                                           .half_width = w * 0.5f,
                                           .half_height = h * 0.5f,
                                           .corner_radius = 0.0f};
-            struct yetty_ycore_void_result br = yetty_ydraw_draw_list_add_cmd_add_box(
-                ctx->ygrid_draw_list, 0, 0, bg, 0, 0.0f, &geom);
+            struct yetty_ycore_void_result br = yetty_ydraw_drawable_list_add_cmd_add_box(
+                ctx->ygrid_drawable_list, 0, 0, bg, 0, 0.0f, &geom);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "primitive_emit_body: bg");
         }
     }

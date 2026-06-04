@@ -4,7 +4,7 @@
 #include <yetty/ysdf/handler.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yfsvm/compiler.h>
-#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-core/composite.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdio.h>
@@ -161,7 +161,7 @@ static yetty_ydraw_yaml_factory_fn find_factory(struct yetty_ydraw_yaml_parser *
 }
 
 struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(struct yetty_ydraw_yaml_parser *parser,
-                                                             struct yetty_ydraw_draw_list *buffer,
+                                                             struct yetty_ydraw_drawable_list *buffer,
                                                              const char *yaml, size_t len)
 {
     if (!parser || !buffer || !yaml) {
@@ -320,7 +320,7 @@ static uint32_t parse_text_color(const char *str)
     return (a << 24) | (b << 16) | (g << 8) | r;
 }
 
-static struct yetty_ycore_void_result text_factory(struct yetty_ydraw_draw_list *buffer,
+static struct yetty_ycore_void_result text_factory(struct yetty_ydraw_drawable_list *buffer,
                                                    struct yaml_parser_s *yaml_parser,
                                                    const char *primitive_type_name)
 {
@@ -423,7 +423,7 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ydraw_draw_list 
             }
             struct yetty_ycore_buffer ttf_buf = {.data = ttf, .size = ttf_len, .capacity = ttf_len};
             struct yetty_ycore_int_result fr =
-                yetty_ydraw_draw_list_add_font(buffer, &ttf_buf, font_name);
+                yetty_ydraw_drawable_list_add_font(buffer, &ttf_buf, font_name);
             free(ttf);
             if (YETTY_IS_ERR(fr)) {
                 free(path);
@@ -436,7 +436,7 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ydraw_draw_list 
 
         struct yetty_ycore_buffer text_buf = {
             .data = (uint8_t *)content, .size = strlen(content), .capacity = strlen(content)};
-        struct yetty_ycore_void_result res = yetty_ydraw_draw_list_add_text(
+        struct yetty_ycore_void_result res = yetty_ydraw_drawable_list_add_text(
             buffer, x, y, &text_buf, font_size, color, 0, font_id, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "ydraw_yaml: add_text");
     }
@@ -455,47 +455,47 @@ static struct yetty_ycore_void_result register_text_factory(struct yetty_ydraw_y
 // High level API
 //=============================================================================
 
-struct yetty_ydraw_draw_list_result yetty_ydraw_yaml_parse(const char *yaml, size_t len)
+struct yetty_ydraw_drawable_list_result yetty_ydraw_yaml_parse(const char *yaml, size_t len)
 {
     if (!yaml || len == 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "null or empty yaml");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "null or empty yaml");
     }
 
-    struct yetty_ydraw_draw_list_result buf_res = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result buf_res = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(buf_res)) {
         return buf_res;
     }
 
-    struct yetty_ydraw_draw_list *buffer = buf_res.value;
+    struct yetty_ydraw_drawable_list *buffer = buf_res.value;
 
     struct yetty_ydraw_yaml_parser_ptr_result parser_res = yetty_ydraw_yaml_parser_create();
     if (YETTY_IS_ERR(parser_res)) {
-        yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: parser create failed", parser_res);
+        yetty_ydraw_drawable_list_destroy(buffer);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ydraw_yaml: parser create failed", parser_res);
     }
     struct yetty_ydraw_yaml_parser *parser = parser_res.value;
 
     struct yetty_ycore_void_result reg_res = yetty_ysdf_register_yaml_factories(parser);
     if (YETTY_IS_ERR(reg_res)) {
         yetty_ydraw_yaml_parser_destroy(parser);
-        yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: ysdf factories registration", reg_res);
+        yetty_ydraw_drawable_list_destroy(buffer);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ydraw_yaml: ysdf factories registration", reg_res);
     }
     ydebug("ydraw_yaml: ysdf factories registered, count=%zu", parser->count);
 
     struct yetty_ycore_void_result text_reg_res = register_text_factory(parser);
     if (YETTY_IS_ERR(text_reg_res)) {
         yetty_ydraw_yaml_parser_destroy(parser);
-        yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: text factory registration",
+        yetty_ydraw_drawable_list_destroy(buffer);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ydraw_yaml: text factory registration",
                          text_reg_res);
     }
 
     struct yetty_ycore_void_result yplot_reg_res = yetty_yplot_register_yaml_factory(parser);
     if (YETTY_IS_ERR(yplot_reg_res)) {
         yetty_ydraw_yaml_parser_destroy(parser);
-        yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: yplot factory registration",
+        yetty_ydraw_drawable_list_destroy(buffer);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ydraw_yaml: yplot factory registration",
                          yplot_reg_res);
     }
     ydebug("ydraw_yaml: text+yplot factories registered, total count=%zu", parser->count);
@@ -506,9 +506,9 @@ struct yetty_ydraw_draw_list_result yetty_ydraw_yaml_parse(const char *yaml, siz
     yetty_ydraw_yaml_parser_destroy(parser);
 
     if (YETTY_IS_ERR(parse_res)) {
-        yetty_ydraw_draw_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ydraw_yaml: parse failed", parse_res);
+        yetty_ydraw_drawable_list_destroy(buffer);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ydraw_yaml: parse failed", parse_res);
     }
 
-    return YETTY_OK(yetty_ydraw_draw_list, buffer);
+    return YETTY_OK(yetty_ydraw_drawable_list, buffer);
 }

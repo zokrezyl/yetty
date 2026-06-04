@@ -12,7 +12,7 @@
  *   - Panel widget background defaults
  */
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/ygui.h>
 
 #include <assert.h>
@@ -215,8 +215,8 @@ static void test_clickable_state_machine(void)
 static void test_widget_paint_emits_real_prims(void)
 {
     /* Build a tree: panel (10,10)-(110,110) containing a label and a
-     * button. Drive paint and verify real SDF prims + a TEXT_SPAN
-     * land in the ydraw draw_list. */
+     * button. Drive paint and verify real SDF prims + a TEXT_DRAWABLE_LIST
+     * land in the ydraw drawable_list. */
     struct yetty_ygui_object *panel =
         yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL).value;
     struct yetty_ygui_object *label =
@@ -231,12 +231,12 @@ static void test_widget_paint_emits_real_prims(void)
     yetty_ygui_widget_set_rect(label, rect(20, 20, 100, 40));
     yetty_ygui_widget_set_rect(btn, rect(20, 60, 100, 90));
 
-    struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {
         .framework = NULL,
         .container_records = NULL,
-        .ygrid_draw_list = dlr.value,
+        .ygrid_drawable_list = dlr.value,
         .figure_bodies = NULL,
         .current_figure_id = 0,
     };
@@ -245,10 +245,10 @@ static void test_widget_paint_emits_real_prims(void)
     yetty_ygui_widget_paint(NULL, (struct yetty_yclass_object *)btn, &ctx);
 
     /* Walk the prims by type word — confirm: panel SDF_BOX (0x7FFFFFFE),
-     * label TEXT_SPAN (0x40000002), button SDF_ROUNDED_BOX (0x7FFFFFF7)
-     * + another TEXT_SPAN. */
-    size_t sz = yetty_ydraw_draw_list_size(dlr.value);
-    const uint32_t *p = (const uint32_t *)yetty_ydraw_draw_list_data(dlr.value);
+     * label TEXT_DRAWABLE_LIST (0x40000002), button SDF_ROUNDED_BOX (0x7FFFFFF7)
+     * + another TEXT_DRAWABLE_LIST. */
+    size_t sz = yetty_ydraw_drawable_list_size(dlr.value);
+    const uint32_t *p = (const uint32_t *)yetty_ydraw_drawable_list_data(dlr.value);
     int saw_box = 0, saw_rounded = 0, saw_text = 0;
     size_t off = 0;
     while (off + 4 <= sz) {
@@ -264,14 +264,14 @@ static void test_widget_paint_emits_real_prims(void)
         }
         /* Word count differs per prim — for this assertion we walk by
          * type-word locations using the known counts. SDF_BOX = 10
-         * words; SDF_ROUNDED_BOX = 13; TEXT_SPAN is FAM with the size
+         * words; SDF_ROUNDED_BOX = 13; TEXT_DRAWABLE_LIST is FAM with the size
          * word right after the type word. */
         if (type == 0x7FFFFFFEu) {
             off += 10 * 4;
         } else if (type == 0x7FFFFFF7u) {
             off += 13 * 4;
         } else if (type == 0x40000002u) {
-            /* TEXT_SPAN: type | payload_size | payload (padded to 4) */
+            /* TEXT_DRAWABLE_LIST: type | payload_size | payload (padded to 4) */
             uint32_t payload_size = p[(off / 4) + 1];
             off += 8 + ((payload_size + 3) & ~3u);
         } else {
@@ -282,7 +282,7 @@ static void test_widget_paint_emits_real_prims(void)
     assert(saw_rounded);
     assert(saw_text >= 2);
 
-    yetty_ydraw_draw_list_destroy(dlr.value);
+    yetty_ydraw_drawable_list_destroy(dlr.value);
     yetty_ygui_del(panel);
 }
 

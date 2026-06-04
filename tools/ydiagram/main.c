@@ -27,7 +27,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -169,10 +169,10 @@ static int emit_envelope(FILE *out, int osc_code, int compressed, const void *ar
     return rc;
 }
 
-static int emit_osc_bin(FILE *out, struct yetty_ydraw_draw_list *buf)
+static int emit_osc_bin(FILE *out, struct yetty_ydraw_drawable_list *buf)
 {
     const uint8_t *raw  = NULL;
-    size_t         size = yetty_ydraw_draw_list_serialize(buf, &raw);
+    size_t         size = yetty_ydraw_drawable_list_serialize(buf, &raw);
     if (size == 0 || !raw) {
         fprintf(stderr, "ydiagram: serialize produced empty buffer\n");
         return 1;
@@ -189,10 +189,10 @@ static int emit_osc_bin(FILE *out, struct yetty_ydraw_draw_list *buf)
                          raw, size);
 }
 
-static int write_raw(FILE *out, struct yetty_ydraw_draw_list *buf)
+static int write_raw(FILE *out, struct yetty_ydraw_drawable_list *buf)
 {
     const uint8_t *raw  = NULL;
-    size_t         size = yetty_ydraw_draw_list_serialize(buf, &raw);
+    size_t         size = yetty_ydraw_drawable_list_serialize(buf, &raw);
     if (size == 0 || !raw) {
         fprintf(stderr, "ydiagram: serialize produced empty buffer\n");
         return 1;
@@ -332,7 +332,7 @@ int main(int argc, char **argv)
         fflush(stdout);
     }
 
-    yetty_ydraw_draw_list_destroy(br.value);
+    yetty_ydraw_drawable_list_destroy(br.value);
     if (font && font->ops && font->ops->destroy) font->ops->destroy(font);
     return rc;
 }

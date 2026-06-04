@@ -20,7 +20,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,7 +68,7 @@ struct yetty_ycore_void_result yetty_ymaze_regenerate(struct yetty_ymaze *maze);
  * `*out_regenerated` (may be NULL) is set to true iff a new maze was generated
  * during this call. */
 struct yetty_ycore_void_result yetty_ymaze_render(struct yetty_ymaze *maze,
-                                                  struct yetty_ydraw_draw_list *buf, float time,
+                                                  struct yetty_ydraw_drawable_list *buf, float time,
                                                   bool *out_regenerated);
 
 bool yetty_ymaze_is_finished(const struct yetty_ymaze *maze, float time);

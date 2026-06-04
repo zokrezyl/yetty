@@ -176,7 +176,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "filepicker paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, fp_class());
@@ -195,7 +195,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                    .half_width = w * 0.5f,
                                    .half_height = h * 0.5f,
                                    .corner_radius = 0.0f};
-    struct yetty_ycore_void_result result_198 = yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0, 0, FP_BG,
+    struct yetty_ycore_void_result result_198 = yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 0, FP_BG,
                                                               FP_BORDER, 1.0f, &frame);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_198, "fp: frame");
     struct yetty_ycore_void_result result_202 = yguix_box(ctx, r.min.x, r.min.y, w, FP_HEADER_H, FP_HEADER_BG, 0.0f);

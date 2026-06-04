@@ -1,7 +1,7 @@
 // YDraw Complex Primitive Factory - Abstract Factory Pattern (GPU side)
 //
 // This header bundles the *server-side* runtime that turns wire-format
-// complex-prim bytes (defined in yetty/ydraw-core/figure-types.h)
+// composite bytes (defined in yetty/ydraw-core/composite.h)
 // into renderable GPU objects.
 //
 // Architecture:
@@ -23,7 +23,7 @@
 #include <yetty/ycore/ffi-annotations.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-core/composite.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
@@ -145,7 +145,7 @@ struct yetty_ydraw_concrete_factory {
 
     /* Event loop available to the factory's instances. Set by the
      * abstract factory at registration time (mirror of what's stashed
-     * on the figure_factory). Concrete factories that need to register
+     * on the composite_factory). Concrete factories that need to register
      * listeners (timers, mouse, …) use this; static-content factories
      * (yplot, yimage, ymesh) ignore it. */
     struct yetty_yevent_event_loop *event_loop;
@@ -210,29 +210,29 @@ struct yetty_ydraw_concrete_factory {
 // Abstract factory - registry of concrete factories
 //=============================================================================
 
-struct yetty_ydraw_complex_drawable_factory;
+struct yetty_ydraw_composite_factory;
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_complex_drawable_factory_ptr, struct yetty_ydraw_complex_drawable_factory *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_composite_factory_ptr, struct yetty_ydraw_composite_factory *);
 
 // Create (after device/queue available) / destroy. `event_loop` is
 // stashed on the registry and propagated to every concrete factory at
 // register time so instances can subscribe to timers / mouse / etc.
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ydraw_complex_drawable_factory_ptr_result yetty_ydraw_complex_drawable_factory_create(
+struct yetty_ydraw_composite_factory_ptr_result yetty_ydraw_composite_factory_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
     struct yetty_ydraw_gpu_allocator *allocator, struct yetty_yevent_event_loop *event_loop);
 
-void yetty_ydraw_complex_drawable_factory_destroy(
-    struct yetty_ydraw_complex_drawable_factory *factory YETTY_ANNOT_CALLEE_OWNED);
+void yetty_ydraw_composite_factory_destroy(
+    struct yetty_ydraw_composite_factory *factory YETTY_ANNOT_CALLEE_OWNED);
 
 // Register concrete factory
-struct yetty_ycore_void_result yetty_ydraw_complex_drawable_factory_register(
-    struct yetty_ydraw_complex_drawable_factory *factory, struct yetty_ydraw_concrete_factory *concrete);
+struct yetty_ycore_void_result yetty_ydraw_composite_factory_register(
+    struct yetty_ydraw_composite_factory *factory, struct yetty_ydraw_concrete_factory *concrete);
 
 // Create instance (reads type from buffer_data, dispatches to concrete factory)
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ydraw_figure_ptr_result yetty_ydraw_complex_drawable_factory_create_instance(
-    struct yetty_ydraw_complex_drawable_factory *factory, const void *buffer_data YETTY_ANNOT_ARRAY(size),
+struct yetty_ydraw_figure_ptr_result yetty_ydraw_composite_factory_create_instance(
+    struct yetty_ydraw_composite_factory *factory, const void *buffer_data YETTY_ANNOT_ARRAY(size),
     size_t size, uint32_t rolling_row);
 
 // Destroy instance (uses instance->factory back-pointer)
@@ -241,12 +241,12 @@ void yetty_ydraw_figure_destroy(struct yetty_ydraw_figure *instance YETTY_ANNOT_
 // Fan out visual-zoom state to every registered concrete factory (yplot,
 // yimage, ...). Safe to call with no registrations. Concrete factories that
 // don't implement set_visual_zoom are silently skipped.
-void yetty_ydraw_complex_drawable_factory_set_visual_zoom(struct yetty_ydraw_complex_drawable_factory *factory,
+void yetty_ydraw_composite_factory_set_visual_zoom(struct yetty_ydraw_composite_factory *factory,
                                                     float scale, float offset_x, float offset_y);
 
 // Fan out "intrusive" cell-zoom state the same way (separate uniforms,
 // separate semantics — see set_cell_zoom in the concrete factory ops).
-void yetty_ydraw_complex_drawable_factory_set_cell_zoom(struct yetty_ydraw_complex_drawable_factory *factory,
+void yetty_ydraw_composite_factory_set_cell_zoom(struct yetty_ydraw_composite_factory *factory,
                                                   float scale, float offset_x, float offset_y);
 
 #ifdef __cplusplus

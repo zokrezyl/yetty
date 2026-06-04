@@ -69,7 +69,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/yvideo/yvideo.h>
 #include <yetty/yvideo/yvideo-gen.h>
@@ -253,13 +253,13 @@ static int parse_args(int argc, char **argv, struct opts *o)
     return 0;
 }
 
-static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_draw_list *dl)
+static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_drawable_list *dl)
 {
     const uint8_t *raw = NULL;
     size_t raw_size =
-        yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)dl, &raw);
+        yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)dl, &raw);
     if (raw_size == 0 || !raw) {
-        return YETTY_ERR(yetty_ycore_void, "draw_list_serialize: empty");
+        return YETTY_ERR(yetty_ycore_void, "drawable_list_serialize: empty");
     }
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -355,43 +355,43 @@ static struct yetty_ycore_void_result emit_create_envelope(
         return YETTY_ERR(yetty_ycore_void, "create envelope: serialize", sr);
     }
 
-    struct yetty_ydraw_draw_list_config dlcfg = {
+    struct yetty_ydraw_drawable_list_config dlcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = u.bounds_w,
         .scene_max_y = u.bounds_h,
     };
-    struct yetty_ydraw_draw_list_result outr =
-        yetty_ydraw_draw_list_config_buffer_create(&dlcfg);
+    struct yetty_ydraw_drawable_list_result outr =
+        yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
     if (YETTY_IS_ERR(outr)) {
         free(prim_bytes);
-        return YETTY_ERR(yetty_ycore_void, "create envelope: draw_list create", outr);
+        return YETTY_ERR(yetty_ycore_void, "create envelope: drawable_list create", outr);
     }
-    struct yetty_ydraw_draw_list *out = outr.value;
+    struct yetty_ydraw_drawable_list *out = outr.value;
 
     struct yetty_ydraw_id_result gr =
-        yetty_ydraw_draw_list_begin_group(out, (uint32_t)o->stream_id);
+        yetty_ydraw_drawable_list_begin_group(out, (uint32_t)o->stream_id);
     if (YETTY_IS_ERR(gr)) {
-        yetty_ydraw_draw_list_destroy(out);
+        yetty_ydraw_drawable_list_destroy(out);
         free(prim_bytes);
         return YETTY_ERR(yetty_ycore_void, "create envelope: begin_group", gr);
     }
     struct yetty_ydraw_id_result ar =
-        yetty_ydraw_draw_list_add_prim(out, prim_bytes, prim_size);
+        yetty_ydraw_drawable_list_add_prim(out, prim_bytes, prim_size);
     free(prim_bytes);
     if (YETTY_IS_ERR(ar)) {
-        yetty_ydraw_draw_list_destroy(out);
+        yetty_ydraw_drawable_list_destroy(out);
         return YETTY_ERR(yetty_ycore_void, "create envelope: add_prim", ar);
     }
     struct yetty_ycore_void_result er =
-        yetty_ydraw_draw_list_end_group(out, (uint32_t)gr.value);
+        yetty_ydraw_drawable_list_end_group(out, (uint32_t)gr.value);
     if (YETTY_IS_ERR(er)) {
-        yetty_ydraw_draw_list_destroy(out);
+        yetty_ydraw_drawable_list_destroy(out);
         return YETTY_ERR(yetty_ycore_void, "create envelope: end_group", er);
     }
 
     struct yetty_ycore_void_result emr = emit_scene_bin(out);
-    yetty_ydraw_draw_list_destroy(out);
+    yetty_ydraw_drawable_list_destroy(out);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emr, "create envelope: emit");
     return YETTY_OK_VOID();
 }
@@ -415,24 +415,24 @@ static struct yetty_ycore_void_result emit_update_envelope(
         memcpy(typed + 4u, bytes, len);
     }
 
-    struct yetty_ydraw_draw_list_config dlcfg = {0};
-    struct yetty_ydraw_draw_list_result outr =
-        yetty_ydraw_draw_list_config_buffer_create(&dlcfg);
+    struct yetty_ydraw_drawable_list_config dlcfg = {0};
+    struct yetty_ydraw_drawable_list_result outr =
+        yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
     if (YETTY_IS_ERR(outr)) {
         free(typed);
-        return YETTY_ERR(yetty_ycore_void, "update envelope: draw_list create", outr);
+        return YETTY_ERR(yetty_ycore_void, "update envelope: drawable_list create", outr);
     }
-    struct yetty_ydraw_draw_list *out = outr.value;
+    struct yetty_ydraw_drawable_list *out = outr.value;
 
     struct yetty_ycore_void_result cu =
-        yetty_ydraw_draw_list_add_cmd_update(out, (uint32_t)stream_id, typed, total);
+        yetty_ydraw_drawable_list_add_cmd_update(out, (uint32_t)stream_id, typed, total);
     free(typed);
     if (YETTY_IS_ERR(cu)) {
-        yetty_ydraw_draw_list_destroy(out);
+        yetty_ydraw_drawable_list_destroy(out);
         return YETTY_ERR(yetty_ycore_void, "update envelope: add_cmd_update", cu);
     }
     struct yetty_ycore_void_result er = emit_scene_bin(out);
-    yetty_ydraw_draw_list_destroy(out);
+    yetty_ydraw_drawable_list_destroy(out);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "update envelope: emit");
     return YETTY_OK_VOID();
 }

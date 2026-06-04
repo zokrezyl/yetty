@@ -30,7 +30,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/yvideo/yvideo-gen.h>
 #include <yetty/yvideo/yvideo.h>
@@ -537,13 +537,13 @@ static int parse_args(int argc, char **argv, struct yvideo_opts *o)
     return 0;
 }
 
-static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_draw_list *dl)
+static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_drawable_list *dl)
 {
     const uint8_t *raw = NULL;
     size_t raw_size =
-        yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)dl, &raw);
+        yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)dl, &raw);
     if (raw_size == 0 || !raw) {
-        return YETTY_ERR(yetty_ycore_void, "draw_list_serialize: empty");
+        return YETTY_ERR(yetty_ycore_void, "drawable_list_serialize: empty");
     }
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -577,18 +577,18 @@ static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_dr
  * timer subscription. Empty canvas is a no-op. */
 static struct yetty_ycore_void_result emit_zero(void)
 {
-    struct yetty_ydraw_draw_list_config dlcfg = {0};
-    struct yetty_ydraw_draw_list_result dlr =
-        yetty_ydraw_draw_list_config_buffer_create(&dlcfg);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dlr, "yvideo: zero draw_list create");
-    struct yetty_ydraw_draw_list *dl = dlr.value;
-    struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(dl);
+    struct yetty_ydraw_drawable_list_config dlcfg = {0};
+    struct yetty_ydraw_drawable_list_result dlr =
+        yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dlr, "yvideo: zero drawable_list create");
+    struct yetty_ydraw_drawable_list *dl = dlr.value;
+    struct yetty_ycore_void_result zr = yetty_ydraw_drawable_list_add_cmd_zero(dl);
     if (YETTY_IS_ERR(zr)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "yvideo: add_cmd_zero", zr);
     }
     struct yetty_ycore_void_result em = emit_scene_bin(dl);
-    yetty_ydraw_draw_list_destroy(dl);
+    yetty_ydraw_drawable_list_destroy(dl);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, em, "yvideo: emit zero");
     return YETTY_OK_VOID();
 }
@@ -646,41 +646,41 @@ static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o,
         return YETTY_ERR(yetty_ycore_void, "yvideo: serialize failed", sr);
     }
 
-    struct yetty_ydraw_draw_list_config dlcfg = {
+    struct yetty_ydraw_drawable_list_config dlcfg = {
         .scene_min_x = 0.0f, .scene_min_y = 0.0f,
         .scene_max_x = u.bounds_w, .scene_max_y = u.bounds_h,
     };
-    struct yetty_ydraw_draw_list_result dlr =
-        yetty_ydraw_draw_list_config_buffer_create(&dlcfg);
+    struct yetty_ydraw_drawable_list_result dlr =
+        yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
     if (YETTY_IS_ERR(dlr)) {
         free(prim_bytes);
-        return YETTY_ERR(yetty_ycore_void, "yvideo: draw_list create", dlr);
+        return YETTY_ERR(yetty_ycore_void, "yvideo: drawable_list create", dlr);
     }
-    struct yetty_ydraw_draw_list *dl = dlr.value;
+    struct yetty_ydraw_drawable_list *dl = dlr.value;
 
     struct yetty_ydraw_id_result gr =
-        yetty_ydraw_draw_list_begin_group(dl, (uint32_t)o->stream_id);
+        yetty_ydraw_drawable_list_begin_group(dl, (uint32_t)o->stream_id);
     if (YETTY_IS_ERR(gr)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         free(prim_bytes);
         return YETTY_ERR(yetty_ycore_void, "yvideo: begin_group", gr);
     }
     struct yetty_ydraw_id_result ar =
-        yetty_ydraw_draw_list_add_prim(dl, prim_bytes, prim_size);
+        yetty_ydraw_drawable_list_add_prim(dl, prim_bytes, prim_size);
     free(prim_bytes);
     if (YETTY_IS_ERR(ar)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "yvideo: add_prim", ar);
     }
     struct yetty_ycore_void_result er =
-        yetty_ydraw_draw_list_end_group(dl, (uint32_t)gr.value);
+        yetty_ydraw_drawable_list_end_group(dl, (uint32_t)gr.value);
     if (YETTY_IS_ERR(er)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "yvideo: end_group", er);
     }
 
     struct yetty_ycore_void_result em = emit_scene_bin(dl);
-    yetty_ydraw_draw_list_destroy(dl);
+    yetty_ydraw_drawable_list_destroy(dl);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, em, "yvideo: emit init");
     return YETTY_OK_VOID();
 }
@@ -705,23 +705,23 @@ static struct yetty_ycore_void_result emit_update(int stream_id, const uint8_t *
         memcpy(typed + 4u, bytes, len);
     }
 
-    struct yetty_ydraw_draw_list_config dlcfg = {0};
-    struct yetty_ydraw_draw_list_result dlr =
-        yetty_ydraw_draw_list_config_buffer_create(&dlcfg);
+    struct yetty_ydraw_drawable_list_config dlcfg = {0};
+    struct yetty_ydraw_drawable_list_result dlr =
+        yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
     if (YETTY_IS_ERR(dlr)) {
         free(typed);
-        return YETTY_ERR(yetty_ycore_void, "yvideo: update draw_list create", dlr);
+        return YETTY_ERR(yetty_ycore_void, "yvideo: update drawable_list create", dlr);
     }
-    struct yetty_ydraw_draw_list *dl = dlr.value;
+    struct yetty_ydraw_drawable_list *dl = dlr.value;
     struct yetty_ycore_void_result cu =
-        yetty_ydraw_draw_list_add_cmd_update(dl, (uint32_t)stream_id, typed, total);
+        yetty_ydraw_drawable_list_add_cmd_update(dl, (uint32_t)stream_id, typed, total);
     free(typed);
     if (YETTY_IS_ERR(cu)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "yvideo: add_cmd_update", cu);
     }
     struct yetty_ycore_void_result em = emit_scene_bin(dl);
-    yetty_ydraw_draw_list_destroy(dl);
+    yetty_ydraw_drawable_list_destroy(dl);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, em, "yvideo: emit update");
     return YETTY_OK_VOID();
 }

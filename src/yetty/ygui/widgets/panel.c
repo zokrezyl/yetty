@@ -12,7 +12,7 @@
 
 #include <yetty/ygui/primitive-widget.h>
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/panel.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <string.h>
@@ -57,7 +57,7 @@ static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *yclas
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "panel_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =
@@ -77,7 +77,7 @@ static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *yclas
         .half_height = h * 0.5f,
         .corner_radius = 0.0f,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, /*id=*/0, /*z_order=*/0,
+    return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, /*id=*/0, /*z_order=*/0,
                                                  pack_rgba(d->bg), pack_rgba(d->border),
                                                  d->border_width, &geom);
 }

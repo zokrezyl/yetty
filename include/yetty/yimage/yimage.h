@@ -2,7 +2,7 @@
 #define YETTY_YIMAGE_YIMAGE_H
 
 /*
- * yimage — high-level API for producing a yimage complex primitive from
+ * yimage — high-level API for producing a yimage composite from
  * an image source.
  *
  * Pipeline:
@@ -25,7 +25,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yimage/yimage-gen.h>
 
 #ifdef __cplusplus
@@ -48,17 +48,17 @@ int yetty_yimage_probe_size(const uint8_t *image_bytes, size_t len, int *out_w, 
 
 /* Decode `image_bytes` (PNG/JPG/...) and produce a fresh ydraw-core
  * buffer holding ONE yimage complex prim. Caller frees the buffer with
- * yetty_ydraw_draw_list_destroy. */
-struct yetty_ydraw_draw_list_result yetty_yimage_render(
+ * yetty_ydraw_drawable_list_destroy. */
+struct yetty_ydraw_drawable_list_result yetty_yimage_render(
     const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config);
 
 /* Convenience: read the file at `path` and call yetty_yimage_render. */
-struct yetty_ydraw_draw_list_result yetty_yimage_render_path(
+struct yetty_ydraw_drawable_list_result yetty_yimage_render_path(
     const char *path, const struct yetty_yimage_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
-struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                          FILE *out);
 
 #ifdef __cplusplus

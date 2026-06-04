@@ -1,12 +1,12 @@
-// YDraw Flyweight - primitive handler registry (instance-based)
+// YDraw Drawable-list entry - primitive handler registry (instance-based)
 // Decoupled from buffer, usable by buffer and canvas
 //
 // Two-level ops structure:
 //   Base ops (all primitives - SDF and complex): size, aabb
 //   Extended ops (SDF only): destroy, get_gpu_resource_set
 //
-// Complex primitives use the factory pattern instead of extended ops.
-// See complex-prim-types.h for complex prim handling.
+// Composites use the factory pattern instead of extended ops.
+// See composite.h for complex prim handling.
 #pragma once
 
 #include <stdint.h>
@@ -27,7 +27,7 @@ struct yetty_yrender_gpu_resource_set_result;
 // Used by buffer iteration to get size and aabb
 //=============================================================================
 
-struct yetty_ydraw_drawable_base_ops {
+struct yetty_ydraw_drawable_list_entry_ops {
     // Size in bytes (for buffer iteration)
     struct yetty_ycore_size_result (*size)(const uint32_t *prim);
 
@@ -37,12 +37,12 @@ struct yetty_ydraw_drawable_base_ops {
 
 //=============================================================================
 // Extended ops - for SDF primitives only (inherits base)
-// Complex primitives use factory pattern instead
+// Composites use factory pattern instead
 //=============================================================================
 
-struct yetty_ydraw_drawable_ops {
+struct yetty_ydraw_primitive_ops {
     // Base ops (size, aabb) - MUST be first for C inheritance
-    struct yetty_ydraw_drawable_base_ops base;
+    struct yetty_ydraw_drawable_list_entry_ops base;
 
     // Cleanup cached data (optional, may be NULL for simple prims)
     void (*destroy)(void *cache);
@@ -53,38 +53,38 @@ struct yetty_ydraw_drawable_ops {
                                                                          void **cache_ptr);
 };
 
-// Flyweight - wraps pointer to primitive data + base ops
+// Drawable-list entry - wraps pointer to primitive data + base ops
 // Works for ALL primitives (SDF and complex)
-struct yetty_ydraw_drawable_flyweight {
+struct yetty_ydraw_drawable_list_entry {
     const uint32_t *data;                            // type at data[0]
-    const struct yetty_ydraw_drawable_base_ops *ops; // base ops (size, aabb)
+    const struct yetty_ydraw_drawable_list_entry_ops *ops; // base ops (size, aabb)
 };
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_base_ops_ptr,
-                      const struct yetty_ydraw_drawable_base_ops *);
-YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_flyweight_ptr, struct yetty_ydraw_drawable_flyweight *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_entry_ops_ptr,
+                      const struct yetty_ydraw_drawable_list_entry_ops *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_entry_ptr, struct yetty_ydraw_drawable_list_entry *);
 
-// Flyweight registry instance (opaque)
-struct yetty_ydraw_flyweight_registry;
+// Drawable-list registry instance (opaque)
+struct yetty_ydraw_drawable_list_registry;
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_flyweight_registry_ptr, struct yetty_ydraw_flyweight_registry *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_registry_ptr, struct yetty_ydraw_drawable_list_registry *);
 
 // Create/destroy registry instance
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ydraw_flyweight_registry_ptr_result yetty_ydraw_flyweight_registry_create(void);
+struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_registry_create(void);
 
-void yetty_ydraw_flyweight_registry_destroy(
-    struct yetty_ydraw_flyweight_registry *reg YETTY_ANNOT_CALLEE_OWNED);
+void yetty_ydraw_drawable_list_registry_destroy(
+    struct yetty_ydraw_drawable_list_registry *reg YETTY_ANNOT_CALLEE_OWNED);
 
 // Set default handler (SDF) - called first, fast path
-void yetty_ydraw_flyweight_registry_set_default(
-    struct yetty_ydraw_flyweight_registry *reg,
-    struct yetty_ydraw_drawable_base_ops_ptr_result (*handler)(uint32_t));
+void yetty_ydraw_drawable_list_registry_set_default(
+    struct yetty_ydraw_drawable_list_registry *reg,
+    struct yetty_ydraw_drawable_list_entry_ops_ptr_result (*handler)(uint32_t));
 
 // Register additional handler for type range [type_min, type_max]
-struct yetty_ycore_void_result yetty_ydraw_flyweight_registry_add(
-    struct yetty_ydraw_flyweight_registry *reg, uint32_t type_min, uint32_t type_max,
-    struct yetty_ydraw_drawable_base_ops_ptr_result (*handler)(uint32_t));
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_registry_add(
+    struct yetty_ydraw_drawable_list_registry *reg, uint32_t type_min, uint32_t type_max,
+    struct yetty_ydraw_drawable_list_entry_ops_ptr_result (*handler)(uint32_t));
 
 #ifdef __cplusplus
 }

@@ -540,7 +540,7 @@ struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_render(struct yetty_ylexbor *r,
-                                                    struct yetty_ydraw_draw_list *buf)
+                                                    struct yetty_ydraw_drawable_list *buf)
 {
     if (r == NULL || buf == NULL) {
         return YETTY_ERR(yetty_ycore_void, "ylexbor_render: null");

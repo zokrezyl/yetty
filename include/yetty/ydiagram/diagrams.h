@@ -22,7 +22,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ydiagram/graph-ir.h>
 #include <yetty/ydiagram/layout.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,7 +51,7 @@ struct yetty_ycore_void_result yetty_ydiagram_er_parse(const char *input, size_t
 /* Sequence diagrams own their layout; render straight into a fresh buffer.
  * `clear_canvas` mirrors the render-options flag: true prepends a CMD_ZERO
  * (full redraw, jump to pane origin); false is cat-like inline at the cursor. */
-YETTY_YRESULT_DECLARE(yetty_ydiagram_seq_buffer, struct yetty_ydraw_draw_list *);
+YETTY_YRESULT_DECLARE(yetty_ydiagram_seq_buffer, struct yetty_ydraw_drawable_list *);
 struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
     const char *input, size_t len, yetty_ydiagram_measure_text_fn measure, void *measure_userdata,
     bool clear_canvas);

@@ -1,15 +1,15 @@
-#ifndef YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_H
-#define YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_H
+#ifndef YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_H
+#define YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_H
 
 /*
- * text-span-prim - flyweight primitive carrying a UTF-8 text run.
+ * text-drawable-list - drawable-list entry carrying a UTF-8 text run.
  *
- * Sits in the same flyweight tier as font-prim. The canvas expands a
- * TEXT_SPAN into glyph SDF prims at add_buffer time, after fonts have
+ * Sits in the same drawable-list tier as font-resource. The canvas expands a
+ * TEXT_DRAWABLE_LIST into glyph SDF prims at add_buffer time, after fonts have
  * been materialized.
  *
  * Wire layout (little-endian, 4-byte aligned):
- *   u32 type            (= YETTY_YDRAW_TYPE_TEXT_SPAN)
+ *   u32 type            (= YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST)
  *   u32 payload_size    (bytes of payload, padded to 4)
  *   f32 x, y, font_size, rotation
  *   u32 color           (RGBA, R in low byte)
@@ -23,15 +23,15 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/ffi-annotations.h>
-#include <yetty/ydraw-core/flyweight.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define YETTY_YDRAW_TYPE_TEXT_SPAN 0x40000002u
+#define YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST 0x40000002u
 
-struct yetty_ydraw_text_span_drawable_view {
+struct yetty_ydraw_text_drawable_list_view {
     float x, y;
     float font_size;
     float rotation;
@@ -58,14 +58,14 @@ struct yetty_ydraw_text_span_drawable_view {
     float word_spacing;
 };
 
-int yetty_ydraw_text_span_drawable_parse(
-    const uint32_t *prim, struct yetty_ydraw_text_span_drawable_view *out YETTY_ANNOT_OUT);
+int yetty_ydraw_text_drawable_list_parse(
+    const uint32_t *prim, struct yetty_ydraw_text_drawable_list_view *out YETTY_ANNOT_OUT);
 
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_text_span_drawable_handler(
+struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_text_drawable_list_handler(
     uint32_t drawable_type);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_H */
+#endif /* YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_H */

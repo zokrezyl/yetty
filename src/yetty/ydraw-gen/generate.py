@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Complex primitive code generator.
+Composite code generator.
 
 Reads YAML schema, generates ALL boilerplate:
 - C header: struct definition, serialization API, factory API
@@ -228,7 +228,7 @@ extern "C" {{
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full type lives in
- * yetty/ydraw-factory/figure-factory.h (server side). */
+ * yetty/ydraw-factory/composite-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
 
 #define YETTY_{NAME}_TYPE_ID 0x{type_id:08x}u
@@ -292,7 +292,7 @@ def generate_c_wire_source(schema, uniforms, buffers):
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
-// Wire-format helpers for the {name} complex primitive. Pure CPU code: packs
+// Wire-format helpers for the {name} composite. Pure CPU code: packs
 // caller-supplied uniforms + buffers into the on-the-wire byte layout. Lives
 // in yetty_{name}_core (no Dawn, no WebGPU, safe for riscv64 / wasm / any
 // cross-target without a GPU).
@@ -738,11 +738,11 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
         hooks_factory_wire = ''
 
     # webgpu.h is pulled in via the ydraw-factory header (server-only).
-    # Wire format / type-id ranges come from ydraw-core/complex-prim-types.h.
+    # Wire format / type-id ranges come from ydraw-core/composite.h.
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
-// Two-tier complex-prim model:
+// Two-tier composite model:
 //   - factory owns ONE shared yetty_yrender_pipeline (compiled once at
 //     compile_pipeline time from a template resource_set; the pipeline
 //     carries the WGPUShaderModule + bind_group_layout + WGPURenderPipeline
@@ -760,8 +760,8 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ydraw-core/figure-types.h>
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1008,7 +1008,7 @@ static struct yetty_ydraw_figure_ptr_result
 {name}_create_instance(struct yetty_ydraw_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {{
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_drawable))
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite))
         return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
 
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
@@ -1033,7 +1033,7 @@ static struct yetty_ydraw_figure_ptr_result
     instance->rolling_row = rolling_row;
     instance->render = {name}_instance_render;
 
-    struct rectangle_result aabb_res = yetty_ydraw_complex_drawable_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_composite_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res))
         instance->bounds = aabb_res.value;
 
@@ -1248,11 +1248,11 @@ def generate_yaml_parser(schema, uniforms, buffers):
     flags_code = '\n                else '.join(flag_checks) if flag_checks else '/* no yaml_flags */'
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
-// YAML parser factory for {name} complex primitive
+// YAML parser factory for {name} composite
 
 #include <yetty/{name}/{name}-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
@@ -1289,7 +1289,7 @@ static const uint32_t {NAME}_COLOR_PALETTE[8] = {{
 }};
 
 static struct yetty_ycore_void_result
-{name}_yaml_factory(struct yetty_ydraw_draw_list *buffer,
+{name}_yaml_factory(struct yetty_ydraw_drawable_list *buffer,
                     yaml_parser_t *yaml_parser,
                     const char *primitive_type_name)
 {{
@@ -1425,7 +1425,7 @@ static struct yetty_ycore_void_result
     }}
 
     struct yetty_ydraw_id_result id_res =
-        yetty_ydraw_draw_list_add_prim(buffer, drawable_buf, required);
+        yetty_ydraw_drawable_list_add_prim(buffer, drawable_buf, required);
     free(drawable_buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "{name} yaml: add_prim failed");
     return YETTY_OK_VOID();

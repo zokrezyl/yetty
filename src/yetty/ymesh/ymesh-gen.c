@@ -1,5 +1,5 @@
 /*
- * ymesh-gen.c — concrete factory for the ymesh complex primitive.
+ * ymesh-gen.c — concrete factory for the ymesh composite.
  *
  * Unlike yimage / yplot, ymesh uses raw WebGPU directly (not the schema-
  * driven yetty_yrender_pipeline / gpu_resource_binder framework). The
@@ -25,8 +25,8 @@
 #include <yetty/ymesh/ymesh-gen.h>
 #include <yetty/ymesh/ymesh-math.h>
 
-#include <yetty/ydraw-core/figure-types.h>
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -738,7 +738,7 @@ static struct yetty_ydraw_figure_ptr_result ymesh_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_drawable)) {
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite)) {
         return YETTY_ERR(yetty_ydraw_figure_ptr, "ymesh: invalid buffer data");
     }
 
@@ -812,7 +812,7 @@ static struct yetty_ydraw_figure_ptr_result ymesh_create_instance(
     inst->ops = &ymesh_figure_ops;
     inst->instance_data = d;
 
-    struct rectangle_result aabb_res = yetty_ydraw_complex_drawable_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_composite_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         inst->bounds = aabb_res.value;
     }

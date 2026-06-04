@@ -1,4 +1,4 @@
-# YImage complex primitive schema
+# YImage composite schema
 # Generator produces: C serializer, WGSL accessors, GPU resource set logic,
 # and routes the `pixels` buffer's bytes into the `image` texture (atlas-
 # packed, hardware-bilinear).

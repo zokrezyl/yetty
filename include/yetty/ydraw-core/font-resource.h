@@ -1,12 +1,12 @@
-#ifndef YETTY_YDRAW_CORE_FONT_PRIM_H
-#define YETTY_YDRAW_CORE_FONT_PRIM_H
+#ifndef YETTY_YDRAW_CORE_FONT_RESOURCE_H
+#define YETTY_YDRAW_CORE_FONT_RESOURCE_H
 
 /*
- * font-prim - flyweight primitive carrying TTF bytes through a ydraw buffer.
+ * font-resource - drawable-list entry carrying TTF bytes through a ydraw buffer.
  *
  * Tier:
  *   Simple (SDF, fixed-size):    [0x00, 0xFF]
- *   Flyweight (variable-size):   [0x40000000, 0x7FFFFFFF]   ← font/text-span
+ *   Drawable-list entry (variable-size):   [0x40000000, 0x7FFFFFFF]   ← font/text-span
  *   Complex (factory + GPU):     [0x80000000, 0xFFFFFFFF]   ← yplot, yimage, …
  *
  * A font primitive is just bytes in the buffer's stream — it has no per-instance
@@ -14,7 +14,7 @@
  * yetty cache, generates an MSDF CDB on miss, opens it as a font).
  *
  * Wire layout (little-endian, 4-byte aligned):
- *   u32 type           (= YETTY_YDRAW_TYPE_FONT)
+ *   u32 type           (= YETTY_YDRAW_RESOURCE_FONT)
  *   u32 payload_size   (bytes of payload, padded to 4)
  *   i32 font_id        (producer-assigned id; text spans reference it)
  *   u32 name_len       (bytes; not NUL-terminated)
@@ -27,15 +27,15 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/ffi-annotations.h>
-#include <yetty/ydraw-core/flyweight.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define YETTY_YDRAW_TYPE_FONT 0x40000001u
+#define YETTY_YDRAW_RESOURCE_FONT 0x40000001u
 
-struct yetty_yfont_font_drawable_view {
+struct yetty_ydraw_font_resource_view {
     int32_t font_id;
     const char *name; /* NOT NUL-terminated, len in name_len */
     uint32_t name_len;
@@ -45,16 +45,16 @@ struct yetty_yfont_font_drawable_view {
 
 /* Parse a FONT prim. The view points into the prim payload — lifetime is
  * tied to the underlying buffer. Returns 0 on success, -1 on malformed. */
-int yetty_yfont_font_drawable_parse(const uint32_t *prim,
-                                    struct yetty_yfont_font_drawable_view *out YETTY_ANNOT_OUT);
+int yetty_ydraw_font_resource_parse(const uint32_t *prim,
+                                    struct yetty_ydraw_font_resource_view *out YETTY_ANNOT_OUT);
 
-/* Flyweight base ops handler. Returns ops only for type FONT. Register
- * via yetty_ydraw_flyweight_registry_add(reg, FONT, FONT, handler). */
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_yfont_font_drawable_handler(
+/* Drawable-list entry base ops handler. Returns ops only for type FONT. Register
+ * via yetty_ydraw_drawable_list_registry_add(reg, FONT, FONT, handler). */
+struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_font_resource_handler(
     uint32_t drawable_type);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YDRAW_CORE_FONT_PRIM_H */
+#endif /* YETTY_YDRAW_CORE_FONT_RESOURCE_H */

@@ -1,19 +1,34 @@
 #!/bin/bash
-# Mass replace words recursively in the codebase
+# Mass replace LITERAL text recursively in the codebase.
 # Usage: replace <what> <with>
+# Example: replace old_name new_name
+#
+# Matching and replacement are byte-literal. There is NO regex and NO
+# delimiter interpretation: '.', '/', '|', '&', '\', '*', '[' etc. are all
+# treated as themselves, in both <what> and <with>. This is deliberate —
+# the previous sed-based implementation interpreted '.' as a wildcard, which
+# silently corrupted identifiers (e.g. ".foo" matched " foo" and ate the
+# preceding character).
 
-set -e
+set -euo pipefail
 
 if [ $# -ne 2 ]; then
-    echo "Usage: $0 <what> <with>"
-    echo "Example: $0 old_name new_name"
+    echo "Usage: $0 <what> <with>" >&2
+    echo "Example: $0 old_name new_name" >&2
     exit 1
 fi
 
-WHAT="$1"
-WITH="$2"
+what="$1"
+with="$2"
 
-# Find and replace in source files, excluding build dirs and .git
+if [ -z "$what" ]; then
+    echo "error: <what> must not be empty" >&2
+    exit 1
+fi
+
+# Discover candidate files with a fixed-string (literal) match via 'grep -F',
+# then perform the substitution in Python operating on raw bytes so nothing is
+# ever interpreted as a regex or affected by text encoding.
 find . \
     -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.cpp' -o -name '*.hpp' -o -name '*.c' -o -name '*.sh' -o -name '*.wgsl' -o -name '*.h' -o -name '*.md' -o -name '*.txt' -o -name 'CMakeLists.txt' -o -name '*.cmake' -o -name 'Makefile' -o -name '*.py' -o -name '*.mm' -o -name '*.m' \) \
     ! -path './build-desktop*' \
@@ -21,9 +36,25 @@ find . \
     ! -path './build-webasm*' \
     ! -path './.git/*' \
     ! -path './tmp/*' \
-    -exec grep -l "$WHAT" {} \; 2>/dev/null | while read -r file; do
-    echo "Replacing in: $file"
-    sed -i "s|$WHAT|$WITH|g" "$file"
-done
+    -exec grep -lF -- "$what" {} \; 2>/dev/null \
+| WHAT="$what" WITH="$with" python3 -c '
+import os, sys
+
+what = os.environb[b"WHAT"]
+with_ = os.environb[b"WITH"]
+
+for raw in sys.stdin.buffer.read().split(b"\n"):
+    path = raw.rstrip(b"\r")
+    if not path:
+        continue
+    name = os.fsdecode(path)
+    with open(name, "rb") as handle:
+        data = handle.read()
+    if what not in data:
+        continue
+    with open(name, "wb") as handle:
+        handle.write(data.replace(what, with_))
+    sys.stdout.write("Replacing in: " + name + "\n")
+'
 
 echo "Done."

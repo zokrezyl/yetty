@@ -5,21 +5,21 @@
  *   ESC ] 600001 ; <b64(yetty_yface_bin_meta)> ; <base64(LZ4F(payload))> ESC \
  *
  * The payload is the magic-tagged blob produced by
- * yetty_ydraw_draw_list_serialize() — prims + text_spans + scene_bounds.
+ * yetty_ydraw_drawable_list_serialize() — prims + text_spans + scene_bounds.
  * yetty_yface owns the LZ4F + base64 + envelope construction.
  */
 
 #include <yetty/ycat/ycat.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_BIN */
 
 #include <stdio.h>
 #include <stdlib.h>
 
-struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                        FILE *out)
 {
     if (!buffer || !out) {
@@ -28,7 +28,7 @@ struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ydraw_
 
     const uint8_t *raw_bytes = NULL;
     size_t raw_size =
-        yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)buffer, &raw_bytes);
+        yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw_bytes);
     if (raw_size == 0 || !raw_bytes) {
         return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: serialize empty");
     }

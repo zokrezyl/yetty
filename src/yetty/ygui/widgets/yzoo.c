@@ -9,7 +9,7 @@
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/yzoo.h>
 #include <yetty/yzoo/yzoo.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplatform/time.h>
 
 struct [[clang::annotate("class@ygui:yzoo")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
@@ -83,14 +83,14 @@ static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_ctx *yc
             d->scene_w = w;
             d->scene_h = h;
         }
-        struct yetty_ydraw_draw_list_config bcfg = {
+        struct yetty_ydraw_drawable_list_config bcfg = {
             .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = w, .scene_max_y = h};
-        struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+        struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yzoo_emit_body: buffer create");
         float t = (float)(yetty_yplatform_ytime_monotonic_sec() - d->start_time);
         struct yetty_ycore_void_result rr = yetty_yzoo_render(d->zoo, br.value, t);
         if (YETTY_IS_ERR(rr)) {
-            yetty_ydraw_draw_list_destroy(br.value);
+            yetty_ydraw_drawable_list_destroy(br.value);
             return YETTY_ERR(yetty_ycore_void, "yzoo_emit_body: render", rr);
         }
         struct yetty_ycore_void_result sb = yetty_ygui_ydraw_embed_set_buffer(obj, br.value);

@@ -28,9 +28,9 @@ extern "C" {
 
 struct yetty_ydraw_canvas;
 struct yetty_ydraw_canvas_ops;
-struct yetty_ydraw_complex_drawable_factory;
+struct yetty_ydraw_composite_factory;
 struct yetty_ydraw_figure;
-struct yetty_ydraw_flyweight_registry;
+struct yetty_ydraw_drawable_list_registry;
 struct yetty_yfont_font;
 struct yetty_ywire_wire_statemachine;
 struct yetty_ydraw_cell_source;
@@ -143,10 +143,10 @@ struct yetty_ydraw_canvas_ops {
     struct yetty_yfont_font *(*get_font_at)(const struct yetty_ydraw_canvas *canvas, uint32_t slot);
     struct yetty_yfont_font *(*get_default_font)(const struct yetty_ydraw_canvas *canvas);
 
-    /* Flyweight registry / complex-prim factory accessors. */
-    const struct yetty_ydraw_flyweight_registry *(*get_flyweight_registry)(
+    /* Drawable-list registry / composite factory accessors. */
+    const struct yetty_ydraw_drawable_list_registry *(*get_drawable_list_registry)(
         const struct yetty_ydraw_canvas *canvas);
-    struct yetty_ydraw_complex_drawable_factory *(*get_figure_factory)(
+    struct yetty_ydraw_composite_factory *(*get_composite_factory)(
         const struct yetty_ydraw_canvas *canvas);
 
     /* Complex drawable access (for atlas rendering). */

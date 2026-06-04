@@ -14,7 +14,7 @@
 
 #include "ysvg-internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ycore/types.h>
@@ -213,14 +213,14 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
     resolve_target_size(config, vw, vh, &scene_w, &scene_h);
     float scale = (vw > 0.0f) ? scene_w / vw : 1.0f;
 
-    struct yetty_ydraw_draw_list_config bcfg = {
+    struct yetty_ydraw_drawable_list_config bcfg = {
         .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = scene_w, .scene_max_y = scene_h};
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         yetty_ysvg_doc_destroy(doc);
         return YETTY_ERR(yetty_ysvg_render, "ysvg: buffer create failed", br);
     }
-    struct yetty_ydraw_draw_list *buf = br.value;
+    struct yetty_ydraw_drawable_list *buf = br.value;
 
     /* Optional background — emit before any other primitives. */
     if (params.has_bg && (params.bg_color & 0xFFu) != 0) {
@@ -231,9 +231,9 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
                                     .half_height = scene_h * 0.5f,
                                     .corner_radius = 0.0f};
         struct yetty_ycore_void_result r =
-            yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, 0, abgr, 0, 0.0f, &bg);
+            yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, 0, abgr, 0, 0.0f, &bg);
         if (YETTY_IS_ERR(r)) {
-            yetty_ydraw_draw_list_destroy(buf);
+            yetty_ydraw_drawable_list_destroy(buf);
             yetty_ysvg_doc_destroy(doc);
             return YETTY_ERR(yetty_ysvg_render, "ysvg: background emit failed", r);
         }
@@ -258,7 +258,7 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
     struct yetty_ycore_void_result er = yetty_ysvg_paint(doc, &ctx);
     yetty_ysvg_doc_destroy(doc);
     if (YETTY_IS_ERR(er)) {
-        yetty_ydraw_draw_list_destroy(buf);
+        yetty_ydraw_drawable_list_destroy(buf);
         return YETTY_ERR(yetty_ysvg_render, "ysvg: emission failed", er);
     }
 

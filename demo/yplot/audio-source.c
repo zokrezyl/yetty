@@ -40,7 +40,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplot/yplot.h>
 #include <yetty/yterm/osc-codes.h>
 
@@ -161,15 +161,15 @@ static void generate_frame(float *out, int n, double t0, double sample_rate, dou
     }
 }
 
-/* Serialize a draw_list and ship it as a YDRAW_SCENE_BIN OSC envelope on
+/* Serialize a drawable_list and ship it as a YDRAW_SCENE_BIN OSC envelope on
  * stdout. */
-static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_draw_list *dl)
+static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_drawable_list *dl)
 {
     const uint8_t *raw = NULL;
     size_t raw_size =
-        yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)dl, &raw);
+        yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)dl, &raw);
     if (raw_size == 0 || !raw) {
-        return YETTY_ERR(yetty_ycore_void, "draw_list_serialize: empty");
+        return YETTY_ERR(yetty_ycore_void, "drawable_list_serialize: empty");
     }
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -275,42 +275,42 @@ static struct yetty_ycore_void_result emit_create_envelope(const struct opts *o,
 
     /* Wrap in CMD_GROUP(id=plot_id) so scene-canvas creates an addressable
      * entity. Subsequent CMD_UPDATE records target this id. */
-    struct yetty_ydraw_draw_list_config cfg = {
+    struct yetty_ydraw_drawable_list_config cfg = {
         .scene_min_x = 0.0f, .scene_min_y = 0.0f,
         .scene_max_x = u.bounds_w, .scene_max_y = u.bounds_h,
     };
-    struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(dlr)) {
         free(prim_bytes);
-        return YETTY_ERR(yetty_ycore_void, "create envelope: draw_list create failed", dlr);
+        return YETTY_ERR(yetty_ycore_void, "create envelope: drawable_list create failed", dlr);
     }
-    struct yetty_ydraw_draw_list *dl = dlr.value;
+    struct yetty_ydraw_drawable_list *dl = dlr.value;
 
     struct yetty_ydraw_id_result mk =
-        yetty_ydraw_draw_list_begin_group(dl, (uint32_t)o->plot_id);
+        yetty_ydraw_drawable_list_begin_group(dl, (uint32_t)o->plot_id);
     if (YETTY_IS_ERR(mk)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         free(prim_bytes);
         return YETTY_ERR(yetty_ycore_void, "create envelope: begin_group failed", mk);
     }
 
     struct yetty_ydraw_id_result ar =
-        yetty_ydraw_draw_list_add_prim(dl, prim_bytes, prim_size);
+        yetty_ydraw_drawable_list_add_prim(dl, prim_bytes, prim_size);
     free(prim_bytes);
     if (YETTY_IS_ERR(ar)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "create envelope: add_prim failed", ar);
     }
 
     struct yetty_ycore_void_result er =
-        yetty_ydraw_draw_list_end_group(dl, (uint32_t)mk.value);
+        yetty_ydraw_drawable_list_end_group(dl, (uint32_t)mk.value);
     if (YETTY_IS_ERR(er)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "create envelope: end_group failed", er);
     }
 
     struct yetty_ycore_void_result emit_r = emit_scene_bin(dl);
-    yetty_ydraw_draw_list_destroy(dl);
+    yetty_ydraw_drawable_list_destroy(dl);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_r, "create envelope: emit failed");
     return YETTY_OK_VOID();
 }
@@ -334,24 +334,24 @@ static struct yetty_ycore_void_result emit_update_envelope(int plot_id, const fl
 
     /* Scene bounds are meaningless for an update-only envelope — pass zeros;
      * the canvas already knows the entity's footprint from the create env. */
-    struct yetty_ydraw_draw_list_config cfg = {0};
-    struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_drawable_list_config cfg = {0};
+    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(dlr)) {
         free(payload);
-        return YETTY_ERR(yetty_ycore_void, "update envelope: draw_list create", dlr);
+        return YETTY_ERR(yetty_ycore_void, "update envelope: drawable_list create", dlr);
     }
-    struct yetty_ydraw_draw_list *dl = dlr.value;
+    struct yetty_ydraw_drawable_list *dl = dlr.value;
 
-    struct yetty_ycore_void_result cu = yetty_ydraw_draw_list_add_cmd_update(
+    struct yetty_ycore_void_result cu = yetty_ydraw_drawable_list_add_cmd_update(
         dl, (uint32_t)plot_id, payload, payload_size);
     free(payload);
     if (YETTY_IS_ERR(cu)) {
-        yetty_ydraw_draw_list_destroy(dl);
+        yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "update envelope: add_cmd_update", cu);
     }
 
     struct yetty_ycore_void_result emit_r = emit_scene_bin(dl);
-    yetty_ydraw_draw_list_destroy(dl);
+    yetty_ydraw_drawable_list_destroy(dl);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_r, "update envelope: emit");
     return YETTY_OK_VOID();
 }

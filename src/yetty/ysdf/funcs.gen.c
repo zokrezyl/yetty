@@ -4,8 +4,8 @@
 #include <yetty/ysdf/funcs.gen.h>
 #include <string.h>
 
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_circle(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_circle(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_circle *geom)
 {
@@ -27,12 +27,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_circle(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_box(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_box(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_box *geom)
 {
@@ -56,12 +56,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_box(
     memcpy(&data[off++], &geom->corner_radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_segment(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_segment(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_segment *geom)
 {
@@ -84,12 +84,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_segment(
     memcpy(&data[off++], &geom->end_y, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_triangle(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_triangle(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_triangle *geom)
 {
@@ -114,12 +114,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_triangle(
     memcpy(&data[off++], &geom->vertex_c_y, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_ellipse(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_ellipse(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_ellipse *geom)
 {
@@ -142,12 +142,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_ellipse(
     memcpy(&data[off++], &geom->radius_y, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_arc(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_arc(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_arc *geom)
 {
@@ -172,12 +172,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_arc(
     memcpy(&data[off++], &geom->thickness, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rounded_box(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_rounded_box(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_rounded_box *geom)
 {
@@ -204,12 +204,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rounded_box(
     memcpy(&data[off++], &geom->radius_bottom_left, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rhombus(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_rhombus(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_rhombus *geom)
 {
@@ -232,12 +232,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rhombus(
     memcpy(&data[off++], &geom->half_height, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pentagon(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_pentagon(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_pentagon *geom)
 {
@@ -259,12 +259,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pentagon(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_hexagon(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_hexagon(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_hexagon *geom)
 {
@@ -286,12 +286,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_hexagon(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_star(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_star(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_star *geom)
 {
@@ -315,12 +315,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_star(
     memcpy(&data[off++], &geom->inner_ratio, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pie(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_pie(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_pie *geom)
 {
@@ -344,12 +344,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pie(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_ring(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_ring(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_ring *geom)
 {
@@ -374,12 +374,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_ring(
     memcpy(&data[off++], &geom->thickness, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_heart(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_heart(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_heart *geom)
 {
@@ -401,12 +401,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_heart(
     memcpy(&data[off++], &geom->scale, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_cross(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_cross(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_cross *geom)
 {
@@ -430,12 +430,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_cross(
     memcpy(&data[off++], &geom->corner_radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rounded_x(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_rounded_x(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_rounded_x *geom)
 {
@@ -458,12 +458,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_rounded_x(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_capsule(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_capsule(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_capsule *geom)
 {
@@ -487,12 +487,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_capsule(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_moon(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_moon(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_moon *geom)
 {
@@ -516,12 +516,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_moon(
     memcpy(&data[off++], &geom->radius_inner, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_egg(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_egg(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_egg *geom)
 {
@@ -544,12 +544,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_egg(
     memcpy(&data[off++], &geom->radius_inner, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_octogon(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_octogon(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_octogon *geom)
 {
@@ -571,12 +571,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_octogon(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_hexagram(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_hexagram(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_hexagram *geom)
 {
@@ -598,12 +598,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_hexagram(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pentagram(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_pentagram(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_pentagram *geom)
 {
@@ -625,12 +625,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_pentagram(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_linear_gradient_box(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_linear_gradient_box(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_linear_gradient_box *geom)
 {
@@ -660,12 +660,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_linear_gradient
     tmp = (uint32_t)geom->color1; memcpy(&data[off++], &tmp, sizeof(tmp));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_radial_gradient_box(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_radial_gradient_box(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_radial_gradient_box *geom)
 {
@@ -694,12 +694,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_radial_gradient
     tmp = (uint32_t)geom->color_outer; memcpy(&data[off++], &tmp, sizeof(tmp));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_sphere_3d(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_sphere_3d(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_sphere_3d *geom)
 {
@@ -722,12 +722,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_sphere_3d(
     memcpy(&data[off++], &geom->radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_box_3d(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_box_3d(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_box_3d *geom)
 {
@@ -752,12 +752,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_box_3d(
     memcpy(&data[off++], &geom->half_size_z, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_torus_3d(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_torus_3d(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_torus_3d *geom)
 {
@@ -781,12 +781,12 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_torus_3d(
     memcpy(&data[off++], &geom->minor_radius, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_cylinder_3d(
-    struct yetty_ydraw_draw_list *list, uint32_t id,
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_cylinder_3d(
+    struct yetty_ydraw_drawable_list *list, uint32_t id,
     uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,
     float stroke_width, const struct yetty_ysdf_cylinder_3d *geom)
 {
@@ -810,7 +810,7 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_cylinder_3d(
     memcpy(&data[off++], &geom->half_height, sizeof(float));
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }

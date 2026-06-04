@@ -16,8 +16,8 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw/cell-ref-table.h>
 #include <yetty/ydraw/scrollbuffer.h>
-#include <yetty/ydraw-core/figure-types.h>
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfont/font-cache.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ytrace/ytrace.h>

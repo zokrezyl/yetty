@@ -5,7 +5,7 @@
  * bytes; the next emit triggers a render and feeds the buffer into the
  * ydraw_embed base. Cached (w, h) gates re-renders. */
 #include "../internal.h"
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/ybrowser.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #if YETTY_YGUI_HAVE_YBROWSER
@@ -100,7 +100,7 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
         yetty_ylexbor_destroy(lx);
         return YETTY_ERR(yetty_ycore_void, "ybrowser_render: load_html", hr);
     }
-    struct yetty_ydraw_draw_list_result dlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(dlr)) {
         yetty_ylexbor_destroy(lx);
         return YETTY_ERR(yetty_ycore_void, "ybrowser_render: dl_create", dlr);
@@ -108,7 +108,7 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
     struct yetty_ycore_void_result rr = yetty_ylexbor_render(lx, dlr.value);
     yetty_ylexbor_destroy(lx);
     if (YETTY_IS_ERR(rr)) {
-        yetty_ydraw_draw_list_destroy(dlr.value);
+        yetty_ydraw_drawable_list_destroy(dlr.value);
         return YETTY_ERR(yetty_ycore_void, "ybrowser_render: render", rr);
     }
     struct yetty_ycore_void_result br = yetty_ygui_ydraw_embed_set_buffer(obj, dlr.value);

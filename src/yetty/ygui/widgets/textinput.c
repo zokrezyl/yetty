@@ -8,7 +8,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/textinput.h>
@@ -121,7 +121,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u, 0.0f,
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
                                                      &geom);
     }
     if (radius > w * 0.5f) {
@@ -140,7 +140,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
                                                          0.0f, &geom);
 }
 
@@ -151,7 +151,7 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *y
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "textinput_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =
@@ -184,7 +184,7 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *y
         float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)text, .capacity = strlen(text), .size = strlen(text)};
-        rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, r.min.x + 10.0f, ty, &tb, fs,
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + 10.0f, ty, &tb, fs,
                                             color, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "textinput_paint: text");
     }
@@ -197,7 +197,7 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *y
             .half_width = 1.0f,
             .half_height = (h - 8.0f) * 0.5f,
         };
-        rr = yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0u, 0u, COLOR_BORDER_FOCUS,
+        rr = yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, COLOR_BORDER_FOCUS,
                                                    0u, 0.0f, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "textinput_paint: caret");
     }

@@ -1,9 +1,9 @@
 // Auto-generated from yplot.yaml - DO NOT EDIT
-// YAML parser factory for yplot complex primitive
+// YAML parser factory for yplot composite
 
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yexpr/yexpr.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>
@@ -55,7 +55,7 @@ static const uint32_t YPLOT_COLOR_PALETTE[8] = {
     0xFFFF6B6B, 0xFF4ECDC4, 0xFFFFE66D, 0xFF95E1D3, 0xFFF38181, 0xFFAA96DA, 0xFF72D6C9, 0xFFFCBF49,
 };
 
-static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw_list *buffer,
+static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_drawable_list *buffer,
                                                          yaml_parser_t *yaml_parser,
                                                          const char *primitive_type_name)
 {
@@ -331,7 +331,7 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
     }
 
     struct yetty_ydraw_id_result id_res =
-        yetty_ydraw_draw_list_add_prim(buffer, drawable_buf, required);
+        yetty_ydraw_drawable_list_add_prim(buffer, drawable_buf, required);
     free(drawable_buf);
     free(zero_fill);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot yaml: add_prim failed");

@@ -26,7 +26,7 @@
 
 #include <yetty/ymarkdown/ymarkdown.h>
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ycore/types.h>
@@ -49,7 +49,7 @@
  * UTF-8 over-counts width slightly — consistent with the original. */
 #define YMD_CHAR_W 0.6f
 
-/* A TEXT_SPAN's y is the glyph BASELINE (the canvas places each glyph at
+/* A TEXT_DRAWABLE_LIST's y is the glyph BASELINE (the canvas places each glyph at
  * span_y - bearing_y), so a line drawn at its top edge would ascend off the
  * top. We treat the per-line cursor as the line's TOP and push the baseline
  * down by this fraction of the font size so the glyphs sit inside the line
@@ -1104,7 +1104,7 @@ static float ymd_measure_spans(const struct yetty_ymarkdown_ymd_span *spans, siz
     return w;
 }
 
-static struct yetty_ycore_void_result ymd_emit_text(struct yetty_ydraw_draw_list *buf, float x,
+static struct yetty_ycore_void_result ymd_emit_text(struct yetty_ydraw_drawable_list *buf, float x,
                                                     float y, const char *text, size_t text_len,
                                                     float scaled_size, uint32_t color)
 {
@@ -1113,10 +1113,10 @@ static struct yetty_ycore_void_result ymd_emit_text(struct yetty_ydraw_draw_list
         .size = text_len,
         .capacity = text_len,
     };
-    return yetty_ydraw_draw_list_add_text(buf, x, y, &t, scaled_size, color, 0, -1, 0.0f);
+    return yetty_ydraw_drawable_list_add_text(buf, x, y, &t, scaled_size, color, 0, -1, 0.0f);
 }
 
-static struct yetty_ycore_void_result ymd_emit_box(struct yetty_ydraw_draw_list *buf, float cx,
+static struct yetty_ycore_void_result ymd_emit_box(struct yetty_ydraw_drawable_list *buf, float cx,
                                                    float cy, float half_w, float half_h,
                                                    uint32_t fill)
 {
@@ -1127,29 +1127,29 @@ static struct yetty_ycore_void_result ymd_emit_box(struct yetty_ydraw_draw_list 
         .half_height = half_h,
         .corner_radius = 0.0f,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, 0, fill, 0, 0.0f, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, 0, fill, 0, 0.0f, &geom);
 }
 
-static struct yetty_ycore_void_result ymd_emit_hline(struct yetty_ydraw_draw_list *buf, float x0,
+static struct yetty_ycore_void_result ymd_emit_hline(struct yetty_ydraw_drawable_list *buf, float x0,
                                                      float x1, float y, uint32_t color)
 {
     struct yetty_ysdf_segment geom = {.start_x = x0, .start_y = y, .end_x = x1, .end_y = y};
-    return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, 0, 0u, color, YMD_TABLE_BORDER_W,
+    return yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, 0, 0u, color, YMD_TABLE_BORDER_W,
                                                      &geom);
 }
 
-static struct yetty_ycore_void_result ymd_emit_vline(struct yetty_ydraw_draw_list *buf, float x,
+static struct yetty_ycore_void_result ymd_emit_vline(struct yetty_ydraw_drawable_list *buf, float x,
                                                      float y0, float y1, uint32_t color)
 {
     struct yetty_ysdf_segment geom = {.start_x = x, .start_y = y0, .end_x = x, .end_y = y1};
-    return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, 0, 0u, color, YMD_TABLE_BORDER_W,
+    return yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, 0, 0u, color, YMD_TABLE_BORDER_W,
                                                      &geom);
 }
 
 /* Emit a run of spans starting at (x, y). `override` recolours spans that
  * would otherwise use the default body colour (used for blockquote text).
  * Writes the trailing x to *out_x when non-NULL. */
-static struct yetty_ycore_void_result ymd_emit_spans(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result ymd_emit_spans(struct yetty_ydraw_drawable_list *buf,
                                                      const struct yetty_ymarkdown_ymd_span *spans,
                                                      size_t count, float x, float y,
                                                      float scaled_size, uint32_t override,
@@ -1200,7 +1200,7 @@ static float ymd_table_row_h(const struct yetty_ymarkdown_ymd_params *p)
     return p->font_size * p->line_spacing;
 }
 
-static struct yetty_ycore_void_result ymd_emit_table(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result ymd_emit_table(struct yetty_ydraw_drawable_list *buf,
                                                      const struct yetty_ymarkdown_ymd_line *line,
                                                      float x0, float y0,
                                                      const struct yetty_ymarkdown_ymd_params *p)
@@ -1306,7 +1306,7 @@ static float ymd_block_height(const struct yetty_ymarkdown_ymd_line *line,
 /* Emit one block's primitives at vertical cursor `cy`, starting horizontally
  * at `cx_start`. `content_w` is the usable document width (used to size code
  * panels and rules); 0 means "unknown — fall back to content size". */
-static struct yetty_ycore_void_result ymd_emit_one_line(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result ymd_emit_one_line(struct yetty_ydraw_drawable_list *buf,
                                                         const struct yetty_ymarkdown_ymd_line *line,
                                                         float cx_start, float cy, float content_w,
                                                         const struct yetty_ymarkdown_ymd_params *p)
@@ -1362,7 +1362,7 @@ static struct yetty_ycore_void_result ymd_emit_one_line(struct yetty_ydraw_draw_
                           override, NULL);
 }
 
-static struct yetty_ycore_void_result ymd_emit(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result ymd_emit(struct yetty_ydraw_drawable_list *buf,
                                                const struct yetty_ymarkdown_ymd_doc *doc,
                                                float content_w,
                                                const struct yetty_ymarkdown_ymd_params *p)
@@ -1407,29 +1407,29 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
     }
     float content_w = scene_w > 2.0f * YMD_MARGIN ? scene_w - 2.0f * YMD_MARGIN : 0.0f;
 
-    struct yetty_ydraw_draw_list_config bcfg = {
+    struct yetty_ydraw_drawable_list_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ymarkdown_render, br.error.msg);
     }
-    struct yetty_ydraw_draw_list *buf = br.value;
+    struct yetty_ydraw_drawable_list *buf = br.value;
 
     struct yetty_ymarkdown_ymd_doc doc = {0};
     if (ymd_parse(&doc, content, content_len) < 0) {
         ymd_doc_destroy(&doc);
-        yetty_ydraw_draw_list_destroy(buf);
+        yetty_ydraw_drawable_list_destroy(buf);
         return YETTY_ERR(yetty_ymarkdown_render, "parse failed");
     }
 
     struct yetty_ycore_void_result er = ymd_emit(buf, &doc, content_w, &params);
     if (YETTY_IS_ERR(er)) {
         ymd_doc_destroy(&doc);
-        yetty_ydraw_draw_list_destroy(buf);
+        yetty_ydraw_drawable_list_destroy(buf);
         return YETTY_ERR(yetty_ymarkdown_render, "ymarkdown: primitive emission failed", er);
     }
 
@@ -1448,15 +1448,15 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
  *===========================================================================*/
 
 /* Build a fresh per-chunk buffer with the right scene bounds. */
-static struct yetty_ydraw_draw_list_result ymd_make_chunk(float scene_w, float chunk_h)
+static struct yetty_ydraw_drawable_list_result ymd_make_chunk(float scene_w, float chunk_h)
 {
-    struct yetty_ydraw_draw_list_config bcfg = {
+    struct yetty_ydraw_drawable_list_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = scene_w,
         .scene_max_y = chunk_h,
     };
-    return yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    return yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
 }
 
 struct yetty_ymarkdown_stream_render_result yetty_ymarkdown_render_streaming(
@@ -1493,12 +1493,12 @@ struct yetty_ymarkdown_stream_render_result yetty_ymarkdown_render_streaming(
         return YETTY_ERR(yetty_ymarkdown_stream_render, "parse failed");
     }
 
-    struct yetty_ydraw_draw_list_result br = ymd_make_chunk(scene_w, chunk_h);
+    struct yetty_ydraw_drawable_list_result br = ymd_make_chunk(scene_w, chunk_h);
     if (YETTY_IS_ERR(br)) {
         ymd_doc_destroy(&doc);
         return YETTY_ERR(yetty_ymarkdown_stream_render, "buffer create failed", br);
     }
-    struct yetty_ydraw_draw_list *buf = br.value;
+    struct yetty_ydraw_drawable_list *buf = br.value;
 
     float cursor_y = YMD_MARGIN;
     int chunk_index = 0;
@@ -1516,7 +1516,7 @@ struct yetty_ymarkdown_stream_render_result yetty_ymarkdown_render_streaming(
         bool chunk_has_content = cursor_y > YMD_MARGIN;
         if (chunk_has_content && cursor_y + block_h > chunk_h) {
             struct yetty_ycore_void_result er = on_chunk(user_data, chunk_index, buf);
-            yetty_ydraw_draw_list_destroy(buf);
+            yetty_ydraw_drawable_list_destroy(buf);
             buf = NULL;
             chunks_emitted++;
             if (YETTY_IS_ERR(er)) {
@@ -1524,7 +1524,7 @@ struct yetty_ymarkdown_stream_render_result yetty_ymarkdown_render_streaming(
                 goto cleanup;
             }
             chunk_index++;
-            struct yetty_ydraw_draw_list_result nbr = ymd_make_chunk(scene_w, chunk_h);
+            struct yetty_ydraw_drawable_list_result nbr = ymd_make_chunk(scene_w, chunk_h);
             if (YETTY_IS_ERR(nbr)) {
                 fail = YETTY_ERR(yetty_ycore_void, "ymarkdown stream: chunk buffer alloc", nbr);
                 goto cleanup;
@@ -1553,7 +1553,7 @@ struct yetty_ymarkdown_stream_render_result yetty_ymarkdown_render_streaming(
 
 cleanup:
     if (buf) {
-        yetty_ydraw_draw_list_destroy(buf);
+        yetty_ydraw_drawable_list_destroy(buf);
     }
     ymd_doc_destroy(&doc);
 

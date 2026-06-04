@@ -1,17 +1,17 @@
 /*
- * ygui-ydraw_embed.c — base widget that hosts a yetty_ydraw_draw_list
+ * ygui-ydraw_embed.c — base widget that hosts a yetty_ydraw_drawable_list
  * and paints it translated by the widget's own rect.min.
  *
  * Walks the source buffer, identifies each primitive by type word,
  * copies it into a scratch slot, translates the position fields by
- * the widget's offset, and appends to ctx->ygrid_draw_list.
+ * the widget's offset, and appends to ctx->ygrid_drawable_list.
  */
 
 #include "../internal.h"
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
-#include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -25,7 +25,7 @@
 
 struct [[clang::annotate("class@ygui:ydraw_embed")]] [[clang::annotate(
     "parent@ygui:primitive_widget")]] embed_data {
-    struct yetty_ydraw_draw_list *buf;
+    struct yetty_ydraw_drawable_list *buf;
 };
 
 [[clang::annotate("override@ygui:ydraw_embed:constructor")]]
@@ -58,7 +58,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct embed_data *d = d_dr.value;
     if (d->buf) {
-        yetty_ydraw_draw_list_destroy(d->buf);
+        yetty_ydraw_drawable_list_destroy(d->buf);
     }
     d->buf = NULL;
     return yetty_ygui_super_void(obj,
@@ -117,7 +117,7 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
         }
         return;
     }
-    if (type == YETTY_YDRAW_TYPE_TEXT_SPAN && words >= 4) {
+    if (type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST && words >= 4) {
         float *fprim = (float *)prim;
         fprim[2] += dx;
         fprim[3] += dy;
@@ -153,10 +153,10 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
      * offset from the widget rect. Buffers authored from (0,0) — ymarkdown,
      * ypdf — have scene_min == 0, so this is a no-op for them. */
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    float dx = r.min.x - yetty_ydraw_draw_list_scene_min_x(d->buf);
-    float dy = r.min.y - yetty_ydraw_draw_list_scene_min_y(d->buf);
-    const uint8_t *src = (const uint8_t *)yetty_ydraw_draw_list_data(d->buf);
-    size_t src_size = yetty_ydraw_draw_list_size(d->buf);
+    float dx = r.min.x - yetty_ydraw_drawable_list_scene_min_x(d->buf);
+    float dy = r.min.y - yetty_ydraw_drawable_list_scene_min_y(d->buf);
+    const uint8_t *src = (const uint8_t *)yetty_ydraw_drawable_list_data(d->buf);
+    size_t src_size = yetty_ydraw_drawable_list_size(d->buf);
     if (!src || src_size == 0) {
         return YETTY_OK_VOID();
     }
@@ -198,7 +198,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         memcpy(work, p, s);
         translate_prim((uint32_t *)work, s, dx, dy);
         struct yetty_ydraw_id_result ar =
-            yetty_ydraw_draw_list_add_prim(ctx->ygrid_draw_list, work, s);
+            yetty_ydraw_drawable_list_add_prim(ctx->ygrid_drawable_list, work, s);
         if (YETTY_IS_ERR(ar)) {
             free(heap);
             return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: add_prim", ar);
@@ -217,7 +217,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_ygui_object *obj,
-                                                                 struct yetty_ydraw_draw_list *buf)
+                                                                 struct yetty_ydraw_drawable_list *buf)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "ydraw_embed_set_buffer: NULL");
@@ -227,7 +227,7 @@ struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_yg
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_ydraw_embed_set_buffer: data_get");
     struct embed_data *d = d_dr.value;
     if (d->buf && d->buf != buf) {
-        yetty_ydraw_draw_list_destroy(d->buf);
+        yetty_ydraw_drawable_list_destroy(d->buf);
     }
     d->buf = buf;
     return yetty_ygui_object_set_dirty(obj);

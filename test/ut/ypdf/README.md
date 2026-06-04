@@ -40,7 +40,7 @@ increasing strictness:
 2. **Per-line endpoints** — leftmost-x and rightmost-x for each
    baseline match `pdf-sample-expected-lines.h`. Catches whole-line
    shifts and cumulative drift.
-3. **Per-character cursor** — for every TEXT_SPAN, walk char-by-char
+3. **Per-character cursor** — for every TEXT_DRAWABLE_LIST, walk char-by-char
    accumulating the patched-TTF advance + Tc/Tw spacing the producer
    baked into the prim, then verify each computed `(x, y, c)` lands
    within ±3 px of *some* mutool-reported char with the same codepoint

@@ -8,7 +8,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/dropdown.h>
@@ -130,7 +130,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                       .center_y = y + h * 0.5f,
                                       .half_width = w * 0.5f,
                                       .half_height = h * 0.5f};
-        return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u, 0.0f,
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
                                                      &geom);
     }
     if (radius > w * 0.5f) {
@@ -149,7 +149,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
                                                          0.0f, &geom);
 }
 
@@ -160,7 +160,7 @@ static struct yetty_ycore_void_result dropdown_paint(struct yetty_yclass_ctx *yc
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "dropdown_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =
@@ -183,13 +183,13 @@ static struct yetty_ycore_void_result dropdown_paint(struct yetty_yclass_ctx *yc
     float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
     struct yetty_ycore_buffer tb = {
         .data = (uint8_t *)label, .capacity = strlen(label), .size = strlen(label)};
-    rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, r.min.x + 12.0f, ty, &tb, fs,
+    rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + 12.0f, ty, &tb, fs,
                                         COLOR_TEXT, 0, -1, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "dropdown_paint: label");
     /* Down chevron glyph at right edge. */
     const char *chev = "v";
     struct yetty_ycore_buffer cb = {.data = (uint8_t *)chev, .capacity = 1, .size = 1};
-    rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, r.max.x - 16.0f, ty, &cb, fs,
+    rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.max.x - 16.0f, ty, &cb, fs,
                                         COLOR_CHEVRON, 0, -1, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "dropdown_paint: chev");
     return YETTY_OK_VOID();

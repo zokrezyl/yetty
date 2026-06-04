@@ -1,6 +1,6 @@
 // YDraw Complex Primitive - base interface for yplot, yimage, etc.
 //
-// Complex primitives:
+// Composites:
 // - Embed this base struct as FIRST member
 // - Implement ops interface
 // - Have their own gpu_resource_set (collected as children of ydraw layer)

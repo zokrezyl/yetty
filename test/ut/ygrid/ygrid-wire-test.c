@@ -5,7 +5,7 @@
  *
  * The ygrid figure is created in "headless" mode: passing a NULL
  * `yetty_context` makes yetty_ygrid_create skip every GPU-touching init
- * step (no shader load, no binder). The entity tree, the flyweight
+ * step (no shader load, no binder). The entity tree, the drawable-list entry
  * registry, the cell bucketing, and the process_bytes path all still
  * work — that's the surface this test exercises.
  *
@@ -17,7 +17,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/ygrid/ygrid.h>
@@ -56,9 +56,9 @@ static struct yetty_ygrid_grid *make_headless_grid(float w, float h)
     return r.value;
 }
 
-static struct yetty_ydraw_draw_list *make_buf(void)
+static struct yetty_ydraw_drawable_list *make_buf(void)
 {
-    struct yetty_ydraw_draw_list_result r = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result r = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "buffer_create failed\n");
         yetty_ycore_error_destroy(r.error);
@@ -67,11 +67,11 @@ static struct yetty_ydraw_draw_list *make_buf(void)
     return r.value;
 }
 
-static void feed_grid(struct yetty_ygrid_grid *grid, const struct yetty_ydraw_draw_list *buf)
+static void feed_grid(struct yetty_ygrid_grid *grid, const struct yetty_ydraw_drawable_list *buf)
 {
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(grid);
-    const uint8_t *bytes = (const uint8_t *)yetty_ydraw_draw_list_data(buf);
-    size_t len = yetty_ydraw_draw_list_size(buf);
+    const uint8_t *bytes = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
+    size_t len = yetty_ydraw_drawable_list_size(buf);
     struct yetty_ycore_void_result r =
         yetty_yfigure_process_bytes(NULL, ((struct yetty_yclass_object *)(fig) - 1), bytes, len);
     if (YETTY_IS_ERR(r)) {
@@ -93,7 +93,7 @@ static void destroy_grid(struct yetty_ygrid_grid *grid)
 }
 
 /* Append a small SDF box record to buf. Coordinates are figure-local. */
-static void add_box(struct yetty_ydraw_draw_list *buf, float x, float y, float w, float h,
+static void add_box(struct yetty_ydraw_drawable_list *buf, float x, float y, float w, float h,
                     uint32_t color)
 {
     struct yetty_ysdf_box geom = {
@@ -103,7 +103,7 @@ static void add_box(struct yetty_ydraw_draw_list *buf, float x, float y, float w
         .half_height = h * 0.5f,
         .corner_radius = 0.0f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_box(buf, /*id=*/0, /*z_order=*/0, color, /*stroke=*/0,
+    yetty_ydraw_drawable_list_add_cmd_add_box(buf, /*id=*/0, /*z_order=*/0, color, /*stroke=*/0,
                                           /*stroke_w=*/0.0f, &geom);
 }
 
@@ -147,10 +147,10 @@ static void test_add_one_box_at_root(void)
     g_tests++;
     struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
+    struct yetty_ydraw_drawable_list *buf = make_buf();
     add_box(buf, 10, 10, 20, 20, 0xff0000ffu);
     feed_grid(g, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_grid(g);
     /* One live prim attached to the root entity (slot 0). */
@@ -193,18 +193,18 @@ static void test_cmd_group_one_entity(void)
     g_tests++;
     struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    struct yetty_ydraw_id_result m = yetty_ydraw_draw_list_begin_group(buf, /*group_id=*/42u);
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    struct yetty_ydraw_id_result m = yetty_ydraw_drawable_list_begin_group(buf, /*group_id=*/42u);
     if (YETTY_IS_ERR(m)) {
         fprintf(stderr, "begin_group failed\n");
         yetty_ycore_error_destroy(m.error);
         exit(3);
     }
     add_box(buf, 5, 5, 10, 10, 0xffabcdef);
-    yetty_ydraw_draw_list_end_group(buf, m.value);
+    yetty_ydraw_drawable_list_end_group(buf, m.value);
 
     feed_grid(g, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_grid(g);
     const char *expected =
@@ -243,17 +243,17 @@ static void test_nested_cmd_group(void)
     g_tests++;
     struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    struct yetty_ydraw_id_result outer = yetty_ydraw_draw_list_begin_group(buf, 42u);
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    struct yetty_ydraw_id_result outer = yetty_ydraw_drawable_list_begin_group(buf, 42u);
     add_box(buf, 0, 0, 10, 10, 0xff000000); /* in outer scope */
-    struct yetty_ydraw_id_result inner = yetty_ydraw_draw_list_begin_group(buf, 100u);
+    struct yetty_ydraw_id_result inner = yetty_ydraw_drawable_list_begin_group(buf, 100u);
     add_box(buf, 5, 5, 5, 5, 0xff111111); /* in inner scope */
     add_box(buf, 6, 6, 1, 1, 0xff222222); /* second prim in inner */
-    yetty_ydraw_draw_list_end_group(buf, inner.value);
-    yetty_ydraw_draw_list_end_group(buf, outer.value);
+    yetty_ydraw_drawable_list_end_group(buf, inner.value);
+    yetty_ydraw_drawable_list_end_group(buf, outer.value);
 
     feed_grid(g, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_grid(g);
     /* Three live prims: 1 in outer, 2 in inner. Two entities: outer
@@ -300,21 +300,21 @@ static void test_reopen_cmd_group_replaces_prims(void)
     struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
 
     /* First emission: CMD_GROUP(42) with 2 boxes. */
-    struct yetty_ydraw_draw_list *buf1 = make_buf();
-    struct yetty_ydraw_id_result m1 = yetty_ydraw_draw_list_begin_group(buf1, 42u);
+    struct yetty_ydraw_drawable_list *buf1 = make_buf();
+    struct yetty_ydraw_id_result m1 = yetty_ydraw_drawable_list_begin_group(buf1, 42u);
     add_box(buf1, 0, 0, 10, 10, 0xff111111);
     add_box(buf1, 10, 0, 10, 10, 0xff222222);
-    yetty_ydraw_draw_list_end_group(buf1, m1.value);
+    yetty_ydraw_drawable_list_end_group(buf1, m1.value);
     feed_grid(g, buf1);
-    yetty_ydraw_draw_list_destroy(buf1);
+    yetty_ydraw_drawable_list_destroy(buf1);
 
     /* Second emission: CMD_GROUP(42) again, with 1 box this time. */
-    struct yetty_ydraw_draw_list *buf2 = make_buf();
-    struct yetty_ydraw_id_result m2 = yetty_ydraw_draw_list_begin_group(buf2, 42u);
+    struct yetty_ydraw_drawable_list *buf2 = make_buf();
+    struct yetty_ydraw_id_result m2 = yetty_ydraw_drawable_list_begin_group(buf2, 42u);
     add_box(buf2, 50, 50, 5, 5, 0xff333333);
-    yetty_ydraw_draw_list_end_group(buf2, m2.value);
+    yetty_ydraw_drawable_list_end_group(buf2, m2.value);
     feed_grid(g, buf2);
-    yetty_ydraw_draw_list_destroy(buf2);
+    yetty_ydraw_drawable_list_destroy(buf2);
 
     char *dump = dump_grid(g);
     /* The entity 42 should now own only 1 live prim. The two old prims
@@ -346,17 +346,17 @@ static void test_cmd_delete_drops_entity(void)
     g_tests++;
     struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
 
-    struct yetty_ydraw_draw_list *buf1 = make_buf();
-    struct yetty_ydraw_id_result m1 = yetty_ydraw_draw_list_begin_group(buf1, 42u);
+    struct yetty_ydraw_drawable_list *buf1 = make_buf();
+    struct yetty_ydraw_id_result m1 = yetty_ydraw_drawable_list_begin_group(buf1, 42u);
     add_box(buf1, 0, 0, 10, 10, 0xff111111);
-    yetty_ydraw_draw_list_end_group(buf1, m1.value);
+    yetty_ydraw_drawable_list_end_group(buf1, m1.value);
     feed_grid(g, buf1);
-    yetty_ydraw_draw_list_destroy(buf1);
+    yetty_ydraw_drawable_list_destroy(buf1);
 
-    struct yetty_ydraw_draw_list *buf2 = make_buf();
-    yetty_ydraw_draw_list_add_cmd_delete(buf2, 42u);
+    struct yetty_ydraw_drawable_list *buf2 = make_buf();
+    yetty_ydraw_drawable_list_add_cmd_delete(buf2, 42u);
     feed_grid(g, buf2);
-    yetty_ydraw_draw_list_destroy(buf2);
+    yetty_ydraw_drawable_list_destroy(buf2);
 
     char *dump = dump_grid(g);
     /* Live prim count drops to 0; entity 42 must NOT appear in entities. */
@@ -381,17 +381,17 @@ static void test_cmd_zero_clears(void)
     g_tests++;
     struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
 
-    struct yetty_ydraw_draw_list *buf1 = make_buf();
-    struct yetty_ydraw_id_result m1 = yetty_ydraw_draw_list_begin_group(buf1, 42u);
+    struct yetty_ydraw_drawable_list *buf1 = make_buf();
+    struct yetty_ydraw_id_result m1 = yetty_ydraw_drawable_list_begin_group(buf1, 42u);
     add_box(buf1, 0, 0, 10, 10, 0xffcafe00);
-    yetty_ydraw_draw_list_end_group(buf1, m1.value);
+    yetty_ydraw_drawable_list_end_group(buf1, m1.value);
     feed_grid(g, buf1);
-    yetty_ydraw_draw_list_destroy(buf1);
+    yetty_ydraw_drawable_list_destroy(buf1);
 
-    struct yetty_ydraw_draw_list *buf2 = make_buf();
-    yetty_ydraw_draw_list_add_cmd_zero(buf2);
+    struct yetty_ydraw_drawable_list *buf2 = make_buf();
+    yetty_ydraw_drawable_list_add_cmd_zero(buf2);
     feed_grid(g, buf2);
-    yetty_ydraw_draw_list_destroy(buf2);
+    yetty_ydraw_drawable_list_destroy(buf2);
 
     char *dump = dump_grid(g);
     const char *expected =

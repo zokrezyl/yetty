@@ -10,7 +10,7 @@
 
 #include <yetty/ylottie/ylottie.h>
 
-struct yetty_ydraw_draw_list_result yetty_ycat_handler_lottie(const uint8_t *bytes, size_t len,
+struct yetty_ydraw_drawable_list_result yetty_ycat_handler_lottie(const uint8_t *bytes, size_t len,
                                                               const char *path_hint,
                                                               const struct yetty_ycat_config
                                                                   *config)
@@ -28,7 +28,7 @@ struct yetty_ydraw_draw_list_result yetty_ycat_handler_lottie(const uint8_t *byt
     struct yetty_ylottie_render_result r =
         yetty_ylottie_render((const char *)bytes, len, NULL, 0, &lcfg);
     if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ydraw_draw_list, r.error.msg);
+        return YETTY_ERR(yetty_ydraw_drawable_list, r.error.msg);
     }
-    return YETTY_OK(yetty_ydraw_draw_list, r.value.buffer);
+    return YETTY_OK(yetty_ydraw_drawable_list, r.value.buffer);
 }

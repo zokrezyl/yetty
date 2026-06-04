@@ -16,7 +16,7 @@
 
 #include <yetty/ygui/primitive-widget.h>
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/tooltip.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,7 +73,7 @@ static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *ycl
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "tooltip_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result td_dr =
@@ -90,7 +90,7 @@ static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *ycl
         .capacity = strlen(td->text),
         .size = strlen(td->text),
     };
-    return yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, r.min.x + 4.0f,
+    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + 4.0f,
                                           r.min.y + font_size + 4.0f, &text_buf, font_size,
                                           0xFFE4E5E0u, /*layer=*/0,
                                           /*font_id=*/-1, /*rotation=*/0.0f);

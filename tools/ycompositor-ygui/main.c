@@ -9,7 +9,7 @@
  *     render target + compositor render loop) but instead of a hand-
  *     built ygrid full of SDF primitives spins up a headless ygui
  *     engine, builds a tiny widget tree, and pushes the engine's
- *     draw_list bytes through root container_process_records. On every
+ *     drawable_list bytes through root container_process_records. On every
  *     RESIZE event the surface is reconfigured, the engine's display
  *     pixel size is updated, and the ygui scene is re-emitted so the
  *     compositor's per-widget figures track the new geometry.
@@ -40,7 +40,7 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
@@ -96,7 +96,7 @@ struct ycomp_ygui_app {
      * so the layout pass stretches it to the viewport automatically. */
     struct yetty_ygui_object  *win;
     /* Default font handed to the compositor; every per-group ygrid the
-     * compositor creates borrows this at slot 0 so TEXT_SPAN records
+     * compositor creates borrows this at slot 0 so TEXT_DRAWABLE_LIST records
      * (button labels, etc.) expand into renderable glyphs. */
     struct yetty_yfont_font   *font;
     /* ygrid factory bundle — borrowed by every ygrid the registry mints;
@@ -269,7 +269,7 @@ static void build_scene(struct ycomp_ygui_app *app)
  * worker startup and from every RESIZE event so the compositor's
  * per-widget figures track the live surface geometry.
  *
- * engine_rebuild itself doesn't clear the draw_list or emit CMD_ZERO
+ * engine_rebuild itself doesn't clear the drawable_list or emit CMD_ZERO
  * — that's engine_render's job, and engine_render also tries to ship
  * over OSC which we don't want in-process. So we wipe + lead with
  * CMD_ZERO manually here. */
@@ -668,10 +668,10 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
-    /* Bundle the font into the factory-args struct; no complex-prim
+    /* Bundle the font into the factory-args struct; no composite
      * factory at this layer — tool is a minimal POC. */
     app->figure_args.default_font = app->font;
-    app->figure_args.figure_factory = NULL;
+    app->figure_args.composite_factory = NULL;
     struct yetty_ycore_void_result rf =
         yetty_ygrid_register_factory(app->registry, &app->figure_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ygrid_register_factory failed");

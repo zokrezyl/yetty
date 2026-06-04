@@ -7,8 +7,8 @@
 #include <yetty/yface/yface.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
-#include <yetty/ydraw-core/figure-types.h>
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/ydraw/canvas.h>
 #include <yetty/ydraw/scrolling-canvas.h>
 #include <yetty/yrender/font-dispatcher.h>
@@ -99,7 +99,7 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
 struct yetty_yterm_ydraw_layer {
     struct yetty_yrender_terminal_layer base;
     /* Initial cell size captured at creation — used to derive the cumulative
-   * cell-zoom factor and push it to complex-prim factories (yplot, …) so
+   * cell-zoom factor and push it to composite factories (yplot, …) so
    * their shaders can apply the "intrusive" zoom the same way they apply
    * the non-intrusive visual zoom. */
     struct yetty_ycore_pixel_size initial_cell_size;
@@ -249,9 +249,9 @@ static struct yetty_ycore_void_result ydraw_layer_set_visual_zoom(
      * ydraw-layer shader. Push the zoom into every concrete factory's shared
      * uniforms so each type's shader can apply the same transform. */
     if (layer->canvas) {
-        struct yetty_ydraw_complex_drawable_factory *f =
-            layer->canvas->ops->get_figure_factory(layer->canvas);
-        yetty_ydraw_complex_drawable_factory_set_visual_zoom(f, scale, off_x, off_y);
+        struct yetty_ydraw_composite_factory *f =
+            layer->canvas->ops->get_composite_factory(layer->canvas);
+        yetty_ydraw_composite_factory_set_visual_zoom(f, scale, off_x, off_y);
     }
     return YETTY_OK_VOID();
 }
@@ -568,9 +568,9 @@ static struct yetty_ycore_void_result ydraw_layer_resize_grid(
     float base_h = layer->initial_cell_size.height;
     float cz = (base_h > 0.0f) ? (cell_size.height / base_h) : 1.0f;
     set_cell_zoom(&layer->rs, cz, 0.0f, 0.0f);
-    struct yetty_ydraw_complex_drawable_factory *ff =
-        layer->canvas->ops->get_figure_factory(layer->canvas);
-    yetty_ydraw_complex_drawable_factory_set_cell_zoom(ff, cz, 0.0f, 0.0f);
+    struct yetty_ydraw_composite_factory *ff =
+        layer->canvas->ops->get_composite_factory(layer->canvas);
+    yetty_ydraw_composite_factory_set_cell_zoom(ff, cz, 0.0f, 0.0f);
 
     self->dirty = 1;
 
@@ -1010,7 +1010,7 @@ static struct yetty_ycore_void_result ydraw_layer_set_selection(
 /*=============================================================================
  * Selection text extraction — reconstruct UTF-8 from ydraw glyph prims
  *
- * The ydraw canvas stores text as flyweight GLYPH drawables — each one
+ * The ydraw canvas stores text as drawable-list entry GLYPH drawables — each one
  * is a single glyph at a pixel position, with the font atlas index (and
  * canvas font slot) packed in. To produce plain text for the clipboard we:
  *   1. walk every glyph in the canvas via for_each_glyph

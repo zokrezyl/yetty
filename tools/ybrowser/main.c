@@ -27,7 +27,7 @@
 
 #include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
@@ -401,24 +401,24 @@ int main(int argc, char **argv)
 		(void)yetty_ylexbor_relayout(yl);
 	}
 
-	struct yetty_ydraw_draw_list_result br =
-		yetty_ydraw_draw_list_config_buffer_create(NULL);
+	struct yetty_ydraw_drawable_list_result br =
+		yetty_ydraw_drawable_list_config_buffer_create(NULL);
 	if (YETTY_IS_ERR(br)) {
 		yetty_ylexbor_destroy(yl); free(html); return 1;
 	}
-	struct yetty_ydraw_draw_list *buf = br.value;
+	struct yetty_ydraw_drawable_list *buf = br.value;
 	struct yetty_ycore_void_result rr = yetty_ylexbor_render(yl, buf);
 	if (YETTY_IS_ERR(rr)) {
 		fprintf(stderr, "render: %s\n", rr.error.msg);
-		yetty_ydraw_draw_list_destroy(buf);
+		yetty_ydraw_drawable_list_destroy(buf);
 		yetty_ylexbor_destroy(yl); free(html); return 1;
 	}
 	const uint8_t *bytes = NULL;
-	size_t blen = yetty_ydraw_draw_list_serialize(buf, &bytes);
+	size_t blen = yetty_ydraw_drawable_list_serialize(buf, &bytes);
 	if (osc) (void)emit_bin_osc(bytes, blen);
 	else     fwrite(bytes, 1, blen, stdout);
 	fflush(stdout);
-	yetty_ydraw_draw_list_destroy(buf);
+	yetty_ydraw_drawable_list_destroy(buf);
 
 	yetty_ylexbor_destroy(yl);
 	free(html);

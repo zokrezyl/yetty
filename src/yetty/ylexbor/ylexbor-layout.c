@@ -7,7 +7,7 @@
  * is a follow-up). Each laid-out line replaces its source
  * YL_BOX_INLINE_TEXT box's geometry; if a single text box wraps into N
  * lines we *split* it into N inline-text boxes so the paint pass can
- * emit one TEXT_SPAN per line.
+ * emit one TEXT_DRAWABLE_LIST per line.
  *
  * Margin collapsing: vertical margins between adjacent block siblings
  * collapse to the larger of the two. Padding / horizontal margins are

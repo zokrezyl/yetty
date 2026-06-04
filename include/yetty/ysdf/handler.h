@@ -1,7 +1,7 @@
 // YSDF primitive handler for buffer iteration
 #pragma once
 
-#include <yetty/ydraw-core/flyweight.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ysdf/types.gen.h>
 
 #ifdef __cplusplus
@@ -27,13 +27,13 @@ static inline struct rectangle_result yetty_ysdf_drawable_aabb(const uint32_t *p
 }
 
 // Base ops for SDF primitives (size, aabb only)
-static const struct yetty_ydraw_drawable_base_ops yetty_ysdf_drawable_base_ops = {
+static const struct yetty_ydraw_drawable_list_entry_ops yetty_ysdf_drawable_base_ops = {
     .size = yetty_ysdf_drawable_size,
     .aabb = yetty_ysdf_drawable_aabb,
 };
 
 // Extended ops for SDF primitives (includes base + destroy + get_gpu_resource_set)
-static const struct yetty_ydraw_drawable_ops yetty_ysdf_drawable_ops = {
+static const struct yetty_ydraw_primitive_ops yetty_ysdf_drawable_ops = {
     .base =
         {
             .size = yetty_ysdf_drawable_size,
@@ -43,17 +43,17 @@ static const struct yetty_ydraw_drawable_ops yetty_ysdf_drawable_ops = {
     .get_gpu_resource_set = NULL, // SDF prims rendered by main shader
 };
 
-// Handler returns base ops (for flyweight registry).
+// Handler returns base ops (for drawable-list registry).
 // yetty_ysdf_primitive_size returns 0 for any type id not registered in
 // the SDF YAML, so the size lookup is itself the SDF discriminator —
 // no hardcoded range gate.
-static inline struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ysdf_handler(
+static inline struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ysdf_handler(
     uint32_t drawable_type)
 {
     if (yetty_ysdf_primitive_size(drawable_type) > 0) {
-        return YETTY_OK(yetty_ydraw_drawable_base_ops_ptr, &yetty_ysdf_drawable_base_ops);
+        return YETTY_OK(yetty_ydraw_drawable_list_entry_ops_ptr, &yetty_ysdf_drawable_base_ops);
     }
-    return YETTY_ERR(yetty_ydraw_drawable_base_ops_ptr, "not an SDF type");
+    return YETTY_ERR(yetty_ydraw_drawable_list_entry_ops_ptr, "not an SDF type");
 }
 
 #ifdef __cplusplus

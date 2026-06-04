@@ -8,7 +8,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/checkbox.h>
@@ -100,7 +100,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u, 0.0f,
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
                                                      &geom);
     }
     struct yetty_ysdf_rounded_box geom = {
@@ -113,7 +113,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
                                                          0.0f, &geom);
 }
 
@@ -124,7 +124,7 @@ static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_ctx *yc
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "checkbox_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =
@@ -155,7 +155,7 @@ static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_ctx *yc
         float ty = r.min.y + (h + font_size) * 0.5f - 2.0f;
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)d->label, .capacity = strlen(d->label), .size = strlen(d->label)};
-        rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, tx, ty, &tb, font_size,
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, tx, ty, &tb, font_size,
                                             COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "checkbox_paint: label");
     }

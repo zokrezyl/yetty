@@ -32,7 +32,7 @@
 #include <yetty/yclass/rpc-dcs-server.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yterm/terminal.h>
@@ -158,7 +158,7 @@ struct yetty_yterm_terminal {
      * One instance per terminal — every ygrid the root container mints
      * borrows the same pointer via figure_args (below) so they all share
      * the same per-type pipeline cache. */
-    struct yetty_ydraw_complex_drawable_factory *figure_factory;
+    struct yetty_ydraw_composite_factory *composite_factory;
 
     /* Bundle handed as registry user-data on every kind ygrid handles.
      * Lives on the terminal because the registry stores a pointer to it,
@@ -1412,7 +1412,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * via the comp_sm_shim below.
      *
      * Default MSDF font: ygui-emitting subprocesses (ygreeter, ytop, …)
-     * ship widget labels as TEXT_SPAN records; each ygrid figure the
+     * ship widget labels as TEXT_DRAWABLE_LIST records; each ygrid figure the
      * container mints (KIND_YGRID factory) needs a font at slot 0 to
      * expand them into renderable glyphs. Font load failure is
      * non-fatal — labels won't render, but the terminal stays up. */
@@ -1448,18 +1448,18 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * concrete factory (yplot_factory_create etc.) builds its own
      * pipeline lazily on the first create_instance call. */
     {
-        struct yetty_ydraw_complex_drawable_factory_ptr_result ffr =
-            yetty_ydraw_complex_drawable_factory_create(
+        struct yetty_ydraw_composite_factory_ptr_result ffr =
+            yetty_ydraw_composite_factory_create(
                 yetty_context->runtime->gpu.device, yetty_context->runtime->gpu.queue,
                 yetty_context->runtime->gpu.surface_format, yetty_context->runtime->gpu.allocator,
                 yetty_context->event_loop);
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ffr,
-                            "terminal_create: raw_figure_factory create");
-        terminal->figure_factory = ffr.value;
+                            "terminal_create: raw_composite_factory create");
+        terminal->composite_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_complex_drawable_factory_register(terminal->figure_factory, yplot_f);
+                yetty_ydraw_composite_factory_register(terminal->composite_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -1467,14 +1467,14 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_complex_drawable_factory_register(terminal->figure_factory, yimage_f);
+                yetty_ydraw_composite_factory_register(terminal->composite_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
         }
     }
     terminal->figure_args.default_font = terminal->compositor_font;
-    terminal->figure_args.figure_factory = terminal->figure_factory;
+    terminal->figure_args.composite_factory = terminal->composite_factory;
 
     struct yetty_yfigure_registry_ptr_result reg_res = yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, reg_res,
@@ -1486,7 +1486,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rf, "terminal_create: ygrid register_factory");
         /* Producer-widget kinds reuse the ygrid factory today (same SDF /
          * glyph prim stream) but ship under distinct kind codes on the
-         * wire — see yfigure/wire.h. The complex-prim factory in figure_args
+         * wire — see yfigure/wire.h. The composite factory in figure_args
          * lets each ygrid render yplot/yimage/etc. instances embedded in
          * the prim stream. */
         static const uint32_t producer_kinds[] = {
@@ -1694,12 +1694,12 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
         }
         terminal->figure_registry = NULL;
     }
-    /* The complex-prim factory outlives the registry — every ygrid the
+    /* The composite factory outlives the registry — every ygrid the
      * registry minted borrowed our factory pointer, and they must be
      * gone (via root_container destroy above) before we tear it down. */
-    if (terminal->figure_factory) {
-        yetty_ydraw_complex_drawable_factory_destroy(terminal->figure_factory);
-        terminal->figure_factory = NULL;
+    if (terminal->composite_factory) {
+        yetty_ydraw_composite_factory_destroy(terminal->composite_factory);
+        terminal->composite_factory = NULL;
     }
     if (terminal->compositor_font) {
         terminal->compositor_font->ops->destroy(terminal->compositor_font);

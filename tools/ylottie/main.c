@@ -20,7 +20,7 @@
 #include <yetty/yplatform/time.h> /* yetty_yplatform_ytime_sleep_ms */
 #include <yetty/ycore/util.h>     /* yetty_ycore_read_file */
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_* */
 #include <yetty/ylottie/ylottie.h>
 
@@ -75,17 +75,17 @@ static int render_and_emit(const struct yetty_ylottie_animation *anim, float fra
         fprintf(stderr, "yetty-ylottie: render failed: %s\n", rr.error.msg);
         return -1;
     }
-    struct yetty_ydraw_draw_list *buf = rr.value.buffer;
+    struct yetty_ydraw_drawable_list *buf = rr.value.buffer;
 
     if (do_clear) {
         emit_clear();
     }
 
     const uint8_t *raw = NULL;
-    size_t raw_size = yetty_ydraw_draw_list_serialize(buf, &raw);
+    size_t raw_size = yetty_ydraw_drawable_list_serialize(buf, &raw);
     if (raw_size == 0 || !raw) {
         fprintf(stderr, "yetty-ylottie: serialize failed\n");
-        yetty_ydraw_draw_list_destroy(buf);
+        yetty_ydraw_drawable_list_destroy(buf);
         return -1;
     }
     struct yetty_yface_bin_meta meta = {
@@ -99,7 +99,7 @@ static int render_and_emit(const struct yetty_ylottie_animation *anim, float fra
     struct yetty_ycore_void_result er =
         yetty_yface_emit_to_fd(fileno(stdout), YETTY_OSC_YDRAW_BIN,
                                /*compressed=*/1, &meta, sizeof(meta), raw, raw_size);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
     if (YETTY_IS_ERR(er)) {
         fprintf(stderr, "yetty-ylottie: yface_emit: %s\n", er.error.msg);
         return -1;

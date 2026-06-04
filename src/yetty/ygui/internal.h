@@ -205,10 +205,10 @@ struct yetty_ygui_framework {
     /* Reusable per-emit buffers. Cleared at the start of each emit. */
     struct yetty_ycore_buffer container_records;
     struct yetty_ycore_buffer figure_bodies;
-    /* Shared ydraw draw_list — primitive widgets append SDF / glyph
+    /* Shared ydraw drawable_list — primitive widgets append SDF / glyph
      * records here. Lazily created on first emit; reused across
      * frames. */
-    struct yetty_ydraw_draw_list *ygrid_draw_list;
+    struct yetty_ydraw_drawable_list *ygrid_drawable_list;
 
     /* Byte-stream input decoder state. */
     struct yetty_ygui_input_state input;

@@ -1,7 +1,7 @@
 # ydiagram — Mermaid (and later DOT) → ydraw buffer of MSD/MSDF primitives.
 #
 # Pure C; depends on ycore (result/types), ydraw-core (buffer + text/font
-# flyweights), and ysdf (SDF shape emitters). No platform-specific deps.
+# drawable-list entries), and ysdf (SDF shape emitters). No platform-specific deps.
 
 add_library(yetty_ydiagram STATIC
     graph-ir.c

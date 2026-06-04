@@ -26,7 +26,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ydiagram/graph-ir.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -322,7 +322,7 @@ static struct yetty_ycore_void_result seq_parse(struct seq *s, const char *input
  *===========================================================================*/
 
 struct seq_render {
-    struct yetty_ydraw_draw_list *buf;
+    struct yetty_ydraw_drawable_list *buf;
     uint32_t z;
 };
 
@@ -333,14 +333,14 @@ static void seq_text(struct seq_render *r, float x, float y, const char *t, floa
     }
     size_t n = strlen(t);
     struct yetty_ycore_buffer view = {.data = (uint8_t *)(uintptr_t)t, .capacity = n, .size = n};
-    (void)yetty_ydraw_draw_list_add_text(r->buf, x, y, &view, fs, color, r->z++, -1, 0.0f);
+    (void)yetty_ydraw_drawable_list_add_text(r->buf, x, y, &view, fs, color, r->z++, -1, 0.0f);
 }
 
 static void seq_seg(struct seq_render *r, float x0, float y0, float x1, float y1, uint32_t color,
                     float w)
 {
     struct yetty_ysdf_segment g = {.start_x = x0, .start_y = y0, .end_x = x1, .end_y = y1};
-    yetty_ydraw_draw_list_add_cmd_add_segment(r->buf, 0, r->z++, 0, color, w, &g);
+    yetty_ydraw_drawable_list_add_cmd_add_segment(r->buf, 0, r->z++, 0, color, w, &g);
 }
 
 static void seq_dashed(struct seq_render *r, float x0, float y0, float x1, float y1, uint32_t color,
@@ -363,7 +363,7 @@ static void seq_dashed(struct seq_render *r, float x0, float y0, float x1, float
                                        .start_y = y0 + uy * pos,
                                        .end_x = x0 + ux * end,
                                        .end_y = y0 + uy * end};
-        yetty_ydraw_draw_list_add_cmd_add_segment(r->buf, 0, z, 0, color, w, &g);
+        yetty_ydraw_drawable_list_add_cmd_add_segment(r->buf, 0, z, 0, color, w, &g);
     }
     r->z = z + 1;
 }
@@ -377,7 +377,7 @@ static void seq_arrowhead(struct seq_render *r, float x, float y, float dir, uin
         .vertex_b_x = ax,       .vertex_b_y = y - size * 0.45f,
         .vertex_c_x = ax,       .vertex_c_y = y + size * 0.45f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_triangle(r->buf, 0, r->z++, color, 0, 0.0f, &g);
+    yetty_ydraw_drawable_list_add_cmd_add_triangle(r->buf, 0, r->z++, color, 0, 0.0f, &g);
 }
 
 static void seq_box(struct seq_render *r, float cx, float cy, float w, float h, uint32_t fill,
@@ -388,7 +388,7 @@ static void seq_box(struct seq_render *r, float cx, float cy, float w, float h, 
                                .half_width = w * 0.5f,
                                .half_height = h * 0.5f,
                                .corner_radius = radius};
-    yetty_ydraw_draw_list_add_cmd_add_box(r->buf, 0, r->z++, fill, stroke, sw, &g);
+    yetty_ydraw_drawable_list_add_cmd_add_box(r->buf, 0, r->z++, fill, stroke, sw, &g);
 }
 
 struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
@@ -452,9 +452,9 @@ struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
     float life_bottom = y + 6.0f;
     float total_h = life_bottom + (float)SEQ_HEADER_H + (float)SEQ_MARGIN;
 
-    struct yetty_ydraw_draw_list_config cfg = {
+    struct yetty_ydraw_drawable_list_config cfg = {
         .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = total_w, .scene_max_y = total_h};
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
         seq_destroy(&s);
         return YETTY_ERR(yetty_ydiagram_seq_buffer, "sequence_render: buffer create failed", br);
@@ -462,9 +462,9 @@ struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
 
     struct seq_render r = {.buf = br.value, .z = 0};
     if (clear_canvas) {
-        (void)yetty_ydraw_draw_list_add_cmd_zero(br.value);
+        (void)yetty_ydraw_drawable_list_add_cmd_zero(br.value);
     }
-    yetty_ydraw_draw_list_set_scene_bounds(br.value, 0.0f, 0.0f, total_w, total_h);
+    yetty_ydraw_drawable_list_set_scene_bounds(br.value, 0.0f, 0.0f, total_w, total_h);
 
     /* Lifelines (under everything). */
     for (size_t i = 0; i < s.part_count; i++) {

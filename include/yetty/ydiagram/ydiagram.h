@@ -6,7 +6,7 @@
  *
  * One-shot API: hand over a UTF-8 input string, get back a fresh ydraw
  * buffer populated with MSD shape primitives and MSDF text spans. The
- * caller owns the buffer and frees it via yetty_ydraw_draw_list_destroy.
+ * caller owns the buffer and frees it via yetty_ydraw_drawable_list_destroy.
  *
  * For finer control (custom layout params, custom rendering options),
  * compose the lower-level modules directly:
@@ -20,7 +20,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ydiagram/layout.h>
 #include <yetty/ydiagram/renderer.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,7 +28,7 @@ extern "C" {
 
 /* Result type for the high-level entry. On success, .value is a freshly
  * allocated ydraw buffer the caller owns. */
-YETTY_YRESULT_DECLARE(yetty_ydiagram_buffer, struct yetty_ydraw_draw_list *);
+YETTY_YRESULT_DECLARE(yetty_ydiagram_buffer, struct yetty_ydraw_drawable_list *);
 
 /* High-level: parse Mermaid text, lay it out, emit MSD/MSDF primitives.
  * Returns an owned buffer. Uses default layout/render options and a crude

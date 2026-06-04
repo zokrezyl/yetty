@@ -11,7 +11,7 @@
  *   - CSS parsing + selector matching + computed style (via lexbor)
  *   - Naive block-flow layout: vertical stacking of block-level elements,
  *     line-by-line text wrapping inside inline content
- *   - Painting: emit ydraw primitives (boxes + TEXT_SPAN) into a buffer
+ *   - Painting: emit ydraw primitives (boxes + TEXT_DRAWABLE_LIST) into a buffer
  *
  * Explicitly NOT implemented (TODO, separate work):
  *   - Float layout
@@ -36,7 +36,7 @@
 
 #include <yetty/ycore/result.h>
 
-struct yetty_ydraw_draw_list;
+struct yetty_ydraw_drawable_list;
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,7 +72,7 @@ struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *
 /* Drain the laid-out document into a ydraw buffer. Caller owns buf;
  * this function appends primitives. */
 struct yetty_ycore_void_result yetty_ylexbor_render(struct yetty_ylexbor *r,
-                                                    struct yetty_ydraw_draw_list *buf);
+                                                    struct yetty_ydraw_drawable_list *buf);
 
 /* Total content height after layout, in px. Useful for scrollbars. */
 int yetty_ylexbor_content_height(const struct yetty_ylexbor *r);

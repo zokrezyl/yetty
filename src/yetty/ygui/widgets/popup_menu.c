@@ -14,7 +14,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/popup_menu.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -180,7 +180,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u, 0.0f,
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
                                                      &geom);
     }
     if (radius > w * 0.5f) {
@@ -199,7 +199,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
                                                          0.0f, &geom);
 }
 
@@ -217,7 +217,7 @@ static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_ctx *
     if (!d->open) {
         return YETTY_OK_VOID();
     }
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_paint: NULL ctx");
     }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -247,7 +247,7 @@ static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_ctx *
         float ty = ry + (MENU_ITEM_H + MENU_FONT_SIZE) * 0.5f - 3.0f;
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)label, .capacity = strlen(label), .size = strlen(label)};
-        rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, r.min.x + MENU_PAD_X, ty, &tb,
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + MENU_PAD_X, ty, &tb,
                                             MENU_FONT_SIZE, COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "popup_menu_paint: label");
     }

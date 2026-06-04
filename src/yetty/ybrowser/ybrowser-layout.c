@@ -7,7 +7,7 @@
  * is a follow-up). Each laid-out line replaces its source
  * YL_BOX_INLINE_TEXT box's geometry; if a single text box wraps into N
  * lines we *split* it into N inline-text boxes so the paint pass can
- * emit one TEXT_SPAN per line.
+ * emit one TEXT_DRAWABLE_LIST per line.
  *
  * Margin collapsing: vertical margins between adjacent block siblings
  * collapse to the larger of the two. Padding / horizontal margins are
@@ -346,7 +346,7 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
 
         /* text-align: justify — distribute leftover slack as extra
 		 * spacing after every ASCII space in the line. We route the
-		 * slack through the TEXT_SPAN v2 word_spacing field rather
+		 * slack through the TEXT_DRAWABLE_LIST v2 word_spacing field rather
 		 * than padding the spaces with explicit \t-or-similar bytes,
 		 * so the wire prim count stays the same and the canvas does
 		 * the spacing math. Skip the last line of the paragraph
@@ -392,7 +392,7 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
 			 * two inline elements (e.g. `<a>x</a> <b>y</b>` — the
 			 * `" "` between `</a>` and `<b>` opens its own seg with a
 			 * different element pointer). Painting them wastes a
-			 * TEXT_SPAN prim per inter-word gap and, more importantly,
+			 * TEXT_DRAWABLE_LIST prim per inter-word gap and, more importantly,
 			 * forces the canvas to look up a glyph for U+0020 in a
 			 * vacuum — fonts that fall back to a placeholder square /
 			 * dot for missing metric data render visible artefacts

@@ -187,14 +187,14 @@ emit_capsule(struct yetty_ygrid_grid *g, uint32_t fill, uint32_t stroke, float s
     return push_sdf(g, YETTY_YSDF_CAPSULE, 0, fill, stroke, sw, geom, 5);
 }
 
-/* Emit a TEXT_SPAN record. ygrid expands it into one GLYPH record per
+/* Emit a TEXT_DRAWABLE_LIST record. ygrid expands it into one GLYPH record per
  * codepoint at index time (same flow scene-canvas uses), so layout,
  * bearings, and advances come from the actual font metrics — the
  * caller just hands over the UTF-8 string.
  *
- * Wire format documented in include/yetty/ydraw-core/text-span-prim.h:
+ * Wire format documented in include/yetty/ydraw-core/text-drawable-list.h:
  *
- *   u32 type            (= YETTY_YDRAW_TYPE_TEXT_SPAN = 0x40000002)
+ *   u32 type            (= YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST = 0x40000002)
  *   u32 payload_size    (bytes of payload, padded to 4)
  *   f32 x, y, font_size, rotation
  *   u32 color, layer
@@ -219,7 +219,7 @@ emit_text_span(struct yetty_ygrid_grid *grid, int32_t font_slot, const char *utf
     if (!record)
         return YETTY_ERR(yetty_ycore_void, "emit_text_span: record alloc oom");
 
-    uint32_t type = 0x40000002u;            /* YETTY_YDRAW_TYPE_TEXT_SPAN */
+    uint32_t type = 0x40000002u;            /* YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST */
     uint32_t layer = 0u;
     float rotation = 0.0f;
     float char_spacing = 0.0f;
@@ -248,10 +248,10 @@ emit_text_span(struct yetty_ygrid_grid *grid, int32_t font_slot, const char *utf
 }
 
 /* Lay out a parameter-sweep grid: one column per SDF kind, three rows
- * showing fill / stroke-only / stroke+fill variants, plus a TEXT_SPAN
+ * showing fill / stroke-only / stroke+fill variants, plus a TEXT_DRAWABLE_LIST
  * header at the top to exercise the font dispatcher path. Coordinates
  * are LOCAL to the ygrid figure (the figure's rect handles translation
- * into target space). `has_text` gates the TEXT_SPAN emission — set
+ * into target space). `has_text` gates the TEXT_DRAWABLE_LIST emission — set
  * when a font has been attached at slot 0 so the expansion path can
  * resolve glyphs. */
 static struct yetty_ycore_void_result
@@ -339,13 +339,13 @@ populate_grid(struct yetty_ygrid_grid *grid, int has_text, float w, float h)
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "populate_grid: line");
     }
 
-    /* Header TEXT_SPAN — exercises the TEXT_SPAN → glyph expansion +
+    /* Header TEXT_DRAWABLE_LIST — exercises the TEXT_DRAWABLE_LIST → glyph expansion +
      * dispatcher path (slot 0, the default font attached in
      * rebuild_figure). Skipped when no font is wired so the SDF sweep
      * keeps rendering. font_id = -1 addresses the default slot. */
     if (has_text) {
         struct yetty_ycore_void_result text_result = emit_text_span(
-            grid, /*font_slot=*/-1, "ycompositor: ygrid + TEXT_SPAN",
+            grid, /*font_slot=*/-1, "ycompositor: ygrid + TEXT_DRAWABLE_LIST",
             pad_x, 36.0f, 28.0f, COL_TEXT_PRI);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, text_result, "populate_grid: header text");
     }
