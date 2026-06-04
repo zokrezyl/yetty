@@ -513,6 +513,28 @@ struct yetty_ycore_void_result yetty_yterm_ydraw_layer_process_input(
     }
 }
 
+struct yetty_ycore_void_result yetty_yterm_ydraw_layer_set_cell_source(
+    struct yetty_yrender_terminal_layer *self, const struct yetty_ydraw_cell_source *source)
+{
+    struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
+
+    /* Apply to the active canvas and the saved (alt-screen) canvas if one
+     * exists — the same cell source serves both, since handle_at always hits
+     * libvterm's currently-active buffer. A canvas minted later on alt-screen
+     * enable picks the source up when it is bound. */
+    if (layer->canvas && layer->canvas->ops->set_cell_source) {
+        struct yetty_ycore_void_result r =
+            layer->canvas->ops->set_cell_source(layer->canvas, source);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw_layer_set_cell_source: canvas");
+    }
+    if (layer->saved_canvas && layer->saved_canvas->ops->set_cell_source) {
+        struct yetty_ycore_void_result r =
+            layer->saved_canvas->ops->set_cell_source(layer->saved_canvas, source);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw_layer_set_cell_source: saved canvas");
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Single atomic update: both grid_size and cell_size. The canvas's
  * grid_pixel area is `cols * cell_w x rows * cell_h`, which the shader
  * uses 1:1 to map primitive coords to fragments. Callers compute

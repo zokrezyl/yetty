@@ -30,6 +30,13 @@ struct yetty_ycore_void_result yetty_yterm_text_layer_process_input(
 void yetty_yterm_terminal_layer_terminal_text_layer_get_cells(
     const struct yetty_yrender_terminal_layer *self, const uint8_t **out_data, size_t *out_size);
 
+/* Fill `out` with the text-layer's cell source — the per-cell rich-handle
+ * accessor + the ref table — so the ydraw canvas can route per-cell drawable
+ * refs through the libvterm cells. Both stay owned by the text layer. */
+struct yetty_ydraw_cell_source;
+void yetty_yterm_text_layer_fill_cell_source(struct yetty_yrender_terminal_layer *self,
+                                             struct yetty_ydraw_cell_source *out);
+
 #ifdef __cplusplus
 }
 #endif

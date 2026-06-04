@@ -33,6 +33,7 @@ struct yetty_ydraw_figure;
 struct yetty_ydraw_flyweight_registry;
 struct yetty_yfont_font;
 struct yetty_ywire_wire_statemachine;
+struct yetty_ydraw_cell_source;
 
 /* Result type for the polymorphic pointer — every variant's create
  * returns this. */
@@ -96,6 +97,13 @@ struct yetty_ydraw_canvas_ops {
     /* OSC ingestion. */
     struct yetty_ycore_void_result (*process_input)(struct yetty_ydraw_canvas *canvas,
                                                     struct yetty_ywire_wire_statemachine *sm);
+
+    /* Bind the text-grid cell source (per-cell rich-handle access + ref
+     * table). Copies the source by value; the canvas reads/stamps cell
+     * handles through it. scene-style canvases that aren't cell-backed may
+     * stub this. Passing NULL clears the binding. */
+    struct yetty_ycore_void_result (*set_cell_source)(struct yetty_ydraw_canvas *canvas,
+                                                      const struct yetty_ydraw_cell_source *source);
 
     /* Cursor / scroll. scene-canvas implements these as success-stubs. */
     struct yetty_ycore_void_result (*set_cursor_pos)(struct yetty_ydraw_canvas *canvas,

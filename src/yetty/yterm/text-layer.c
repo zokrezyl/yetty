@@ -8,6 +8,7 @@
 #include <yetty/yfont/shader-glyph.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/ydraw/cell-ref-table.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
@@ -210,6 +211,15 @@ struct yetty_yterm_terminal_text_layer {
      * struct yetty_yterm_text_sb_arena above. Logical position 0 is the
      * oldest live line; pop reads the newest. */
     struct yetty_yterm_text_sb_arena sb;
+
+    /* Per-cell rich-handle table. Each VTermScreenCell.rich_handle indexes
+     * this; the ydraw canvas reads/stamps handles through a cell_source we
+     * hand it. Slots are reclaimed by a mark-sweep GC over the cell buffer. */
+    struct yetty_ydraw_cell_ref_table cell_ref_table;
+    /* Altscreen active? Handles only ever live on the primary buffer, so the
+     * GC (which scans the active buffer) is suppressed while the altscreen is
+     * shown — otherwise it would reap the primary's still-referenced handles. */
+    int alt_active;
 
     /* Scrollback view (tmux-style copy mode). When active, the GPU buffer
      * is built by stitching sb_lines + live screen so the user sees a
@@ -732,6 +742,7 @@ static int on_settermprop(VTermProp prop, VTermValue *val, void *user)
         /* libvterm has already swapped its internal buffer pointer; refresh
          * our GPU-side pointer so the next render samples the right one,
          * and notify the terminal so the other layers can save/restore. */
+        layer->alt_active = val->boolean ? 1 : 0;
         layer->rs.buffers[0].data = (uint8_t *)vterm_screen_get_buffer(layer->screen);
         layer->rs.buffers[0].size = vterm_screen_get_buffer_size(layer->screen);
         layer->rs.buffers[0].dirty = 1;
@@ -887,6 +898,73 @@ static void apply_color_palette(const struct yetty_yconfig_config *config, VTerm
     vterm_state_set_default_colors(state, &fg, &bg);
 }
 
+/* Mark-sweep the rich-handle table against the cell buffers. Nothing releases
+ * a handle on clear/scroll/reflow — those paths only zero a cell's rich_handle
+ * and freely duplicate cells via memmove — so a slot is reclaimed only once no
+ * physical cell (in either the primary or alt buffer) still references it. This
+ * sidesteps every double-free hazard the cell-duplicating paths would create.
+ * Cost: a couple of linear scans of the 2*rows*cols cell buffers. */
+static void text_layer_gc_handles(struct yetty_yterm_terminal_text_layer *text_layer)
+{
+    /* Handles only ever live on the primary buffer. While the altscreen is
+     * active the active buffer is the altscreen (no handles), so scanning it
+     * would reap the primary's still-referenced handles — suppress GC until
+     * the primary screen is restored. */
+    if (!text_layer->screen || text_layer->alt_active) {
+        return;
+    }
+    struct yetty_ydraw_cell_ref_table *table = &text_layer->cell_ref_table;
+    uint32_t live_before = table->count > 1 ? (table->count - 1 - table->free_count) : 0;
+    struct yetty_ycore_void_result gb = yetty_ydraw_cell_ref_table_gc_begin(table);
+    if (YETTY_IS_ERR(gb)) {
+        /* Out of memory growing the mark bitmap — skip this GC pass; slots
+         * simply persist until the next successful pass. */
+        yetty_ycore_error_destroy(gb.error);
+        return;
+    }
+    const VTermScreenCell *buffer = vterm_screen_get_buffer(text_layer->screen);
+    size_t cells = vterm_screen_get_buffer_size(text_layer->screen) / sizeof(VTermScreenCell);
+    for (size_t cell = 0; cell < cells; cell++) {
+        yetty_ydraw_cell_ref_table_gc_mark(table, buffer[cell].rich_handle);
+    }
+    yetty_ydraw_cell_ref_table_gc_end(table);
+    uint32_t live_after = table->count > 1 ? (table->count - 1 - table->free_count) : 0;
+    if (live_before != live_after) {
+        ydebug("rich: gc reclaimed %u handles (live %u -> %u)", live_before - live_after,
+               live_before, live_after);
+    }
+}
+
+/* cell_source.handle_at — returns a writable pointer to the rich_handle of
+ * the live-screen cell at (row, col), or NULL if off-screen. The ydraw canvas
+ * calls this to read/stamp handles without depending on libvterm. */
+static uint32_t *text_layer_cell_handle_at(void *user, uint32_t row, uint32_t col)
+{
+    struct yetty_yterm_terminal_text_layer *text_layer = user;
+    if (!text_layer->screen || row >= text_layer->base.grid_size.rows ||
+        col >= text_layer->base.grid_size.cols) {
+        return NULL;
+    }
+    /* Index the live screen inside libvterm's 2*rows-tall buffer, same as the
+     * zero-copy GPU upload does (root_row marks visible row 0). Cast away const
+     * to write the handle back — the text-layer already owns this buffer for
+     * upload. */
+    VTermScreenCell *buffer = (VTermScreenCell *)vterm_screen_get_buffer(text_layer->screen);
+    uint32_t root_row = (uint32_t)vterm_screen_get_buffer_root_row(text_layer->screen);
+    uint32_t cols = text_layer->base.grid_size.cols;
+    return &buffer[(size_t)(root_row + row) * cols + col].rich_handle;
+}
+
+void yetty_yterm_text_layer_fill_cell_source(struct yetty_yrender_terminal_layer *self,
+                                             struct yetty_ydraw_cell_source *out)
+{
+    struct yetty_yterm_terminal_text_layer *text_layer =
+        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    out->handle_at = text_layer_cell_handle_at;
+    out->user = text_layer;
+    out->table = &text_layer->cell_ref_table;
+}
+
 struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     uint32_t cols, uint32_t rows, const struct yetty_context *context,
     yetty_yterm_pty_write_fn pty_write_fn, void *pty_write_userdata,
@@ -1023,6 +1101,10 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     vterm_screen_enable_altscreen(text_layer->screen, 1);
     vterm_screen_enable_reflow(text_layer->screen, 1);
 
+    /* Per-cell rich-handle table. Slots are reclaimed by text_layer_gc_handles
+     * (mark-sweep over the cell buffers), not by a per-clear callback. */
+    yetty_ydraw_cell_ref_table_init(&text_layer->cell_ref_table);
+
     /* Override the built-in (harsh) ANSI palette with softer, config-driven
      * colours before the reset copies default fg/bg into the active pen. */
     apply_color_palette(context->runtime->config, text_layer->vterm);
@@ -1082,6 +1164,9 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
     if (text_layer->vterm) {
         vterm_free(text_layer->vterm);
     }
+    /* Free the table after vterm: no cell can reference it once vterm is gone,
+     * and nothing in teardown calls back into it (GC reclaims, no callback). */
+    yetty_ydraw_cell_ref_table_destroy(&text_layer->cell_ref_table);
 
     sb_arena_destroy(&text_layer->sb);
     free(text_layer->view_staging);
@@ -1274,6 +1359,11 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
         (struct yetty_yterm_terminal_text_layer *)((const char *)self -
                                                    offsetof(struct yetty_yterm_terminal_text_layer,
                                                             base));
+
+    /* Reclaim rich-handle slots no cell references anymore. Runs before the
+     * ydraw layer (rendered after us) reads the table, and after this frame's
+     * ingestion has stamped any new handles, so live refs are never collected. */
+    text_layer_gc_handles(text_layer);
 
     /* Live mode: GPU reads vterm's buffer directly (zero-copy).
      * Scrollback view: rebuild the stitched buffer every dirty pass — new
@@ -1613,6 +1703,13 @@ static int on_sb_popline(int cols, VTermScreenCell *cells, void *user)
     int copy_cols = sb_arena_pop(&text_layer->sb, cells, cols);
     if (copy_cols == 0) {
         return 0;
+    }
+    /* Scrollback storage may carry a stale rich_handle (the live cell that
+     * was evicted still owns the table slot). Zero it on restore so a popped
+     * line never re-introduces a handle that aliases a live/recycled slot —
+     * rich content is not preserved across scrollback in this increment. */
+    for (int col = 0; col < copy_cols; col++) {
+        cells[col].rich_handle = 0;
     }
     ydebug("on_sb_popline: returned %d cols (target=%d) sb_count=%u", copy_cols, cols,
            text_layer->sb.lines_count);

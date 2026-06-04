@@ -38,6 +38,7 @@
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/ydraw-layer.h>
+#include <yetty/ydraw/cell-ref-table.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
@@ -1358,6 +1359,17 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
                         "terminal_create: terminal_layer_add(ydraw scrolling) failed");
     ydebug("terminal_create: ydraw scrolling layer created and added");
+
+    /* Bridge the text grid's per-cell rich-handle table into the ydraw
+     * canvas so per-cell drawable refs can hang off the libvterm cells. */
+    {
+        struct yetty_ydraw_cell_source cell_source;
+        yetty_yterm_text_layer_fill_cell_source(text_layer, &cell_source);
+        struct yetty_ycore_void_result cs_r =
+            yetty_yterm_ydraw_layer_set_cell_source(ydraw_res.value, &cell_source);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, cs_r,
+                            "terminal_create: ydraw_layer_set_cell_source failed");
+    }
 
     rr = yetty_ywire_wire_statemachine_register(
         terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_CLEAR, /*has_args=*/1,

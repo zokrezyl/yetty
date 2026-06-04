@@ -14,6 +14,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ydraw/cell-ref-table.h>
 #include <yetty/ydraw/scrollbuffer.h>
 #include <yetty/ydraw-core/figure-types.h>
 #include <yetty/ydraw-factory/figure-factory.h>
@@ -47,16 +48,9 @@
  * Private types
  *===========================================================================*/
 
-struct drawable_ref {
-    uint16_t lines_ahead;
-    uint16_t drawable_index;
-};
-
-struct drawable_ref_array {
-    struct drawable_ref *data;
-    uint32_t count;
-    uint32_t capacity;
-};
+/* struct drawable_ref / drawable_ref_array now live in
+ * <yetty/ydraw/cell-ref-table.h> (shared with the canvas producer and the
+ * text-layer-owned handle table). */
 
 struct grid_cell {
     struct drawable_ref_array refs;
@@ -894,7 +888,8 @@ static struct yetty_ycore_void_result ensure_staging_cap(uint32_t **buf, uint32_
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t window_top, uint32_t grid_rows,
-    uint32_t effective_grid_cols, uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count)
+    uint32_t effective_grid_cols, const struct yetty_ydraw_cell_source *cell_source,
+    uint32_t live_rolling_row_0, uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count)
 {
     if (!grid) {
         return YETTY_ERR(yetty_ycore_void, "scrolling-grid: NULL");
@@ -929,6 +924,33 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
                         uint32_t bl = canvas_y + refs->data[ri].lines_ahead;
                         if (bl < grid->lines_count && bl > max_anchor) {
                             max_anchor = bl;
+                        }
+                    }
+                }
+                /* Live cells carry their refs on the cell handle, not in
+                 * line->cells — scan those for below-window anchors too, else a
+                 * multi-row drawable anchored in scrollback restores partially.
+                 * handle_at returns NULL past the live row width (bounds the
+                 * scan); cap defensively in case of a misbehaving source. */
+                if (cell_source && cell_source->handle_at && cell_source->table) {
+                    int64_t vterm_row = (int64_t)canvas_y - (int64_t)live_rolling_row_0;
+                    if (vterm_row >= 0) {
+                        for (uint32_t x = 0; x < YDRAW_GRID_COLS_MAX; x++) {
+                            uint32_t *handle_ptr = cell_source->handle_at(cell_source->user,
+                                                                         (uint32_t)vterm_row, x);
+                            if (!handle_ptr) {
+                                break; /* past the live row width */
+                            }
+                            const struct drawable_ref_array *hrefs =
+                                (*handle_ptr != 0)
+                                    ? yetty_ydraw_cell_ref_table_get(cell_source->table, *handle_ptr)
+                                    : NULL;
+                            for (uint32_t ri = 0; hrefs && ri < hrefs->count; ri++) {
+                                uint32_t bl = canvas_y + hrefs->data[ri].lines_ahead;
+                                if (bl < grid->lines_count && bl > max_anchor) {
+                                    max_anchor = bl;
+                                }
+                            }
                         }
                     }
                 }
@@ -967,6 +989,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
         return YETTY_OK_VOID();
     }
 
+    uint32_t handle_refs_emitted = 0; /* diagnostics: handle-routed refs this rebuild */
     uint32_t num_cells = grid_w * grid_rows;
     struct yetty_ycore_void_result es = ensure_staging_cap(out_buf, out_capacity, num_cells * 4);
     if (YETTY_IS_ERR(es)) {
@@ -1014,11 +1037,50 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
                     }
                 }
             }
+
+            /* Live-screen cells carry their anchor-row refs on the libvterm
+             * cell's rich_handle (see canvas_push_cell_ref). Emit those too —
+             * they are the union partner of the grid-local refs above (the
+             * producer routes lines_ahead==0 live refs here, everything else
+             * to line->cells). vterm_row < 0 means this canvas row is history
+             * (scrollback view / above the live top) → handle path skipped. */
+            if (cell_source && cell_source->handle_at && cell_source->table &&
+                line_base_drawable_idx) {
+                int64_t vterm_row = (int64_t)canvas_y - (int64_t)live_rolling_row_0;
+                if (vterm_row >= 0) {
+                    uint32_t *handle_ptr =
+                        cell_source->handle_at(cell_source->user, (uint32_t)vterm_row, x);
+                    const struct drawable_ref_array *refs =
+                        (handle_ptr && *handle_ptr != 0)
+                            ? yetty_ydraw_cell_ref_table_get(cell_source->table, *handle_ptr)
+                            : NULL;
+                    for (uint32_t ri = 0; refs && ri < refs->count; ri++) {
+                        uint32_t bl = canvas_y + refs->data[ri].lines_ahead;
+                        if (bl >= grid->lines_count) {
+                            continue;
+                        }
+                        struct yetty_ycore_void_result e3 =
+                            ensure_staging_cap(out_buf, out_capacity, count + 1);
+                        if (YETTY_IS_ERR(e3)) {
+                            free(line_base_drawable_idx);
+                            return YETTY_ERR(yetty_ycore_void,
+                                             "rebuild_staging: ensure_cap (handle)", e3);
+                        }
+                        (*out_buf)[count++] =
+                            line_base_drawable_idx[bl] + refs->data[ri].drawable_index;
+                        cell_count++;
+                        handle_refs_emitted++;
+                    }
+                }
+            }
             (*out_buf)[count_pos] = cell_count;
         }
     }
 
     free(line_base_drawable_idx);
+    if (handle_refs_emitted) {
+        ydebug("rich: rebuild_staging emitted %u handle-routed refs", handle_refs_emitted);
+    }
     *out_count = count;
     return YETTY_OK_VOID();
 }
