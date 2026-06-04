@@ -1,5 +1,5 @@
 /*
- * text-drawable-list.c - flyweight TEXT_SPAN primitive (see text-drawable-list.h).
+ * text-drawable-list.c - drawable-list entry TEXT_SPAN primitive (see text-drawable-list.h).
  */
 
 #include <yetty/ydraw-core/text-drawable-list.h>
@@ -135,7 +135,7 @@ int yetty_ydraw_text_drawable_list_parse(const uint32_t *prim,
 }
 
 /*=============================================================================
- * Flyweight base ops
+ * Drawable-list entry base ops
  *===========================================================================*/
 
 static struct yetty_ycore_size_result text_drawable_list_size(const uint32_t *prim)

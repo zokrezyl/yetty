@@ -318,7 +318,7 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
             }
         }
 
-        /* Flyweight FAM (FONT, TEXT_SPAN) and figures: type(4) + payload_size(4) + payload */
+        /* Drawable-list entry FAM (FONT, TEXT_SPAN) and figures: type(4) + payload_size(4) + payload */
         if (p + 8 > end) {
             fprintf(stderr, "%sprim #%d FAM header truncated for type 0x%08x\n", prefix, idx, t);
             return -1;

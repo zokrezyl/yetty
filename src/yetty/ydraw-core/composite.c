@@ -19,7 +19,7 @@ bool yetty_ydraw_is_composite(uint32_t type)
 }
 
 //=============================================================================
-// Base ops wrappers for flyweight compatibility
+// Base ops wrappers for drawable-list entry compatibility
 //=============================================================================
 
 static struct yetty_ycore_size_result figure_size_wrapper(const uint32_t *prim)

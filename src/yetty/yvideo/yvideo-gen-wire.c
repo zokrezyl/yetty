@@ -1,6 +1,6 @@
 // Auto-generated from yvideo.yaml - DO NOT EDIT
 //
-// Wire-format helpers for the yvideo complex primitive. Pure CPU code: packs
+// Wire-format helpers for the yvideo composite. Pure CPU code: packs
 // caller-supplied uniforms + buffers into the on-the-wire byte layout. Lives
 // in yetty_yvideo_core (no Dawn, no WebGPU, safe for riscv64 / wasm / any
 // cross-target without a GPU).

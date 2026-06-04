@@ -1,6 +1,6 @@
 // Auto-generated from yplot.yaml - DO NOT EDIT
 //
-// Wire-format helpers for the yplot complex primitive. Pure CPU code: packs
+// Wire-format helpers for the yplot composite. Pure CPU code: packs
 // caller-supplied uniforms + buffers into the on-the-wire byte layout used
 // by ycat / yecho / yplot CLI / demos. Lives in yetty_yplot_core (no Dawn,
 // no WebGPU, safe for riscv64 / wasm / any cross-target without a GPU).

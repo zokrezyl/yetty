@@ -560,7 +560,7 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
  * for a routed payload, or the init_payload of CREATE_CHILD(YGRID).
  *
  * The bytes are a stream of drawable records, NOT length-prefixed wire
- * records. Uses the flyweight registry to know each record's exact
+ * records. Uses the drawable-list registry to know each record's exact
  * size (no heuristics). CMD_GROUP bodies are walked recursively so the
  * entity tree shows up. Complex prims (yplot/yimage/yvideo) have their
  * payload size printed but not their data — the user's complaint was
@@ -1264,7 +1264,7 @@ static void print_help(const char *prog)
             "Decoding walks {length, id} figure-tree records inside\n"
             "YETTY_OSC_YCOMPOSITOR_BIN envelopes (and prints headers for every\n"
             "other OSC code listed in the public wire headers). Inside each\n"
-            "record the body is walked via the flyweight registry — every SDF\n"
+            "record the body is walked via the drawable-list registry — every SDF\n"
             "prim, TEXT_SPAN, FONT, GLYPH, and CMD_GROUP/CMD_DELETE record is\n"
             "emitted as YAML with named fields. Complex prims (yplot/yimage/\n"
             "yvideo etc.) report their type + payload size but omit the data\n"
@@ -1359,7 +1359,7 @@ int main(int argc, char **argv)
         g_out = f;
     }
 
-    /* Flyweight registry — drives drawable_command_parse so ygrid body
+    /* Drawable-list registry — drives drawable_command_parse so ygrid body
      * walks know each record's exact size. Built once, lives until
      * teardown below. NULL is tolerated (walk_ygrid_body prints a
      * stub) but normal runs always have it. */

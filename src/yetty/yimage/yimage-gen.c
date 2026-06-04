@@ -1,6 +1,6 @@
 // Auto-generated from yimage.yaml - DO NOT EDIT
 //
-// Two-tier complex-prim model:
+// Two-tier composite model:
 //   - factory owns ONE shared yetty_yrender_pipeline (compiled once at
 //     compile_pipeline time from a template resource_set; the pipeline
 //     carries the WGPUShaderModule + bind_group_layout + WGPURenderPipeline

@@ -1,4 +1,4 @@
-/* cmds.c — control-cmd producer + flyweight handler.
+/* cmds.c — control-cmd producer + drawable-list entry handler.
  *
  * The wire layout matches FONT/TEXT_SPAN: 8-byte FAM header (u32 type +
  * u32 payload_size) followed by `payload_size` bytes. Cmds with no

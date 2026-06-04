@@ -13,7 +13,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YDRAW_BIN */
 
-// Complex primitive type for yplot
+// Composite type for yplot
 #define YETTY_YDRAW_TYPE_YPLOT 0x80000003u
 
 // yfsvm constants

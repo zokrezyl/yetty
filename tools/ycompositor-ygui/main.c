@@ -668,7 +668,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
-    /* Bundle the font into the factory-args struct; no complex-prim
+    /* Bundle the font into the factory-args struct; no composite
      * factory at this layer — tool is a minimal POC. */
     app->figure_args.default_font = app->font;
     app->figure_args.composite_factory = NULL;

@@ -1,4 +1,4 @@
-// YDraw Flyweight - primitive handler registry implementation (instance-based)
+// YDraw Drawable-list entry - primitive handler registry implementation (instance-based)
 
 #include <stdlib.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
@@ -93,7 +93,7 @@ struct yetty_ydraw_drawable_list_entry_ptr_result yetty_ydraw_drawable_list_regi
     }
 
     // Fallback to additional handlers by type range
-    // TODO: optimize the mapping from id to flyweight
+    // TODO: optimize the mapping from id to drawable-list entry
     for (size_t i = 0; i < reg->handler_count; i++) {
         ydebug("drawable_list_registry_get: checking handler[%zu] range=[0x%08x, 0x%08x]", i,
                reg->handlers[i].type_min, reg->handlers[i].type_max);

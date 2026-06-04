@@ -15,7 +15,7 @@
  *
  * Scope:
  *   - SDF primitives (type-id range 0x10000000–0x1FFFFFFF)
- *   - Glyph / TEXT_SPAN records (flyweight tier)
+ *   - Glyph / TEXT_SPAN records (drawable-list tier)
  *   - Implicit ADD is the default decode action (no opcode byte).
  *
  * Figures that are not naturally rendered by a grid (yplot, yimage,
@@ -47,13 +47,13 @@ struct yetty_ydraw_composite_factory;
 
 /* Bundle of host-owned pointers handed to every ygrid the factory mints.
  * Both fields are borrowed — the host (terminal / yui) keeps the actual
- * font and complex-prim factory alive for the lifetime of every ygrid
+ * font and composite factory alive for the lifetime of every ygrid
  * the registry might still be holding.
  *
  *   default_font   slot-0 font for GLYPH/TEXT_SPAN expansion. NULL → no
  *                  default font, glyph records silently drop.
- *   composite_factory complex-prim renderer (yplot / yimage / yvideo / …).
- *                  NULL → complex-prim records silently drop, same as
+ *   composite_factory composite renderer (yplot / yimage / yvideo / …).
+ *                  NULL → composite records silently drop, same as
  *                  the v1 behaviour. */
 struct yetty_ygrid_factory_args {
     struct yetty_yfont_font *default_font;
@@ -80,7 +80,7 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
     struct yetty_yfigure_registry *registry, uint32_t kind,
     const struct yetty_ygrid_factory_args *args);
 
-/* Attach a complex-prim figure factory. Borrowed; lifetime must
+/* Attach a composite figure factory. Borrowed; lifetime must
  * outlive the ygrid. Complex prims (yplot / yimage / etc.) arriving
  * via process_bytes after this call mint a figure instance through
  * the factory and are rendered alongside the SDF / glyph pass. */
@@ -107,7 +107,7 @@ struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid
  * record are interpreted as LOCAL to the grid's origin.
  *
  * Storage is opaque at this layer: the bytes are copied verbatim and
- * parsed lazily by the render path via the ydraw-core flyweight
+ * parsed lazily by the render path via the ydraw-core drawable-list entry
  * registry.
  *
  * NAMING: this is the in-process, raw-bytes entry point — the legacy

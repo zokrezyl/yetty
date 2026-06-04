@@ -1,5 +1,5 @@
 // Auto-generated from yplot.yaml - DO NOT EDIT
-// YAML parser factory for yplot complex primitive
+// YAML parser factory for yplot composite
 
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>

@@ -1,7 +1,7 @@
 // YDraw Complex Primitive Factory - Abstract Factory Pattern (GPU side)
 //
 // This header bundles the *server-side* runtime that turns wire-format
-// complex-prim bytes (defined in yetty/ydraw-core/composite.h)
+// composite bytes (defined in yetty/ydraw-core/composite.h)
 // into renderable GPU objects.
 //
 // Architecture:

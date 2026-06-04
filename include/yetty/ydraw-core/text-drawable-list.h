@@ -2,9 +2,9 @@
 #define YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_H
 
 /*
- * text-span-prim - flyweight primitive carrying a UTF-8 text run.
+ * text-drawable-list - drawable-list entry carrying a UTF-8 text run.
  *
- * Sits in the same flyweight tier as font-prim. The canvas expands a
+ * Sits in the same drawable-list tier as font-resource. The canvas expands a
  * TEXT_SPAN into glyph SDF prims at add_buffer time, after fonts have
  * been materialized.
  *

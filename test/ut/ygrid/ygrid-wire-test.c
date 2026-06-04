@@ -5,7 +5,7 @@
  *
  * The ygrid figure is created in "headless" mode: passing a NULL
  * `yetty_context` makes yetty_ygrid_create skip every GPU-touching init
- * step (no shader load, no binder). The entity tree, the flyweight
+ * step (no shader load, no binder). The entity tree, the drawable-list entry
  * registry, the cell bucketing, and the process_bytes path all still
  * work — that's the surface this test exercises.
  *

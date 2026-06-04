@@ -99,7 +99,7 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
 struct yetty_yterm_ydraw_layer {
     struct yetty_yrender_terminal_layer base;
     /* Initial cell size captured at creation — used to derive the cumulative
-   * cell-zoom factor and push it to complex-prim factories (yplot, …) so
+   * cell-zoom factor and push it to composite factories (yplot, …) so
    * their shaders can apply the "intrusive" zoom the same way they apply
    * the non-intrusive visual zoom. */
     struct yetty_ycore_pixel_size initial_cell_size;
@@ -1010,7 +1010,7 @@ static struct yetty_ycore_void_result ydraw_layer_set_selection(
 /*=============================================================================
  * Selection text extraction — reconstruct UTF-8 from ydraw glyph prims
  *
- * The ydraw canvas stores text as flyweight GLYPH drawables — each one
+ * The ydraw canvas stores text as drawable-list entry GLYPH drawables — each one
  * is a single glyph at a pixel position, with the font atlas index (and
  * canvas font slot) packed in. To produce plain text for the clipboard we:
  *   1. walk every glyph in the canvas via for_each_glyph

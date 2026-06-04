@@ -43,7 +43,7 @@ static const struct yetty_ydraw_primitive_ops yetty_ysdf_drawable_ops = {
     .get_gpu_resource_set = NULL, // SDF prims rendered by main shader
 };
 
-// Handler returns base ops (for flyweight registry).
+// Handler returns base ops (for drawable-list registry).
 // yetty_ysdf_primitive_size returns 0 for any type id not registered in
 // the SDF YAML, so the size lookup is itself the SDF discriminator —
 // no hardcoded range gate.

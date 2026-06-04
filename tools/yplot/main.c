@@ -1,5 +1,5 @@
 /*
- * yplot — emit a yplot complex-prim OSC envelope for a function expression.
+ * yplot — emit a yplot composite OSC envelope for a function expression.
  *
  * Inside a yetty terminal the OSC is routed to the ydraw scrolling layer,
  * which renders the plot via the yplot pipeline. Outside a yetty terminal

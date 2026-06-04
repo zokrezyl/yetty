@@ -3,10 +3,10 @@
 // The buffer is a single byte stream of primitives. Everything — SDF shapes,
 // fonts, text spans, complex prims — is a primitive identified by the type
 // word at the start of each entry. Iteration is type-agnostic via the
-// flyweight registry (size + aabb come from per-type base ops).
+// drawable-list registry (size + aabb come from per-type base ops).
 //
 // add_font / add_text exist as convenience wrappers that pack the
-// flyweight wire layout (font-resource.c / text-drawable-list.c) and call
+// drawable-list entry wire layout (font-resource.c / text-drawable-list.c) and call
 // add_prim — same path SDF emitters take.
 
 #include <stdlib.h>
@@ -781,7 +781,7 @@ struct yetty_ydraw_drawable_iter_result yetty_ydraw_drawable_list_drawable_next(
 }
 
 /*=============================================================================
- * Producer convenience: pack flyweight FONT / TEXT_SPAN prims into the stream.
+ * Producer convenience: pack drawable-list entry FONT / TEXT_SPAN prims into the stream.
  * Same path as add_prim — these just pack the FAM payload first.
  *===========================================================================*/
 
@@ -819,7 +819,7 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font(
         if (t == YETTY_YDRAW_RESOURCE_FONT) {
             next_id++;
         }
-        /* Walk by FAM size for flyweight/complex; otherwise stop — we'd need
+        /* Walk by FAM size for drawable-list entry/complex; otherwise stop — we'd need
      * the registry to walk SDF prims correctly. We only need to count
      * FONTs that precede this insertion, and producers add fonts before
      * other prims in practice (PDF, markdown). If a producer interleaves,

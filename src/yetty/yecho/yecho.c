@@ -858,7 +858,7 @@ static int span_has_attr(const struct yetty_yecho_span *span, const char *key)
     return 0;
 }
 
-/* yplot block: emit a yplot complex primitive into the ydraw buffer.
+/* yplot block: emit a yplot composite into the ydraw buffer.
  *
  * Block syntax (left side = attrs, right side = function definitions):
  *   {plot; w=400; h=200; xrange=-3.14..3.14; yrange=-1.5..1.5:
@@ -1064,7 +1064,7 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
 }
 
 #ifdef YETTY_YECHO_HAS_YVIDEO
-/* yvideo block: emit a yvideo complex primitive into the ydraw buffer.
+/* yvideo block: emit a yvideo composite into the ydraw buffer.
  *
  * Syntax:
  *   {video; src=path.h264; w=W; h=H; fps=F; loop=0|1: }

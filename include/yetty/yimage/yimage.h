@@ -2,7 +2,7 @@
 #define YETTY_YIMAGE_YIMAGE_H
 
 /*
- * yimage — high-level API for producing a yimage complex primitive from
+ * yimage — high-level API for producing a yimage composite from
  * an image source.
  *
  * Pipeline:

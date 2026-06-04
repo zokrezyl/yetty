@@ -233,9 +233,9 @@ struct yetty_ydraw_drawable_iter_result yetty_ydraw_drawable_list_drawable_next(
     const struct yetty_ydraw_drawable_iter *iter);
 
 /*=============================================================================
- * Producer convenience: pack flyweight FONT and TEXT_SPAN prims into the
+ * Producer convenience: pack drawable-list entry FONT and TEXT_SPAN prims into the
  * buffer. These are thin wrappers — same path as add_prim. Readers iterate
- * via the flyweight registry; the canvas dispatches by prim type.
+ * via the drawable-list registry; the canvas dispatches by prim type.
  *===========================================================================*/
 
 /* Pack a FONT primitive (font-resource.h). Returns the producer-assigned

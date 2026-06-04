@@ -12,7 +12,7 @@
  *   - register the required gui_* tables with the NetSurf core
  *   - drive page load and re-layout
  *   - on each redraw, drain the page into a yetty_ydraw_drawable_list of
- *     ysdf primitives + TEXT_SPAN flyweight prims
+ *     ysdf primitives + TEXT_SPAN drawable-list entries
  *
  * The host (e.g. tools/ynetsurf) owns the lifetime, the viewport size,
  * and the event loop pump.

@@ -2,11 +2,11 @@
 #define YETTY_YDRAW_CORE_FONT_PRIM_H
 
 /*
- * font-prim - flyweight primitive carrying TTF bytes through a ydraw buffer.
+ * font-resource - drawable-list entry carrying TTF bytes through a ydraw buffer.
  *
  * Tier:
  *   Simple (SDF, fixed-size):    [0x00, 0xFF]
- *   Flyweight (variable-size):   [0x40000000, 0x7FFFFFFF]   ← font/text-span
+ *   Drawable-list entry (variable-size):   [0x40000000, 0x7FFFFFFF]   ← font/text-span
  *   Complex (factory + GPU):     [0x80000000, 0xFFFFFFFF]   ← yplot, yimage, …
  *
  * A font primitive is just bytes in the buffer's stream — it has no per-instance
@@ -48,7 +48,7 @@ struct yetty_ydraw_font_resource_view {
 int yetty_ydraw_font_resource_parse(const uint32_t *prim,
                                     struct yetty_ydraw_font_resource_view *out YETTY_ANNOT_OUT);
 
-/* Flyweight base ops handler. Returns ops only for type FONT. Register
+/* Drawable-list entry base ops handler. Returns ops only for type FONT. Register
  * via yetty_ydraw_drawable_list_registry_add(reg, FONT, FONT, handler). */
 struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_font_resource_handler(
     uint32_t drawable_type);

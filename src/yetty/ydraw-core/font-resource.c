@@ -1,5 +1,5 @@
 /*
- * font-resource.c - flyweight FONT primitive (see font-resource.h).
+ * font-resource.c - drawable-list entry FONT primitive (see font-resource.h).
  */
 
 #include <yetty/ydraw-core/font-resource.h>
@@ -99,7 +99,7 @@ int yetty_ydraw_font_resource_parse(const uint32_t *prim,
 }
 
 /*=============================================================================
- * Flyweight base ops
+ * Drawable-list entry base ops
  *===========================================================================*/
 
 static struct yetty_ycore_size_result font_resource_size(const uint32_t *prim)

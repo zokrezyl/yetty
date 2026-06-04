@@ -1486,7 +1486,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rf, "terminal_create: ygrid register_factory");
         /* Producer-widget kinds reuse the ygrid factory today (same SDF /
          * glyph prim stream) but ship under distinct kind codes on the
-         * wire — see yfigure/wire.h. The complex-prim factory in figure_args
+         * wire — see yfigure/wire.h. The composite factory in figure_args
          * lets each ygrid render yplot/yimage/etc. instances embedded in
          * the prim stream. */
         static const uint32_t producer_kinds[] = {
@@ -1694,7 +1694,7 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
         }
         terminal->figure_registry = NULL;
     }
-    /* The complex-prim factory outlives the registry — every ygrid the
+    /* The composite factory outlives the registry — every ygrid the
      * registry minted borrowed our factory pointer, and they must be
      * gone (via root_container destroy above) before we tear it down. */
     if (terminal->composite_factory) {

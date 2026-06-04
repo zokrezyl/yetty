@@ -2,7 +2,7 @@
 #define YETTY_YVIDEO_YVIDEO_H
 
 /*
- * yvideo — high-level API for producing a yvideo complex primitive from
+ * yvideo — high-level API for producing a yvideo composite from
  * a raw H.264 Annex-B byte stream.
  *
  * Pipeline:

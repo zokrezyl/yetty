@@ -2,7 +2,7 @@
  * ylexbor-paint — emit ydraw primitives from a laid-out box vector.
  *
  * Every YL_BOX_BLOCK with non-zero alpha background → ysdf box.
- * Every YL_BOX_INLINE_TEXT → TEXT_SPAN flyweight prim.
+ * Every YL_BOX_INLINE_TEXT → TEXT_SPAN drawable-list entry prim.
  * Every YL_BOX_INLINE_IMAGE → yimage prim with decoded pixels (or grey
  *                             placeholder when the fetch/decode fails).
  *

@@ -1,4 +1,4 @@
-/* text-span-prim — module-internal declarations (ydraw-core only).
+/* text-drawable-list — module-internal declarations (ydraw-core only).
  *
  * These functions are called only from within the ydraw-core module
  * (text-drawable-list.c implementation, buffer.c packing wrappers). The public

@@ -283,7 +283,7 @@ struct yetty_ydraw_box {
 
 ## Complex Primitives
 
-Complex primitives (yplot, nested ydraw, images, video) require more than simple SDF evaluation. They have their own rendering logic and may contain nested content.
+Composites (yplot, nested ydraw, images, video) require more than simple SDF evaluation. They have their own rendering logic and may contain nested content.
 
 ### Types
 
@@ -296,7 +296,7 @@ Complex primitives (yplot, nested ydraw, images, video) require more than simple
 
 ### Storage (Simplified vs Simple Primitives)
 
-Unlike simple primitives which register in ALL overlapping grid cells, complex primitives use simplified storage:
+Unlike simple primitives which register in ALL overlapping grid cells, composites use simplified storage:
 
 **Simple primitives:**
 ```
@@ -305,7 +305,7 @@ grid[row=6].add(drawable_ref{lines_ahead=1, drawable_index=0})
 grid[row=7].add(drawable_ref{lines_ahead=0, drawable_index=0})
 ```
 
-**Complex primitives:**
+**Composites:**
 ```
 line[7].figures.add(ptr)  // Only last overlapping line
 ```
@@ -317,7 +317,7 @@ Why simplified:
 
 ### Direct Layer Rendering
 
-Complex primitives render directly to the ydraw layer texture at their viewport positions:
+Composites render directly to the ydraw layer texture at their viewport positions:
 
 ```
 ydraw_layer_texture (render target)
@@ -343,7 +343,7 @@ ydraw_layer_texture (render target)
 **Flow:**
 1. `layer->render(render_target)` called by terminal
 2. Render simple prims to render_target (LoadOp=Clear, full-screen quad, SDF shader)
-3. For each complex primitive: `instance->render(render_target, x, y)`
+3. For each composite: `instance->render(render_target, x, y)`
    - LoadOp=Load (preserves simple prims and previous complex prims)
    - Viewport set to instance's screen bounds (x, y, width, height)
    - Instance uses its factory's pre-compiled pipeline
@@ -370,7 +370,7 @@ ydraw_layer_texture (render target)
 
 ### Recursive Composition (Future)
 
-Complex primitives may contain nested ydraw (recursive). Each nesting level would render to its parent's render target at its viewport bounds.
+Composites may contain nested ydraw (recursive). Each nesting level would render to its parent's render target at its viewport bounds.
 
 ### Render Target Integration
 
@@ -392,7 +392,7 @@ Remote renders using same approach, result composited as a yrdawn figure
 
 ### Wire Format (FAM - Flexible Array Member)
 
-Complex primitives in buffer use FAM format:
+Composites in buffer use FAM format:
 
 ```
 [type: u32][payload_size: u32][data: u8[payload_size]]
@@ -400,9 +400,9 @@ Complex primitives in buffer use FAM format:
 
 Type IDs use upper half of u32 range (≥ 0x80000000) to distinguish from simple SDF types (0-255).
 
-### Flyweight Pattern
+### Drawable-list dispatch
 
-Complex primitive rendering follows flyweight pattern:
+Composite rendering follows drawable-list dispatch:
 
 **Intrinsic (shared per type):**
 - Shader code
@@ -429,7 +429,7 @@ Two-level ops structure for primitives:
 - `aabb` - same as base
 - `render` - render to render_target at viewport
 
-SDF primitives use base ops only. Complex primitives use extended ops with render.
+SDF primitives use base ops only. Composites use extended ops with render.
 
 ---
 
@@ -478,7 +478,7 @@ The binder is created when the factory is registered (device/queue available). T
 
 ### Instance
 
-An instance represents a single occurrence of a complex primitive. Instances are stored in the canvas grid. Each instance:
+An instance represents a single occurrence of a composite. Instances are stored in the canvas grid. Each instance:
 
 - Holds a copy of its buffer data, which contains all primitive-specific values including its size.
 - Has a back-pointer to its concrete factory, giving access to the factory's binder.
@@ -514,7 +514,7 @@ The factory's binder owns the pre-compiled pipeline. This pipeline is compiled O
 
 ## Direct Layer Rendering
 
-Complex primitives render directly to the layer texture at their viewport positions.
+Composites render directly to the layer texture at their viewport positions.
 
 **Render flow:**
 ```
@@ -576,7 +576,7 @@ let y = yfsvm_execute(&storage_buffer, bc_offset, ...);
 
 ## Code Generation
 
-Complex primitives require **only two files** - everything else is generated.
+Composites require **only two files** - everything else is generated.
 
 **User provides:**
 1. `<name>.yaml` - schema (uniforms, buffers, type_id, shader libraries)
@@ -590,7 +590,7 @@ Complex primitives require **only two files** - everything else is generated.
 - Resource set initialization (from YAML uniforms/buffers definition)
 - WGSL: accessor functions with calculated offsets
 
-**Zero type-specific C code needed.** The factory pattern is 100% generic - every complex primitive does the same thing:
+**Zero type-specific C code needed.** The factory pattern is 100% generic - every composite does the same thing:
 1. Factory creates binder with resource set + compiled pipeline
 2. Instance binds its data (uniforms, buffer, texture) to binder's RS
 3. Binder renders
@@ -623,7 +623,7 @@ Runtime binds bytes to pipeline - no interpretation. Only constructor (sender) a
 
 ## Status
 
-The complex-primitive code generator described above has shipped. The generator
+The composite code generator described above has shipped. The generator
 and the abstract/concrete factory split live in `ydraw-core`, `ydraw-factory`,
 and `ydraw-yaml`; complex figures (yplot, yimage, yvideo, …) are generated from a
 per-module `model.yaml` + `.wgsl` pair.
@@ -635,8 +635,8 @@ per-module `model.yaml` + `.wgsl` pair.
   initialization, and WGSL accessor functions from YAML
 
 **Related modules:**
-- `ydraw-core` — serialized primitive buffer, draw list, flyweight registry
-- `ydraw-factory` — figure factory for complex primitives
+- `ydraw-core` — serialized primitive buffer, draw list, drawable-list registry
+- `ydraw-factory` — figure factory for composites
 - `ydraw-yaml` — YAML-driven figure construction
 - `yfigure` — the figure/container model the compositor uses (see
   [Layered Rendering](../../../docs/layered-rendering.md))

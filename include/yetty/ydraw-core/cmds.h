@@ -4,10 +4,10 @@
  * Type-id space for the ydraw wire format:
  *   [0x00000000, 0x0000FFFF]  cmds (this header)
  *   [0x10000000, 0x1FFFFFFF]  SDF (paint primitives, generated)
- *   [0x40000000, 0x7FFFFFFF]  flyweight (FONT, TEXT_SPAN)
+ *   [0x40000000, 0x7FFFFFFF]  drawable-list entry (FONT, TEXT_SPAN)
  *   [0x80000000, 0xFFFFFFFF]  complex (yplot, yimage, ...)
  *
- * Cmds use the same FAM wire layout as flyweight prims:
+ * Cmds use the same FAM wire layout as drawable-list entries:
  *     u32 type
  *     u32 payload_size  (bytes of payload, 4-aligned)
  *     u8  payload[payload_size]
@@ -109,11 +109,11 @@ extern "C" {
  * CRITICAL — type-word namespace collision risk:                         *
  *                                                                        *
  * cmd values that set HAS_ID_FLAG (CMD_DELETE, CMD_GROUP, CMD_UPDATE)    *
- * land in the same 0x8XXXXXXX range as complex-prim type_ids             *
+ * land in the same 0x8XXXXXXX range as composite type_ids             *
  * (YETTY_YDRAW_COMPOSITE_TYPE_BASE = 0x80000000). The drawable iterator    *
  * disambiguates by *exact-match* on each cmd constant before falling     *
  * through to the prim registry — so each cmd value MUST stay distinct    *
- * from every complex-prim type_id ever assigned.                         *
+ * from every composite type_id ever assigned.                         *
  *                                                                        *
  * Existing complex prim type_ids cluster at 0x80000003 (yplot),          *
  * 0x80000004 (yimage), 0x80000005 (ymesh). To avoid future clashes new   *
@@ -141,7 +141,7 @@ extern "C" {
  *
  * Wire layout: (type|HAS_ID_FLAG) | id | payload_size | payload[payload_size]
  *
- * The drawable-iterator surfaces this as an ADD with flyweight.data
+ * The drawable-iterator surfaces this as an ADD with entry.data
  * pointing at the full record; canvases with an entity model (e.g.
  * scene-canvas) recognise the type, look up / create the entity by id,
  * and walk the payload bytes as nested commands attached to that
@@ -154,8 +154,8 @@ struct yetty_ydraw_drawable_list;
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_zero(
     struct yetty_ydraw_drawable_list *buf);
 
-/* Flyweight handler for the cmd tier — returns the cmd base_ops which
- * stride by the FAM `8 + payload_size` bytes (same as flyweight prims).
+/* Drawable-list entry handler for the cmd tier — returns the cmd base_ops which
+ * stride by the FAM `8 + payload_size` bytes (same as drawable-list entries).
  * Register at startup with:
  *   yetty_ydraw_drawable_list_registry_add(reg,
  *       YETTY_YDRAW_CMD_BASE, YETTY_YDRAW_CMD_END,

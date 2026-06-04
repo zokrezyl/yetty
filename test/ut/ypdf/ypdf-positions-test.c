@@ -122,7 +122,7 @@ int main(void)
     REQUIRE(out->page_count == 1, "expected 1 page");
 
     struct yetty_ydraw_drawable_list_registry_ptr_result rfr = yetty_ydraw_drawable_list_registry_create_default();
-    REQUIRE(rfr.ok, "flyweight_create failed");
+    REQUIRE(rfr.ok, "drawable-list entry_create failed");
     struct yetty_ydraw_drawable_list_registry *reg = rfr.value;
 
     struct span_summary sum = {0};

@@ -10,7 +10,7 @@
  *
  * After the buffer/handler refactor, fonts and text spans live in the
  * primitive byte stream alongside SDF prims. We count them by iterating
- * with a flyweight registry that has the FONT/TEXT_SPAN handlers
+ * with a drawable-list registry that has the FONT/TEXT_SPAN handlers
  * registered (yetty_ydraw_drawable_list_registry_create_default() does that).
  */
 
@@ -93,7 +93,7 @@ int main(void) {
 
     struct yetty_ydraw_drawable_list_registry_ptr_result rr =
         yetty_ydraw_drawable_list_registry_create_default();
-    REQUIRE(YETTY_IS_OK(rr), "flyweight_create failed");
+    REQUIRE(YETTY_IS_OK(rr), "drawable-list entry_create failed");
     struct yetty_ydraw_drawable_list_registry *reg = rr.value;
 
     struct drawable_counts c = count_prims(out->buffer, reg);

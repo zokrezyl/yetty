@@ -97,7 +97,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, uint32_t col, uint16_t lines_ahead,
     uint16_t drawable_idx);
 
-/* Attach a complex-prim instance to line `line_idx`. The grid takes
+/* Attach a composite instance to line `line_idx`. The grid takes
  * ownership (destroys on grid_line_free / grid_clear). */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, struct yetty_ydraw_figure *figure);

@@ -1,5 +1,5 @@
 /*
- * ymesh-gen.c — concrete factory for the ymesh complex primitive.
+ * ymesh-gen.c — concrete factory for the ymesh composite.
  *
  * Unlike yimage / yplot, ymesh uses raw WebGPU directly (not the schema-
  * driven yetty_yrender_pipeline / gpu_resource_binder framework). The

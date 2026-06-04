@@ -18,7 +18,7 @@
  *   polyline    → sequence of SDF segments.
  *   polygon     → sequence of SDF segments + closing edge.
  *   path        → flattened to polyline segments per the path module.
- *   text/tspan  → TEXT_SPAN flyweight via add_text.
+ *   text/tspan  → TEXT_SPAN drawable-list entry via add_text.
  *   g/a/svg/    → recurse.
  */
 

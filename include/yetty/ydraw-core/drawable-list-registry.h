@@ -1,12 +1,12 @@
-// YDraw Flyweight - primitive handler registry (instance-based)
+// YDraw Drawable-list entry - primitive handler registry (instance-based)
 // Decoupled from buffer, usable by buffer and canvas
 //
 // Two-level ops structure:
 //   Base ops (all primitives - SDF and complex): size, aabb
 //   Extended ops (SDF only): destroy, get_gpu_resource_set
 //
-// Complex primitives use the factory pattern instead of extended ops.
-// See complex-prim-types.h for complex prim handling.
+// Composites use the factory pattern instead of extended ops.
+// See composite.h for complex prim handling.
 #pragma once
 
 #include <stdint.h>
@@ -37,7 +37,7 @@ struct yetty_ydraw_drawable_list_entry_ops {
 
 //=============================================================================
 // Extended ops - for SDF primitives only (inherits base)
-// Complex primitives use factory pattern instead
+// Composites use factory pattern instead
 //=============================================================================
 
 struct yetty_ydraw_primitive_ops {
@@ -53,7 +53,7 @@ struct yetty_ydraw_primitive_ops {
                                                                          void **cache_ptr);
 };
 
-// Flyweight - wraps pointer to primitive data + base ops
+// Drawable-list entry - wraps pointer to primitive data + base ops
 // Works for ALL primitives (SDF and complex)
 struct yetty_ydraw_drawable_list_entry {
     const uint32_t *data;                            // type at data[0]
@@ -64,7 +64,7 @@ YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_entry_ops_ptr,
                       const struct yetty_ydraw_drawable_list_entry_ops *);
 YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_entry_ptr, struct yetty_ydraw_drawable_list_entry *);
 
-// Flyweight registry instance (opaque)
+// Drawable-list registry instance (opaque)
 struct yetty_ydraw_drawable_list_registry;
 
 YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_registry_ptr, struct yetty_ydraw_drawable_list_registry *);

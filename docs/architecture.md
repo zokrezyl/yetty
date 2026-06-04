@@ -70,8 +70,8 @@ The full startup/ownership chain and context structs are in
 | `yrender` | GPU pipeline: resource-set binder, allocator, pipeline, render targets, blender ([render](render.md), [GPU binding](gpu-resource-binding.md)) | ✓ |
 | `yrender-utils` | Screenshot, tile-diff helpers | ✓ |
 | `ydraw` | Canvas + rolling-row scrolling primitive model ([ydraw](../src/yetty/ydraw/README.md)) | ✓ |
-| `ydraw-core` | Serialized primitive buffer, draw list, flyweight registry | ✓ |
-| `ydraw-factory` | Figure factory for complex primitives | ✓ |
+| `ydraw-core` | Serialized primitive buffer, draw list, drawable-list registry | ✓ |
+| `ydraw-factory` | Figure factory for composites | ✓ |
 | `ydraw-yaml` | YAML-driven figure construction | ✓ |
 | `yfigure` | Figure/container model — the compositor that hosts rich content | ✓ |
 | `ygrid` | Figure: spatial-bucketed batch of SDF primitives + glyphs | ✓ |

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Complex primitive code generator.
+Composite code generator.
 
 Reads YAML schema, generates ALL boilerplate:
 - C header: struct definition, serialization API, factory API
@@ -292,7 +292,7 @@ def generate_c_wire_source(schema, uniforms, buffers):
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
-// Wire-format helpers for the {name} complex primitive. Pure CPU code: packs
+// Wire-format helpers for the {name} composite. Pure CPU code: packs
 // caller-supplied uniforms + buffers into the on-the-wire byte layout. Lives
 // in yetty_{name}_core (no Dawn, no WebGPU, safe for riscv64 / wasm / any
 // cross-target without a GPU).
@@ -738,11 +738,11 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
         hooks_factory_wire = ''
 
     # webgpu.h is pulled in via the ydraw-factory header (server-only).
-    # Wire format / type-id ranges come from ydraw-core/complex-prim-types.h.
+    # Wire format / type-id ranges come from ydraw-core/composite.h.
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
-// Two-tier complex-prim model:
+// Two-tier composite model:
 //   - factory owns ONE shared yetty_yrender_pipeline (compiled once at
 //     compile_pipeline time from a template resource_set; the pipeline
 //     carries the WGPUShaderModule + bind_group_layout + WGPURenderPipeline
@@ -1248,7 +1248,7 @@ def generate_yaml_parser(schema, uniforms, buffers):
     flags_code = '\n                else '.join(flag_checks) if flag_checks else '/* no yaml_flags */'
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
-// YAML parser factory for {name} complex primitive
+// YAML parser factory for {name} composite
 
 #include <yetty/{name}/{name}-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>

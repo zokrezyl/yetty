@@ -1,4 +1,4 @@
-/* flyweight — module-internal declarations (ydraw-core only).
+/* drawable-list entry — module-internal declarations (ydraw-core only).
  *
  * The public surface lives in include/yetty/ydraw-core/drawable-list-registry.h.
  */
@@ -16,7 +16,7 @@ extern "C" {
 typedef struct yetty_ydraw_drawable_list_entry_ops_ptr_result (*yetty_ydraw_drawable_handler_fn)(
     uint32_t drawable_type);
 
-/* Get flyweight for primitive (tries default first, then by type range).
+/* Get drawable-list entry for primitive (tries default first, then by type range).
  * `drawable_data[0]` is the type — read inside; no separate type param. */
 struct yetty_ydraw_drawable_list_entry_ptr_result yetty_ydraw_drawable_list_registry_get(
     const struct yetty_ydraw_drawable_list_registry *reg, const uint32_t *drawable_data);

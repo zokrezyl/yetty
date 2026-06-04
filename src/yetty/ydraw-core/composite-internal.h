@@ -1,4 +1,4 @@
-/* complex-prim-types — module-internal declarations (ydraw-core only).
+/* composite — module-internal declarations (ydraw-core only).
  *
  * The public surface lives in include/yetty/ydraw-core/composite.h.
  */

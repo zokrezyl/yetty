@@ -66,7 +66,7 @@ static int g_tests = 0;
  * "kind: test_leaf | bytes_seen: N".
  *
  * Kind code 0x70000001 is outside every range the production code uses
- * (YGRID = 2, YMGUI/YRDAWN single-digit, complex-prim base 0x80000003+).
+ * (YGRID = 2, YMGUI/YRDAWN single-digit, composite base 0x80000003+).
  *===========================================================================*/
 
 #define TEST_LEAF_KIND 0x70000001u

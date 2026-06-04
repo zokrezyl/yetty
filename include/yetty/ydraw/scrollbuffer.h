@@ -136,9 +136,9 @@ struct yetty_ydraw_scrollbuffer_cell {
     const struct yetty_ydraw_scrollbuffer_ref *refs;
 };
 
-/* One primitive's payload. word_count must match the flyweight of
+/* One primitive's payload. word_count must match the drawable-list entry of
  * payload[0] (the type word); the decoder will trust the codec is
- * consistent with the canvas's flyweight. */
+ * consistent with the canvas's drawable-list entry. */
 struct yetty_ydraw_scrollbuffer_prim {
     uint32_t rolling_row;
     uint32_t word_count;
@@ -199,8 +199,8 @@ struct yetty_ydraw_scrollbuffer_decode_sinks {
 
 /* For decoding non-default records, the codec needs to know the size
  * of each prim's payload from its type word. The canvas already owns
- * a flyweight registry that maps type → word_count; pass it via this
- * trampoline so the codec doesn't depend on the flyweight header. */
+ * a drawable-list registry that maps type → word_count; pass it via this
+ * trampoline so the codec doesn't depend on the drawable-list entry header. */
 typedef uint32_t (*yetty_ydraw_scrollbuffer_word_count_fn)(uint32_t type_word, void *ctx);
 
 /* Decode the record that starts at `offset`. Returns the byte offset

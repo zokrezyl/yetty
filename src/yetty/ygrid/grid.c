@@ -7,7 +7,7 @@
  *   ycore        — Result + buffer + rectangle types
  *   yfigure      — figure base type
  *   yrender      — pipeline + binder + resource set machinery
- *   ydraw-core   — flyweight registry (wire-format parsing primitives)
+ *   ydraw-core   — drawable-list registry (wire-format parsing primitives)
  *   ysdf         — SDF handler (size + aabb) and ysdf.gen.wgsl (SDF math)
  *
  * No coupling to scene-canvas / scrolling-canvas / ydraw-layer. Those
@@ -1902,7 +1902,7 @@ static struct yetty_ycore_void_result ygrid_process_bytes(struct yetty_yfigure_f
     return process_group_body(g, YGRID_ROOT_SLOT, bytes, bytes_len);
 }
 
-/* Drop content (records, prims, complex-prim instances, per-cell
+/* Drop content (records, prims, composite instances, per-cell
  * buckets) WITHOUT touching the GPU resource set, binder, pipeline,
  * atlases, or the font slots. Lets CREATE_CHILD on an existing id
  * refresh a widget's content in place — followed by process_bytes
@@ -2401,7 +2401,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     }
     /* Test/tooling mode: `context == NULL` (or `context->runtime == NULL`)
      * skips every GPU-touching init step — no shader load, no binder.
-     * The entity tree, flyweight registry, cell bucketing, and the
+     * The entity tree, drawable-list registry, cell bucketing, and the
      * process_bytes path all still work. Render is a no-op-on-NULL-binder
      * later; tests never call it. */
     int headless = (context == NULL) || (context->runtime == NULL);
@@ -2464,7 +2464,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         g->entities[root_slot].external_id = 0;
     }
 
-    /* Flyweight registry — used by process_input to walk the routed-
+    /* Drawable-list registry — used by process_input to walk the routed-
      * record payload as a stream of SDF / glyph / TEXT_SPAN / FONT
      * records. Same handler set the legacy compositor used for its
      * outer iterator, lifted here so each ygrid is self-sufficient. */
@@ -2563,8 +2563,8 @@ static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *ou
 
 /* Factory used by yetty_yfigure_registry_mint. `user` is a
  * (borrowed) `yetty_ygrid_factory_args *` carrying the default font and
- * (optional) complex-prim factory. NULL `user` is allowed — produces
- * an ygrid with no font and no complex-prim support, useful for tests
+ * (optional) composite factory. NULL `user` is allowed — produces
+ * an ygrid with no font and no composite support, useful for tests
  * and tooling. */
 static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_impl(struct yetty_ycore_rectangle rect,
                                                                  const struct yetty_context *context,

@@ -10,8 +10,8 @@
  * wraps paint() in CMD_GROUP(obj->id, rect) so each widget's prims are
  * entity-scoped. The current ygrid receiver, however, has no exact-
  * match disambiguation for CMD_GROUP (type=0x80000002): the type word
- * falls into the complex-prim range [0x80000000, 0xffffffff] and is
- * routed to the complex-prim handler, which reads the next u32 as
+ * falls into the composite range [0x80000000, 0xffffffff] and is
+ * routed to the composite handler, which reads the next u32 as
  * `payload_size`, advances the stride wrong, and the rest of the
  * stream becomes garbage. Until the ygrid iterator special-cases the
  * three cmd constants (CMD_GROUP / CMD_DELETE / CMD_UPDATE) the way

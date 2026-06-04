@@ -1,7 +1,7 @@
 /* scrolling-canvas.c — terminal text/ydraw canvas with scrollback.
  *
  * Self-contained implementation. Owns:
- *   - font cache, flyweight registry, figure factory, default font,
+ *   - font cache, drawable-list registry, figure factory, default font,
  *     font dirs/family/render-method, MSDF generator
  *   - cursor + rolling-row state, viewport override
  *   - GPU staging buffers (grid + prim)
@@ -506,13 +506,13 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     c->default_handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
     c->raster_base_size = 32.0f;
 
-    /* Flyweight registry. */
-    struct yetty_ydraw_drawable_list_registry_ptr_result flyweight_res = yetty_ydraw_drawable_list_registry_create_default();
-    if (YETTY_IS_ERR(flyweight_res)) {
+    /* Drawable-list registry. */
+    struct yetty_ydraw_drawable_list_registry_ptr_result entry_res = yetty_ydraw_drawable_list_registry_create_default();
+    if (YETTY_IS_ERR(entry_res)) {
         free(c);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "flyweight create", flyweight_res);
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "drawable-list-registry create", entry_res);
     }
-    c->drawable_list_registry = flyweight_res.value;
+    c->drawable_list_registry = entry_res.value;
 
     /* figure factory + built-in registrations. */
     struct yetty_ydraw_composite_factory_ptr_result factory_res =
@@ -853,10 +853,10 @@ static struct yetty_ycore_void_result canvas_push_cell_ref(struct scrolling_canv
 }
 
 static struct uint32_result add_drawable_internal(
-    struct scrolling_canvas *c, const struct yetty_ydraw_drawable_list_entry *flyweight)
+    struct scrolling_canvas *c, const struct yetty_ydraw_drawable_list_entry *entry)
 {
-    if (!flyweight || !flyweight->data || !flyweight->ops) {
-        return YETTY_ERR(uint32, "invalid flyweight");
+    if (!entry || !entry->data || !entry->ops) {
+        return YETTY_ERR(uint32, "invalid drawable-list entry");
     }
     if (c->cell_size.height <= 0.0f) {
         return YETTY_ERR(uint32, "cell_height <= 0");
@@ -864,17 +864,17 @@ static struct uint32_result add_drawable_internal(
     if (c->cell_size.width <= 0.0f) {
         return YETTY_ERR(uint32, "cell_width <= 0");
     }
-    if (!flyweight->ops->aabb || !flyweight->ops->size) {
+    if (!entry->ops->aabb || !entry->ops->size) {
         return YETTY_ERR(uint32, "handler missing ops");
     }
 
-    uint32_t drawable_type = flyweight->data[0];
+    uint32_t drawable_type = entry->data[0];
 
-    struct rectangle_result aabb_res = flyweight->ops->aabb(flyweight->data);
+    struct rectangle_result aabb_res = entry->ops->aabb(entry->data);
     YETTY_RETURN_IF_ERR(uint32, aabb_res, "add_drawable: aabb");
     struct yetty_ycore_rectangle aabb = aabb_res.value;
 
-    struct yetty_ycore_size_result size_res = flyweight->ops->size(flyweight->data);
+    struct yetty_ycore_size_result size_res = entry->ops->size(entry->data);
     YETTY_RETURN_IF_ERR(uint32, size_res, "add_drawable: size");
     uint32_t word_count = size_res.value / sizeof(uint32_t);
 
@@ -921,7 +921,7 @@ static struct uint32_result add_drawable_internal(
 
     struct uint32_result push_res =
         yetty_ydraw_scrolling_grid_push_prim(c->grid, drawable_grid_line, drawable_rolling_row,
-                                             (const float *)flyweight->data, word_count);
+                                             (const float *)entry->data, word_count);
     YETTY_RETURN_IF_ERR(uint32, push_res, "add_drawable: push_prim");
     uint32_t drawable_index = push_res.value;
 
@@ -971,7 +971,7 @@ static struct uint32_result add_drawable_internal(
 
     if (yetty_ydraw_is_composite(drawable_type)) {
         struct yetty_ydraw_figure_ptr_result inst_res =
-            yetty_ydraw_composite_factory_create_instance(c->composite_factory, flyweight->data,
+            yetty_ydraw_composite_factory_create_instance(c->composite_factory, entry->data,
                                                            word_count * sizeof(uint32_t),
                                                            drawable_rolling_row);
         YETTY_RETURN_IF_ERR(uint32, inst_res, "add_drawable: create_instance");
@@ -1191,10 +1191,10 @@ struct env_state {
 };
 
 static struct yetty_ycore_void_result dispatch_one(
-    struct scrolling_canvas *c, const struct yetty_ydraw_drawable_list_entry *flyweight,
+    struct scrolling_canvas *c, const struct yetty_ydraw_drawable_list_entry *entry,
     struct env_state *env)
 {
-    uint32_t drawable_type = flyweight->data[0];
+    uint32_t drawable_type = entry->data[0];
     if (drawable_type <= YETTY_YDRAW_CMD_END) {
         if (drawable_type == YETTY_YDRAW_CMD_ZERO) {
             ydebug("process_input: CMD_ZERO — clearing canvas + cursor (0,0)");
@@ -1213,13 +1213,13 @@ static struct yetty_ycore_void_result dispatch_one(
          * no-op. The iter has already consumed the full record (header
          * + payload bytes); the payload's nested commands are simply
          * not processed. */
-        uint32_t group_id = flyweight->data[1];
+        uint32_t group_id = entry->data[1];
         ydebug("scrolling-canvas: CMD_GROUP id=%u — no-op (entities not supported)", group_id);
         return YETTY_OK_VOID();
     }
     if (drawable_type == YETTY_YDRAW_RESOURCE_FONT) {
         struct yetty_ydraw_font_resource_view fv;
-        if (yetty_ydraw_font_resource_parse(flyweight->data, &fv) != 0 || fv.font_id < 0) {
+        if (yetty_ydraw_font_resource_parse(entry->data, &fv) != 0 || fv.font_id < 0) {
             return YETTY_OK_VOID();
         }
         char hex[17];
@@ -1263,7 +1263,7 @@ static struct yetty_ycore_void_result dispatch_one(
     }
     if (drawable_type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
         struct yetty_ydraw_text_drawable_list_view tv;
-        if (yetty_ydraw_text_drawable_list_parse(flyweight->data, &tv) != 0) {
+        if (yetty_ydraw_text_drawable_list_parse(entry->data, &tv) != 0) {
             return YETTY_OK_VOID();
         }
         struct yetty_yfont_font *font = NULL;
@@ -1300,7 +1300,7 @@ static struct yetty_ycore_void_result dispatch_one(
         YETTY_RETURN_IF_ERR(yetty_ycore_void, an, "dispatch: attach_list_note");
         return YETTY_OK_VOID();
     }
-    struct uint32_result drawable_res = add_drawable_internal(c, flyweight);
+    struct uint32_result drawable_res = add_drawable_internal(c, entry);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, drawable_res, "dispatch: add_drawable");
     if (drawable_res.value > env->max_row_seen) {
         env->max_row_seen = drawable_res.value;
