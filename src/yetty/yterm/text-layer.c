@@ -1569,6 +1569,23 @@ void yetty_yterm_terminal_layer_terminal_text_layer_get_cells(
     }
 }
 
+uint32_t yetty_yterm_terminal_layer_terminal_text_layer_get_root_row(
+    const struct yetty_yrender_terminal_layer *self)
+{
+    const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+
+    /* Scrollback view hands back a staging buffer laid out from row 0 — same
+     * convention text_layer_get_gpu_resource_set forces on the shader uniform. */
+    if (text_layer->view_active && text_layer->view_staging) {
+        return 0;
+    }
+    if (!text_layer->screen) {
+        return 0;
+    }
+    return (uint32_t)vterm_screen_get_buffer_root_row(text_layer->screen);
+}
+
 /* VTerm callbacks */
 
 YETTY_EXTERNAL_CALLBACK

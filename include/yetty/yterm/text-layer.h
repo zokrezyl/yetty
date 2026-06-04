@@ -31,6 +31,15 @@ struct yetty_ycore_void_result yetty_yterm_text_layer_process_input(
 void yetty_yterm_terminal_layer_terminal_text_layer_get_cells(
     const struct yetty_yrender_terminal_layer *self, const uint8_t **out_data, size_t *out_size);
 
+/* Row within the borrowed cell buffer where the visible screen's row 0 sits.
+ * libvterm allocates the live buffer 2*rows tall and bumps this offset on
+ * full-screen scroll-up instead of memmoving. Siblings that read the same
+ * cells (shader-glyph figure) must add this offset to locate visible cells,
+ * exactly as text-layer.wgsl does. Returns 0 in scrollback-view mode, where
+ * get_cells hands back a staging buffer already laid out from row 0. */
+uint32_t yetty_yterm_terminal_layer_terminal_text_layer_get_root_row(
+    const struct yetty_yrender_terminal_layer *self);
+
 /* TEMP isolation: render the text-layer's owned figures (shader-glyph). */
 struct yetty_ydraw_target;
 struct yetty_ycore_void_result yetty_yterm_text_layer_render_figures(
