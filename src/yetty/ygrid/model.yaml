@@ -48,7 +48,7 @@ classes:
         get: false
         set: false
       - name: registry
-        type: "struct yetty_ydraw_flyweight_registry *"
+        type: "struct yetty_ydraw_drawable_list_registry *"
         get: false
         set: false
       - name: grid_cols
@@ -203,8 +203,8 @@ classes:
         type: int
         get: false
         set: false
-      - name: figure_factory
-        type: "struct yetty_ydraw_complex_drawable_factory *"
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
         get: false
         set: false
       - name: figure_instances

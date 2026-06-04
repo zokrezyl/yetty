@@ -1065,7 +1065,7 @@ struct glyph_uniforms {
 
 /* Per-glyph data assembled during dispatch and serialised to the CDB.
  * Pixel-space metrics are stored as floats to preserve sub-pixel precision —
- * downstream (msdf-font.c → expand_text_span_to_glyphs) reads them straight
+ * downstream (msdf-font.c → expand_text_drawable_list_to_glyphs) reads them straight
  * out of the CDB header and any truncation here translates 1:1 to wrong
  * glyph layout on screen. */
 struct emit_glyph {

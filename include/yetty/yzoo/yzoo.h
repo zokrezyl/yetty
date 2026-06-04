@@ -18,7 +18,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,7 +60,7 @@ struct yetty_ycore_void_result yetty_yzoo_set_scene_size(struct yetty_yzoo *zoo,
  * `buf`. The buffer is cleared and its scene bounds are set to
  * (0, 0, scene_width, scene_height). */
 struct yetty_ycore_void_result yetty_yzoo_render(struct yetty_yzoo *zoo,
-                                                 struct yetty_ydraw_draw_list *buf, float time);
+                                                 struct yetty_ydraw_drawable_list *buf, float time);
 
 const struct yetty_yzoo_config *yetty_yzoo_config_get(const struct yetty_yzoo *zoo);
 

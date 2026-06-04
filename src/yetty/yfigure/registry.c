@@ -12,7 +12,7 @@
 
 struct kind_entry {
     uint32_t kind;
-    yetty_yfigure_factory_fn factory;
+    yetty_ycomposite_factory_fn factory;
     void *user;
     UT_hash_handle hh;
 };
@@ -47,7 +47,7 @@ struct yetty_ycore_void_result yetty_yfigure_registry_destroy(
 }
 
 struct yetty_ycore_void_result yetty_yfigure_registry_register(
-    struct yetty_yfigure_registry *registry, uint32_t kind, yetty_yfigure_factory_fn factory,
+    struct yetty_yfigure_registry *registry, uint32_t kind, yetty_ycomposite_factory_fn factory,
     void *user)
 {
     if (!registry || !factory) {

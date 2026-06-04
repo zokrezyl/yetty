@@ -65,7 +65,7 @@ static struct yetty_ycore_void_result ch_rounded(struct yetty_ygui_emit_ctx *ctx
                                        .radius_bottom_right = radius,
                                        .radius_top_left = radius,
                                        .radius_bottom_left = radius};
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0, 0, fill, stroke,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill, stroke,
                                                          stroke_w, &g);
 }
 
@@ -91,7 +91,7 @@ static struct yetty_ycore_void_result ch_chevron(struct yetty_ygui_emit_ctx *ctx
         t.vertex_c_x = cx + s * 0.45f;
         t.vertex_c_y = cy;
     }
-    return yetty_ydraw_draw_list_add_cmd_add_triangle(ctx->ygrid_draw_list, 0, 0, CH_CHEVRON, 0, 0,
+    return yetty_ydraw_drawable_list_add_cmd_add_triangle(ctx->ygrid_drawable_list, 0, 0, CH_CHEVRON, 0, 0,
                                                       &t);
 }
 
@@ -202,7 +202,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "collapsing_header paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());

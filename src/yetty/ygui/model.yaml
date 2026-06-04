@@ -1653,7 +1653,7 @@ classes:
     data: struct embed_data
     data_fields:
       - name: buf
-        type: "struct yetty_ydraw_draw_list *"
+        type: "struct yetty_ydraw_drawable_list *"
         get: false
         set: false
     ops:
@@ -3395,7 +3395,7 @@ typedef void (*yetty_ygui_tab_new_cb)(struct yetty_ygui_object *tabbar, void *us
       - name: obj
         type: "struct yetty_ygui_object *"
       - name: buf
-        type: "struct yetty_ydraw_draw_list *"
+        type: "struct yetty_ydraw_drawable_list *"
   - source_file: src/yetty/ygui/widgets/yimage.c
     name: yetty_ygui_yimage_set_bytes
     return_type: struct yetty_ycore_void_result

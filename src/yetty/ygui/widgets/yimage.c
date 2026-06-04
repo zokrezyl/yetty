@@ -8,14 +8,14 @@
  * file — the framework's class system stays generic.
  *
  * In-place reset on the receiver: a fresh body record targeting the
- * same id resets the YIMAGE figure's draw_list, keeping its GPU
+ * same id resets the YIMAGE figure's drawable_list, keeping its GPU
  * pipeline cache hot (see yfigure/figure.h reset_content contract).
  */
 
 #include "../internal.h"
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/widgets/yimage.h>
 #include <yetty/yimage/yimage.h>
@@ -101,8 +101,8 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
     /* The receiver-side YIMAGE figure is in fact a ygrid (the platform
      * registers ygrid's factory under YETTY_YFIGURE_KIND_YIMAGE so all
      * producer widgets share one renderer), so the body bytes must be
-     * a ydraw draw_list containing one yimage complex prim — NOT the
-     * raw JPEG/PNG bytes. yetty_yimage_render builds that draw_list. */
+     * a ydraw drawable_list containing one yimage complex prim — NOT the
+     * raw JPEG/PNG bytes. yetty_yimage_render builds that drawable_list. */
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     struct yetty_yimage_render_config cfg = {
         .bounds_x = 0.0f,
@@ -110,19 +110,19 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
         .bounds_w = r.max.x - r.min.x,
         .bounds_h = r.max.y - r.min.y,
     };
-    struct yetty_ydraw_draw_list_result dlr = yetty_yimage_render(d->bytes, d->len, &cfg);
+    struct yetty_ydraw_drawable_list_result dlr = yetty_yimage_render(d->bytes, d->len, &cfg);
     if (YETTY_IS_ERR(dlr)) {
         return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: yimage_render", dlr);
     }
-    struct yetty_ydraw_draw_list *dl = dlr.value;
-    const void *bytes = yetty_ydraw_draw_list_data(dl);
-    size_t size = yetty_ydraw_draw_list_size(dl);
+    struct yetty_ydraw_drawable_list *dl = dlr.value;
+    const void *bytes = yetty_ydraw_drawable_list_data(dl);
+    size_t size = yetty_ydraw_drawable_list_size(dl);
     struct yetty_ycore_void_result er = YETTY_OK_VOID();
     if (bytes && size > 0) {
         if (size > 0xFFFFFFFFu) {
-            yetty_ydraw_draw_list_destroy(dl);
+            yetty_ydraw_drawable_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void,
-                             "yimage_emit_body: rendered draw_list exceeds wire u32 length");
+                             "yimage_emit_body: rendered drawable_list exceeds wire u32 length");
         }
         /* Receiver-side YIMAGE figure is a ygrid whose process_bytes
          * APPENDS complex-prim instances on every body — without a
@@ -133,31 +133,31 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
          * instance/prim/cell state before consuming the fresh yimage
          * record. (The chrome ygrid's stream already starts with
          * CMD_ZERO via framework_emit; figure bodies need the same.) */
-        struct yetty_ydraw_draw_list_result zlr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+        struct yetty_ydraw_drawable_list_result zlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(zlr)) {
-            yetty_ydraw_draw_list_destroy(dl);
+            yetty_ydraw_drawable_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: prefix list create", zlr);
         }
-        struct yetty_ydraw_draw_list *zl = zlr.value;
-        struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(zl);
+        struct yetty_ydraw_drawable_list *zl = zlr.value;
+        struct yetty_ycore_void_result zr = yetty_ydraw_drawable_list_add_cmd_zero(zl);
         if (YETTY_IS_ERR(zr)) {
-            yetty_ydraw_draw_list_destroy(zl);
-            yetty_ydraw_draw_list_destroy(dl);
+            yetty_ydraw_drawable_list_destroy(zl);
+            yetty_ydraw_drawable_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: CMD_ZERO append", zr);
         }
-        const void *zbytes = yetty_ydraw_draw_list_data(zl);
-        size_t zsize = yetty_ydraw_draw_list_size(zl);
+        const void *zbytes = yetty_ydraw_drawable_list_data(zl);
+        size_t zsize = yetty_ydraw_drawable_list_size(zl);
         if (zsize > 0xFFFFFFFFu - size) {
-            yetty_ydraw_draw_list_destroy(zl);
-            yetty_ydraw_draw_list_destroy(dl);
+            yetty_ydraw_drawable_list_destroy(zl);
+            yetty_ydraw_drawable_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void,
                              "yimage_emit_body: prefixed body would overflow u32");
         }
         size_t total = zsize + size;
         uint8_t *combined = malloc(total);
         if (!combined) {
-            yetty_ydraw_draw_list_destroy(zl);
-            yetty_ydraw_draw_list_destroy(dl);
+            yetty_ydraw_drawable_list_destroy(zl);
+            yetty_ydraw_drawable_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: combined oom");
         }
         if (zbytes && zsize > 0) {
@@ -166,9 +166,9 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
         memcpy(combined + zsize, bytes, size);
         er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined, (uint32_t)total);
         free(combined);
-        yetty_ydraw_draw_list_destroy(zl);
+        yetty_ydraw_drawable_list_destroy(zl);
     }
-    yetty_ydraw_draw_list_destroy(dl);
+    yetty_ydraw_drawable_list_destroy(dl);
     return er;
 }
 

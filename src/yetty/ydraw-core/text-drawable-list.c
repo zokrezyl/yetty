@@ -1,9 +1,9 @@
 /*
- * text-span-prim.c - flyweight TEXT_SPAN primitive (see text-span-prim.h).
+ * text-drawable-list.c - flyweight TEXT_SPAN primitive (see text-drawable-list.h).
  */
 
-#include <yetty/ydraw-core/text-span-prim.h>
-#include "text-span-prim-internal.h"
+#include <yetty/ydraw-core/text-drawable-list.h>
+#include "text-drawable-list-internal.h"
 
 #include <math.h>
 #include <string.h>
@@ -27,12 +27,12 @@ static uint32_t text_span_payload_size(uint32_t text_len)
     return align4(TEXT_SPAN_FIXED_BYTES + text_len);
 }
 
-size_t yetty_ydraw_text_span_drawable_size_for(uint32_t text_len)
+size_t yetty_ydraw_text_drawable_list_size_for(uint32_t text_len)
 {
     return TEXT_SPAN_PRIM_HEADER + text_span_payload_size(text_len);
 }
 
-void yetty_ydraw_text_span_drawable_write_full(uint8_t *out, float x, float y, float font_size,
+void yetty_ydraw_text_drawable_list_write_full(uint8_t *out, float x, float y, float font_size,
                                                float rotation, uint32_t color, uint32_t layer,
                                                int32_t font_id, const char *text, uint32_t text_len,
                                                float char_spacing, float word_spacing)
@@ -41,7 +41,7 @@ void yetty_ydraw_text_span_drawable_write_full(uint8_t *out, float x, float y, f
     size_t total = TEXT_SPAN_PRIM_HEADER + payload_size;
     memset(out, 0, total);
 
-    uint32_t type = YETTY_YDRAW_TYPE_TEXT_SPAN;
+    uint32_t type = YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST;
     memcpy(out + 0, &type, 4);
     memcpy(out + 4, &payload_size, 4);
 
@@ -71,16 +71,16 @@ void yetty_ydraw_text_span_drawable_write_full(uint8_t *out, float x, float y, f
     }
 }
 
-void yetty_ydraw_text_span_drawable_write(uint8_t *out, float x, float y, float font_size,
+void yetty_ydraw_text_drawable_list_write(uint8_t *out, float x, float y, float font_size,
                                           float rotation, uint32_t color, uint32_t layer,
                                           int32_t font_id, const char *text, uint32_t text_len)
 {
-    yetty_ydraw_text_span_drawable_write_full(out, x, y, font_size, rotation, color, layer, font_id,
+    yetty_ydraw_text_drawable_list_write_full(out, x, y, font_size, rotation, color, layer, font_id,
                                               text, text_len, 0.0f, 0.0f);
 }
 
-int yetty_ydraw_text_span_drawable_parse(const uint32_t *prim,
-                                         struct yetty_ydraw_text_span_drawable_view *out)
+int yetty_ydraw_text_drawable_list_parse(const uint32_t *prim,
+                                         struct yetty_ydraw_text_drawable_list_view *out)
 {
     if (!prim || !out) {
         return -1;
@@ -89,7 +89,7 @@ int yetty_ydraw_text_span_drawable_parse(const uint32_t *prim,
     uint32_t type, payload_size;
     memcpy(&type, prim, 4);
     memcpy(&payload_size, (const uint8_t *)prim + 4, 4);
-    if (type != YETTY_YDRAW_TYPE_TEXT_SPAN) {
+    if (type != YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
         return -1;
     }
     /* Accept either v1 (32-byte fixed prefix) or v2 (40-byte fixed prefix
@@ -138,7 +138,7 @@ int yetty_ydraw_text_span_drawable_parse(const uint32_t *prim,
  * Flyweight base ops
  *===========================================================================*/
 
-static struct yetty_ycore_size_result text_span_drawable_size(const uint32_t *prim)
+static struct yetty_ycore_size_result text_drawable_list_size(const uint32_t *prim)
 {
     uint32_t payload_size;
     memcpy(&payload_size, (const uint8_t *)prim + 4, 4);
@@ -150,10 +150,10 @@ static struct yetty_ycore_size_result text_span_drawable_size(const uint32_t *pr
  * so this is only used for the PASS-1 max-row computation. Width is
  * estimated at 0.6 * font_size per UTF-8 byte (over-estimate for
  * multi-byte sequences but never under-estimates the row span). */
-static struct rectangle_result text_span_drawable_aabb(const uint32_t *prim)
+static struct rectangle_result text_drawable_list_aabb(const uint32_t *prim)
 {
-    struct yetty_ydraw_text_span_drawable_view v;
-    if (yetty_ydraw_text_span_drawable_parse(prim, &v) < 0) {
+    struct yetty_ydraw_text_drawable_list_view v;
+    if (yetty_ydraw_text_drawable_list_parse(prim, &v) < 0) {
         return YETTY_ERR(rectangle, "malformed TEXT_SPAN");
     }
 
@@ -167,16 +167,16 @@ static struct rectangle_result text_span_drawable_aabb(const uint32_t *prim)
     return YETTY_OK(rectangle, r);
 }
 
-static const struct yetty_ydraw_drawable_base_ops g_text_span_drawable_base_ops = {
-    .size = text_span_drawable_size,
-    .aabb = text_span_drawable_aabb,
+static const struct yetty_ydraw_drawable_list_entry_ops g_text_drawable_list_base_ops = {
+    .size = text_drawable_list_size,
+    .aabb = text_drawable_list_aabb,
 };
 
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_text_span_drawable_handler(
+struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_text_drawable_list_handler(
     uint32_t drawable_type)
 {
-    if (drawable_type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-        return YETTY_OK(yetty_ydraw_drawable_base_ops_ptr, &g_text_span_drawable_base_ops);
+    if (drawable_type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+        return YETTY_OK(yetty_ydraw_drawable_list_entry_ops_ptr, &g_text_drawable_list_base_ops);
     }
-    return YETTY_ERR(yetty_ydraw_drawable_base_ops_ptr, "not TEXT_SPAN");
+    return YETTY_ERR(yetty_ydraw_drawable_list_entry_ops_ptr, "not TEXT_SPAN");
 }

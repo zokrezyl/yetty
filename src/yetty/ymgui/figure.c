@@ -23,7 +23,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>

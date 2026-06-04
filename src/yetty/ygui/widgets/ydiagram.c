@@ -28,7 +28,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widget.h>
 #include <yetty/ygui/widgets/ydiagram.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
@@ -132,10 +132,10 @@ struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_ygui_
      * overflowing the container. The diagram's scene bounds are its true
      * pixel footprint; size the widget to match so the layout reserves the
      * right space and the diagram fits exactly. */
-    float dw = yetty_ydraw_draw_list_scene_max_x(br.value) -
-               yetty_ydraw_draw_list_scene_min_x(br.value);
-    float dh = yetty_ydraw_draw_list_scene_max_y(br.value) -
-               yetty_ydraw_draw_list_scene_min_y(br.value);
+    float dw = yetty_ydraw_drawable_list_scene_max_x(br.value) -
+               yetty_ydraw_drawable_list_scene_min_x(br.value);
+    float dh = yetty_ydraw_drawable_list_scene_max_y(br.value) -
+               yetty_ydraw_drawable_list_scene_min_y(br.value);
     if (dw > 0.0f && dh > 0.0f) {
         struct yetty_ygui_layout layout = *yetty_ygui_widget_layout_get(obj);
         layout.width = dw;

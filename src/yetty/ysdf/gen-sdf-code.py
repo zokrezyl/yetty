@@ -167,8 +167,8 @@ def generate_sdf_types(prims: list[dict], out: Path) -> None:
 def _decl(name: str) -> str:
     """One add-cmd declaration, used by both the .h and the .c."""
     return (
-        f"struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_{name}(\n"
-        f"    struct yetty_ydraw_draw_list *list, uint32_t id,\n"
+        f"struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_add_{name}(\n"
+        f"    struct yetty_ydraw_drawable_list *list, uint32_t id,\n"
         f"    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,\n"
         f"    float stroke_width, const struct yetty_ysdf_{name} *geom)"
     )
@@ -193,7 +193,7 @@ def generate_sdf_drawable_header(prims: list[dict], out: Path) -> None:
 
     Per drawable, one function:
 
-        yetty_ydraw_draw_list_add_cmd_add_<name>(list, id,
+        yetty_ydraw_drawable_list_add_cmd_add_<name>(list, id,
             z_order, fill_color, stroke_color, stroke_width, *geom)
 
     `id == 0` ⇒ no id word written, type word goes on the wire as-is.
@@ -208,7 +208,7 @@ def generate_sdf_drawable_header(prims: list[dict], out: Path) -> None:
 #pragma once
 
 #include "types.gen.h"
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
@@ -250,7 +250,7 @@ def generate_sdf_drawable_impl(prims: list[dict], out: Path) -> None:
 {_geom_writes(args)}
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+        yetty_ydraw_drawable_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }}
@@ -538,7 +538,7 @@ def generate_sdf_yaml_factory_header(prims: list[dict], out: Path) -> None:
     lines.append("")
     lines.append("// SDF factory - handles all SDF primitive types")
     lines.append("struct yetty_ycore_void_result")
-    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_draw_list *buffer,")
+    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_drawable_list *buffer,")
     lines.append("                        struct yaml_parser_s *yaml_parser,")
     lines.append("                        const char *primitive_type_name);")
     lines.append("")
@@ -564,7 +564,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines = [HEADER_C, ""]
     lines.append('#include <yetty/ysdf/yaml-factory.gen.h>')
     lines.append('#include <yetty/ysdf/types.gen.h>')
-    lines.append('#include <yetty/ydraw-core/draw-list.h>')
+    lines.append('#include <yetty/ydraw-core/drawable-list.h>')
     lines.append('#include <yetty/ydraw-yaml/ydraw-yaml.h>')
     lines.append('#include <yetty/ytrace/ytrace.h>')
     lines.append('#include <yaml.h>')
@@ -659,7 +659,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append("")
 
     # Build primitive data
-    lines.append("static void build_prim(struct yetty_ydraw_draw_list *buffer,")
+    lines.append("static void build_prim(struct yetty_ydraw_drawable_list *buffer,")
     lines.append("                       const char *primitive_type_name,")
     lines.append("                       struct ysdf_parse_ctx *ctx) {")
     lines.append("    float data[16];")
@@ -689,7 +689,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append("    }")
     lines.append("")
     lines.append("    if (word_count > 0)")
-    lines.append("        yetty_ydraw_draw_list_add_prim(buffer, data, word_count * sizeof(float));")
+    lines.append("        yetty_ydraw_drawable_list_add_prim(buffer, data, word_count * sizeof(float));")
     lines.append("}")
     lines.append("")
 
@@ -699,7 +699,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append(" *===========================================================================*/")
     lines.append("")
     lines.append("struct yetty_ycore_void_result")
-    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_draw_list *buffer,")
+    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_drawable_list *buffer,")
     lines.append("                        struct yaml_parser_s *yaml_parser,")
     lines.append("                        const char *primitive_type_name) {")
     lines.append("    struct ysdf_parse_ctx ctx = {0};")

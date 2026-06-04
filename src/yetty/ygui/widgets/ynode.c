@@ -310,7 +310,7 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "ynode_paint: NULL ctx");
     }
     struct node_data *d = ynode_data(obj);
@@ -335,8 +335,8 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
         .radius_bottom_left = corner,
     };
     uint32_t border = d->selected ? YNODE_BORDER_SEL : YNODE_BORDER;
-    struct yetty_ycore_void_result result_338 = yetty_ydraw_draw_list_add_cmd_add_rounded_box(
-                            ctx->ygrid_draw_list, 0, 0, YNODE_BG, border, d->selected ? 2.0f : 1.0f,
+    struct yetty_ycore_void_result result_338 = yetty_ydraw_drawable_list_add_cmd_add_rounded_box(
+                            ctx->ygrid_drawable_list, 0, 0, YNODE_BG, border, d->selected ? 2.0f : 1.0f,
                             &frame);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_338, "ynode_paint: frame");
 
@@ -357,8 +357,8 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
             .radius_top_left = 0.0f,
             .radius_bottom_left = corner,
         };
-        struct yetty_ycore_void_result result_361 = yetty_ydraw_draw_list_add_cmd_add_rounded_box(
-                                ctx->ygrid_draw_list, 0, 0, YNODE_TITLE_BG, 0, 0.0f, &title);
+        struct yetty_ycore_void_result result_361 = yetty_ydraw_drawable_list_add_cmd_add_rounded_box(
+                                ctx->ygrid_drawable_list, 0, 0, YNODE_TITLE_BG, 0, 0.0f, &title);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_361, "ynode_paint: title bar");
         if (d->title && d->title[0]) {
             float font_size = YNODE_TITLE_FONT * zoom;
@@ -401,8 +401,8 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
                 .end_x = xc + sx * far * grip,
                 .end_y = r.max.y - 0.18f * grip,
             };
-            struct yetty_ycore_void_result result_409 = yetty_ydraw_draw_list_add_cmd_add_segment(
-                                    ctx->ygrid_draw_list, 0, 0, 0u, YNODE_GRIP, grip_w, &seg);
+            struct yetty_ycore_void_result result_409 = yetty_ydraw_drawable_list_add_cmd_add_segment(
+                                    ctx->ygrid_drawable_list, 0, 0, 0u, YNODE_GRIP, grip_w, &seg);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_409, "ynode_paint: grip");
         }
     }

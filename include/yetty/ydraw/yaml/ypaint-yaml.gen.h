@@ -4,7 +4,7 @@
 #pragma once
 
 #include <stddef.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/types.gen.h>
 
 #ifdef __cplusplus
@@ -18,7 +18,7 @@ extern "C" {
  * @param len Length of YAML string
  * @return 0 on success, -1 on error
  */
-int ydraw_sdf_yaml_parse(struct yetty_ydraw_draw_list *canvas, const char *yaml, size_t len);
+int ydraw_sdf_yaml_parse(struct yetty_ydraw_drawable_list *canvas, const char *yaml, size_t len);
 
 #ifdef __cplusplus
 }

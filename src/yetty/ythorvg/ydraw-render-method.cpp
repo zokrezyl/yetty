@@ -4,7 +4,7 @@
 
 #include "ydraw-render-method.hpp"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -83,7 +83,7 @@ namespace yetty::ythorvg
 // Constructor/Destructor
 //=============================================================================
 
-YDrawRenderMethod::YDrawRenderMethod(yetty_ydraw_draw_list *buffer) : _buffer(buffer)
+YDrawRenderMethod::YDrawRenderMethod(yetty_ydraw_drawable_list *buffer) : _buffer(buffer)
 {
 }
 
@@ -118,7 +118,7 @@ bool YDrawRenderMethod::postUpdate()
 bool YDrawRenderMethod::preRender()
 {
     if (_buffer) {
-        yetty_ydraw_draw_list_clear(_buffer);
+        yetty_ydraw_drawable_list_clear(_buffer);
     }
     _nextPrimId = 0;
     return true;
@@ -132,7 +132,7 @@ bool YDrawRenderMethod::postRender()
 bool YDrawRenderMethod::clear()
 {
     if (_buffer) {
-        yetty_ydraw_draw_list_clear(_buffer);
+        yetty_ydraw_drawable_list_clear(_buffer);
     }
     _nextPrimId = 0;
     return true;
@@ -507,7 +507,7 @@ void YDrawRenderMethod::emitMeshPolygon(uint32_t vertexCount, const float *verti
             tri.vertex_c_x = vertices[(i + 1) * 2];
             tri.vertex_c_y = vertices[(i + 1) * 2 + 1];
             auto r =
-                yetty_ydraw_draw_list_add_cmd_add_triangle(_buffer, 0, 0, fillColor, 0, 0.0f, &tri);
+                yetty_ydraw_drawable_list_add_cmd_add_triangle(_buffer, 0, 0, fillColor, 0, 0.0f, &tri);
             if (YETTY_IS_OK(r)) {
                 _nextPrimId++;
             }
@@ -522,7 +522,7 @@ void YDrawRenderMethod::emitMeshPolygon(uint32_t vertexCount, const float *verti
             seg.start_y = vertices[i * 2 + 1];
             seg.end_x = vertices[j * 2];
             seg.end_y = vertices[j * 2 + 1];
-            auto r = yetty_ydraw_draw_list_add_cmd_add_segment(_buffer, 0, 0, 0, strokeColor,
+            auto r = yetty_ydraw_drawable_list_add_cmd_add_segment(_buffer, 0, 0, 0, strokeColor,
                                                                strokeWidth, &seg);
             if (YETTY_IS_OK(r)) {
                 _nextPrimId++;
@@ -608,7 +608,7 @@ bool YDrawRenderMethod::tryRenderAsEllipse(YDrawRenderData *rd)
         (strokeA > 0) ? rgbaToPackedABGR(rd->strokeR, rd->strokeG, rd->strokeB, strokeA) : 0;
 
     yetty_ysdf_ellipse geom{cx, cy, rx, ry};
-    auto result = yetty_ydraw_draw_list_add_cmd_add_ellipse(_buffer, 0, 0, fillColor, strokeColor,
+    auto result = yetty_ydraw_drawable_list_add_cmd_add_ellipse(_buffer, 0, 0, fillColor, strokeColor,
                                                             rd->strokeWidth, &geom);
     if (YETTY_IS_OK(result)) {
         _nextPrimId++;
@@ -701,7 +701,7 @@ bool YDrawRenderMethod::tryRenderAsBox(YDrawRenderData *rd)
         (strokeA > 0) ? rgbaToPackedABGR(rd->strokeR, rd->strokeG, rd->strokeB, strokeA) : 0;
 
     yetty_ysdf_box geom{cx, cy, hw, hh, cornerRadius};
-    auto result = yetty_ydraw_draw_list_add_cmd_add_box(_buffer, 0, 0, fillColor, strokeColor,
+    auto result = yetty_ydraw_drawable_list_add_cmd_add_box(_buffer, 0, 0, fillColor, strokeColor,
                                                         rd->strokeWidth, &geom);
     if (YETTY_IS_OK(result)) {
         _nextPrimId++;
@@ -946,7 +946,7 @@ void YDrawRenderMethod::renderPath(YDrawRenderData *rd)
                                     dashVisible);
             } else {
                 yetty_ysdf_segment seg{current.x, current.y, next.x, next.y};
-                auto r = yetty_ydraw_draw_list_add_cmd_add_segment(_buffer, 0, 0, 0, strokeColor,
+                auto r = yetty_ydraw_drawable_list_add_cmd_add_segment(_buffer, 0, 0, 0, strokeColor,
                                                                    rd->strokeWidth, &seg);
                 if (YETTY_IS_OK(r)) {
                     _nextPrimId++;
@@ -974,7 +974,7 @@ void YDrawRenderMethod::renderPath(YDrawRenderData *rd)
                                flat);
             for (size_t k = 2; k + 1 < flat.size(); k += 2) {
                 yetty_ysdf_segment seg{flat[k - 2], flat[k - 1], flat[k], flat[k + 1]};
-                auto r = yetty_ydraw_draw_list_add_cmd_add_segment(_buffer, 0, 0, 0, strokeColor,
+                auto r = yetty_ydraw_drawable_list_add_cmd_add_segment(_buffer, 0, 0, 0, strokeColor,
                                                                    rd->strokeWidth, &seg);
                 if (YETTY_IS_OK(r)) {
                     _nextPrimId++;
@@ -1024,7 +1024,7 @@ void YDrawRenderMethod::renderDashedSegment(float x0, float y0, float x1, float 
             float ex = x0 + ux * (pos + advance);
             float ey = y0 + uy * (pos + advance);
             yetty_ysdf_segment seg{sx, sy, ex, ey};
-            auto r = yetty_ydraw_draw_list_add_cmd_add_segment(_buffer, 0, 0, 0, strokeColor,
+            auto r = yetty_ydraw_drawable_list_add_cmd_add_segment(_buffer, 0, 0, 0, strokeColor,
                                                                strokeWidth, &seg);
             if (YETTY_IS_OK(r)) {
                 _nextPrimId++;
@@ -1151,7 +1151,7 @@ bool YDrawRenderMethod::tryRenderAsGradientBox(YDrawRenderData *rd)
     // flattened. Replace with a proper gradient SDF when available.
     if (isLinear) {
         yetty_ysdf_box geom{cx, cy, hw, hh, 0.0f};
-        auto result = yetty_ydraw_draw_list_add_cmd_add_box(_buffer, 0, 0, gradColor1, strokeColor,
+        auto result = yetty_ydraw_drawable_list_add_cmd_add_box(_buffer, 0, 0, gradColor1, strokeColor,
                                                             rd->strokeWidth, &geom);
         if (YETTY_IS_OK(result)) {
             _nextPrimId++;
@@ -1159,7 +1159,7 @@ bool YDrawRenderMethod::tryRenderAsGradientBox(YDrawRenderData *rd)
     } else {
         float r = std::max(hw, hh);
         yetty_ysdf_ellipse geom{cx, cy, r, r};
-        auto result = yetty_ydraw_draw_list_add_cmd_add_ellipse(
+        auto result = yetty_ydraw_drawable_list_add_cmd_add_ellipse(
             _buffer, 0, 0, gradColor1, strokeColor, rd->strokeWidth, &geom);
         if (YETTY_IS_OK(result)) {
             _nextPrimId++;

@@ -2,7 +2,7 @@
  * ygui-yrich_view.c — hosts a yetty_yrich_document inside a ydraw_embed.
  *
  * yrich documents (ydoc rich-text, yspreadsheet, yslides) render
- * themselves into a yetty_ydraw_draw_list. This widget owns one such
+ * themselves into a yetty_ydraw_drawable_list. This widget owns one such
  * document, re-renders it into a fresh draw list whenever its rect
  * changes or the document marks itself dirty, and hands the buffer to
  * the ydraw_embed base — which blits the primitive stream translated
@@ -17,8 +17,8 @@
 #include "../internal.h"
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
-#include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/yrich_view.h>
@@ -128,11 +128,11 @@ static size_t yrich_view_prim_size(const uint32_t *prim, size_t remaining)
 /* Recolour every TEXT_SPAN in the freshly-rendered buffer to `color`. The
  * yrich model bakes a fixed (near-black) colour into each text run; this
  * makes content legible against the themed background. TEXT_SPAN wire
- * layout (text-span-prim.h): word[6] is the packed colour. */
-static void yrich_view_retint_text(struct yetty_ydraw_draw_list *buf, uint32_t color)
+ * layout (text-drawable-list.h): word[6] is the packed colour. */
+static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32_t color)
 {
-    uint8_t *data = (uint8_t *)yetty_ydraw_draw_list_data(buf);
-    size_t size = yetty_ydraw_draw_list_size(buf);
+    uint8_t *data = (uint8_t *)yetty_ydraw_drawable_list_data(buf);
+    size_t size = yetty_ydraw_drawable_list_size(buf);
     if (!data) {
         return;
     }
@@ -143,7 +143,7 @@ static void yrich_view_retint_text(struct yetty_ydraw_draw_list *buf, uint32_t c
         if (s == 0) {
             break;
         }
-        if (YRICH_VIEW_TYPE_BASE(prim[0]) == YETTY_YDRAW_TYPE_TEXT_SPAN &&
+        if (YRICH_VIEW_TYPE_BASE(prim[0]) == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST &&
             s >= 7 * sizeof(uint32_t)) {
             prim[6] = color;
         }
@@ -174,13 +174,13 @@ static struct yetty_ycore_void_result yrich_view_render(struct yetty_ygui_object
     if (!d->doc || w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yrich_view_render: buffer create");
     yetty_yrich_document_set_buffer(d->doc, br.value);
     struct yetty_ycore_void_result rr = yetty_yrich_document_render(d->doc);
     if (YETTY_IS_ERR(rr)) {
         yetty_yrich_document_set_buffer(d->doc, NULL);
-        yetty_ydraw_draw_list_destroy(br.value);
+        yetty_ydraw_drawable_list_destroy(br.value);
         return YETTY_ERR(yetty_ycore_void, "yrich_view_render: document render", rr);
     }
     yetty_yrich_document_clear_dirty(d->doc);

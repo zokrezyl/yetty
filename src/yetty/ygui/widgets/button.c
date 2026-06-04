@@ -13,7 +13,7 @@
 
 #include <yetty/ygui/primitive-widget.h>
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/ygui/widgets/button.h>
@@ -105,7 +105,7 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "button_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =
@@ -163,8 +163,8 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
         };
         uint32_t stroke = hovered ? BTN_HOVER_OUTLINE : 0u;
         float stroke_w = hovered ? 2.0f : 0.0f;
-        struct yetty_ycore_void_result rr = yetty_ydraw_draw_list_add_cmd_add_linear_gradient_box(
-            ctx->ygrid_draw_list, /*id=*/0, /*z_order=*/0, /*fill=*/0u, stroke, stroke_w, &gg);
+        struct yetty_ycore_void_result rr = yetty_ydraw_drawable_list_add_cmd_add_linear_gradient_box(
+            ctx->ygrid_drawable_list, /*id=*/0, /*z_order=*/0, /*fill=*/0u, stroke, stroke_w, &gg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: gradient surface");
     } else {
         struct yetty_ysdf_rounded_box geom = {
@@ -177,8 +177,8 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
             .radius_top_left = radius,
             .radius_bottom_left = radius,
         };
-        struct yetty_ycore_void_result rr = yetty_ydraw_draw_list_add_cmd_add_rounded_box(
-            ctx->ygrid_draw_list, /*id=*/0, /*z_order=*/0, surface, /*stroke=*/0u,
+        struct yetty_ycore_void_result rr = yetty_ydraw_drawable_list_add_cmd_add_rounded_box(
+            ctx->ygrid_drawable_list, /*id=*/0, /*z_order=*/0, surface, /*stroke=*/0u,
             /*stroke_w=*/0.0f, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: pressed surface");
     }
@@ -197,8 +197,8 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
             .capacity = strlen(d->label),
             .size = strlen(d->label),
         };
-        struct yetty_ycore_void_result rr = yetty_ydraw_draw_list_add_text(
-            ctx->ygrid_draw_list, x, y, &text_buf, font_size, BTN_FG, /*layer=*/0, /*font_id=*/-1,
+        struct yetty_ycore_void_result rr = yetty_ydraw_drawable_list_add_text(
+            ctx->ygrid_drawable_list, x, y, &text_buf, font_size, BTN_FG, /*layer=*/0, /*font_id=*/-1,
             /*rotation=*/0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: label");
     }

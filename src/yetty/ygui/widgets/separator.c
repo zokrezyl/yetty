@@ -4,7 +4,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/separator.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -18,7 +18,7 @@ static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *y
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "separator_paint: NULL ctx");
     }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -33,7 +33,7 @@ static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *y
         .half_width = w * 0.5f,
         .half_height = h * 0.5f,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0u, 0u, COLOR_BORDER, 0u,
+    return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, COLOR_BORDER, 0u,
                                                  0.0f, &geom);
 }
 

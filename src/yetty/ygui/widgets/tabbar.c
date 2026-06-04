@@ -15,7 +15,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/hbox.h>
@@ -398,7 +398,7 @@ static struct yetty_ycore_void_result paint_pill(struct yetty_ygui_emit_ctx *ctx
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u, 0.0f,
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
                                                      &geom);
     }
     struct yetty_ysdf_rounded_box geom = {
@@ -411,7 +411,7 @@ static struct yetty_ycore_void_result paint_pill(struct yetty_ygui_emit_ctx *ctx
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
                                                          0.0f, &geom);
 }
 
@@ -426,7 +426,7 @@ static struct yetty_ycore_void_result paint_label(struct yetty_ygui_emit_ctx *ct
         .capacity = strlen(text),
         .size = strlen(text),
     };
-    return yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, x, y, &text_buf, font_size, color,
+    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &text_buf, font_size, color,
                                           /*layer=*/0, /*font_id=*/-1, /*rotation=*/0.0f);
 }
 
@@ -437,7 +437,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_paint: NULL ctx");
     }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);

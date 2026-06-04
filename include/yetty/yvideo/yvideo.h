@@ -8,7 +8,7 @@
  * Pipeline:
  *   caller supplies H.264 NAL bytes (raw file or in-memory buffer)
  *   yetty_yvideo_uniforms_serialize(uniforms, nal_stream) → wire bytes
- *   wrap in CMD_GROUP(id) + the prim                       → draw_list
+ *   wrap in CMD_GROUP(id) + the prim                       → drawable_list
  *   yetty_yvideo_osc_bin_emit(...)                         → OSC envelope
  *
  * The figure is STATEFUL on the receiving terminal — once the INIT
@@ -26,7 +26,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yvideo/yvideo-gen.h>
 
 #ifdef __cplusplus
@@ -84,10 +84,10 @@ struct yetty_yvideo_render_config {
 };
 
 /*
- * Build a draw_list holding ONE yvideo complex prim that carries the
+ * Build a drawable_list holding ONE yvideo complex prim that carries the
  * supplied NAL bytes as its initial chunk + (optionally) the initial
  * audio packets. The caller owns the returned buffer and frees it with
- * yetty_ydraw_draw_list_destroy.
+ * yetty_ydraw_drawable_list_destroy.
  *
  * `audio_bytes` carries length-prefixed audio packets (each: u32
  * length followed by `length` bytes; the v2 audio_stream buffer
@@ -98,13 +98,13 @@ struct yetty_yvideo_render_config {
  * helper below is intentionally low-level and does NOT wrap — callers
  * (or the demo driver) compose the GROUP themselves.
  */
-struct yetty_ydraw_draw_list_result yetty_yvideo_render(
+struct yetty_ydraw_drawable_list_result yetty_yvideo_render(
     const uint8_t *nal_bytes, size_t nal_len, const uint8_t *audio_bytes, size_t audio_len,
     const struct yetty_yvideo_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
-struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                          FILE *out);
 
 #ifdef __cplusplus

@@ -58,10 +58,10 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-iterator.h>
-#include <yetty/ydraw-core/figure-types.h>
-#include <yetty/ydraw-core/flyweight.h>
-#include <yetty/ydraw-core/font-prim.h>
-#include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
@@ -326,38 +326,38 @@ static void walk_ygrid_body(const uint8_t *bytes, size_t bytes_len, int depth);
  * ygrid body knowing every record's exact size. Without it we'd be
  * guessing (the previous heuristic-step code drifted off after one or
  * two records and printed garbage for the rest of the body). */
-static struct yetty_ydraw_flyweight_registry *g_registry = NULL;
+static struct yetty_ydraw_drawable_list_registry *g_registry = NULL;
 
-static struct yetty_ydraw_flyweight_registry *make_full_registry(void)
+static struct yetty_ydraw_drawable_list_registry *make_full_registry(void)
 {
-    struct yetty_ydraw_flyweight_registry_ptr_result rr =
-        yetty_ydraw_flyweight_registry_create();
+    struct yetty_ydraw_drawable_list_registry_ptr_result rr =
+        yetty_ydraw_drawable_list_registry_create();
     if (YETTY_IS_ERR(rr)) {
         fprintf(stderr, "osc-analyzer: registry_create failed: %s\n", rr.error.msg);
         yetty_ycore_error_destroy(rr.error);
         return NULL;
     }
-    yetty_ydraw_flyweight_registry_set_default(rr.value, yetty_ysdf_handler);
+    yetty_ydraw_drawable_list_registry_set_default(rr.value, yetty_ysdf_handler);
     struct yetty_ycore_void_result a;
-    a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_CMD_BASE,
+    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_CMD_BASE,
                                            YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
     if (YETTY_IS_ERR(a)) goto err;
-    a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_TYPE_FONT,
-                                           YETTY_YDRAW_TYPE_FONT,
-                                           yetty_yfont_font_drawable_handler);
+    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_RESOURCE_FONT,
+                                           YETTY_YDRAW_RESOURCE_FONT,
+                                           yetty_ydraw_font_resource_handler);
     if (YETTY_IS_ERR(a)) goto err;
-    a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_TYPE_TEXT_SPAN,
-                                           YETTY_YDRAW_TYPE_TEXT_SPAN,
-                                           yetty_ydraw_text_span_drawable_handler);
+    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+                                           YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+                                           yetty_ydraw_text_drawable_list_handler);
     if (YETTY_IS_ERR(a)) goto err;
-    a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_COMPLEX_TYPE_BASE,
-                                           0xFFFFFFFFu, yetty_ydraw_complex_drawable_handler);
+    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
+                                           0xFFFFFFFFu, yetty_ydraw_composite_handler);
     if (YETTY_IS_ERR(a)) goto err;
     return rr.value;
 err:
     fprintf(stderr, "osc-analyzer: registry_add failed: %s\n", a.error.msg);
     yetty_ycore_error_destroy(a.error);
-    yetty_ydraw_flyweight_registry_destroy(rr.value);
+    yetty_ydraw_drawable_list_registry_destroy(rr.value);
     return NULL;
 }
 
@@ -380,7 +380,7 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
         return;
     }
     /* ADD — break down further by type. */
-    uint32_t type = cmd->flyweight.data ? cmd->flyweight.data[0] : 0u;
+    uint32_t type = cmd->entry.data ? cmd->entry.data[0] : 0u;
 
     if (type == YETTY_YDRAW_CMD_GROUP) {
         if (rec_len < 12) {
@@ -407,9 +407,9 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
         ind(depth); out("  kind: CMD_ZERO\n");
         return;
     }
-    if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-        struct yetty_ydraw_text_span_drawable_view v;
-        if (yetty_ydraw_text_span_drawable_parse((const uint32_t *)bytes, &v) == 0) {
+    if (type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+        struct yetty_ydraw_text_drawable_list_view v;
+        if (yetty_ydraw_text_drawable_list_parse((const uint32_t *)bytes, &v) == 0) {
             ind(depth); out("- # rec %d\n", idx);
             ind(depth); out("  kind: TEXT_SPAN\n");
             ind(depth); out("  x: %.2f\n", v.x);
@@ -440,9 +440,9 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
         }
         /* fallthrough on parse error */
     }
-    if (type == YETTY_YDRAW_TYPE_FONT) {
-        struct yetty_yfont_font_drawable_view v;
-        if (yetty_yfont_font_drawable_parse((const uint32_t *)bytes, &v) == 0) {
+    if (type == YETTY_YDRAW_RESOURCE_FONT) {
+        struct yetty_ydraw_font_resource_view v;
+        if (yetty_ydraw_font_resource_parse((const uint32_t *)bytes, &v) == 0) {
             ind(depth); out("- # rec %d\n", idx);
             ind(depth); out("  kind: FONT\n");
             ind(depth); out("  font_id: %d\n", v.font_id);
@@ -483,7 +483,7 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
      * type >= 0x80000003 and FAM-shaped (word 1 = payload_size). Show
      * type + size only, NEVER the payload bytes (yimage carries
      * megabytes of pixel data; dumping it floods the analyzer log). */
-    if (type >= YETTY_YDRAW_COMPLEX_TYPE_BASE && rec_len >= 8) {
+    if (type >= YETTY_YDRAW_COMPOSITE_TYPE_BASE && rec_len >= 8) {
         uint32_t payload_size;
         memcpy(&payload_size, bytes + 4, 4);
         ind(depth); out("- # rec %d\n", idx);
@@ -1371,7 +1371,7 @@ int main(int argc, char **argv)
     if (records_path) {
         int rrc = run_records_file(records_path);
         if (g_registry) {
-            yetty_ydraw_flyweight_registry_destroy(g_registry);
+            yetty_ydraw_drawable_list_registry_destroy(g_registry);
             g_registry = NULL;
         }
         if (g_out != stderr) fclose(g_out);
@@ -1478,7 +1478,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < kAnalyzedCodes_n; i++) free(mocks[i].buf);
     free(mocks);
     if (g_registry) {
-        yetty_ydraw_flyweight_registry_destroy(g_registry);
+        yetty_ydraw_drawable_list_registry_destroy(g_registry);
         g_registry = NULL;
     }
     if (g_out != stderr) fclose(g_out);

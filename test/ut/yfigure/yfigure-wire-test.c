@@ -5,7 +5,7 @@
  *
  * Each test:
  *   1. Create a yfigure_container as the root.
- *   2. Build a wire record stream into a ydraw_draw_list:
+ *   2. Build a wire record stream into a ydraw_drawable_list:
  *        - admin CREATE_CHILD records to mint children,
  *        - admin DELETE_CHILD records to remove them,
  *        - routed records to forward bytes to a specific child,
@@ -28,7 +28,7 @@
 #include <string.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/rpc.h>
@@ -253,9 +253,9 @@ static struct yetty_yfigure_container *make_root(struct yetty_yfigure_registry *
     return root;
 }
 
-static struct yetty_ydraw_draw_list *make_buf(void)
+static struct yetty_ydraw_drawable_list *make_buf(void)
 {
-    struct yetty_ydraw_draw_list_result r = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result r = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "buffer_create failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);
@@ -264,10 +264,10 @@ static struct yetty_ydraw_draw_list *make_buf(void)
     return r.value;
 }
 
-static void feed(struct yetty_yfigure_container *root, const struct yetty_ydraw_draw_list *buf)
+static void feed(struct yetty_yfigure_container *root, const struct yetty_ydraw_drawable_list *buf)
 {
-    const uint8_t *bytes = (const uint8_t *)yetty_ydraw_draw_list_data(buf);
-    size_t len = yetty_ydraw_draw_list_size(buf);
+    const uint8_t *bytes = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
+    size_t len = yetty_ydraw_drawable_list_size(buf);
     struct yetty_ycore_void_result r = yetty_yfigure_container_process_records(root, bytes, len);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "container_process_records failed: %s\n", r.error.msg);
@@ -316,11 +316,11 @@ static void test_one_create_child(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yfigure_container *root = make_root(reg);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    yetty_ydraw_draw_list_add_admin_create_child(buf, /*child_id=*/1u, TEST_LEAF_KIND,
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, /*child_id=*/1u, TEST_LEAF_KIND,
                                                   10.0f, 20.0f, 110.0f, 80.0f, NULL, 0);
     feed(root, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
     const char *expected =
@@ -353,11 +353,11 @@ static void test_two_create_child(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yfigure_container *root = make_root(reg);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 100, 100, NULL, 0);
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 100, 0, 200, 100, NULL, 0);
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 100, 100, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 100, 0, 200, 100, NULL, 0);
     feed(root, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
     const char *expected =
@@ -394,12 +394,12 @@ static void test_create_then_delete(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yfigure_container *root = make_root(reg);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL, 0);
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL, 0);
-    yetty_ydraw_draw_list_add_admin_delete_child(buf, 1u);
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_delete_child(buf, 1u);
     feed(root, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
     const char *expected =
@@ -437,11 +437,11 @@ static void test_create_with_init_payload(void)
     for (int i = 0; i < 32; i++) {
         init[i] = (uint8_t)i;
     }
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 7u, TEST_LEAF_KIND, 0, 0, 10, 10, init,
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 7u, TEST_LEAF_KIND, 0, 0, 10, 10, init,
                                                   sizeof(init));
     feed(root, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
     const char *expected =
@@ -474,14 +474,14 @@ static void test_routed_to_child(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yfigure_container *root = make_root(reg);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 3u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 3u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
 
     /* Now a routed record (id=3) with a 16-byte body. */
     uint8_t body[16] = {0};
-    yetty_ydraw_draw_list_add_record(buf, /*id=*/3u, body, sizeof(body));
+    yetty_ydraw_drawable_list_add_record(buf, /*id=*/3u, body, sizeof(body));
     feed(root, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
     const char *expected =
@@ -513,12 +513,12 @@ static void test_clear_all(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yfigure_container *root = make_root(reg);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
-    yetty_ydraw_draw_list_add_admin_clear_all(buf);
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_clear_all(buf);
     feed(root, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
     const char *expected =
@@ -547,11 +547,11 @@ static void test_stale_delete_is_noop(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yfigure_container *root = make_root(reg);
 
-    struct yetty_ydraw_draw_list *buf = make_buf();
-    yetty_ydraw_draw_list_add_admin_create_child(buf, 5u, TEST_LEAF_KIND, 0, 0, 10, 10, NULL, 0);
-    yetty_ydraw_draw_list_add_admin_delete_child(buf, 99u); /* never bound */
+    struct yetty_ydraw_drawable_list *buf = make_buf();
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 5u, TEST_LEAF_KIND, 0, 0, 10, 10, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_delete_child(buf, 99u); /* never bound */
     feed(root, buf);
-    yetty_ydraw_draw_list_destroy(buf);
+    yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
     const char *expected =

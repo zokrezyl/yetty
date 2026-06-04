@@ -12,8 +12,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <yetty/ydraw-core/draw-list.h>
-#include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ymarkdown/ymarkdown.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -67,13 +67,13 @@ static int render_counts(const char *md, struct counts *out)
         yetty_ycore_error_destroy(r.error);
         return -1;
     }
-    const uint8_t *data = yetty_ydraw_draw_list_data(r.value.buffer);
-    size_t size = yetty_ydraw_draw_list_size(r.value.buffer);
+    const uint8_t *data = yetty_ydraw_drawable_list_data(r.value.buffer);
+    size_t size = yetty_ydraw_drawable_list_size(r.value.buffer);
     out->boxes = count_tag(data, size, (uint32_t)YETTY_YSDF_BOX);
     out->segments = count_tag(data, size, (uint32_t)YETTY_YSDF_SEGMENT);
-    out->text_spans = count_tag(data, size, YETTY_YDRAW_TYPE_TEXT_SPAN);
+    out->text_spans = count_tag(data, size, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST);
     out->bytes = size;
-    yetty_ydraw_draw_list_destroy(r.value.buffer);
+    yetty_ydraw_drawable_list_destroy(r.value.buffer);
     return 0;
 }
 

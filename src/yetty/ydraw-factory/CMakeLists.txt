@@ -4,7 +4,7 @@
 # yetty_ydraw_core (wire format) and never touches the factory pattern.
 if(YETTY_ENABLE_LIB_WEBGPU)
     add_library(yetty_ydraw_factory STATIC
-        complex-prim-factory.c
+        composite-factory.c
     )
 
     target_include_directories(yetty_ydraw_factory PUBLIC

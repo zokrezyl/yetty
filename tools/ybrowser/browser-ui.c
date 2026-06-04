@@ -37,7 +37,7 @@
 #include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ygui/ygui.h>
@@ -1162,7 +1162,7 @@ static void render_doc(struct app *a, struct tab *t)
 		return;
 	}
 
-	struct yetty_ydraw_draw_list *dl = NULL;
+	struct yetty_ydraw_drawable_list *dl = NULL;
 	int content_h = (int)h;
 
 	if (t->kind == CK_SVG) {
@@ -1189,8 +1189,8 @@ static void render_doc(struct app *a, struct tab *t)
 			err_ok(yetty_ylexbor_set_viewport(t->engine, (int)w, vh));
 		}
 		err_ok(yetty_ylexbor_relayout(t->engine));
-		struct yetty_ydraw_draw_list_result dlr =
-			yetty_ydraw_draw_list_config_buffer_create(NULL);
+		struct yetty_ydraw_drawable_list_result dlr =
+			yetty_ydraw_drawable_list_config_buffer_create(NULL);
 		if (YETTY_IS_ERR(dlr)) {
 			yetty_ycore_error_destroy(dlr.error);
 			return;
@@ -1199,7 +1199,7 @@ static void render_doc(struct app *a, struct tab *t)
 		struct yetty_ycore_void_result rd = yetty_ylexbor_render(t->engine, dl);
 		if (YETTY_IS_ERR(rd)) {
 			yetty_ycore_error_destroy(rd.error);
-			yetty_ydraw_draw_list_destroy(dl);
+			yetty_ydraw_drawable_list_destroy(dl);
 			return;
 		}
 		content_h = yetty_ylexbor_content_height(t->engine);
@@ -1210,11 +1210,11 @@ static void render_doc(struct app *a, struct tab *t)
 	 * analytics) re-render to the SAME draw list — without this we'd
 	 * re-ship the whole page every frame (tens of MB/s for a real site).
 	 * needs_render forces a ship (tab switch / fresh document). */
-	const void *dl_bytes = yetty_ydraw_draw_list_data(dl);
-	size_t dl_sz = yetty_ydraw_draw_list_size(dl);
+	const void *dl_bytes = yetty_ydraw_drawable_list_data(dl);
+	size_t dl_sz = yetty_ydraw_drawable_list_size(dl);
 	uint64_t h2 = fnv1a(dl_bytes, dl_sz);
 	if (!t->needs_render && dl_sz == t->dl_size && h2 == t->dl_hash) {
-		yetty_ydraw_draw_list_destroy(dl);
+		yetty_ydraw_drawable_list_destroy(dl);
 		t->rendered_w = w;
 		return;
 	}
@@ -1456,7 +1456,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #ifdef YETTY_YBROWSER_HAS_STANDALONE
 
 #include <yetty/yconfig/config.h>
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yfigure/figure.h>
@@ -1479,7 +1479,7 @@ struct standalone {
 	struct yetty_yframework *yframework;
 	struct yetty_yfigure_container *root_container;
 	struct yetty_yfigure_registry *figure_registry;
-	struct yetty_ydraw_complex_drawable_factory *figure_factory;
+	struct yetty_ydraw_composite_factory *composite_factory;
 	struct yetty_ywire_wire_statemachine *wire_sm;
 	struct yetty_yplatform_memory_pty_pair pty_pair;
 	int has_pty_pair;
@@ -1733,20 +1733,20 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
 
 	/* Raw figure factory + producer kinds. */
 	{
-		struct yetty_ydraw_complex_drawable_factory_ptr_result ffr =
-			yetty_ydraw_complex_drawable_factory_create(
+		struct yetty_ydraw_composite_factory_ptr_result ffr =
+			yetty_ydraw_composite_factory_create(
 				s->yframework->gpu.device, s->yframework->gpu.queue,
 				s->yframework->gpu.surface_format, s->yframework->gpu.allocator,
 				s->yframework->event_loop);
-		YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "ybrowser standalone: raw_figure_factory");
-		s->figure_factory = ffr.value;
+		YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "ybrowser standalone: raw_composite_factory");
+		s->composite_factory = ffr.value;
 		struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
 		if (yplot_f) {
-			err_ok(yetty_ydraw_complex_drawable_factory_register(s->figure_factory, yplot_f));
+			err_ok(yetty_ydraw_composite_factory_register(s->composite_factory, yplot_f));
 		}
 		struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
 		if (yimage_f) {
-			err_ok(yetty_ydraw_complex_drawable_factory_register(s->figure_factory, yimage_f));
+			err_ok(yetty_ydraw_composite_factory_register(s->composite_factory, yimage_f));
 		}
 	}
 
@@ -1756,7 +1756,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
 		YETTY_RETURN_IF_ERR(yetty_ycore_void, reg, "ybrowser standalone: registry_create");
 		s->figure_registry = reg.value;
 		s->figure_args.default_font = s->font;
-		s->figure_args.figure_factory = s->figure_factory;
+		s->figure_args.composite_factory = s->composite_factory;
 		struct yetty_ycore_void_result rf =
 			yetty_ygrid_register_factory(s->figure_registry, &s->figure_args);
 		YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ybrowser standalone: ygrid_register_factory");
@@ -1873,9 +1873,9 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
 		yetty_yfigure_registry_destroy(s->figure_registry);
 		s->figure_registry = NULL;
 	}
-	if (s->figure_factory) {
-		yetty_ydraw_complex_drawable_factory_destroy(s->figure_factory);
-		s->figure_factory = NULL;
+	if (s->composite_factory) {
+		yetty_ydraw_composite_factory_destroy(s->composite_factory);
+		s->composite_factory = NULL;
 	}
 	if (s->font) {
 		s->font->ops->destroy(s->font);

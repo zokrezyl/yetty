@@ -3,7 +3,7 @@
 
 add_library(yetty_ydraw STATIC
     cell-ref-table.c
-    flyweight.c
+    drawable-list-registry.c
     scrollbuffer.c
     scrolling-canvas.c
     scrolling-grid.c

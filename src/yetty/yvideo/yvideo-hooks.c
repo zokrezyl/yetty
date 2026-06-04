@@ -46,7 +46,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h> /* container_of */
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>

@@ -99,7 +99,7 @@ static struct yetty_ycore_void_result win_rounded(struct yetty_ygui_emit_ctx *ct
                                        .radius_bottom_right = radius,
                                        .radius_top_left = radius,
                                        .radius_bottom_left = radius};
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0, 0, fill, stroke,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill, stroke,
                                                          stroke_w, &g);
 }
 
@@ -159,7 +159,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "window paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());

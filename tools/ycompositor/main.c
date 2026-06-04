@@ -192,9 +192,9 @@ emit_capsule(struct yetty_ygrid_grid *g, uint32_t fill, uint32_t stroke, float s
  * bearings, and advances come from the actual font metrics — the
  * caller just hands over the UTF-8 string.
  *
- * Wire format documented in include/yetty/ydraw-core/text-span-prim.h:
+ * Wire format documented in include/yetty/ydraw-core/text-drawable-list.h:
  *
- *   u32 type            (= YETTY_YDRAW_TYPE_TEXT_SPAN = 0x40000002)
+ *   u32 type            (= YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST = 0x40000002)
  *   u32 payload_size    (bytes of payload, padded to 4)
  *   f32 x, y, font_size, rotation
  *   u32 color, layer
@@ -219,7 +219,7 @@ emit_text_span(struct yetty_ygrid_grid *grid, int32_t font_slot, const char *utf
     if (!record)
         return YETTY_ERR(yetty_ycore_void, "emit_text_span: record alloc oom");
 
-    uint32_t type = 0x40000002u;            /* YETTY_YDRAW_TYPE_TEXT_SPAN */
+    uint32_t type = 0x40000002u;            /* YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST */
     uint32_t layer = 0u;
     float rotation = 0.0f;
     float char_spacing = 0.0f;

@@ -17,7 +17,7 @@
 #include <yetty/ydiagram/layout.h>
 #include <yetty/ydiagram/mermaid-parser.h>
 #include <yetty/ydiagram/renderer.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 struct yetty_ydiagram_buffer_result yetty_ydiagram_render_mermaid_full(
     const char *input, size_t len, const struct yetty_ydiagram_layout_params *layout_params,
@@ -82,13 +82,13 @@ struct yetty_ydiagram_buffer_result yetty_ydiagram_render_mermaid_full(
         return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: layout failed", lr);
     }
 
-    struct yetty_ydraw_draw_list_config cfg = {
+    struct yetty_ydraw_drawable_list_config cfg = {
         .scene_min_x = graph.min_x,
         .scene_min_y = graph.min_y,
         .scene_max_x = graph.max_x,
         .scene_max_y = graph.max_y,
     };
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
         yetty_ydiagram_graph_destroy(&graph);
         return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: buffer create failed", br);
@@ -97,7 +97,7 @@ struct yetty_ydiagram_buffer_result yetty_ydiagram_render_mermaid_full(
     struct yetty_ycore_void_result rr =
         yetty_ydiagram_render(&graph, br.value, render_options, measure, measure_userdata);
     if (YETTY_IS_ERR(rr)) {
-        yetty_ydraw_draw_list_destroy(br.value);
+        yetty_ydraw_drawable_list_destroy(br.value);
         yetty_ydiagram_graph_destroy(&graph);
         return YETTY_ERR(yetty_ydiagram_buffer, "ydiagram: render failed", rr);
     }

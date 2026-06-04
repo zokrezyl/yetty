@@ -15,7 +15,7 @@
  *   yexpr_parse_plot(source)   — multi-function plot syntax
  *   yfsvm_compile_multi(ast)   — bytecode for the GPU interpreter
  *   yplot_serialize(uniforms, bytecode + data buffers) — wire bytes
- *   ydraw_core_draw_list_add_prim(buffer) — attach to a ydraw draw list
+ *   ydraw_core_drawable_list_add_prim(buffer) — attach to a ydraw draw list
  */
 
 #include <stddef.h>
@@ -23,7 +23,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplot/yplot-gen.h>
 
 #ifdef __cplusplus
@@ -66,8 +66,8 @@ struct yetty_yplot_buffer_input {
  * the source; plots without explicit colors fall back to a built-in
  * 8-slot palette (matches the yaml factory).
  *
- * Caller frees the returned buffer with yetty_ydraw_draw_list_destroy. */
-struct yetty_ydraw_draw_list_result yetty_yplot_render(
+ * Caller frees the returned buffer with yetty_ydraw_drawable_list_destroy. */
+struct yetty_ydraw_drawable_list_result yetty_yplot_render(
     const char *source, size_t len, const struct yetty_yplot_render_config *config);
 
 /* Same as yetty_yplot_render but also attaches `buffer_count` data buffers
@@ -79,14 +79,14 @@ struct yetty_ydraw_draw_list_result yetty_yplot_render(
  *   slot 0..M-1            expression curves (M = number of named plots)
  *   slot M..M+N-1 (mod 8)  data buffers in invocation order
  *
- * Caller frees the returned buffer with yetty_ydraw_draw_list_destroy. */
-struct yetty_ydraw_draw_list_result yetty_yplot_render_with_buffers(
+ * Caller frees the returned buffer with yetty_ydraw_drawable_list_destroy. */
+struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
     const char *source, size_t len, const struct yetty_yplot_buffer_input *buffers,
     size_t buffer_count, const struct yetty_yplot_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
-struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                         FILE *out);
 
 #ifdef __cplusplus

@@ -1,10 +1,10 @@
 /*
  * yvideo.c — high-level convenience wrapper around yvideo-gen's wire
- * serializer. Builds a draw_list holding one yvideo prim from raw
+ * serializer. Builds a drawable_list holding one yvideo prim from raw
  * H.264 Annex-B bytes + optional audio packets + config. v2 layout
  * (#198 item 2).
  *
- * Senders typically wrap the returned draw_list in a CMD_GROUP(id) so
+ * Senders typically wrap the returned drawable_list in a CMD_GROUP(id) so
  * subsequent CMD_UPDATE envelopes can target the figure; this helper
  * stays low-level and leaves grouping to the caller.
  */
@@ -13,7 +13,7 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yterm/osc-codes.h>
 
 #include <stdint.h>
@@ -21,16 +21,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct yetty_ydraw_draw_list_result yetty_yvideo_render(
+struct yetty_ydraw_drawable_list_result yetty_yvideo_render(
     const uint8_t *nal_bytes, size_t nal_len, const uint8_t *audio_bytes, size_t audio_len,
     const struct yetty_yvideo_render_config *config)
 {
     if (!config || config->video_w == 0u || config->video_h == 0u) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: config NULL or video_w/h == 0");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo: config NULL or video_w/h == 0");
     }
     if (config->audio_codec != 0u) {
         if (config->audio_sample_rate == 0u || config->audio_channels == 0u) {
-            return YETTY_ERR(yetty_ydraw_draw_list,
+            return YETTY_ERR(yetty_ydraw_drawable_list,
                              "yvideo: audio_codec set but sample_rate/channels not");
         }
     }
@@ -64,7 +64,7 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     if (nal_len > 0u) {
         nal_words_buf = calloc(nal_words, sizeof(uint32_t));
         if (!nal_words_buf) {
-            return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: nal-pack alloc failed");
+            return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo: nal-pack alloc failed");
         }
         if (nal_bytes) {
             memcpy(nal_words_buf, nal_bytes, nal_len);
@@ -77,7 +77,7 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
         audio_words_buf = calloc(audio_words, sizeof(uint32_t));
         if (!audio_words_buf) {
             free(nal_words_buf);
-            return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: audio-pack alloc failed");
+            return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo: audio-pack alloc failed");
         }
         if (audio_bytes) {
             memcpy(audio_words_buf, audio_bytes, audio_len);
@@ -96,7 +96,7 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     if (!prim_buf) {
         free(nal_words_buf);
         free(audio_words_buf);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: prim alloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
         yetty_yvideo_uniforms_serialize(&u, &bufs, prim_buf, required);
@@ -104,38 +104,38 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render(
     free(audio_words_buf);
     if (YETTY_IS_ERR(ser)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: serialize failed", ser);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo: serialize failed", ser);
     }
 
-    struct yetty_ydraw_draw_list_config dlcfg = {
+    struct yetty_ydraw_drawable_list_config dlcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = u.bounds_x + u.bounds_w,
         .scene_max_y = u.bounds_y + u.bounds_h,
     };
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&dlcfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
     if (YETTY_IS_ERR(br)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: draw_list create failed", br);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo: drawable_list create failed", br);
     }
 
-    struct yetty_ydraw_id_result idr = yetty_ydraw_draw_list_add_prim(br.value, prim_buf, required);
+    struct yetty_ydraw_id_result idr = yetty_ydraw_drawable_list_add_prim(br.value, prim_buf, required);
     free(prim_buf);
     if (YETTY_IS_ERR(idr)) {
-        yetty_ydraw_draw_list_destroy(br.value);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo: add_prim failed", idr);
+        yetty_ydraw_drawable_list_destroy(br.value);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo: add_prim failed", idr);
     }
-    return YETTY_OK(yetty_ydraw_draw_list, br.value);
+    return YETTY_OK(yetty_ydraw_drawable_list, br.value);
 }
 
-struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                          FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
-    size_t raw_size = yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)buffer, &raw);
+    size_t raw_size = yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: empty serialize");
     }

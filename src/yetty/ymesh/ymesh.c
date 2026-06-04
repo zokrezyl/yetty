@@ -12,7 +12,7 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yterm/osc-codes.h>
 
 #include <stdint.h>
@@ -95,16 +95,16 @@ static struct yetty_ycore_size_result ymesh_serialize_prim(const struct yetty_ym
     return YETTY_OK(yetty_ycore_size, required);
 }
 
-struct yetty_ydraw_draw_list_result yetty_ymesh_render(
+struct yetty_ydraw_drawable_list_result yetty_ymesh_render(
     const uint8_t *glb_bytes, size_t len, const struct yetty_ymesh_render_config *config)
 {
     if (!glb_bytes || len == 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: glb_bytes is NULL/empty");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: glb_bytes is NULL/empty");
     }
 
     struct yetty_ymesh_glb_data_result mr = yetty_ymesh_glb_parse(glb_bytes, len);
     if (YETTY_IS_ERR(mr)) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: glb parse failed", mr);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: glb parse failed", mr);
     }
     struct yetty_ymesh_glb_data mesh = mr.value;
 
@@ -131,78 +131,78 @@ struct yetty_ydraw_draw_list_result yetty_ymesh_render(
     uint8_t *drawable_buf = malloc(required);
     if (!drawable_buf) {
         yetty_ymesh_glb_destroy(&mesh);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: prim alloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: prim alloc failed");
     }
 
     struct yetty_ycore_size_result ser = ymesh_serialize_prim(&u, &mesh, drawable_buf, required);
     yetty_ymesh_glb_destroy(&mesh);
     if (YETTY_IS_ERR(ser)) {
         free(drawable_buf);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: serialize failed", ser);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: serialize failed", ser);
     }
 
-    struct yetty_ydraw_draw_list_config bcfg = {
+    struct yetty_ydraw_drawable_list_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = u.bounds_x + u.bounds_w,
         .scene_max_y = u.bounds_y + u.bounds_h,
     };
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(drawable_buf);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: ydraw buffer create failed", br);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: ydraw buffer create failed", br);
     }
 
     struct yetty_ydraw_id_result idr =
-        yetty_ydraw_draw_list_add_prim(br.value, drawable_buf, required);
+        yetty_ydraw_drawable_list_add_prim(br.value, drawable_buf, required);
     free(drawable_buf);
     if (YETTY_IS_ERR(idr)) {
-        yetty_ydraw_draw_list_destroy(br.value);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: ydraw add_prim failed", idr);
+        yetty_ydraw_drawable_list_destroy(br.value);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: ydraw add_prim failed", idr);
     }
 
-    return YETTY_OK(yetty_ydraw_draw_list, br.value);
+    return YETTY_OK(yetty_ydraw_drawable_list, br.value);
 }
 
-struct yetty_ydraw_draw_list_result yetty_ymesh_render_path(
+struct yetty_ydraw_drawable_list_result yetty_ymesh_render_path(
     const char *path, const struct yetty_ymesh_render_config *config)
 {
     if (!path) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh_render_path: path is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh_render_path: path is NULL");
     }
 
     FILE *f = fopen(path, "rb");
     if (!f) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh_render_path: fopen failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh_render_path: fopen failed");
     }
     if (fseek(f, 0, SEEK_END) != 0) {
         fclose(f);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh_render_path: fseek failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh_render_path: fseek failed");
     }
     long size = ftell(f);
     if (size <= 0) {
         fclose(f);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh_render_path: empty or unreadable");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh_render_path: empty or unreadable");
     }
     rewind(f);
     uint8_t *bytes = malloc((size_t)size);
     if (!bytes) {
         fclose(f);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh_render_path: malloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh_render_path: malloc failed");
     }
     size_t nread = fread(bytes, 1, (size_t)size, f);
     fclose(f);
     if (nread != (size_t)size) {
         free(bytes);
-        return YETTY_ERR(yetty_ydraw_draw_list, "ymesh_render_path: short read");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh_render_path: short read");
     }
 
-    struct yetty_ydraw_draw_list_result r = yetty_ymesh_render(bytes, (size_t)size, config);
+    struct yetty_ydraw_drawable_list_result r = yetty_ymesh_render(bytes, (size_t)size, config);
     free(bytes);
     return r;
 }
 
-struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(const struct yetty_ydraw_draw_list *buffer,
+struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                         FILE *out)
 {
     if (!buffer || !out) {
@@ -210,7 +210,7 @@ struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(const struct yetty_ydraw
     }
 
     const uint8_t *raw = NULL;
-    size_t raw_size = yetty_ydraw_draw_list_serialize((struct yetty_ydraw_draw_list *)buffer, &raw);
+    size_t raw_size = yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "ymesh_osc_bin_emit: empty serialize");
     }

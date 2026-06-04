@@ -4,8 +4,8 @@
  * Emission is single-pass and z-order ascends as we go:
  *   clusters → edges → nodes → labels
  *
- * Every primitive is an MSD shape (yetty_ydraw_draw_list_add_cmd_add_*) or an MSDF text run
- * (yetty_ydraw_draw_list_add_text). The buffer's font_id = -1 means
+ * Every primitive is an MSD shape (yetty_ydraw_drawable_list_add_cmd_add_*) or an MSDF text run
+ * (yetty_ydraw_drawable_list_add_text). The buffer's font_id = -1 means
  * "canvas default" — producers don't need to embed fonts themselves.
  */
 
@@ -18,7 +18,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -41,7 +41,7 @@ struct yetty_ydiagram_render_options yetty_ydiagram_default_render_options(void)
  *===========================================================================*/
 
 struct render_state {
-    struct yetty_ydraw_draw_list *buf;
+    struct yetty_ydraw_drawable_list *buf;
     const struct yetty_ydiagram_render_options *opt;
     yetty_ydiagram_measure_text_fn measure;
     void *userdata;
@@ -81,7 +81,7 @@ static void emit_rect(struct render_state *s, const struct yetty_ydiagram_node *
         .half_height = n->height * 0.5f,
         .corner_radius = corner_radius,
     };
-    yetty_ydraw_draw_list_add_cmd_add_box(s->buf, 0, s->z++, n->style.fill_color,
+    yetty_ydraw_drawable_list_add_cmd_add_box(s->buf, 0, s->z++, n->style.fill_color,
                                           n->style.stroke_color, n->style.stroke_width, &geom);
 }
 
@@ -89,7 +89,7 @@ static void emit_circle(struct render_state *s, const struct yetty_ydiagram_node
 {
     float r = (n->width < n->height ? n->width : n->height) * 0.5f;
     struct yetty_ysdf_circle geom = {.center_x = n->x, .center_y = n->y, .radius = r};
-    yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, n->style.fill_color,
+    yetty_ydraw_drawable_list_add_cmd_add_circle(s->buf, 0, s->z++, n->style.fill_color,
                                              n->style.stroke_color, n->style.stroke_width, &geom);
 }
 
@@ -101,7 +101,7 @@ static void emit_diamond(struct render_state *s, const struct yetty_ydiagram_nod
         .half_width = n->width * 0.5f,
         .half_height = n->height * 0.5f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_rhombus(s->buf, 0, s->z++, n->style.fill_color,
+    yetty_ydraw_drawable_list_add_cmd_add_rhombus(s->buf, 0, s->z++, n->style.fill_color,
                                               n->style.stroke_color, n->style.stroke_width, &geom);
 }
 
@@ -113,7 +113,7 @@ static void emit_ellipse(struct render_state *s, const struct yetty_ydiagram_nod
         .radius_x = n->width * 0.5f,
         .radius_y = n->height * 0.5f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_ellipse(s->buf, 0, s->z++, n->style.fill_color,
+    yetty_ydraw_drawable_list_add_cmd_add_ellipse(s->buf, 0, s->z++, n->style.fill_color,
                                               n->style.stroke_color, n->style.stroke_width, &geom);
 }
 
@@ -150,7 +150,7 @@ static void emit_hexagon(struct render_state *s, const struct yetty_ydiagram_nod
         .half_height = hh,
         .corner_radius = 0.0f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_box(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f, &body);
+    yetty_ydraw_drawable_list_add_cmd_add_box(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f, &body);
 
     /* Fill: left and right triangles. */
     struct yetty_ysdf_triangle left = {
@@ -161,7 +161,7 @@ static void emit_hexagon(struct render_state *s, const struct yetty_ydiagram_nod
         .vertex_c_x = cx_l,
         .vertex_c_y = by,
     };
-    yetty_ydraw_draw_list_add_cmd_add_triangle(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f,
+    yetty_ydraw_drawable_list_add_cmd_add_triangle(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f,
                                                &left);
     struct yetty_ysdf_triangle right = {
         .vertex_a_x = n->x + hw,
@@ -171,7 +171,7 @@ static void emit_hexagon(struct render_state *s, const struct yetty_ydiagram_nod
         .vertex_c_x = cx_r,
         .vertex_c_y = by,
     };
-    yetty_ydraw_draw_list_add_cmd_add_triangle(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f,
+    yetty_ydraw_drawable_list_add_cmd_add_triangle(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f,
                                                &right);
 
     /* Stroke: trace the six outline segments. */
@@ -188,7 +188,7 @@ static void emit_hexagon(struct render_state *s, const struct yetty_ydiagram_nod
         };
         uint32_t z = s->z;
         for (size_t i = 0; i < 6; i++) {
-            yetty_ydraw_draw_list_add_cmd_add_segment(s->buf, 0, z, 0, sc, sw, &edges[i]);
+            yetty_ydraw_drawable_list_add_cmd_add_segment(s->buf, 0, z, 0, sc, sw, &edges[i]);
         }
         s->z = z + 1;
     }
@@ -204,7 +204,7 @@ static void emit_capsule(struct render_state *s, const struct yetty_ydiagram_nod
         .end_y = n->y,
         .radius = r,
     };
-    yetty_ydraw_draw_list_add_cmd_add_capsule(s->buf, 0, s->z++, n->style.fill_color,
+    yetty_ydraw_drawable_list_add_cmd_add_capsule(s->buf, 0, s->z++, n->style.fill_color,
                                               n->style.stroke_color, n->style.stroke_width, &geom);
 }
 
@@ -221,7 +221,7 @@ static void emit_cylinder(struct render_state *s, const struct yetty_ydiagram_no
         .half_height = body_h * 0.5f,
         .corner_radius = 0.0f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_box(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f, &body);
+    yetty_ydraw_drawable_list_add_cmd_add_box(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f, &body);
 
     struct yetty_ysdf_ellipse top = {
         .center_x = n->x,
@@ -229,7 +229,7 @@ static void emit_cylinder(struct render_state *s, const struct yetty_ydiagram_no
         .radius_x = n->width * 0.5f,
         .radius_y = ellipse_h,
     };
-    yetty_ydraw_draw_list_add_cmd_add_ellipse(s->buf, 0, s->z++, n->style.fill_color,
+    yetty_ydraw_drawable_list_add_cmd_add_ellipse(s->buf, 0, s->z++, n->style.fill_color,
                                               n->style.stroke_color, n->style.stroke_width, &top);
 
     struct yetty_ysdf_ellipse bottom = {
@@ -238,7 +238,7 @@ static void emit_cylinder(struct render_state *s, const struct yetty_ydiagram_no
         .radius_x = n->width * 0.5f,
         .radius_y = ellipse_h,
     };
-    yetty_ydraw_draw_list_add_cmd_add_ellipse(s->buf, 0, s->z++, n->style.fill_color,
+    yetty_ydraw_drawable_list_add_cmd_add_ellipse(s->buf, 0, s->z++, n->style.fill_color,
                                               n->style.stroke_color, n->style.stroke_width,
                                               &bottom);
 
@@ -248,7 +248,7 @@ static void emit_cylinder(struct render_state *s, const struct yetty_ydiagram_no
         .end_x = n->x - n->width * 0.5f,
         .end_y = n->y + body_h * 0.5f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, n->style.stroke_color,
+    yetty_ydraw_drawable_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, n->style.stroke_color,
                                               n->style.stroke_width, &l);
     struct yetty_ysdf_segment r = {
         .start_x = n->x + n->width * 0.5f,
@@ -256,7 +256,7 @@ static void emit_cylinder(struct render_state *s, const struct yetty_ydiagram_no
         .end_x = n->x + n->width * 0.5f,
         .end_y = n->y + body_h * 0.5f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, n->style.stroke_color,
+    yetty_ydraw_drawable_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, n->style.stroke_color,
                                               n->style.stroke_width, &r);
 }
 
@@ -265,10 +265,10 @@ static void emit_double_circle(struct render_state *s, const struct yetty_ydiagr
 {
     float r = (n->width < n->height ? n->width : n->height) * 0.5f;
     struct yetty_ysdf_circle outer = {.center_x = n->x, .center_y = n->y, .radius = r};
-    yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, 0, n->style.stroke_color,
+    yetty_ydraw_drawable_list_add_cmd_add_circle(s->buf, 0, s->z++, 0, n->style.stroke_color,
                                              n->style.stroke_width, &outer);
     struct yetty_ysdf_circle inner = {.center_x = n->x, .center_y = n->y, .radius = r * 0.55f};
-    yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, n->style.stroke_color, 0, 0.0f,
+    yetty_ydraw_drawable_list_add_cmd_add_circle(s->buf, 0, s->z++, n->style.stroke_color, 0, 0.0f,
                                              &inner);
 }
 
@@ -432,7 +432,7 @@ static void emit_dashed_line(struct render_state *s, float x0, float y0, float x
             .end_x = x0 + ux * end,
             .end_y = y0 + uy * end,
         };
-        yetty_ydraw_draw_list_add_cmd_add_segment(s->buf, 0, z, 0, color, width, &g);
+        yetty_ydraw_drawable_list_add_cmd_add_segment(s->buf, 0, z, 0, color, width, &g);
     }
     s->z = z + 1;
 }
@@ -441,7 +441,7 @@ static void emit_segment_xy(struct render_state *s, float x0, float y0, float x1
                             uint32_t color, float width)
 {
     struct yetty_ysdf_segment g = {.start_x = x0, .start_y = y0, .end_x = x1, .end_y = y1};
-    yetty_ydraw_draw_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, color, width, &g);
+    yetty_ydraw_drawable_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, color, width, &g);
 }
 
 static void emit_filled_triangle(struct render_state *s, float ax, float ay, float bx, float by,
@@ -451,7 +451,7 @@ static void emit_filled_triangle(struct render_state *s, float ax, float ay, flo
         .vertex_a_x = ax, .vertex_a_y = ay, .vertex_b_x = bx,
         .vertex_b_y = by, .vertex_c_x = cx, .vertex_c_y = cy,
     };
-    yetty_ydraw_draw_list_add_cmd_add_triangle(s->buf, 0, s->z++, color, 0, 0.0f, &geom);
+    yetty_ydraw_drawable_list_add_cmd_add_triangle(s->buf, 0, s->z++, color, 0, 0.0f, &geom);
 }
 
 /* Arrowhead / line terminal at `(x, y)`, pointing along `angle` (the edge's
@@ -519,7 +519,7 @@ static void emit_arrowhead(struct render_state *s, float x, float y, float angle
         float cx = x + bxu * r, cy = y + byu * r;
         struct yetty_ysdf_circle g = {.center_x = cx, .center_y = cy, .radius = r};
         uint32_t fill = style == YETTY_YDIAGRAM_ARROW_DOT ? color : 0;
-        yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, fill, color, lw, &g);
+        yetty_ydraw_drawable_list_add_cmd_add_circle(s->buf, 0, s->z++, fill, color, lw, &g);
         break;
     }
     case YETTY_YDIAGRAM_ARROW_CROW_ONE:
@@ -547,7 +547,7 @@ static void emit_arrowhead(struct render_state *s, float x, float y, float angle
             float r = size * 0.42f;
             float cx = x + bxu * (span + r * 1.4f), cy = y + byu * (span + r * 1.4f);
             struct yetty_ysdf_circle g = {.center_x = cx, .center_y = cy, .radius = r};
-            yetty_ydraw_draw_list_add_cmd_add_circle(s->buf, 0, s->z++, 0, color, lw, &g);
+            yetty_ydraw_drawable_list_add_cmd_add_circle(s->buf, 0, s->z++, 0, color, lw, &g);
         }
         break;
     }
@@ -571,7 +571,7 @@ static void emit_text(struct render_state *s, float x, float y, const char *text
         .capacity = n,
         .size = n,
     };
-    (void)yetty_ydraw_draw_list_add_text(s->buf, x, y, &view, font_size, color, s->z++, -1, 0.0f);
+    (void)yetty_ydraw_drawable_list_add_text(s->buf, x, y, &view, font_size, color, s->z++, -1, 0.0f);
 }
 
 static void emit_node_label(struct render_state *s, const struct yetty_ydiagram_node *n)
@@ -604,7 +604,7 @@ static void emit_edge_label(struct render_state *s, const struct yetty_ydiagram_
         .half_height = fs * 0.5f + padding,
         .corner_radius = 2.0f,
     };
-    yetty_ydraw_draw_list_add_cmd_add_box(s->buf, 0, s->z++, 0xFF1A1A2Eu, 0, 0.0f, &bg);
+    yetty_ydraw_drawable_list_add_cmd_add_box(s->buf, 0, s->z++, 0xFF1A1A2Eu, 0, 0.0f, &bg);
     emit_text(s, e->label_position.x - tw * 0.5f, e->label_position.y + fs / 3.0f, e->label, fs,
               e->style.label_color);
 }
@@ -635,7 +635,7 @@ static void emit_edge(struct render_state *s, const struct yetty_ydiagram_graph 
             .end_x = tx,
             .end_y = ty,
         };
-        yetty_ydraw_draw_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, e->style.stroke_color,
+        yetty_ydraw_drawable_list_add_cmd_add_segment(s->buf, 0, s->z++, 0, e->style.stroke_color,
                                                   e->style.stroke_width, &seg);
     }
 
@@ -658,7 +658,7 @@ static void emit_edge(struct render_state *s, const struct yetty_ydiagram_graph 
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ydiagram_render(
-    const struct yetty_ydiagram_graph *g, struct yetty_ydraw_draw_list *buffer,
+    const struct yetty_ydiagram_graph *g, struct yetty_ydraw_drawable_list *buffer,
     const struct yetty_ydiagram_render_options *options, yetty_ydiagram_measure_text_fn measure,
     void *userdata)
 {
@@ -676,13 +676,13 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
         .z = 0,
     };
 
-    yetty_ydraw_draw_list_set_scene_bounds(buffer, g->min_x, g->min_y, g->max_x, g->max_y);
+    yetty_ydraw_drawable_list_set_scene_bounds(buffer, g->min_x, g->min_y, g->max_x, g->max_y);
 
     /* CMD_ZERO clears the receiving canvas + resets its cursor to (0,0) on
      * decode — full-redraw semantics. Skipped in cat-like (inline) mode so the
      * diagram flows at the current cursor instead of jumping to the origin. */
     if (opts.clear_canvas) {
-        (void)yetty_ydraw_draw_list_add_cmd_zero(buffer);
+        (void)yetty_ydraw_drawable_list_add_cmd_zero(buffer);
     }
 
     /* Optional fullscreen background. */
@@ -694,7 +694,7 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
             .half_height = (g->max_y - g->min_y) * 0.5f,
             .corner_radius = 0.0f,
         };
-        yetty_ydraw_draw_list_add_cmd_add_box(buffer, 0, st.z++, opts.background_color, 0, 0.0f,
+        yetty_ydraw_drawable_list_add_cmd_add_box(buffer, 0, st.z++, opts.background_color, 0, 0.0f,
                                               &bg);
     }
 
@@ -711,7 +711,7 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
             .half_height = c->height * 0.5f,
             .corner_radius = 5.0f,
         };
-        yetty_ydraw_draw_list_add_cmd_add_box(buffer, 0, st.z++, c->fill_color, c->stroke_color,
+        yetty_ydraw_drawable_list_add_cmd_add_box(buffer, 0, st.z++, c->fill_color, c->stroke_color,
                                               1.0f, &geom);
     }
 

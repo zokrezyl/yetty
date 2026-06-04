@@ -20,14 +20,14 @@
  * Group nesting: a non-leaf segment is emitted by opening a CMD_GROUP
  * for the segment, then recursing into each child (which may itself
  * open a nested CMD_GROUP). end_group patches the parent's payload_size
- * after the children finish — see draw-list.h. This stresses scene-
+ * after the children finish — see drawable-list.h. This stresses scene-
  * canvas's process_group_body recursive parser.
  */
 
 #include <yetty/yjungle/yjungle.h>
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -378,7 +378,7 @@ static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segmen
  *   4-N spine line + bead-of-shape-X at start
  *===========================================================================*/
 
-static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_drawable_list *buf,
                                                    uint32_t z_order, int variant, float ax,
                                                    float ay, float r, uint32_t color, float scene_w,
                                                    float scene_h);
@@ -418,7 +418,7 @@ static int yjungle_aabb_in_bounds(float x0, float y0, float x1, float y1, float 
     return 1;
 }
 
-static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_drawable_list *buf,
                                                      uint32_t z_order,
                                                      const struct yjungle_segment *seg,
                                                      float scene_w, float scene_h)
@@ -432,7 +432,7 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         /* Degenerate — still emit a tiny circle at the endpoint so the
          * canvas isn't unaccounted-for. */
         struct yetty_ysdf_circle g = {sx, sy, 2.0f};
-        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, seg->color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z_order, seg->color, 0u, 0.0f, &g);
     }
     float nx = dx / length; /* unit along spine */
     float ny = dy / length;
@@ -460,7 +460,7 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
-        return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke, &g);
     }
     case 1: {
         /* Capsule = thick rounded line from start to end. */
@@ -478,7 +478,7 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_capsule g = {sx, sy, ex, ey, radius};
-        return yetty_ydraw_draw_list_add_cmd_add_capsule(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_capsule(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 2: {
         /* Rotated thin box aligned along the spine. SDF box is
@@ -496,7 +496,7 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
-        return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke * 3.0f,
+        return yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke * 3.0f,
                                                          &g);
     }
     case 3: {
@@ -515,7 +515,7 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
             return YETTY_OK_VOID();
         }
         struct yetty_ysdf_triangle g = {sx, sy, ex, ey, tx, ty};
-        return yetty_ydraw_draw_list_add_cmd_add_triangle(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_triangle(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     default: {
         /* Spine + bead. Emit the spine first (lower z_order? no — the
@@ -533,7 +533,7 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
         }
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
         struct yetty_ycore_void_result sr =
-            yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke, &g);
+            yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke, &g);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yjungle: spine emit");
         /* Bead radius scales with stroke but stays small enough that
          * the next segment's bead at the shared endpoint visibly
@@ -554,7 +554,7 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
  * `variant` selects which SDF flavour. Variants are taken from the
  * choice value the segment was generated with, so each segment's bead
  * is stable across re-renders. */
-static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_drawable_list *buf,
                                                    uint32_t z_order, int variant, float ax,
                                                    float ay, float r, uint32_t color, float scene_w,
                                                    float scene_h)
@@ -571,79 +571,79 @@ static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list 
     switch (variant % 18) {
     case 0: {
         struct yetty_ysdf_circle g = {ax, ay, r};
-        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 1: {
         struct yetty_ysdf_box g = {ax, ay, r, r, r * 0.2f};
-        return yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 2: {
         struct yetty_ysdf_ellipse g = {ax, ay, r * 1.2f, r * 0.8f};
-        return yetty_ydraw_draw_list_add_cmd_add_ellipse(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_ellipse(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 3: {
         struct yetty_ysdf_rounded_box g = {ax, ay, r, r, r * 0.3f, r * 0.3f, r * 0.3f, r * 0.3f};
-        return yetty_ydraw_draw_list_add_cmd_add_rounded_box(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 4: {
         struct yetty_ysdf_rhombus g = {ax, ay, r, r * 1.2f};
-        return yetty_ydraw_draw_list_add_cmd_add_rhombus(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_rhombus(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 5: {
         struct yetty_ysdf_pentagon g = {ax, ay, r};
-        return yetty_ydraw_draw_list_add_cmd_add_pentagon(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_pentagon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 6: {
         struct yetty_ysdf_hexagon g = {ax, ay, r};
-        return yetty_ydraw_draw_list_add_cmd_add_hexagon(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_hexagon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 7: {
         struct yetty_ysdf_star g = {ax, ay, r, 5.0f, 2.5f};
-        return yetty_ydraw_draw_list_add_cmd_add_star(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_star(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 8: {
         struct yetty_ysdf_pie g = {ax, ay, 0.866f, 0.5f, r};
-        return yetty_ydraw_draw_list_add_cmd_add_pie(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_pie(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 9: {
         struct yetty_ysdf_ring g = {ax, ay, 0.866f, 0.5f, r, r * 0.25f};
-        return yetty_ydraw_draw_list_add_cmd_add_ring(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_ring(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 10: {
         struct yetty_ysdf_heart g = {ax, ay, r};
-        return yetty_ydraw_draw_list_add_cmd_add_heart(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_heart(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 11: {
         struct yetty_ysdf_cross g = {ax, ay, r, r * 0.3f, r * 0.1f};
-        return yetty_ydraw_draw_list_add_cmd_add_cross(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_cross(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 12: {
         struct yetty_ysdf_rounded_x g = {ax, ay, r, r * 0.2f};
-        return yetty_ydraw_draw_list_add_cmd_add_rounded_x(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_rounded_x(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 13: {
         struct yetty_ysdf_moon g = {ax, ay, r * 0.5f, r, r * 0.8f};
-        return yetty_ydraw_draw_list_add_cmd_add_moon(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_moon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 14: {
         struct yetty_ysdf_egg g = {ax, ay, r, r * 0.6f};
-        return yetty_ydraw_draw_list_add_cmd_add_egg(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_egg(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 15: {
         struct yetty_ysdf_octogon g = {ax, ay, r};
-        return yetty_ydraw_draw_list_add_cmd_add_octogon(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_octogon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 16: {
         struct yetty_ysdf_hexagram g = {ax, ay, r};
-        return yetty_ydraw_draw_list_add_cmd_add_hexagram(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_hexagram(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 17: {
         struct yetty_ysdf_pentagram g = {ax, ay, r};
-        return yetty_ydraw_draw_list_add_cmd_add_pentagram(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_pentagram(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     default: {
         struct yetty_ysdf_circle g = {ax, ay, r};
-        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     }
 }
@@ -661,12 +661,12 @@ static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list 
  * counter rolls forward forever — uint32_t headroom is plenty.
  *===========================================================================*/
 
-static struct yetty_ycore_void_result emit_segment_subtree(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result emit_segment_subtree(struct yetty_ydraw_drawable_list *buf,
                                                            const struct yjungle_segment *seg,
                                                            uint32_t *z_order_counter, float scene_w,
                                                            float scene_h)
 {
-    struct yetty_ydraw_id_result br = yetty_ydraw_draw_list_begin_group(buf, seg->group_id);
+    struct yetty_ydraw_id_result br = yetty_ydraw_drawable_list_begin_group(buf, seg->group_id);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yjungle: begin_group");
     uint32_t marker = br.value;
 
@@ -682,7 +682,7 @@ static struct yetty_ycore_void_result emit_segment_subtree(struct yetty_ydraw_dr
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yjungle: primitive emit");
     }
 
-    struct yetty_ycore_void_result er = yetty_ydraw_draw_list_end_group(buf, marker);
+    struct yetty_ycore_void_result er = yetty_ydraw_drawable_list_end_group(buf, marker);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yjungle: end_group");
     return YETTY_OK_VOID();
 }
@@ -692,7 +692,7 @@ static struct yetty_ycore_void_result emit_segment_subtree(struct yetty_ydraw_dr
  * (yetty_yjungle_render) for consumers that paint a flat prim list each
  * frame (the ygui ydraw_embed widget) rather than accumulating GROUP/DELETE
  * deltas on a persistent canvas. */
-static struct yetty_ycore_void_result emit_segment_flat(struct yetty_ydraw_draw_list *buf,
+static struct yetty_ycore_void_result emit_segment_flat(struct yetty_ydraw_drawable_list *buf,
                                                         const struct yjungle_segment *seg,
                                                         uint32_t *z_order_counter, float scene_w,
                                                         float scene_h)
@@ -869,7 +869,7 @@ static void schedule_next_event(struct yetty_yjungle *j, uint64_t now_ms)
  * reserved capacity. Emits the new GROUP into `buf` and updates
  * `*z_order_counter`. */
 static struct yetty_ycore_void_result do_extend(struct yetty_yjungle *j,
-                                                struct yetty_ydraw_draw_list *buf,
+                                                struct yetty_ydraw_drawable_list *buf,
                                                 uint32_t *z_order_counter)
 {
     float sx = j->cursor_x;
@@ -892,7 +892,7 @@ static struct yetty_ycore_void_result do_extend(struct yetty_yjungle *j,
  * keeps the old (start, end); only its tree/primitive content changes.
  * Emits DELETE(old_id) followed by GROUP(new_id). */
 static struct yetty_ycore_void_result do_replace(struct yetty_yjungle *j,
-                                                 struct yetty_ydraw_draw_list *buf,
+                                                 struct yetty_ydraw_drawable_list *buf,
                                                  uint32_t *z_order_counter)
 {
     uint32_t idx = rng_uint(j, j->chain_len);
@@ -907,7 +907,7 @@ static struct yetty_ycore_void_result do_replace(struct yetty_yjungle *j,
     uint32_t old_id = seg->group_id;
 
     /* Emit DELETE(old_id) at the envelope root. */
-    struct yetty_ycore_void_result dr = yetty_ydraw_draw_list_add_cmd_delete(buf, old_id);
+    struct yetty_ycore_void_result dr = yetty_ydraw_drawable_list_add_cmd_delete(buf, old_id);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "yjungle: DELETE old segment");
 
     /* Free the old subtree and build a fresh one in place. */
@@ -920,7 +920,7 @@ static struct yetty_ycore_void_result do_replace(struct yetty_yjungle *j,
 }
 
 struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,
-                                                  struct yetty_ydraw_draw_list *buf,
+                                                  struct yetty_ydraw_drawable_list *buf,
                                                   uint64_t now_ms)
 {
     if (!j) {
@@ -930,8 +930,8 @@ struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,
         return YETTY_ERR(yetty_ycore_void, "yjungle_tick: NULL buf");
     }
 
-    yetty_ydraw_draw_list_clear(buf);
-    yetty_ydraw_draw_list_set_scene_bounds(buf, 0.0f, 0.0f, j->config.scene_width,
+    yetty_ydraw_drawable_list_clear(buf);
+    yetty_ydraw_drawable_list_set_scene_bounds(buf, 0.0f, 0.0f, j->config.scene_width,
                                            j->config.scene_height);
 
     /* z_order is local to this envelope. Each new envelope is a delta
@@ -944,7 +944,7 @@ struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,
         /* First tick: full-redraw envelope. CMD_ZERO clears any prior
          * scene-canvas state, then we emit GROUP(...) for every initial
          * chain segment. */
-        struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(buf);
+        struct yetty_ycore_void_result zr = yetty_ydraw_drawable_list_add_cmd_zero(buf);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yjungle_tick: add_cmd_zero");
 
         struct yetty_ycore_void_result rr = chain_reserve(j, j->config.initial_chain_length);
@@ -996,7 +996,7 @@ struct yetty_ycore_void_result yetty_yjungle_tick(struct yetty_yjungle *j,
 }
 
 struct yetty_ycore_void_result yetty_yjungle_render(struct yetty_yjungle *j,
-                                                    struct yetty_ydraw_draw_list *buf,
+                                                    struct yetty_ydraw_drawable_list *buf,
                                                     uint64_t now_ms)
 {
     if (!j) {
@@ -1009,17 +1009,17 @@ struct yetty_ycore_void_result yetty_yjungle_render(struct yetty_yjungle *j,
     /* Advance the simulation (mutates the chain). The tick writes its
      * incremental commands into a scratch buffer we throw away — only the
      * chain side effect matters here. */
-    struct yetty_ydraw_draw_list_result sr = yetty_ydraw_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result sr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yjungle_render: scratch create");
     struct yetty_ycore_void_result tr = yetty_yjungle_tick(j, sr.value, now_ms);
-    yetty_ydraw_draw_list_destroy(sr.value);
+    yetty_ydraw_drawable_list_destroy(sr.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "yjungle_render: advance");
 
     /* Emit the whole current chain as a flat prim list, replacing the
      * buffer each frame (the full-redraw model the ydraw_embed widget
      * needs). */
-    yetty_ydraw_draw_list_clear(buf);
-    yetty_ydraw_draw_list_set_scene_bounds(buf, 0.0f, 0.0f, j->config.scene_width,
+    yetty_ydraw_drawable_list_clear(buf);
+    yetty_ydraw_drawable_list_set_scene_bounds(buf, 0.0f, 0.0f, j->config.scene_width,
                                            j->config.scene_height);
     uint32_t z_order = 0u;
     for (uint32_t i = 0; i < j->chain_len; i++) {

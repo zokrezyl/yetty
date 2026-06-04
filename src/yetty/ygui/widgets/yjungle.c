@@ -10,7 +10,7 @@
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/yjungle.h>
 #include <yetty/yjungle/yjungle.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplatform/time.h>
 
 struct [[clang::annotate("class@ygui:yjungle")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
@@ -86,15 +86,15 @@ static struct yetty_ycore_void_result yjungle_emit_body(struct yetty_yclass_ctx 
             d->scene_w = w;
             d->scene_h = h;
         }
-        struct yetty_ydraw_draw_list_config bcfg = {
+        struct yetty_ydraw_drawable_list_config bcfg = {
             .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = w, .scene_max_y = h};
-        struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+        struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yjungle_emit_body: buffer create");
         uint64_t now_ms =
             (uint64_t)((yetty_yplatform_ytime_monotonic_sec() - d->start_time) * 1000.0);
         struct yetty_ycore_void_result rr = yetty_yjungle_render(d->jungle, br.value, now_ms);
         if (YETTY_IS_ERR(rr)) {
-            yetty_ydraw_draw_list_destroy(br.value);
+            yetty_ydraw_drawable_list_destroy(br.value);
             return YETTY_ERR(yetty_ycore_void, "yjungle_emit_body: render", rr);
         }
         struct yetty_ycore_void_result sb = yetty_ygui_ydraw_embed_set_buffer(obj, br.value);

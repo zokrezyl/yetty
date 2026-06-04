@@ -3,7 +3,7 @@
  *
  * Implements the five mandatory NetSurf gui tables (misc, window,
  * fetch, bitmap, layout) plus a plotter_table that drains drawing
- * commands into a yetty_ydraw_draw_list.
+ * commands into a yetty_ydraw_drawable_list.
  */
 
 #include "ynetsurf-internal.h"
@@ -38,7 +38,7 @@
 #include "content/fetch.h"
 
 /* yetty */
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 /* Singleton — NetSurf's table registration is process-wide and the
  * plotter callbacks reach this via redraw_context.priv. We keep one
@@ -721,7 +721,7 @@ struct yetty_ycore_void_result yetty_ynetsurf_set_scroll(struct yetty_ynetsurf *
 }
 
 struct yetty_ycore_void_result yetty_ynetsurf_redraw(struct yetty_ynetsurf *ns,
-                                                     struct yetty_ydraw_draw_list *buf)
+                                                     struct yetty_ydraw_drawable_list *buf)
 {
     if (ns == NULL || buf == NULL) {
         return YETTY_ERR(yetty_ycore_void, "null");

@@ -31,11 +31,11 @@
 #include <yetty/yframework/yframework.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-iterator.h>
-#include <yetty/ydraw-core/figure-types.h>
-#include <yetty/ydraw-core/flyweight.h>
-#include <yetty/ydraw-core/font-prim.h>
-#include <yetty/ydraw-factory/figure-factory.h>
-#include <yetty/ydraw-core/text-span-prim.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yfigure/figure.h>
@@ -172,7 +172,7 @@ yetty_ygrid_grid {
     /* Owned. Built at create time. Used by process_input to walk the
      * routed-record payload as a stream of SDF/glyph/TEXT_SPAN records
      * and feed each one into the ygrid's flat byte buffer. */
-    struct yetty_ydraw_flyweight_registry *registry;
+    struct yetty_ydraw_drawable_list_registry *registry;
 
     uint32_t grid_cols;
     uint32_t grid_rows;
@@ -271,7 +271,7 @@ yetty_ygrid_grid {
      * yzoo/yjungle once, then hands the same pointer to every ygrid
      * via the factory args bundle). Each instance lives until the
      * next clear() / destroy(). */
-    struct yetty_ydraw_complex_drawable_factory *figure_factory;
+    struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_ydraw_figure **figure_instances;
     uint32_t figure_instance_count;
     uint32_t figure_instance_cap;
@@ -1008,7 +1008,7 @@ static uint32_t decode_utf8(const uint8_t **ptr, const uint8_t *end)
 }
 
 /* Expand one TEXT_SPAN wire record into glyph records, mirroring
- * scene-canvas's scene_expand_text_span_to_glyphs. The TEXT_SPAN's
+ * scene-canvas's scene_expand_text_drawable_list_to_glyphs. The TEXT_SPAN's
  * font_id maps directly to a ygrid font slot (-1 means slot 0, the
  * default). Each generated glyph is appended to grid->bytes as its own
  * 7-word GLYPH wire record and bucketed via parse_and_index_record so
@@ -1019,7 +1019,7 @@ static uint32_t decode_utf8(const uint8_t **ptr, const uint8_t *end)
  * may be realloc'd by grow_bytes when each generated glyph is emitted.
  * The caller takes a heap copy first to keep the pointer stable. */
 static struct yetty_ycore_void_result expand_text_span(
-    struct yetty_ygrid_grid *grid, const struct yetty_ydraw_text_span_drawable_view *span,
+    struct yetty_ygrid_grid *grid, const struct yetty_ydraw_text_drawable_list_view *span,
     const uint8_t *text_run, uint32_t text_run_len)
 {
     /* font_id < 0 means "default" → slot 0. Otherwise the producer chose
@@ -1175,9 +1175,9 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
      * each generated glyph is appended + bucketed normally and shows
      * up in prim_count/staging. The TEXT_SPAN bytes themselves stay in
      * grid->bytes but produce no prim entry. */
-    if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-        struct yetty_ydraw_text_span_drawable_view view;
-        if (yetty_ydraw_text_span_drawable_parse(hdr, &view) != 0) {
+    if (type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+        struct yetty_ydraw_text_drawable_list_view view;
+        if (yetty_ydraw_text_drawable_list_parse(hdr, &view) != 0) {
             return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_SPAN parse failed");
         }
         /* `view.text` aliases into g->bytes; grow_bytes inside the
@@ -1223,7 +1223,7 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
                                      .min = {.x = gx, .y = gy},
                                      .max = {.x = gx + gs, .y = gy + gs},
                                  }));
-    } else if (yetty_ydraw_is_figure(type) && g->figure_factory) {
+    } else if (yetty_ydraw_is_composite(type) && g->composite_factory) {
         /* Complex prim (yplot / yimage / yvideo / yzoo / yjungle …).
          * Mint a figure instance via the host-supplied factory and
          * stash it in figure_instances; the render path will paint
@@ -1240,10 +1240,10 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
             g->figure_instances = grown;
             g->figure_instance_cap = cap;
         }
-        struct yetty_ydraw_figure_ptr_result ir = yetty_ydraw_complex_drawable_factory_create_instance(
-            g->figure_factory, hdr, record_len, /*rolling_row=*/0u);
+        struct yetty_ydraw_figure_ptr_result ir = yetty_ydraw_composite_factory_create_instance(
+            g->composite_factory, hdr, record_len, /*rolling_row=*/0u);
         if (YETTY_IS_ERR(ir)) {
-            ydebug("ygrid: figure_factory create_instance failed for type=0x%08x: %s", type,
+            ydebug("ygrid: composite_factory create_instance failed for type=0x%08x: %s", type,
                    ir.error.msg);
             yetty_ycore_error_destroy(ir.error);
             return YETTY_OK_VOID();
@@ -1257,17 +1257,17 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
     }
         return YETTY_OK_VOID();
     } else {
-        struct yetty_ydraw_drawable_base_ops_ptr_result ops_r = yetty_ysdf_handler(type);
+        struct yetty_ydraw_drawable_list_entry_ops_ptr_result ops_r = yetty_ysdf_handler(type);
         if (YETTY_IS_ERR(ops_r)) {
             /* Not an SDF type and not a glyph — drop the error,
              * leave the wire bytes in place, and report success.
              * v1 renders nothing for unsupported types. */
-            ydebug("ygrid: drop unrenderable type=0x%08x len=%zu (figure_factory=%p)", type,
-                   record_len, (void *)g->figure_factory);
+            ydebug("ygrid: drop unrenderable type=0x%08x len=%zu (composite_factory=%p)", type,
+                   record_len, (void *)g->composite_factory);
             yetty_ycore_error_destroy(ops_r.error);
             return YETTY_OK_VOID();
         }
-        const struct yetty_ydraw_drawable_base_ops *ops = ops_r.value;
+        const struct yetty_ydraw_drawable_list_entry_ops *ops = ops_r.value;
         ar = ops->aabb(hdr);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "ygrid: SDF prim aabb");
         ydebug("ygrid: SDF type=0x%08x aabb=(%.1f,%.1f)-(%.1f,%.1f) len=%zu", type, ar.value.min.x,
@@ -1429,7 +1429,7 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
         g->binder->ops->destroy(g->binder);
     }
     if (g->registry) {
-        yetty_ydraw_flyweight_registry_destroy(g->registry);
+        yetty_ydraw_drawable_list_registry_destroy(g->registry);
     }
 
     free(g->sdf_lib_code.data);
@@ -1451,7 +1451,7 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     free(g->entities);
     free(g->id_index);
 
-    /* figure_factory itself is BORROWED; only the instances we minted
+    /* composite_factory itself is BORROWED; only the instances we minted
      * through it are ours to free. */
     if (g->figure_instances) {
         for (uint32_t i = 0; i < g->figure_instance_count; i++) {
@@ -1467,13 +1467,13 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     return yetty_yclass_object_free((struct yetty_yclass_object *)self - 1);
 }
 
-void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
-                                    struct yetty_ydraw_complex_drawable_factory *factory)
+void yetty_ygrid_set_composite_factory(struct yetty_ygrid_grid *grid,
+                                    struct yetty_ydraw_composite_factory *factory)
 {
     if (!grid) {
         return;
     }
-    grid->figure_factory = factory;
+    grid->composite_factory = factory;
 }
 
 void yetty_ygrid_set_content_size(struct yetty_ygrid_grid *grid, float content_w, float content_h)
@@ -1841,7 +1841,7 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
         }
 
         /* cmd.kind == ADD */
-        uint32_t drawable_type = cmd.flyweight.data ? cmd.flyweight.data[0] : 0u;
+        uint32_t drawable_type = cmd.entry.data ? cmd.entry.data[0] : 0u;
         if (drawable_type == YETTY_YDRAW_CMD_ZERO) {
             struct yetty_ycore_void_result rc = ygrid_reset_content(g->base);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rc, "ygrid_process_bytes: CMD_ZERO");
@@ -1854,14 +1854,14 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
         if (drawable_type == YETTY_YDRAW_CMD_GROUP) {
             uint32_t id;
             uint32_t payload_size;
-            memcpy(&id, &cmd.flyweight.data[1], sizeof(id));
-            memcpy(&payload_size, &cmd.flyweight.data[2], sizeof(payload_size));
+            memcpy(&id, &cmd.entry.data[1], sizeof(id));
+            memcpy(&payload_size, &cmd.entry.data[2], sizeof(payload_size));
             uint32_t child_slot;
             int was_existing = 0;
             struct yetty_ycore_void_result cr =
                 entity_lookup_or_create(g, parent_slot, (uint64_t)id, &child_slot, &was_existing);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ygrid_process_bytes: CMD_GROUP");
-            const uint8_t *body = (const uint8_t *)cmd.flyweight.data + 12u;
+            const uint8_t *body = (const uint8_t *)cmd.entry.data + 12u;
             struct yetty_ycore_void_result rr =
                 process_group_body(g, child_slot, body, payload_size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ygrid_process_bytes: CMD_GROUP body");
@@ -2469,37 +2469,37 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
      * records. Same handler set the legacy compositor used for its
      * outer iterator, lifted here so each ygrid is self-sufficient. */
     {
-        struct yetty_ydraw_flyweight_registry_ptr_result rr =
-            yetty_ydraw_flyweight_registry_create();
+        struct yetty_ydraw_drawable_list_registry_ptr_result rr =
+            yetty_ydraw_drawable_list_registry_create();
         if (YETTY_IS_ERR(rr)) {
             ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry", rr);
         }
         g->registry = rr.value;
-        yetty_ydraw_flyweight_registry_set_default(g->registry, yetty_ysdf_handler);
+        yetty_ydraw_drawable_list_registry_set_default(g->registry, yetty_ysdf_handler);
         struct yetty_ycore_void_result hr;
-        hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_CMD_BASE,
+        hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_CMD_BASE,
                                                 YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry cmd", hr);
         }
-        hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_TYPE_FONT,
-                                                YETTY_YDRAW_TYPE_FONT,
-                                                yetty_yfont_font_drawable_handler);
+        hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_RESOURCE_FONT,
+                                                YETTY_YDRAW_RESOURCE_FONT,
+                                                yetty_ydraw_font_resource_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry font", hr);
         }
-        hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_TYPE_TEXT_SPAN,
-                                                YETTY_YDRAW_TYPE_TEXT_SPAN,
-                                                yetty_ydraw_text_span_drawable_handler);
+        hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+                                                YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+                                                yetty_ydraw_text_drawable_list_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
         }
-        hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_COMPLEX_TYPE_BASE,
-                                                0xFFFFFFFFu, yetty_ydraw_complex_drawable_handler);
+        hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
+                                                0xFFFFFFFFu, yetty_ydraw_composite_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);
@@ -2587,8 +2587,8 @@ static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_impl(struct yet
                 yetty_ycore_error_destroy(fr.error);
             }
         }
-        if (args->figure_factory) {
-            yetty_ygrid_set_figure_factory(gr.value, args->figure_factory);
+        if (args->composite_factory) {
+            yetty_ygrid_set_composite_factory(gr.value, args->composite_factory);
         }
     }
     return YETTY_OK(yetty_yfigure_figure_data_ptr, yetty_ygrid_as_figure(gr.value));
@@ -2687,7 +2687,7 @@ static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offs
     uint32_t *words = (uint32_t *)(g->bytes + record_offset);
     uint32_t type = words[0];
 
-    if (type == YGRID_GLYPH_TYPE || type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
+    if (type == YGRID_GLYPH_TYPE || type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
         /* Both layouts place x, y, font_size at words 2, 3, 4. */
         scale_record_word(&words[2], scale);
         scale_record_word(&words[3], scale);
@@ -2698,7 +2698,7 @@ static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offs
     /* SDF prims share the header [type, z_order, fill, stroke, stroke_w]
      * with geometry from word 5. yetty_ysdf_handler gates the type so
      * non-SDF records are skipped. */
-    struct yetty_ydraw_drawable_base_ops_ptr_result ops_r = yetty_ysdf_handler(type);
+    struct yetty_ydraw_drawable_list_entry_ops_ptr_result ops_r = yetty_ysdf_handler(type);
     if (YETTY_IS_ERR(ops_r)) {
         yetty_ycore_error_destroy(ops_r.error);
         ydebug("scale_record_coords: SKIP type=0x%08X (not SDF) word_count=%u", type, word_count);
@@ -2824,7 +2824,7 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
  *                                     coroutine pointer.
  *   - dump(self, indent) → char*    — pointer return.
  *   - set_font(grid, slot, font*)   — font isn't a yclass object yet.
- *   - set_figure_factory(grid, f*)  — same; the factory pointer has no
+ *   - set_composite_factory(grid, f*)  — same; the factory pointer has no
  *                                     yclass identity.
  *   - as_figure(grid) → figure*     — pure cast helper, no dispatch.
  *

@@ -43,7 +43,7 @@ extern "C" {
 struct yetty_ygrid_grid;
 struct yetty_yfont_font;
 struct yetty_yfigure_registry;
-struct yetty_ydraw_complex_drawable_factory;
+struct yetty_ydraw_composite_factory;
 
 /* Bundle of host-owned pointers handed to every ygrid the factory mints.
  * Both fields are borrowed — the host (terminal / yui) keeps the actual
@@ -52,12 +52,12 @@ struct yetty_ydraw_complex_drawable_factory;
  *
  *   default_font   slot-0 font for GLYPH/TEXT_SPAN expansion. NULL → no
  *                  default font, glyph records silently drop.
- *   figure_factory complex-prim renderer (yplot / yimage / yvideo / …).
+ *   composite_factory complex-prim renderer (yplot / yimage / yvideo / …).
  *                  NULL → complex-prim records silently drop, same as
  *                  the v1 behaviour. */
 struct yetty_ygrid_factory_args {
     struct yetty_yfont_font *default_font;
-    struct yetty_ydraw_complex_drawable_factory *figure_factory;
+    struct yetty_ydraw_composite_factory *composite_factory;
 };
 
 /* Register the ygrid factory under YETTY_YFIGURE_KIND_YGRID with the
@@ -84,8 +84,8 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
  * outlive the ygrid. Complex prims (yplot / yimage / etc.) arriving
  * via process_bytes after this call mint a figure instance through
  * the factory and are rendered alongside the SDF / glyph pass. */
-void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
-                                    struct yetty_ydraw_complex_drawable_factory *factory);
+void yetty_ygrid_set_composite_factory(struct yetty_ygrid_grid *grid,
+                                    struct yetty_ydraw_composite_factory *factory);
 
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 

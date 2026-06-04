@@ -24,7 +24,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ylottie/ylottie.h>
 
 #ifdef __cplusplus
@@ -212,7 +212,7 @@ int yetty_ylottie_polyline_push(struct yetty_ylottie_polyline *pl, float x, floa
  *===========================================================================*/
 
 struct yetty_ylottie_paint_ctx {
-    struct yetty_ydraw_draw_list *buf;
+    struct yetty_ydraw_drawable_list *buf;
     const struct yetty_ylottie_json *layers; /* composition `layers` array */
     float frame;                             /* frame being rendered */
     float default_font_size;

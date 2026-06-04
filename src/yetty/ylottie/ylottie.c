@@ -17,7 +17,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ylottie/ylottie.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -326,15 +326,15 @@ struct yetty_ylottie_render_result yetty_ylottie_animation_render_frame(
     if (!anim) {
         return YETTY_ERR(yetty_ylottie_render, "ylottie: NULL animation");
     }
-    struct yetty_ydraw_draw_list_config bcfg = {.scene_min_x = 0.0f,
+    struct yetty_ydraw_drawable_list_config bcfg = {.scene_min_x = 0.0f,
                                                 .scene_min_y = 0.0f,
                                                 .scene_max_x = anim->scene_w,
                                                 .scene_max_y = anim->scene_h};
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ylottie_render, "ylottie: buffer create failed", br);
     }
-    struct yetty_ydraw_draw_list *buf = br.value;
+    struct yetty_ydraw_drawable_list *buf = br.value;
 
     if ((bg_abgr >> 24) != 0) {
         struct yetty_ysdf_box bg = {.center_x = anim->scene_w * 0.5f,
@@ -343,9 +343,9 @@ struct yetty_ylottie_render_result yetty_ylottie_animation_render_frame(
                                     .half_height = anim->scene_h * 0.5f,
                                     .corner_radius = 0.0f};
         struct yetty_ycore_void_result r =
-            yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, 0, bg_abgr, 0, 0.0f, &bg);
+            yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, 0, bg_abgr, 0, 0.0f, &bg);
         if (YETTY_IS_ERR(r)) {
-            yetty_ydraw_draw_list_destroy(buf);
+            yetty_ydraw_drawable_list_destroy(buf);
             return YETTY_ERR(yetty_ylottie_render, "ylottie: background emit failed", r);
         }
     }
@@ -360,7 +360,7 @@ struct yetty_ylottie_render_result yetty_ylottie_animation_render_frame(
     };
     struct yetty_ycore_void_result er = yetty_ylottie_paint(&ctx);
     if (YETTY_IS_ERR(er)) {
-        yetty_ydraw_draw_list_destroy(buf);
+        yetty_ydraw_drawable_list_destroy(buf);
         return YETTY_ERR(yetty_ylottie_render, "ylottie: emission failed", er);
     }
 

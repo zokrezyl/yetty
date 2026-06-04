@@ -11,7 +11,7 @@
  *
  *   - register the required gui_* tables with the NetSurf core
  *   - drive page load and re-layout
- *   - on each redraw, drain the page into a yetty_ydraw_draw_list of
+ *   - on each redraw, drain the page into a yetty_ydraw_drawable_list of
  *     ysdf primitives + TEXT_SPAN flyweight prims
  *
  * The host (e.g. tools/ynetsurf) owns the lifetime, the viewport size,
@@ -24,7 +24,7 @@
 
 #include <yetty/ycore/result.h>
 
-struct yetty_ydraw_draw_list;
+struct yetty_ydraw_drawable_list;
 struct nsurl;
 
 #ifdef __cplusplus
@@ -56,7 +56,7 @@ struct yetty_ycore_void_result yetty_ynetsurf_set_scroll(struct yetty_ynetsurf *
  * appends primitives. Returns NSERROR-translated error on plotter
  * faults (rare; bail-on-first-error). */
 struct yetty_ycore_void_result yetty_ynetsurf_redraw(struct yetty_ynetsurf *ns,
-                                                     struct yetty_ydraw_draw_list *buf);
+                                                     struct yetty_ydraw_drawable_list *buf);
 
 /* Run any pending scheduled callbacks whose deadline has elapsed.
  * Call this from the host event loop. Returns the milliseconds until

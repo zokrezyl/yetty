@@ -110,7 +110,7 @@ extern "C" {
  *                                                                        *
  * cmd values that set HAS_ID_FLAG (CMD_DELETE, CMD_GROUP, CMD_UPDATE)    *
  * land in the same 0x8XXXXXXX range as complex-prim type_ids             *
- * (YETTY_YDRAW_COMPLEX_TYPE_BASE = 0x80000000). The drawable iterator    *
+ * (YETTY_YDRAW_COMPOSITE_TYPE_BASE = 0x80000000). The drawable iterator    *
  * disambiguates by *exact-match* on each cmd constant before falling     *
  * through to the prim registry — so each cmd value MUST stay distinct    *
  * from every complex-prim type_id ever assigned.                         *
@@ -148,20 +148,20 @@ extern "C" {
  * entity. Canvas variants without entities (scrolling-canvas) drop it. */
 #define YETTY_YDRAW_CMD_GROUP (YETTY_YDRAW_HAS_ID_FLAG | 0x00000002u)
 
-struct yetty_ydraw_draw_list;
+struct yetty_ydraw_drawable_list;
 
 /* Append a CMD_ZERO at the current write head of the buffer. */
-struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_zero(
-    struct yetty_ydraw_draw_list *buf);
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_zero(
+    struct yetty_ydraw_drawable_list *buf);
 
 /* Flyweight handler for the cmd tier — returns the cmd base_ops which
  * stride by the FAM `8 + payload_size` bytes (same as flyweight prims).
  * Register at startup with:
- *   yetty_ydraw_flyweight_registry_add(reg,
+ *   yetty_ydraw_drawable_list_registry_add(reg,
  *       YETTY_YDRAW_CMD_BASE, YETTY_YDRAW_CMD_END,
  *       yetty_ydraw_cmd_handler);
  */
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_cmd_handler(uint32_t drawable_type);
+struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_cmd_handler(uint32_t drawable_type);
 
 #ifdef __cplusplus
 }

@@ -9,7 +9,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/dialog.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -89,7 +89,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u, 0.0f,
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
                                                      &geom);
     }
     if (radius > w * 0.5f) {
@@ -108,7 +108,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
                                                          0.0f, &geom);
 }
 
@@ -126,7 +126,7 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *ycla
     if (!d->open) {
         return YETTY_OK_VOID();
     }
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "dialog_paint: NULL ctx");
     }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -144,7 +144,7 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *ycla
         float ty = r.min.y + (DIALOG_TITLE_H + fs) * 0.5f - 3.0f;
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)d->title, .capacity = strlen(d->title), .size = strlen(d->title)};
-        rr = yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, r.min.x + DIALOG_PAD, ty, &tb, fs,
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + DIALOG_PAD, ty, &tb, fs,
                                             COLOR_TITLE_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "dialog_paint: title");
     }

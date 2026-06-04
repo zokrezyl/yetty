@@ -731,7 +731,7 @@ static struct yetty_ycore_void_result ynodes_draw_link(struct yetty_ygui_emit_ct
         float py = cubic_at(y0, y0, y1, y1, t);
         struct yetty_ysdf_segment seg = {
             .start_x = prev_x, .start_y = prev_y, .end_x = px, .end_y = py};
-        struct yetty_ycore_void_result result_744 = yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
+        struct yetty_ycore_void_result result_744 = yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 0, 0u,
                                                                       color, width, &seg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_744, "ynodes_draw_link: segment");
         prev_x = px;
@@ -747,7 +747,7 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "ynodes_paint: NULL ctx");
     }
     struct nodes_data *d = ynodes_data(obj);
@@ -773,7 +773,7 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
     for (float sx = r.min.x + offx; sx <= r.max.x; sx += step) {
         struct yetty_ysdf_segment seg = {
             .start_x = sx, .start_y = r.min.y, .end_x = sx, .end_y = r.max.y};
-        struct yetty_ycore_void_result result_788 = yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
+        struct yetty_ycore_void_result result_788 = yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 0, 0u,
                                                                       YNODES_GRID, 1.0f, &seg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_788, "ynodes_paint: grid vline");
     }
@@ -784,7 +784,7 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
     for (float sy = r.min.y + offy; sy <= r.max.y; sy += step) {
         struct yetty_ysdf_segment seg = {
             .start_x = r.min.x, .start_y = sy, .end_x = r.max.x, .end_y = sy};
-        struct yetty_ycore_void_result result_800 = yetty_ydraw_draw_list_add_cmd_add_segment(ctx->ygrid_draw_list, 0, 0, 0u,
+        struct yetty_ycore_void_result result_800 = yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 0, 0u,
                                                                       YNODES_GRID, 1.0f, &seg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_800, "ynodes_paint: grid hline");
     }

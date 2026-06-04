@@ -19,7 +19,7 @@
 
 #include <yetty/ypdf/ypdf.h>
 #include <yetty/ypdf/pdf-content-parser.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/raster-font.h>
 #include <yetty/ysdf/types.gen.h>
@@ -59,7 +59,7 @@
 
 struct yetty_ypdf_font_info {
     char tag[64];                      /* e.g. "/F1" or "F1" */
-    int buffer_font_id;                /* yetty_ydraw_draw_list font index.
+    int buffer_font_id;                /* yetty_ydraw_drawable_list font index.
                                          * Legacy single-buffer mode: assigned
                                          * once at first add, stable across
                                          * pages. Streaming mode: envelope-
@@ -866,7 +866,7 @@ static int find_font_idx(const struct yetty_ypdf_font_info *fonts, size_t count,
  * Result return is structural (this function calls Result-returning
  * APIs); it always reports OK. */
 static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
-                                                         struct yetty_ydraw_draw_list *buffer,
+                                                         struct yetty_ydraw_drawable_list *buffer,
                                                          struct yetty_ypdf_font_info *fonts,
                                                          size_t *font_count)
 {
@@ -1059,7 +1059,7 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
         /* Store TTF in buffer. */
         struct yetty_ycore_buffer ttf_buf = {bytes, sz, sz};
         struct yetty_ycore_int_result id_res =
-            yetty_ydraw_draw_list_add_font(buffer, &ttf_buf, tag);
+            yetty_ydraw_drawable_list_add_font(buffer, &ttf_buf, tag);
 
         int buf_font_id = -1;
         if (YETTY_IS_OK(id_res)) {
@@ -1111,7 +1111,7 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
  * Per-font failures are absorbed (logged + continue), matching the legacy
  * extract_page_fonts. */
 static struct yetty_ycore_void_result extract_and_emit_page_fonts_streaming(
-    pdfio_obj_t *page_obj, struct yetty_ydraw_draw_list *buffer, struct yetty_ypdf_font_info *fonts,
+    pdfio_obj_t *page_obj, struct yetty_ydraw_drawable_list *buffer, struct yetty_ypdf_font_info *fonts,
     size_t *font_count)
 {
     pdfio_dict_t *page_dict = pdfioObjGetDict(page_obj);
@@ -1156,7 +1156,7 @@ static struct yetty_ycore_void_result extract_and_emit_page_fonts_streaming(
             struct yetty_ypdf_font_info *fi = &fonts[existing];
             if (fi->globally_emitted) {
                 struct yetty_ycore_int_result id_res =
-                    yetty_ydraw_draw_list_add_font_ref(buffer, fi->hex);
+                    yetty_ydraw_drawable_list_add_font_ref(buffer, fi->hex);
                 if (YETTY_IS_OK(id_res)) {
                     fi->buffer_font_id = id_res.value;
                 } else {
@@ -1307,7 +1307,7 @@ static struct yetty_ycore_void_result extract_and_emit_page_fonts_streaming(
          * document ships this font. */
         struct yetty_ycore_buffer ttf_buf = {bytes, sz, sz};
         struct yetty_ycore_int_result id_res =
-            yetty_ydraw_draw_list_add_font(buffer, &ttf_buf, tag);
+            yetty_ydraw_drawable_list_add_font(buffer, &ttf_buf, tag);
         int buf_font_id = -1;
         if (YETTY_IS_OK(id_res)) {
             buf_font_id = id_res.value;
@@ -1351,7 +1351,7 @@ static struct yetty_ycore_void_result extract_and_emit_page_fonts_streaming(
  *===========================================================================*/
 
 struct yetty_ypdf_render_ctx {
-    struct yetty_ydraw_draw_list *buffer;
+    struct yetty_ydraw_drawable_list *buffer;
     struct yetty_ypdf_font_info *fonts;
     size_t font_count;
     float y_offset;
@@ -1415,7 +1415,7 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
     float h_scale_for_emit = state->horizontal_scaling / 100.0f;
     float emit_char_spacing = state->char_spacing * disp_size * h_scale_for_emit;
     float emit_word_spacing = state->word_spacing * disp_size * h_scale_for_emit;
-    (void)yetty_ydraw_draw_list_add_text_full(
+    (void)yetty_ydraw_drawable_list_add_text_full(
         c->buffer, sx, sy, &tb, disp_size, color, 0, font_id,
         (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f, emit_char_spacing,
         emit_word_spacing);
@@ -1494,7 +1494,7 @@ static void rect_paint_cb(void *ud, float x, float y, float w, float h,
             .half_height = h_s * 0.5f,
             .corner_radius = 0.0f,
         };
-        yetty_ydraw_draw_list_add_cmd_add_box(c->buffer, 0, 0, fc, 0, 0.0f, &geom);
+        yetty_ydraw_drawable_list_add_cmd_add_box(c->buffer, 0, 0, fc, 0, 0.0f, &geom);
     }
     if (mode == YETTY_YPDF_PAINT_STROKE || mode == YETTY_YPDF_PAINT_FILL_AND_STROKE) {
         uint32_t sc = rgb_to_abgr(sr, sg, sb);
@@ -1505,7 +1505,7 @@ static void rect_paint_cb(void *ud, float x, float y, float w, float h,
             {rx, ry + h_s, rx, ry},
         };
         for (int i = 0; i < 4; i++) {
-            yetty_ydraw_draw_list_add_cmd_add_segment(c->buffer, 0, 0, 0, sc, lw_s, &sides[i]);
+            yetty_ydraw_drawable_list_add_cmd_add_segment(c->buffer, 0, 0, 0, sc, lw_s, &sides[i]);
         }
     }
 }
@@ -1524,7 +1524,7 @@ static void line_paint_cb(void *ud, float x0, float y0, float x1, float y1, floa
         .end_x = x1 * s,
         .end_y = (c->y_offset + (c->page_height - y1)) * s,
     };
-    yetty_ydraw_draw_list_add_cmd_add_segment(c->buffer, 0, 0, 0, color, line_width * s, &geom);
+    yetty_ydraw_drawable_list_add_cmd_add_segment(c->buffer, 0, 0, 0, color, line_width * s, &geom);
 }
 
 /*=============================================================================
@@ -1572,17 +1572,17 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         }
     }
 
-    struct yetty_ydraw_draw_list_config cfg = {
+    struct yetty_ydraw_drawable_list_config cfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = max_width * YPDF_RENDER_SCALE,
         .scene_max_y = total_height * YPDF_RENDER_SCALE,
     };
-    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ypdf_render, br.error.msg);
     }
-    struct yetty_ydraw_draw_list *buffer = br.value;
+    struct yetty_ydraw_drawable_list *buffer = br.value;
 
     /* ---------- Pass 2: emission ---------- */
     struct yetty_ypdf_font_info fonts[MAX_FONTS];
@@ -1613,7 +1613,7 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         }
         pdfio_rect_t mb = {0};
         if (!resolve_media_box(page_obj, &mb)) {
-            yetty_ydraw_draw_list_destroy(buffer);
+            yetty_ydraw_drawable_list_destroy(buffer);
             return YETTY_ERR(yetty_ypdf_render, "page is missing MediaBox");
         }
         float ph = (float)(mb.y2 - mb.y1);
@@ -1625,7 +1625,7 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         struct yetty_ypdf_content_parser_ptr_result pr =
             yetty_ypdf_content_parser_callbacks_content_parser_create(&cb);
         if (YETTY_IS_ERR(pr)) {
-            yetty_ydraw_draw_list_destroy(buffer);
+            yetty_ydraw_drawable_list_destroy(buffer);
             return YETTY_ERR(yetty_ypdf_render, pr.error.msg);
         }
         yetty_ypdf_content_parser_set_page_height(pr.value, ph);
@@ -1735,18 +1735,18 @@ struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
          * receiver scrolls a uniform gap between pages. Coordinates inside
          * are page-relative (origin top-left, y=0..ph) and scaled by
          * YPDF_RENDER_SCALE on emit, so the scene bounds scale to match. */
-        struct yetty_ydraw_draw_list_config bcfg = {
+        struct yetty_ydraw_drawable_list_config bcfg = {
             .scene_min_x = 0.0f,
             .scene_min_y = 0.0f,
             .scene_max_x = pw * YPDF_RENDER_SCALE,
             .scene_max_y = (ph + PAGE_MARGIN) * YPDF_RENDER_SCALE,
         };
-        struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+        struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
         if (YETTY_IS_ERR(br)) {
-            emit_err = YETTY_ERR(yetty_ycore_void, "draw_list create failed", br);
+            emit_err = YETTY_ERR(yetty_ycore_void, "drawable_list create failed", br);
             break;
         }
-        struct yetty_ydraw_draw_list *page_buffer = br.value;
+        struct yetty_ydraw_drawable_list *page_buffer = br.value;
 
         /* Per-page font handling: load on first encounter, emit full TTF
          * on first envelope using the font, hash-ref on subsequent ones. */
@@ -1755,7 +1755,7 @@ struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
         struct yetty_ypdf_content_parser_ptr_result pr =
             yetty_ypdf_content_parser_callbacks_content_parser_create(&cb);
         if (YETTY_IS_ERR(pr)) {
-            yetty_ydraw_draw_list_destroy(page_buffer);
+            yetty_ydraw_drawable_list_destroy(page_buffer);
             emit_err = YETTY_ERR(yetty_ycore_void, "content parser create", pr);
             break;
         }
@@ -1781,7 +1781,7 @@ struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
         yetty_ypdf_content_parser_destroy(pr.value);
 
         struct yetty_ycore_void_result er = on_page(user_data, page, page_count, page_buffer);
-        yetty_ydraw_draw_list_destroy(page_buffer);
+        yetty_ydraw_drawable_list_destroy(page_buffer);
         if (YETTY_IS_ERR(er)) {
             emit_err = YETTY_ERR(yetty_ycore_void, "on_page callback failed", er);
             break;

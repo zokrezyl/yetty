@@ -29,7 +29,7 @@
 #include "netsurf/bitmap.h"
 
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
 
@@ -106,7 +106,7 @@ static nserror p_rectangle(const struct redraw_context *ctx, const plot_style_t 
         .half_height = hh,
         .corner_radius = 0,
     };
-    (void)yetty_ydraw_draw_list_add_cmd_add_box(ns->cur_buf, 0, ns->z_counter++, fill_rgba(s),
+    (void)yetty_ydraw_drawable_list_add_cmd_add_box(ns->cur_buf, 0, ns->z_counter++, fill_rgba(s),
                                                 stroke_rgba(s), stroke_w(s), &box);
     return NSERROR_OK;
 }
@@ -124,7 +124,7 @@ static nserror p_disc(const struct redraw_context *ctx, const plot_style_t *s, i
         .center_y = y,
         .radius = radius,
     };
-    (void)yetty_ydraw_draw_list_add_cmd_add_circle(ns->cur_buf, 0, ns->z_counter++, fill_rgba(s),
+    (void)yetty_ydraw_drawable_list_add_cmd_add_circle(ns->cur_buf, 0, ns->z_counter++, fill_rgba(s),
                                                    stroke_rgba(s), stroke_w(s), &c);
     return NSERROR_OK;
 }
@@ -150,7 +150,7 @@ static nserror p_line(const struct redraw_context *ctx, const plot_style_t *s, c
     if (col == 0) {
         col = to_rgba(s->stroke_colour);
     }
-    (void)yetty_ydraw_draw_list_add_cmd_add_segment(ns->cur_buf, 0, ns->z_counter++, 0, col,
+    (void)yetty_ydraw_drawable_list_add_cmd_add_segment(ns->cur_buf, 0, ns->z_counter++, 0, col,
                                                     stroke_w(s), &seg);
     return NSERROR_OK;
 }
@@ -177,7 +177,7 @@ static nserror p_arc(const struct redraw_context *ctx, const plot_style_t *s, in
         .thickness = stroke_w(s),
     };
     (void)ac; /* arc orientation is implicit in aperture vector */
-    (void)yetty_ydraw_draw_list_add_cmd_add_arc(ns->cur_buf, 0, ns->z_counter++, 0, stroke_rgba(s),
+    (void)yetty_ydraw_drawable_list_add_cmd_add_arc(ns->cur_buf, 0, ns->z_counter++, 0, stroke_rgba(s),
                                                 stroke_w(s), &arc);
     return NSERROR_OK;
 }
@@ -200,7 +200,7 @@ static void fan_triangulate(struct yetty_ynetsurf *ns, const float *xs, const fl
             .vertex_c_x = xs[i + 1],
             .vertex_c_y = ys[i + 1],
         };
-        (void)yetty_ydraw_draw_list_add_cmd_add_triangle(ns->cur_buf, 0, ns->z_counter++, fill,
+        (void)yetty_ydraw_drawable_list_add_cmd_add_triangle(ns->cur_buf, 0, ns->z_counter++, fill,
                                                          stroke, sw, &t);
     }
 }
@@ -359,7 +359,7 @@ static nserror p_path(const struct redraw_context *ctx, const plot_style_t *s, c
                         .end_x = xs[k],
                         .end_y = ys[k],
                     };
-                    (void)yetty_ydraw_draw_list_add_cmd_add_segment(ns->cur_buf, 0, ns->z_counter++,
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_segment(ns->cur_buf, 0, ns->z_counter++,
                                                                     0, col, sw, &seg);
                 }
             }
@@ -392,7 +392,7 @@ static nserror p_bitmap(const struct redraw_context *ctx, struct bitmap *bm, int
         .corner_radius = 0,
     };
     uint32_t fill = bm != NULL ? 0xc0c0c0ffu : 0xe0e0e0ffu;
-    (void)yetty_ydraw_draw_list_add_cmd_add_box(ns->cur_buf, 0, ns->z_counter++, fill, 0, 0, &box);
+    (void)yetty_ydraw_drawable_list_add_cmd_add_box(ns->cur_buf, 0, ns->z_counter++, fill, 0, 0, &box);
     return NSERROR_OK;
 }
 
@@ -417,7 +417,7 @@ static nserror p_text(const struct redraw_context *ctx, const plot_font_style_t 
         .capacity = length,
         .size = length,
     };
-    (void)yetty_ydraw_draw_list_add_text(ns->cur_buf, (float)x, (float)y, &txt, pt,
+    (void)yetty_ydraw_drawable_list_add_text(ns->cur_buf, (float)x, (float)y, &txt, pt,
                                          to_rgba(fstyle->foreground), ns->z_counter++,
                                          ns->default_font_id, 0.0f);
     return NSERROR_OK;

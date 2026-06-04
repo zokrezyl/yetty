@@ -84,7 +84,7 @@ static struct yetty_ycore_void_result dp_frame(struct yetty_ygui_emit_ctx *ctx, 
                                .half_width = w * 0.5f,
                                .half_height = h * 0.5f,
                                .corner_radius = 0.0f};
-    return yetty_ydraw_draw_list_add_cmd_add_box(ctx->ygrid_draw_list, 0, 0, fill, stroke, stroke_w,
+    return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 0, fill, stroke, stroke_w,
                                                  &g);
 }
 
@@ -115,7 +115,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "datepicker paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, dp_class());

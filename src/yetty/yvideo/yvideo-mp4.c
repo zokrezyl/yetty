@@ -17,7 +17,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yvideo/yvideo.h>
 
 #include <stdbool.h>
@@ -393,24 +393,24 @@ static int slurp_file(const char *path, uint8_t **out, size_t *out_len)
  * Public render_from_mp4_* helpers — real implementations.
  *-------------------------------------------------------------------------*/
 
-struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
+struct yetty_ydraw_drawable_list_result yetty_yvideo_render_from_mp4_bytes(
     const uint8_t *mp4_bytes, size_t mp4_len, const struct yetty_yvideo_render_config *overrides)
 {
     if (!mp4_bytes || mp4_len == 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo_mp4: empty input");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo_mp4: empty input");
     }
     uint8_t *annexb = NULL;
     size_t annexb_len = 0;
     int dr = demux_to_annexb(mp4_bytes, mp4_len, &annexb, &annexb_len);
     if (dr != 0 || !annexb || annexb_len == 0) {
         free(annexb);
-        return YETTY_ERR(yetty_ydraw_draw_list,
+        return YETTY_ERR(yetty_ydraw_drawable_list,
                          "yvideo_mp4: demux failed (no video track or unreadable container)");
     }
     uint32_t video_w = 0, video_h = 0;
     if (!sps_extract_dims(annexb, annexb_len, &video_w, &video_h) || video_w == 0 || video_h == 0) {
         free(annexb);
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo_mp4: SPS dimensions extraction failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo_mp4: SPS dimensions extraction failed");
     }
     struct yetty_yvideo_render_config cfg = {0};
     if (overrides) {
@@ -428,23 +428,23 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
         cfg.flags = YETTY_YVIDEO_FLAG_LOOP | YETTY_YVIDEO_FLAG_AUTOPLAY;
     }
 
-    struct yetty_ydraw_draw_list_result r = yetty_yvideo_render(annexb, annexb_len, NULL, 0, &cfg);
+    struct yetty_ydraw_drawable_list_result r = yetty_yvideo_render(annexb, annexb_len, NULL, 0, &cfg);
     free(annexb);
     return r;
 }
 
-struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_file(
+struct yetty_ydraw_drawable_list_result yetty_yvideo_render_from_mp4_file(
     const char *path, const struct yetty_yvideo_render_config *overrides)
 {
     if (!path) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo_mp4: NULL path");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo_mp4: NULL path");
     }
     uint8_t *buf = NULL;
     size_t len = 0;
     if (slurp_file(path, &buf, &len) != 0) {
-        return YETTY_ERR(yetty_ydraw_draw_list, "yvideo_mp4: file slurp failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo_mp4: file slurp failed");
     }
-    struct yetty_ydraw_draw_list_result r = yetty_yvideo_render_from_mp4_bytes(buf, len, overrides);
+    struct yetty_ydraw_drawable_list_result r = yetty_yvideo_render_from_mp4_bytes(buf, len, overrides);
     free(buf);
     return r;
 }
@@ -457,22 +457,22 @@ struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_file(
  * returns ERR.
  *-------------------------------------------------------------------------*/
 
-struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_bytes(
+struct yetty_ydraw_drawable_list_result yetty_yvideo_render_from_mp4_bytes(
     const uint8_t *mp4_bytes, size_t mp4_len, const struct yetty_yvideo_render_config *overrides)
 {
     (void)mp4_bytes;
     (void)mp4_len;
     (void)overrides;
-    return YETTY_ERR(yetty_ydraw_draw_list,
+    return YETTY_ERR(yetty_ydraw_drawable_list,
                      "yvideo_mp4: build without minimp4 — MP4 ingestion unavailable");
 }
 
-struct yetty_ydraw_draw_list_result yetty_yvideo_render_from_mp4_file(
+struct yetty_ydraw_drawable_list_result yetty_yvideo_render_from_mp4_file(
     const char *path, const struct yetty_yvideo_render_config *overrides)
 {
     (void)path;
     (void)overrides;
-    return YETTY_ERR(yetty_ydraw_draw_list,
+    return YETTY_ERR(yetty_ydraw_drawable_list,
                      "yvideo_mp4: build without minimp4 — MP4 ingestion unavailable");
 }
 

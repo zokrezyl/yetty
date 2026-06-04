@@ -8,7 +8,7 @@
 
 #include "../internal.h"
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/slider.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -78,7 +78,7 @@ static struct yetty_ycore_void_result paint_rounded(struct yetty_ygui_emit_ctx *
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_rounded_box(ctx->ygrid_draw_list, 0u, 0u, fill, 0u,
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
                                                          0.0f, &geom);
 }
 
@@ -90,7 +90,7 @@ static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *c
         .center_y = cy,
         .radius = radius,
     };
-    return yetty_ydraw_draw_list_add_cmd_add_circle(ctx->ygrid_draw_list, 0u, 0u, fill, 0u, 0.0f,
+    return yetty_ydraw_drawable_list_add_cmd_add_circle(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
                                                     &geom);
 }
 
@@ -101,7 +101,7 @@ static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_ctx *ycla
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "slider_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =

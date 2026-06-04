@@ -17,7 +17,7 @@
 #include <yetty/yplot/yplot.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -227,7 +227,7 @@ int main(int argc, char **argv)
         cfg.y_max =  1.5f;
     }
 
-    struct yetty_ydraw_draw_list_result rr =
+    struct yetty_ydraw_drawable_list_result rr =
         yetty_yplot_render(source, source_len, &cfg);
     free(source);
     if (YETTY_IS_ERR(rr)) {
@@ -241,7 +241,7 @@ int main(int argc, char **argv)
 
     int rc = 0;
     struct yetty_ycore_size_result wr = yetty_yplot_osc_bin_emit(rr.value, stdout);
-    yetty_ydraw_draw_list_destroy(rr.value);
+    yetty_ydraw_drawable_list_destroy(rr.value);
     if (YETTY_IS_ERR(wr)) {
         fprintf(stderr, "yplot: OSC emit failed: %s\n", wr.error.msg);
         for (const struct yetty_ycore_error *e = wr.error.cause; e; e = e->cause) {

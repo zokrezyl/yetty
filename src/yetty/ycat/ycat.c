@@ -21,28 +21,28 @@
 #endif
 
 /* Forward decls: handlers defined in handler-*.c files. */
-extern struct yetty_ydraw_draw_list_result yetty_ycat_handler_image(
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_image(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 
-extern struct yetty_ydraw_draw_list_result yetty_ycat_handler_svg(
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_svg(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 
 #ifdef YETTY_YCAT_HAS_DIAGRAM
-extern struct yetty_ydraw_draw_list_result yetty_ycat_handler_mermaid(
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_mermaid(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 #endif
 
 #ifdef YETTY_YCAT_HAS_YVIDEO
-extern struct yetty_ydraw_draw_list_result yetty_ycat_handler_video(
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_video(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 #endif
 
 #ifdef YETTY_YCAT_HAS_LOTTIE
-extern struct yetty_ydraw_draw_list_result yetty_ycat_handler_lottie(
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_lottie(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 #endif
@@ -169,7 +169,7 @@ int yetty_ycat_register_handler_streaming(enum yetty_ycat_type type,
  * Dispatch
  *===========================================================================*/
 
-struct yetty_ydraw_draw_list_result yetty_ycat_render(const uint8_t *bytes, size_t len,
+struct yetty_ydraw_drawable_list_result yetty_ycat_render(const uint8_t *bytes, size_t len,
                                                       const char *path_hint,
                                                       const struct yetty_ycat_config *config)
 {
@@ -177,7 +177,7 @@ struct yetty_ydraw_draw_list_result yetty_ycat_render(const uint8_t *bytes, size
     yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
     if (!fn) {
         ydebug("ycat_render: no handler for type=%s", yetty_ycat_type_name(type));
-        return YETTY_ERR(yetty_ydraw_draw_list, "no handler for detected type");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "no handler for detected type");
     }
     return fn(bytes, len, path_hint, config);
 }

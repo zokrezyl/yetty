@@ -20,7 +20,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ydraw-factory/figure-factory.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
@@ -73,7 +73,7 @@ struct demo_runner {
     int has_pty_pair;
     struct yetty_yfigure_container *root_container;
     struct yetty_yfigure_registry *figure_registry;
-    struct yetty_ydraw_complex_drawable_factory *figure_factory;
+    struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
     struct yetty_yfont_font *font;
     struct yetty_ygrid_factory_args figure_args;
@@ -320,23 +320,23 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     /* Raw figure factory + producer kinds (yplot, yimage). */
     {
-        struct yetty_ydraw_complex_drawable_factory_ptr_result ffr =
-            yetty_ydraw_complex_drawable_factory_create(
+        struct yetty_ydraw_composite_factory_ptr_result ffr =
+            yetty_ydraw_composite_factory_create(
                 r->yframework->gpu.device, r->yframework->gpu.queue,
                 r->yframework->gpu.surface_format, r->yframework->gpu.allocator,
                 r->yframework->event_loop);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "demo_runner: raw_figure_factory_create");
-        r->figure_factory = ffr.value;
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "demo_runner: raw_composite_factory_create");
+        r->composite_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_complex_drawable_factory_register(r->figure_factory, yplot_f);
+                yetty_ydraw_composite_factory_register(r->composite_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_complex_drawable_factory_register(r->figure_factory, yimage_f);
+                yetty_ydraw_composite_factory_register(r->composite_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
         }
     }
@@ -347,7 +347,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         YETTY_RETURN_IF_ERR(yetty_ycore_void, reg, "demo_runner: registry_create");
         r->figure_registry = reg.value;
         r->figure_args.default_font = r->font;
-        r->figure_args.figure_factory = r->figure_factory;
+        r->figure_args.composite_factory = r->composite_factory;
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(r->figure_registry, &r->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "demo_runner: ygrid_register_factory");
@@ -532,9 +532,9 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         yetty_yfigure_registry_destroy(r->figure_registry);
         r->figure_registry = NULL;
     }
-    if (r->figure_factory) {
-        yetty_ydraw_complex_drawable_factory_destroy(r->figure_factory);
-        r->figure_factory = NULL;
+    if (r->composite_factory) {
+        yetty_ydraw_composite_factory_destroy(r->composite_factory);
+        r->composite_factory = NULL;
     }
     if (r->font) {
         r->font->ops->destroy(r->font);

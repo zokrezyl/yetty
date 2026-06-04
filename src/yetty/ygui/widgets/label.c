@@ -12,7 +12,7 @@
 
 #include <yetty/ygui/primitive-widget.h>
 
-#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/label.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,7 +73,7 @@ static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *yclas
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    if (!ctx || !ctx->ygrid_draw_list) {
+    if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "label_paint: NULL ctx");
     }
     struct yetty_ygui_void_ptr_result d_dr =
@@ -88,7 +88,7 @@ static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *yclas
      * — TEXT_SPAN's y coord is the baseline (font ascender lifts above). */
     float x = r.min.x;
     float y = r.min.y + d->font_size;
-    /* yetty_ydraw_draw_list_add_text wants a yetty_ycore_buffer view of the
+    /* yetty_ydraw_drawable_list_add_text wants a yetty_ycore_buffer view of the
      * text bytes. Construct one in-place — `data` pointer is borrowed for
      * the duration of the call. */
     struct yetty_ycore_buffer text_buf = {
@@ -96,7 +96,7 @@ static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *yclas
         .capacity = strlen(d->text),
         .size = strlen(d->text),
     };
-    return yetty_ydraw_draw_list_add_text(ctx->ygrid_draw_list, x, y, &text_buf, d->font_size,
+    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &text_buf, d->font_size,
                                           pack_rgba(d->color), /*layer=*/0, /*font_id=*/-1,
                                           /*rotation=*/0.0f);
 }
