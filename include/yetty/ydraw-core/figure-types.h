@@ -45,7 +45,7 @@ extern "C" {
 // Complex primitive header (FAM wire format)
 //=============================================================================
 
-struct yetty_ydraw_raw_figure {
+struct yetty_ydraw_complex_drawable {
     uint32_t type;
     uint32_t payload_size;
     uint8_t data[];
@@ -55,7 +55,7 @@ struct yetty_ydraw_raw_figure {
 bool yetty_ydraw_is_figure(uint32_t type);
 
 // Get AABB (reads bounds from standard offset 0-15 in payload)
-struct rectangle_result yetty_ydraw_raw_figure_aabb(const void *data);
+struct rectangle_result yetty_ydraw_complex_drawable_aabb(const void *data);
 
 //=============================================================================
 // Base ops for complex primitives (for flyweight registry)
@@ -65,7 +65,7 @@ struct rectangle_result yetty_ydraw_raw_figure_aabb(const void *data);
 #include <yetty/ydraw-core/flyweight.h>
 
 // Handler for complex prim types (>= 0x80000000)
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_raw_figure_handler(
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_complex_drawable_handler(
     uint32_t drawable_type);
 
 #ifdef __cplusplus

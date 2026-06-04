@@ -73,7 +73,7 @@ struct demo_runner {
     int has_pty_pair;
     struct yetty_yfigure_container *root_container;
     struct yetty_yfigure_registry *figure_registry;
-    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ydraw_complex_drawable_factory *figure_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
     struct yetty_yfont_font *font;
     struct yetty_ygrid_factory_args figure_args;
@@ -320,8 +320,8 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     /* Raw figure factory + producer kinds (yplot, yimage). */
     {
-        struct yetty_ydraw_raw_figure_factory_ptr_result ffr =
-            yetty_ydraw_raw_figure_factory_create(
+        struct yetty_ydraw_complex_drawable_factory_ptr_result ffr =
+            yetty_ydraw_complex_drawable_factory_create(
                 r->yframework->gpu.device, r->yframework->gpu.queue,
                 r->yframework->gpu.surface_format, r->yframework->gpu.allocator,
                 r->yframework->event_loop);
@@ -330,13 +330,13 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_raw_figure_factory_register(r->figure_factory, yplot_f);
+                yetty_ydraw_complex_drawable_factory_register(r->figure_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_raw_figure_factory_register(r->figure_factory, yimage_f);
+                yetty_ydraw_complex_drawable_factory_register(r->figure_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
         }
     }
@@ -533,7 +533,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         r->figure_registry = NULL;
     }
     if (r->figure_factory) {
-        yetty_ydraw_raw_figure_factory_destroy(r->figure_factory);
+        yetty_ydraw_complex_drawable_factory_destroy(r->figure_factory);
         r->figure_factory = NULL;
     }
     if (r->font) {

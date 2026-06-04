@@ -19,7 +19,7 @@ extern "C" {
 #define YETTY_YRENDER_RS_MAX_CHILDREN 64
 
 /* GPU resource set - collection of resources a provider needs */
-struct yetty_ydraw_gpu_resource_set {
+struct yetty_yrender_gpu_resource_set {
     char namespace[YETTY_YRENDER_NAME_MAX];
     struct yetty_ycore_pixel_size pixel_size;
 
@@ -34,7 +34,7 @@ struct yetty_ydraw_gpu_resource_set {
 
     struct yetty_yrender_shader_code shader;
 
-    struct yetty_ydraw_gpu_resource_set *children[YETTY_YRENDER_RS_MAX_CHILDREN];
+    struct yetty_yrender_gpu_resource_set *children[YETTY_YRENDER_RS_MAX_CHILDREN];
     size_t children_count;
 
     /* Per-frame draw call shape. 6 vertices = full-pane quad. instance_count
@@ -46,7 +46,7 @@ struct yetty_ydraw_gpu_resource_set {
     uint32_t instance_count;
 };
 
-YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_set, const struct yetty_ydraw_gpu_resource_set *);
+YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_set, const struct yetty_yrender_gpu_resource_set *);
 
 #ifdef __cplusplus
 }

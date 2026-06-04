@@ -3,7 +3,7 @@
 // =============================================================================
 //
 // Reads two storage buffers populated by shader-glyph-layer.c:
-//   cells     : the full vterm cell array (12 bytes/cell), same layout as
+//   cells     : the full vterm cell array (16 bytes/cell), same layout as
 //                text-layer.wgsl. Used to fetch fg/bg for the rendered cell.
 //   instances : packed (cell_index, local_id) pairs, one per shader-glyph
 //                cell visible this frame.
@@ -24,6 +24,7 @@
 //   uniforms.shader_glyph_time
 //   uniforms.shader_glyph_visual_zoom_scale
 //   uniforms.shader_glyph_visual_zoom_off
+//   uniforms.shader_glyph_root_row
 //   shader_glyph_cells_offset
 //   shader_glyph_instances_offset
 
@@ -44,9 +45,10 @@ struct VertexOutput {
     @location(3) @interpolate(linear) pixel_pos: vec2<f32>,
 };
 
-// 12-byte cell layout — same as text-layer.wgsl.
+// 16-byte cell layout (4 u32) — same as text-layer.wgsl. Stride must equal
+// sizeof(VTermScreenCell)/4; only u32[1]/u32[2] hold fg/bg.
 fn read_cell_fg(cell_index: u32) -> vec3<f32> {
-    let packed = storage_buffer[shader_glyph_cells_offset + cell_index * 3u + 1u];
+    let packed = storage_buffer[shader_glyph_cells_offset + cell_index * 4u + 1u];
     return vec3<f32>(
         f32( packed        & 0xFFu) / 255.0,
         f32((packed >>  8u) & 0xFFu) / 255.0,
@@ -55,8 +57,8 @@ fn read_cell_fg(cell_index: u32) -> vec3<f32> {
 }
 
 fn read_cell_bg(cell_index: u32) -> vec3<f32> {
-    let packed1 = storage_buffer[shader_glyph_cells_offset + cell_index * 3u + 1u];
-    let packed2 = storage_buffer[shader_glyph_cells_offset + cell_index * 3u + 2u];
+    let packed1 = storage_buffer[shader_glyph_cells_offset + cell_index * 4u + 1u];
+    let packed2 = storage_buffer[shader_glyph_cells_offset + cell_index * 4u + 2u];
     return vec3<f32>(
         f32((packed1 >> 24u) & 0xFFu) / 255.0,
         f32( packed2         & 0xFFu) / 255.0,
@@ -66,7 +68,7 @@ fn read_cell_bg(cell_index: u32) -> vec3<f32> {
 
 // 8-byte instance layout (must match shader_glyph_instance in
 // shader-glyph-layer.c):
-//   u32[0] = cell_index    (row * cols + col)
+//   u32[0] = cell_index    (ABSOLUTE buffer index = (root_row+row)*cols + col)
 //   u32[1] = local_id      (0..PUA window size; dispatcher key)
 fn read_instance_cell_index(inst: u32) -> u32 {
     return storage_buffer[shader_glyph_instances_offset + inst * 2u];
@@ -85,10 +87,14 @@ fn vs_main(input: VertexInput, @builtin(instance_index) inst: u32) -> VertexOutp
     let grid_pixel_w = grid_size.x * cell_size.x;
     let grid_pixel_h = grid_size.y * cell_size.y;
 
+    // cell_index is the ABSOLUTE index into libvterm's 2*rows-tall buffer
+    // (fg/bg are fetched there). Subtract root_row*cols to map it onto the
+    // visible screen, the inverse of text-layer.wgsl adding root_row. The C
+    // scan only emits cells with abs_row >= root_row, so this never underflows.
     let cell_index = read_instance_cell_index(inst);
     let cols = u32(grid_size.x);
     let cell_col_i = cell_index % cols;
-    let cell_row_i = cell_index / cols;
+    let cell_row_i = (cell_index / cols) - uniforms.shader_glyph_root_row;
     let cell_col = f32(cell_col_i);
     let cell_row = f32(cell_row_i);
 

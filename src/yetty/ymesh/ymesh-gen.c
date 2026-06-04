@@ -738,7 +738,7 @@ static struct yetty_ydraw_figure_ptr_result ymesh_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_raw_figure)) {
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_drawable)) {
         return YETTY_ERR(yetty_ydraw_figure_ptr, "ymesh: invalid buffer data");
     }
 
@@ -812,7 +812,7 @@ static struct yetty_ydraw_figure_ptr_result ymesh_create_instance(
     inst->ops = &ymesh_figure_ops;
     inst->instance_data = d;
 
-    struct rectangle_result aabb_res = yetty_ydraw_raw_figure_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_complex_drawable_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         inst->bounds = aabb_res.value;
     }
@@ -1012,7 +1012,7 @@ static void ymesh_destroy_instance(struct yetty_ydraw_concrete_factory *self,
     ymesh_instance_destroy(instance);
 }
 
-static struct yetty_ydraw_gpu_resource_set *ymesh_get_shared_rs(
+static struct yetty_yrender_gpu_resource_set *ymesh_get_shared_rs(
     struct yetty_ydraw_concrete_factory *self)
 {
     /* ymesh doesn't use the framework RS. The abstract factory tolerates

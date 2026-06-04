@@ -46,16 +46,18 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     return output;
 }
 
-// VTermScreenCell layout (12 bytes):
+// VTermScreenCell layout (16 bytes = 4 u32; stride must equal
+// sizeof(VTermScreenCell)/4 — bump it here whenever the struct grows):
 //   u32[0]: glyph_index
 //   u32[1]: fg.r | fg.g<<8 | fg.b<<16 | bg.r<<24
 //   u32[2]: bg.g | bg.b<<8 | attrs<<16
+//   u32[3]: rich_handle  (CPU-side figure handle; not read by the shader)
 fn read_cell_glyph(cell_index: u32) -> u32 {
-    return storage_buffer[text_grid_buffer_offset + cell_index * 3u];
+    return storage_buffer[text_grid_buffer_offset + cell_index * 4u];
 }
 
 fn read_cell_fg(cell_index: u32) -> vec3<f32> {
-    let packed = storage_buffer[text_grid_buffer_offset + cell_index * 3u + 1u];
+    let packed = storage_buffer[text_grid_buffer_offset + cell_index * 4u + 1u];
     return vec3<f32>(
         f32(packed & 0xFFu) / 255.0,
         f32((packed >> 8u) & 0xFFu) / 255.0,
@@ -64,8 +66,8 @@ fn read_cell_fg(cell_index: u32) -> vec3<f32> {
 }
 
 fn read_cell_bg(cell_index: u32) -> vec3<f32> {
-    let packed1 = storage_buffer[text_grid_buffer_offset + cell_index * 3u + 1u];
-    let packed2 = storage_buffer[text_grid_buffer_offset + cell_index * 3u + 2u];
+    let packed1 = storage_buffer[text_grid_buffer_offset + cell_index * 4u + 1u];
+    let packed2 = storage_buffer[text_grid_buffer_offset + cell_index * 4u + 2u];
     return vec3<f32>(
         f32((packed1 >> 24u) & 0xFFu) / 255.0,
         f32(packed2 & 0xFFu) / 255.0,
@@ -81,7 +83,7 @@ fn read_cell_bg(cell_index: u32) -> vec3<f32> {
 // Bold/italic are applied upstream by choosing a bold/italic font glyph;
 // only the line decorations are drawn here.
 fn read_cell_attrs(cell_index: u32) -> u32 {
-    let packed2 = storage_buffer[text_grid_buffer_offset + cell_index * 3u + 2u];
+    let packed2 = storage_buffer[text_grid_buffer_offset + cell_index * 4u + 2u];
     return (packed2 >> 16u) & 0xFFFFu;
 }
 

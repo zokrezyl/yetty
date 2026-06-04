@@ -100,6 +100,10 @@ static inline void clearcell(VTermScreen *screen, VTermScreenCell *cell)
   cell->attrs.default_fg = 0;
   cell->attrs.default_bg = 0;
   cell->attrs.font_type = 0;
+  /* Drop the rich-content handle reference. The slot itself is reclaimed by
+   * the owner's mark-sweep GC over the cell buffers — never freed here, so
+   * the many memmove/scroll paths that duplicate a cell can't double-free. */
+  cell->rich_handle = 0;
 }
 
 /* Active root_row index — depends on which buffer is live. Tells callers and
@@ -131,6 +135,11 @@ static VTermScreenCell *alloc_buffer(VTermScreen *screen, int rows, int cols)
 {
   int alloc_rows = rows * 2;
   VTermScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * alloc_rows * cols);
+
+  /* Zero first so rich_handle is a well-defined 0 ("no rich content") on every
+   * cell before clearcell runs — clearcell releases a non-zero handle, and
+   * must never see uninitialised garbage from the fresh allocation. */
+  memset(new_buffer, 0, sizeof(VTermScreenCell) * alloc_rows * cols);
 
   for(int row = 0; row < alloc_rows; row++) {
     for(int col = 0; col < cols; col++) {
@@ -429,6 +438,9 @@ static int erase_internal(VTermRect rect, int selective, void *user)
       cell->attrs.default_fg = 0;
       cell->attrs.default_bg = 0;
       cell->attrs.font_type = 0;
+      /* erase open-codes the cell wipe (no clearcell); drop the handle ref
+       * here too. GC over the cell buffers reclaims the slot. */
+      cell->rich_handle = 0;
     }
   }
 
@@ -679,6 +691,10 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
    * new_rows rows; the second half is cleared explicitly so reads of it
    * (e.g. the GPU upload, which uploads the full 2*rows) see clean cells. */
   VTermScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * new_rows * 2 * new_cols);
+  /* Zero so rich_handle is a well-defined 0 on every cell — the reflow walk
+   * below only assigns the live region; clearcell on the rest must not see
+   * uninitialised handle garbage. */
+  memset(new_buffer, 0, sizeof(VTermScreenCell) * new_rows * 2 * new_cols);
   VTermLineInfo *new_lineinfo = vterm_allocator_malloc(screen->vt, sizeof(new_lineinfo[0]) * new_rows);
 
   int old_row = old_rows - 1;

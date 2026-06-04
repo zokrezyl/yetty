@@ -24,6 +24,7 @@
 #include <string.h>
 #include <time.h>
 
+#include <vterm.h> /* VTermScreenCell — cell buffer stride */
 #include <webgpu/webgpu.h>
 
 #include <yetty/yconfig/config.h>
@@ -38,6 +39,7 @@
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/webgpu/error.h>
 #include <yetty/yterm/shader-glyph-figure.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -48,7 +50,8 @@
 #define U_TIME 2
 #define U_VZ_SCALE 3
 #define U_VZ_OFF 4
-#define U_COUNT 5
+#define U_ROOT_ROW 5
+#define U_COUNT 6
 
 /* Per-instance entry uploaded to buffers[1]. One entry per shader-glyph
  * cell visible this frame; the vertex shader fetches it by instance_index,
@@ -85,7 +88,7 @@ yetty_yterm_shader_glyph_figure {
      * buffers; it's compiled lazily on first render so creating the
      * figure doesn't fail when called before the GPU is fully ready
      * (matches yrdawn_figure's lazy build_pipeline pattern). */
-    struct yetty_ydraw_gpu_resource_set rs;
+    struct yetty_yrender_gpu_resource_set rs;
     struct yetty_yrender_gpu_resource_binder *binder;
     int binder_finalized;
 
@@ -120,24 +123,24 @@ static struct yetty_yterm_shader_glyph_figure *shader_glyph_figure_from_obj(stru
  * Uniform helpers
  * ========================================================================= */
 
-static inline void set_grid_size(struct yetty_ydraw_gpu_resource_set *rs, float cols, float rows)
+static inline void set_grid_size(struct yetty_yrender_gpu_resource_set *rs, float cols, float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
 }
 
-static inline void set_cell_size(struct yetty_ydraw_gpu_resource_set *rs, float w, float h)
+static inline void set_cell_size(struct yetty_yrender_gpu_resource_set *rs, float w, float h)
 {
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
 
-static inline void set_time(struct yetty_ydraw_gpu_resource_set *rs, float t)
+static inline void set_time(struct yetty_yrender_gpu_resource_set *rs, float t)
 {
     rs->uniforms[U_TIME].f32 = t;
 }
 
-static inline void set_visual_zoom(struct yetty_ydraw_gpu_resource_set *rs, float scale,
+static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs, float scale,
                                    float off_x, float off_y)
 {
     rs->uniforms[U_VZ_SCALE].f32 = scale;
@@ -145,7 +148,12 @@ static inline void set_visual_zoom(struct yetty_ydraw_gpu_resource_set *rs, floa
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
 
-static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
+static inline void set_root_row(struct yetty_yrender_gpu_resource_set *rs, uint32_t root_row)
+{
+    rs->uniforms[U_ROOT_ROW].u32 = root_row;
+}
+
+static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
 
@@ -158,9 +166,12 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"visual_zoom_scale", YETTY_YRENDER_UNIFORM_F32};
     rs->uniforms[U_VZ_OFF] =
         (struct yetty_yrender_uniform){"visual_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_ROOT_ROW] =
+        (struct yetty_yrender_uniform){"root_row", YETTY_YRENDER_UNIFORM_U32};
 
     set_visual_zoom(rs, 1.0f, 0.0f, 0.0f);
     set_time(rs, 0.0f);
+    set_root_row(rs, 0);
 }
 
 /* ===========================================================================
@@ -455,22 +466,36 @@ static char *splice_marker(const char *template, size_t template_size, const cha
  * Cell scan helpers
  * ========================================================================= */
 
-/* Cheap branchless scan over the cell buffer (12B stride). Returns 1 iff
- * at least one cell has glyph_index with bit-31 set. Used to short-circuit
- * the anim timer when the grid is idle. */
+/* Cheap branchless scan over the VISIBLE cell window (16B stride = sizeof
+ * VTermScreenCell). Returns 1 iff no on-screen cell has glyph_index bit-31
+ * set. Bounded to [root_row, root_row+rows) so glyph cells that scrolled off
+ * the top don't pin the anim timer on (and so the draw path never runs on an
+ * empty window). Used to short-circuit the anim timer when the grid is idle. */
 static int figure_is_empty(struct yetty_yterm_shader_glyph_figure *f)
 {
     const uint8_t *data = NULL;
     size_t size = 0;
     yetty_yterm_terminal_layer_terminal_text_layer_get_cells(f->text_layer, &data, &size);
-    if (!data || size < 12) {
+    if (!data || size < sizeof(VTermScreenCell)) {
         return 1;
     }
+    uint32_t cols = (uint32_t)f->grid_size.cols;
+    uint32_t rows = (uint32_t)f->grid_size.rows;
+    uint32_t root_row =
+        yetty_yterm_terminal_layer_terminal_text_layer_get_root_row(f->text_layer);
+    size_t total_cells = size / sizeof(VTermScreenCell);
+    size_t window_first = (size_t)root_row * cols;
+    size_t window_last = window_first + (size_t)cols * rows; /* exclusive */
+    if (window_last > total_cells) {
+        window_last = total_cells;
+    }
+    if (window_first > window_last) {
+        window_first = window_last;
+    }
     const uint32_t *p = (const uint32_t *)data;
-    size_t cells = size / 12u;
     int found = 0;
-    for (size_t i = 0; i < cells; i++) {
-        uint32_t g = p[i * 3u];
+    for (size_t i = window_first; i < window_last; i++) {
+        uint32_t g = p[i * 4u];
         found |= (int)(g >> 31);
     }
     return found ? 0 : 1;
@@ -484,33 +509,49 @@ static uint32_t figure_pack_instances(struct yetty_yterm_shader_glyph_figure *f)
     size_t cells_size = 0;
     yetty_yterm_terminal_layer_terminal_text_layer_get_cells(f->text_layer, &cells_data,
                                                              &cells_size);
-    if (!cells_data || cells_size < 12) {
+    if (!cells_data || cells_size < sizeof(VTermScreenCell)) {
         f->instance_count = 0;
         return 0;
     }
 
-    /* Keep the live-cell window honest: vterm allocates 2*rows tall but
-     * only the top rows×cols are on-screen. Bound the scan accordingly. */
+    /* libvterm allocates the live buffer 2*rows tall and starts the visible
+     * screen at row root_row within it (bumped on full-screen scroll-up). The
+     * on-screen cells are the window [root_row, root_row+rows), NOT the top
+     * rows — scan that window so the glyphs track the scroll. root_row is 0 in
+     * scrollback-view mode (get_cells hands back a row-0 staging buffer). */
     uint32_t cols = (uint32_t)f->grid_size.cols;
     uint32_t rows = (uint32_t)f->grid_size.rows;
-    size_t live_cells = (size_t)cols * (size_t)rows;
-    if (cells_size < live_cells * 12u) {
-        live_cells = cells_size / 12u;
-    }
+    uint32_t root_row =
+        yetty_yterm_terminal_layer_terminal_text_layer_get_root_row(f->text_layer);
+    set_root_row(&f->rs, root_row);
 
-    if (f->instance_cap < live_cells) {
+    size_t total_cells = cells_size / sizeof(VTermScreenCell);
+    size_t window_first = (size_t)root_row * cols;
+    size_t window_last = window_first + (size_t)cols * rows; /* exclusive */
+    if (window_last > total_cells) {
+        window_last = total_cells;
+    }
+    if (window_first > window_last) {
+        window_first = window_last;
+    }
+    size_t window_cells = window_last - window_first;
+
+    if (f->instance_cap < window_cells) {
         struct shader_glyph_instance *resized =
-            realloc(f->instances, live_cells * sizeof(*resized));
+            realloc(f->instances, window_cells * sizeof(*resized));
         if (resized) {
             f->instances = resized;
-            f->instance_cap = live_cells;
+            f->instance_cap = window_cells;
         }
     }
     uint32_t n = 0;
     if (f->instances) {
         const uint32_t *p = (const uint32_t *)cells_data;
-        for (size_t i = 0; i < live_cells; i++) {
-            uint32_t g = p[i * 3u];
+        /* Store the absolute buffer index — the shader reads fg/bg at that
+         * index and subtracts root_row*cols to place the quad on screen,
+         * mirroring text-layer.wgsl. */
+        for (size_t i = window_first; i < window_last; i++) {
+            uint32_t g = p[i * 4u];
             if (g >> 31) {
                 f->instances[n].cell_index = (uint32_t)i;
                 f->instances[n].local_id = 0xFFFFFFFFu - g;
@@ -691,6 +732,7 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
     }
 
     struct yetty_yframework_gpu_context *gpu = &f->context->runtime->gpu;
+    yetty_ywebgpu_error_clear(); /* TEMP: capture draw/bind validation errors */
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(gpu->device, &enc_desc);
     if (!encoder) {
@@ -729,7 +771,13 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
                                         (uint32_t)vp.h);
 
     uint32_t instance_count = f->rs.instance_count > 0 ? f->rs.instance_count : 1u;
-    ydebug("shader-glyph figure: draw instances=%u", instance_count);
+    uint32_t inst0 = f->instance_count > 0 ? f->instances[0].cell_index : 0xFFFFFFFFu;
+    ydebug("shader-glyph figure: draw instances=%u vp=(%.1f,%.1f,%.1f,%.1f) "
+           "grid_u=(%.1fx%.1f) cell_u=(%.1fx%.1f) vz=%.3f root_row=%u inst0_cell=%u",
+           instance_count, vp.x, vp.y, vp.w, vp.h, f->rs.uniforms[U_GRID_SIZE].vec2[0],
+           f->rs.uniforms[U_GRID_SIZE].vec2[1], f->rs.uniforms[U_CELL_SIZE].vec2[0],
+           f->rs.uniforms[U_CELL_SIZE].vec2[1], f->rs.uniforms[U_VZ_SCALE].f32,
+           f->rs.uniforms[U_ROOT_ROW].u32, inst0);
     wgpuRenderPassEncoderDraw(pass, 6, instance_count, 0, 0);
 
     wgpuRenderPassEncoderEnd(pass);
@@ -740,6 +788,9 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
     wgpuQueueSubmit(gpu->queue, 1, &cb);
     wgpuCommandBufferRelease(cb);
     wgpuCommandEncoderRelease(encoder);
+    if (yetty_ywebgpu_error_check()) { /* TEMP */
+        yerror("shader-glyph figure: GPU validation error: %s", yetty_ywebgpu_error.message);
+    }
     return YETTY_OK_VOID();
 }
 

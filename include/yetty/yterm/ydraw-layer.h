@@ -40,6 +40,13 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
 struct yetty_ycore_void_result yetty_yterm_ydraw_layer_process_input(
     void *userdata, struct yetty_ywire_wire_statemachine *sm);
 
+/* Bind the text-grid cell source onto the layer's canvas so per-cell
+ * rich-handles route through the text-layer-owned table. Forwarded to
+ * canvas->ops->set_cell_source. */
+struct yetty_ydraw_cell_source;
+struct yetty_ycore_void_result yetty_yterm_ydraw_layer_set_cell_source(
+    struct yetty_yrender_terminal_layer *self, const struct yetty_ydraw_cell_source *source);
+
 #ifdef __cplusplus
 }
 #endif

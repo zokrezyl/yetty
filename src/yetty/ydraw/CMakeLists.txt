@@ -2,6 +2,7 @@
 # Note: core moved to ydraw-core, SDF/yaml moved to ysdf
 
 add_library(yetty_ydraw STATIC
+    cell-ref-table.c
     flyweight.c
     scrollbuffer.c
     scrolling-canvas.c

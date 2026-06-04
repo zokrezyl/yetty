@@ -28,11 +28,12 @@ extern "C" {
 
 struct yetty_ydraw_canvas;
 struct yetty_ydraw_canvas_ops;
-struct yetty_ydraw_raw_figure_factory;
+struct yetty_ydraw_complex_drawable_factory;
 struct yetty_ydraw_figure;
 struct yetty_ydraw_flyweight_registry;
 struct yetty_yfont_font;
 struct yetty_ywire_wire_statemachine;
+struct yetty_ydraw_cell_source;
 
 /* Result type for the polymorphic pointer — every variant's create
  * returns this. */
@@ -97,6 +98,13 @@ struct yetty_ydraw_canvas_ops {
     struct yetty_ycore_void_result (*process_input)(struct yetty_ydraw_canvas *canvas,
                                                     struct yetty_ywire_wire_statemachine *sm);
 
+    /* Bind the text-grid cell source (per-cell rich-handle access + ref
+     * table). Copies the source by value; the canvas reads/stamps cell
+     * handles through it. scene-style canvases that aren't cell-backed may
+     * stub this. Passing NULL clears the binding. */
+    struct yetty_ycore_void_result (*set_cell_source)(struct yetty_ydraw_canvas *canvas,
+                                                      const struct yetty_ydraw_cell_source *source);
+
     /* Cursor / scroll. scene-canvas implements these as success-stubs. */
     struct yetty_ycore_void_result (*set_cursor_pos)(struct yetty_ydraw_canvas *canvas,
                                                      struct yetty_ycore_grid_cursor_pos pos);
@@ -138,7 +146,7 @@ struct yetty_ydraw_canvas_ops {
     /* Flyweight registry / complex-prim factory accessors. */
     const struct yetty_ydraw_flyweight_registry *(*get_flyweight_registry)(
         const struct yetty_ydraw_canvas *canvas);
-    struct yetty_ydraw_raw_figure_factory *(*get_figure_factory)(
+    struct yetty_ydraw_complex_drawable_factory *(*get_figure_factory)(
         const struct yetty_ydraw_canvas *canvas);
 
     /* Complex drawable access (for atlas rendering). */

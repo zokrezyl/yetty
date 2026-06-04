@@ -31,7 +31,7 @@ extern const unsigned int gyimage_lib_shaderSize;
 
 /* Static resource set for accessor library (yimage-gen.wgsl).
  * Read-only after init; safely shared across all instances as a child. */
-static struct yetty_ydraw_gpu_resource_set yimage_lib_rs;
+static struct yetty_yrender_gpu_resource_set yimage_lib_rs;
 static bool yimage_lib_rs_initialized = false;
 
 static void yimage_init_lib_rs(void)
@@ -51,7 +51,7 @@ struct yetty_yimage_factory {
     struct yetty_yrender_pipeline *pipeline;
     /* Template RS: shape definition for both the pipeline and per-instance
      * RSes. Children point to the shared static library RSes. */
-    struct yetty_ydraw_gpu_resource_set template_rs;
+    struct yetty_yrender_gpu_resource_set template_rs;
     int template_initialized;
 
     WGPUDevice device;
@@ -83,7 +83,7 @@ static struct yetty_yimage_factory *yetty_yimage_factory_from_base(
 // for each per-instance RS (binder-build) — they're memcpy clones.
 //=============================================================================
 
-static void yimage_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
+static void yimage_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 {
     yimage_init_lib_rs();
 
@@ -93,7 +93,7 @@ static void yimage_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
                                   gyimage_shaderSize);
 
     // Accessor library (generated uniforms accessors)
-    rs->children[0] = (struct yetty_ydraw_gpu_resource_set *)&yimage_lib_rs;
+    rs->children[0] = (struct yetty_yrender_gpu_resource_set *)&yimage_lib_rs;
     rs->children_count = 1;
 
     // Setup uniforms (values set later during render)
@@ -182,7 +182,7 @@ static struct yetty_ycore_void_result yimage_instance_render(struct yetty_ydraw_
         return YETTY_ERR(yetty_ycore_void, "factory pipeline not initialized");
     }
 
-    struct yetty_ydraw_gpu_resource_set *rs = self->resource_set;
+    struct yetty_yrender_gpu_resource_set *rs = self->resource_set;
 
     // Parse wire format: [type_id][payload_size][uniforms...][buffer_lens...][buffer_data...]
     const uint32_t *data = (const uint32_t *)self->buffer_data;
@@ -347,7 +347,7 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_raw_figure)) {
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_drawable)) {
         return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
     }
 
@@ -374,7 +374,7 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
     instance->render = yimage_instance_render;
     instance->ops = &yimage_figure_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_raw_figure_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_complex_drawable_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         instance->bounds = aabb_res.value;
     }
@@ -382,14 +382,14 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
     /* Per-instance RS. Same shape as the factory template (so the binder
      * flattens to the same layout the pipeline was compiled against), but
      * with per-instance buffer/uniform values (set in render). */
-    instance->resource_set = malloc(sizeof(struct yetty_ydraw_gpu_resource_set));
+    instance->resource_set = malloc(sizeof(struct yetty_yrender_gpu_resource_set));
     if (!instance->resource_set) {
         free(instance->buffer_data);
         free(instance);
         return YETTY_ERR(yetty_ydraw_figure_ptr, "rs alloc failed");
     }
     memcpy(instance->resource_set, &factory->template_rs,
-           sizeof(struct yetty_ydraw_gpu_resource_set));
+           sizeof(struct yetty_yrender_gpu_resource_set));
 
     /* Wire the per-instance RS to this instance's payload. Storage
      * buffers (if any) point into the wire bytes; textures whose
@@ -488,7 +488,7 @@ static void yimage_destroy_instance(struct yetty_ydraw_concrete_factory *self,
     yimage_instance_destroy(instance);
 }
 
-static struct yetty_ydraw_gpu_resource_set *yimage_get_shared_rs(
+static struct yetty_yrender_gpu_resource_set *yimage_get_shared_rs(
     struct yetty_ydraw_concrete_factory *self)
 {
     /* Returns the structural template, NOT a mutable per-instance RS. */

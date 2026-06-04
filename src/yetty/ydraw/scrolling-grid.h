@@ -24,6 +24,7 @@ extern "C" {
 
 struct yetty_ydraw_scrolling_grid;
 struct yetty_ydraw_figure;
+struct yetty_ydraw_cell_source;
 
 /* Result type for the grid pointer. */
 YETTY_YRESULT_DECLARE(yetty_ydraw_scrolling_grid_ptr, struct yetty_ydraw_scrolling_grid *);
@@ -137,9 +138,14 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_restore_range(
  * Returns the total prim count (offset-table entries) via `*out_drawable_count`.
  *===========================================================================*/
 
+/* `cell_source` (may be NULL) lets live-screen cells contribute anchor-row
+ * refs stored on their libvterm rich_handle; `live_rolling_row_0` maps a
+ * canvas row to a live vterm row. When cell_source is NULL only grid-local
+ * per-cell refs are emitted (identical to the pre-merge behaviour). */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t window_top, uint32_t grid_rows,
-    uint32_t effective_grid_cols, uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count);
+    uint32_t effective_grid_cols, const struct yetty_ydraw_cell_source *cell_source,
+    uint32_t live_rolling_row_0, uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count);
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_build_drawable_staging(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t **out_buf, uint32_t *out_capacity,

@@ -24,13 +24,13 @@ bool yetty_ydraw_is_figure(uint32_t type)
 
 static struct yetty_ycore_size_result figure_size_wrapper(const uint32_t *prim)
 {
-    size_t size = yetty_ydraw_raw_figure_size(prim);
+    size_t size = yetty_ydraw_complex_drawable_size(prim);
     return YETTY_OK(yetty_ycore_size, size);
 }
 
 static struct rectangle_result figure_aabb_wrapper(const uint32_t *prim)
 {
-    return yetty_ydraw_raw_figure_aabb(prim);
+    return yetty_ydraw_complex_drawable_aabb(prim);
 }
 
 static const struct yetty_ydraw_drawable_base_ops g_figure_base_ops = {
@@ -38,7 +38,7 @@ static const struct yetty_ydraw_drawable_base_ops g_figure_base_ops = {
     .aabb = figure_aabb_wrapper,
 };
 
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_raw_figure_handler(
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_complex_drawable_handler(
     uint32_t drawable_type)
 {
     if (yetty_ydraw_is_figure(drawable_type)) {
@@ -47,10 +47,10 @@ struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_raw_figure_handler(
     return YETTY_ERR(yetty_ydraw_drawable_base_ops_ptr, "not a complex type");
 }
 
-size_t yetty_ydraw_raw_figure_size(const void *data)
+size_t yetty_ydraw_complex_drawable_size(const void *data)
 {
-    const struct yetty_ydraw_raw_figure *prim = data;
-    return sizeof(struct yetty_ydraw_raw_figure) + prim->payload_size;
+    const struct yetty_ydraw_complex_drawable *prim = data;
+    return sizeof(struct yetty_ydraw_complex_drawable) + prim->payload_size;
 }
 
 //=============================================================================
@@ -60,13 +60,13 @@ size_t yetty_ydraw_raw_figure_size(const void *data)
 
 #define COMPLEX_PRIM_BOUNDS_SIZE 16 /* 4 floats */
 
-struct rectangle_result yetty_ydraw_raw_figure_aabb(const void *data)
+struct rectangle_result yetty_ydraw_complex_drawable_aabb(const void *data)
 {
     if (!data) {
         return YETTY_ERR(rectangle, "NULL data");
     }
 
-    const struct yetty_ydraw_raw_figure *prim = data;
+    const struct yetty_ydraw_complex_drawable *prim = data;
     if (prim->payload_size < COMPLEX_PRIM_BOUNDS_SIZE) {
         return YETTY_ERR(rectangle, "payload too small for bounds");
     }

@@ -147,14 +147,6 @@ struct yetty_yterm_terminal {
     struct yetty_yfigure_container *root_container;
     struct yetty_yfigure_registry *figure_registry;
 
-    /* Shader-glyph figure — animated procedurals at PUA-B cells. Created
-     * by terminal_create after the root container and attached to it
-     * under a reserved high id. Borrowed pointer; the root container
-     * cascades destroy on it. Held here so terminal_resize_grid and
-     * the ZOOM_VISUAL_APPLY broadcast can reach it (the figure isn't
-     * in layers[]). */
-    struct yetty_yterm_shader_glyph_figure *shader_glyph_figure;
-
     /* Default MSDF font attached to every ygrid the root container
      * mints (registered as user-data on KIND_YGRID factory). Borrowed
      * by each ygrid; terminal owns lifetime. Teardown destroys the
@@ -166,7 +158,7 @@ struct yetty_yterm_terminal {
      * One instance per terminal — every ygrid the root container mints
      * borrows the same pointer via figure_args (below) so they all share
      * the same per-type pipeline cache. */
-    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ydraw_complex_drawable_factory *figure_factory;
 
     /* Bundle handed as registry user-data on every kind ygrid handles.
      * Lives on the terminal because the registry stores a pointer to it,
@@ -1165,6 +1157,14 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     }
     ytime_report(layers);
 
+    /* TEMP isolation: render the text-layer's owned shader-glyph figure here
+     * (old compositor timing) to test render-location vs text_layer_render. */
+    if (terminal->text_layer_base) {
+        struct yetty_ycore_void_result fr =
+            yetty_yterm_text_layer_render_figures(terminal->text_layer_base, target);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "terminal_render_frame: text-layer figures");
+    }
+
     /* Root container renders LAST — topmost of the new rendering
      * stack. Old layers (text / ydraw / ymgui / yrdawn) paint
      * underneath; everything addressed via YCOMPOSITOR_BIN figure
@@ -1359,6 +1359,16 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: terminal_layer_add(ydraw scrolling) failed");
     ydebug("terminal_create: ydraw scrolling layer created and added");
 
+    /* Wire the text grid's per-cell rich-handle table into the ydraw layer so
+     * per-cell drawable refs hang off the libvterm cells. The text-layer keeps
+     * its handle accessor + table private. */
+    {
+        struct yetty_ycore_void_result cs_r =
+            yetty_yterm_text_layer_bind_ydraw(text_layer, ydraw_res.value);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, cs_r,
+                            "terminal_create: text_layer_bind_ydraw failed");
+    }
+
     rr = yetty_ywire_wire_statemachine_register(
         terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YDRAW_CLEAR, /*has_args=*/1,
         yetty_yterm_ydraw_layer_process_input, ydraw_res.value);
@@ -1438,8 +1448,8 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * concrete factory (yplot_factory_create etc.) builds its own
      * pipeline lazily on the first create_instance call. */
     {
-        struct yetty_ydraw_raw_figure_factory_ptr_result ffr =
-            yetty_ydraw_raw_figure_factory_create(
+        struct yetty_ydraw_complex_drawable_factory_ptr_result ffr =
+            yetty_ydraw_complex_drawable_factory_create(
                 yetty_context->runtime->gpu.device, yetty_context->runtime->gpu.queue,
                 yetty_context->runtime->gpu.surface_format, yetty_context->runtime->gpu.allocator,
                 yetty_context->event_loop);
@@ -1449,7 +1459,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_raw_figure_factory_register(terminal->figure_factory, yplot_f);
+                yetty_ydraw_complex_drawable_factory_register(terminal->figure_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -1457,7 +1467,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_raw_figure_factory_register(terminal->figure_factory, yimage_f);
+                yetty_ydraw_complex_drawable_factory_register(terminal->figure_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -1590,34 +1600,10 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     }
     ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)", YETTY_DCS_YCLASS_RPC);
 
-    /* Shader-glyph figure — replaces the legacy shader-glyph layer. Added
-     * as a child of the root container under a reserved high id (just
-     * below UINT32_MAX) so it can't collide with producer-assigned ids,
-     * which start at 1 and count up. The container cascades destroy. */
-    {
-        struct yetty_yterm_shader_glyph_figure_ptr_result sgf_res =
-            yetty_yterm_shader_glyph_figure_create(
-                root_rect, cols, rows, text_layer->cell_size.width, text_layer->cell_size.height,
-                text_layer, yetty_context, terminal_request_render_callback, terminal);
-        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, sgf_res,
-                            "terminal_create: shader_glyph figure create failed");
-        terminal->shader_glyph_figure = sgf_res.value;
-        struct yetty_yfigure_figure *sgf_base =
-            yetty_yterm_shader_glyph_figure_as_figure(terminal->shader_glyph_figure);
-        struct yetty_ycore_void_result ar =
-            yetty_yfigure_container_add_child(terminal->root_container, sgf_base, 0xFFFFFFFEu);
-        if (YETTY_IS_ERR(ar)) {
-            struct yetty_ycore_void_result dr =
-                yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)sgf_base - 1);
-            if (YETTY_IS_ERR(dr)) {
-                yetty_ycore_error_destroy(dr.error);
-            }
-            terminal->shader_glyph_figure = NULL;
-            return YETTY_ERR(yetty_yterm_terminal,
-                             "terminal_create: shader_glyph figure add_child failed", ar);
-        }
-        ydebug("terminal_create: shader_glyph figure created and attached to root container");
-    }
+    /* The shader-glyph figure is created, rendered, and destroyed entirely by
+     * the text-layer (it scans the cell buffer and renders as a second pass in
+     * text_layer_render) — it is NOT a compositor child, so nothing to wire
+     * here. The compositor's children remain the real figures (yplot, …). */
 
     /* Create render targets for each layer */
     const struct yetty_yinit_gpu_context *app_gpu = &yetty_context->runtime->gpu.app_gpu_context;
@@ -1712,7 +1698,7 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
      * registry minted borrowed our factory pointer, and they must be
      * gone (via root_container destroy above) before we tear it down. */
     if (terminal->figure_factory) {
-        yetty_ydraw_raw_figure_factory_destroy(terminal->figure_factory);
+        yetty_ydraw_complex_drawable_factory_destroy(terminal->figure_factory);
         terminal->figure_factory = NULL;
     }
     if (terminal->compositor_font) {
@@ -1817,15 +1803,9 @@ struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
         yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, new_rect);
         yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
     }
-    /* Shader-glyph figure lives in the root container and doesn't get
-     * resize via the layers[] broadcast. Push the new grid + cell size
-     * explicitly so its uniforms + per-instance quad placement track. */
-    if (terminal->shader_glyph_figure) {
-        struct yetty_ycore_void_result sgr = yetty_yterm_shader_glyph_figure_resize(
-            terminal->shader_glyph_figure, grid_size, cell_size);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sgr,
-                            "yetty_yterm_terminal_resize_grid: shader_glyph figure resize failed");
-    }
+    /* The shader-glyph figure tracks the resize through the text-layer's own
+     * resize_grid op (the text-layer owns it), reached by the layers[]
+     * broadcast above — no separate push needed here. */
     return YETTY_OK_VOID();
 }
 
@@ -2266,13 +2246,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                                     "terminal_view_on_event: layer set_visual_zoom failed");
             }
         }
-        /* Shader-glyph figure is outside layers[]; broadcast directly. */
-        if (terminal->shader_glyph_figure) {
-            struct yetty_ycore_void_result vr = yetty_yterm_shader_glyph_figure_set_visual_zoom(
-                terminal->shader_glyph_figure, scale, ox, oy);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, vr,
-                                "terminal_view_on_event: shader_glyph figure set_visual_zoom");
-        }
+        /* The shader-glyph figure picks up the zoom through the text-layer's
+         * set_visual_zoom op (the text-layer owns it), reached by the layers[]
+         * broadcast above — no separate push needed here. */
         ydebug("terminal: ZOOM_VISUAL_APPLY scale=%.2f off=(%.1f,%.1f)", scale, ox, oy);
         return YETTY_OK(yetty_ycore_int, 1);
     }

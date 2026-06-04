@@ -24,6 +24,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ydraw/canvas.h>
+#include <yetty/ydraw/cell-ref-table.h>
 #include <yetty/ydraw/flyweight.h>
 #include <yetty/ydraw/scrolling-canvas.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -228,7 +229,7 @@ struct scrolling_canvas {
 
     /* Registries + factory. */
     struct yetty_ydraw_flyweight_registry *flyweight_registry;
-    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ydraw_complex_drawable_factory *figure_factory;
     struct yetty_ymsdf_generator *msdf_generator; /* borrowed */
     struct yetty_yfont_cache *font_cache;
 
@@ -247,6 +248,12 @@ struct scrolling_canvas {
 
     /* Opaque grid (line storage + scrollbuffer eviction). */
     struct yetty_ydraw_scrolling_grid *grid;
+
+    /* Text-grid cell source — per-cell rich-handle access + the ref table
+     * (both owned by the text-layer). Bound via set_cell_source. When
+     * cell_source.handle_at is NULL the canvas falls back to grid-local
+     * per-cell ref storage. */
+    struct yetty_ydraw_cell_source cell_source;
 
     /* Scroll / cursor callbacks. */
     yetty_ydraw_canvas_scroll_callback scroll_callback;
@@ -472,7 +479,7 @@ static void scrolling_canvas_destroy_internals(struct scrolling_canvas *c)
         c->font_cache = NULL;
     }
     if (c->figure_factory) {
-        yetty_ydraw_raw_figure_factory_destroy(c->figure_factory);
+        yetty_ydraw_complex_drawable_factory_destroy(c->figure_factory);
         c->figure_factory = NULL;
     }
     if (c->flyweight_registry) {
@@ -508,8 +515,8 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     c->flyweight_registry = flyweight_res.value;
 
     /* figure factory + built-in registrations. */
-    struct yetty_ydraw_raw_figure_factory_ptr_result factory_res =
-        yetty_ydraw_raw_figure_factory_create(context->runtime->gpu.device,
+    struct yetty_ydraw_complex_drawable_factory_ptr_result factory_res =
+        yetty_ydraw_complex_drawable_factory_create(context->runtime->gpu.device,
                                               context->runtime->gpu.queue,
                                               context->runtime->gpu.surface_format,
                                               context->runtime->gpu.allocator, context->event_loop);
@@ -528,7 +535,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yplot factory create");
         }
         struct yetty_ycore_void_result rr =
-            yetty_ydraw_raw_figure_factory_register(c->figure_factory, f);
+            yetty_ydraw_complex_drawable_factory_register(c->figure_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yplot_factory_destroy(f);
             scrolling_canvas_destroy_internals(c);
@@ -544,7 +551,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yimage factory create");
         }
         struct yetty_ycore_void_result rr =
-            yetty_ydraw_raw_figure_factory_register(c->figure_factory, f);
+            yetty_ydraw_complex_drawable_factory_register(c->figure_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yimage_factory_destroy(f);
             scrolling_canvas_destroy_internals(c);
@@ -561,7 +568,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "ymesh factory create");
         }
         struct yetty_ycore_void_result rr =
-            yetty_ydraw_raw_figure_factory_register(c->figure_factory, f);
+            yetty_ydraw_complex_drawable_factory_register(c->figure_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_ymesh_factory_destroy(f);
             scrolling_canvas_destroy_internals(c);
@@ -579,7 +586,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yvideo factory create");
         }
         struct yetty_ycore_void_result rr =
-            yetty_ydraw_raw_figure_factory_register(c->figure_factory, f);
+            yetty_ydraw_complex_drawable_factory_register(c->figure_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yvideo_factory_destroy(f);
             scrolling_canvas_destroy_internals(c);
@@ -712,6 +719,21 @@ static uint32_t effective_view_top(const struct scrolling_canvas *c)
     return c->view_top_override_active ? c->view_top_override : c->rolling_row_0;
 }
 
+static struct yetty_ycore_void_result scrolling_set_cell_source(
+    struct yetty_ydraw_canvas *base, const struct yetty_ydraw_cell_source *source)
+{
+    if (!base) {
+        return YETTY_ERR(yetty_ycore_void, "scrolling-canvas: NULL");
+    }
+    struct scrolling_canvas *c = as_scrolling(base);
+    if (source) {
+        c->cell_source = *source;
+    } else {
+        c->cell_source = (struct yetty_ydraw_cell_source){0};
+    }
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result scrolling_set_cursor_pos(
     struct yetty_ydraw_canvas *base, struct yetty_ycore_grid_cursor_pos pos)
 {
@@ -794,6 +816,41 @@ static struct yetty_ycore_void_result scrolling_set_cursor_callback(
 /*===========================================================================
  * Add a single SDF / complex drawable
  *===========================================================================*/
+
+/* Record that the drawable at (anchor line = canvas_row + lines_ahead, local
+ * index drawable_index) covers the cell at (canvas_row, col).
+ *
+ * When a cell source is bound and the covered cell is on the live screen, the
+ * ref hangs off that libvterm cell's rich_handle so it rides along with text
+ * scroll/reflow — for any lines_ahead, since `lines_ahead` is a vterm-row
+ * delta that the synchronized text+ydraw scroll keeps valid. Only cells with
+ * no backing live cell (rows below the live bottom, scrolled-away rows) fall
+ * back to grid-local per-cell storage, which remains authoritative there. */
+static struct yetty_ycore_void_result canvas_push_cell_ref(struct scrolling_canvas *c,
+                                                           uint32_t canvas_row, uint32_t col,
+                                                           uint16_t lines_ahead,
+                                                           uint16_t drawable_index)
+{
+    if (c->cell_source.handle_at) {
+        int64_t vterm_row = (int64_t)canvas_row - (int64_t)c->rolling_row_0;
+        if (vterm_row >= 0) {
+            uint32_t *handle_ptr =
+                c->cell_source.handle_at(c->cell_source.user, (uint32_t)vterm_row, col);
+            if (handle_ptr) {
+                if (*handle_ptr == 0) {
+                    struct yetty_ydraw_cell_handle_result hr =
+                        yetty_ydraw_cell_ref_table_alloc(c->cell_source.table);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "canvas_push_cell_ref: handle alloc");
+                    *handle_ptr = hr.value;
+                }
+                return yetty_ydraw_cell_ref_table_push(c->cell_source.table, *handle_ptr,
+                                                       lines_ahead, drawable_index);
+            }
+        }
+    }
+    return yetty_ydraw_scrolling_grid_push_ref(c->grid, canvas_row, col, lines_ahead,
+                                               drawable_index);
+}
 
 static struct uint32_result add_drawable_internal(
     struct scrolling_canvas *c, const struct yetty_ydraw_drawable_flyweight *flyweight)
@@ -906,15 +963,15 @@ static struct uint32_result add_drawable_internal(
         YETTY_RETURN_IF_ERR(uint32, dr, "add_drawable: dirty_line (cell row)");
         uint16_t lines_ahead = (uint16_t)(drawable_grid_line - row);
         for (uint32_t col = drawable_col_min; col <= drawable_col_max; col++) {
-            struct yetty_ycore_void_result rp = yetty_ydraw_scrolling_grid_push_ref(
-                c->grid, row, col, lines_ahead, (uint16_t)drawable_index);
+            struct yetty_ycore_void_result rp =
+                canvas_push_cell_ref(c, row, col, lines_ahead, (uint16_t)drawable_index);
             YETTY_RETURN_IF_ERR(uint32, rp, "add_drawable: push_ref");
         }
     }
 
     if (yetty_ydraw_is_figure(drawable_type)) {
         struct yetty_ydraw_figure_ptr_result inst_res =
-            yetty_ydraw_raw_figure_factory_create_instance(c->figure_factory, flyweight->data,
+            yetty_ydraw_complex_drawable_factory_create_instance(c->figure_factory, flyweight->data,
                                                            word_count * sizeof(uint32_t),
                                                            drawable_rolling_row);
         YETTY_RETURN_IF_ERR(uint32, inst_res, "add_drawable: create_instance");
@@ -1004,7 +1061,7 @@ static struct uint32_result expand_text_span_to_glyphs(
 
         struct yetty_yrender_gpu_resource_set_result rs_res = font->ops->get_gpu_resource_set(font);
         YETTY_RETURN_IF_ERR(uint32, rs_res, "expand_text_span: get_gpu_resource_set");
-        const struct yetty_ydraw_gpu_resource_set *rs = rs_res.value;
+        const struct yetty_yrender_gpu_resource_set *rs = rs_res.value;
         if (rs->buffer_count == 0 || !rs->buffers[0].data) {
             return YETTY_ERR(uint32,
                              "expand_text_span: font resource set has no glyph metadata buffer");
@@ -1080,8 +1137,8 @@ static struct uint32_result expand_text_span_to_glyphs(
             YETTY_RETURN_IF_ERR(uint32, dr, "expand_text_span: dirty_line (cell row)");
             uint16_t lines_ahead = (uint16_t)(glyph_row_max - row);
             for (uint32_t col = col_min; col <= col_max; col++) {
-                struct yetty_ycore_void_result rp = yetty_ydraw_scrolling_grid_push_ref(
-                    c->grid, row, col, lines_ahead, (uint16_t)drawable_idx);
+                struct yetty_ycore_void_result rp =
+                    canvas_push_cell_ref(c, row, col, lines_ahead, (uint16_t)drawable_idx);
                 YETTY_RETURN_IF_ERR(uint32, rp, "expand_text_span: push_ref");
             }
         }
@@ -1431,7 +1488,8 @@ static struct yetty_ycore_void_result scrolling_rebuild_grid(struct yetty_ydraw_
 
     uint32_t count = 0;
     struct yetty_ycore_void_result rr = yetty_ydraw_scrolling_grid_rebuild_staging(
-        c->grid, window_top, grid_h, grid_w, &c->grid_staging, &c->grid_staging_capacity, &count);
+        c->grid, window_top, grid_h, grid_w, &c->cell_source, c->rolling_row_0, &c->grid_staging,
+        &c->grid_staging_capacity, &count);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rebuild_grid: grid_rebuild_staging");
     c->grid_staging_count = count;
     c->dirty = false;
@@ -1533,7 +1591,7 @@ static const struct yetty_ydraw_flyweight_registry *scrolling_get_flyweight_regi
     return base ? as_scrolling_const(base)->flyweight_registry : NULL;
 }
 
-static struct yetty_ydraw_raw_figure_factory *scrolling_get_figure_factory(
+static struct yetty_ydraw_complex_drawable_factory *scrolling_get_figure_factory(
     const struct yetty_ydraw_canvas *base)
 {
     return base ? as_scrolling_const(base)->figure_factory : NULL;
@@ -1623,6 +1681,7 @@ static const struct yetty_ydraw_canvas_ops scrolling_canvas_ops = {
     .get_cell_size = scrolling_get_cell_size,
     .get_grid_size = scrolling_get_grid_size,
     .process_input = scrolling_process_input,
+    .set_cell_source = scrolling_set_cell_source,
     .set_cursor_pos = scrolling_set_cursor_pos,
     .scroll_lines = scrolling_scroll_lines,
     .set_view_top = scrolling_set_view_top,

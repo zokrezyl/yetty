@@ -81,7 +81,7 @@ yetty_yshadertoy_figure {
     /* GPU plumbing. The binder owns pipeline + bind groups + buffers;
      * compiled lazily on first render. Rebuilt when the shader text
      * changes (binder torn down so finalize recompiles). */
-    struct yetty_ydraw_gpu_resource_set rs;
+    struct yetty_yrender_gpu_resource_set rs;
     struct yetty_yrender_gpu_resource_binder *binder;
     int binder_finalized;
 
@@ -196,7 +196,7 @@ static char *assemble_shader(const char *user_src, size_t user_len, size_t *out_
  * Uniform helpers
  * ========================================================================= */
 
-static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
+static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
     rs->uniforms[U_RESOLUTION] =
@@ -208,7 +208,7 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
     rs->uniforms[U_MOUSE] = (struct yetty_yrender_uniform){"iMouse", YETTY_YRENDER_UNIFORM_VEC4};
 }
 
-static void set_resolution(struct yetty_ydraw_gpu_resource_set *rs, float w, float h)
+static void set_resolution(struct yetty_yrender_gpu_resource_set *rs, float w, float h)
 {
     rs->uniforms[U_RESOLUTION].vec3[0] = w;
     rs->uniforms[U_RESOLUTION].vec3[1] = h;

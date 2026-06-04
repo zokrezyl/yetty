@@ -445,7 +445,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
         return YETTY_ERR(yetty_ycore_void, rs_res.error.msg);
     }
 
-    const struct yetty_ydraw_gpu_resource_set *rs = rs_res.value;
+    const struct yetty_yrender_gpu_resource_set *rs = rs_res.value;
 
     /* Look up or create the per-layer binder. Multiple layers rendering
      * into the same target each have their own resource-tree shader, and
@@ -504,6 +504,9 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 
     /* Encode + draw + submit command buffer to GPU */
     ytime_start(rt_gpu);
+
+    ydebug("render_layer: rt.device=%p rt.queue=%p rt.format=%d rt.view=%p layer=%p",
+           (void *)rt->device, (void *)rt->queue, (int)rt->format, (void *)rt->view, (void *)layer);
 
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
