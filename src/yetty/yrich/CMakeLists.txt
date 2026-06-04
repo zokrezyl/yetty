@@ -95,6 +95,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
     # group for GNU ld to resolve. glfw3webgpu/glfw also carry the GLFW
     # include dirs the inlined yinit/yplatform sources compile against;
     # the ymsdf / yctl / vnc libs arrive through ${YETTY_LIBS}.
+    #
+    # uv_a is listed explicitly (not only via ${YETTY_LIBS}) because this
+    # file is processed by add_subdirectory(src/yetty) BEFORE shared.cmake
+    # populates ${YETTY_LIBS} — so the variable expands empty here. The
+    # inlined libuv-event-loop/default.c needs uv.h at compile time, which
+    # only uv_a's INTERFACE_INCLUDE_DIRECTORIES provides; the consuming
+    # tools (yslide/ydoc) re-add the now-populated ${YETTY_LIBS} at link
+    # time, but the OBJECT compile happens here and needs the include dir.
     set(YRICH_APP_LINK_LIBS
         yetty_yrich
         ygui
@@ -113,6 +121,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
         yetty_ydraw_core
         glfw3webgpu
         glfw
+        uv_a
         ${YETTY_LIBS}
         yetty_ywire
         yetty_yplatform_core
