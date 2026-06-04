@@ -155,7 +155,7 @@ text-layer (background + terminal text) are the only paints.
 
 ## Per-layer GPU binding
 
-Each layer produces a `struct yetty_ydraw_gpu_resource_set` (buffers, textures,
+Each layer produces a `struct yetty_yrender_gpu_resource_set` (buffers, textures,
 uniforms, shader, children). A `gpu-resource-binder` flattens that set, packs it
 into one storage buffer + per-format atlas textures + one uniform block, and
 caches the compiled pipeline keyed by a shader-code hash (recompiling only when

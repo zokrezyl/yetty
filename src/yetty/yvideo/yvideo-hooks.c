@@ -613,7 +613,7 @@ static struct yetty_ycore_int_result yvideo_on_tick(struct yetty_yevent_event_li
     }
 
     if (instance->resource_set && st->y_buf && st->u_buf && st->v_buf) {
-        struct yetty_ydraw_gpu_resource_set *rs = instance->resource_set;
+        struct yetty_yrender_gpu_resource_set *rs = instance->resource_set;
         if (!st->tex_pinned) {
             rs->textures[0].data = st->y_buf;
             rs->textures[0].width = st->video_w;

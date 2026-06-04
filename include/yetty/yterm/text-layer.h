@@ -23,19 +23,27 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
 struct yetty_ycore_void_result yetty_yterm_text_layer_process_input(
     void *userdata, struct yetty_ywire_wire_statemachine *sm);
 
-/* Borrow the GPU cell buffer (12 bytes per cell, see text-layer.wgsl).
+/* Borrow the GPU cell buffer (sizeof(VTermScreenCell), currently 16 bytes;
+ * see text-layer.wgsl).
  * Pointer is owned by the text layer (or libvterm). Valid only until the
  * next call into text-layer that mutates the screen — read inside one
  * get_gpu_resource_set / render call only. */
 void yetty_yterm_terminal_layer_terminal_text_layer_get_cells(
     const struct yetty_yrender_terminal_layer *self, const uint8_t **out_data, size_t *out_size);
 
-/* Fill `out` with the text-layer's cell source — the per-cell rich-handle
- * accessor + the ref table — so the ydraw canvas can route per-cell drawable
- * refs through the libvterm cells. Both stay owned by the text layer. */
-struct yetty_ydraw_cell_source;
-void yetty_yterm_text_layer_fill_cell_source(struct yetty_yrender_terminal_layer *self,
-                                             struct yetty_ydraw_cell_source *out);
+/* TEMP isolation: render the text-layer's owned figures (shader-glyph). */
+struct yetty_ydraw_target;
+struct yetty_ycore_void_result yetty_yterm_text_layer_render_figures(
+    struct yetty_yrender_terminal_layer *self, struct yetty_ydraw_target *target);
+
+/* Wire the text-layer's per-cell rich-handle table into the ydraw layer so the
+ * ydraw canvas can route per-cell drawable refs through the libvterm cells.
+ * The handle accessor + table stay private to the text-layer (built into a
+ * local cell source here, never exposed). Collapses to internal wiring once
+ * the ydraw primitives are folded in. */
+struct yetty_ycore_void_result yetty_yterm_text_layer_bind_ydraw(
+    struct yetty_yrender_terminal_layer *self, struct yetty_yrender_terminal_layer *ydraw_layer);
+
 
 #ifdef __cplusplus
 }

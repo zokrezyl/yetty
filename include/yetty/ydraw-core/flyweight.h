@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
 // Forward declare gpu_resource_set result (defined in yrender/gpu-resource-set.h)
-struct yetty_ydraw_gpu_resource_set;
+struct yetty_yrender_gpu_resource_set;
 struct yetty_yrender_gpu_resource_set_result;
 
 //=============================================================================

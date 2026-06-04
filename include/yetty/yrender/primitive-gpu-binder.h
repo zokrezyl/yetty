@@ -45,7 +45,7 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_set_pipeline(
 // Add resource set (buffers, textures, uniforms)
 // Does NOT compile anything - just collects resources for bind group
 struct yetty_ycore_void_result yetty_yrender_gpu_binder_add_resource_set(
-    struct yetty_yrender_gpu_binder *binder, const struct yetty_ydraw_gpu_resource_set *rs);
+    struct yetty_yrender_gpu_binder *binder, const struct yetty_yrender_gpu_resource_set *rs);
 
 // Finalize - create bind group from collected resources
 // Uses pre-set pipeline's bind group layout

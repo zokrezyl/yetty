@@ -351,7 +351,7 @@ static struct yetty_ydraw_flyweight_registry *make_full_registry(void)
                                            yetty_ydraw_text_span_drawable_handler);
     if (YETTY_IS_ERR(a)) goto err;
     a = yetty_ydraw_flyweight_registry_add(rr.value, YETTY_YDRAW_COMPLEX_TYPE_BASE,
-                                           0xFFFFFFFFu, yetty_ydraw_raw_figure_handler);
+                                           0xFFFFFFFFu, yetty_ydraw_complex_drawable_handler);
     if (YETTY_IS_ERR(a)) goto err;
     return rr.value;
 err:

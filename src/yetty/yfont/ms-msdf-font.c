@@ -102,7 +102,7 @@ struct yetty_yfont_ms_msdf_font {
     struct yetty_ycore_buffer shader_code;
 
     /* GPU resource set */
-    struct yetty_ydraw_gpu_resource_set rs;
+    struct yetty_yrender_gpu_resource_set rs;
     int dirty;
 };
 

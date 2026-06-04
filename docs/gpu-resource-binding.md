@@ -15,13 +15,13 @@ for the per-frame upload and recompilation logic.
 ## Resource set tree
 
 Every component that needs GPU resources fills in a
-`struct yetty_ydraw_gpu_resource_set` (declared in
+`struct yetty_yrender_gpu_resource_set` (declared in
 `include/yetty/yrender/gpu-resource-set.h`). Resource sets form a **tree**: a
 layer's set lists the font's set as a child, and the binder flattens the whole
 tree depth-first (children before parents).
 
 ```c
-struct yetty_ydraw_gpu_resource_set {
+struct yetty_yrender_gpu_resource_set {
     char namespace[YETTY_YRENDER_NAME_MAX];     /* prefixes generated WGSL names */
     struct yetty_ycore_pixel_size pixel_size;
 
@@ -36,7 +36,7 @@ struct yetty_ydraw_gpu_resource_set {
 
     struct yetty_yrender_shader_code shader;     /* WGSL body for this provider  */
 
-    struct yetty_ydraw_gpu_resource_set *children[YETTY_YRENDER_RS_MAX_CHILDREN]; /* 64 */
+    struct yetty_yrender_gpu_resource_set *children[YETTY_YRENDER_RS_MAX_CHILDREN]; /* 64 */
     size_t children_count;
 
     uint32_t instance_count;  /* draw shape: 6 verts × instance_count. 0 = skip. */
@@ -66,7 +66,7 @@ struct yetty_yrender_gpu_resource_binder_ops {
     /* Per frame: hand the binder a (sub)tree of resource sets to collect. */
     struct yetty_ycore_void_result (*submit)(
         struct yetty_yrender_gpu_resource_binder *self,
-        const struct yetty_ydraw_gpu_resource_set *rs);
+        const struct yetty_yrender_gpu_resource_set *rs);
 
     /* One-time: flatten, pack, create GPU objects, compile pipeline. */
     struct yetty_ycore_void_result (*finalize)(struct yetty_yrender_gpu_resource_binder *self);

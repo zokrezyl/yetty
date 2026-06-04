@@ -39,6 +39,7 @@
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/webgpu/error.h>
 #include <yetty/yterm/shader-glyph-figure.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -86,7 +87,7 @@ yetty_yterm_shader_glyph_figure {
      * buffers; it's compiled lazily on first render so creating the
      * figure doesn't fail when called before the GPU is fully ready
      * (matches yrdawn_figure's lazy build_pipeline pattern). */
-    struct yetty_ydraw_gpu_resource_set rs;
+    struct yetty_yrender_gpu_resource_set rs;
     struct yetty_yrender_gpu_resource_binder *binder;
     int binder_finalized;
 
@@ -121,24 +122,24 @@ static struct yetty_yterm_shader_glyph_figure *shader_glyph_figure_from_obj(stru
  * Uniform helpers
  * ========================================================================= */
 
-static inline void set_grid_size(struct yetty_ydraw_gpu_resource_set *rs, float cols, float rows)
+static inline void set_grid_size(struct yetty_yrender_gpu_resource_set *rs, float cols, float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
 }
 
-static inline void set_cell_size(struct yetty_ydraw_gpu_resource_set *rs, float w, float h)
+static inline void set_cell_size(struct yetty_yrender_gpu_resource_set *rs, float w, float h)
 {
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
 
-static inline void set_time(struct yetty_ydraw_gpu_resource_set *rs, float t)
+static inline void set_time(struct yetty_yrender_gpu_resource_set *rs, float t)
 {
     rs->uniforms[U_TIME].f32 = t;
 }
 
-static inline void set_visual_zoom(struct yetty_ydraw_gpu_resource_set *rs, float scale,
+static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs, float scale,
                                    float off_x, float off_y)
 {
     rs->uniforms[U_VZ_SCALE].f32 = scale;
@@ -146,7 +147,7 @@ static inline void set_visual_zoom(struct yetty_ydraw_gpu_resource_set *rs, floa
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
 
-static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
+static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
 
@@ -692,6 +693,7 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
     }
 
     struct yetty_yframework_gpu_context *gpu = &f->context->runtime->gpu;
+    yetty_ywebgpu_error_clear(); /* TEMP: capture draw/bind validation errors */
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(gpu->device, &enc_desc);
     if (!encoder) {
@@ -730,7 +732,12 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
                                         (uint32_t)vp.h);
 
     uint32_t instance_count = f->rs.instance_count > 0 ? f->rs.instance_count : 1u;
-    ydebug("shader-glyph figure: draw instances=%u", instance_count);
+    uint32_t inst0 = f->instance_count > 0 ? f->instances[0].cell_index : 0xFFFFFFFFu;
+    ydebug("shader-glyph figure: draw instances=%u vp=(%.1f,%.1f,%.1f,%.1f) "
+           "grid_u=(%.1fx%.1f) cell_u=(%.1fx%.1f) vz=%.3f inst0_cell=%u",
+           instance_count, vp.x, vp.y, vp.w, vp.h, f->rs.uniforms[U_GRID_SIZE].vec2[0],
+           f->rs.uniforms[U_GRID_SIZE].vec2[1], f->rs.uniforms[U_CELL_SIZE].vec2[0],
+           f->rs.uniforms[U_CELL_SIZE].vec2[1], f->rs.uniforms[U_VZ_SCALE].f32, inst0);
     wgpuRenderPassEncoderDraw(pass, 6, instance_count, 0, 0);
 
     wgpuRenderPassEncoderEnd(pass);
@@ -741,6 +748,9 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
     wgpuQueueSubmit(gpu->queue, 1, &cb);
     wgpuCommandBufferRelease(cb);
     wgpuCommandEncoderRelease(encoder);
+    if (yetty_ywebgpu_error_check()) { /* TEMP */
+        yerror("shader-glyph figure: GPU validation error: %s", yetty_ywebgpu_error.message);
+    }
     return YETTY_OK_VOID();
 }
 

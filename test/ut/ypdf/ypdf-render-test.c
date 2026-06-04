@@ -53,18 +53,18 @@ static struct drawable_counts count_prims(struct yetty_ydraw_draw_list *buf,
                                       struct yetty_ydraw_flyweight_registry *reg)
 {
     struct drawable_counts c = {0};
-    struct yetty_ydraw_primitive_iter_result ir =
+    struct yetty_ydraw_drawable_iter_result ir =
         yetty_ydraw_draw_list_drawable_first(buf, reg);
     if (YETTY_IS_ERR(ir))
         return c;
-    struct yetty_ydraw_primitive_iter it = ir.value;
+    struct yetty_ydraw_drawable_iter it = ir.value;
     for (;;) {
         uint32_t t = it.fw.data[0];
         if (t == YETTY_YDRAW_TYPE_FONT)            c.fonts++;
         else if (t == YETTY_YDRAW_TYPE_TEXT_SPAN)  c.text_spans++;
         else                                        c.other++;
 
-        struct yetty_ydraw_primitive_iter_result nx =
+        struct yetty_ydraw_drawable_iter_result nx =
             yetty_ydraw_draw_list_drawable_next(buf, reg, &it);
         if (YETTY_IS_ERR(nx)) break;
         it = nx.value;

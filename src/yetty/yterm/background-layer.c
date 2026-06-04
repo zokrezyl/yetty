@@ -23,7 +23,7 @@ struct yetty_yterm_background_layer {
      * it must outlive the rs. Freed in destroy. */
     struct yetty_ycore_buffer shader_code;
 
-    struct yetty_ydraw_gpu_resource_set rs;
+    struct yetty_yrender_gpu_resource_set rs;
 };
 
 /* --- Ops -------------------------------------------------------------- */

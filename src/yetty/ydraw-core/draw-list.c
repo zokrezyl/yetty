@@ -723,61 +723,61 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_end_admin_create_child(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_first(
+struct yetty_ydraw_drawable_iter_result yetty_ydraw_draw_list_drawable_first(
     const struct yetty_ydraw_draw_list *buf, const struct yetty_ydraw_flyweight_registry *reg)
 {
     if (!buf) {
-        return YETTY_ERR(yetty_ydraw_primitive_iter, "buf is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_iter, "buf is NULL");
     }
     if (!reg) {
-        return YETTY_ERR(yetty_ydraw_primitive_iter, "reg is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_iter, "reg is NULL");
     }
     if (!buf->primitives.buf.data || buf->primitives.buf.size == 0) {
-        return YETTY_ERR(yetty_ydraw_primitive_iter, "buffer empty");
+        return YETTY_ERR(yetty_ydraw_drawable_iter, "buffer empty");
     }
 
     const uint32_t *prim = (const uint32_t *)buf->primitives.buf.data;
     struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
         yetty_ydraw_flyweight_registry_get(reg, prim);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, fw_res,
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_iter, fw_res,
                         "drawable_first: registry lookup failed");
 
-    struct yetty_ydraw_primitive_iter iter = {.fw = *fw_res.value};
-    return YETTY_OK(yetty_ydraw_primitive_iter, iter);
+    struct yetty_ydraw_drawable_iter iter = {.fw = *fw_res.value};
+    return YETTY_OK(yetty_ydraw_drawable_iter, iter);
 }
 
-struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_next(
+struct yetty_ydraw_drawable_iter_result yetty_ydraw_draw_list_drawable_next(
     const struct yetty_ydraw_draw_list *buf, const struct yetty_ydraw_flyweight_registry *reg,
-    const struct yetty_ydraw_primitive_iter *iter)
+    const struct yetty_ydraw_drawable_iter *iter)
 {
     if (!buf) {
-        return YETTY_ERR(yetty_ydraw_primitive_iter, "buf is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_iter, "buf is NULL");
     }
     if (!reg) {
-        return YETTY_ERR(yetty_ydraw_primitive_iter, "reg is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_iter, "reg is NULL");
     }
     if (!iter || !iter->fw.ops) {
-        return YETTY_ERR(yetty_ydraw_primitive_iter, "iter is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_iter, "iter is NULL");
     }
 
     const uint8_t *base = buf->primitives.buf.data;
     size_t buf_size = buf->primitives.buf.size;
     struct yetty_ycore_size_result size_res = iter->fw.ops->size(iter->fw.data);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, size_res, "drawable_next: size op failed");
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_iter, size_res, "drawable_next: size op failed");
     const uint32_t *next = (const uint32_t *)((const uint8_t *)iter->fw.data + size_res.value);
     size_t offset = (const uint8_t *)next - base;
 
     if (offset >= buf_size) {
-        return YETTY_ERR(yetty_ydraw_primitive_iter, "end of buffer");
+        return YETTY_ERR(yetty_ydraw_drawable_iter, "end of buffer");
     }
 
     struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
         yetty_ydraw_flyweight_registry_get(reg, next);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, fw_res,
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_iter, fw_res,
                         "drawable_next: registry lookup failed");
 
-    struct yetty_ydraw_primitive_iter new_iter = {.fw = *fw_res.value};
-    return YETTY_OK(yetty_ydraw_primitive_iter, new_iter);
+    struct yetty_ydraw_drawable_iter new_iter = {.fw = *fw_res.value};
+    return YETTY_OK(yetty_ydraw_drawable_iter, new_iter);
 }
 
 /*=============================================================================

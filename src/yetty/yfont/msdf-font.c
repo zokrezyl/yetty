@@ -69,7 +69,7 @@ struct yetty_yfont_msdf_font {
     /* Shader code (owned) */
     struct yetty_ycore_buffer shader_code;
 
-    struct yetty_ydraw_gpu_resource_set rs;
+    struct yetty_yrender_gpu_resource_set rs;
     int dirty;
 };
 

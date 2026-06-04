@@ -151,10 +151,10 @@ int main(void)
     int found_print = 0;            /* second-half text on page */
     float print_y = 0;
 
-    struct yetty_ydraw_primitive_iter_result ir =
+    struct yetty_ydraw_drawable_iter_result ir =
         yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
     REQUIRE(ir.ok, "iterator first failed");
-    struct yetty_ydraw_primitive_iter it = ir.value;
+    struct yetty_ydraw_drawable_iter it = ir.value;
 
     int dump_count = 0;
     for (;;) {
@@ -210,7 +210,7 @@ int main(void)
                 }
             }
         }
-        struct yetty_ydraw_primitive_iter_result nx =
+        struct yetty_ydraw_drawable_iter_result nx =
             yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &it);
         if (!nx.ok) break;
         it = nx.value;
@@ -291,7 +291,7 @@ int main(void)
      * Sans is metric-compatible with Arial but not character-identical). */
 
     /* Re-scan: the first iter consumed everything; iterate again. */
-    struct yetty_ydraw_primitive_iter_result ir2 =
+    struct yetty_ydraw_drawable_iter_result ir2 =
         yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
     REQUIRE(ir2.ok, "iterator first (rescan) failed");
 
@@ -309,7 +309,7 @@ int main(void)
         const struct mutool_line *ml = &EXPECTED_LINES[li];
 
         /* Walk every span on this baseline. */
-        struct yetty_ydraw_primitive_iter it3 = ir2.value;
+        struct yetty_ydraw_drawable_iter it3 = ir2.value;
         float ypdf_left = 1e9f, ypdf_right_estimate = -1e9f;
         int found = 0;
         for (;;) {
@@ -329,7 +329,7 @@ int main(void)
                     }
                 }
             }
-            struct yetty_ydraw_primitive_iter_result nx3 =
+            struct yetty_ydraw_drawable_iter_result nx3 =
                 yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &it3);
             if (!nx3.ok) break;
             it3 = nx3.value;
@@ -400,10 +400,10 @@ int main(void)
     /* First, build a font_id → raster_font* map by walking FONT prims. */
     enum { MAX_FONTS_LOCAL = 32 };
     struct yetty_yfont_font *fonts[MAX_FONTS_LOCAL] = {0};
-    struct yetty_ydraw_primitive_iter_result ir3 =
+    struct yetty_ydraw_drawable_iter_result ir3 =
         yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
     REQUIRE(ir3.ok, "iterator first (font scan) failed");
-    struct yetty_ydraw_primitive_iter it4 = ir3.value;
+    struct yetty_ydraw_drawable_iter it4 = ir3.value;
     int loaded_fonts = 0;
     for (;;) {
         if (it4.fw.data[0] == YETTY_YDRAW_TYPE_FONT) {
@@ -419,7 +419,7 @@ int main(void)
                 }
             }
         }
-        struct yetty_ydraw_primitive_iter_result nx4 =
+        struct yetty_ydraw_drawable_iter_result nx4 =
             yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &it4);
         if (!nx4.ok) break;
         it4 = nx4.value;
@@ -433,10 +433,10 @@ int main(void)
     size_t total_chars = 0, matched_chars = 0;
     int char_misses_dumped = 0;
 
-    struct yetty_ydraw_primitive_iter_result ir4 =
+    struct yetty_ydraw_drawable_iter_result ir4 =
         yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
     REQUIRE(ir4.ok, "iterator first (char layout sim) failed");
-    struct yetty_ydraw_primitive_iter it5 = ir4.value;
+    struct yetty_ydraw_drawable_iter it5 = ir4.value;
     for (;;) {
         if (it5.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_SPAN) {
             struct yetty_ydraw_text_span_drawable_view v;
@@ -496,7 +496,7 @@ int main(void)
                 }
             }
         }
-        struct yetty_ydraw_primitive_iter_result nx5 =
+        struct yetty_ydraw_drawable_iter_result nx5 =
             yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &it5);
         if (!nx5.ok) break;
         it5 = nx5.value;
@@ -511,10 +511,10 @@ int main(void)
      * catch (e.g. wrong font_id pointing at a TTF with patched-to-zero
      * advances). */
     fprintf(stderr, "\n=== smaller-line diagnostic (per-char canvas-side cursor) ===\n");
-    struct yetty_ydraw_primitive_iter_result ir5 =
+    struct yetty_ydraw_drawable_iter_result ir5 =
         yetty_ydraw_draw_list_drawable_first(out->buffer, reg);
     if (ir5.ok) {
-        struct yetty_ydraw_primitive_iter dit = ir5.value;
+        struct yetty_ydraw_drawable_iter dit = ir5.value;
         for (;;) {
             if (dit.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_SPAN) {
                 struct yetty_ydraw_text_span_drawable_view dv;
@@ -549,7 +549,7 @@ int main(void)
                     }
                 }
             }
-            struct yetty_ydraw_primitive_iter_result nxd =
+            struct yetty_ydraw_drawable_iter_result nxd =
                 yetty_ydraw_draw_list_drawable_next(out->buffer, reg, &dit);
             if (!nxd.ok) break;
             dit = nxd.value;

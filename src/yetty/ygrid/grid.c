@@ -235,8 +235,8 @@ yetty_ygrid_grid {
     size_t prim_staging_cap;
 
     /* Resource set + child SDF lib */
-    struct yetty_ydraw_gpu_resource_set rs;
-    struct yetty_ydraw_gpu_resource_set sdf_lib_rs;
+    struct yetty_yrender_gpu_resource_set rs;
+    struct yetty_yrender_gpu_resource_set sdf_lib_rs;
     struct yetty_ycore_buffer sdf_lib_code;
     /* ydraw-layer.wgsl raw bytes, loaded from paths/shaders. Combined
      * shader = stub font dispatcher + this file. */
@@ -271,7 +271,7 @@ yetty_ygrid_grid {
      * yzoo/yjungle once, then hands the same pointer to every ygrid
      * via the factory args bundle). Each instance lives until the
      * next clear() / destroy(). */
-    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ydraw_complex_drawable_factory *figure_factory;
     struct yetty_ydraw_figure **figure_instances;
     uint32_t figure_instance_count;
     uint32_t figure_instance_cap;
@@ -1036,7 +1036,7 @@ static struct yetty_ycore_void_result expand_text_span(
     struct yetty_yrender_gpu_resource_set_result font_rs_result =
         font->ops->get_gpu_resource_set(font);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, font_rs_result, "ygrid: text_span font rs");
-    const struct yetty_ydraw_gpu_resource_set *font_rs = font_rs_result.value;
+    const struct yetty_yrender_gpu_resource_set *font_rs = font_rs_result.value;
     if (font_rs->buffer_count == 0 || !font_rs->buffers[0].data) {
         return YETTY_ERR(yetty_ycore_void, "ygrid: text_span: font has no glyph metadata");
     }
@@ -1079,7 +1079,7 @@ static struct yetty_ycore_void_result expand_text_span(
         struct yetty_yrender_gpu_resource_set_result fresh_rs_result =
             font->ops->get_gpu_resource_set(font);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fresh_rs_result, "ygrid: text_span font rs refetch");
-        const struct yetty_ydraw_gpu_resource_set *fresh_rs = fresh_rs_result.value;
+        const struct yetty_yrender_gpu_resource_set *fresh_rs = fresh_rs_result.value;
         const float *meta = (const float *)fresh_rs->buffers[0].data;
         uint32_t meta_count = (uint32_t)(fresh_rs->buffers[0].size / (6u * sizeof(float)));
         if (glyph_index >= meta_count) {
@@ -1240,7 +1240,7 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
             g->figure_instances = grown;
             g->figure_instance_cap = cap;
         }
-        struct yetty_ydraw_figure_ptr_result ir = yetty_ydraw_raw_figure_factory_create_instance(
+        struct yetty_ydraw_figure_ptr_result ir = yetty_ydraw_complex_drawable_factory_create_instance(
             g->figure_factory, hdr, record_len, /*rolling_row=*/0u);
         if (YETTY_IS_ERR(ir)) {
             ydebug("ygrid: figure_factory create_instance failed for type=0x%08x: %s", type,
@@ -1468,7 +1468,7 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
 }
 
 void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
-                                    struct yetty_ydraw_raw_figure_factory *factory)
+                                    struct yetty_ydraw_complex_drawable_factory *factory)
 {
     if (!grid) {
         return;
@@ -2190,7 +2190,7 @@ static struct yetty_ycore_void_result ygrid_destroy_slot(struct yetty_yclass_ctx
  * types. With namespace "ydraw" the binder generates the shader-side
  * uniform field names ydraw_ydraw_grid_size, ydraw_ydraw_cell_size,
  * etc., which is what ydraw-layer.wgsl references. */
-static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
+static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
     rs->uniforms[U_GRID_SIZE] =
@@ -2256,7 +2256,7 @@ static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid
     /* Resolve each active slot's font rs once. The rs pointers are
      * reused below for both the dispatcher namespace list and the
      * rs.children attachment, so we don't double-call the font op. */
-    const struct yetty_ydraw_gpu_resource_set *font_rs[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
+    const struct yetty_yrender_gpu_resource_set *font_rs[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
     const char *slot_namespaces[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
     for (uint32_t slot = 0; slot < grid->font_count; slot++) {
         if (!grid->fonts[slot]) {
@@ -2305,7 +2305,7 @@ static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid
         if (children_used >= YETTY_YRENDER_RS_MAX_CHILDREN) {
             break;
         }
-        grid->rs.children[children_used++] = (struct yetty_ydraw_gpu_resource_set *)font_rs[slot];
+        grid->rs.children[children_used++] = (struct yetty_yrender_gpu_resource_set *)font_rs[slot];
     }
     grid->rs.children_count = children_used;
     grid->last_emitted_font_generation = grid->font_generation;
@@ -2499,7 +2499,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
         }
         hr = yetty_ydraw_flyweight_registry_add(g->registry, YETTY_YDRAW_COMPLEX_TYPE_BASE,
-                                                0xFFFFFFFFu, yetty_ydraw_raw_figure_handler);
+                                                0xFFFFFFFFu, yetty_ydraw_complex_drawable_handler);
         if (YETTY_IS_ERR(hr)) {
             ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);

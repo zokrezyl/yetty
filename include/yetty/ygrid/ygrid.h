@@ -43,7 +43,7 @@ extern "C" {
 struct yetty_ygrid_grid;
 struct yetty_yfont_font;
 struct yetty_yfigure_registry;
-struct yetty_ydraw_raw_figure_factory;
+struct yetty_ydraw_complex_drawable_factory;
 
 /* Bundle of host-owned pointers handed to every ygrid the factory mints.
  * Both fields are borrowed — the host (terminal / yui) keeps the actual
@@ -57,7 +57,7 @@ struct yetty_ydraw_raw_figure_factory;
  *                  the v1 behaviour. */
 struct yetty_ygrid_factory_args {
     struct yetty_yfont_font *default_font;
-    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ydraw_complex_drawable_factory *figure_factory;
 };
 
 /* Register the ygrid factory under YETTY_YFIGURE_KIND_YGRID with the
@@ -85,7 +85,7 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
  * via process_bytes after this call mint a figure instance through
  * the factory and are rendered alongside the SDF / glyph pass. */
 void yetty_ygrid_set_figure_factory(struct yetty_ygrid_grid *grid,
-                                    struct yetty_ydraw_raw_figure_factory *factory);
+                                    struct yetty_ydraw_complex_drawable_factory *factory);
 
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 

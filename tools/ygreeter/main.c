@@ -255,7 +255,7 @@ struct app {
     int has_pty_pair;
     struct yetty_yfigure_container *root_container;
     struct yetty_yfigure_registry *figure_registry;
-    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ydraw_complex_drawable_factory *figure_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
     struct yetty_yfont_font *font;
     struct yetty_ygrid_factory_args figure_args;
@@ -3251,8 +3251,8 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     /* Raw figure factory — needed for the yplot / yimage producer
      * kinds. Same wiring yui.c uses (yui_create lines 506-571). */
     {
-        struct yetty_ydraw_raw_figure_factory_ptr_result ffr =
-            yetty_ydraw_raw_figure_factory_create(
+        struct yetty_ydraw_complex_drawable_factory_ptr_result ffr =
+            yetty_ydraw_complex_drawable_factory_create(
                 app->yframework->gpu.device, app->yframework->gpu.queue,
                 app->yframework->gpu.surface_format, app->yframework->gpu.allocator,
                 app->yframework->event_loop);
@@ -3261,13 +3261,13 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_raw_figure_factory_register(app->figure_factory, yplot_f);
+                yetty_ydraw_complex_drawable_factory_register(app->figure_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_raw_figure_factory_register(app->figure_factory, yimage_f);
+                yetty_ydraw_complex_drawable_factory_register(app->figure_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
         }
     }
@@ -3430,7 +3430,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         app->figure_registry = NULL;
     }
     if (app->figure_factory) {
-        yetty_ydraw_raw_figure_factory_destroy(app->figure_factory);
+        yetty_ydraw_complex_drawable_factory_destroy(app->figure_factory);
         app->figure_factory = NULL;
     }
     if (app->font) {

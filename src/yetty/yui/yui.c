@@ -81,7 +81,7 @@ struct yetty_yui {
 
     struct yetty_yfont_font *font;
 
-    struct yetty_ydraw_raw_figure_factory *figure_factory;
+    struct yetty_ydraw_complex_drawable_factory *figure_factory;
     struct yetty_ygrid_factory_args figure_args;
 
     /* Producer engine (new yclass framework). framework_emit lays out the
@@ -616,8 +616,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     /* Build registry + register ygrid factory, then the root container
      * that consumes ygui's records. */
     {
-        struct yetty_ydraw_raw_figure_factory_ptr_result ffr =
-            yetty_ydraw_raw_figure_factory_create(
+        struct yetty_ydraw_complex_drawable_factory_ptr_result ffr =
+            yetty_ydraw_complex_drawable_factory_create(
                 context->runtime->gpu.device, context->runtime->gpu.queue,
                 context->runtime->gpu.surface_format, context->runtime->gpu.allocator,
                 context->event_loop);
@@ -630,19 +630,19 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             yetty_ycore_error_destroy_safe(
-                yetty_ydraw_raw_figure_factory_register(yui->figure_factory, yplot_f));
+                yetty_ydraw_complex_drawable_factory_register(yui->figure_factory, yplot_f));
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             yetty_ycore_error_destroy_safe(
-                yetty_ydraw_raw_figure_factory_register(yui->figure_factory, yimage_f));
+                yetty_ydraw_complex_drawable_factory_register(yui->figure_factory, yimage_f));
         }
         yui->figure_args.default_font = yui->font;
         yui->figure_args.figure_factory = yui->figure_factory;
 
         struct yetty_yfigure_registry_ptr_result reg_res = yetty_yfigure_registry_create();
         if (!YETTY_IS_OK(reg_res)) {
-            yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
+            yetty_ydraw_complex_drawable_factory_destroy(yui->figure_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: registry", reg_res);
@@ -652,7 +652,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             yetty_ygrid_register_factory(yui->figure_registry, &yui->figure_args);
         if (!YETTY_IS_OK(rf)) {
             yetty_yfigure_registry_destroy(yui->figure_registry);
-            yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
+            yetty_ydraw_complex_drawable_factory_destroy(yui->figure_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory", rf);
@@ -666,7 +666,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
                 yui->figure_registry, producer_kinds[i], &yui->figure_args);
             if (!YETTY_IS_OK(kr)) {
                 yetty_yfigure_registry_destroy(yui->figure_registry);
-                yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
+                yetty_ydraw_complex_drawable_factory_destroy(yui->figure_factory);
                 yui->font->ops->destroy(yui->font);
                 free(yui);
                 return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory_for_kind", kr);
@@ -677,7 +677,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
                 context->runtime, yui->figure_registry, context);
             if (!YETTY_IS_OK(fr)) {
                 yetty_yfigure_registry_destroy(yui->figure_registry);
-                yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
+                yetty_ydraw_complex_drawable_factory_destroy(yui->figure_factory);
                 yui->font->ops->destroy(yui->font);
                 free(yui);
                 return YETTY_ERR(yetty_yui_ptr, "yui_create: framework register_figure_factories",
@@ -860,7 +860,7 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         yui->figure_registry = NULL;
     }
     if (yui->figure_factory) {
-        yetty_ydraw_raw_figure_factory_destroy(yui->figure_factory);
+        yetty_ydraw_complex_drawable_factory_destroy(yui->figure_factory);
         yui->figure_factory = NULL;
     }
     if (yui->font) {

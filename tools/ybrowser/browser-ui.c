@@ -1479,7 +1479,7 @@ struct standalone {
 	struct yetty_yframework *yframework;
 	struct yetty_yfigure_container *root_container;
 	struct yetty_yfigure_registry *figure_registry;
-	struct yetty_ydraw_raw_figure_factory *figure_factory;
+	struct yetty_ydraw_complex_drawable_factory *figure_factory;
 	struct yetty_ywire_wire_statemachine *wire_sm;
 	struct yetty_yplatform_memory_pty_pair pty_pair;
 	int has_pty_pair;
@@ -1733,8 +1733,8 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
 
 	/* Raw figure factory + producer kinds. */
 	{
-		struct yetty_ydraw_raw_figure_factory_ptr_result ffr =
-			yetty_ydraw_raw_figure_factory_create(
+		struct yetty_ydraw_complex_drawable_factory_ptr_result ffr =
+			yetty_ydraw_complex_drawable_factory_create(
 				s->yframework->gpu.device, s->yframework->gpu.queue,
 				s->yframework->gpu.surface_format, s->yframework->gpu.allocator,
 				s->yframework->event_loop);
@@ -1742,11 +1742,11 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
 		s->figure_factory = ffr.value;
 		struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
 		if (yplot_f) {
-			err_ok(yetty_ydraw_raw_figure_factory_register(s->figure_factory, yplot_f));
+			err_ok(yetty_ydraw_complex_drawable_factory_register(s->figure_factory, yplot_f));
 		}
 		struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
 		if (yimage_f) {
-			err_ok(yetty_ydraw_raw_figure_factory_register(s->figure_factory, yimage_f));
+			err_ok(yetty_ydraw_complex_drawable_factory_register(s->figure_factory, yimage_f));
 		}
 	}
 
@@ -1874,7 +1874,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
 		s->figure_registry = NULL;
 	}
 	if (s->figure_factory) {
-		yetty_ydraw_raw_figure_factory_destroy(s->figure_factory);
+		yetty_ydraw_complex_drawable_factory_destroy(s->figure_factory);
 		s->figure_factory = NULL;
 	}
 	if (s->font) {

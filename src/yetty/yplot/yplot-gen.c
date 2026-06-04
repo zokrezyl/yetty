@@ -40,7 +40,7 @@ extern const unsigned int gyplot_lib_shaderSize;
 
 /* Static resource set for accessor library (yplot-gen.wgsl).
  * Read-only after init; safely shared across all instances as a child. */
-static struct yetty_ydraw_gpu_resource_set yplot_lib_rs;
+static struct yetty_yrender_gpu_resource_set yplot_lib_rs;
 static bool yplot_lib_rs_initialized = false;
 
 static void yplot_init_lib_rs(void)
@@ -60,7 +60,7 @@ struct yetty_yplot_factory {
     struct yetty_yrender_pipeline *pipeline;
     /* Template RS: shape definition for both the pipeline and per-instance
      * RSes. Children point to the shared static library RSes. */
-    struct yetty_ydraw_gpu_resource_set template_rs;
+    struct yetty_yrender_gpu_resource_set template_rs;
     int template_initialized;
 
     WGPUDevice device;
@@ -92,7 +92,7 @@ static struct yetty_yplot_factory *yetty_yplot_factory_from_base(
 // for each per-instance RS (binder-build) — they're memcpy clones.
 //=============================================================================
 
-static void yplot_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
+static void yplot_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 {
     yplot_init_lib_rs();
 
@@ -101,12 +101,12 @@ static void yplot_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
     yetty_yrender_shader_code_set(&rs->shader, (const char *)gyplot_shaderData, gyplot_shaderSize);
 
     // Accessor library (generated uniforms accessors)
-    rs->children[0] = (struct yetty_ydraw_gpu_resource_set *)&yplot_lib_rs;
+    rs->children[0] = (struct yetty_yrender_gpu_resource_set *)&yplot_lib_rs;
     rs->children_count = 1;
     // Library: yfsvm
-    const struct yetty_ydraw_gpu_resource_set *yfsvm_rs = yetty_yfsvm_get_shader_resource_set();
+    const struct yetty_yrender_gpu_resource_set *yfsvm_rs = yetty_yfsvm_get_shader_resource_set();
     if (yfsvm_rs) {
-        rs->children[1] = (struct yetty_ydraw_gpu_resource_set *)yfsvm_rs;
+        rs->children[1] = (struct yetty_yrender_gpu_resource_set *)yfsvm_rs;
         rs->children_count = 2;
     }
 
@@ -227,7 +227,7 @@ static struct yetty_ycore_void_result yplot_instance_render(struct yetty_ydraw_f
         return YETTY_ERR(yetty_ycore_void, "factory pipeline not initialized");
     }
 
-    struct yetty_ydraw_gpu_resource_set *rs = self->resource_set;
+    struct yetty_yrender_gpu_resource_set *rs = self->resource_set;
 
     /* Wire layout (see yplot-gen-wire.c for the serializer):
      *   [0]  type_id
@@ -407,7 +407,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_raw_figure)) {
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_drawable)) {
         return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
     }
 
@@ -434,7 +434,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
     instance->render = yplot_instance_render;
     instance->ops = &yplot_figure_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_raw_figure_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_complex_drawable_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         instance->bounds = aabb_res.value;
     }
@@ -442,14 +442,14 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
     /* Per-instance RS. Same shape as the factory template (so the binder
      * flattens to the same layout the pipeline was compiled against), but
      * with per-instance buffer/uniform values (set in render). */
-    instance->resource_set = malloc(sizeof(struct yetty_ydraw_gpu_resource_set));
+    instance->resource_set = malloc(sizeof(struct yetty_yrender_gpu_resource_set));
     if (!instance->resource_set) {
         free(instance->buffer_data);
         free(instance);
         return YETTY_ERR(yetty_ydraw_figure_ptr, "rs alloc failed");
     }
     memcpy(instance->resource_set, &factory->template_rs,
-           sizeof(struct yetty_ydraw_gpu_resource_set));
+           sizeof(struct yetty_yrender_gpu_resource_set));
 
     /* Point the storage buffer descriptor at the wire's storage payload
      * (bytes after the uniforms), so the binder's first finalize allocates
@@ -602,7 +602,7 @@ static void yplot_destroy_instance(struct yetty_ydraw_concrete_factory *self,
     yplot_instance_destroy(instance);
 }
 
-static struct yetty_ydraw_gpu_resource_set *yplot_get_shared_rs(
+static struct yetty_yrender_gpu_resource_set *yplot_get_shared_rs(
     struct yetty_ydraw_concrete_factory *self)
 {
     /* Returns the structural template, NOT a mutable per-instance RS. */

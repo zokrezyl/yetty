@@ -152,11 +152,11 @@ classes:
         get: false
         set: false
       - name: rs
-        type: struct yetty_ydraw_gpu_resource_set
+        type: struct yetty_yrender_gpu_resource_set
         get: false
         set: false
       - name: sdf_lib_rs
-        type: struct yetty_ydraw_gpu_resource_set
+        type: struct yetty_yrender_gpu_resource_set
         get: false
         set: false
       - name: sdf_lib_code
@@ -204,7 +204,7 @@ classes:
         get: false
         set: false
       - name: figure_factory
-        type: "struct yetty_ydraw_raw_figure_factory *"
+        type: "struct yetty_ydraw_complex_drawable_factory *"
         get: false
         set: false
       - name: figure_instances
