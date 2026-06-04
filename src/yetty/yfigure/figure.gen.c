@@ -81,7 +81,7 @@ struct yetty_ycore_int_result yetty_yfigure_figure_z_get(struct yetty_yclass_obj
     return YETTY_OK(yetty_ycore_int, data.value->z);
 }
 
-struct yetty_ycore_void_result yetty_yfigure_figure_z_set(struct yetty_yclass_object *obj, int32_t value)
+struct yetty_ycore_void_result yetty_yfigure_figure_z_set(struct yetty_yclass_object *obj, int value)
 {
     struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
     if (YETTY_IS_ERR(data))

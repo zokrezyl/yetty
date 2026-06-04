@@ -129,7 +129,7 @@ static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_stat
  *            into its damage region next render pass and clears it. */
 struct [[clang::annotate("class@yfigure:figure")]] yetty_yfigure_figure {
     [[clang::annotate("property")]] struct yetty_ycore_rectangle rect;
-    [[clang::annotate("property")]] int32_t z;
+    [[clang::annotate("property")]] int z;
     [[clang::annotate("property")]] int hidden;
     [[clang::annotate("property")]] int dirty;
 };
