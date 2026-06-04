@@ -7,8 +7,8 @@
 # delimiter interpretation: '.', '/', '|', '&', '\', '*', '[' etc. are all
 # treated as themselves, in both <what> and <with>. This is deliberate —
 # the previous sed-based implementation interpreted '.' as a wildcard, which
-# silently corrupted identifiers (e.g. ".flyweight" matched " flyweight" and
-# ate the preceding character).
+# silently corrupted identifiers (e.g. ".foo" matched " foo" and ate the
+# preceding character).
 
 set -euo pipefail
 

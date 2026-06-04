@@ -164,7 +164,7 @@ struct yetty_ylexbor_box {
 	 * Filled by wrap_inline_box when `text-align: justify` is in
 	 * effect: extra pixels per space so the line fills content_w. The
 	 * paint pass routes through yetty_ydraw_drawable_list_add_text_full
-	 * (TEXT_SPAN v2) when this is non-zero. */
+	 * (TEXT_DRAWABLE_LIST v2) when this is non-zero. */
     float word_spacing;
 
     /* List marker — non-empty when the BLOCK box is an <li>. Painted

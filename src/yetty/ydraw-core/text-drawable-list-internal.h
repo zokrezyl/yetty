@@ -5,8 +5,8 @@
  * surface (parse, view struct, type id, handler) lives in
  * include/yetty/ydraw-core/text-drawable-list.h.
  */
-#ifndef YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_INTERNAL_H
-#define YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_INTERNAL_H
+#ifndef YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_INTERNAL_H
+#define YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_INTERNAL_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -32,4 +32,4 @@ void yetty_ydraw_text_drawable_list_write_full(uint8_t *out, float x, float y, f
 }
 #endif
 
-#endif /* YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_INTERNAL_H */
+#endif /* YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_INTERNAL_H */

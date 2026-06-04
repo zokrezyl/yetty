@@ -2,8 +2,8 @@
  *
  * The public surface lives in include/yetty/ydraw-core/drawable-list-registry.h.
  */
-#ifndef YETTY_YDRAW_CORE_FLYWEIGHT_INTERNAL_H
-#define YETTY_YDRAW_CORE_FLYWEIGHT_INTERNAL_H
+#ifndef YETTY_YDRAW_CORE_DRAWABLE_LIST_REGISTRY_INTERNAL_H
+#define YETTY_YDRAW_CORE_DRAWABLE_LIST_REGISTRY_INTERNAL_H
 
 #include <stdint.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
@@ -25,4 +25,4 @@ struct yetty_ydraw_drawable_list_entry_ptr_result yetty_ydraw_drawable_list_regi
 }
 #endif
 
-#endif /* YETTY_YDRAW_CORE_FLYWEIGHT_INTERNAL_H */
+#endif /* YETTY_YDRAW_CORE_DRAWABLE_LIST_REGISTRY_INTERNAL_H */

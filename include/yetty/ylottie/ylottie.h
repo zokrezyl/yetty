@@ -26,7 +26,7 @@
  *      Fills approximate a solid interior by tracing the perimeter (the SDF
  *      set has no arbitrary-polygon fill); strokes map straight to SDF
  *      stroke width.
- *   4. Text layers (ty 5) emit MSDF TEXT_SPAN drawable-list entries via
+ *   4. Text layers (ty 5) emit MSDF TEXT_DRAWABLE_LIST drawable-list entries via
  *      yetty_ydraw_drawable_list_add_text.
  *
  * The composition `w`/`h` determine the user-space bounds; a width-fit policy

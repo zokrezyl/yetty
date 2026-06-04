@@ -15,7 +15,7 @@
  *
  * Scope:
  *   - SDF primitives (type-id range 0x10000000–0x1FFFFFFF)
- *   - Glyph / TEXT_SPAN records (drawable-list tier)
+ *   - Glyph / TEXT_DRAWABLE_LIST records (drawable-list tier)
  *   - Implicit ADD is the default decode action (no opcode byte).
  *
  * Figures that are not naturally rendered by a grid (yplot, yimage,
@@ -50,7 +50,7 @@ struct yetty_ydraw_composite_factory;
  * font and composite factory alive for the lifetime of every ygrid
  * the registry might still be holding.
  *
- *   default_font   slot-0 font for GLYPH/TEXT_SPAN expansion. NULL → no
+ *   default_font   slot-0 font for GLYPH/TEXT_DRAWABLE_LIST expansion. NULL → no
  *                  default font, glyph records silently drop.
  *   composite_factory composite renderer (yplot / yimage / yvideo / …).
  *                  NULL → composite records silently drop, same as

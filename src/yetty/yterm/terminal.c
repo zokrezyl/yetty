@@ -1412,7 +1412,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
      * via the comp_sm_shim below.
      *
      * Default MSDF font: ygui-emitting subprocesses (ygreeter, ytop, …)
-     * ship widget labels as TEXT_SPAN records; each ygrid figure the
+     * ship widget labels as TEXT_DRAWABLE_LIST records; each ygrid figure the
      * container mints (KIND_YGRID factory) needs a font at slot 0 to
      * expand them into renderable glyphs. Font load failure is
      * non-fatal — labels won't render, but the terminal stays up. */

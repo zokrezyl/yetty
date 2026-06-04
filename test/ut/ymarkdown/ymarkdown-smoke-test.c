@@ -3,7 +3,7 @@
  *
  * Renders markdown into a ydraw buffer and asserts that the new block
  * constructs emit the right primitive families. The buffer holds bare SDF
- * prims (box = YETTY_YSDF_BOX, segment = YETTY_YSDF_SEGMENT) and TEXT_SPAN
+ * prims (box = YETTY_YSDF_BOX, segment = YETTY_YSDF_SEGMENT) and TEXT_DRAWABLE_LIST
  * prims, each led by a u32 type tag — we scan the raw byte stream for those
  * tags rather than standing up a full drawable-list registry.
  */

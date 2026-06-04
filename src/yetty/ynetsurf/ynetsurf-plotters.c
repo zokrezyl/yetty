@@ -14,7 +14,7 @@
  *                the same way as polygon.
  *   - bitmap   : MVP — placeholder filled box at the bitmap's slot.
  *                A real impl needs a yimage composite atlas upload.
- *   - text     : TEXT_SPAN drawable-list entry prim (font_id = -1 = canvas default).
+ *   - text     : TEXT_DRAWABLE_LIST drawable-list entry prim (font_id = -1 = canvas default).
  */
 
 #include "ynetsurf-internal.h"
@@ -396,7 +396,7 @@ static nserror p_bitmap(const struct redraw_context *ctx, struct bitmap *bm, int
     return NSERROR_OK;
 }
 
-/* ----- text: TEXT_SPAN drawable-list entry prim ----------------------------------- */
+/* ----- text: TEXT_DRAWABLE_LIST drawable-list entry prim ----------------------------------- */
 
 static nserror p_text(const struct redraw_context *ctx, const plot_font_style_t *fstyle, int x,
                       int y, const char *text, size_t length)

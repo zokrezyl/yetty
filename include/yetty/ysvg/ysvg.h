@@ -17,7 +17,7 @@
  *      primitives (circle, ellipse, box, rounded_box, segment, capsule).
  *      Path data is flattened to segments after applying the inherited
  *      transform stack.
- *   4. Text: <text>/<tspan> emits MSDF TEXT_SPAN drawable-list entries via
+ *   4. Text: <text>/<tspan> emits MSDF TEXT_DRAWABLE_LIST drawable-list entries via
  *      yetty_ydraw_drawable_list_add_text.
  *
  * The viewBox attribute on <svg> determines the scene bounds passed to the

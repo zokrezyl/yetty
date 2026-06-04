@@ -34,7 +34,7 @@ extern "C" {
  *   [0x00000000, 0x000000FF]   Simple SDF (fixed-size, generated)
  *   [0x40000000, 0x7FFFFFFF]   Drawable-list entry (variable-size, no GPU pipeline)
  *                                FONT       — yetty/ydraw-core/font-resource.h
- *                                TEXT_SPAN  — yetty/ydraw-core/text-drawable-list.h
+ *                                TEXT_DRAWABLE_LIST  — yetty/ydraw-core/text-drawable-list.h
  *   [0x80000000, 0xFFFFFFFF]   Complex (factory + per-instance GPU resources)
  *                                each concrete factory owns its own type id
  *                                (e.g. YETTY_YPLOT_TYPE_ID in yplot-gen.h).

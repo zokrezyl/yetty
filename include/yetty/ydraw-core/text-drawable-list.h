@@ -1,11 +1,11 @@
-#ifndef YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_H
-#define YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_H
+#ifndef YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_H
+#define YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_H
 
 /*
  * text-drawable-list - drawable-list entry carrying a UTF-8 text run.
  *
  * Sits in the same drawable-list tier as font-resource. The canvas expands a
- * TEXT_SPAN into glyph SDF prims at add_buffer time, after fonts have
+ * TEXT_DRAWABLE_LIST into glyph SDF prims at add_buffer time, after fonts have
  * been materialized.
  *
  * Wire layout (little-endian, 4-byte aligned):
@@ -68,4 +68,4 @@ struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_text_drawable_
 }
 #endif
 
-#endif /* YETTY_YDRAW_CORE_TEXT_SPAN_PRIM_H */
+#endif /* YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_H */

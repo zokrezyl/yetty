@@ -251,7 +251,7 @@ static bool seg_style_matches(const struct yetty_ylexbor_inline_seg *seg,
     (void)seg;
     (void)style;
     /* Always merge — match ylexbor's behaviour of emitting ONE
-	 * TEXT_SPAN per wrapped line. Per-segment style tracking
+	 * TEXT_DRAWABLE_LIST per wrapped line. Per-segment style tracking
 	 * created visible drift between fragments on the same line
 	 * (each fragment is positioned by our naive `font*0.55` per-glyph
 	 * width estimate, which doesn't match the canvas's actual font
@@ -1229,7 +1229,7 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
 			 *
 			 * Why this matters: P1.2 originally stamped every
 			 * inline element on the seg. With Wikipedia's ~1000
-			 * spans per article that produces ~1000 extra TEXT_SPAN
+			 * spans per article that produces ~1000 extra TEXT_DRAWABLE_LIST
 			 * prims, each emitted at a position computed from our
 			 * naive per_glyph estimate. The canvas's real font
 			 * advances differ from that estimate by a few px per

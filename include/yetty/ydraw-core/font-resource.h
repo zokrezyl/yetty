@@ -1,5 +1,5 @@
-#ifndef YETTY_YDRAW_CORE_FONT_PRIM_H
-#define YETTY_YDRAW_CORE_FONT_PRIM_H
+#ifndef YETTY_YDRAW_CORE_FONT_RESOURCE_H
+#define YETTY_YDRAW_CORE_FONT_RESOURCE_H
 
 /*
  * font-resource - drawable-list entry carrying TTF bytes through a ydraw buffer.
@@ -57,4 +57,4 @@ struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_font_resource_
 }
 #endif
 
-#endif /* YETTY_YDRAW_CORE_FONT_PRIM_H */
+#endif /* YETTY_YDRAW_CORE_FONT_RESOURCE_H */

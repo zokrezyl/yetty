@@ -781,7 +781,7 @@ struct yetty_ydraw_drawable_iter_result yetty_ydraw_drawable_list_drawable_next(
 }
 
 /*=============================================================================
- * Producer convenience: pack drawable-list entry FONT / TEXT_SPAN prims into the stream.
+ * Producer convenience: pack drawable-list entry FONT / TEXT_DRAWABLE_LIST prims into the stream.
  * Same path as add_prim — these just pack the FAM payload first.
  *===========================================================================*/
 

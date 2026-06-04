@@ -237,12 +237,12 @@ static void test_tooltip_pilot(void)
     assert(strcmp(yetty_ygui_tooltip_get_text(obj), "hello") == 0);
     assert(yetty_ygui_object_is_dirty(obj));
 
-    /* Position the widget so paint emits a TEXT_SPAN at a known coord. */
+    /* Position the widget so paint emits a TEXT_DRAWABLE_LIST at a known coord. */
     struct yetty_ycore_rectangle wr = {{10.0f, 20.0f}, {200.0f, 60.0f}};
     yetty_ygui_widget_set_rect(obj, wr);
 
     /* Drive a minimal pass-2 emit: set up an ad-hoc drawable_list, call
-     * paint, and verify a TEXT_SPAN drawable-list entry record landed. */
+     * paint, and verify a TEXT_DRAWABLE_LIST drawable-list entry record landed. */
     struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {

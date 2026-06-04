@@ -49,7 +49,7 @@
  * UTF-8 over-counts width slightly — consistent with the original. */
 #define YMD_CHAR_W 0.6f
 
-/* A TEXT_SPAN's y is the glyph BASELINE (the canvas places each glyph at
+/* A TEXT_DRAWABLE_LIST's y is the glyph BASELINE (the canvas places each glyph at
  * span_y - bearing_y), so a line drawn at its top edge would ascend off the
  * top. We treat the per-line cursor as the line's TOP and push the baseline
  * down by this fraction of the font size so the glyphs sit inside the line

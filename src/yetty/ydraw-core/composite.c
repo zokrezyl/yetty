@@ -58,7 +58,7 @@ size_t yetty_ydraw_composite_size(const void *data)
 // Wire format: [bounds_x:f32][bounds_y:f32][bounds_w:f32][bounds_h:f32][...]
 //=============================================================================
 
-#define COMPLEX_PRIM_BOUNDS_SIZE 16 /* 4 floats */
+#define COMPOSITE_BOUNDS_SIZE 16 /* 4 floats */
 
 struct rectangle_result yetty_ydraw_composite_aabb(const void *data)
 {
@@ -67,7 +67,7 @@ struct rectangle_result yetty_ydraw_composite_aabb(const void *data)
     }
 
     const struct yetty_ydraw_composite *prim = data;
-    if (prim->payload_size < COMPLEX_PRIM_BOUNDS_SIZE) {
+    if (prim->payload_size < COMPOSITE_BOUNDS_SIZE) {
         return YETTY_ERR(rectangle, "payload too small for bounds");
     }
 

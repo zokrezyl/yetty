@@ -233,7 +233,7 @@ struct yetty_ydraw_drawable_iter_result yetty_ydraw_drawable_list_drawable_next(
     const struct yetty_ydraw_drawable_iter *iter);
 
 /*=============================================================================
- * Producer convenience: pack drawable-list entry FONT and TEXT_SPAN prims into the
+ * Producer convenience: pack drawable-list entry FONT and TEXT_DRAWABLE_LIST prims into the
  * buffer. These are thin wrappers — same path as add_prim. Readers iterate
  * via the drawable-list registry; the canvas dispatches by prim type.
  *===========================================================================*/
@@ -260,7 +260,7 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font(
 struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_ref(
     struct yetty_ydraw_drawable_list *buf, const char *hex16 YETTY_ANNOT_CSTRING);
 
-/* Pack a TEXT_SPAN primitive (text-drawable-list.h). font_id must match a
+/* Pack a TEXT_DRAWABLE_LIST primitive (text-drawable-list.h). font_id must match a
  * previously-added FONT prim's id, or be -1 to use the canvas default. */
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_text(
     struct yetty_ydraw_drawable_list *buf, float x, float y, const struct yetty_ycore_buffer *text,

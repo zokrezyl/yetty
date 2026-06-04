@@ -5,8 +5,8 @@
  * surface (parse, view struct, type id, handler) lives in
  * include/yetty/ydraw-core/font-resource.h.
  */
-#ifndef YETTY_YDRAW_CORE_FONT_PRIM_INTERNAL_H
-#define YETTY_YDRAW_CORE_FONT_PRIM_INTERNAL_H
+#ifndef YETTY_YDRAW_CORE_FONT_RESOURCE_INTERNAL_H
+#define YETTY_YDRAW_CORE_FONT_RESOURCE_INTERNAL_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -28,4 +28,4 @@ void yetty_ydraw_font_resource_write(uint8_t *out, int32_t font_id, const char *
 }
 #endif
 
-#endif /* YETTY_YDRAW_CORE_FONT_PRIM_INTERNAL_H */
+#endif /* YETTY_YDRAW_CORE_FONT_RESOURCE_INTERNAL_H */

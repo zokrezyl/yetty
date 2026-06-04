@@ -6,7 +6,7 @@
 
 #include "drawable-list-registry-internal.h"
 
-#define FLYWEIGHT_MAX_HANDLERS 8
+#define DRAWABLE_LIST_REGISTRY_MAX_HANDLERS 8
 
 struct yetty_ydraw_handler_reg {
     uint32_t type_min;
@@ -16,7 +16,7 @@ struct yetty_ydraw_handler_reg {
 
 struct yetty_ydraw_drawable_list_registry {
     yetty_ydraw_drawable_handler_fn default_handler;
-    struct yetty_ydraw_handler_reg handlers[FLYWEIGHT_MAX_HANDLERS];
+    struct yetty_ydraw_handler_reg handlers[DRAWABLE_LIST_REGISTRY_MAX_HANDLERS];
     size_t handler_count;
 };
 
@@ -50,7 +50,7 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_list_registry_add(
     if (!reg) {
         return YETTY_ERR(yetty_ycore_void, "reg is NULL");
     }
-    if (reg->handler_count >= FLYWEIGHT_MAX_HANDLERS) {
+    if (reg->handler_count >= DRAWABLE_LIST_REGISTRY_MAX_HANDLERS) {
         return YETTY_ERR(yetty_ycore_void, "max handlers reached");
     }
     if (!handler) {

@@ -1106,7 +1106,7 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
  * all later envelopes referencing the same font.
  *
  * fi->buffer_font_id is rewritten per envelope to the envelope-local id
- * (TEXT_SPAN refs read this through find_font_idx in the callbacks).
+ * (TEXT_DRAWABLE_LIST refs read this through find_font_idx in the callbacks).
  *
  * Per-font failures are absorbed (logged + continue), matching the legacy
  * extract_page_fonts. */

@@ -11,7 +11,7 @@
  * ypdf's screen-y output. We expect ypdf's text-span x ≈ 213.76 and
  * the span y ≈ 84.96 (baseline) ± a few pixels.
  *
- * The test scans every TEXT_SPAN prim emitted by ypdf, finds the one
+ * The test scans every TEXT_DRAWABLE_LIST prim emitted by ypdf, finds the one
  * whose content is the title (or starts with "Adobe"), and asserts:
  *   1. font_size ≈ 14 (PDF text-state Tfs).
  *   2. x is within ±5 px of 213.76.
@@ -380,7 +380,7 @@ int main(void)
 
     /* === Per-character position match (strongest invariant) ============== *
      *
-     * For each TEXT_SPAN, materialise its FONT prim into a raster_font,
+     * For each TEXT_DRAWABLE_LIST, materialise its FONT prim into a raster_font,
      * then walk char-by-char accumulating each glyph's advance to
      * compute the on-screen position the canvas WILL render at. Compare
      * against mutool's per-character ground truth.
@@ -426,7 +426,7 @@ int main(void)
     }
     fprintf(stderr, "loaded %d fonts from FONT prims for per-char layout sim\n", loaded_fonts);
 
-    /* Walk TEXT_SPANs and emit (computed_x, y, c) for each char. Compare
+    /* Walk TEXT_DRAWABLE_LISTs and emit (computed_x, y, c) for each char. Compare
      * each to mutool's expected per-char position. */
     const float CHAR_X_TOL = 3.0f;
     const float CHAR_Y_TOL = 2.0f;

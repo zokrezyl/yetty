@@ -992,7 +992,7 @@ static struct uint32_result add_drawable_internal(
 }
 
 /*===========================================================================
- * Expand a TEXT_SPAN view into per-glyph SDF drawables
+ * Expand a TEXT_DRAWABLE_LIST view into per-glyph SDF drawables
  *===========================================================================*/
 
 static struct uint32_result expand_text_drawable_list_to_glyphs(

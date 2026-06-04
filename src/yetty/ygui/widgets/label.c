@@ -2,7 +2,7 @@
  * ygui-label.c — static text widget.
  *
  * The paint hook writes a {"LABL", id, font_size, rgba, text_len, text}
- * marker into the engine's ygrid body. The actual GLYPH/TEXT_SPAN
+ * marker into the engine's ygrid body. The actual GLYPH/TEXT_DRAWABLE_LIST
  * record encoding will land when the receiver-side renderer hook is
  * stabilised — for now this proves the pass-2 walk hits the widget
  * and that data_get returns the right slice.
@@ -85,7 +85,7 @@ static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *yclas
     }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     /* Position the baseline a font-size below the top of the widget rect
-     * — TEXT_SPAN's y coord is the baseline (font ascender lifts above). */
+     * — TEXT_DRAWABLE_LIST's y coord is the baseline (font ascender lifts above). */
     float x = r.min.x;
     float y = r.min.y + d->font_size;
     /* yetty_ydraw_drawable_list_add_text wants a yetty_ycore_buffer view of the

@@ -4,7 +4,7 @@
 //   1. CMD tier handler                      types [0x00000000, 0x0000FFFF]
 //   2. SDF default handler                   types [0x10000000, 0x1FFFFFFF]
 //   3. FONT      drawable-list entry handler           type   0x40000001
-//   4. TEXT_SPAN drawable-list entry handler           type   0x40000002
+//   4. TEXT_DRAWABLE_LIST drawable-list entry handler           type   0x40000002
 //   5. Complex prim handler (factory-based)  types [0x80000000, 0xFFFFFFFF]
 //
 // All return base ops (size, aabb) for buffer iteration.
@@ -52,7 +52,7 @@ struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_r
     if (YETTY_IS_ERR(r_ts)) {
         yetty_ydraw_drawable_list_registry_destroy(reg);
         return YETTY_ERR(yetty_ydraw_drawable_list_registry_ptr,
-                         "drawable_list_registry_create_default: register TEXT_SPAN handler", r_ts);
+                         "drawable_list_registry_create_default: register TEXT_DRAWABLE_LIST handler", r_ts);
     }
 
     // Complex prim handler (types >= 0x80000000)
@@ -64,6 +64,6 @@ struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_r
                          "drawable_list_registry_create_default: register complex handler", r_complex);
     }
 
-    ydebug("drawable_list_registry_create_default: cmd + SDF default + FONT + TEXT_SPAN + complex");
+    ydebug("drawable_list_registry_create_default: cmd + SDF default + FONT + TEXT_DRAWABLE_LIST + complex");
     return res;
 }

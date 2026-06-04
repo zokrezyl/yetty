@@ -8,7 +8,7 @@
 #include <string.h>
 
 /* FAM header size: type(u32) + payload_size(u32). */
-#define FONT_PRIM_HEADER 8u
+#define FONT_RESOURCE_HEADER 8u
 
 /* Round up to a multiple of 4 so the next prim in the stream is aligned. */
 static inline uint32_t align4(uint32_t n)
@@ -25,14 +25,14 @@ static uint32_t font_payload_size(uint32_t name_len, uint32_t ttf_len)
 
 size_t yetty_ydraw_font_resource_size_for(uint32_t name_len, uint32_t ttf_len)
 {
-    return FONT_PRIM_HEADER + font_payload_size(name_len, ttf_len);
+    return FONT_RESOURCE_HEADER + font_payload_size(name_len, ttf_len);
 }
 
 void yetty_ydraw_font_resource_write(uint8_t *out, int32_t font_id, const char *name,
                                      uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len)
 {
     uint32_t payload_size = font_payload_size(name_len, ttf_len);
-    size_t total = FONT_PRIM_HEADER + payload_size;
+    size_t total = FONT_RESOURCE_HEADER + payload_size;
 
     /* Zero pad slot first so trailing alignment bytes are deterministic. */
     memset(out, 0, total);
@@ -41,7 +41,7 @@ void yetty_ydraw_font_resource_write(uint8_t *out, int32_t font_id, const char *
     memcpy(out + 0, &type, 4);
     memcpy(out + 4, &payload_size, 4);
 
-    uint8_t *p = out + FONT_PRIM_HEADER;
+    uint8_t *p = out + FONT_RESOURCE_HEADER;
     memcpy(p, &font_id, 4);
     p += 4;
     memcpy(p, &name_len, 4);
@@ -74,7 +74,7 @@ int yetty_ydraw_font_resource_parse(const uint32_t *prim,
         return -1;
     }
 
-    const uint8_t *p = (const uint8_t *)prim + FONT_PRIM_HEADER;
+    const uint8_t *p = (const uint8_t *)prim + FONT_RESOURCE_HEADER;
     const uint8_t *end = p + payload_size;
 
     memcpy(&out->font_id, p, 4);
@@ -106,7 +106,7 @@ static struct yetty_ycore_size_result font_resource_size(const uint32_t *prim)
 {
     uint32_t payload_size;
     memcpy(&payload_size, (const uint8_t *)prim + 4, 4);
-    return YETTY_OK(yetty_ycore_size, FONT_PRIM_HEADER + (size_t)payload_size);
+    return YETTY_OK(yetty_ycore_size, FONT_RESOURCE_HEADER + (size_t)payload_size);
 }
 
 /* Fonts don't render directly — return a degenerate empty rect so the

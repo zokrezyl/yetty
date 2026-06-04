@@ -2,8 +2,8 @@
  *
  * The public surface lives in include/yetty/ydraw-core/composite.h.
  */
-#ifndef YETTY_YDRAW_CORE_COMPLEX_PRIM_TYPES_INTERNAL_H
-#define YETTY_YDRAW_CORE_COMPLEX_PRIM_TYPES_INTERNAL_H
+#ifndef YETTY_YDRAW_CORE_COMPOSITE_INTERNAL_H
+#define YETTY_YDRAW_CORE_COMPOSITE_INTERNAL_H
 
 #include <stddef.h>
 #include <yetty/ydraw-core/composite.h>
@@ -19,4 +19,4 @@ size_t yetty_ydraw_composite_size(const void *data);
 }
 #endif
 
-#endif /* YETTY_YDRAW_CORE_COMPLEX_PRIM_TYPES_INTERNAL_H */
+#endif /* YETTY_YDRAW_CORE_COMPOSITE_INTERNAL_H */

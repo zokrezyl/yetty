@@ -411,7 +411,7 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
         struct yetty_ydraw_text_drawable_list_view v;
         if (yetty_ydraw_text_drawable_list_parse((const uint32_t *)bytes, &v) == 0) {
             ind(depth); out("- # rec %d\n", idx);
-            ind(depth); out("  kind: TEXT_SPAN\n");
+            ind(depth); out("  kind: TEXT_DRAWABLE_LIST\n");
             ind(depth); out("  x: %.2f\n", v.x);
             ind(depth); out("  y: %.2f\n", v.y);
             ind(depth); out("  font_size: %.2f\n", v.font_size);
@@ -1265,7 +1265,7 @@ static void print_help(const char *prog)
             "YETTY_OSC_YCOMPOSITOR_BIN envelopes (and prints headers for every\n"
             "other OSC code listed in the public wire headers). Inside each\n"
             "record the body is walked via the drawable-list registry — every SDF\n"
-            "prim, TEXT_SPAN, FONT, GLYPH, and CMD_GROUP/CMD_DELETE record is\n"
+            "prim, TEXT_DRAWABLE_LIST, FONT, GLYPH, and CMD_GROUP/CMD_DELETE record is\n"
             "emitted as YAML with named fields. Complex prims (yplot/yimage/\n"
             "yvideo etc.) report their type + payload size but omit the data\n"
             "bytes themselves.\n",

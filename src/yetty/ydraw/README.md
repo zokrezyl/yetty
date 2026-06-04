@@ -290,7 +290,7 @@ Composites (yplot, nested ydraw, images, video) require more than simple SDF eva
 | Type ID | Name | Description |
 |---------|------|-------------|
 | 0x80000001 | FONT | Font definition (atlas + metrics) |
-| 0x80000002 | TEXT_SPAN | Text with font reference |
+| 0x80000002 | TEXT_DRAWABLE_LIST | Text with font reference |
 | 0x80000003 | YPLOT | Function plot with yfsvm bytecode |
 | 0x80000004+ | Reserved | Future: images, video, nested ydraw |
 

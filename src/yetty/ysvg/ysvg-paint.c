@@ -18,7 +18,7 @@
  *   polyline    → sequence of SDF segments.
  *   polygon     → sequence of SDF segments + closing edge.
  *   path        → flattened to polyline segments per the path module.
- *   text/tspan  → TEXT_SPAN drawable-list entry via add_text.
+ *   text/tspan  → TEXT_DRAWABLE_LIST drawable-list entry via add_text.
  *   g/a/svg/    → recurse.
  */
 
@@ -423,7 +423,7 @@ static struct yetty_ycore_void_result emit_path(struct ysvg_paint_state *ps,
 /*=============================================================================
  * Text
  *
- * We flatten <text> + <tspan> children into a single TEXT_SPAN per node
+ * We flatten <text> + <tspan> children into a single TEXT_DRAWABLE_LIST per node
  * for now — that's sufficient for the common SVG-tiny case where tspans
  * are used for inline styling. A future pass can split into multiple
  * spans when colours / anchors differ between tspans.

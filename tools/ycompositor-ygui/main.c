@@ -96,7 +96,7 @@ struct ycomp_ygui_app {
      * so the layout pass stretches it to the viewport automatically. */
     struct yetty_ygui_object  *win;
     /* Default font handed to the compositor; every per-group ygrid the
-     * compositor creates borrows this at slot 0 so TEXT_SPAN records
+     * compositor creates borrows this at slot 0 so TEXT_DRAWABLE_LIST records
      * (button labels, etc.) expand into renderable glyphs. */
     struct yetty_yfont_font   *font;
     /* ygrid factory bundle — borrowed by every ygrid the registry mints;

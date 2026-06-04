@@ -19,7 +19,7 @@
  * shape is approximated by tracing its perimeter in the fill colour (same
  * compromise ysvg makes); ellipses and axis-aligned rects fill natively.
  *
- * Text layers (ty 5) emit MSDF TEXT_SPAN drawable-list entries via add_text.
+ * Text layers (ty 5) emit MSDF TEXT_DRAWABLE_LIST drawable-list entries via add_text.
  */
 
 #include "ylottie-internal.h"

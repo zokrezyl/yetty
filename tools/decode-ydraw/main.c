@@ -26,7 +26,7 @@
  *       CMD_DELETE id=N
  *       CMD_GROUP id=N  (recurses into its payload as nested commands)
  *       FONT id=N name="…" ttf=N B
- *       TEXT_SPAN @(x,y) font=N "text"
+ *       TEXT_DRAWABLE_LIST @(x,y) font=N "text"
  *       SDF prims (BOX, ROUNDED_BOX, CIRCLE, …)
  *       COMPLEX (yplot, yimage, …)
  */
@@ -116,7 +116,7 @@ static void print_sdf_prim(int idx, int indent, uint32_t t, const uint32_t *w, s
     }
 }
 
-/* Print a TEXT_SPAN prim. Returns the parsed text-len so the caller can
+/* Print a TEXT_DRAWABLE_LIST prim. Returns the parsed text-len so the caller can
  * surface it in summary stats. */
 static void print_text_span(int idx, int indent, const uint8_t *p, size_t psize)
 {
@@ -125,7 +125,7 @@ static void print_text_span(int idx, int indent, const uint8_t *p, size_t psize)
      * Header is 8 bytes (type + payload_size); payload starts with 32 bytes of fixed
      * fields then text_len + text bytes. */
     if (psize < 8u + 32u) {
-        out("%sprim #%d TEXT_SPAN truncated (%zu B)\n", prefix, idx, psize);
+        out("%sprim #%d TEXT_DRAWABLE_LIST truncated (%zu B)\n", prefix, idx, psize);
         return;
     }
     float x, y, font_size;
@@ -148,7 +148,7 @@ static void print_text_span(int idx, int indent, const uint8_t *p, size_t psize)
         text_off = text_off_v2;
     }
     if (text_off + text_len > psize) {
-        out("%sprim #%d TEXT_SPAN @(%.1f,%.1f) fs=%.1f font=%d color=0x%08x "
+        out("%sprim #%d TEXT_DRAWABLE_LIST @(%.1f,%.1f) fs=%.1f font=%d color=0x%08x "
             "text_len=%u (truncated)\n",
             prefix, idx, x, y, font_size, font_id, color, text_len);
         return;
@@ -165,7 +165,7 @@ static void print_text_span(int idx, int indent, const uint8_t *p, size_t psize)
         if (c < 0x20 || c == 0x7f) buf[i] = '?';
     }
     const char *tail = (show < text_len) ? "..." : "";
-    out("%sprim #%d TEXT_SPAN @(%.1f,%.1f) fs=%.1f font=%d color=0x%08x "
+    out("%sprim #%d TEXT_DRAWABLE_LIST @(%.1f,%.1f) fs=%.1f font=%d color=0x%08x "
         "text(%u)=\"%s%s\"\n",
         prefix, idx, x, y, font_size, font_id, color, text_len, buf, tail);
 }
@@ -226,7 +226,7 @@ static void print_figure(int idx, int indent, uint32_t t, size_t psize)
  *   - CMD_GROUP  (type == 0x80000002): type(4) + id(4) + payload_size(4)
  *                                       + payload[payload_size] — recurse
  *   - FONT       (type == 0x40000001): type(4) + payload_size(4) + payload
- *   - TEXT_SPAN  (type == 0x40000002): same shape
+ *   - TEXT_DRAWABLE_LIST  (type == 0x40000002): same shape
  *   - Figures    (type >= 0x80000003): type(4) + payload_size(4) + payload
  *
  * The CMD_DELETE / CMD_GROUP types live in the [0x80000000+] range
@@ -318,7 +318,7 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
             }
         }
 
-        /* Drawable-list entry FAM (FONT, TEXT_SPAN) and figures: type(4) + payload_size(4) + payload */
+        /* Drawable-list entry FAM (FONT, TEXT_DRAWABLE_LIST) and figures: type(4) + payload_size(4) + payload */
         if (p + 8 > end) {
             fprintf(stderr, "%sprim #%d FAM header truncated for type 0x%08x\n", prefix, idx, t);
             return -1;
@@ -666,7 +666,7 @@ static void print_help(const char *prog)
             "      CMD_GROUP id=N   open / re-open an entity; nested commands\n"
             "                       are indented under the GROUP\n"
             "      FONT             id, name, ttf length\n"
-            "      TEXT_SPAN        position, font, color, text content\n"
+            "      TEXT_DRAWABLE_LIST        position, font, color, text content\n"
             "      SDF prims        BOX / ROUNDED_BOX / CIRCLE / …\n"
             "      COMPLEX          yplot / yimage / ymesh figures\n",
             prog, prog, prog, prog, prog, prog, prog);

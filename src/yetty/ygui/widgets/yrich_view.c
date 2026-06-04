@@ -125,9 +125,9 @@ static size_t yrich_view_prim_size(const uint32_t *prim, size_t remaining)
     return s <= remaining ? s : 0;
 }
 
-/* Recolour every TEXT_SPAN in the freshly-rendered buffer to `color`. The
+/* Recolour every TEXT_DRAWABLE_LIST in the freshly-rendered buffer to `color`. The
  * yrich model bakes a fixed (near-black) colour into each text run; this
- * makes content legible against the themed background. TEXT_SPAN wire
+ * makes content legible against the themed background. TEXT_DRAWABLE_LIST wire
  * layout (text-drawable-list.h): word[6] is the packed colour. */
 static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32_t color)
 {

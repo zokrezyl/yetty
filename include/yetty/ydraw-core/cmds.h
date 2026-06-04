@@ -4,7 +4,7 @@
  * Type-id space for the ydraw wire format:
  *   [0x00000000, 0x0000FFFF]  cmds (this header)
  *   [0x10000000, 0x1FFFFFFF]  SDF (paint primitives, generated)
- *   [0x40000000, 0x7FFFFFFF]  drawable-list entry (FONT, TEXT_SPAN)
+ *   [0x40000000, 0x7FFFFFFF]  drawable-list entry (FONT, TEXT_DRAWABLE_LIST)
  *   [0x80000000, 0xFFFFFFFF]  complex (yplot, yimage, ...)
  *
  * Cmds use the same FAM wire layout as drawable-list entries:
@@ -60,7 +60,7 @@ extern "C" {
  * top two bits to know how to consume each record.                       *
  *                                                                        *
  * Today's existing constants (CMD_GROUP, CMD_UPDATE in kind-10 bits with *
- * an embedded body; TEXT_SPAN / FONT in kind-01 bits while anonymous;    *
+ * an embedded body; TEXT_DRAWABLE_LIST / FONT in kind-01 bits while anonymous;    *
  * SDF prims spread across various ranges) predate this scheme and are    *
  * NOT yet consistent with these bit assignments. A follow-up sweep will  *
  * renumber them; for now use the kind-bit constants below for any        *

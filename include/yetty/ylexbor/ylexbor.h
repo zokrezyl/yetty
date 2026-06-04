@@ -11,7 +11,7 @@
  *   - CSS parsing + selector matching + computed style (via lexbor)
  *   - Naive block-flow layout: vertical stacking of block-level elements,
  *     line-by-line text wrapping inside inline content
- *   - Painting: emit ydraw primitives (boxes + TEXT_SPAN) into a buffer
+ *   - Painting: emit ydraw primitives (boxes + TEXT_DRAWABLE_LIST) into a buffer
  *
  * Explicitly NOT implemented (TODO, separate work):
  *   - Float layout

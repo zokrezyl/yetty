@@ -215,7 +215,7 @@ static void test_clickable_state_machine(void)
 static void test_widget_paint_emits_real_prims(void)
 {
     /* Build a tree: panel (10,10)-(110,110) containing a label and a
-     * button. Drive paint and verify real SDF prims + a TEXT_SPAN
+     * button. Drive paint and verify real SDF prims + a TEXT_DRAWABLE_LIST
      * land in the ydraw drawable_list. */
     struct yetty_ygui_object *panel =
         yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL).value;
@@ -245,8 +245,8 @@ static void test_widget_paint_emits_real_prims(void)
     yetty_ygui_widget_paint(NULL, (struct yetty_yclass_object *)btn, &ctx);
 
     /* Walk the prims by type word — confirm: panel SDF_BOX (0x7FFFFFFE),
-     * label TEXT_SPAN (0x40000002), button SDF_ROUNDED_BOX (0x7FFFFFF7)
-     * + another TEXT_SPAN. */
+     * label TEXT_DRAWABLE_LIST (0x40000002), button SDF_ROUNDED_BOX (0x7FFFFFF7)
+     * + another TEXT_DRAWABLE_LIST. */
     size_t sz = yetty_ydraw_drawable_list_size(dlr.value);
     const uint32_t *p = (const uint32_t *)yetty_ydraw_drawable_list_data(dlr.value);
     int saw_box = 0, saw_rounded = 0, saw_text = 0;
@@ -264,14 +264,14 @@ static void test_widget_paint_emits_real_prims(void)
         }
         /* Word count differs per prim — for this assertion we walk by
          * type-word locations using the known counts. SDF_BOX = 10
-         * words; SDF_ROUNDED_BOX = 13; TEXT_SPAN is FAM with the size
+         * words; SDF_ROUNDED_BOX = 13; TEXT_DRAWABLE_LIST is FAM with the size
          * word right after the type word. */
         if (type == 0x7FFFFFFEu) {
             off += 10 * 4;
         } else if (type == 0x7FFFFFF7u) {
             off += 13 * 4;
         } else if (type == 0x40000002u) {
-            /* TEXT_SPAN: type | payload_size | payload (padded to 4) */
+            /* TEXT_DRAWABLE_LIST: type | payload_size | payload (padded to 4) */
             uint32_t payload_size = p[(off / 4) + 1];
             off += 8 + ((payload_size + 3) & ~3u);
         } else {

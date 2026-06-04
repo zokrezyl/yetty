@@ -170,7 +170,7 @@ yetty_ygrid_grid {
     struct yetty_yfigure_figure *base;
 
     /* Owned. Built at create time. Used by process_input to walk the
-     * routed-record payload as a stream of SDF/glyph/TEXT_SPAN records
+     * routed-record payload as a stream of SDF/glyph/TEXT_DRAWABLE_LIST records
      * and feed each one into the ygrid's flat byte buffer. */
     struct yetty_ydraw_drawable_list_registry *registry;
 
@@ -926,7 +926,7 @@ static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, ui
  *                                       stroke_w, geom_words...]
  *                              Size derived from `yetty_ysdf_word_count(type)`.
  *
- *   FAM prims (TEXT_SPAN/FONT etc.):  Self-describing.
+ *   FAM prims (TEXT_DRAWABLE_LIST/FONT etc.):  Self-describing.
  *                              Layout: [type, payload_size, payload...]
  *                              Size = 8 + payload_size bytes.
  *
@@ -947,7 +947,7 @@ static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, ui
  * — no need to synthesize the type separately.
  *=========================================================================*/
 
-/* Forward decls — the TEXT_SPAN expansion below uses
+/* Forward decls — the TEXT_DRAWABLE_LIST expansion below uses
  * parse_and_index_record to bucket each generated glyph record, and
  * grow_bytes to extend grid->bytes for the new GLYPH records. The
  * normal SDF/GLYPH parse loop and the expansion call into each other. */
@@ -960,7 +960,7 @@ static struct yetty_ycore_void_result ygrid_reset_content(struct yetty_yfigure_f
 /* Decode one UTF-8 codepoint at *ptr (clamped by `end`). Advances *ptr
  * past the consumed bytes and returns the codepoint, or 0xFFFD on a
  * malformed prefix (still consumes one byte to make forward progress).
- * Matches the same decode shape scene-canvas uses for TEXT_SPAN. */
+ * Matches the same decode shape scene-canvas uses for TEXT_DRAWABLE_LIST. */
 static uint32_t decode_utf8(const uint8_t **ptr, const uint8_t *end)
 {
     const uint8_t *cursor = *ptr;
@@ -1007,8 +1007,8 @@ static uint32_t decode_utf8(const uint8_t **ptr, const uint8_t *end)
     return codepoint;
 }
 
-/* Expand one TEXT_SPAN wire record into glyph records, mirroring
- * scene-canvas's scene_expand_text_drawable_list_to_glyphs. The TEXT_SPAN's
+/* Expand one TEXT_DRAWABLE_LIST wire record into glyph records, mirroring
+ * scene-canvas's scene_expand_text_drawable_list_to_glyphs. The TEXT_DRAWABLE_LIST's
  * font_id maps directly to a ygrid font slot (-1 means slot 0, the
  * default). Each generated glyph is appended to grid->bytes as its own
  * 7-word GLYPH wire record and bucketed via parse_and_index_record so
@@ -1028,7 +1028,7 @@ static struct yetty_ycore_void_result expand_text_span(
      * "no font registered yet" path. */
     uint32_t slot = (span->font_id < 0) ? 0u : (uint32_t)span->font_id;
     if (slot >= grid->font_count || !grid->fonts[slot]) {
-        ydebug("ygrid: TEXT_SPAN font_id=%d -> slot %u has no font; dropped", span->font_id, slot);
+        ydebug("ygrid: TEXT_DRAWABLE_LIST font_id=%d -> slot %u has no font; dropped", span->font_id, slot);
         return YETTY_OK_VOID();
     }
     struct yetty_yfont_font *font = grid->fonts[slot];
@@ -1163,22 +1163,22 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
      *     font_size as a conservative square (refined when font support
      *     lands).
      *
-     * Anything else (TEXT_SPAN, FONT, complex prims) is RECORDED in
+     * Anything else (TEXT_DRAWABLE_LIST, FONT, complex prims) is RECORDED in
      * the byte buffer but NOT indexed: no entry in prims[] or the
      * spatial buckets, so it doesn't reach the shader. Returning OK
      * keeps the wire decoder flowing — ygui sends a mix of records
      * and dropping the unrendered ones silently is the v1 contract.
      * The bytes consumed by these records aren't reclaimed; they live
      * until the next yetty_ygrid_clear. */
-    /* TEXT_SPAN: not a rendered prim itself. Expand into one GLYPH
+    /* TEXT_DRAWABLE_LIST: not a rendered prim itself. Expand into one GLYPH
      * record per codepoint (same shape as scene-canvas's expansion);
      * each generated glyph is appended + bucketed normally and shows
-     * up in prim_count/staging. The TEXT_SPAN bytes themselves stay in
+     * up in prim_count/staging. The TEXT_DRAWABLE_LIST bytes themselves stay in
      * grid->bytes but produce no prim entry. */
     if (type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
         struct yetty_ydraw_text_drawable_list_view view;
         if (yetty_ydraw_text_drawable_list_parse(hdr, &view) != 0) {
-            return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_SPAN parse failed");
+            return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_DRAWABLE_LIST parse failed");
         }
         /* `view.text` aliases into g->bytes; grow_bytes inside the
          * expansion may realloc that buffer and dangle the pointer.
@@ -1187,14 +1187,14 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
         if (view.text_len > 0) {
             text_copy = (uint8_t *)malloc(view.text_len);
             if (!text_copy) {
-                return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_SPAN text copy oom");
+                return YETTY_ERR(yetty_ycore_void, "ygrid: TEXT_DRAWABLE_LIST text copy oom");
             }
             memcpy(text_copy, view.text, view.text_len);
         }
         struct yetty_ycore_void_result expand_result =
             expand_text_span(g, &view, text_copy, view.text_len);
         free(text_copy);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, expand_result, "ygrid: TEXT_SPAN expand");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, expand_result, "ygrid: TEXT_DRAWABLE_LIST expand");
         return YETTY_OK_VOID();
     }
 
@@ -2465,7 +2465,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     }
 
     /* Drawable-list registry — used by process_input to walk the routed-
-     * record payload as a stream of SDF / glyph / TEXT_SPAN / FONT
+     * record payload as a stream of SDF / glyph / TEXT_DRAWABLE_LIST / FONT
      * records. Same handler set the legacy compositor used for its
      * outer iterator, lifted here so each ygrid is self-sufficient. */
     {
@@ -2655,7 +2655,7 @@ static void scale_record_word(uint32_t *word, float scale)
  * ones a logical-pixel producer (ygui chrome) emits:
  *
  *   GLYPH      — x, y, font_size (words 2,3,4).
- *   TEXT_SPAN  — x, y, font_size (words 2,3,4). Its expanded glyphs
+ *   TEXT_DRAWABLE_LIST  — x, y, font_size (words 2,3,4). Its expanded glyphs
  *                inherit the scaled span and are NOT re-scaled: they are
  *                generated straight into parse_and_index_record, below
  *                this boundary.

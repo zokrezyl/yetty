@@ -6,11 +6,11 @@
  *   - pages are counted correctly
  *   - scene bounds reflect the accumulated page heights
  *   - at least one FONT prim was emitted (test PDF embeds fonts)
- *   - at least one TEXT_SPAN prim was emitted
+ *   - at least one TEXT_DRAWABLE_LIST prim was emitted
  *
  * After the buffer/handler refactor, fonts and text spans live in the
  * primitive byte stream alongside SDF prims. We count them by iterating
- * with a drawable-list registry that has the FONT/TEXT_SPAN handlers
+ * with a drawable-list registry that has the FONT/TEXT_DRAWABLE_LIST handlers
  * registered (yetty_ydraw_drawable_list_registry_create_default() does that).
  */
 
@@ -98,9 +98,9 @@ int main(void) {
 
     struct drawable_counts c = count_prims(out->buffer, reg);
     REQUIRE(c.fonts >= 1, "no FONT prims in buffer");
-    REQUIRE(c.text_spans >= 1, "no TEXT_SPAN prims in buffer");
+    REQUIRE(c.text_spans >= 1, "no TEXT_DRAWABLE_LIST prims in buffer");
 
-    printf("OK: %d pages, %u FONT prims, %u TEXT_SPAN prims, %u other, "
+    printf("OK: %d pages, %u FONT prims, %u TEXT_DRAWABLE_LIST prims, %u other, "
            "total_h=%.1f\n",
            out->page_count, c.fonts, c.text_spans, c.other,
            out->total_height);
