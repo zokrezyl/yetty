@@ -229,6 +229,10 @@ classes:
         type: int
         get: true
         set: true
+      - name: absolute_coords
+        type: int
+        get: true
+        set: true
     ops:
       - slot: render
         slot_domain: yfigure

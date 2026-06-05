@@ -1227,6 +1227,10 @@ struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(
 struct hit_visitor_state {
     float x;
     float y;
+    /* Pane origin in target pixels (== container viewport offset). Used to
+     * report pane-local coords for absolute-coords figures. */
+    float viewport_offset_x;
+    float viewport_offset_y;
     struct yetty_yfigure_hit hit;
 };
 
@@ -1247,8 +1251,24 @@ static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user
      * inserted at terminal create) steal hits from interactive figures
      * (ygreeter / ygui chrome) inserted later. */
     st->hit.figure_id = id;
-    st->hit.local_x = st->x - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(child) - 1).value.min.x;
-    st->hit.local_y = st->y - yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(child) - 1).value.min.y;
+    if (yetty_yfigure_figure_absolute_coords_get((struct yetty_yclass_object *)(child) - 1).value) {
+        /* Absolute-coords figure (ygui chrome / scrolling sub-figures): its
+         * content is laid out and hit-tested in pane-root space and merely
+         * scissor-clipped to the rect — no per-figure re-origin. Report the
+         * cursor in that same pane-local space so an offset sub-figure (a
+         * scrollarea below a tabbar) maps to the widget under the pointer.
+         * A full-pane chrome figure has rect.min == viewport offset, so this
+         * is identical to the local path for it. */
+        st->hit.local_x = st->x - st->viewport_offset_x;
+        st->hit.local_y = st->y - st->viewport_offset_y;
+    } else {
+        /* Local-coords producer figure (yplot/yimage/…): content drawn from
+         * the figure's own origin; re-origin the cursor to its rect. */
+        struct yetty_ycore_rectangle rect =
+            yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(child) - 1).value;
+        st->hit.local_x = st->x - rect.min.x;
+        st->hit.local_y = st->y - rect.min.y;
+    }
     return 0;
 }
 
@@ -1256,7 +1276,11 @@ static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user
 struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_container *container,
                                                           float x, float y)
 {
-    struct hit_visitor_state st = {.x = x, .y = y, .hit = {0, 0, 0}};
+    struct hit_visitor_state st = {.x = x,
+                                   .y = y,
+                                   .viewport_offset_x = container->viewport_offset_x,
+                                   .viewport_offset_y = container->viewport_offset_y,
+                                   .hit = {0, 0, 0}};
     yetty_yfigure_container_for_each(container, hit_visit, &st);
     return st.hit;
 }
