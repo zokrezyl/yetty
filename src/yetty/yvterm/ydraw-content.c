@@ -15,7 +15,7 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yvterm/osc-args.h>
-#include <yetty/yterminal/osc-codes.h> /* YETTY_OSC_YDRAW_* */
+#include <yetty/yterminal/dcs-codes.h> /* YETTY_DCS_YDRAW_* */
 #include <yetty/yvterm/ydraw-content.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
@@ -491,11 +491,11 @@ struct yetty_ycore_void_result yetty_yvterm_ydraw_content_process_input(
         int code = yetty_ywire_wire_statemachine_code(osc_statemachine);
         struct yetty_ycore_void_result r;
         switch (code) {
-        case YETTY_OSC_YDRAW_CLEAR:
+        case YETTY_DCS_YDRAW_CLEAR:
             r = layer->canvas->ops->clear(layer->canvas);
             break;
-        case YETTY_OSC_YDRAW_BIN:
-        case YETTY_OSC_YDRAW_OVERLAY:
+        case YETTY_DCS_YDRAW_BIN:
+        case YETTY_DCS_YDRAW_OVERLAY:
             r = layer->canvas->ops->process_input(layer->canvas, osc_statemachine);
             break;
         default:

@@ -2,7 +2,7 @@
 #include <yetty/yvterm/content-layer.h>
 #include <yetty/yvterm/text-layer.h>
 #include <yetty/yvterm/ydraw-content.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -518,15 +518,15 @@ struct yetty_ycore_void_result yetty_yvterm_content_layer_register_wire(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
                         "content_layer_register_wire: set_default(text grid) failed");
 
-    /* ydraw canvas consumes the YDRAW OSC codes. */
-    const int ydraw_codes[3] = {YETTY_OSC_YDRAW_CLEAR, YETTY_OSC_YDRAW_BIN, YETTY_OSC_YDRAW_OVERLAY};
+    /* ydraw canvas consumes the YDRAW DCS codes. */
+    const int ydraw_codes[3] = {YETTY_DCS_YDRAW_CLEAR, YETTY_DCS_YDRAW_BIN, YETTY_DCS_YDRAW_OVERLAY};
     for (size_t i = 0; i < 3; i++) {
-        rr = yetty_ywire_wire_statemachine_register(sm, YETTY_YWIRE_ENVELOPE_OSC, ydraw_codes[i],
+        rr = yetty_ywire_wire_statemachine_register(sm, YETTY_YWIRE_ENVELOPE_DCS, ydraw_codes[i],
                                                     /*has_args=*/1,
                                                     yetty_yvterm_ydraw_content_process_input,
                                                     content->ydraw);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
-                            "content_layer_register_wire: register ydraw OSC code failed");
+                            "content_layer_register_wire: register ydraw DCS code failed");
     }
     return YETTY_OK_VOID();
 }

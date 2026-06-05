@@ -45,7 +45,7 @@
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yterminal/client-input.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include "browser-ui.h"
@@ -1799,7 +1799,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
 		YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ybrowser standalone: wire_sm_create");
 		s->wire_sm = sr.value;
 		struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-			s->wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN,
+			s->wire_sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
 			/*has_args=*/1, yetty_yfigure_container_process_input, s->root_container);
 		YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ybrowser standalone: wire_sm register");
 	}

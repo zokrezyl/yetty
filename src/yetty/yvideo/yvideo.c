@@ -14,7 +14,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -150,7 +150,7 @@ struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(const struct yetty_ydra
     };
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r = yetty_yface_emit(
-        YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
+        YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: yface_emit failed", r);

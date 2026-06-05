@@ -37,7 +37,7 @@
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/yplatform/tty.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 
 /*=============================================================================
  * Output side — one-shot emit + interactive clear+bin re-render.
@@ -69,7 +69,7 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
         .raw_size = blen,
         .reserved = {0, 0},
     };
-    return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
+    return emit_envelope(YETTY_DCS_YDRAW_BIN, /*compressed=*/1,
                          &meta, sizeof(meta), bytes, blen);
 }
 
@@ -142,7 +142,7 @@ static int redraw_and_push(struct ev_state *st)
 
     const uint8_t *bytes = NULL;
     size_t blen = yetty_ydraw_drawable_list_serialize(br.value, &bytes);
-    (void)emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
+    (void)emit_envelope(YETTY_DCS_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
     (void)emit_bin_osc(bytes, blen);
     fflush(stdout);
 
@@ -389,7 +389,7 @@ static int interactive_loop(struct ev_state *st)
      * the term-wide forwarding state. Then clear the pane on exit so the
      * mesh disappears with the viewer (instead of leaving a stuck frame). */
     term_input_subscribe(0);
-    (void)emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
+    (void)emit_envelope(YETTY_DCS_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
     fflush(stdout);
 
     yetty_yface_destroy(yface);

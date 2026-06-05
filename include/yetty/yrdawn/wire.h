@@ -2,7 +2,7 @@
  * yrdawn/wire.h — wire format for the WebGPU-over-OSC bridge.
  *
  * yrdawn rides the figure-tree OSC channel exactly like ymgui: every
- * client→server message is a record inside YETTY_OSC_YCOMPOSITOR_BIN
+ * client→server message is a record inside YETTY_DCS_YCOMPOSITOR_BIN
  * (see <yetty/yterminal/osc-codes.h>) of shape `{u32 length, u32 id,
  * body}`. `id == 0` means container-admin (CREATE_CHILD / DELETE_CHILD
  * / SET_CHILD_RECT — see <yetty/yfigure/wire.h>); `id != 0` addresses
@@ -49,7 +49,7 @@ extern "C" {
  * Server→client OSC codes
  *
  * 72xxxx block. CS direction has no per-message codes any more — every
- * client→server message rides YETTY_OSC_YCOMPOSITOR_BIN as a sub-record.
+ * client→server message rides YETTY_DCS_YCOMPOSITOR_BIN as a sub-record.
  *===========================================================================*/
 
 #define YETTY_YRDAWN_OSC_SC_HELLO_ACK 720000 /* yetty_yrdawn_wire_hello_ack, flag=0 */

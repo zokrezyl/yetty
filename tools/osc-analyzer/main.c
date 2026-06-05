@@ -22,7 +22,7 @@
  * (yetty_ywire_wire_statemachine): coroutine-driven framer, lz4f
  * auto-sniff, dispatch to a registered layer per OSC code. The analyzer
  * registers itself for every wire code published in
- * <yetty/yterminal/osc-codes.h>, <yetty/yterminal/client-input.h>, and
+ * <yetty/yterminal/dcs-codes.h>, <yetty/yterminal/client-input.h>, and
  * <yetty/ymgui/wire.h>, so every envelope flows through the same path
  * yetty's terminal uses for real.
  *
@@ -69,7 +69,7 @@
 #include <yetty/ysdf/handler.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yterminal/client-input.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/yterminal/terminal.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ytrace/ytrace.h>
@@ -83,12 +83,12 @@
 static const char *osc_code_name(int code)
 {
     switch (code) {
-    case YETTY_OSC_YDRAW_CLEAR:                    return "YDRAW_CLEAR";
-    case YETTY_OSC_YDRAW_BIN:                      return "YDRAW_BIN";
-    case YETTY_OSC_YDRAW_YAML:                     return "YDRAW_YAML";
-    case YETTY_OSC_YDRAW_OVERLAY:                  return "YDRAW_OVERLAY";
-    case YETTY_OSC_YDRAW_SCENE_BIN:                return "YDRAW_SCENE_BIN";
-    case YETTY_OSC_YCOMPOSITOR_BIN:                return "YCOMPOSITOR_BIN";
+    case YETTY_DCS_YDRAW_CLEAR:                    return "YDRAW_CLEAR";
+    case YETTY_DCS_YDRAW_BIN:                      return "YDRAW_BIN";
+    case YETTY_DCS_YDRAW_YAML:                     return "YDRAW_YAML";
+    case YETTY_DCS_YDRAW_OVERLAY:                  return "YDRAW_OVERLAY";
+    case YETTY_DCS_YDRAW_SCENE_BIN:                return "YDRAW_SCENE_BIN";
+    case YETTY_DCS_YCOMPOSITOR_BIN:                return "YCOMPOSITOR_BIN";
     case YETTY_OSC_CS_CLIENT_INPUT_SUB:            return "CS_CLIENT_INPUT_SUB";
     case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE:   return "SC_CLIENT_INPUT_FIGURE_MOUSE";
     case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE:  return "SC_CLIENT_INPUT_FIGURE_RESIZE";
@@ -111,12 +111,12 @@ static const char *osc_code_name(int code)
  * invisible — adding a new wire code anywhere in the project means
  * extending this table. */
 static const int kAnalyzedCodes[] = {
-    YETTY_OSC_YDRAW_CLEAR,
-    YETTY_OSC_YDRAW_BIN,
-    YETTY_OSC_YDRAW_YAML,
-    YETTY_OSC_YDRAW_OVERLAY,
-    YETTY_OSC_YDRAW_SCENE_BIN,
-    YETTY_OSC_YCOMPOSITOR_BIN,
+    YETTY_DCS_YDRAW_CLEAR,
+    YETTY_DCS_YDRAW_BIN,
+    YETTY_DCS_YDRAW_YAML,
+    YETTY_DCS_YDRAW_OVERLAY,
+    YETTY_DCS_YDRAW_SCENE_BIN,
+    YETTY_DCS_YCOMPOSITOR_BIN,
     YETTY_OSC_CS_CLIENT_INPUT_SUB,
     YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE,
     YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE,
@@ -970,7 +970,7 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
         out("\n");
 
         switch (code) {
-        case YETTY_OSC_YCOMPOSITOR_BIN:
+        case YETTY_DCS_YCOMPOSITOR_BIN:
             walk_records(m->buf, m->len, 1);
             break;
         case YETTY_OSC_CS_CLIENT_INPUT_SUB:
@@ -1262,7 +1262,7 @@ static void print_help(const char *prog)
             "  --cols N / --rows N  PTY size for -e (cells)\n"
             "\n"
             "Decoding walks {length, id} figure-tree records inside\n"
-            "YETTY_OSC_YCOMPOSITOR_BIN envelopes (and prints headers for every\n"
+            "YETTY_DCS_YCOMPOSITOR_BIN envelopes (and prints headers for every\n"
             "other OSC code listed in the public wire headers). Inside each\n"
             "record the body is walked via the drawable-list registry — every SDF\n"
             "prim, TEXT_DRAWABLE_LIST, FONT, GLYPH, and CMD_GROUP/CMD_DELETE record is\n"
@@ -1427,7 +1427,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < kAnalyzedCodes_n; i++) {
         mocks[i].expected_code = kAnalyzedCodes[i];
         struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_register(
-            sm, YETTY_YWIRE_ENVELOPE_OSC, kAnalyzedCodes[i], /*has_args=*/1,
+            sm, YETTY_YWIRE_ENVELOPE_DCS, kAnalyzedCodes[i], /*has_args=*/1,
             envelope_mock_process_input, &mocks[i]);
         if (YETTY_IS_ERR(r)) {
             fprintf(stderr,

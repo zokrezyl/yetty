@@ -4,11 +4,34 @@
  * Two envelope kinds are recognised, both ECMA-48 control strings:
  *
  *   OSC: ESC ] <decimal-code> ; <b64-args> ; <b64-payload> (BEL | ESC \)
- *   DCS: ESC P <decimal-code> ; <b64-args> ; <b64-payload> ESC \
+ *   DCS: ESC P <decimal-code> <final> <b64-args> ; <b64-payload> ESC \
  *
- * The inside is identical between OSC and DCS — only the opener byte
- * (kind) differs. We pick a kind per producer envelope; the framer
- * dispatches a registered handler by (kind, code) pair.
+ * The two differ only in how the code is separated from the body:
+ *
+ *   - OSC puts a `;` after the code. `ESC ] <number> ; …` is already a
+ *     valid OSC string, so nothing more is needed.
+ *
+ *   - DCS puts a single ECMA-48 "final byte" (YETTY_YWIRE_DCS_FINAL)
+ *     after the code instead of `;`. ECMA-48 DCS is `ESC P <params>
+ *     <intermediates> <final> <data> ST`, where the sections are
+ *     delimited purely by byte RANGE — params 0x30–0x3F (digits + `;`),
+ *     intermediates 0x20–0x2F, exactly one final 0x40–0x7E — and the
+ *     data string begins right after the final byte. So our decimal code
+ *     rides in the legitimate DCS parameter field, the final byte marks
+ *     end-of-command, and `<b64-args> ; <b64-payload>` is the opaque DCS
+ *     data string (the inner `;` is just data, not a parser delimiter).
+ *     A strict DCS parser (xterm, tmux passthrough) frames this
+ *     correctly and passes the data through untouched. Reusing a
+ *     standard final byte (q=Sixel, p=ReGIS, |=DECUDK, …) would make a
+ *     real terminal try to interpret our payload, so the final byte is a
+ *     private one that no standard DCS command claims.
+ *
+ * Putting the code directly after ESC P with a `;` (the OSC shape) is
+ * NOT valid DCS — the first payload byte would be mis-read as the final
+ * byte — which is why DCS needs its own separator.
+ *
+ * We pick a kind per producer envelope; the framer dispatches a
+ * registered handler by (kind, code) pair.
  *
  * Pipeline:
  *
@@ -54,6 +77,19 @@ enum yetty_ywire_envelope_kind {
     YETTY_YWIRE_ENVELOPE_OSC = ']', /* ESC ]  …  (BEL | ST) */
     YETTY_YWIRE_ENVELOPE_DCS = 'P', /* ESC P  …  ST          */
 };
+
+/*
+ * DCS final byte. Emitted right after the decimal code (in place of the
+ * OSC `;`) so the envelope is a conformant ECMA-48 DCS string: the code
+ * is the DCS parameter, this byte is the single final byte, and the
+ * remaining `<b64-args> ; <b64-payload>` is the opaque data string.
+ *
+ * Chosen from the final-byte range (0x40–0x7E) and deliberately NOT a
+ * byte any standard DCS command uses (q=Sixel, p=ReGIS, |=DECUDK,
+ * $q=DECRQSS, +q=XTGETTCAP, …), so a pass-through terminal won't try to
+ * interpret a yetty payload as one of those. `y` for yetty.
+ */
+#define YETTY_YWIRE_DCS_FINAL 'y'
 
 /*
  * Handler callback. Called by the SM on its persistent per-handler
@@ -336,6 +372,29 @@ struct yetty_ycore_void_result yetty_ywire_emit_to_fd(int fd, enum yetty_ywire_e
  * the second `;` and the trailing terminator — into out_buf. */
 struct yetty_ycore_void_result yetty_ywire_decode(const char *b64, size_t n, int compressed,
                                                   struct yetty_ycore_buffer *out_buf);
+
+/*===========================================================================
+ * tmux passthrough
+ *
+ * Under tmux, the multiplexer parses and re-renders pane output and will
+ * NOT forward our OSC/DCS envelopes (or any raw control sequence) to the
+ * outer terminal — except a `ESC P tmux; <payload, ESC doubled> ESC \`
+ * passthrough wrapper, which it unwraps verbatim (requires
+ * `allow-passthrough on`). Envelope emit (start_write / emit / emit_to_fd)
+ * applies this automatically. These helpers expose the same mechanism for
+ * raw control sequences that don't go through the envelope path (e.g. the
+ * DEC ?1500/?1501 card-mouse enable).
+ *=========================================================================*/
+
+/* True when emitted sequences must be tmux-wrapped: TMUX env set, unless
+ * overridden by YETTY_TMUX_PASSTHROUGH=0/1. */
+int yetty_ywire_tmux_passthrough_active(void);
+
+/* Append `seq` to `out_buf`, tmux-wrapped iff passthrough is active, else
+ * verbatim. Use for raw control sequences (not envelopes — those wrap
+ * themselves). */
+struct yetty_ycore_void_result yetty_ywire_tmux_wrap(const char *seq, size_t len,
+                                                     struct yetty_ycore_buffer *out_buf);
 
 #ifdef __cplusplus
 }

@@ -21,7 +21,7 @@
 #include <yetty/ycore/util.h>     /* yetty_ycore_read_file */
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yterminal/osc-codes.h> /* YETTY_OSC_YDRAW_* */
+#include <yetty/yterminal/dcs-codes.h> /* YETTY_DCS_YDRAW_* */
 #include <yetty/ylottie/ylottie.h>
 
 #include <signal.h>
@@ -61,7 +61,7 @@ static void usage(const char *prog)
 /* Emit an OSC clear so the previous frame's primitives are wiped. */
 static void emit_clear(void)
 {
-    printf("\033]%u;;\033\\", YETTY_OSC_YDRAW_CLEAR);
+    printf("\033P%uy;\033\\", YETTY_DCS_YDRAW_CLEAR);
 }
 
 /* Render one frame of the (already-parsed) animation and emit its ydraw-bin
@@ -97,7 +97,7 @@ static int render_and_emit(const struct yetty_ylottie_animation *anim, float fra
         .reserved = {0, 0},
     };
     struct yetty_ycore_void_result er =
-        yetty_yface_emit_to_fd(fileno(stdout), YETTY_OSC_YDRAW_BIN,
+        yetty_yface_emit_to_fd(fileno(stdout), YETTY_DCS_YDRAW_BIN,
                                /*compressed=*/1, &meta, sizeof(meta), raw, raw_size);
     yetty_ydraw_drawable_list_destroy(buf);
     if (YETTY_IS_ERR(er)) {

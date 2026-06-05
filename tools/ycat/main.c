@@ -17,6 +17,7 @@
  */
 
 #include <yetty/ycat/ycat.h>
+#include <yetty/ycore/terminal-detect.h>
 
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
@@ -70,12 +71,11 @@ static int terminal_columns(void)
 	return 80;
 }
 
-/* Detect whether ycat is running inside a yetty terminal. yetty sets
- * TERM_PROGRAM=yetty at the top of main() so every descendant inherits it. */
+/* Detect whether ycat is running inside a yetty terminal (directly or via
+ * tmux). See <yetty/ycore/terminal-detect.h>. */
 static bool in_yetty_terminal(void)
 {
-	const char *tp = getenv("TERM_PROGRAM");
-	return tp && strcmp(tp, "yetty") == 0;
+	return yetty_running_under_yetty() != 0;
 }
 
 static void usage(FILE *out, const char *prog)

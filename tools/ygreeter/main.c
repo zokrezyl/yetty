@@ -33,6 +33,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ycore/terminal-detect.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
@@ -51,7 +52,7 @@
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yterminal/client-input.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplot/yplot.h>
@@ -2762,8 +2763,17 @@ static struct yetty_ycore_void_result client_resize_handler(
 static struct yetty_ycore_void_result client_enable_mouse_forwarding(struct client_state *cs)
 {
     static const char enable[] = "\033[?1500h\033[?1501h";
+    /* tmux-wrap so the card-mouse enable survives a multiplexer (tmux drops
+     * unknown private DEC modes otherwise). Verbatim when not under tmux. */
+    struct yetty_ycore_buffer seq = {0};
+    struct yetty_ycore_void_result wrap = yetty_ywire_tmux_wrap(enable, sizeof(enable) - 1, &seq);
+    if (YETTY_IS_ERR(wrap)) {
+        yetty_ycore_buffer_destroy(&seq);
+        return YETTY_ERR(yetty_ycore_void, "client_enable_mouse_forwarding: wrap", wrap);
+    }
     struct yetty_ycore_size_result wr =
-        cs->out.base.ops->write(&cs->out.base, enable, sizeof(enable) - 1);
+        cs->out.base.ops->write(&cs->out.base, (const char *)seq.data, seq.size);
+    yetty_ycore_buffer_destroy(&seq);
     if (YETTY_IS_ERR(wr)) {
         return YETTY_ERR(yetty_ycore_void, "client_enable_mouse_forwarding: write", wr);
     }
@@ -2947,8 +2957,12 @@ static int run_client_mode(void)
      * after we're gone. */
     {
         static const char disable_fwd[] = "\033[?1500l\033[?1501l";
-        ssize_t fwd_n = write(STDOUT_FILENO, disable_fwd, sizeof(disable_fwd) - 1);
-        (void)fwd_n;
+        struct yetty_ycore_buffer seq = {0};
+        if (YETTY_IS_OK(yetty_ywire_tmux_wrap(disable_fwd, sizeof(disable_fwd) - 1, &seq))) {
+            ssize_t fwd_n = write(STDOUT_FILENO, (const char *)seq.data, seq.size);
+            (void)fwd_n;
+        }
+        yetty_ycore_buffer_destroy(&seq);
     }
 
     /* Tell the host to destroy our remote figure containers, otherwise it
@@ -3329,7 +3343,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "standalone: wire_sm_create");
         app->wire_sm = sr.value;
         struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-            app->wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN, /*has_args=*/1,
+            app->wire_sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN, /*has_args=*/1,
             yetty_yfigure_container_process_input, app->root_container);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "standalone: wire_sm register");
     }
@@ -3491,8 +3505,7 @@ static int run_standalone_mode(int argc, char **argv)
 
 static int in_yetty_terminal(void)
 {
-    const char *tp = getenv("TERM_PROGRAM");
-    return tp && strcmp(tp, "yetty") == 0;
+    return yetty_running_under_yetty();
 }
 
 int main(int argc, char **argv)

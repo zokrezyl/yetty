@@ -9,7 +9,7 @@
  *
  * Wire shape (matches the figure-tree contract used by ymgui):
  *   - Each canvas is announced via a CREATE_CHILD admin record sent
- *     on YETTY_OSC_YCOMPOSITOR_BIN (handled in client.c). The record's
+ *     on YETTY_DCS_YCOMPOSITOR_BIN (handled in client.c). The record's
  *     `init_payload` carries `{u32 SUB_HELLO} +
  *     struct yetty_yrdawn_wire_hello{session_id, figure_id}`.
  *   - Subsequent wgpu* CMDs, BULK uploads, and BYEs go out as

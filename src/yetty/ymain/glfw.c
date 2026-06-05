@@ -79,8 +79,16 @@ int main(int argc, char **argv)
     /* Advertise ourselves via the de-facto TERM_PROGRAM convention so
      * child processes (PTY shells, tools like ycat) can detect a yetty
      * terminal and adapt their output. Done here at the top of main so
-     * every fork inherits it. */
+     * every fork inherits it.
+     *
+     * TERM_PROGRAM alone is not enough: a multiplexer (tmux) rewrites it
+     * to its own name ("tmux") for every pane, so a tool running inside
+     * tmux-inside-yetty would not detect yetty and would skip rich output
+     * entirely (nothing to render/pass through). We therefore also export
+     * YETTY=1, a custom var tmux passes through unchanged; detection keys
+     * on either (see yetty_running_under_yetty). */
     setenv("TERM_PROGRAM", "yetty", 1);
+    setenv("YETTY", "1", 1);
 
     struct yetty_yinit_app_config cfg = {
         .extract_assets_fn = yetty_platform_extract_assets,

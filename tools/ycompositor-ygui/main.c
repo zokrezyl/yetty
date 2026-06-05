@@ -18,7 +18,7 @@
  *     Acts as a debug terminal sitting between an app and a real yetty:
  *     forks the app under a PTY, scans its stdout for OSC envelopes,
  *     logs every envelope (code + payload size + decoded type), and
- *     feeds figure-tree records (YETTY_OSC_YCOMPOSITOR_BIN) into the
+ *     feeds figure-tree records (YETTY_DCS_YCOMPOSITOR_BIN) into the
  *     existing compositor pipeline so the app's own rendering shows up
  *     in this window. The YMGUI factory is registered alongside YGRID
  *     so ymgui-shaped apps (the demo) render natively. Use this to see
@@ -47,7 +47,7 @@
 #include <yetty/ygui/ygui.h>
 #include <yetty/ymgui/figure.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 #include <lz4frame.h>
 #include <webgpu/webgpu.h>
@@ -300,11 +300,11 @@ static struct yetty_ycore_void_result push_ygui_scene(struct ycomp_ygui_app *app
 static const char *osc_code_name(int code)
 {
     switch (code) {
-    case 620000: return "YETTY_OSC_YDRAW_BIN";
-    case 620001: return "YETTY_OSC_YDRAW_TEXT_ZONE";
-    case 620002: return "YETTY_OSC_YDRAW_TEXT_END";
-    case 620003: return "YETTY_OSC_YDRAW_CLEAR";
-    case 630000: return "YETTY_OSC_YCOMPOSITOR_BIN";
+    case 620000: return "YETTY_DCS_YDRAW_BIN";
+    case 620001: return "YETTY_DCS_YDRAW_TEXT_ZONE";
+    case 620002: return "YETTY_DCS_YDRAW_TEXT_END";
+    case 620003: return "YETTY_DCS_YDRAW_CLEAR";
+    case 630000: return "YETTY_DCS_YCOMPOSITOR_BIN";
     case 610010: return "YETTY_OSC_CS_CLIENT_INPUT_SUB";
     case 700000: return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE";
     case 700001: return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE";
@@ -398,7 +398,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
           osc_code, name ? name : "?", args_len, body_len,
           inflated ? " [lz4f-decompressed]" : "");
 
-    if (osc_code == YETTY_OSC_YCOMPOSITOR_BIN) {
+    if (osc_code == YETTY_DCS_YCOMPOSITOR_BIN) {
         app->n_osc_compositor++;
         if (app->root && body_len > 0) {
             struct yetty_ycore_void_result pr =

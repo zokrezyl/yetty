@@ -33,7 +33,7 @@
  *
  * Outgoing pipeline (caller → wire):
  *
- *     yetty_yface_start_write(yface, osc_code, compressed, args, args_len);
+ *     yetty_yface_start_write(yface, wire_code, compressed, args, args_len);
  *         emits "\e]<code>;" raw, b64-encodes args bytes (if any) into
  *         the args slot, then ";", opens an LZ4F frame if compressed=1,
  *         and starts the streaming b64 encoder for the payload.
@@ -54,7 +54,7 @@
  *         The stream scanner finds \e]…\e\\ envelopes in `raw`, b64-
  *         decodes the args slot, b64-decodes the payload (running it
  *         through LZ4F if the bin meta says so), and fires
- *         `on_osc(user, osc_code, args, args_len, payload, payload_len)`.
+ *         `on_osc(user, wire_code, args, args_len, payload, payload_len)`.
  *         Any bytes outside an envelope are forwarded verbatim through
  *         `on_raw` so consumers can keep their raw-byte handling
  *         (keyboard, CSI, …) alongside structured OSC events.
@@ -68,6 +68,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ywire/wire-statemachine.h> /* enum yetty_ywire_envelope_kind */
 
 #ifdef __cplusplus
 extern "C" {
@@ -139,9 +140,10 @@ struct yetty_ycore_buffer *yetty_yface_out_buf(struct yetty_yface *yface);
  * codes the same flag should also be reflected in the meta struct that
  * lives in `args` so the receiver can mirror the choice without needing
  * a yface API param. */
-struct yetty_ycore_void_result yetty_yface_start_write(struct yetty_yface *yface, int osc_code,
-                                                       int compressed, const void *args,
-                                                       size_t args_len);
+struct yetty_ycore_void_result yetty_yface_start_write(struct yetty_yface *yface,
+                                                       enum yetty_ywire_envelope_kind kind,
+                                                       int wire_code, int compressed,
+                                                       const void *args, size_t args_len);
 struct yetty_ycore_void_result yetty_yface_write(struct yetty_yface *yface, const void *src,
                                                  size_t len);
 struct yetty_ycore_void_result yetty_yface_finish_write(struct yetty_yface *yface);
@@ -157,7 +159,7 @@ struct yetty_ycore_void_result yetty_yface_finish_write(struct yetty_yface *yfac
  *
  * Either callback may be NULL to discard that direction.
  *---------------------------------------------------------------------------*/
-typedef void (*yetty_yface_msg_cb)(void *user, int osc_code, const uint8_t *args, size_t args_len,
+typedef void (*yetty_yface_msg_cb)(void *user, int wire_code, const uint8_t *args, size_t args_len,
                                    const uint8_t *payload, size_t payload_len);
 typedef void (*yetty_yface_raw_cb)(void *user, const char *bytes, size_t n);
 
@@ -188,17 +190,18 @@ struct yetty_ycore_void_result yetty_yface_finish_read(struct yetty_yface *yface
  * long-lived yetty_yface around instead — saves the LZ4 context alloc.
  *---------------------------------------------------------------------------*/
 
-/* Encode and append the full OSC sequence
- *   "\e]<osc_code>;<b64(args)>;<b64[(LZ4F)body]>\e\\"
- * to `out_buf`. `args`/`args_len` and `body`/`body_len` may both be 0;
- * the wire still carries `;;` between them. `compressed` matches
- * yetty_yface_start_write. */
-struct yetty_ycore_void_result yetty_yface_emit(int osc_code, int compressed, const void *args,
+/* Encode and append the full DCS sequence
+ *   "\eP<wire_code>y<b64(args)>;<b64[(LZ4F)body]>\e\\"
+ * to `out_buf`. The `y` is the DCS final byte (YETTY_YWIRE_DCS_FINAL);
+ * see <yetty/ywire/wire-statemachine.h>. `args`/`args_len` and
+ * `body`/`body_len` may both be 0; the wire still carries the `;`
+ * between them. `compressed` matches yetty_yface_start_write. */
+struct yetty_ycore_void_result yetty_yface_emit(int wire_code, int compressed, const void *args,
                                                 size_t args_len, const void *body, size_t body_len,
                                                 struct yetty_ycore_buffer *out_buf);
 
 /* Same, but write the full envelope straight to `fd` (blocking write). */
-struct yetty_ycore_void_result yetty_yface_emit_to_fd(int fd, int osc_code, int compressed,
+struct yetty_ycore_void_result yetty_yface_emit_to_fd(int fd, int wire_code, int compressed,
                                                       const void *args, size_t args_len,
                                                       const void *body, size_t body_len);
 

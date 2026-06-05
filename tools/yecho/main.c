@@ -2,7 +2,7 @@
  * yecho - echo text with embedded glyphs and styled blocks.
  *
  * Inside a yetty terminal, the parsed input is rendered into a ydraw-core
- * buffer and emitted as a YETTY_OSC_YDRAW_BIN sequence (same wire format
+ * buffer and emitted as a YETTY_DCS_YDRAW_BIN sequence (same wire format
  * ycat uses). Outside a yetty terminal there's nothing meaningful to do
  * with rich content; we fall back to writing the raw input through —
  * unless --osc is forced.
@@ -13,6 +13,7 @@
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ycore/result.h>
+#include <yetty/ycore/terminal-detect.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -55,8 +56,7 @@ static int terminal_columns(void)
 
 static bool in_yetty_terminal(void)
 {
-    const char *tp = getenv("TERM_PROGRAM");
-    return tp && strcmp(tp, "yetty") == 0;
+    return yetty_running_under_yetty() != 0;
 }
 
 static void usage(FILE *out, const char *prog)

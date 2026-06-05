@@ -11,7 +11,7 @@
  *     in-flight requests.
  *
  * Outbound wire shape: every CMD/BULK/BYE goes out as a record inside
- * a YETTY_OSC_YCOMPOSITOR_BIN envelope of shape `{u32 length, u32 id,
+ * a YETTY_DCS_YCOMPOSITOR_BIN envelope of shape `{u32 length, u32 id,
  * u32 SUB_OP, payload...}`. canvas_create emits a CREATE_CHILD admin
  * record (id=0) whose init_payload is the SUB_HELLO body, so the
  * server-side figure is bound to its session in the same envelope.
@@ -28,9 +28,9 @@
 #include <yetty/yplatform/time.h>
 #include <yetty/yrdawn/wire.h>
 
-/* Local copy — pulling <yetty/yterminal/osc-codes.h> would drag in
+/* Local copy — pulling <yetty/yterminal/dcs-codes.h> would drag in
  * terminal-only constants for a single value. */
-#define YETTY_YRDAWN_CLIENT_OSC_COMPOSITOR_BIN 630000
+#define YETTY_YRDAWN_CLIENT_DCS_COMPOSITOR_BIN 630000
 
 struct pending_req {
     uint32_t req_id; /* 0 = free slot */
@@ -312,7 +312,7 @@ uint64_t yetty_yrdawn_client_alloc_handle(struct yetty_yrdawn_client *c)
  * Outbound: container envelope writer
  *
  * Every outbound record gets wrapped in `{u32 record_length, u32 id}
- * + payload` and ridden on YETTY_OSC_YCOMPOSITOR_BIN. payload always
+ * + payload` and ridden on YETTY_DCS_YCOMPOSITOR_BIN. payload always
  * starts with a u32 SUB_OP (figure-targeted) or u32 admin_op (id==0
  * container admin).
  *=========================================================================*/
@@ -320,7 +320,7 @@ uint64_t yetty_yrdawn_client_alloc_handle(struct yetty_yrdawn_client *c)
 static struct yetty_ycore_void_result emit_envelope(struct yetty_yrdawn_client *c, int compressed,
                                                     const uint8_t *body, size_t body_len)
 {
-    return yetty_yface_emit_to_fd(c->out_fd, YETTY_YRDAWN_CLIENT_OSC_COMPOSITOR_BIN, compressed,
+    return yetty_yface_emit_to_fd(c->out_fd, YETTY_YRDAWN_CLIENT_DCS_COMPOSITOR_BIN, compressed,
                                   NULL, 0, body, body_len);
 }
 
