@@ -10,6 +10,7 @@
 
 #include <webgpu/webgpu.h>
 #include <pthread.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +29,18 @@
 #define LOG_TAG "yetty"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+/* Keyboard/scroll modifier bits, matching the GLFW-derived values used
+ * across yui/yetty (no shared header declares them yet). The pinch
+ * gesture synthesises a Ctrl+scroll so it lands on the existing visual
+ * zoom path. */
+#define YETTY_MOD_CONTROL 0x0002
+
+/* Pinch sensitivity: zoom-scale "wheel notches" produced per pixel of
+ * change in the finger-to-finger distance. The desktop Ctrl+wheel path
+ * multiplies notches by 0.1 to get the scale delta, so each pixel of
+ * spread contributes ~0.002 to the visual zoom scale. Tunable. */
+#define YETTY_ANDROID_PINCH_NOTCH_PER_PX 0.02f
 
 /* Forward declarations */
 const char *yetty_yplatform_get_cache_dir(void);
@@ -53,6 +66,12 @@ struct yetty_yplatform_app_state {
     pthread_t render_thread;
     int running;
     int initialized;
+    /* Two-finger pinch-to-zoom state. While pinch_active is set, pointer
+     * motion drives the visual magnify (Ctrl+wheel equivalent) instead of
+     * being forwarded as a mouse drag/selection. pinch_last_dist is the
+     * previous finger-to-finger distance in pixels. */
+    int pinch_active;
+    float pinch_last_dist;
 };
 
 /* Render thread args */
@@ -617,6 +636,26 @@ static uint32_t akey_to_ascii(int akey, int32_t meta)
     }
 }
 
+/* Euclidean distance between the first two active pointers. */
+static float pinch_distance(const AInputEvent *event)
+{
+    float x0 = AMotionEvent_getX(event, 0);
+    float y0 = AMotionEvent_getY(event, 0);
+    float x1 = AMotionEvent_getX(event, 1);
+    float y1 = AMotionEvent_getY(event, 1);
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+    return sqrtf(dx * dx + dy * dy);
+}
+
+/* Midpoint between the first two active pointers — used as the zoom
+ * anchor so the content under the pinch centre stays put. */
+static void pinch_center(const AInputEvent *event, float *center_x, float *center_y)
+{
+    *center_x = (AMotionEvent_getX(event, 0) + AMotionEvent_getX(event, 1)) * 0.5f;
+    *center_y = (AMotionEvent_getY(event, 0) + AMotionEvent_getY(event, 1)) * 0.5f;
+}
+
 static int32_t handle_input(struct android_app *app, AInputEvent *event)
 {
     struct yetty_yplatform_app_state *state = app->userData;
@@ -681,7 +720,70 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
     }
 
     if (type == AINPUT_EVENT_TYPE_MOTION) {
+        int32_t pointer_count = AMotionEvent_getPointerCount(event);
         action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
+
+        /* Pinch-to-zoom: two fingers spreading apart / together magnify the
+         * view non-intrusively — the touch equivalent of Ctrl+wheel on the
+         * desktop. We synthesise a Ctrl+MOUSE_SCROLL so it reuses the exact
+         * visual-zoom path in yetty_event_handler (single source of truth
+         * for sensitivity and anchor math). Once a second finger lands we
+         * stay in pinch mode until every finger lifts, swallowing the
+         * single-finger motion that remains so the terminal doesn't treat
+         * it as a drag/selection. */
+        if (action == AMOTION_EVENT_ACTION_POINTER_DOWN || state->pinch_active) {
+            switch (action) {
+            case AMOTION_EVENT_ACTION_POINTER_DOWN:
+                if (pointer_count >= 2) {
+                    /* The first finger already emitted a MOUSE_DOWN; since
+                     * we'll swallow the matching UP while pinching, release
+                     * it now so the terminal's button state stays balanced
+                     * (and any nascent selection is cancelled). */
+                    ev.type = YETTY_YCORE_MOUSE_UP;
+                    ev.mouse.x = AMotionEvent_getX(event, 0);
+                    ev.mouse.y = AMotionEvent_getY(event, 0);
+                    ev.mouse.button = 0;
+                    ev.mouse.mods = 0;
+                    state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
+
+                    state->pinch_active = 1;
+                    state->pinch_last_dist = pinch_distance(event);
+                }
+                return 1;
+            case AMOTION_EVENT_ACTION_MOVE:
+                if (pointer_count >= 2 && state->pinch_last_dist > 0.0f) {
+                    float dist = pinch_distance(event);
+                    float center_x, center_y;
+                    pinch_center(event, &center_x, &center_y);
+                    ev.type = YETTY_YCORE_MOUSE_SCROLL;
+                    ev.mouse_scroll.x = center_x;
+                    ev.mouse_scroll.y = center_y;
+                    ev.mouse_scroll.dx = 0.0f;
+                    ev.mouse_scroll.dy =
+                        (dist - state->pinch_last_dist) * YETTY_ANDROID_PINCH_NOTCH_PER_PX;
+                    ev.mouse_scroll.mods = YETTY_MOD_CONTROL;
+                    state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
+                    state->pinch_last_dist = dist;
+                }
+                return 1;
+            case AMOTION_EVENT_ACTION_POINTER_UP:
+                /* A finger lifted. The leaving pointer is still counted in
+                 * this event; if three or more were down, re-baseline from
+                 * the remaining pair, otherwise wait for the final UP. */
+                if (pointer_count >= 3) {
+                    state->pinch_last_dist = pinch_distance(event);
+                }
+                return 1;
+            case AMOTION_EVENT_ACTION_UP:
+            case AMOTION_EVENT_ACTION_CANCEL:
+                state->pinch_active = 0;
+                state->pinch_last_dist = 0.0f;
+                return 1;
+            default:
+                return 1;
+            }
+        }
+
         x = AMotionEvent_getX(event, 0);
         y = AMotionEvent_getY(event, 0);
 
