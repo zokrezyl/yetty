@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include <yetty/ydiagram/graph-ir.h>
+#include <yetty/yplatform/compat.h>
 
 static char *trim(char *s)
 {
