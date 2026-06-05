@@ -218,7 +218,7 @@ classes:
         get: true
         set: true
       - name: z
-        type: int32_t
+        type: int
         get: true
         set: true
       - name: hidden
