@@ -10,7 +10,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yrender-utils/screenshot.h>
-#include <yetty/yterm/terminal.h>
+#include <yetty/yterminal/terminal.h>
 #include <yetty/ycore/math.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/ytrace/ytrace.h>
@@ -571,14 +571,14 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 yetty_yui_tile_find_by_id(root, event->pane_create.pane_id);
             if (pane) {
                 struct yetty_ycore_grid_size gs = {.rows = 24, .cols = 80};
-                struct yetty_yterm_terminal_result tr =
-                    yetty_yterm_terminal_create(gs, &yetty->context);
+                struct yetty_yterminal_terminal_result tr =
+                    yetty_yterminal_terminal_create(gs, &yetty->context);
                 if (YETTY_IS_ERR(tr)) {
                     yerror("yetty: PANE_CREATE: terminal create: %s", tr.error.msg);
                     yetty_ycore_error_destroy(tr.error);
                 } else {
                     struct yetty_ycore_void_result pr =
-                        yetty_yui_tile_pane_push_view(pane, yetty_yterm_terminal_as_view(tr.value));
+                        yetty_yui_tile_pane_push_view(pane, yetty_yterminal_terminal_as_view(tr.value));
                     if (YETTY_IS_ERR(pr)) {
                         yerror("yetty: PANE_CREATE: push_view: %s", pr.error.msg);
                         yetty_ycore_error_destroy(pr.error);
@@ -634,14 +634,14 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 yetty_yui_tile_find_by_id(root, event->pane_split.new_pane_id);
             if (new_pane) {
                 struct yetty_ycore_grid_size gs = {.rows = 24, .cols = 80};
-                struct yetty_yterm_terminal_result tr =
-                    yetty_yterm_terminal_create(gs, &yetty->context);
+                struct yetty_yterminal_terminal_result tr =
+                    yetty_yterminal_terminal_create(gs, &yetty->context);
                 if (YETTY_IS_ERR(tr)) {
                     yerror("yetty: PANE_SPLIT: terminal create: %s", tr.error.msg);
                     //
                     yetty_ycore_error_destroy(tr.error);
                 } else {
-                    yetty_yui_tile_pane_push_view(new_pane, yetty_yterm_terminal_as_view(tr.value));
+                    yetty_yui_tile_pane_push_view(new_pane, yetty_yterminal_terminal_as_view(tr.value));
                 }
                 yetty_yui_tile_clear_focus(root);
                 yetty_yui_tile_pane_set_focused(new_pane, 1);

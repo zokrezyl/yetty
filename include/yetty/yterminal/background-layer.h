@@ -1,7 +1,7 @@
-#ifndef YETTY_YTERM_BACKGROUND_LAYER_H
-#define YETTY_YTERM_BACKGROUND_LAYER_H
+#ifndef YETTY_YTERMINAL_BACKGROUND_LAYER_H
+#define YETTY_YTERMINAL_BACKGROUND_LAYER_H
 
-#include <yetty/yterm/terminal.h>
+#include <yetty/yterminal/terminal.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,11 +19,11 @@ extern "C" {
  * the default (opaque black). The layer copies the values, so the caller's
  * array does not need to outlive the call.
  */
-struct yetty_yterm_terminal_layer_result yetty_yterm_background_layer_create(
+struct yetty_yterminal_layer_result yetty_yterminal_background_layer_create(
     const struct yetty_context *yetty_context, const float color_rgba[4]);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YTERM_BACKGROUND_LAYER_H */
+#endif /* YETTY_YTERMINAL_BACKGROUND_LAYER_H */

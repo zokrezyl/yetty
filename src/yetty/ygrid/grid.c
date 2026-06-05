@@ -2577,6 +2577,11 @@ static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_impl(struct yet
         return YETTY_ERR(yetty_yfigure_figure_data_ptr, "ygrid_factory: create", gr);
     }
     gr.value->absolute_coords = absolute_coords;
+    /* Mirror the coordinate mode onto the yfigure base so the owning
+     * container's hit-test can re-origin (local) or pass through (absolute)
+     * the cursor without reaching into ygrid-private state. */
+    yetty_yfigure_figure_absolute_coords_set(
+        (struct yetty_yclass_object *)yetty_ygrid_as_figure(gr.value) - 1, absolute_coords);
     if (user) {
         const struct yetty_ygrid_factory_args *args = user;
         if (args->default_font) {

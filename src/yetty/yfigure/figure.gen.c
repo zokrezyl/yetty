@@ -123,3 +123,20 @@ struct yetty_ycore_void_result yetty_yfigure_figure_dirty_set(struct yetty_yclas
     data.value->dirty = value;
     return YETTY_OK_VOID();
 }
+
+struct yetty_ycore_int_result yetty_yfigure_figure_absolute_coords_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_int, "yetty_yfigure_figure_absolute_coords_get: data block", data);
+    return YETTY_OK(yetty_ycore_int, data.value->absolute_coords);
+}
+
+struct yetty_ycore_void_result yetty_yfigure_figure_absolute_coords_set(struct yetty_yclass_object *obj, int value)
+{
+    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    if (YETTY_IS_ERR(data))
+        return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_absolute_coords_set: data block", data);
+    data.value->absolute_coords = value;
+    return YETTY_OK_VOID();
+}

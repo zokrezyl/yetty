@@ -1,5 +1,5 @@
-#ifndef YETTY_YTERM_TERMINAL_H
-#define YETTY_YTERM_TERMINAL_H
+#ifndef YETTY_YTERMINAL_TERMINAL_H
+#define YETTY_YTERMINAL_TERMINAL_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -13,9 +13,9 @@ extern "C" {
 #endif
 
 /* Forward declarations */
-struct yetty_yterm_terminal;
+struct yetty_yterminal_terminal;
 struct yetty_yrender_terminal_layer;
-struct yetty_yterm_terminal_layer_ops;
+struct yetty_yterminal_layer_ops;
 struct yetty_ywire_wire_statemachine;
 struct yetty_yevent_event_loop;
 struct yetty_platform_pty;
@@ -24,24 +24,24 @@ struct yetty_yrender_gpu_resource_binder;
 struct yetty_ydraw_target;
 
 /* Result types */
-YETTY_YRESULT_DECLARE(yetty_yterm_terminal, struct yetty_yterm_terminal *);
-YETTY_YRESULT_DECLARE(yetty_yterm_terminal_layer, struct yetty_yrender_terminal_layer *);
+YETTY_YRESULT_DECLARE(yetty_yterminal_terminal, struct yetty_yterminal_terminal *);
+YETTY_YRESULT_DECLARE(yetty_yterminal_layer, struct yetty_yrender_terminal_layer *);
 
 /* PTY write callback - called when layer needs to send data to PTY */
-typedef struct yetty_ycore_void_result (*yetty_yterm_pty_write_fn)(const char *data, size_t len,
+typedef struct yetty_ycore_void_result (*yetty_yterminal_pty_write_fn)(const char *data, size_t len,
                                                                    void *userdata);
 
 /* Request render callback - called when layer needs a render frame */
-typedef struct yetty_ycore_void_result (*yetty_yterm_request_render_fn)(void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterminal_request_render_fn)(void *userdata);
 
 /* Scroll callback - called when layer scrolls, passes source layer and line
  * count */
-typedef struct yetty_ycore_void_result (*yetty_yterm_scroll_fn)(
+typedef struct yetty_ycore_void_result (*yetty_yterminal_scroll_fn)(
     struct yetty_yrender_terminal_layer *source, int lines, void *userdata);
 
 /* Cursor callback - called when layer moves cursor, passes source layer and
  * position */
-typedef struct yetty_ycore_void_result (*yetty_yterm_cursor_fn)(
+typedef struct yetty_ycore_void_result (*yetty_yterminal_cursor_fn)(
     struct yetty_yrender_terminal_layer *source, struct yetty_ycore_grid_cursor_pos cursor_pos,
     void *userdata);
 
@@ -49,7 +49,7 @@ typedef struct yetty_ycore_void_result (*yetty_yterm_cursor_fn)(
  * (card click, click_enabled) or 1501 (card move, move_enabled). The two
  * args carry the *current* subscription state for both modes; the layer
  * fires this whenever either changes. */
-typedef struct yetty_ycore_void_result (*yetty_yterm_mouse_sub_fn)(int click_enabled,
+typedef struct yetty_ycore_void_result (*yetty_yterminal_mouse_sub_fn)(int click_enabled,
                                                                    int move_enabled,
                                                                    void *userdata);
 
@@ -57,31 +57,31 @@ typedef struct yetty_ycore_void_result (*yetty_yterm_mouse_sub_fn)(int click_ena
  * receives YETTY_OSC_CS_CLIENT_INPUT_SUB from the inferior. `flags` is the
  * new (post-update) bitmask of YETTY_YMGUI_TERM_SUB_* bits. flags == 0
  * means full unsubscribe. */
-typedef struct yetty_ycore_void_result (*yetty_yterm_term_input_sub_fn)(uint32_t flags,
+typedef struct yetty_ycore_void_result (*yetty_yterminal_term_input_sub_fn)(uint32_t flags,
                                                                         void *userdata);
 
 /* OSC emit callback - fires when a layer needs to send an OSC envelope
  * back to the client app (PTY child). Used by ymgui-layer to deliver
  * focus events, by future bidirectional layers, etc. The terminal
  * implements this via terminal_yface_emit. */
-typedef struct yetty_ycore_void_result (*yetty_yterm_emit_osc_fn)(int osc_code, const void *payload,
+typedef struct yetty_ycore_void_result (*yetty_yterminal_emit_osc_fn)(int osc_code, const void *payload,
                                                                   size_t len, void *userdata);
 
 /* Alt-screen-toggle callback - fired by the text-layer when libvterm
  * switches in/out of alternate-screen mode (DEC ?1047/?1049/?47). The
  * terminal forwards the new state to every layer via its set_alt_screen
  * op so each layer can save/restore its content. */
-typedef struct yetty_ycore_void_result (*yetty_yterm_alt_screen_fn)(int active, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterminal_alt_screen_fn)(int active, void *userdata);
 
 /* Clear-screen callback - fired by the text-layer when libvterm processes
  * a full-screen erase (CSI 2J / 3J) on the currently active screen. The
  * terminal forwards via each layer's clear_screen op; the layer is expected
  * to wipe the active half of its content (primary or alternate — the layer
  * already tracks which is current via set_alt_screen). */
-typedef struct yetty_ycore_void_result (*yetty_yterm_clear_screen_fn)(void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterminal_clear_screen_fn)(void *userdata);
 
 /* Layer ops */
-struct yetty_yterm_terminal_layer_ops {
+struct yetty_yterminal_layer_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yrender_terminal_layer *self);
     /* Single atomic update: grid (cols/rows) AND cell pixel size. The
      * canvas's grid_pixel area is `cols * cell_w x rows * cell_h`, and
@@ -202,46 +202,46 @@ struct yetty_yterm_terminal_layer_ops {
 
 /* Layer base - embed as first member in subclasses */
 struct yetty_yrender_terminal_layer {
-    const struct yetty_yterm_terminal_layer_ops *ops;
+    const struct yetty_yterminal_layer_ops *ops;
     struct yetty_ycore_grid_size grid_size;
     struct yetty_ycore_pixel_size cell_size;
 
     int dirty;
     int in_external_scroll; /* Set when receiving scroll from another layer */
     /* PTY write callback - set by creator */
-    yetty_yterm_pty_write_fn pty_write_fn;
+    yetty_yterminal_pty_write_fn pty_write_fn;
     void *pty_write_userdata;
     /* Request render callback - set by creator */
-    yetty_yterm_request_render_fn request_render_fn;
+    yetty_yterminal_request_render_fn request_render_fn;
     void *request_render_userdata;
     /* Scroll callback - set by creator */
-    yetty_yterm_scroll_fn scroll_fn;
+    yetty_yterminal_scroll_fn scroll_fn;
     void *scroll_userdata;
     /* Cursor callback - set by creator */
-    yetty_yterm_cursor_fn cursor_fn;
+    yetty_yterminal_cursor_fn cursor_fn;
     void *cursor_userdata;
     /* Mouse-subscription callback - set by creator. Optional. */
-    yetty_yterm_mouse_sub_fn mouse_sub_fn;
+    yetty_yterminal_mouse_sub_fn mouse_sub_fn;
     void *mouse_sub_userdata;
     /* Terminal-wide input subscription callback - set by creator. Optional.
      * Fired when a layer receives YETTY_OSC_CS_CLIENT_INPUT_SUB. */
-    yetty_yterm_term_input_sub_fn term_input_sub_fn;
+    yetty_yterminal_term_input_sub_fn term_input_sub_fn;
     void *term_input_sub_userdata;
     /* OSC emit callback - set by creator. Optional. Used by layers that
    * need to send envelopes back to the PTY child (e.g. ymgui-layer for
    * focus events). */
-    yetty_yterm_emit_osc_fn emit_osc_fn;
+    yetty_yterminal_emit_osc_fn emit_osc_fn;
     void *emit_osc_userdata;
     /* Alt-screen-toggle callback - set by creator. Fired by the layer
    * that hosts libvterm (text-layer) when the inferior toggles DEC
    * ?1049 / ?1047 / ?47. The terminal hooks this and broadcasts via
    * each layer's set_alt_screen op. */
-    yetty_yterm_alt_screen_fn alt_screen_fn;
+    yetty_yterminal_alt_screen_fn alt_screen_fn;
     void *alt_screen_userdata;
     /* Clear-screen callback - set by creator. Fired by the text-layer
    * when libvterm reports a full-screen erase. The terminal hooks this
    * and broadcasts via each layer's clear_screen op. */
-    yetty_yterm_clear_screen_fn clear_screen_fn;
+    yetty_yterminal_clear_screen_fn clear_screen_fn;
     void *clear_screen_userdata;
 };
 
@@ -250,45 +250,36 @@ struct yetty_yrender_terminal_layer {
  * The pane background colour is read from the config in yetty_context as
  * "terminal/background-color" (hex string: "#RGB", "#RGBA", "#RRGGBB" or
  * "#RRGGBBAA"). Default when unset or unparseable is opaque black. */
-struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
+struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     struct yetty_ycore_grid_size grid_size, const struct yetty_context *yetty_context);
-struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal);
+struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(struct yetty_yterminal_terminal *terminal);
 
 /* Get terminal as yui view (for pushing into pane) */
-struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal);
+struct yetty_yui_view *yetty_yterminal_terminal_as_view(struct yetty_yterminal_terminal *terminal);
 
 /* Reverse of _as_view: returns the owning terminal pointer if `view` is
  * a yterm view, NULL for any other view kind (VNC viewer, ydvnc, …) or
  * NULL input. Implemented by comparing view->ops against the static
  * terminal_view_ops table in terminal.c, so it's safe to call on any
  * yetty_yui_view without prior knowledge of its type. */
-struct yetty_yterm_terminal *yetty_yterm_terminal_from_view(struct yetty_yui_view *view);
+struct yetty_yterminal_terminal *yetty_yterminal_terminal_from_view(struct yetty_yui_view *view);
 
 /* Borrowed accessor for the terminal's wire statemachine (one per
  * terminal — same lifetime). NULL when terminal is NULL. Used by the
  * yui debug window to pull rolling envelope traffic stats. */
-struct yetty_ywire_wire_statemachine *yetty_yterm_terminal_wire_sm(
-    struct yetty_yterm_terminal *terminal);
+struct yetty_ywire_wire_statemachine *yetty_yterminal_terminal_wire_sm(
+    struct yetty_yterminal_terminal *terminal);
 
-struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
-    struct yetty_yterm_terminal *terminal, struct yetty_ycore_grid_size grid_size,
+struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);
 
 /* Terminal state */
-uint32_t yetty_yterm_terminal_get_cols(const struct yetty_yterm_terminal *terminal);
-uint32_t yetty_yterm_terminal_get_rows(const struct yetty_yterm_terminal *terminal);
-
-/* Layer management */
-struct yetty_ycore_void_result yetty_yterm_terminal_layer_add(
-    struct yetty_yterm_terminal *terminal, struct yetty_yrender_terminal_layer *layer);
-struct yetty_ycore_void_result yetty_yterm_terminal_layer_remove(
-    struct yetty_yterm_terminal *terminal, struct yetty_yrender_terminal_layer *layer);
-size_t yetty_yterm_terminal_layer_count(const struct yetty_yterm_terminal *terminal);
-struct yetty_yrender_terminal_layer *yetty_yterm_terminal_layer_get(
-    const struct yetty_yterm_terminal *terminal, size_t index);
+uint32_t yetty_yterminal_terminal_get_cols(const struct yetty_yterminal_terminal *terminal);
+uint32_t yetty_yterminal_terminal_get_rows(const struct yetty_yterminal_terminal *terminal);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YTERM_TERMINAL_H */
+#endif /* YETTY_YTERMINAL_TERMINAL_H */

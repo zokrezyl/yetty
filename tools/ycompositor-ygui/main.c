@@ -47,7 +47,7 @@
 #include <yetty/ygui/ygui.h>
 #include <yetty/ymgui/figure.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterminal/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 #include <lz4frame.h>
 #include <webgpu/webgpu.h>

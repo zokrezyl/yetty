@@ -2,27 +2,27 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
-#include "yetty/yterm/rpc.h"
-#include "yetty/yterm/methods.h"
+#include "yetty/yvterm/rpc.h"
+#include "yetty/yvterm/methods.h"
 #include <yetty/yclass/class.h>
-#include "yetty/yterm/shader-glyph-figure.h"
+#include "yetty/yvterm/shader-glyph-figure.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-struct yetty_yclass_object_ptr_result yetty_yterm_shader_glyph_create(struct yetty_yclass_ctx *ctx)
+struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(struct yetty_yclass_ctx *ctx)
 {
-    ydebug("class=yetty_yterm_shader_glyph");
+    ydebug("class=yetty_yvterm_shader_glyph");
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    struct yetty_yclass_ptr_result class_accessor_r = yetty_yterm_shader_glyph_class_get();
+    struct yetty_yclass_ptr_result class_accessor_r = yetty_yvterm_shader_glyph_class_get();
     if (YETTY_IS_ERR(class_accessor_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yterm_shader_glyph_create: class accessor failed", class_accessor_r);
+                         "yetty_yvterm_shader_glyph_create: class accessor failed", class_accessor_r);
     const struct yetty_yclass *klass = class_accessor_r.value;
 
     if (!ctx || !ctx->session) {
@@ -38,26 +38,26 @@ struct yetty_yclass_object_ptr_result yetty_yterm_shader_glyph_create(struct yet
      * response isn't silently swallowed. */
     {
         struct yetty_ycore_void_result translate_class_r =
-            yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_yterm_shader_glyph");
+            yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_yvterm_shader_glyph");
         if (YETTY_IS_ERR(translate_class_r)) {
             yetty_ycore_error_print(stderr,
-                "yetty_yterm_shader_glyph_create: translate_class (degraded — will lazy-resolve)",
+                "yetty_yvterm_shader_glyph_create: translate_class (degraded — will lazy-resolve)",
                 translate_class_r.error);
             yetty_ycore_error_destroy(translate_class_r.error);
         }
     }
 
     uint64_t handle = 0;
-    const char *class_name = "yetty_yterm_shader_glyph";
+    const char *class_name = "yetty_yvterm_shader_glyph";
     struct yetty_ycore_size_result create_call_r = yetty_yclass_rpc_call(
         ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name, strlen(class_name), &handle,
         sizeof(handle));
     if (YETTY_IS_ERR(create_call_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yterm_shader_glyph_create: CREATE call failed", create_call_r);
+                         "yetty_yvterm_shader_glyph_create: CREATE call failed", create_call_r);
     if (create_call_r.value != sizeof(handle) || !handle)
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yterm_shader_glyph_create: CREATE returned no/invalid handle");
+                         "yetty_yvterm_shader_glyph_create: CREATE returned no/invalid handle");
 
     /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
      * and writing the handle past the header was misaligned on 32-bit
@@ -68,22 +68,22 @@ struct yetty_yclass_object_ptr_result yetty_yterm_shader_glyph_create(struct yet
      * honoured for this allocation. */
     struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
     if (!proxy)
-        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yterm_shader_glyph_create: calloc(proxy) failed");
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yvterm_shader_glyph_create: calloc(proxy) failed");
     proxy->header.klass = klass;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
 
-/* ---- yterm: class name → accessor (lazy) ---------------------- */
+/* ---- yvterm: class name → accessor (lazy) ---------------------- */
 
-static struct yetty_yclass_ptr_result yetty_yterm_accessor_lookup(const char *name)
+static struct yetty_yclass_ptr_result yetty_yvterm_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_yterm_shader_glyph") == 0) return yetty_yterm_shader_glyph_class_get();
+    if (strcmp(name, "yetty_yvterm_shader_glyph") == 0) return yetty_yvterm_shader_glyph_class_get();
     /* "Not mine": OK with NULL value — yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
-/* ---- yterm: explicit yclass-RPC hook registration ------------- */
+/* ---- yvterm: explicit yclass-RPC hook registration ------------- */
 
 /* Installs this module's server-side discovery hooks: the accessor
  * lookup feeds yetty_yclass_by_name()'s registry-miss path, and (when
@@ -93,16 +93,16 @@ static struct yetty_yclass_ptr_result yetty_yterm_accessor_lookup(const char *na
  * are no-ops. This replaces the former load-time installer: a module
  * merely being linked no longer mutates global state before main(),
  * and there is no abort() path on a constructor. */
-struct yetty_ycore_void_result yetty_yterm_register(void)
+struct yetty_ycore_void_result yetty_yvterm_register(void)
 {
     static bool registered = false;
     if (registered)
         return YETTY_OK_VOID();
 
     struct yetty_ycore_void_result add_accessor_r =
-        yetty_yclass_add_accessor_lookup(yetty_yterm_accessor_lookup);
+        yetty_yclass_add_accessor_lookup(yetty_yvterm_accessor_lookup);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
-                        "yetty_yterm_register: add_accessor_lookup");
+                        "yetty_yvterm_register: add_accessor_lookup");
     registered = true;
     return YETTY_OK_VOID();
 }

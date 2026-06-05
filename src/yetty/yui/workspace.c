@@ -4,7 +4,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yterm/terminal.h>
+#include <yetty/yterminal/terminal.h>
 #include <yetty/yvnc/vnc-viewer.h>
 #include <yetty/ydvnc/ydvnc-viewer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -552,10 +552,10 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                 yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             } else {
                 /* Create terminal */
-                struct yetty_yterm_terminal_result term_res;
+                struct yetty_yterminal_terminal_result term_res;
                 struct yetty_ycore_grid_size grid_size = {.rows = 24, .cols = 80};
 
-                term_res = yetty_yterm_terminal_create(grid_size, yetty_ctx);
+                term_res = yetty_yterminal_terminal_create(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
                     yetty_yui_tile_destroy(tile_res.value);
                     return YETTY_ERR(yetty_ycore_void,
@@ -563,7 +563,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                 }
 
                 yetty_yui_tile_pane_push_view(tile_res.value,
-                                              yetty_yterm_terminal_as_view(term_res.value));
+                                              yetty_yterminal_terminal_as_view(term_res.value));
                 yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             }
         }

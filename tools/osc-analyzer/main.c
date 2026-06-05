@@ -22,7 +22,7 @@
  * (yetty_ywire_wire_statemachine): coroutine-driven framer, lz4f
  * auto-sniff, dispatch to a registered layer per OSC code. The analyzer
  * registers itself for every wire code published in
- * <yetty/yterm/osc-codes.h>, <yetty/yterm/client-input.h>, and
+ * <yetty/yterminal/osc-codes.h>, <yetty/yterminal/client-input.h>, and
  * <yetty/ymgui/wire.h>, so every envelope flows through the same path
  * yetty's terminal uses for real.
  *
@@ -68,9 +68,9 @@
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/yterm/client-input.h>
-#include <yetty/yterm/osc-codes.h>
-#include <yetty/yterm/terminal.h>
+#include <yetty/yterminal/client-input.h>
+#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/terminal.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ytrace/ytrace.h>
 

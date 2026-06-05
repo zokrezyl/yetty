@@ -11,7 +11,7 @@
 #endif
 
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YDRAW_BIN */
+#include <yetty/yterminal/osc-codes.h>    /* YETTY_OSC_YDRAW_BIN */
 
 // Composite type for yplot
 #define YETTY_YDRAW_TYPE_YPLOT 0x80000003u

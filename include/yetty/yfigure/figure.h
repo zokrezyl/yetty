@@ -26,5 +26,7 @@ struct yetty_ycore_int_result yetty_yfigure_figure_hidden_get(struct yetty_yclas
 struct yetty_ycore_void_result yetty_yfigure_figure_hidden_set(struct yetty_yclass_object *obj, int value);
 struct yetty_ycore_int_result yetty_yfigure_figure_dirty_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_figure_dirty_set(struct yetty_yclass_object *obj, int value);
+struct yetty_ycore_int_result yetty_yfigure_figure_absolute_coords_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yfigure_figure_absolute_coords_set(struct yetty_yclass_object *obj, int value);
 
 #endif

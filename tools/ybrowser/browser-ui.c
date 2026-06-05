@@ -44,8 +44,8 @@
 #include <yetty/yimage/yimage.h>
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yterm/client-input.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterminal/client-input.h>
+#include <yetty/yterminal/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include "browser-ui.h"

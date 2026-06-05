@@ -1,5 +1,5 @@
-#ifndef YETTY_YTERM_OSC_CODES_H
-#define YETTY_YTERM_OSC_CODES_H
+#ifndef YETTY_YTERMINAL_OSC_CODES_H
+#define YETTY_YTERMINAL_OSC_CODES_H
 
 /*
  * Yetty OSC vendor IDs — leaf header (no other yetty deps), so thin
@@ -36,4 +36,4 @@
  * target this code under an env-var gate during the transition. */
 #define YETTY_OSC_YCOMPOSITOR_BIN 630000
 
-#endif /* YETTY_YTERM_OSC_CODES_H */
+#endif /* YETTY_YTERMINAL_OSC_CODES_H */

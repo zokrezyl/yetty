@@ -507,7 +507,7 @@ endif()
 # duplicate archive entries on the link line.
 # yetty_yetty is the module wrapping yetty.c + <yetty/yetty/yetty.h>; it
 # PUBLIC-links webgpu so anything linking it gets the webgpu include path.
-list(APPEND YETTY_LIBS yetty_yetty yetty_yui yetty_yterm yetty_yui_core yetty_yrender yetty_yrender_utils yetty_ywebgpu yetty_yevent)
+list(APPEND YETTY_LIBS yetty_yetty yetty_yui yetty_yterminal yetty_yvterm yetty_yui_core yetty_yrender yetty_yrender_utils yetty_ywebgpu yetty_yevent)
 
 # Feature library link platforms
 if(YETTY_ENABLE_FEATURE_BASE)
@@ -616,11 +616,11 @@ function(yetty_embed_assets TARGET)
         YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
     # Collect shaders from module locations
-    file(COPY "${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    file(COPY "${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/text-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/ydraw-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    file(COPY "${YETTY_ROOT}/src/yetty/yterm/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/yterminal/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # Generated SDF dispatcher + sdf_* functions — attached at runtime as a
     # child resource set of ydraw-layer; see src/yetty/ysdf/gen-sdf-code.py.
     file(COPY "${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
@@ -640,7 +640,7 @@ function(yetty_embed_assets TARGET)
     # Shader-glyph layer + per-glyph procedurals. Layer reads the .wgsl
     # template AND scans glyph-shaders/*.wgsl at runtime, splices them into
     # one compiled shader. Adding a glyph is dropping a .wgsl file.
-    file(COPY "${YETTY_ROOT}/src/yetty/yterm/shader-glyph-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/shader-glyph-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}/shaders/glyph-shaders")
     # Glob both 0x*.wgsl (per-glyph procedurals) AND _*.wgsl (shared prelude
     # libs). The layer's runtime assembler reads `_*.wgsl` first, then glyphs.

@@ -3,7 +3,7 @@
  *
  * yrdawn rides the figure-tree OSC channel exactly like ymgui: every
  * client→server message is a record inside YETTY_OSC_YCOMPOSITOR_BIN
- * (see <yetty/yterm/osc-codes.h>) of shape `{u32 length, u32 id,
+ * (see <yetty/yterminal/osc-codes.h>) of shape `{u32 length, u32 id,
  * body}`. `id == 0` means container-admin (CREATE_CHILD / DELETE_CHILD
  * / SET_CHILD_RECT — see <yetty/yfigure/wire.h>); `id != 0` addresses
  * a specific yrdawn figure (== one remote canvas) and the body starts

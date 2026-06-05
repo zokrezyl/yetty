@@ -10,7 +10,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-binder.h>
-#include <yetty/yterm/terminal.h>
+#include <yetty/yterminal/terminal.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/yplatform/ycoroutine.h>

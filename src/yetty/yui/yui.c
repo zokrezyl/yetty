@@ -34,7 +34,7 @@
 #include <yetty/yplatform/thread.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yterm/terminal.h>
+#include <yetty/yterminal/terminal.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywebgpu/utils.h>
 #include <yetty/yui/workspace.h>
@@ -1191,8 +1191,8 @@ static void yui_debug_window_walk_tree(struct yetty_yui *yui, struct yetty_yui_t
         yetty_ycore_error_destroy_safe(yetty_yui_debug_window_layout(e->dw, b.x, b.y, b.w, b.h));
 
         struct yetty_yui_view *view = yetty_yui_tile_pane_active_view(tile);
-        struct yetty_yterm_terminal *term = yetty_yterm_terminal_from_view(view);
-        struct yetty_ywire_wire_statemachine *sm = term ? yetty_yterm_terminal_wire_sm(term) : NULL;
+        struct yetty_yterminal_terminal *term = yetty_yterminal_terminal_from_view(view);
+        struct yetty_ywire_wire_statemachine *sm = term ? yetty_yterminal_terminal_wire_sm(term) : NULL;
         if (sm) {
             struct yetty_ywire_stats_snapshot s = yetty_ywire_wire_statemachine_stats_snapshot(sm);
             yetty_ycore_error_destroy_safe(yetty_yui_debug_window_set_stats(e->dw, &s));

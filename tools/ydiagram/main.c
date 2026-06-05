@@ -28,7 +28,7 @@
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterminal/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <errno.h>

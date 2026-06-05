@@ -76,7 +76,7 @@ extern "C" {
  *===========================================================================*/
 
 /* Client → server traffic flows through the figure-tree OSC
- * (YETTY_OSC_YCOMPOSITOR_BIN, see <yetty/yterm/osc-codes.h>) as
+ * (YETTY_OSC_YCOMPOSITOR_BIN, see <yetty/yterminal/osc-codes.h>) as
  * `{u32 length, u32 id, body}` records. Body for id != 0 is one of
  * the YETTY_YMGUI_FIGURE_SUB_* sub-records defined below. There are
  * no per-message client→server OSC codes any more — the figure-tree
@@ -85,7 +85,7 @@ extern "C" {
  * The CARD_* / CLEAR / FRAME / TEX CS codes below are legacy producer
  * fallback (still referenced by ygui_osc.c); they will be deleted with
  * that producer. The pane-wide client-input channel lives in
- * <yetty/yterm/client-input.h>. */
+ * <yetty/yterminal/client-input.h>. */
 #define YMGUI_OSC_CS_CLEAR 610000       /* ymgui_wire_clear,        comp=0 */
 #define YMGUI_OSC_CS_FRAME 610001       /* ymgui_wire_frame,        comp=1 */
 #define YMGUI_OSC_CS_TEX 610002         /* ymgui_wire_tex,          comp=1 */
@@ -93,7 +93,7 @@ extern "C" {
 #define YMGUI_OSC_CS_CARD_REMOVE 610004 /* ymgui_wire_card_remove,  comp=0 */
 
 /* Server → client client-input events (figure-tagged and pane-wide variants)
- * live in <yetty/yterm/client-input.h>. */
+ * live in <yetty/yterminal/client-input.h>. */
 
 /*=============================================================================
  * Magic numbers + versioning
@@ -358,7 +358,7 @@ struct yetty_ymgui_wire_card_remove {
 };
 
 /* Server → client client-input event structs (mouse / resize / focus / key)
- * live in <yetty/yterm/client-input.h>. */
+ * live in <yetty/yterminal/client-input.h>. */
 
 #ifdef __cplusplus
 }

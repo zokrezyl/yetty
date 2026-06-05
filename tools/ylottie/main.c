@@ -21,7 +21,7 @@
 #include <yetty/ycore/util.h>     /* yetty_ycore_read_file */
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_* */
+#include <yetty/yterminal/osc-codes.h> /* YETTY_OSC_YDRAW_* */
 #include <yetty/ylottie/ylottie.h>
 
 #include <signal.h>

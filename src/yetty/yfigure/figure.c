@@ -126,12 +126,20 @@ static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_stat
  *            hit-tests); ties break on insertion order.
  *   hidden : parent skips this child entirely (no render, no hit).
  *   dirty  : contents changed without geometry moving; the parent ORs this
- *            into its damage region next render pass and clears it. */
+ *            into its damage region next render pass and clears it.
+ *   absolute_coords : the figure lays out / hit-tests / paints its content
+ *            in pane-root pixel space and only scissor-clips to its rect —
+ *            no per-figure re-origin (ygui chrome + scrolling sub-figures).
+ *            When 0 (the default for every producer figure: yplot/yimage/…),
+ *            content is local to the figure rect. The parent's hit-test reads
+ *            this to decide whether to report the cursor in pane-local space
+ *            (absolute) or re-origined to the figure rect (local). */
 struct [[clang::annotate("class@yfigure:figure")]] yetty_yfigure_figure {
     [[clang::annotate("property")]] struct yetty_ycore_rectangle rect;
     [[clang::annotate("property")]] int z;
     [[clang::annotate("property")]] int hidden;
     [[clang::annotate("property")]] int dirty;
+    [[clang::annotate("property")]] int absolute_coords;
 };
 
 #include "figure.gen.c"

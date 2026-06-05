@@ -13,7 +13,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YDRAW_* */
+#include <yetty/yterminal/osc-codes.h>    /* YETTY_OSC_YDRAW_* */
 #include <yetty/ythorvg/ythorvg.h>
 
 #include <stdio.h>
