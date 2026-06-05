@@ -21,6 +21,15 @@ REM at asset-extract time (decompress_brotli in incbin-assets.c).
 if exist "C:\Program Files\Git\mingw64\bin\brotli.exe" set PATH=C:\Program Files\Git\mingw64\bin;%PATH%
 if exist "C:\Program Files\Git\usr\bin\brotli.exe" set PATH=C:\Program Files\Git\usr\bin;%PATH%
 
+REM yfont/CMakeLists.txt calls find_package(Python3 REQUIRED) at configure time
+REM to generate the shader-glyph lookup table, so python must be on PATH. The
+REM Woodpecker local backend redirects %USERPROFILE%/%LOCALAPPDATA%, so the
+REM per-user Python install isn't reachable through those vars — point at the
+REM absolute agent-user home (same assumption the archive step makes),
+REM tolerating version drift, then fall back to machine-wide installs.
+for /d %%P in ("C:\Users\misi\AppData\Local\Programs\Python\Python3*") do if exist "%%P\python.exe" set "PATH=%%P;!PATH!"
+for /d %%P in ("C:\Program Files\Python3*" "C:\Python3*") do if exist "%%P\python.exe" set "PATH=%%P;!PATH!"
+
 REM CMake's file(DOWNLOAD ...) uses libcurl, which on Windows ships without a
 REM CA bundle. Without CMAKE_TLS_CAINFO the 3rdparty-fetch HTTPS pulls fail
 REM with "Peer certificate cannot be authenticated". Strawberry Perl includes
