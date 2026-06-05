@@ -56,6 +56,14 @@ typedef void (*yetty_yrdawn_input_key_cb)(void *user, uint32_t kind, int32_t key
                                           uint32_t codepoint);
 typedef void (*yetty_yrdawn_input_resize_cb)(void *user, float width, float height);
 
+/* Raw-byte input callback. Fires for bytes on the input stream that are
+ * NOT part of a yface/figure envelope — i.e. ordinary keystrokes the host
+ * terminal forwards to the PTY when no figure has keyboard focus (a typed
+ * 'q', a Ctrl-C delivered as ETX 0x03, etc.). This is the plain-tty input
+ * path; figure-focused key events arrive via the per-canvas key callback
+ * instead. `bytes` is valid only for the duration of the call. */
+typedef void (*yetty_yrdawn_raw_input_cb)(void *user, const char *bytes, size_t len);
+
 /* Construct a client bound to (in_fd, out_fd). For the typical wasm
  * deployment, in_fd = STDIN_FILENO and out_fd = STDOUT_FILENO. The
  * session_id is client-chosen, must be non-zero, and is stamped into
@@ -66,6 +74,12 @@ struct yetty_yrdawn_client_ptr_result yetty_yrdawn_client_create(int in_fd, int 
 struct yetty_ycore_void_result yetty_yrdawn_client_destroy(struct yetty_yrdawn_client *c);
 
 uint32_t yetty_yrdawn_client_session_id(const struct yetty_yrdawn_client *c);
+
+/* Register a handler for raw (non-envelope) input bytes — see
+ * yetty_yrdawn_raw_input_cb. One per client; pass NULL to clear. Fires
+ * from yetty_yrdawn_client_pump as the input stream is drained. */
+void yetty_yrdawn_client_set_raw_input_cb(struct yetty_yrdawn_client *c,
+                                          yetty_yrdawn_raw_input_cb cb, void *user);
 
 /* Open one canvas at the given pane rect (host-pixel space). Emits the
  * CREATE_CHILD admin record and SUB_HELLO; the canvas becomes the

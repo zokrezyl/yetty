@@ -10,12 +10,28 @@
 
 int demo_quit_flag = 0;
 
+/* Input key kinds (mirrors enum yetty_client_input_key_kind). */
+enum {
+    DEMO_KEY_DOWN = 0,
+    DEMO_KEY_UP = 1,
+    DEMO_KEY_CHAR = 2,
+};
+
+/* Quit on 'q' or Ctrl-C.
+ *
+ * 'q' arrives as a CHAR event (codepoint 'q'). Ctrl-C does NOT produce a
+ * CHAR under GLFW (control combos generate no text), so it comes as a
+ * KEY_DOWN for the C key (GLFW keycode 67) with the control modifier bit
+ * (GLFW_MOD_CONTROL = 0x0002) set. We also accept a CHAR of ETX (3) in
+ * case a host ever cooks Ctrl-C into a literal control byte. */
 static void demo_on_key(void *user, uint32_t kind, int32_t key, int32_t mods, uint32_t codepoint)
 {
     (void)user;
-    (void)key;
-    (void)mods;
-    if (kind == 2 /* YETTY_YRDAWN_INPUT_KEY_CHAR */ && codepoint == 'q') {
+    const int control_held = (mods & 0x0002) != 0; /* GLFW_MOD_CONTROL */
+
+    if (kind == DEMO_KEY_CHAR && (codepoint == 'q' || codepoint == 3 /* ETX */)) {
+        demo_quit_flag = 1;
+    } else if (kind == DEMO_KEY_DOWN && control_held && key == 67 /* GLFW_KEY_C */) {
         demo_quit_flag = 1;
     }
 }
@@ -26,6 +42,29 @@ void demo_install_quit_on_q(struct yetty_yrdawn_canvas *canvas)
         return;
     }
     yetty_yrdawn_canvas_set_input_key_cb(canvas, demo_on_key, NULL);
+}
+
+/* Raw-byte input: plain keystrokes the host forwards to the PTY when no
+ * figure has keyboard focus. A focused yrdawn canvas would get key events
+ * via demo_on_key, but the demos don't grab focus, so this is the path that
+ * actually fires. 'q' arrives as the byte 'q'; Ctrl-C as ETX (0x03). */
+static void demo_on_raw(void *user, const char *bytes, size_t len)
+{
+    (void)user;
+    for (size_t i = 0; i < len; ++i) {
+        unsigned char ch = (unsigned char)bytes[i];
+        if (ch == 'q' || ch == 0x03 /* Ctrl-C (ETX) */) {
+            demo_quit_flag = 1;
+        }
+    }
+}
+
+void demo_install_quit_input(struct yetty_yrdawn_client *client)
+{
+    if (!client) {
+        return;
+    }
+    yetty_yrdawn_client_set_raw_input_cb(client, demo_on_raw, NULL);
 }
 
 void demo_raw_stdin(void)
@@ -86,6 +125,8 @@ struct yetty_yrdawn_canvas *demo_bringup_single_canvas(uint32_t figure_id, float
         return NULL;
     }
     struct yetty_yrdawn_client *c = cr.value;
+    /* Quit on 'q' / Ctrl-C via the raw-tty input path. */
+    demo_install_quit_input(c);
 
     /* Small inset from the pane's top-left so the canvas doesn't sit
      * underneath the host's chrome (tab bar etc). */

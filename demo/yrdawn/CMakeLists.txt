@@ -35,14 +35,14 @@ target_include_directories(demo_yrdawn_support PUBLIC
 
 find_package(Threads REQUIRED)
 
-add_subdirectory(01_hello)
+# Only demos that put something on screen are kept. 01_dawn_info prints the
+# remote adapter metadata into the pane; the rest present pixels. The former
+# headless bridge-exercisers (async-init, adapter-info, buffer-write,
+# submit-chain, glyph-shaders, and the old hello no-op) drew nothing and were
+# removed. All surviving demos quit on 'q' or Ctrl-C (see common.c).
+add_subdirectory(01_dawn_info)
 add_subdirectory(02_gradient)
-add_subdirectory(03_async_init)
 add_subdirectory(04_animation)
-add_subdirectory(05_adapter_info)
-add_subdirectory(06_buffer_write)
-add_subdirectory(07_submit_chain)
-add_subdirectory(08_glyph_shaders)
 add_subdirectory(09_glyph_render)
 add_subdirectory(10_glyph_animate)
 add_subdirectory(11_two_canvases)

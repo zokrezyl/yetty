@@ -74,6 +74,11 @@ struct yetty_yrdawn_client {
 
     uint8_t *rx_buf;
     size_t rx_buf_cap;
+
+    /* Raw (non-envelope) input bytes — plain keystrokes the host forwards
+     * to the PTY when no figure has focus. */
+    yetty_yrdawn_raw_input_cb raw_input_cb;
+    void *raw_input_user;
 };
 
 /*===========================================================================
@@ -123,6 +128,16 @@ static struct pending_req *canvas_pending_take(struct yetty_yrdawn_canvas *cv, u
 /*===========================================================================
  * Inbound dispatch
  *=========================================================================*/
+
+/* yface raw-byte sink: bytes outside any envelope. Forwarded to the
+ * client's raw-input handler (plain-tty keystrokes). */
+static void on_raw(void *user, const char *bytes, size_t n)
+{
+    struct yetty_yrdawn_client *c = (struct yetty_yrdawn_client *)user;
+    if (c->raw_input_cb) {
+        c->raw_input_cb(c->raw_input_user, bytes, n);
+    }
+}
 
 static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
                    const uint8_t *payload, size_t payload_len)
@@ -270,7 +285,7 @@ struct yetty_yrdawn_client_ptr_result yetty_yrdawn_client_create(int in_fd, int 
         return YETTY_ERR(yetty_yrdawn_client_ptr, "yrdawn_client_create: yface_create", fr);
     }
     c->in_face = fr.value;
-    yetty_yface_set_handlers(c->in_face, on_osc, NULL, c);
+    yetty_yface_set_handlers(c->in_face, on_osc, on_raw, c);
 
     return YETTY_OK(yetty_yrdawn_client_ptr, c);
 }
@@ -301,6 +316,16 @@ struct yetty_ycore_void_result yetty_yrdawn_client_destroy(struct yetty_yrdawn_c
 uint32_t yetty_yrdawn_client_session_id(const struct yetty_yrdawn_client *c)
 {
     return c ? c->session_id : 0;
+}
+
+void yetty_yrdawn_client_set_raw_input_cb(struct yetty_yrdawn_client *c,
+                                          yetty_yrdawn_raw_input_cb cb, void *user)
+{
+    if (!c) {
+        return;
+    }
+    c->raw_input_cb = cb;
+    c->raw_input_user = user;
 }
 
 uint64_t yetty_yrdawn_client_alloc_handle(struct yetty_yrdawn_client *c)

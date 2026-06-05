@@ -386,8 +386,10 @@ struct yetty_ycore_void_result yetty_ywire_decode(const char *b64, size_t n, int
  * DEC ?1500/?1501 card-mouse enable).
  *=========================================================================*/
 
-/* True when emitted sequences must be tmux-wrapped: TMUX env set, unless
- * overridden by YETTY_TMUX_PASSTHROUGH=0/1. */
+/* "Am I running tmux inside yetty?" — true only when the host is yetty
+ * (YETTY_TMUX_PASSTHROUGH=1) AND a tmux sits in between ($TMUX set). That is
+ * exactly when emitted envelopes must be passthrough-wrapped to survive the
+ * multiplexer. Directly under yetty (no tmux) this is false — bare output. */
 int yetty_ywire_tmux_passthrough_active(void);
 
 /* Append `seq` to `out_buf`, tmux-wrapped iff passthrough is active, else

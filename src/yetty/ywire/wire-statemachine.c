@@ -187,15 +187,16 @@ struct yetty_ywire_wire_statemachine {
     uint8_t enc_b64_carry_n;
     struct yetty_ycore_buffer *enc_out_buf; /* borrowed during write */
 
-    /* tmux passthrough — cached once per SM. When the emitting process runs
-     * under tmux (TMUX env set), tmux parses and re-renders its panes and
-     * will NOT forward our OSC/DCS envelopes to the outer terminal (yetty).
-     * The only escape hatch tmux honours (with `allow-passthrough on`) is
-     * the `ESC P tmux; <payload, every ESC doubled> ESC \` wrapper, which it
-     * unwraps and re-emits verbatim. We wrap every emitted envelope here so
-     * producers need no per-call-site logic. YETTY_TMUX_PASSTHROUGH=0/1
-     * forces it off/on (e.g. when piping to a file or another yetty tool
-     * rather than through a live tmux). */
+    /* tmux passthrough — cached once per SM. True only when running tmux
+     * inside yetty (YETTY_TMUX_PASSTHROUGH=1 AND $TMUX set; see
+     * yetty_ywire_tmux_passthrough_active). In that case tmux parses/
+     * re-renders pane output and will NOT forward our OSC/DCS envelopes to
+     * the outer terminal — except the `ESC P tmux; <payload, every ESC
+     * doubled> ESC \` wrapper, which it unwraps verbatim (with
+     * `allow-passthrough on`). We wrap every emitted envelope here so
+     * producers need no per-call-site logic; the receive side
+     * (ingest_unwrap) strips it back. Directly under yetty (no tmux) this is
+     * false and envelopes go out bare. */
     int tmux_wrap;
     int tmux_wrap_known;
 
@@ -1661,11 +1662,19 @@ enum yetty_ywire_envelope_kind yetty_ywire_wire_statemachine_kind(
 
 int yetty_ywire_tmux_passthrough_active(void)
 {
-    const char *force = getenv("YETTY_TMUX_PASSTHROUGH");
-    if (force) {
-        return force[0] == '1';
+    /* "Am I running tmux inside yetty, so my output must be passthrough-
+     * wrapped to reach yetty?" — TRUE only when BOTH hold:
+     *   - the host terminal is yetty (YETTY_TMUX_PASSTHROUGH=1, set by yetty
+     *     and inherited through tmux), and
+     *   - a tmux actually sits in between ($TMUX set).
+     * Directly under yetty (no tmux) there is nothing to wrap around, so we
+     * emit bare envelopes. */
+    const char *yetty = getenv("YETTY_TMUX_PASSTHROUGH");
+    if (!yetty || yetty[0] != '1') {
+        return 0;
     }
-    return getenv("TMUX") != NULL;
+    const char *tmux = getenv("TMUX");
+    return tmux && tmux[0] != '\0';
 }
 
 /* tmux passthrough wrapping. Lazily decide (and cache) whether emitted
