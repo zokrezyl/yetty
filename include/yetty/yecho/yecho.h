@@ -38,7 +38,7 @@
  * The library emits a yetty_ydraw_drawable_list (text spans for runs of
  * UTF-8 text, SDF box primitives for backgrounds). The frontend tool
  * wraps that buffer in the same OSC envelope ycat uses
- * (YETTY_OSC_YDRAW_BIN — see yetty_yecho_osc_bin_emit).
+ * (YETTY_DCS_YDRAW_BIN — see yetty_yecho_osc_bin_emit).
  */
 
 #include <stddef.h>
@@ -139,7 +139,7 @@ struct yetty_ydraw_drawable_list_result yetty_yecho_render_string(
     const char *input, size_t len, const struct yetty_yecho_render_config *config);
 
 /*=============================================================================
- * OSC emission — wraps a ydraw buffer in a YETTY_OSC_YDRAW_BIN envelope
+ * OSC emission — wraps a ydraw buffer in a YETTY_DCS_YDRAW_BIN envelope
  * (same wire format as yetty_ycat_osc_bin_emit). Returns bytes written on
  * success.
  *===========================================================================*/

@@ -27,9 +27,10 @@
 
 #include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ycore/terminal-detect.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <curl/curl.h>
@@ -222,7 +223,7 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 		.raw_size = blen,
 		.reserved = {0, 0},
 	};
-	return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
+	return emit_envelope(YETTY_DCS_YDRAW_BIN, /*compressed=*/1,
 			     &meta, sizeof(meta), bytes, blen);
 }
 
@@ -319,8 +320,7 @@ int main(int argc, char **argv)
 	if (interactive) {
 		curl_global_init(CURL_GLOBAL_DEFAULT);
 #ifdef YETTY_YBROWSER_HAS_STANDALONE
-		const char *term_program = getenv("TERM_PROGRAM");
-		int in_yetty = term_program && strcmp(term_program, "yetty") == 0;
+		int in_yetty = yetty_running_under_yetty();
 		if (!in_yetty) {
 			/* Hand yinit a clean argv (just the program name) so it does
 			 * not try to parse ybrowser's URL/flags as yetty options. */

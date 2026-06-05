@@ -6,7 +6,7 @@
  * Two modes:
  *
  *   Capture mode (default):
- *     decode-ydraw [FILE | -]    # parse every \e]…\e\\ envelope in FILE / stdin
+ *     decode-ydraw [FILE | -]    # parse every \eP…\e\\ envelope in FILE / stdin
  *
  *   Interpose mode (--interpose / -t):
  *     PRODUCER | decode-ydraw --interpose -o decoded.log | CONSUMER
@@ -352,18 +352,26 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
 static int decode_envelope(struct yetty_yface *y,
                            const char *body, size_t body_len)
 {
-    /* body has the shape "<code>;<b64-args>;<b64-payload>". */
-    const char *semi1 = memchr(body, ';', body_len);
-    if (!semi1) { out("  no first ;\n"); return -1; }
-    size_t code_len = semi1 - body;
-    if (code_len == 0 || code_len > 16) {
+    /* body has the DCS shape "<code> y <b64-args> ; <b64-payload>", where
+     * 'y' is the final byte (YETTY_YWIRE_DCS_FINAL) that separates the
+     * decimal code from the args/payload section. */
+    size_t code_len = 0;
+    while (code_len < body_len && body[code_len] >= '0' && body[code_len] <= '9') {
+        code_len++;
+    }
+    if (code_len == 0 || code_len > 16 || code_len >= body_len) {
         out("  bad code length %zu\n", code_len); return -1;
+    }
+    if (body[code_len] != 'y') {
+        out("  expected DCS final byte 'y' after code, got 0x%02x\n",
+            (unsigned char)body[code_len]);
+        return -1;
     }
     char code_str[20] = {0};
     memcpy(code_str, body, code_len);
     int osc_code = atoi(code_str);
 
-    const char *after_code = semi1 + 1;
+    const char *after_code = body + code_len + 1;
     size_t after_code_len = body_len - code_len - 1;
     const char *semi2 = memchr(after_code, ';', after_code_len);
     if (!semi2) { out("  no second ;\n"); return -1; }
@@ -494,7 +502,7 @@ static void splitter_consume(struct splitter *s)
 {
     size_t pos = 0;
     while (pos + 1 < s->len) {
-        if (s->buf[pos] != '\033' || s->buf[pos + 1] != ']') {
+        if (s->buf[pos] != '\033' || s->buf[pos + 1] != 'P') {
             pos++;
             continue;
         }

@@ -29,7 +29,7 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1435,7 +1435,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_fram
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer wire_out = {0};
-    r = yetty_yface_emit(YETTY_OSC_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
+    r = yetty_yface_emit(YETTY_DCS_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
                          envelope.data, envelope.size, &wire_out);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
@@ -1490,7 +1490,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
         .reserved = {0, 0},
     };
     struct yetty_ycore_void_result er =
-        yetty_yface_emit_to_fd(fd, YETTY_OSC_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
+        yetty_yface_emit_to_fd(fd, YETTY_DCS_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
                                records.data, records.size);
     yetty_ycore_buffer_destroy(&records);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, er,

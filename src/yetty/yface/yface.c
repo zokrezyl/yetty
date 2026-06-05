@@ -113,9 +113,10 @@ static struct yetty_ycore_void_result ensure_sm(struct yetty_yface *y)
  * Outgoing — streaming
  *-------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yetty_yface_start_write(struct yetty_yface *y, int osc_code,
-                                                       int compressed, const void *args,
-                                                       size_t args_len)
+struct yetty_ycore_void_result yetty_yface_start_write(struct yetty_yface *y,
+                                                       enum yetty_ywire_envelope_kind kind,
+                                                       int wire_code, int compressed,
+                                                       const void *args, size_t args_len)
 {
     if (!y) {
         return YETTY_ERR(yetty_ycore_void, "yface: yface is NULL");
@@ -128,8 +129,7 @@ struct yetty_ycore_void_result yetty_yface_start_write(struct yetty_yface *y, in
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yface: start_write: ensure_sm");
     }
     struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_start_write(
-        y->sm, YETTY_YWIRE_ENVELOPE_OSC, osc_code, /*has_args=*/1, compressed, args, args_len,
-        &y->out_buf);
+        y->sm, kind, wire_code, /*has_args=*/1, compressed, args, args_len, &y->out_buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yface: start_write");
     y->write_active = 1;
     return YETTY_OK_VOID();
@@ -301,19 +301,19 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
  * One-shot helpers — forward to ywire equivalents.
  *-------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yetty_yface_emit(int osc_code, int compressed, const void *args,
+struct yetty_ycore_void_result yetty_yface_emit(int wire_code, int compressed, const void *args,
                                                 size_t args_len, const void *body, size_t body_len,
                                                 struct yetty_ycore_buffer *out_buf)
 {
-    return yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_OSC, osc_code, /*has_args=*/1, compressed, args,
+    return yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_DCS, wire_code, /*has_args=*/1, compressed, args,
                             args_len, body, body_len, out_buf);
 }
 
-struct yetty_ycore_void_result yetty_yface_emit_to_fd(int fd, int osc_code, int compressed,
+struct yetty_ycore_void_result yetty_yface_emit_to_fd(int fd, int wire_code, int compressed,
                                                       const void *args, size_t args_len,
                                                       const void *body, size_t body_len)
 {
-    return yetty_ywire_emit_to_fd(fd, YETTY_YWIRE_ENVELOPE_OSC, osc_code, /*has_args=*/1,
+    return yetty_ywire_emit_to_fd(fd, YETTY_YWIRE_ENVELOPE_DCS, wire_code, /*has_args=*/1,
                                   compressed, args, args_len, body, body_len);
 }
 

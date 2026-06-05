@@ -76,7 +76,7 @@ extern "C" {
  *===========================================================================*/
 
 /* Client → server traffic flows through the figure-tree OSC
- * (YETTY_OSC_YCOMPOSITOR_BIN, see <yetty/yterminal/osc-codes.h>) as
+ * (YETTY_DCS_YCOMPOSITOR_BIN, see <yetty/yterminal/osc-codes.h>) as
  * `{u32 length, u32 id, body}` records. Body for id != 0 is one of
  * the YETTY_YMGUI_FIGURE_SUB_* sub-records defined below. There are
  * no per-message client→server OSC codes any more — the figure-tree
@@ -123,7 +123,7 @@ extern "C" {
  * Figure-tree sub-records
  *
  * When ymgui is carried as a yfigure (kind=YETTY_YFIGURE_KIND_YMGUI=3) on
- * the shared figure-tree OSC code (YETTY_OSC_YCOMPOSITOR_BIN=630000),
+ * the shared figure-tree OSC code (YETTY_DCS_YCOMPOSITOR_BIN=630000),
  * each top-level container record `{length, id=child_id, payload}` arrives
  * at the figure's process_bytes with `payload` being one self-describing
  * sub-record. The first u32 of `payload` is either:

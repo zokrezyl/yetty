@@ -102,7 +102,7 @@ struct yetty_ydraw_drawable_list_result yetty_yvideo_render(
     const uint8_t *nal_bytes, size_t nal_len, const uint8_t *audio_bytes, size_t audio_len,
     const struct yetty_yvideo_render_config *config);
 
-/* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
+/* OSC envelope (YETTY_DCS_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
 struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                          FILE *out);

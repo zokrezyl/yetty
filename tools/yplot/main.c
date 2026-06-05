@@ -54,7 +54,7 @@ static void usage(FILE *out, const char *prog)
     fprintf(out,
         "Usage: %s [options] <expression> [<expression> ...]\n"
         "\n"
-        "Emit a YPlot OSC envelope (YETTY_OSC_YDRAW_BIN, 600001) consumed\n"
+        "Emit a YPlot OSC envelope (YETTY_DCS_YDRAW_BIN, 600001) consumed\n"
         "by the yetty ydraw scrolling layer.\n"
         "\n"
         "Multi-function syntax (yexpr-plot):\n"

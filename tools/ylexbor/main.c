@@ -36,7 +36,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterminal/client-input.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <curl/curl.h>
@@ -185,7 +185,7 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 		.raw_size = blen,
 		.reserved = {0, 0},
 	};
-	return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
+	return emit_envelope(YETTY_DCS_YDRAW_BIN, /*compressed=*/1,
 			     &meta, sizeof(meta), bytes, blen);
 }
 
@@ -200,7 +200,7 @@ static int redraw_and_push(struct yetty_ylexbor *yl)
 	if (YETTY_IS_OK(rd)) {
 		const uint8_t *bytes = NULL;
 		size_t blen = yetty_ydraw_drawable_list_serialize(buf, &bytes);
-		(void)emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
+		(void)emit_envelope(YETTY_DCS_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 		(void)emit_bin_osc(bytes, blen);
 		fflush(stdout);
 		rc = 0;

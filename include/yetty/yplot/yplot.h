@@ -84,7 +84,7 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
     const char *source, size_t len, const struct yetty_yplot_buffer_input *buffers,
     size_t buffer_count, const struct yetty_yplot_render_config *config);
 
-/* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
+/* OSC envelope (YETTY_DCS_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
 struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                         FILE *out);

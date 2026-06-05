@@ -28,7 +28,7 @@
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <errno.h>
@@ -185,7 +185,7 @@ static int emit_osc_bin(FILE *out, struct yetty_ydraw_drawable_list *buf)
         .raw_size         = size,
         .reserved         = {0, 0},
     };
-    return emit_envelope(out, YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta),
+    return emit_envelope(out, YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta),
                          raw, size);
 }
 

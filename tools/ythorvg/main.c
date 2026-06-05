@@ -13,7 +13,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yterminal/osc-codes.h>    /* YETTY_OSC_YDRAW_* */
+#include <yetty/yterminal/dcs-codes.h>    /* YETTY_DCS_YDRAW_* */
 #include <yetty/ythorvg/ythorvg.h>
 
 #include <stdio.h>
@@ -145,7 +145,7 @@ int main(int argc, char **argv) {
 
 	/* Emit OSC. */
 	if (do_clear) {
-		printf("\033]%u;;\033\\", YETTY_OSC_YDRAW_CLEAR);
+		printf("\033P%uy;\033\\", YETTY_DCS_YDRAW_CLEAR);
 	}
 
 	const uint8_t *raw = NULL;
@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
 		.reserved         = {0, 0},
 	};
 	struct yetty_ycore_void_result emit_r = yetty_yface_emit_to_fd(
-	    fileno(stdout), YETTY_OSC_YDRAW_BIN,
+	    fileno(stdout), YETTY_DCS_YDRAW_BIN,
 	    /*compressed=*/1, &meta, sizeof(meta), raw, raw_size);
 	if (YETTY_IS_ERR(emit_r))
 		fprintf(stderr, "%s: yface_emit: %s\n", argv[0], emit_r.error.msg);

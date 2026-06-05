@@ -78,6 +78,8 @@ int main(void)
         return 1;
     }
     struct yetty_yrdawn_client *c = cr.value;
+    /* Quit on 'q' / Ctrl-C (raw-tty input path). */
+    demo_install_quit_input(c);
 
     /* Side-by-side at the top of the pane. The compositor will accept
      * arbitrary rects; the host has the final word via SET_CHILD_RECT

@@ -30,7 +30,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yfigure/wire.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 
 #include <float.h>
 #include <stdio.h>
@@ -174,7 +174,7 @@ static int flush_yface_to_fd(void)
 /*===========================================================================
  * Figure-tree record helpers.
  *
- * Each call ships ONE yfigure record on YETTY_OSC_YCOMPOSITOR_BIN.
+ * Each call ships ONE yfigure record on YETTY_DCS_YCOMPOSITOR_BIN.
  * The record layout is:
  *
  *   u32 length        # payload bytes after this header
@@ -193,7 +193,7 @@ static bool emit_record(uint32_t id, bool compressed,
         return false;
     }
     struct yetty_yfigure_wire_record hdr = {(uint32_t)body_len, id};
-    if (!yetty_yface_start_write(g_state.yface_out, YETTY_OSC_YCOMPOSITOR_BIN,
+    if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
                                  compressed ? 1 : 0, /*args=*/NULL, 0)
              .ok) {
         return false;
@@ -333,7 +333,7 @@ static bool emit_osc(int osc_code, bool compressed, const void *payload, size_t 
     if (!g_state.yface_out) {
         return false;
     }
-    if (!yetty_yface_start_write(g_state.yface_out, osc_code, compressed ? 1 : 0,
+    if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, osc_code, compressed ? 1 : 0,
                                  /*args=*/NULL, /*args_len=*/0)
              .ok) {
         return false;
@@ -585,7 +585,7 @@ static bool upload_figure_atlas(ymgui_figure_state *c)
     uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD;
     uint32_t body_len = (uint32_t)(sizeof(sub_op) + sizeof(hdr) + pixel_bytes);
     struct yetty_yfigure_wire_record outer = {body_len, c->id};
-    if (!yetty_yface_start_write(g_state.yface_out, YETTY_OSC_YCOMPOSITOR_BIN,
+    if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
                                  /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return false;
     }
@@ -896,7 +896,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
     uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_FRAME;
     uint32_t outer_len = (uint32_t)(sizeof(sub_op) + total_size);
     struct yetty_yfigure_wire_record outer = {outer_len, figure_id};
-    if (!yetty_yface_start_write(g_state.yface_out, YETTY_OSC_YCOMPOSITOR_BIN,
+    if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
                                  /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return;
     }
@@ -1132,10 +1132,16 @@ bool yetty_ymgui_ImGui_ImplYetty_PlatformInit(void)
      * drains. flush_yface_to_fd's blocking-drain path covers the case
      * if anything else flips O_NONBLOCK on the fd. */
 
-    /* Subscribe: \e[?1500h \e[?1501h. */
+    /* Subscribe: \e[?1500h \e[?1501h. tmux-wrap it so the card-mouse enable
+     * survives a multiplexer and actually reaches the host yetty (tmux drops
+     * unknown private DEC modes otherwise). */
     static const char subscribe[] = "\033[?1500h\033[?1501h";
-    ssize_t w = write(g_state.out_fd, subscribe, sizeof(subscribe) - 1);
-    (void)w;
+    struct yetty_ycore_buffer sub = {};
+    if (YETTY_IS_OK(yetty_ywire_tmux_wrap(subscribe, sizeof(subscribe) - 1, &sub))) {
+        ssize_t w = write(g_state.out_fd, sub.data, sub.size);
+        (void)w;
+    }
+    yetty_ycore_buffer_destroy(&sub);
     return true;
 #endif
 }
@@ -1145,8 +1151,12 @@ void yetty_ymgui_ImGui_ImplYetty_PlatformShutdown(void)
 #ifndef _WIN32
     if (g_state.raw_mode_active) {
         static const char unsubscribe[] = "\033[?1500l\033[?1501l";
-        ssize_t w = write(g_state.out_fd, unsubscribe, sizeof(unsubscribe) - 1);
-        (void)w;
+        struct yetty_ycore_buffer unsub = {};
+        if (YETTY_IS_OK(yetty_ywire_tmux_wrap(unsubscribe, sizeof(unsubscribe) - 1, &unsub))) {
+            ssize_t w = write(g_state.out_fd, unsub.data, unsub.size);
+            (void)w;
+        }
+        yetty_ycore_buffer_destroy(&unsub);
         platform_restore_termios(g_state.in_fd, &g_state.saved_termios);
         g_state.raw_mode_active = 0;
     }

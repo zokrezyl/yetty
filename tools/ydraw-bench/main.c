@@ -11,7 +11,7 @@
 #endif
 
 #include <yetty/yface/yface.h>
-#include <yetty/yterminal/osc-codes.h>    /* YETTY_OSC_YDRAW_BIN */
+#include <yetty/yterminal/dcs-codes.h>    /* YETTY_DCS_YDRAW_BIN */
 
 // Composite type for yplot
 #define YETTY_YDRAW_TYPE_YPLOT 0x80000003u
@@ -378,7 +378,7 @@ int main(int argc, char **argv) {
             .reserved         = {0, 0},
         };
         struct yetty_ycore_void_result rr = yetty_yface_emit_to_fd(
-            fileno(stdout), YETTY_OSC_YDRAW_BIN,
+            fileno(stdout), YETTY_DCS_YDRAW_BIN,
             /*compressed=*/1, &meta, sizeof(meta), g_buffer, raw_bytes);
         if (YETTY_IS_ERR(rr)) {
             fprintf(stderr, "yface_emit: %s\n", rr.error.msg);

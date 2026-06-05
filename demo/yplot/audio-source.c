@@ -42,7 +42,7 @@
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplot/yplot.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 
 #include <math.h>
 #include <stdint.h>
@@ -181,7 +181,7 @@ static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_dr
     };
     struct yetty_ycore_buffer out = {0};
     struct yetty_ycore_void_result er = yetty_yface_emit(
-        YETTY_OSC_YDRAW_SCENE_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &out);
+        YETTY_DCS_YDRAW_SCENE_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &out);
     if (YETTY_IS_ERR(er)) {
         yetty_ycore_buffer_destroy(&out);
         return YETTY_ERR(yetty_ycore_void, "yface_emit failed", er);

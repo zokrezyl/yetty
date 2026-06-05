@@ -56,6 +56,20 @@ enum scan_state {
     SCAN_OSC_BODY_ESC, /* saw ESC inside body; next byte decides terminator */
 };
 
+/* Ingest-side tmux-passthrough UNWRAP state. Runs over raw bytes BEFORE
+ * they reach the ring/framer: strips `ESC P tmux; … ESC \` wrappers and
+ * un-doubles the ESCs inside, so a wrapped envelope parses identically to
+ * a bare one. Real tmux already unwraps the through-tmux case; this covers
+ * same-process loopback emits (a GUI app under tmux that wraps and then
+ * feeds its own SM) and direct pipes. Bare input passes through untouched. */
+enum unwrap_state {
+    UNWRAP_NORMAL = 0,  /* passthrough; watching for ESC */
+    UNWRAP_AFTER_ESC,   /* saw ESC; could begin ESC P tmux; */
+    UNWRAP_MATCH_TMUX,  /* saw ESC P; matching the literal "tmux;" */
+    UNWRAP_INNER,       /* inside the wrapper payload; un-doubling ESCs */
+    UNWRAP_INNER_ESC,   /* saw ESC inside payload; ESC→one ESC, \ →end */
+};
+
 /* Envelope string terminators (ECMA-48 / xterm):
  *   BEL — single-byte terminator (OSC only; xterm extension)
  *   ST  — two-byte `ESC \` (standards-compliant 7-bit form; used by both
@@ -123,6 +137,10 @@ struct yetty_ywire_wire_statemachine {
     size_t read_pos;
     size_t write_pos;
 
+    /* Ingest-side tmux-unwrap state (persists across feeds/reads). */
+    enum unwrap_state uw_state;
+    size_t uw_match; /* chars of "tmux;" matched in UNWRAP_MATCH_TMUX */
+
     /* Framer state. */
     enum scan_state state;
     enum yetty_ywire_envelope_kind current_kind;
@@ -164,9 +182,23 @@ struct yetty_ywire_wire_statemachine {
     size_t enc_scratch_cap;
     int enc_active;
     int enc_compressed;
+    int enc_tmux_wrap; /* this envelope is wrapped in ESC P tmux; … ESC \ */
     uint8_t enc_b64_carry[2];
     uint8_t enc_b64_carry_n;
     struct yetty_ycore_buffer *enc_out_buf; /* borrowed during write */
+
+    /* tmux passthrough — cached once per SM. True only when running tmux
+     * inside yetty (YETTY_TMUX_PASSTHROUGH=1 AND $TMUX set; see
+     * yetty_ywire_tmux_passthrough_active). In that case tmux parses/
+     * re-renders pane output and will NOT forward our OSC/DCS envelopes to
+     * the outer terminal — except the `ESC P tmux; <payload, every ESC
+     * doubled> ESC \` wrapper, which it unwraps verbatim (with
+     * `allow-passthrough on`). We wrap every emitted envelope here so
+     * producers need no per-call-site logic; the receive side
+     * (ingest_unwrap) strips it back. Directly under yetty (no tmux) this is
+     * false and envelopes go out bare. */
+    int tmux_wrap;
+    int tmux_wrap_known;
 
     /* Args slot. Raw b64 chars accumulate here until the second `;`,
      * then we b64-decode once into args_decoded. Tiny by protocol. */
@@ -1007,19 +1039,17 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
-    struct yetty_ywire_wire_statemachine *sm, const char *bytes, size_t n)
+/* Append raw bytes to the input ring, growing as needed. */
+static struct yetty_ycore_void_result ring_put(struct yetty_ywire_wire_statemachine *sm,
+                                               const uint8_t *bytes, size_t n)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
-    }
-    if (!bytes || n == 0) {
+    if (n == 0) {
         return YETTY_OK_VOID();
     }
     size_t avail = ring_avail(sm);
     if (avail + n > sm->ring_cap) {
         struct yetty_ycore_void_result r = ring_grow_to(sm, avail + n);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: feed grow");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: ring_put grow");
     }
     size_t mask = sm->ring_cap - 1;
     size_t off = sm->write_pos & mask;
@@ -1031,6 +1061,130 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
         memcpy(sm->ring, bytes + first, n - first);
     }
     sm->write_pos += n;
+    return YETTY_OK_VOID();
+}
+
+/* Run raw input through the tmux-passthrough UNWRAP state machine, then
+ * append the result to the ring. Strips `ESC P tmux; … ESC \` wrappers and
+ * un-doubles ESCs inside; bare input passes through unchanged. See the
+ * unwrap_state enum. NORMAL/INNER bulk-copy runs up to the next ESC so the
+ * common (unwrapped) path stays cheap. */
+static struct yetty_ycore_void_result ingest_unwrap(struct yetty_ywire_wire_statemachine *sm,
+                                                    const uint8_t *bytes, size_t n)
+{
+    static const char tmux_lit[] = "tmux;"; /* 5 chars, after ESC P */
+    size_t i = 0;
+    while (i < n) {
+        switch (sm->uw_state) {
+        case UNWRAP_NORMAL: {
+            size_t j = i;
+            while (j < n && bytes[j] != 0x1b) {
+                j++;
+            }
+            struct yetty_ycore_void_result r = ring_put(sm, bytes + i, j - i);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: unwrap normal");
+            if (j < n) {
+                sm->uw_state = UNWRAP_AFTER_ESC;
+                i = j + 1;
+            } else {
+                i = j;
+            }
+            break;
+        }
+        case UNWRAP_AFTER_ESC: {
+            uint8_t c = bytes[i++];
+            if (c == 'P') {
+                sm->uw_state = UNWRAP_MATCH_TMUX;
+                sm->uw_match = 0;
+            } else {
+                /* Not our wrapper opener — pass the held ESC through. If c
+                 * is itself ESC, hold it again; else emit ESC + c. */
+                uint8_t pair[2] = {0x1b, c};
+                struct yetty_ycore_void_result r = ring_put(sm, pair, (c == 0x1b) ? 1 : 2);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: unwrap esc");
+                sm->uw_state = (c == 0x1b) ? UNWRAP_AFTER_ESC : UNWRAP_NORMAL;
+            }
+            break;
+        }
+        case UNWRAP_MATCH_TMUX: {
+            uint8_t c = bytes[i++];
+            if (sm->uw_match < 5 && c == (uint8_t)tmux_lit[sm->uw_match]) {
+                sm->uw_match++;
+                if (sm->uw_match == 5) {
+                    sm->uw_state = UNWRAP_INNER;
+                }
+            } else {
+                /* Bare DCS (ESC P <code>…), not a wrapper. Flush ESC P plus
+                 * the matched prefix, then reprocess the current byte. */
+                uint8_t buf[8];
+                size_t m = 0;
+                buf[m++] = 0x1b;
+                buf[m++] = 'P';
+                for (size_t k = 0; k < sm->uw_match; k++) {
+                    buf[m++] = (uint8_t)tmux_lit[k];
+                }
+                struct yetty_ycore_void_result r = ring_put(sm, buf, m);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: unwrap match flush");
+                if (c == 0x1b) {
+                    sm->uw_state = UNWRAP_AFTER_ESC;
+                } else {
+                    sm->uw_state = UNWRAP_NORMAL;
+                    struct yetty_ycore_void_result r2 = ring_put(sm, &c, 1);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, r2, "wire_sm: unwrap match byte");
+                }
+            }
+            break;
+        }
+        case UNWRAP_INNER: {
+            size_t j = i;
+            while (j < n && bytes[j] != 0x1b) {
+                j++;
+            }
+            struct yetty_ycore_void_result r = ring_put(sm, bytes + i, j - i);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: unwrap inner");
+            if (j < n) {
+                sm->uw_state = UNWRAP_INNER_ESC;
+                i = j + 1;
+            } else {
+                i = j;
+            }
+            break;
+        }
+        case UNWRAP_INNER_ESC: {
+            uint8_t c = bytes[i++];
+            if (c == 0x1b) {
+                uint8_t esc = 0x1b; /* doubled ESC → single */
+                struct yetty_ycore_void_result r = ring_put(sm, &esc, 1);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: unwrap inner dbl");
+                sm->uw_state = UNWRAP_INNER;
+            } else if (c == '\\') {
+                sm->uw_state = UNWRAP_NORMAL; /* wrapper terminator — drop */
+            } else {
+                uint8_t pair[2] = {0x1b, c};
+                struct yetty_ycore_void_result r = ring_put(sm, pair, 2);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: unwrap inner esc");
+                sm->uw_state = UNWRAP_INNER;
+            }
+            break;
+        }
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
+    struct yetty_ywire_wire_statemachine *sm, const char *bytes, size_t n)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!bytes || n == 0) {
+        return YETTY_OK_VOID();
+    }
+    {
+        struct yetty_ycore_void_result r = ingest_unwrap(sm, (const uint8_t *)bytes, n);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: feed ingest");
+    }
 
     /* Lazy-spawn the scanner — emit-only callers may have never
      * triggered it. */
@@ -1089,23 +1243,19 @@ static struct yetty_ycore_size_result pull_from_pty(struct yetty_ywire_wire_stat
         struct yetty_ycore_void_result r = ring_grow_to(sm, OSC_RING_INITIAL_CAP);
         YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "wire_sm: ring init");
     }
-    if (ring_avail(sm) == sm->ring_cap) {
-        struct yetty_ycore_void_result r = ring_grow_to(sm, sm->ring_cap * 2);
-        YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "wire_sm: ring grow");
-    }
-    size_t mask = sm->ring_cap - 1;
-    size_t off = sm->write_pos & mask;
-    size_t free_to_end = sm->ring_cap - off;
-    size_t free_total = sm->ring_cap - ring_avail(sm);
-    size_t max_n = free_to_end < free_total ? free_to_end : free_total;
-    if (max_n == 0) {
-        return YETTY_OK(yetty_ycore_size, 0);
-    }
-    struct yetty_ycore_size_result rr = sm->pty->ops->read(sm->pty, (char *)sm->ring + off, max_n);
+    /* Read into a scratch buffer, then run the bytes through the tmux-unwrap
+     * filter on their way into the ring (ring_put grows as needed). The
+     * filter must see a contiguous run, so we can't read straight into the
+     * (wrapping) ring anymore. */
+    char buf[16384];
+    struct yetty_ycore_size_result rr = sm->pty->ops->read(sm->pty, buf, sizeof(buf));
     if (YETTY_IS_ERR(rr)) {
         return YETTY_ERR(yetty_ycore_size, "wire_sm: pty read", rr);
     }
-    sm->write_pos += rr.value;
+    if (rr.value > 0) {
+        struct yetty_ycore_void_result r = ingest_unwrap(sm, (const uint8_t *)buf, rr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "wire_sm: pty ingest");
+    }
     return YETTY_OK(yetty_ycore_size, rr.value);
 }
 
@@ -1223,10 +1373,17 @@ static void sm_coro_entry(void *arg)
                     }
                 }
                 sm->read_pos++;
+                /* End-of-code separator: `;` for OSC, the DCS final byte
+                 * for DCS. After it, the args/body section is identical
+                 * for both kinds (the inner `;` between args and payload
+                 * is the same). See the header for the DCS rationale. */
+                int code_end = (sm->current_kind == YETTY_YWIRE_ENVELOPE_DCS)
+                                   ? (c == YETTY_YWIRE_DCS_FINAL)
+                                   : (c == ';');
                 if (c >= '0' && c <= '9') {
                     sm->current_code = sm->current_code * 10 + (int)(c - '0');
-                } else if (c == ';') {
-                    /* Resolve handler at the FIRST `;`. The handler's
+                } else if (code_end) {
+                    /* Resolve handler at the code separator. The handler's
                      * has_args flag drives whether we consume an args
                      * slot (one more `;` later) or jump straight into
                      * the body. Unknown (kind, code) with no
@@ -1503,6 +1660,75 @@ enum yetty_ywire_envelope_kind yetty_ywire_wire_statemachine_kind(
 
 #define ENC_SCRATCH_DEFAULT (64 * 1024) /* one LZ4 block worth */
 
+int yetty_ywire_tmux_passthrough_active(void)
+{
+    /* "Am I running tmux inside yetty, so my output must be passthrough-
+     * wrapped to reach yetty?" — TRUE only when BOTH hold:
+     *   - the host terminal is yetty (YETTY_TMUX_PASSTHROUGH=1, set by yetty
+     *     and inherited through tmux), and
+     *   - a tmux actually sits in between ($TMUX set).
+     * Directly under yetty (no tmux) there is nothing to wrap around, so we
+     * emit bare envelopes. */
+    const char *yetty = getenv("YETTY_TMUX_PASSTHROUGH");
+    if (!yetty || yetty[0] != '1') {
+        return 0;
+    }
+    const char *tmux = getenv("TMUX");
+    return tmux && tmux[0] != '\0';
+}
+
+/* tmux passthrough wrapping. Lazily decide (and cache) whether emitted
+ * envelopes must be wrapped so they survive a tmux session. See the
+ * tmux_wrap field comment on the SM struct. */
+static int sm_tmux_wrap(struct yetty_ywire_wire_statemachine *sm)
+{
+    if (!sm->tmux_wrap_known) {
+        sm->tmux_wrap = yetty_ywire_tmux_passthrough_active();
+        sm->tmux_wrap_known = 1;
+    }
+    return sm->tmux_wrap;
+}
+
+struct yetty_ycore_void_result yetty_ywire_tmux_wrap(const char *seq, size_t len,
+                                                     struct yetty_ycore_buffer *out_buf)
+{
+    if (!out_buf) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_tmux_wrap: out_buf is NULL");
+    }
+    if (!seq || len == 0) {
+        return YETTY_OK_VOID();
+    }
+    /* Not under tmux → emit verbatim; the host terminal sees the raw
+     * control sequence directly. */
+    if (!yetty_ywire_tmux_passthrough_active()) {
+        return yetty_ycore_buffer_write(out_buf, seq, len);
+    }
+    /* Under tmux → wrap in ESC P tmux; … ESC \ with every ESC in the body
+     * doubled, so tmux (with allow-passthrough) re-emits the original
+     * sequence verbatim to the outer terminal (yetty). This is the only
+     * way a raw control sequence (e.g. the DEC ?1500/?1501 card-mouse
+     * enable) survives a tmux session. */
+    struct yetty_ycore_void_result r = yetty_ycore_buffer_write(out_buf, "\033Ptmux;", 7);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ywire_tmux_wrap: prefix");
+    size_t run_start = 0;
+    for (size_t i = 0; i < len; i++) {
+        if ((unsigned char)seq[i] == 0x1b) {
+            if (i > run_start) {
+                r = yetty_ycore_buffer_write(out_buf, seq + run_start, i - run_start);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ywire_tmux_wrap: run");
+            }
+            r = yetty_ycore_buffer_write(out_buf, "\033\033", 2);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ywire_tmux_wrap: esc");
+            run_start = i + 1;
+        }
+    }
+    if (len > run_start) {
+        r = yetty_ycore_buffer_write(out_buf, seq + run_start, len - run_start);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ywire_tmux_wrap: tail");
+    }
+    return yetty_ycore_buffer_write(out_buf, "\033\\", 2);
+}
+
 static const char b64_alpha[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static struct yetty_ycore_void_result b64_emit_triple(struct yetty_ycore_buffer *out, uint8_t a,
@@ -1624,14 +1850,29 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
     sm->enc_out_buf = out_buf;
     sm->enc_b64_carry_n = 0;
     sm->enc_compressed = compressed ? 1 : 0;
+    sm->enc_tmux_wrap = sm_tmux_wrap(sm);
 
-    /* Wire shape:
-     *   has_args=0 → "ESC <kind> <code> ; <b64+lz4 body> ESC \\"
-     *   has_args=1 → "ESC <kind> <code> ; <b64 args> ; <b64+lz4 body> ESC \\"
-     * Either way the prefix `ESC <kind> <code> ;` is written first;
+    /* tmux passthrough prefix. When wrapping, the whole envelope becomes the
+     * data string of `ESC P tmux; … ESC \`, and every ESC inside it must be
+     * doubled. Our envelope contains ESC only at the opener and terminator
+     * (code/args/body are base64 + digits — no ESC), so doubling is just:
+     * emit `ESC P tmux;` then one extra ESC here (the first of the doubled
+     * opener pair; the hdr below supplies the second), and a doubled
+     * terminator in finish_write. */
+    if (sm->enc_tmux_wrap) {
+        struct yetty_ycore_void_result r = yetty_ycore_buffer_write(out_buf, "\033Ptmux;\033", 8);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: start_write: tmux prefix");
+    }
+
+    /* Wire shape (sep = `;` for OSC, the DCS final byte for DCS — see
+     * the header for why DCS needs a real final byte after the code):
+     *   has_args=0 → "ESC <kind> <code> <sep> <b64+lz4 body> ESC \\"
+     *   has_args=1 → "ESC <kind> <code> <sep> <b64 args> ; <b64+lz4 body> ESC \\"
+     * Either way the prefix `ESC <kind> <code> <sep>` is written first;
      * the args section + closing `;` are only added when has_args. */
+    char sep = (kind == YETTY_YWIRE_ENVELOPE_DCS) ? YETTY_YWIRE_DCS_FINAL : ';';
     char hdr[32];
-    int n = snprintf(hdr, sizeof(hdr), "\033%c%d;", (char)kind, code);
+    int n = snprintf(hdr, sizeof(hdr), "\033%c%d%c", (char)kind, code, sep);
     if (n <= 0 || (size_t)n >= sizeof(hdr)) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: bad code");
     }
@@ -1715,6 +1956,17 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_write(
     return b64_encode_push(sm, sm->enc_scratch, out_n);
 }
 
+/* Append the envelope terminator. Plain: ESC \. Under tmux wrapping: the
+ * envelope's own terminator ESC \ with its ESC doubled (ESC ESC \) followed
+ * by the tmux wrapper's own terminator ESC \. */
+static struct yetty_ycore_void_result write_terminator(struct yetty_ywire_wire_statemachine *sm)
+{
+    if (sm->enc_tmux_wrap) {
+        return yetty_ycore_buffer_write(sm->enc_out_buf, "\033\033\\\033\\", 5);
+    }
+    return yetty_ycore_buffer_write(sm->enc_out_buf, "\033\\", 2);
+}
+
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
     struct yetty_ywire_wire_statemachine *sm)
 {
@@ -1730,7 +1982,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
             sm->enc_active = 0;
             return r;
         }
-        r = yetty_ycore_buffer_write(sm->enc_out_buf, "\033\\", 2);
+        r = write_terminator(sm);
         sm->enc_active = 0;
         sm->enc_out_buf = NULL;
         return r;
@@ -1760,7 +2012,7 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
     if (YETTY_IS_ERR(r)) {
         goto out;
     }
-    r = yetty_ycore_buffer_write(sm->enc_out_buf, "\033\\", 2);
+    r = write_terminator(sm);
 out:
     /* Reset the LZ4F context so the next envelope on this SM starts
      * clean; keep the context allocated for reuse. */

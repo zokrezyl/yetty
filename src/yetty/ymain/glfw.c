@@ -76,11 +76,18 @@ static struct yetty_ycore_void_result yetty_worker(struct yetty_yinit_runtime *r
 
 int main(int argc, char **argv)
 {
-    /* Advertise ourselves via the de-facto TERM_PROGRAM convention so
-     * child processes (PTY shells, tools like ycat) can detect a yetty
-     * terminal and adapt their output. Done here at the top of main so
-     * every fork inherits it. */
-    setenv("TERM_PROGRAM", "yetty", 1);
+    /* Single marker for descendant tools (ycat, yecho, ygui apps, …):
+     *   - signals "running under a yetty terminal" → emit rich figure output
+     *   - enables tmux-passthrough wrapping of that output
+     * One var does both. It must survive a multiplexer: tmux rewrites
+     * TERM_PROGRAM to "tmux" for its panes but passes inherited custom vars
+     * through unchanged, so this reaches tools inside tmux-inside-yetty.
+     * Wrapping is always safe — the receive side unwraps it (direct,
+     * in-process loopback, or through real tmux alike). Detection and
+     * wrapping both key on this var (yetty_running_under_yetty /
+     * yetty_ywire_tmux_passthrough_active). Set at the top of main so every
+     * fork inherits it. */
+    setenv("YETTY_TMUX_PASSTHROUGH", "1", 1);
 
     struct yetty_yinit_app_config cfg = {
         .extract_assets_fn = yetty_platform_extract_assets,

@@ -28,7 +28,7 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterminal/dcs-codes.h>
-#include <yetty/yterminal/osc-codes.h>
+#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/yclass/rpc-dcs-server.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -374,7 +374,7 @@ static struct yetty_ycore_void_result terminal_yface_emit(struct yetty_yterminal
                                                           size_t len)
 {
     struct yetty_ycore_void_result sr = yetty_yface_start_write(
-        terminal->emit_yface, osc_code, /*compressed=*/0, /*args=*/NULL, /*args_len=*/0);
+        terminal->emit_yface, YETTY_YWIRE_ENVELOPE_OSC, osc_code, /*compressed=*/0, /*args=*/NULL, /*args_len=*/0);
     if (YETTY_IS_ERR(sr)) {
         struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(terminal->emit_yface);
         if (out_buf) {
@@ -1294,11 +1294,11 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     /* Register the root container directly with the wire SM —
      * userdata is the container itself; no terminal-local wrapper. */
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_YCOMPOSITOR_BIN, /*has_args=*/1,
+        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN, /*has_args=*/1,
         yetty_yfigure_container_process_input, terminal->root_container);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
                         "terminal_create: register compositor for YCOMPOSITOR_BIN");
-    ydebug("terminal_create: ycompositor registered for OSC %d", YETTY_OSC_YCOMPOSITOR_BIN);
+    ydebug("terminal_create: ycompositor registered for DCS %d", YETTY_DCS_YCOMPOSITOR_BIN);
 
     /* This process is about to act as a yclass RPC / remote-object
      * server, so bring up the per-module discovery hooks explicitly.
