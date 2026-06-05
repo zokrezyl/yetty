@@ -10,13 +10,13 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/yterm/background-layer.h>
+#include <yetty/yterminal/background-layer.h>
 
 /* Single uniform: the fill colour. */
 #define U_COLOR 0
 #define U_COUNT 1
 
-struct yetty_yterm_background_layer {
+struct yetty_yterminal_background_layer {
     struct yetty_yrender_terminal_layer base;
 
     /* Owning copy of the WGSL source — rs.shader.data points into here, so
@@ -33,8 +33,8 @@ static struct yetty_ycore_void_result bg_destroy(struct yetty_yrender_terminal_l
     if (!self) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yterm_background_layer *layer =
-        container_of(self, struct yetty_yterm_background_layer, base);
+    struct yetty_yterminal_background_layer *layer =
+        container_of(self, struct yetty_yterminal_background_layer, base);
     free(layer->shader_code.data);
     free(layer);
     return YETTY_OK_VOID();
@@ -44,8 +44,8 @@ static struct yetty_ycore_void_result bg_resize_grid(struct yetty_yrender_termin
                                                      struct yetty_ycore_grid_size grid_size,
                                                      struct yetty_ycore_pixel_size cell_size)
 {
-    struct yetty_yterm_background_layer *layer =
-        container_of(self, struct yetty_yterm_background_layer, base);
+    struct yetty_yterminal_background_layer *layer =
+        container_of(self, struct yetty_yterminal_background_layer, base);
     self->grid_size = grid_size;
     self->cell_size = cell_size;
     layer->rs.pixel_size.width = (float)grid_size.cols * cell_size.width;
@@ -57,8 +57,8 @@ static struct yetty_ycore_void_result bg_resize_grid(struct yetty_yrender_termin
 static struct yetty_yrender_gpu_resource_set_result bg_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yterm_background_layer *layer = container_of(
-        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_background_layer, base);
+    const struct yetty_yterminal_background_layer *layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterminal_background_layer, base);
     return YETTY_OK(yetty_yrender_gpu_resource_set, &layer->rs);
 }
 
@@ -99,7 +99,7 @@ static int bg_is_dirty(const struct yetty_yrender_terminal_layer *self)
     return self->dirty;
 }
 
-static const struct yetty_yterm_terminal_layer_ops bg_ops = {
+static const struct yetty_yterminal_layer_ops bg_ops = {
     .destroy = bg_destroy,
     .resize_grid = bg_resize_grid,
     .get_gpu_resource_set = bg_get_gpu_resource_set,
@@ -111,15 +111,15 @@ static const struct yetty_yterm_terminal_layer_ops bg_ops = {
 
 /* --- Create ----------------------------------------------------------- */
 
-struct yetty_yterm_terminal_layer_result yetty_yterm_background_layer_create(
+struct yetty_yterminal_layer_result yetty_yterminal_background_layer_create(
     const struct yetty_context *yetty_context, const float color_rgba[4])
 {
     if (!yetty_context) {
-        return YETTY_ERR(yetty_yterm_terminal_layer, "yetty_context is NULL");
+        return YETTY_ERR(yetty_yterminal_layer, "yetty_context is NULL");
     }
     struct yetty_yconfig_config *config = yetty_context->runtime->config;
     if (!config) {
-        return YETTY_ERR(yetty_yterm_terminal_layer, "config is NULL");
+        return YETTY_ERR(yetty_yterminal_layer, "config is NULL");
     }
 
     /* Read the WGSL source. Same pattern as the other yterm layers — the
@@ -129,13 +129,13 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_background_layer_create(
     snprintf(shader_path, sizeof(shader_path), "%s/background-layer.wgsl", shaders_dir);
     struct yetty_ycore_buffer_result br = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(br)) {
-        return YETTY_ERR(yetty_yterm_terminal_layer, "background_layer: shader read failed", br);
+        return YETTY_ERR(yetty_yterminal_layer, "background_layer: shader read failed", br);
     }
 
-    struct yetty_yterm_background_layer *layer = calloc(1, sizeof(*layer));
+    struct yetty_yterminal_background_layer *layer = calloc(1, sizeof(*layer));
     if (!layer) {
         free(br.value.data);
-        return YETTY_ERR(yetty_yterm_terminal_layer, "alloc failed");
+        return YETTY_ERR(yetty_yterminal_layer, "alloc failed");
     }
 
     layer->base.ops = &bg_ops;
@@ -169,5 +169,5 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_background_layer_create(
            layer->rs.uniforms[U_COLOR].vec4[0], layer->rs.uniforms[U_COLOR].vec4[1],
            layer->rs.uniforms[U_COLOR].vec4[2], layer->rs.uniforms[U_COLOR].vec4[3]);
 
-    return YETTY_OK(yetty_yterm_terminal_layer, &layer->base);
+    return YETTY_OK(yetty_yterminal_layer, &layer->base);
 }

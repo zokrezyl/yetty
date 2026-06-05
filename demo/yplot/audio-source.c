@@ -42,7 +42,7 @@
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplot/yplot.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterminal/osc-codes.h>
 
 #include <math.h>
 #include <stdint.h>

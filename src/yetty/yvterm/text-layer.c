@@ -1,6 +1,7 @@
 #include <yetty/yframework/yframework.h>
-#include <yetty/yterm/text-layer.h>
-#include <yetty/yterm/shader-glyph-figure.h>
+#include <yetty/yvterm/text-layer.h>
+#include <yetty/yvterm/text-scrollback.h>
+#include <yetty/yvterm/shader-glyph-figure.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-raster-font.h>
@@ -10,7 +11,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/ydraw/cell-ref-table.h>
 #include <yetty/yfigure/methods.h>
-#include <yetty/yterm/ydraw-layer.h>
+#include <yetty/yvterm/ydraw-content.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
@@ -154,47 +155,8 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
     set_selection_state(rs, 0, 0, 0, 0, 0);
 }
 
-/* Per-line descriptor in the scrollback arena: byte offset into the cells
- * ring + width at push time. Width is frozen — resize never rewrites stored
- * lines; pops just truncate/pad to whatever vterm asks for. */
-struct yetty_yterm_text_sb_line_rec {
-    size_t offset;
-    int cols;
-};
-
-/* Scrollback arena.
- *
- * Cells payload is packed back-to-back in a byte ring; lines[] is a parallel
- * ring of (offset, cols) descriptors. Two phases:
- *
- *   Growth phase (lines_cap < max_lines): both buffers double std::vector-
- *     style when full. No eviction. Data is contiguous from offset 0, so
- *     plain realloc preserves it.
- *
- *   Steady phase (lines_cap == max_lines): both buffers fixed; push evicts
- *     oldest line(s) until the new line fits in cells[] and lines[] has a
- *     free slot. Pure circular ring.
- *
- * Logical indexing: position 0 = oldest live line, lines_count-1 = newest.
- * Stored at lines[(lines_tail + i) % lines_cap]. */
-struct yetty_yterm_text_sb_arena {
-    uint8_t *cells;
-    size_t cells_cap;
-    size_t cells_head;
-    size_t cells_tail;
-    size_t cells_used;
-
-    struct yetty_yterm_text_sb_line_rec *lines;
-    uint32_t lines_cap;
-    uint32_t lines_head;
-    uint32_t lines_tail;
-    uint32_t lines_count;
-
-    uint32_t max_lines;
-};
-
 /* Text layer - embeds base as first member */
-struct yetty_yterm_terminal_text_layer {
+struct yetty_yvterm_text_layer {
     struct yetty_yrender_terminal_layer base;
     VTerm *vterm;
     VTermScreen *screen;
@@ -210,9 +172,9 @@ struct yetty_yterm_terminal_text_layer {
     int mouse_move_subscribed;
 
     /* Scrollback buffer. Two-ring arena (cells + line descriptors) — see
-     * struct yetty_yterm_text_sb_arena above. Logical position 0 is the
+     * struct yetty_yvterm_text_sb_arena above. Logical position 0 is the
      * oldest live line; pop reads the newest. */
-    struct yetty_yterm_text_sb_arena sb;
+    struct yetty_yvterm_text_sb_arena sb;
 
     /* Per-cell rich-handle table. Each VTermScreenCell.rich_handle indexes
      * this; the ydraw canvas reads/stamps handles through a cell_source we
@@ -227,7 +189,7 @@ struct yetty_yterm_terminal_text_layer {
      * reads this layer's cell buffer, so the text-layer owns its creation +
      * management (resize / visual-zoom). The terminal attaches it to the root
      * container, which renders it and owns its destroy (cascade). */
-    struct yetty_yterm_shader_glyph_figure *shader_glyph_figure;
+    struct yetty_yvterm_shader_glyph_figure *shader_glyph_figure;
 
     /* Scrollback view (tmux-style copy mode). When active, the GPU buffer
      * is built by stitching sb_lines + live screen so the user sees a
@@ -258,7 +220,7 @@ struct yetty_yterm_terminal_text_layer {
 
 /* Forward declarations */
 static struct yetty_yclass_object *text_layer_sgf_object(
-    struct yetty_yterm_terminal_text_layer *text_layer);
+    struct yetty_yvterm_text_layer *text_layer);
 static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result text_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
@@ -274,7 +236,7 @@ static struct yetty_ycore_int_result text_layer_render(struct yetty_yrender_term
 static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result text_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
-static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer);
+static void text_layer_build_view(struct yetty_yvterm_text_layer *layer);
 static struct yetty_ycore_void_result text_layer_get_selection_text(
     const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out);
 static struct yetty_ycore_void_result text_layer_set_selection(
@@ -297,7 +259,7 @@ YETTY_EXTERNAL_CALLBACK
 static VTermResolvedGlyph resolve_glyph(const uint32_t *chars, int count, int bold, int italic,
                                         void *user)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer = user;
+    struct yetty_yvterm_text_layer *text_layer = user;
     VTermResolvedGlyph result = {0, 0};
 
     ydebug("resolve_glyph ENTER: count=%d cp=U+%04X bold=%d italic=%d", count,
@@ -375,212 +337,30 @@ static int text_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
      * so the frame renders us (and thus it). */
     struct yetty_yclass_object *sgf_obj = text_layer_sgf_object(
         container_of((struct yetty_yrender_terminal_layer *)self,
-                     struct yetty_yterm_terminal_text_layer, base));
+                     struct yetty_yvterm_text_layer, base));
     return sgf_obj && yetty_yfigure_figure_dirty_get(sgf_obj).value;
-}
-
-/*=============================================================================
- * Scrollback arena
- *
- * See struct yetty_yterm_text_sb_arena for the design. All operations are
- * O(1) amortised; eviction is only entered after lines_cap hits max_lines.
- *===========================================================================*/
-
-static void sb_arena_init(struct yetty_yterm_text_sb_arena *a, uint32_t max_lines)
-{
-    memset(a, 0, sizeof(*a));
-    a->max_lines = max_lines ? max_lines : 1;
-}
-
-static void sb_arena_destroy(struct yetty_yterm_text_sb_arena *a)
-{
-    free(a->cells);
-    free(a->lines);
-    memset(a, 0, sizeof(*a));
-}
-
-/* Drop the oldest line, freeing its bytes from the cells ring. */
-static void sb_arena_drop_oldest(struct yetty_yterm_text_sb_arena *a)
-{
-    if (a->lines_count == 0) {
-        return;
-    }
-    size_t bytes = (size_t)a->lines[a->lines_tail].cols * sizeof(VTermScreenCell);
-    a->cells_tail = (a->cells_tail + bytes) % a->cells_cap;
-    a->cells_used -= bytes;
-    a->lines_tail = (a->lines_tail + 1) % a->lines_cap;
-    a->lines_count--;
-}
-
-/* Drop the newest line. Used by pop. */
-static void sb_arena_drop_newest(struct yetty_yterm_text_sb_arena *a)
-{
-    if (a->lines_count == 0) {
-        return;
-    }
-    a->lines_head = (a->lines_head + a->lines_cap - 1) % a->lines_cap;
-    size_t bytes = (size_t)a->lines[a->lines_head].cols * sizeof(VTermScreenCell);
-    a->cells_head = (a->cells_head + a->cells_cap - bytes) % a->cells_cap;
-    a->cells_used -= bytes;
-    a->lines_count--;
-}
-
-/* Read cols cells from the ring at byte offset into dst, handling wrap.
- * Defensive: garbage line records (uninit/stale) have shown up under heavy
- * ydraw scrollback. Bail with a loud yerror rather than memcpy from a
- * bogus pointer — the caller has already filled dst with blank if needed. */
-static void sb_arena_read(const struct yetty_yterm_text_sb_arena *a, size_t offset, int cols,
-                          VTermScreenCell *dst)
-{
-    if (cols <= 0) {
-        return;
-    }
-    size_t bytes = (size_t)cols * sizeof(VTermScreenCell);
-    if (offset >= a->cells_cap || bytes > a->cells_cap) {
-        yerror("sb_arena_read: invalid args offset=%zu cols=%d bytes=%zu "
-               "cells_cap=%zu cells_head=%zu cells_tail=%zu cells_used=%zu "
-               "lines_cap=%u lines_head=%u lines_tail=%u lines_count=%u",
-               offset, cols, bytes, a->cells_cap, a->cells_head, a->cells_tail, a->cells_used,
-               a->lines_cap, a->lines_head, a->lines_tail, a->lines_count);
-        return;
-    }
-    if (offset + bytes <= a->cells_cap) {
-        memcpy(dst, a->cells + offset, bytes);
-    } else {
-        size_t first = a->cells_cap - offset;
-        memcpy(dst, a->cells + offset, first);
-        memcpy((uint8_t *)dst + first, a->cells, bytes - first);
-    }
-}
-
-/* Resolve logical index (0=oldest) to a descriptor pointer. */
-static const struct yetty_yterm_text_sb_line_rec *sb_arena_peek(
-    const struct yetty_yterm_text_sb_arena *a, uint32_t i)
-{
-    if (i >= a->lines_count) {
-        return NULL;
-    }
-    return &a->lines[(a->lines_tail + i) % a->lines_cap];
-}
-
-/* Push one line. Returns 1 on success. */
-static int sb_arena_push(struct yetty_yterm_text_sb_arena *a, const VTermScreenCell *src, int cols)
-{
-    if (cols <= 0) {
-        return 1;
-    }
-    size_t bytes = (size_t)cols * sizeof(VTermScreenCell);
-
-    /* Growth phase: extend lines[] up to max_lines. The live range is
-     * always linear in this phase (lines_tail = 0), so realloc preserves it.
-     * After grow, force lines_head = lines_count: the prior push's modulus
-     * may have wrapped lines_head to 0 at the old cap boundary, which would
-     * cause this push to overwrite slot 0 instead of appending. */
-    if (a->lines_count >= a->lines_cap && a->lines_cap < a->max_lines) {
-        uint32_t new_cap = a->lines_cap == 0 ? 256 : a->lines_cap * 2;
-        if (new_cap > a->max_lines) {
-            new_cap = a->max_lines;
-        }
-        struct yetty_yterm_text_sb_line_rec *grown =
-            realloc(a->lines, (size_t)new_cap * sizeof(*grown));
-        if (!grown) {
-            yerror("sb_arena: lines realloc failed (new_cap=%u)", new_cap);
-            return 0;
-        }
-        a->lines = grown;
-        a->lines_cap = new_cap;
-        a->lines_head = a->lines_count;
-    }
-
-    /* Growth phase: extend cells[] until the new line fits. Same linearity
-     * argument — cells_tail = 0 so realloc keeps the range valid. Force
-     * cells_head = cells_used for the same reason as lines_head above. */
-    while (a->cells_used + bytes > a->cells_cap && a->lines_cap < a->max_lines) {
-        size_t new_cap = a->cells_cap == 0 ? 64 * 1024 : a->cells_cap * 2;
-        while (new_cap < a->cells_used + bytes) {
-            new_cap *= 2;
-        }
-        uint8_t *grown = realloc(a->cells, new_cap);
-        if (!grown) {
-            yerror("sb_arena: cells realloc failed (%zu)", new_cap);
-            return 0;
-        }
-        a->cells = grown;
-        a->cells_cap = new_cap;
-        a->cells_head = a->cells_used;
-    }
-
-    /* Steady phase: evict oldest until lines[] has a free slot and cells[]
-     * has room. If a single line exceeds the entire cells_cap (extreme
-     * resize), one-time grow rather than dropping data silently. */
-    while (a->lines_count >= a->lines_cap || a->cells_used + bytes > a->cells_cap) {
-        if (a->lines_count == 0) {
-            uint8_t *grown = realloc(a->cells, bytes);
-            if (!grown) {
-                yerror("sb_arena: emergency cells realloc (%zu) failed", bytes);
-                return 0;
-            }
-            a->cells = grown;
-            a->cells_cap = bytes;
-            break;
-        }
-        sb_arena_drop_oldest(a);
-    }
-
-    /* Write payload, handling ring wrap. */
-    if (a->cells_head + bytes <= a->cells_cap) {
-        memcpy(a->cells + a->cells_head, src, bytes);
-    } else {
-        size_t first = a->cells_cap - a->cells_head;
-        memcpy(a->cells + a->cells_head, src, first);
-        memcpy(a->cells, (const uint8_t *)src + first, bytes - first);
-    }
-
-    /* Record line descriptor. */
-    a->lines[a->lines_head].offset = a->cells_head;
-    a->lines[a->lines_head].cols = cols;
-    a->lines_head = (a->lines_head + 1) % a->lines_cap;
-    a->cells_head = (a->cells_head + bytes) % a->cells_cap;
-    a->cells_used += bytes;
-    a->lines_count++;
-    return 1;
-}
-
-/* Pop newest line. Copies up to copy_cols cells into dst. Returns the number
- * of cells copied (0 on empty). */
-static int sb_arena_pop(struct yetty_yterm_text_sb_arena *a, VTermScreenCell *dst, int copy_cols)
-{
-    if (a->lines_count == 0 || !dst || copy_cols <= 0) {
-        return 0;
-    }
-    uint32_t newest = (a->lines_head + a->lines_cap - 1) % a->lines_cap;
-    int line_cols = a->lines[newest].cols;
-    int n = line_cols < copy_cols ? line_cols : copy_cols;
-    sb_arena_read(a, a->lines[newest].offset, n, dst);
-    sb_arena_drop_newest(a);
-    return n;
 }
 
 /* Append a synthetic blank scrollback line — used when ydraw asks to
  * scroll more lines than the live screen contains. Without this we'd
  * desync from ydraw's rolling_row_0 (which counts every row of unified
  * scroll history, including space the text screen never had content in). */
-static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer, int cols)
+static void push_blank_sb_line(struct yetty_yvterm_text_layer *layer, int cols)
 {
     if (cols <= 0) {
         return;
     }
-    enum { YETTY_YTERM_STACK_BLANK_CELLS = 4096 };
-    if (cols <= YETTY_YTERM_STACK_BLANK_CELLS) {
-        VTermScreenCell stack_blanks[YETTY_YTERM_STACK_BLANK_CELLS] = {0};
-        sb_arena_push(&layer->sb, stack_blanks, cols);
+    enum { YETTY_YVTERM_STACK_BLANK_CELLS = 4096 };
+    if (cols <= YETTY_YVTERM_STACK_BLANK_CELLS) {
+        VTermScreenCell stack_blanks[YETTY_YVTERM_STACK_BLANK_CELLS] = {0};
+        yetty_yvterm_text_sb_arena_push(&layer->sb, stack_blanks, cols);
     } else {
         VTermScreenCell *blanks = calloc((size_t)cols, sizeof(VTermScreenCell));
         if (!blanks) {
             yerror("push_blank_sb_line: calloc failed (cols=%d)", cols);
             return;
         }
-        sb_arena_push(&layer->sb, blanks, cols);
+        yetty_yvterm_text_sb_arena_push(&layer->sb, blanks, cols);
         free(blanks);
     }
 }
@@ -599,8 +379,8 @@ static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer, in
 static struct yetty_ycore_void_result text_layer_scroll(struct yetty_yrender_terminal_layer *self,
                                                         int lines)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
 
     ydebug("text_layer_scroll ENTER: lines=%d screen=%p", lines, (void *)text_layer->screen);
 
@@ -645,8 +425,8 @@ static struct yetty_ycore_void_result text_layer_scroll(struct yetty_yrender_ter
 static struct yetty_ycore_void_result text_layer_set_cursor(
     struct yetty_yrender_terminal_layer *self, int col, int row)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
 
     ydebug("text_layer_set_cursor ENTER: col=%d row=%d screen=%p", col, row,
            (void *)text_layer->screen);
@@ -666,7 +446,7 @@ static struct yetty_ycore_void_result text_layer_set_cursor(
 /* Shared inner that updates the layer's cell stride. resize_grid below
  * combines this with a grid-size update so callers can't forget either. */
 static struct yetty_ycore_void_result text_layer_apply_cell_size(
-    struct yetty_yterm_terminal_text_layer *text_layer, struct yetty_ycore_pixel_size cell_size)
+    struct yetty_yvterm_text_layer *text_layer, struct yetty_ycore_pixel_size cell_size)
 {
     if (cell_size.width <= 0.0f || cell_size.height <= 0.0f) {
         return YETTY_ERR(yetty_ycore_void, "invalid cell size");
@@ -691,13 +471,13 @@ static struct yetty_ycore_void_result text_layer_apply_cell_size(
 static struct yetty_ycore_void_result text_layer_set_visual_zoom(
     struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
     set_visual_zoom(&text_layer->rs, scale, off_x, off_y);
 
     /* Mirror the zoom onto the owned shader-glyph figure (outside layers[]). */
     if (text_layer->shader_glyph_figure) {
-        struct yetty_ycore_void_result vr = yetty_yterm_shader_glyph_figure_set_visual_zoom(
+        struct yetty_ycore_void_result vr = yetty_yvterm_shader_glyph_figure_set_visual_zoom(
             text_layer->shader_glyph_figure, scale, off_x, off_y);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, vr,
                             "text_layer_set_visual_zoom: shader_glyph figure zoom");
@@ -708,7 +488,7 @@ static struct yetty_ycore_void_result text_layer_set_visual_zoom(
 }
 
 /* Ops */
-static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
+static const struct yetty_yterminal_layer_ops text_layer_ops = {
     .destroy = text_layer_destroy,
     .resize_grid = text_layer_resize_grid,
     .set_visual_zoom = text_layer_set_visual_zoom,
@@ -747,7 +527,7 @@ static VTermScreenCallbacks screen_callbacks = {
 YETTY_EXTERNAL_CALLBACK
 static int on_settermprop(VTermProp prop, VTermValue *val, void *user)
 {
-    struct yetty_yterm_terminal_text_layer *layer = user;
+    struct yetty_yvterm_text_layer *layer = user;
     if (!layer || !val) {
         return 1;
     }
@@ -828,7 +608,7 @@ static int on_settermprop(VTermProp prop, VTermValue *val, void *user)
 YETTY_EXTERNAL_CALLBACK
 static void vterm_output_callback(const char *data, size_t len, void *user)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer = user;
+    struct yetty_yvterm_text_layer *text_layer = user;
     if (!text_layer->base.pty_write_fn) {
         return;
     }
@@ -931,7 +711,7 @@ static void apply_color_palette(const struct yetty_yconfig_config *config, VTerm
  * physical cell (in either the primary or alt buffer) still references it. This
  * sidesteps every double-free hazard the cell-duplicating paths would create.
  * Cost: a couple of linear scans of the 2*rows*cols cell buffers. */
-static void text_layer_gc_handles(struct yetty_yterm_terminal_text_layer *text_layer)
+static void text_layer_gc_handles(struct yetty_yvterm_text_layer *text_layer)
 {
     /* Handles only ever live on the primary buffer. While the altscreen is
      * active the active buffer is the altscreen (no handles), so scanning it
@@ -967,7 +747,7 @@ static void text_layer_gc_handles(struct yetty_yterm_terminal_text_layer *text_l
  * calls this to read/stamp handles without depending on libvterm. */
 static uint32_t *text_layer_cell_handle_at(void *user, uint32_t row, uint32_t col)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer = user;
+    struct yetty_yvterm_text_layer *text_layer = user;
     if (!text_layer->screen || row >= text_layer->base.grid_size.rows ||
         col >= text_layer->base.grid_size.cols) {
         return NULL;
@@ -982,11 +762,11 @@ static uint32_t *text_layer_cell_handle_at(void *user, uint32_t row, uint32_t co
     return &buffer[(size_t)(root_row + row) * cols + col].rich_handle;
 }
 
-struct yetty_ycore_void_result yetty_yterm_text_layer_bind_ydraw(
+struct yetty_ycore_void_result yetty_yvterm_text_layer_bind_ydraw(
     struct yetty_yrender_terminal_layer *self, struct yetty_yrender_terminal_layer *ydraw_layer)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
     /* Build the cell source locally — handle_at + the ref table stay private
      * to the text-layer. The ydraw canvas reads/stamps cell handles through
      * it without ever seeing the table. */
@@ -995,30 +775,30 @@ struct yetty_ycore_void_result yetty_yterm_text_layer_bind_ydraw(
         .user = text_layer,
         .table = &text_layer->cell_ref_table,
     };
-    return yetty_yterm_ydraw_layer_set_cell_source(ydraw_layer, &source);
+    return yetty_yvterm_ydraw_content_set_cell_source(ydraw_layer, &source);
 }
 
 /* yclass object behind the owned shader-glyph figure (for render/dirty/destroy
  * dispatch), or NULL if none. */
 static struct yetty_yclass_object *text_layer_sgf_object(
-    struct yetty_yterm_terminal_text_layer *text_layer)
+    struct yetty_yvterm_text_layer *text_layer)
 {
     if (!text_layer->shader_glyph_figure) {
         return NULL;
     }
     struct yetty_yfigure_figure *base =
-        yetty_yterm_shader_glyph_figure_as_figure(text_layer->shader_glyph_figure);
+        yetty_yvterm_shader_glyph_figure_as_figure(text_layer->shader_glyph_figure);
     return (struct yetty_yclass_object *)base - 1;
 }
 
-struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
+struct yetty_yterminal_layer_result yetty_yvterm_text_layer_create(
     uint32_t cols, uint32_t rows, const struct yetty_context *context,
-    yetty_yterm_pty_write_fn pty_write_fn, void *pty_write_userdata,
-    yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
-    yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
+    yetty_yterminal_pty_write_fn pty_write_fn, void *pty_write_userdata,
+    yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata,
+    yetty_yterminal_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterminal_cursor_fn cursor_fn,
     void *cursor_userdata)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer;
+    struct yetty_yvterm_text_layer *text_layer;
 
     /* Load text-layer shader from file */
     struct yetty_yconfig_config *config = context->runtime->config;
@@ -1027,18 +807,18 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     snprintf(shader_path, sizeof(shader_path), "%s/text-layer.wgsl", shaders_dir);
     struct yetty_ycore_buffer_result shader_res = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(shader_res)) {
-        return YETTY_ERR(yetty_yterm_terminal_layer,
+        return YETTY_ERR(yetty_yterminal_layer,
                          "text_layer_create: read_file(text-layer.wgsl) failed", shader_res);
     }
 
-    text_layer = calloc(1, sizeof(struct yetty_yterm_terminal_text_layer));
+    text_layer = calloc(1, sizeof(struct yetty_yvterm_text_layer));
     if (!text_layer) {
         free(shader_res.value.data);
-        return YETTY_ERR(yetty_yterm_terminal_layer, "failed to allocate text layer");
+        return YETTY_ERR(yetty_yterminal_layer, "failed to allocate text layer");
     }
 
     /* Initialise the scrollback arena with the configured max-lines cap. */
-    sb_arena_init(&text_layer->sb,
+    yetty_yvterm_text_sb_arena_init(&text_layer->sb,
                   config->ops->scrollback_lines ? config->ops->scrollback_lines(config) : 10000);
 
     text_layer->shader_code = shader_res.value;
@@ -1117,7 +897,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     }
     if (YETTY_IS_ERR(font_res)) {
         free(text_layer);
-        return YETTY_ERR(yetty_yterm_terminal_layer, "text_layer_create: font creation failed",
+        return YETTY_ERR(yetty_yterminal_layer, "text_layer_create: font creation failed",
                          font_res);
     }
     ydebug("text_layer: font created");
@@ -1128,7 +908,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     struct pixel_size_result cs_res = text_layer->font->ops->get_cell_size(text_layer->font);
     if (YETTY_IS_ERR(cs_res)) {
         free(text_layer);
-        return YETTY_ERR(yetty_yterm_terminal_layer, "text_layer_create: font get_cell_size failed",
+        return YETTY_ERR(yetty_yterminal_layer, "text_layer_create: font get_cell_size failed",
                          cs_res);
     }
     text_layer->base.cell_size.width = cs_res.value.width;
@@ -1138,7 +918,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     text_layer->vterm = vterm_new((int)rows, (int)cols);
     if (!text_layer->vterm) {
         free(text_layer);
-        return YETTY_ERR(yetty_yterm_terminal_layer, "failed to create vterm");
+        return YETTY_ERR(yetty_yterminal_layer, "failed to create vterm");
     }
 
     vterm_set_utf8(text_layer->vterm, 1);
@@ -1206,26 +986,26 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
             .max = {.x = (float)cols * text_layer->base.cell_size.width,
                     .y = (float)rows * text_layer->base.cell_size.height},
         };
-        struct yetty_yterm_shader_glyph_figure_ptr_result sgf_res =
-            yetty_yterm_shader_glyph_figure_create(sgf_rect, cols, rows,
+        struct yetty_yvterm_shader_glyph_figure_ptr_result sgf_res =
+            yetty_yvterm_shader_glyph_figure_create(sgf_rect, cols, rows,
                                                    text_layer->base.cell_size.width,
                                                    text_layer->base.cell_size.height,
                                                    &text_layer->base, context, request_render_fn,
                                                    request_render_userdata);
-        YETTY_RETURN_IF_ERR(yetty_yterm_terminal_layer, sgf_res,
+        YETTY_RETURN_IF_ERR(yetty_yterminal_layer, sgf_res,
                             "text_layer_create: shader_glyph figure create failed");
         text_layer->shader_glyph_figure = sgf_res.value;
     }
 
-    return YETTY_OK(yetty_yterm_terminal_layer, &text_layer->base);
+    return YETTY_OK(yetty_yterminal_layer, &text_layer->base);
 }
 
 /* Ops implementations */
 
 static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
 
     /* We own the shader-glyph figure (it's not a compositor child) — destroy it
      * before vterm, while the cell buffer it borrows is still valid. */
@@ -1245,7 +1025,7 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
      * and nothing in teardown calls back into it (GC reclaims, no callback). */
     yetty_ydraw_cell_ref_table_destroy(&text_layer->cell_ref_table);
 
-    sb_arena_destroy(&text_layer->sb);
+    yetty_yvterm_text_sb_arena_destroy(&text_layer->sb);
     free(text_layer->view_staging);
 
     free(text_layer->shader_code.data);
@@ -1263,12 +1043,12 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
  *
  * userdata is the layer's base pointer (passed to set_default at
  * registration time). */
-struct yetty_ycore_void_result yetty_yterm_text_layer_process_input(
+struct yetty_ycore_void_result yetty_yvterm_text_layer_process_input(
     void *userdata, struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
     struct yetty_yrender_terminal_layer *self = userdata;
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
 
     if (!text_layer->vterm) {
         return YETTY_ERR(yetty_ycore_void, "vterm is NULL");
@@ -1294,8 +1074,8 @@ static struct yetty_ycore_void_result text_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
 
     if (!text_layer->vterm) {
         return YETTY_ERR(yetty_ycore_void, "vterm is NULL");
@@ -1316,7 +1096,7 @@ static struct yetty_ycore_void_result text_layer_resize_grid(
     /* Keep the owned shader-glyph figure tracking the grid (it's outside
      * layers[], so it never sees the resize broadcast on its own). */
     if (text_layer->shader_glyph_figure) {
-        struct yetty_ycore_void_result sgr = yetty_yterm_shader_glyph_figure_resize(
+        struct yetty_ycore_void_result sgr = yetty_yvterm_shader_glyph_figure_resize(
             text_layer->shader_glyph_figure, grid_size, cell_size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sgr,
                             "text_layer_resize_grid: shader_glyph figure resize");
@@ -1405,8 +1185,8 @@ static VTermKey glfw_key_to_vterm(int key)
 
 static int text_layer_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
 
     if (!text_layer->vterm) {
         return 0;
@@ -1425,8 +1205,8 @@ static int text_layer_on_key(struct yetty_yrender_terminal_layer *self, int key,
 static int text_layer_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
                               int mods)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
 
     if (!text_layer->vterm) {
         return 0;
@@ -1441,9 +1221,9 @@ static int text_layer_on_char(struct yetty_yrender_terminal_layer *self, uint32_
 static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        (struct yetty_yterm_terminal_text_layer *)((const char *)self -
-                                                   offsetof(struct yetty_yterm_terminal_text_layer,
+    struct yetty_yvterm_text_layer *text_layer =
+        (struct yetty_yvterm_text_layer *)((const char *)self -
+                                                   offsetof(struct yetty_yvterm_text_layer,
                                                             base));
 
     /* Reclaim rich-handle slots no cell references anymore. Runs before the
@@ -1496,8 +1276,8 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
 static struct yetty_ycore_int_result text_layer_render(struct yetty_yrender_terminal_layer *self,
                                                        struct yetty_ydraw_target *target, int force)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
     struct yetty_yclass_object *sgf_obj = text_layer_sgf_object(text_layer);
     int figure_dirty = sgf_obj && yetty_yfigure_figure_dirty_get(sgf_obj).value;
 
@@ -1525,11 +1305,11 @@ static struct yetty_ycore_int_result text_layer_render(struct yetty_yrender_term
 
 /* TEMP isolation: render the owned shader-glyph figure (called after the layer
  * loop to mimic the old compositor timing). */
-struct yetty_ycore_void_result yetty_yterm_text_layer_render_figures(
+struct yetty_ycore_void_result yetty_yvterm_text_layer_render_figures(
     struct yetty_yrender_terminal_layer *self, struct yetty_ydraw_target *target)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
     struct yetty_yclass_object *sgf_obj = text_layer_sgf_object(text_layer);
     if (!sgf_obj) {
         return YETTY_OK_VOID();
@@ -1544,11 +1324,11 @@ struct yetty_ycore_void_result yetty_yterm_text_layer_render_figures(
  * shader-glyph layer) that need to read the same grid as the text shader.
  * Returns the same pointer text-layer uploads — live screen in normal mode,
  * stitched scrollback view when view_active. */
-void yetty_yterm_terminal_layer_terminal_text_layer_get_cells(
+void yetty_yvterm_text_layer_get_cells(
     const struct yetty_yrender_terminal_layer *self, const uint8_t **out_data, size_t *out_size)
 {
-    const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
-        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+    const struct yetty_yvterm_text_layer *text_layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base);
 
     if (text_layer->view_active && text_layer->view_staging) {
         if (out_data) {
@@ -1569,11 +1349,11 @@ void yetty_yterm_terminal_layer_terminal_text_layer_get_cells(
     }
 }
 
-uint32_t yetty_yterm_terminal_layer_terminal_text_layer_get_root_row(
+uint32_t yetty_yvterm_text_layer_get_root_row(
     const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
-        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+    const struct yetty_yvterm_text_layer *text_layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base);
 
     /* Scrollback view hands back a staging buffer laid out from row 0 — same
      * convention text_layer_get_gpu_resource_set forces on the shader uniform. */
@@ -1591,7 +1371,7 @@ uint32_t yetty_yterm_terminal_layer_terminal_text_layer_get_root_row(
 YETTY_EXTERNAL_CALLBACK
 static int on_damage(VTermRect rect, void *user)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer = user;
+    struct yetty_yvterm_text_layer *text_layer = user;
     ydebug("on_damage: rect(%d,%d)-(%d,%d) -> dirty=1", rect.start_row, rect.start_col,
            rect.end_row, rect.end_col);
     text_layer->base.dirty = 1;
@@ -1607,7 +1387,7 @@ static int on_damage(VTermRect rect, void *user)
 YETTY_EXTERNAL_CALLBACK
 static int on_erase(VTermRect rect, int selective, void *user)
 {
-    struct yetty_yterm_terminal_text_layer *layer = user;
+    struct yetty_yvterm_text_layer *layer = user;
     (void)selective;
     if (!layer) {
         return 1;
@@ -1637,7 +1417,7 @@ static int on_erase(VTermRect rect, int selective, void *user)
 YETTY_EXTERNAL_CALLBACK
 static int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer = user;
+    struct yetty_yvterm_text_layer *text_layer = user;
     (void)oldpos;
     set_cursor_pos(&text_layer->rs, (float)pos.col, (float)pos.row);
     /* Track vterm's reported visibility so we can restore it on exit from
@@ -1671,13 +1451,13 @@ static int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user
 YETTY_EXTERNAL_CALLBACK
 static int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer = user;
+    struct yetty_yvterm_text_layer *text_layer = user;
 
     /* Capture the row vterm is evicting from the top of the live screen.
      * The arena copies the cells into its own storage so libvterm's buffer
      * can be reused immediately. Resizes don't rewrite stored lines. */
     if (cells && cols > 0) {
-        sb_arena_push(&text_layer->sb, cells, cols);
+        yetty_yvterm_text_sb_arena_push(&text_layer->sb, cells, cols);
         ydebug("on_sb_pushline: stored line cols=%d sb_count=%u", cols, text_layer->sb.lines_count);
     }
 
@@ -1704,14 +1484,14 @@ static int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
  * stays absolute and stable as new content keeps arriving during scrollback. */
 static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
-        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+    const struct yetty_yvterm_text_layer *text_layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base);
     return text_layer->sb.lines_count;
 }
 
 /* Reallocate view_staging if the requested cell count outgrew capacity.
  * Returns 1 on success. Caller writes cells * sizeof(VTermScreenCell) bytes. */
-static int ensure_view_staging(struct yetty_yterm_terminal_text_layer *layer, size_t cells)
+static int ensure_view_staging(struct yetty_yvterm_text_layer *layer, size_t cells)
 {
     size_t bytes = cells * sizeof(VTermScreenCell);
     if (bytes <= layer->view_staging_capacity) {
@@ -1735,7 +1515,7 @@ static int ensure_view_staging(struct yetty_yterm_terminal_text_layer *layer, si
  *
  * Width mismatches between an sb line (captured at one cols) and the current
  * grid cols are handled by truncating or clearing the trailing columns. */
-static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
+static void text_layer_build_view(struct yetty_yvterm_text_layer *layer)
 {
     uint32_t cols = layer->base.grid_size.cols;
     uint32_t rows = layer->base.grid_size.rows;
@@ -1757,7 +1537,7 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
         VTermScreenCell *dst = layer->view_staging + (size_t)gpu_y * cols;
 
         if (total_idx < layer->sb.lines_count) {
-            const struct yetty_yterm_text_sb_line_rec *rec = sb_arena_peek(&layer->sb, total_idx);
+            const struct yetty_yvterm_text_sb_line_rec *rec = yetty_yvterm_text_sb_arena_peek(&layer->sb, total_idx);
             /* Sanity-check the record. If anything looks off (uninit slot,
              * stale offset, negative cols), fill blank and shout. Without
              * this we segfault deep in memcpy with no breadcrumbs. */
@@ -1775,7 +1555,7 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
                 continue;
             }
             int copy = (rec->cols < (int)cols) ? rec->cols : (int)cols;
-            sb_arena_read(&layer->sb, rec->offset, copy, dst);
+            yetty_yvterm_text_sb_arena_read(&layer->sb, rec->offset, copy, dst);
             for (int c = copy; c < (int)cols; c++) {
                 dst[c] = blank;
             }
@@ -1804,8 +1584,8 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
 static struct yetty_ycore_void_result text_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
 
     text_layer->view_active = active ? 1 : 0;
     text_layer->view_top_total_idx = view_top_total_idx;
@@ -1834,8 +1614,8 @@ static struct yetty_ycore_void_result text_layer_set_view_top(
 YETTY_EXTERNAL_CALLBACK
 static int on_sb_popline(int cols, VTermScreenCell *cells, void *user)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer = user;
-    int copy_cols = sb_arena_pop(&text_layer->sb, cells, cols);
+    struct yetty_yvterm_text_layer *text_layer = user;
+    int copy_cols = yetty_yvterm_text_sb_arena_pop(&text_layer->sb, cells, cols);
     if (copy_cols == 0) {
         return 0;
     }
@@ -1854,7 +1634,7 @@ static int on_sb_popline(int cols, VTermScreenCell *cells, void *user)
 /* Sort (anchor_row, anchor_col) and (head_row, head_col) into a reading-order
  * (start, end) pair. start always precedes end in top-down, left-to-right
  * stream order. */
-static void text_layer_sel_sorted(const struct yetty_yterm_terminal_text_layer *layer,
+static void text_layer_sel_sorted(const struct yetty_yvterm_text_layer *layer,
                                   uint32_t *out_sr, uint32_t *out_sc, uint32_t *out_er,
                                   uint32_t *out_ec)
 {
@@ -1918,7 +1698,7 @@ static size_t text_layer_cp_to_utf8(uint32_t cp, uint8_t out[4])
  * which drops the codepoint on the floor. For clipboard extraction we
  * walk back through the font's inverse map (or the shader-glyph PUA
  * inverse for animated cells) to reconstruct it. */
-static uint32_t text_layer_codepoint_from_cell(struct yetty_yterm_terminal_text_layer *layer,
+static uint32_t text_layer_codepoint_from_cell(struct yetty_yvterm_text_layer *layer,
                                                uint32_t glyph_index)
 {
     if (glyph_index == 0) {
@@ -1941,7 +1721,7 @@ static uint32_t text_layer_codepoint_from_cell(struct yetty_yterm_terminal_text_
  * cell". We trim trailing blanks within the slice — copying 80 trailing
  * spaces because the user dragged past EOL is never useful. */
 static struct yetty_ycore_void_result text_layer_append_row_slice(
-    struct yetty_yterm_terminal_text_layer *layer, uint32_t row, uint32_t start_col,
+    struct yetty_yvterm_text_layer *layer, uint32_t row, uint32_t start_col,
     uint32_t end_col, struct yetty_ycore_buffer *out)
 {
     int cols = (int)layer->base.grid_size.cols;
@@ -2002,8 +1782,8 @@ static struct yetty_ycore_void_result text_layer_get_selection_text(
     /* Cast away const — extraction goes through the font, whose
      * get_codepoint may lazily populate caches (raster font scans). The
      * cells themselves are read-only here. */
-    struct yetty_yterm_terminal_text_layer *text_layer = container_of(
-        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base);
 
     if (!text_layer->sel_active || !text_layer->screen || !out) {
         return YETTY_OK_VOID();
@@ -2059,8 +1839,8 @@ static struct yetty_ycore_void_result text_layer_set_selection(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t anchor_row, uint32_t anchor_col,
     uint32_t head_row, uint32_t head_col)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    struct yetty_yvterm_text_layer *text_layer =
+        container_of(self, struct yetty_yvterm_text_layer, base);
     text_layer->sel_active = active;
     text_layer->sel_anchor_row = anchor_row;
     text_layer->sel_anchor_col = anchor_col;

@@ -70,7 +70,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterminal/osc-codes.h>
 #include <yetty/yvideo/yvideo.h>
 #include <yetty/yvideo/yvideo-gen.h>
 

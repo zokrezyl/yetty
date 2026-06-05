@@ -1433,7 +1433,7 @@ struct yetty_ydraw_drawable_list_result yetty_yecho_render_string(
  *===========================================================================*/
 
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_BIN */
+#include <yetty/yterminal/osc-codes.h> /* YETTY_OSC_YDRAW_BIN */
 
 struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
                                                         FILE *out)

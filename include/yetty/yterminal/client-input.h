@@ -21,8 +21,8 @@
  * differ.
  */
 
-#ifndef YETTY_YTERM_CLIENT_INPUT_H
-#define YETTY_YTERM_CLIENT_INPUT_H
+#ifndef YETTY_YTERMINAL_CLIENT_INPUT_H
+#define YETTY_YTERMINAL_CLIENT_INPUT_H
 
 #include <stdint.h>
 
@@ -166,4 +166,4 @@ struct yetty_client_input_key {
 }
 #endif
 
-#endif /* YETTY_YTERM_CLIENT_INPUT_H */
+#endif /* YETTY_YTERMINAL_CLIENT_INPUT_H */

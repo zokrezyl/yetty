@@ -40,8 +40,8 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/webgpu/error.h>
-#include <yetty/yterm/shader-glyph-figure.h>
-#include <yetty/yterm/text-layer.h>
+#include <yetty/yvterm/shader-glyph-figure.h>
+#include <yetty/yvterm/text-layer.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Uniform slots */
@@ -62,8 +62,8 @@ struct shader_glyph_instance {
     uint32_t local_id;   /* index into the generated render_shader_glyph dispatcher */
 };
 
-struct [[clang::annotate("class@yterm:shader_glyph")]] [[clang::annotate("parent@yfigure:figure")]]
-yetty_yterm_shader_glyph_figure {
+struct [[clang::annotate("class@yvterm:shader_glyph")]] [[clang::annotate("parent@yfigure:figure")]]
+yetty_yvterm_shader_glyph_figure {
     struct yetty_yfigure_figure *base;
 
     /* Borrowed — text-layer owns the cell buffer; we just point at it. */
@@ -72,7 +72,7 @@ yetty_yterm_shader_glyph_figure {
     /* Borrowed. Held to mint the binder on first render and to ask for
      * future renders from the anim timer. */
     const struct yetty_context *context;
-    yetty_yterm_request_render_fn request_render_fn;
+    yetty_yterminal_request_render_fn request_render_fn;
     void *request_render_userdata;
 
     /* Grid + cell geometry. Mirrored in rs.uniforms; tracked separately
@@ -111,10 +111,10 @@ yetty_yterm_shader_glyph_figure {
 
 /* This kind's own data slice (its fields sit after the figure
  * base slice in the shared yclass object). */
-static struct yetty_yterm_shader_glyph_figure *shader_glyph_figure_from_obj(struct yetty_yclass_object *obj)
+static struct yetty_yvterm_shader_glyph_figure *shader_glyph_figure_from_obj(struct yetty_yclass_object *obj)
 {
-    return (struct yetty_yterm_shader_glyph_figure *)yetty_yclass_object_data(
-               obj, yetty_yterm_shader_glyph_class_get().value)
+    return (struct yetty_yvterm_shader_glyph_figure *)yetty_yclass_object_data(
+               obj, yetty_yvterm_shader_glyph_class_get().value)
         .value;
 }
 
@@ -471,18 +471,18 @@ static char *splice_marker(const char *template, size_t template_size, const cha
  * set. Bounded to [root_row, root_row+rows) so glyph cells that scrolled off
  * the top don't pin the anim timer on (and so the draw path never runs on an
  * empty window). Used to short-circuit the anim timer when the grid is idle. */
-static int figure_is_empty(struct yetty_yterm_shader_glyph_figure *f)
+static int figure_is_empty(struct yetty_yvterm_shader_glyph_figure *f)
 {
     const uint8_t *data = NULL;
     size_t size = 0;
-    yetty_yterm_terminal_layer_terminal_text_layer_get_cells(f->text_layer, &data, &size);
+    yetty_yvterm_text_layer_get_cells(f->text_layer, &data, &size);
     if (!data || size < sizeof(VTermScreenCell)) {
         return 1;
     }
     uint32_t cols = (uint32_t)f->grid_size.cols;
     uint32_t rows = (uint32_t)f->grid_size.rows;
     uint32_t root_row =
-        yetty_yterm_terminal_layer_terminal_text_layer_get_root_row(f->text_layer);
+        yetty_yvterm_text_layer_get_root_row(f->text_layer);
     size_t total_cells = size / sizeof(VTermScreenCell);
     size_t window_first = (size_t)root_row * cols;
     size_t window_last = window_first + (size_t)cols * rows; /* exclusive */
@@ -503,11 +503,11 @@ static int figure_is_empty(struct yetty_yterm_shader_glyph_figure *f)
 
 /* Walk the cell buffer once, packing (cell_index, local_id) per shader-
  * glyph cell into f->instances[]. Returns the instance count. */
-static uint32_t figure_pack_instances(struct yetty_yterm_shader_glyph_figure *f)
+static uint32_t figure_pack_instances(struct yetty_yvterm_shader_glyph_figure *f)
 {
     const uint8_t *cells_data = NULL;
     size_t cells_size = 0;
-    yetty_yterm_terminal_layer_terminal_text_layer_get_cells(f->text_layer, &cells_data,
+    yetty_yvterm_text_layer_get_cells(f->text_layer, &cells_data,
                                                              &cells_size);
     if (!cells_data || cells_size < sizeof(VTermScreenCell)) {
         f->instance_count = 0;
@@ -522,7 +522,7 @@ static uint32_t figure_pack_instances(struct yetty_yterm_shader_glyph_figure *f)
     uint32_t cols = (uint32_t)f->grid_size.cols;
     uint32_t rows = (uint32_t)f->grid_size.rows;
     uint32_t root_row =
-        yetty_yterm_terminal_layer_terminal_text_layer_get_root_row(f->text_layer);
+        yetty_yvterm_text_layer_get_root_row(f->text_layer);
     set_root_row(&f->rs, root_row);
 
     size_t total_cells = cells_size / sizeof(VTermScreenCell);
@@ -578,16 +578,16 @@ static uint32_t figure_pack_instances(struct yetty_yterm_shader_glyph_figure *f)
  * Animation timer
  * ========================================================================= */
 
-static inline struct yetty_yterm_shader_glyph_figure *figure_from_listener(
+static inline struct yetty_yvterm_shader_glyph_figure *figure_from_listener(
     struct yetty_yevent_event_listener *l)
 {
     return (
-        struct yetty_yterm_shader_glyph_figure *)((char *)l -
-                                                  offsetof(struct yetty_yterm_shader_glyph_figure,
+        struct yetty_yvterm_shader_glyph_figure *)((char *)l -
+                                                  offsetof(struct yetty_yvterm_shader_glyph_figure,
                                                            listener));
 }
 
-static void anim_timer_stop(struct yetty_yterm_shader_glyph_figure *f)
+static void anim_timer_stop(struct yetty_yvterm_shader_glyph_figure *f)
 {
     if (!f->timer_created || !f->timer_running) {
         return;
@@ -596,7 +596,7 @@ static void anim_timer_stop(struct yetty_yterm_shader_glyph_figure *f)
     f->timer_running = 0;
 }
 
-static void anim_timer_start(struct yetty_yterm_shader_glyph_figure *f)
+static void anim_timer_start(struct yetty_yvterm_shader_glyph_figure *f)
 {
     if (!f->timer_created || f->timer_running) {
         return;
@@ -613,7 +613,7 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
                                                   const struct yetty_yui_event *event)
 {
     (void)event;
-    struct yetty_yterm_shader_glyph_figure *f = figure_from_listener(listener);
+    struct yetty_yvterm_shader_glyph_figure *f = figure_from_listener(listener);
     if (figure_is_empty(f)) {
         anim_timer_stop(f);
         return YETTY_OK(yetty_ycore_int, 0);
@@ -635,7 +635,7 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yfigure_figure
     if (!self) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yterm_shader_glyph_figure *f = shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
+    struct yetty_yvterm_shader_glyph_figure *f = shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
 
     if (f->timer_created && f->event_loop && f->event_loop->ops) {
         if (f->timer_running && f->event_loop->ops->stop_timer) {
@@ -665,7 +665,7 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yfigure_figure
  * ========================================================================= */
 
 static struct yetty_ycore_void_result figure_ensure_binder(
-    struct yetty_yterm_shader_glyph_figure *f)
+    struct yetty_yvterm_shader_glyph_figure *f)
 {
     if (f->binder) {
         return YETTY_OK_VOID();
@@ -681,7 +681,7 @@ static struct yetty_ycore_void_result figure_ensure_binder(
 static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure *self,
                                                     struct yetty_ydraw_target *target)
 {
-    struct yetty_yterm_shader_glyph_figure *f = shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
+    struct yetty_yvterm_shader_glyph_figure *f = shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
 
     /* No shader-glyph cells visible → stop ticking, skip the draw.
      * Without this the layer would burn a render pass every frame for an
@@ -799,7 +799,7 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure 
  * ========================================================================= */
 
 /* yclass cross-domain override of yfigure:render. Body sits at obj + 1. */
-[[clang::annotate("override@yterm:shader_glyph:yfigure:render")]]
+[[clang::annotate("override@yvterm:shader_glyph:yfigure:render")]]
 static struct yetty_ycore_void_result figure_render_slot(struct yetty_yclass_ctx *ctx,
                                                          struct yetty_yclass_object *obj,
                                                          struct yetty_ydraw_target *target)
@@ -809,7 +809,7 @@ static struct yetty_ycore_void_result figure_render_slot(struct yetty_yclass_ctx
 }
 
 /* yclass cross-domain override of yfigure:destroy. Body sits at obj + 1. */
-[[clang::annotate("override@yterm:shader_glyph:yfigure:destroy")]]
+[[clang::annotate("override@yvterm:shader_glyph:yfigure:destroy")]]
 static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_ctx *ctx,
                                                           struct yetty_yclass_object *obj)
 {
@@ -822,18 +822,18 @@ static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_ct
  * Public API
  * ========================================================================= */
 
-struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figure_create(
+struct yetty_yvterm_shader_glyph_figure_ptr_result yetty_yvterm_shader_glyph_figure_create(
     struct yetty_ycore_rectangle rect, uint32_t cols, uint32_t rows, float cell_width,
     float cell_height, struct yetty_yrender_terminal_layer *text_layer,
-    const struct yetty_context *context, yetty_yterm_request_render_fn request_render_fn,
+    const struct yetty_context *context, yetty_yterminal_request_render_fn request_render_fn,
     void *request_render_userdata)
 {
     if (!text_layer) {
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr,
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr,
                          "shader-glyph figure: text_layer is NULL");
     }
     if (!context) {
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr,
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr,
                          "shader-glyph figure: context is NULL");
     }
 
@@ -847,7 +847,7 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
 
     struct yetty_ycore_buffer_result template_res = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(template_res)) {
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr,
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr,
                          "shader-glyph figure: read_file(shader-glyph-layer.wgsl) failed",
                          template_res);
     }
@@ -855,7 +855,7 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
     struct yetty_ycore_buffer_result glyph_res = assemble_glyph_shaders(glyph_dir, config);
     if (YETTY_IS_ERR(glyph_res)) {
         free(template_res.value.data);
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr,
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr,
                          "shader-glyph figure: assemble failed", glyph_res);
     }
     char *glyph_blob = (char *)glyph_res.value.data;
@@ -868,26 +868,26 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
     free(template_res.value.data);
     free(glyph_blob);
     if (!spliced) {
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: splice failed");
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr, "shader-glyph figure: splice failed");
     }
 
     /* Allocate as a yclass object so the figure carries a class header
      * (enables yclass dispatch). Typed body lives at obj + 1; the
      * embedded `base` is its first member. */
-    struct yetty_yclass_ptr_result glyph_class_r = yetty_yterm_shader_glyph_class_get();
+    struct yetty_yclass_ptr_result glyph_class_r = yetty_yvterm_shader_glyph_class_get();
     if (YETTY_IS_ERR(glyph_class_r)) {
         free(spliced);
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: class",
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr, "shader-glyph figure: class",
                          glyph_class_r);
     }
     struct yetty_yclass_object_ptr_result glyph_obj_r =
         yetty_yclass_object_alloc(glyph_class_r.value);
     if (YETTY_IS_ERR(glyph_obj_r)) {
         free(spliced);
-        return YETTY_ERR(yetty_yterm_shader_glyph_figure_ptr, "shader-glyph figure: object_alloc",
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr, "shader-glyph figure: object_alloc",
                          glyph_obj_r);
     }
-    struct yetty_yterm_shader_glyph_figure *f = shader_glyph_figure_from_obj(glyph_obj_r.value);
+    struct yetty_yvterm_shader_glyph_figure *f = shader_glyph_figure_from_obj(glyph_obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(glyph_obj_r.value + 1);
 
     yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
@@ -933,7 +933,7 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
      * Refreshed each render in figure_pack_instances. */
     const uint8_t *cells_data = NULL;
     size_t cells_size = 0;
-    yetty_yterm_terminal_layer_terminal_text_layer_get_cells(text_layer, &cells_data, &cells_size);
+    yetty_yvterm_text_layer_get_cells(text_layer, &cells_data, &cells_size);
     f->rs.buffers[0].data = (uint8_t *)cells_data;
     f->rs.buffers[0].size = cells_size;
     f->rs.buffers[0].dirty = 1;
@@ -969,17 +969,17 @@ struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figur
     ydebug("shader-glyph figure: created %ux%u grid, %.1fx%.1f cells", cols, rows, cell_width,
            cell_height);
 
-    return YETTY_OK(yetty_yterm_shader_glyph_figure_ptr, f);
+    return YETTY_OK(yetty_yvterm_shader_glyph_figure_ptr, f);
 }
 
-struct yetty_yfigure_figure *yetty_yterm_shader_glyph_figure_as_figure(
-    struct yetty_yterm_shader_glyph_figure *figure)
+struct yetty_yfigure_figure *yetty_yvterm_shader_glyph_figure_as_figure(
+    struct yetty_yvterm_shader_glyph_figure *figure)
 {
     return figure ? figure->base : NULL;
 }
 
-struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_resize(
-    struct yetty_yterm_shader_glyph_figure *f, struct yetty_ycore_grid_size grid_size,
+struct yetty_ycore_void_result yetty_yvterm_shader_glyph_figure_resize(
+    struct yetty_yvterm_shader_glyph_figure *f, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size)
 {
     if (!f) {
@@ -1002,8 +1002,8 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_resize(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_set_visual_zoom(
-    struct yetty_yterm_shader_glyph_figure *f, float scale, float offset_x, float offset_y)
+struct yetty_ycore_void_result yetty_yvterm_shader_glyph_figure_set_visual_zoom(
+    struct yetty_yvterm_shader_glyph_figure *f, float scale, float offset_x, float offset_y)
 {
     if (!f) {
         return YETTY_ERR(yetty_ycore_void, "shader-glyph figure set_visual_zoom: NULL figure");
@@ -1013,7 +1013,7 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_set_visual_zoom(
     return YETTY_OK_VOID();
 }
 
-/* yclass class accessor (yetty_yterm_shader_glyph_class_get) + registration. */
+/* yclass class accessor (yetty_yvterm_shader_glyph_class_get) + registration. */
 #include "shader-glyph-figure.gen.c"
 
 #ifdef YCLASS_CODEGEN
@@ -1024,7 +1024,7 @@ struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_set_visual_zoom(
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
-#include <yetty/yterm/terminal.h>
+#include <yetty/yterminal/terminal.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -1087,10 +1087,10 @@ static inline uint32_t yetty_shader_glyph_codepoint_from_id(uint32_t glyph_index
     return YETTY_SHADER_GLYPH_PUA_BASE + yetty_shader_glyph_local_id(glyph_index);
 }
 
-struct yetty_yterm_shader_glyph_figure;
+struct yetty_yvterm_shader_glyph_figure;
 
-YETTY_YRESULT_DECLARE(yetty_yterm_shader_glyph_figure_ptr,
-                      struct yetty_yterm_shader_glyph_figure *);
+YETTY_YRESULT_DECLARE(yetty_yvterm_shader_glyph_figure_ptr,
+                      struct yetty_yvterm_shader_glyph_figure *);
 
 /* Create the shader-glyph figure.
  *
@@ -1099,26 +1099,26 @@ YETTY_YRESULT_DECLARE(yetty_yterm_shader_glyph_figure_ptr,
  * container; for the terminal's root container this is (0,0)-(cols*cw,
  * rows*ch). `request_render_fn` is invoked from the anim timer thread
  * to nudge the event loop. */
-struct yetty_yterm_shader_glyph_figure_ptr_result yetty_yterm_shader_glyph_figure_create(
+struct yetty_yvterm_shader_glyph_figure_ptr_result yetty_yvterm_shader_glyph_figure_create(
     struct yetty_ycore_rectangle rect, uint32_t cols, uint32_t rows, float cell_width,
     float cell_height, struct yetty_yrender_terminal_layer *text_layer,
-    const struct yetty_context *context, yetty_yterm_request_render_fn request_render_fn,
+    const struct yetty_context *context, yetty_yterminal_request_render_fn request_render_fn,
     void *request_render_userdata);
 
 /* Upcast. Stable pointer. */
-struct yetty_yfigure_figure *yetty_yterm_shader_glyph_figure_as_figure(
-    struct yetty_yterm_shader_glyph_figure *figure);
+struct yetty_yfigure_figure *yetty_yvterm_shader_glyph_figure_as_figure(
+    struct yetty_yvterm_shader_glyph_figure *figure);
 
 /* Push a new grid + cell size after a terminal resize. The figure
  * updates uniforms and its own rect to (0,0)-(cols*cw, rows*ch). */
-struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_resize(
-    struct yetty_yterm_shader_glyph_figure *figure, struct yetty_ycore_grid_size grid_size,
+struct yetty_ycore_void_result yetty_yvterm_shader_glyph_figure_resize(
+    struct yetty_yvterm_shader_glyph_figure *figure, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);
 
 /* Apply visual (shader-level) zoom. Mirrors the layer op of the same
  * name — terminal broadcasts ZOOM_VISUAL_APPLY events here. */
-struct yetty_ycore_void_result yetty_yterm_shader_glyph_figure_set_visual_zoom(
-    struct yetty_yterm_shader_glyph_figure *figure, float scale, float offset_x, float offset_y);
+struct yetty_ycore_void_result yetty_yvterm_shader_glyph_figure_set_visual_zoom(
+    struct yetty_yvterm_shader_glyph_figure *figure, float scale, float offset_x, float offset_y);
 
 #ifdef __cplusplus
 }

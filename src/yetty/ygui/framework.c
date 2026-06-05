@@ -29,7 +29,7 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterminal/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>

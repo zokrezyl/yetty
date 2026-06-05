@@ -3,7 +3,7 @@
  *
  * Benchmarks scanning a yetty text-grid for shader-glyph cells.
  *
- * Cell layout matches src/yetty/yterm/text-layer.wgsl (12 bytes / cell):
+ * Cell layout matches src/yetty/yvterm/text-layer.wgsl (12 bytes / cell):
  *     u32[0] = glyph_index    <-- the field we scan
  *     u32[1] = fg | bg.r<<24
  *     u32[2] = bg.gb | attrs<<16

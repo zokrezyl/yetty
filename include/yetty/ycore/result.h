@@ -91,7 +91,7 @@ size_t yetty_ycore_error_snprint(char *buf, size_t bufsize, struct yetty_ycore_e
  *
  * `type` is the result type identifier you registered with
  * YETTY_YRESULT_DECLARE — the part WITHOUT the `_result` suffix. Examples:
- * `yetty_ycore_void`, `yetty_yrich_cell_ptr`, `yetty_yterm_terminal_layer`.
+ * `yetty_ycore_void`, `yetty_yrich_cell_ptr`, `yetty_yterminal_layer`.
  */
 #define YETTY_ERR(...) YETTY_ERR_DISPATCH(__VA_ARGS__, YETTY_ERR_3, YETTY_ERR_2)(__VA_ARGS__)
 #define YETTY_ERR_DISPATCH(_1, _2, _3, NAME, ...) NAME

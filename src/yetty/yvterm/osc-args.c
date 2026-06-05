@@ -1,10 +1,10 @@
 /* osc-args.c - OSC argument parser */
 
-#include <yetty/yterm/osc-args.h>
+#include <yetty/yvterm/osc-args.h>
 #include <stdlib.h>
 #include <string.h>
 
-int yetty_yterm_osc_args_parse(struct yetty_yterm_osc_args *args, const char *data, size_t len)
+int yetty_yvterm_osc_args_parse(struct yetty_yvterm_osc_args *args, const char *data, size_t len)
 {
     const char *sep;
     size_t args_len;
@@ -73,7 +73,7 @@ int yetty_yterm_osc_args_parse(struct yetty_yterm_osc_args *args, const char *da
         }
 
         /* Parse token: --key=value, --flag, or key=value */
-        struct yetty_yterm_osc_arg *arg = &args->items[args->count];
+        struct yetty_yvterm_osc_arg *arg = &args->items[args->count];
 
         if (token_start[0] == '-' && token_start[1] == '-') {
             /* --key or --key=value */
@@ -113,7 +113,7 @@ int yetty_yterm_osc_args_parse(struct yetty_yterm_osc_args *args, const char *da
     return 0;
 }
 
-void yetty_yterm_osc_args_free(struct yetty_yterm_osc_args *args)
+void yetty_yvterm_osc_args_free(struct yetty_yvterm_osc_args *args)
 {
     if (args) {
         free(args->buf);
@@ -122,7 +122,7 @@ void yetty_yterm_osc_args_free(struct yetty_yterm_osc_args *args)
     }
 }
 
-int yetty_yterm_osc_args_has(const struct yetty_yterm_osc_args *args, const char *key)
+int yetty_yvterm_osc_args_has(const struct yetty_yvterm_osc_args *args, const char *key)
 {
     size_t i, key_len;
 
@@ -139,7 +139,7 @@ int yetty_yterm_osc_args_has(const struct yetty_yterm_osc_args *args, const char
     return 0;
 }
 
-const char *yetty_yterm_osc_args_get(const struct yetty_yterm_osc_args *args, const char *key)
+const char *yetty_yvterm_osc_args_get(const struct yetty_yvterm_osc_args *args, const char *key)
 {
     size_t i, key_len;
 
@@ -156,10 +156,10 @@ const char *yetty_yterm_osc_args_get(const struct yetty_yterm_osc_args *args, co
     return NULL;
 }
 
-int yetty_yterm_osc_args_get_int(const struct yetty_yterm_osc_args *args, const char *key,
+int yetty_yvterm_osc_args_get_int(const struct yetty_yvterm_osc_args *args, const char *key,
                                  int default_val)
 {
-    const char *val = yetty_yterm_osc_args_get(args, key);
+    const char *val = yetty_yvterm_osc_args_get(args, key);
     if (!val) {
         return default_val;
     }
@@ -173,8 +173,8 @@ int yetty_yterm_osc_args_get_int(const struct yetty_yterm_osc_args *args, const 
     return (int)v;
 }
 
-struct yetty_ycore_buffer_result yetty_yterm_osc_args_get_payload_buffer(
-    const struct yetty_yterm_osc_args *args)
+struct yetty_ycore_buffer_result yetty_yvterm_osc_args_get_payload_buffer(
+    const struct yetty_yvterm_osc_args *args)
 {
     if (!args || !args->payload || args->payload_len == 0) {
         return YETTY_ERR(yetty_ycore_buffer, "no payload");

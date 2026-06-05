@@ -27,7 +27,7 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
-#include <yetty/yterm/client-input.h>
+#include <yetty/yterminal/client-input.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <stdlib.h>

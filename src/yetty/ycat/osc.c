@@ -14,7 +14,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_BIN */
+#include <yetty/yterminal/osc-codes.h> /* YETTY_OSC_YDRAW_BIN */
 
 #include <stdio.h>
 #include <stdlib.h>

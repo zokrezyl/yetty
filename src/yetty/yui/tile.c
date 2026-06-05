@@ -6,8 +6,8 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/yterm/terminal.h>
-#include <yetty/yterm/background-layer.h>
+#include <yetty/yterminal/terminal.h>
+#include <yetty/yterminal/background-layer.h>
 #include <yetty/yvnc/vnc-viewer.h>
 #include <yetty/ydvnc/ydvnc-viewer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -907,8 +907,8 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
                     (float)((packed >> 16) & 0xFFu) / 255.0f,
                     (float)((packed >> 24) & 0xFFu) / 255.0f,
                 };
-                struct yetty_yterm_terminal_layer_result bg_res =
-                    yetty_yterm_background_layer_create(yetty_ctx, rgba);
+                struct yetty_yterminal_layer_result bg_res =
+                    yetty_yterminal_background_layer_create(yetty_ctx, rgba);
                 if (YETTY_IS_OK(bg_res)) {
                     ((struct yetty_yui_pane *)res.value)->background_layer = bg_res.value;
                     ydebug("tile: pane background '%s' -> (%.2f, %.2f, %.2f, %.2f)", color_str,
@@ -996,13 +996,13 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
         } else {
             /* Normal mode: create terminal */
             const char *view_type;
-            struct yetty_yterm_terminal_result term_res;
+            struct yetty_yterminal_terminal_result term_res;
             struct yetty_ycore_grid_size grid_size = {.rows = 24, .cols = 80};
 
             view_type = config->ops->get_string(config, "view", "terminal");
 
             if (strcmp(view_type, "terminal") == 0) {
-                term_res = yetty_yterm_terminal_create(grid_size, yetty_ctx);
+                term_res = yetty_yterminal_terminal_create(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
                     yetty_yui_tile_destroy(res.value);
                     return YETTY_ERR(yetty_yui_tile_ptr,
@@ -1011,7 +1011,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
                 }
 
                 yetty_yui_tile_pane_push_view(res.value,
-                                              yetty_yterm_terminal_as_view(term_res.value));
+                                              yetty_yterminal_terminal_as_view(term_res.value));
             }
         }
     }

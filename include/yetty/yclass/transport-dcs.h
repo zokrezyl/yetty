@@ -35,7 +35,7 @@ extern "C" {
 
 /* `dcs_code` is the DCS code used in both directions for this
  * session — typically `YETTY_DCS_YCLASS_RPC` from
- * <yetty/yterm/dcs-codes.h>. `compressed`: 0 = b64-only (smaller
+ * <yetty/yterminal/dcs-codes.h>. `compressed`: 0 = b64-only (smaller
  * overhead for tiny frames), 1 = b64+lz4 (worth it for larger
  * frames). */
 struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int read_fd,

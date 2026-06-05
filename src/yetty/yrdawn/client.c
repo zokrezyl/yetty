@@ -28,7 +28,7 @@
 #include <yetty/yplatform/time.h>
 #include <yetty/yrdawn/wire.h>
 
-/* Local copy — pulling <yetty/yterm/osc-codes.h> would drag in
+/* Local copy — pulling <yetty/yterminal/osc-codes.h> would drag in
  * terminal-only constants for a single value. */
 #define YETTY_YRDAWN_CLIENT_OSC_COMPOSITOR_BIN 630000
 

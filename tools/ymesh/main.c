@@ -35,9 +35,9 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
-#include <yetty/yterm/client-input.h>
+#include <yetty/yterminal/client-input.h>
 #include <yetty/yplatform/tty.h>
-#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterminal/osc-codes.h>
 
 /*=============================================================================
  * Output side — one-shot emit + interactive clear+bin re-render.

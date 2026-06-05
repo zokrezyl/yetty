@@ -1,5 +1,5 @@
-#ifndef YETTY_YTERM_DCS_CODES_H
-#define YETTY_YTERM_DCS_CODES_H
+#ifndef YETTY_YTERMINAL_DCS_CODES_H
+#define YETTY_YTERMINAL_DCS_CODES_H
 
 /*
  * Yetty DCS vendor IDs — leaf header, no yetty deps. DCS is the
@@ -17,4 +17,4 @@
 
 #define YETTY_DCS_YCLASS_RPC 800000
 
-#endif /* YETTY_YTERM_DCS_CODES_H */
+#endif /* YETTY_YTERMINAL_DCS_CODES_H */
