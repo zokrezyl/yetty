@@ -13,6 +13,10 @@
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
 
+/* POSIX strtok_r -> MSVC strtok_s. Identical signature and semantics:
+ * char *(char *str, const char *delim, char **context). */
+#define strtok_r strtok_s
+
 /* POSIX setenv -> Windows _putenv_s. _putenv_s always overwrites, so the
  * `overwrite` flag is ignored. Returns 0 on success. */
 static __inline int setenv(const char *name, const char *value, int overwrite)

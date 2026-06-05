@@ -18,5 +18,9 @@ target_link_libraries(yetty-ylottie PRIVATE
     yetty_yface
     yetty_ycore
     yetty_yplatform_core
-    m
 )
+
+# Math functions live in the C runtime on MSVC — there is no separate libm.
+if(NOT WIN32)
+    target_link_libraries(yetty-ylottie PRIVATE m)
+endif()
