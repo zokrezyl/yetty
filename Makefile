@@ -340,7 +340,8 @@ CMAKE_CROSS_RISCV := \
 	-DYETTY_ENABLE_LIB_GLFW=OFF \
 	-DYETTY_ENABLE_LIB_QEMU=OFF \
 	-DYETTY_ENABLE_LIB_QEMU_BINARY=OFF \
-	-DYETTY_ENABLE_TOOL_QA=OFF
+	-DYETTY_ENABLE_TOOL_QA=OFF \
+	-DYETTY_ENABLE_TOOL_YINSTALL=OFF
 
 # Scope pkg-config to the multiarch .pc dir so `pkg_check_modules(fontconfig)`
 # doesn't pick up host-x86_64 metadata. PKG_CONFIG_LIBDIR replaces the default

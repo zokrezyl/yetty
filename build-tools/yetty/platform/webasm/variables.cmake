@@ -43,4 +43,5 @@ set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)
 # when libuv is available. Webasm uses ygui_core (libuv-free) for in-app
 # embedders; the standalone-interactive tools don't make sense in wasm.
 set(YETTY_ENABLE_TOOL_YGREETER OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YINSTALL OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YTOP     OFF CACHE BOOL "" FORCE)

@@ -20,6 +20,7 @@ set(YETTY_ENABLE_TOOL_YCAT OFF CACHE BOOL "" FORCE)
 # tvOS the host process is the UIKit-owned yetty app — standalone tools
 # don't make sense here.
 set(YETTY_ENABLE_TOOL_YGREETER OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YINSTALL OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YTOP     OFF CACHE BOOL "" FORCE)
 
 # QA tools require host LLVM/Clang libs and hardcode Linux paths.
