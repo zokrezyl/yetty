@@ -748,6 +748,58 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
         return YETTY_OK_VOID();
     }
 
+    case YETTY_YFIGURE_ADMIN_SET_CHILD_SCROLL: {
+        if (body_len != 4 + 8) {
+            return YETTY_ERR(yetty_ycore_void, "container admin SET_CHILD_SCROLL: bad payload size");
+        }
+        uint32_t child_id;
+        float scroll[2];
+        memcpy(&child_id, body + 0, 4);
+        memcpy(scroll, body + 4, 8);
+        struct yetty_yfigure_figure *child =
+            yetty_yfigure_container_find_child_by_id(container, child_id);
+        if (!child) {
+            ydebug("container admin SET_CHILD_SCROLL: id=%u not bound", child_id);
+            return YETTY_OK_VOID();
+        }
+        if (!figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_set_scroll)) {
+            ydebug("container admin SET_CHILD_SCROLL: id=%u not scrollable", child_id);
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ycore_void_result sr = yetty_yfigure_set_scroll(
+            NULL, ((struct yetty_yclass_object *)(child) - 1), scroll[0], scroll[1]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "container admin SET_CHILD_SCROLL: set_scroll");
+        { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(container->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set"); }
+        return YETTY_OK_VOID();
+    }
+
+    case YETTY_YFIGURE_ADMIN_SET_CHILD_CONTENT_SIZE: {
+        if (body_len != 4 + 8) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "container admin SET_CHILD_CONTENT_SIZE: bad payload size");
+        }
+        uint32_t child_id;
+        float content[2];
+        memcpy(&child_id, body + 0, 4);
+        memcpy(content, body + 4, 8);
+        struct yetty_yfigure_figure *child =
+            yetty_yfigure_container_find_child_by_id(container, child_id);
+        if (!child) {
+            ydebug("container admin SET_CHILD_CONTENT_SIZE: id=%u not bound", child_id);
+            return YETTY_OK_VOID();
+        }
+        if (!figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_set_content_size)) {
+            ydebug("container admin SET_CHILD_CONTENT_SIZE: id=%u not scrollable", child_id);
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ycore_void_result sr = yetty_yfigure_set_content_size(
+            NULL, ((struct yetty_yclass_object *)(child) - 1), content[0], content[1]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr,
+                            "container admin SET_CHILD_CONTENT_SIZE: set_content_size");
+        { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(container->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set"); }
+        return YETTY_OK_VOID();
+    }
+
     default:
         ydebug("container admin: unknown op=%u, skipping %zu bytes", op, body_len);
         return YETTY_OK_VOID();

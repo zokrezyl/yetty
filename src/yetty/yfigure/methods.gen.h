@@ -15,5 +15,7 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_process_input_fn)(struct 
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_bytes_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, const uint8_t *, size_t);
 typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, int);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_reset_content_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_set_scroll_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_set_content_size_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
 
 #endif

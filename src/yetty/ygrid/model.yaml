@@ -276,3 +276,9 @@ classes:
       - slot: dump_state
         slot_domain: yfigure
         impl: yetty_ygrid_grid_dump_state_impl
+      - slot: set_scroll
+        slot_domain: yfigure
+        impl: yetty_ygrid_grid_set_scroll_impl
+      - slot: set_content_size
+        slot_domain: yfigure
+        impl: yetty_ygrid_grid_set_content_size_impl

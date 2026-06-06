@@ -183,6 +183,12 @@ if(YETTY_ENABLE_FEATURE_YDRAW)
     add_subdirectory(ydraw)
 endif()
 
+# yview — client emitter for server-side scrollable content surfaces.
+# Needs the ydraw-core record builder and the yface envelope encoder.
+if(YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    add_subdirectory(yview)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YNETSURF)
     add_subdirectory(ynetsurf)
 endif()

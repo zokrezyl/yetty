@@ -108,6 +108,39 @@ static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_stat
     return YETTY_OK(yetty_ycore_char_ptr, NULL);
 }
 
+/* set_scroll: move the figure's scroll offset (the content coordinate shown
+ * at the rect's top-left). Base default rejects — a non-scrolling figure has
+ * no content larger than its rect. Scrollable kinds (ygrid) override this so
+ * the container can drive the offset by id from a wire SET_CHILD_SCROLL
+ * record or the terminal's autonomous wheel/key handler, without re-shipping
+ * content. */
+[[clang::annotate("override@yfigure:figure:set_scroll")]] [[clang::annotate(
+    "local@yfigure:set_scroll")]]
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_scroll(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
+{
+    (void)ctx;
+    (void)obj;
+    (void)scroll_x;
+    (void)scroll_y;
+    return YETTY_ERR(yetty_ycore_void, "yfigure: set_scroll not implemented by this figure");
+}
+
+/* set_content_size: declare the figure's content extent in px (the rect stays
+ * the visible window; content may be larger, making the figure a scroll
+ * viewport). Base default rejects. Scrollable kinds override it. */
+[[clang::annotate("override@yfigure:figure:set_content_size")]] [[clang::annotate(
+    "local@yfigure:set_content_size")]]
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_content_size(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float content_w, float content_h)
+{
+    (void)ctx;
+    (void)obj;
+    (void)content_w;
+    (void)content_h;
+    return YETTY_ERR(yetty_ycore_void, "yfigure: set_content_size not implemented by this figure");
+}
+
 /* ---- figure base data slice (PRIVATE) -----------------------------------
  * The yclass data slice for the figure base class — the first slice in every
  * figure object (right after the yclass object header). The layout is not
