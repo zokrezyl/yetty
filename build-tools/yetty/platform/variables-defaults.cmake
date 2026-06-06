@@ -93,6 +93,7 @@ option(YETTY_ENABLE_FEATURE_YDRAW    "ydraw — drawing library (canvas, SDF, co
 option(YETTY_ENABLE_FEATURE_YRICH     "yrich — rich text"                    ON)
 option(YETTY_ENABLE_FEATURE_YDIAGRAM   "diagram — diagram rendering"          ON)
 option(YETTY_ENABLE_FEATURE_YPLOT     "yplot — plotting"                     ON)
+option(YETTY_ENABLE_FEATURE_YFLAME    "yflame — flame graphs"                ON)
 
 # Cards
 option(YETTY_ENABLE_FEATURE_CARDS     "cards — card plugin system"           OFF)
@@ -171,7 +172,7 @@ option(YETTY_ENABLE_TOOL_YZOO            "yzoo tool (control-point zoo → OSC)"
 option(YETTY_ENABLE_TOOL_YJUNGLE         "yjungle tool (scene-canvas test → OSC)" ON)
 option(YETTY_ENABLE_TOOL_YDRAW_MAZE      "ydraw-maze tool"                   OFF)
 option(YETTY_ENABLE_TOOL_YMUX            "ymux tool"                         OFF)
-option(YETTY_ENABLE_TOOL_YFLAME          "yflame tool"                       OFF)
+option(YETTY_ENABLE_TOOL_YFLAME          "yflame tool"                       ON)
 option(YETTY_ENABLE_TOOL_PDF2YDRAW       "pdf2ydraw tool"                    OFF)
 option(YETTY_ENABLE_TOOL_HTML2YDRAW      "html2ydraw tool"                   OFF)
 option(YETTY_ENABLE_TOOL_YHTML_MACHINE   "yhtml-machine tool"                OFF)
