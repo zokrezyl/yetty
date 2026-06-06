@@ -215,7 +215,15 @@ run_record() {  # $1=perf.data path; remaining: the `perf record` target args
     local -a rec=( perf record -F "$freq" --call-graph "$call_graph" -o "$out" "$@" )
     step "recording: ${rec[*]}"
     if [ "$dry_run" = 1 ]; then return 0; fi
-    "${rec[@]}" >&2
+    # The recorded program may exit non-zero, crash, or be Ctrl-C'd — that's
+    # normal for profiling and perf.data is still valid. Never abort on it.
+    local st=0
+    "${rec[@]}" >&2 || st=$?
+    if [ "$st" -ne 0 ]; then
+        warn "recorded process exited $st (continuing — perf.data is still valid)"
+    fi
+    [ -s "$out" ] || die "perf captured no data (is perf usable? check perf_event_paranoid)"
+    return 0
 }
 
 # ---- produce folded stacks on fd 'folded_out' (a temp), per mode ----------
@@ -309,8 +317,11 @@ if [ "$view" = 1 ]; then
     {
         printf '#!/usr/bin/env bash\n'
         printf 'cat %q\n' "$osc_tmp"
-        printf 'printf "\\n\\033[2m── flame graph above · type exit to close ──\\033[0m\\n"\n'
-        printf 'exec "${SHELL:-bash}"\n'
+        printf 'printf "\\n\\033[2m── flame graph above · scroll to inspect · close the window or press Ctrl-C to dismiss ──\\033[0m\\n"\n'
+        # Hold with sleep, NOT a shell: an interactive shell exits on stdin EOF
+        # when launched non-interactively, closing the window before it is seen.
+        # sleep ignores stdin, so the window stays until the user dismisses it.
+        printf 'exec sleep infinity\n'
     } > "$view_script"
     chmod +x "$view_script"
     step "opening flame graph in a new yetty window"

@@ -230,11 +230,15 @@ static void test_tooltip_pilot(void)
     struct yetty_ygui_object *obj = r.value;
 
     /* Default label is NULL. */
-    assert(yetty_ygui_tooltip_get_text(obj) == NULL);
+    struct yetty_ycore_const_char_ptr_result text_default = yetty_ygui_tooltip_get_text(obj);
+    assert(YETTY_IS_OK(text_default));
+    assert(text_default.value == NULL);
 
     struct yetty_ycore_void_result sr = yetty_ygui_tooltip_set_text(obj, "hello");
     assert(YETTY_IS_OK(sr));
-    assert(strcmp(yetty_ygui_tooltip_get_text(obj), "hello") == 0);
+    struct yetty_ycore_const_char_ptr_result text_after = yetty_ygui_tooltip_get_text(obj);
+    assert(YETTY_IS_OK(text_after));
+    assert(strcmp(text_after.value, "hello") == 0);
     assert(yetty_ygui_object_is_dirty(obj));
 
     /* Position the widget so paint emits a TEXT_DRAWABLE_LIST at a known coord. */
