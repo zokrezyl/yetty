@@ -10,6 +10,7 @@
  * the contract.
  */
 #include <yetty/ywire/wire-statemachine.h>
+#include <yetty/ycore/result.h>
 
 #include <errno.h>
 #include <lz4frame.h>
@@ -1264,6 +1265,7 @@ static struct yetty_ycore_size_result pull_from_pty(struct yetty_ywire_wire_stat
  * sm_coro: the scanner loop
  *=========================================================================*/
 
+YETTY_EXTERNAL_CALLBACK
 YETTY_EXTERNAL_CALLBACK
 static void sm_coro_entry(void *arg)
 {

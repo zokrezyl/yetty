@@ -20,6 +20,6 @@ struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_ygui_object *obj, const char *label);
 struct yetty_ycore_void_result yetty_ygui_list_set_selected(struct yetty_ygui_object *obj, int i);
-int yetty_ygui_list_get_selected(const struct yetty_ygui_object *obj);
+struct yetty_ycore_int_result yetty_ygui_list_get_selected(const struct yetty_ygui_object *obj);
 
 #endif

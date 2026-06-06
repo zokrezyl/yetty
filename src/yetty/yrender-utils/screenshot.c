@@ -10,6 +10,7 @@
  */
 
 #include <yetty/yrender-utils/screenshot.h>
+#include <yetty/ycore/result.h>
 
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ytrace/ytrace.h>
@@ -93,6 +94,7 @@ static struct yetty_ycore_void_result write_ppm(const char *path, const uint8_t 
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void screenshot_coro_entry(void *arg)
 {
     struct screenshot_args *args = arg;

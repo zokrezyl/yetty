@@ -146,7 +146,8 @@ static struct yetty_ycore_void_result header_on_click(struct yetty_yclass_ctx *y
     struct tabbar_data *td = td_dr.value;
     if (td->close_cb) {
         float px = 0.0f, py = 0.0f;
-        yetty_ygui_clickable_press_pos(obj, &px, &py);
+        { struct yetty_ycore_void_result pp_r = yetty_ygui_clickable_press_pos(obj, &px, &py);
+          if (YETTY_IS_ERR(pp_r)) yetty_ycore_error_destroy(pp_r.error); }
         struct yetty_ycore_rectangle pr = yetty_ygui_widget_rect(obj);
         if (px >= pr.max.x - TABBAR_CLOSE_W) {
             td->close_cb(hd->tabbar, idx, td->close_userdata);
@@ -682,15 +683,16 @@ int yetty_ygui_tabbar_count(const struct yetty_ygui_object *tabbar)
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_tabbar_active(const struct yetty_ygui_object *tabbar)
+struct yetty_ycore_int_result yetty_ygui_tabbar_active(const struct yetty_ygui_object *tabbar)
 {
     if (!tabbar) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_tabbar_active: NULL obj");
     }
-    struct tabbar_data *td = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)tabbar,
-        yetty_ygui_tabbar_class_get().value);
-    return td->active_index;
+    struct yetty_ygui_void_ptr_result td_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)tabbar, yetty_ygui_tabbar_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, td_dr, "yetty_ygui_tabbar_active: data_get");
+    struct tabbar_data *td = td_dr.value;
+    return YETTY_OK(yetty_ycore_int, td->active_index);
 }
 
 [[clang::annotate("expose")]]

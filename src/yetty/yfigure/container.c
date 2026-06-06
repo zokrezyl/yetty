@@ -356,6 +356,7 @@ static struct yetty_ycore_void_result container_destroy(struct yetty_yclass_ctx 
  * uthash's sort stability, and equal-z children keep insertion order
  * (so a single-z tree sorts to its original order — no behaviour change
  * until something sets a non-zero z). */
+YETTY_EXTERNAL_CALLBACK
 static int child_z_cmp(struct child_entry *a, struct child_entry *b)
 {
     if (yetty_yfigure_figure_z_get((struct yetty_yclass_object *)(a->figure) - 1).value != yetty_yfigure_figure_z_get((struct yetty_yclass_object *)(b->figure) - 1).value) {

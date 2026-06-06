@@ -27,6 +27,7 @@ typedef enum yetty_yfsvm_YfsvmOpcode {
     YETTY_YFSVM_OP_LOAD_T = 0x04,
     YETTY_YFSVM_OP_LOAD_S = 0x05,
     YETTY_YFSVM_OP_MOV = 0x06,
+    YETTY_YFSVM_OP_LOAD_Y = 0x07,
     YETTY_YFSVM_OP_ADD = 0x10,
     YETTY_YFSVM_OP_SUB = 0x11,
     YETTY_YFSVM_OP_MUL = 0x12,
@@ -54,6 +55,8 @@ typedef enum yetty_yfsvm_YfsvmOpcode {
     YETTY_YFSVM_OP_POW = 0x34,
     YETTY_YFSVM_OP_SQRT = 0x35,
     YETTY_YFSVM_OP_RSQRT = 0x36,
+    YETTY_YFSVM_OP_ERF = 0x37,
+    YETTY_YFSVM_OP_ERFC = 0x38,
     YETTY_YFSVM_OP_ABS = 0x40,
     YETTY_YFSVM_OP_MIN = 0x41,
     YETTY_YFSVM_OP_MAX = 0x42,
@@ -69,6 +72,15 @@ typedef enum yetty_yfsvm_YfsvmOpcode {
     YETTY_YFSVM_OP_TRUNC = 0x4C,
     YETTY_YFSVM_OP_RADIANS = 0x4D,
     YETTY_YFSVM_OP_DEGREES = 0x4E,
+    YETTY_YFSVM_OP_SELECT = 0x4F,
+    YETTY_YFSVM_OP_LT = 0x50,
+    YETTY_YFSVM_OP_GT = 0x51,
+    YETTY_YFSVM_OP_LE = 0x52,
+    YETTY_YFSVM_OP_GE = 0x53,
+    YETTY_YFSVM_OP_EQ = 0x54,
+    YETTY_YFSVM_OP_NE = 0x55,
+    YETTY_YFSVM_OP_RAND = 0x60,
+    YETTY_YFSVM_OP_NOISE = 0x61,
 } YfsvmOpcode;
 
 // Instruction format (32-bit):
@@ -126,6 +138,8 @@ static inline const char *yfsvm_opcode_name(YfsvmOpcode op)
         return "LOAD_S";
     case YETTY_YFSVM_OP_MOV:
         return "MOV";
+    case YETTY_YFSVM_OP_LOAD_Y:
+        return "LOAD_Y";
     case YETTY_YFSVM_OP_ADD:
         return "ADD";
     case YETTY_YFSVM_OP_SUB:
@@ -180,6 +194,10 @@ static inline const char *yfsvm_opcode_name(YfsvmOpcode op)
         return "SQRT";
     case YETTY_YFSVM_OP_RSQRT:
         return "RSQRT";
+    case YETTY_YFSVM_OP_ERF:
+        return "ERF";
+    case YETTY_YFSVM_OP_ERFC:
+        return "ERFC";
     case YETTY_YFSVM_OP_ABS:
         return "ABS";
     case YETTY_YFSVM_OP_MIN:
@@ -210,6 +228,24 @@ static inline const char *yfsvm_opcode_name(YfsvmOpcode op)
         return "RADIANS";
     case YETTY_YFSVM_OP_DEGREES:
         return "DEGREES";
+    case YETTY_YFSVM_OP_SELECT:
+        return "SELECT";
+    case YETTY_YFSVM_OP_LT:
+        return "LT";
+    case YETTY_YFSVM_OP_GT:
+        return "GT";
+    case YETTY_YFSVM_OP_LE:
+        return "LE";
+    case YETTY_YFSVM_OP_GE:
+        return "GE";
+    case YETTY_YFSVM_OP_EQ:
+        return "EQ";
+    case YETTY_YFSVM_OP_NE:
+        return "NE";
+    case YETTY_YFSVM_OP_RAND:
+        return "RAND";
+    case YETTY_YFSVM_OP_NOISE:
+        return "NOISE";
     default:
         return "UNKNOWN";
     }

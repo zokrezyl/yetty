@@ -122,15 +122,15 @@ struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-const char *yetty_ygui_tooltip_get_text(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_tooltip_get_text(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_tooltip_get_text: invalid args");
     }
-    struct tooltip_data *td = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_tooltip_class_get().value);
-    return td->text;
+    struct yetty_ygui_void_ptr_result td_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_tooltip_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, td_dr, "yetty_ygui_tooltip_get_text: data_get");
+    struct tooltip_data *td = td_dr.value;
+    return YETTY_OK(yetty_ycore_const_char_ptr, td->text);
 }
 
 /* Parent: primitive_widget. */

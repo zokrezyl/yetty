@@ -3,6 +3,7 @@
  */
 
 #include <yetty/yetty/yetty.h>
+#include <yetty/ycore/result.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
@@ -945,6 +946,7 @@ static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, in
     yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
 {
     struct yetty_yetty_yetty *yetty = userdata;

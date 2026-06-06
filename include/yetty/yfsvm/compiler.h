@@ -38,6 +38,7 @@ struct yetty_yfsvm_program {
     uint32_t function_count;
 
     int uses_x;
+    int uses_y;
     int uses_time;
 };
 

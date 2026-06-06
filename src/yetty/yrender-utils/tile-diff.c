@@ -7,6 +7,7 @@
  */
 
 #include <yetty/yrender-utils/tile-diff.h>
+#include <yetty/ycore/result.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
@@ -277,6 +278,7 @@ static void submit_coro_finish(struct yetty_yrender_utils_tile_diff_engine *eng)
     }
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void submit_coro_entry(void *arg)
 {
     struct submit_args *args = arg;

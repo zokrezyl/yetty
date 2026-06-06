@@ -80,15 +80,15 @@ struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_ygu
 }
 
 [[clang::annotate("expose")]]
-uint32_t yetty_ygui_colorpicker_get_color(const struct yetty_ygui_object *obj)
+struct yetty_ycore_uint32_result yetty_ygui_colorpicker_get_color(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_uint32, "yetty_ygui_colorpicker_get_color: NULL obj");
     }
-    return ((struct cp_data *)yetty_ygui_data_get(
-                (struct yetty_ygui_object *)obj,
-                yetty_ygui_colorpicker_class_get().value))
-        ->color;
+    struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_colorpicker_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, data_result, "yetty_ygui_colorpicker_get_color: data_get");
+    return YETTY_OK(yetty_ycore_uint32, ((struct cp_data *)data_result.value)->color);
 }
 
 #include "colorpicker.gen.c"

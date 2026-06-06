@@ -54,6 +54,13 @@ opcodes:
     arity: 1
     wgsl: "regs[dst] = v1;"
 
+  # Second spatial input — the pixel's y coordinate. A program that reads it
+  # is a 2D field f(x,y); yplot renders such programs as a heatmap.
+  - name: LOAD_Y
+    value: 0x07
+    arity: 1
+    wgsl: "regs[dst] = y;"
+
   # Arithmetic
   - name: ADD
     value: 0x10
@@ -193,6 +200,18 @@ opcodes:
     arity: 1
     wgsl: "regs[dst] = inverseSqrt(v1);"
 
+  # Error function (Abramowitz & Stegun 7.1.26 rational approximation,
+  # max error ~1.5e-7). erfc(x) = 1 - erf(x). The Gaussian CDF building block.
+  - name: ERF
+    value: 0x37
+    arity: 1
+    wgsl: "let erf_t = 1.0 / (1.0 + 0.3275911 * abs(v1)); regs[dst] = sign(v1) * (1.0 - (((((1.061405429 * erf_t - 1.453152027) * erf_t + 1.421413741) * erf_t - 0.284496736) * erf_t + 0.254829592) * erf_t) * exp(-v1 * v1));"
+
+  - name: ERFC
+    value: 0x38
+    arity: 1
+    wgsl: "let erfc_t = 1.0 / (1.0 + 0.3275911 * abs(v1)); regs[dst] = 1.0 - sign(v1) * (1.0 - (((((1.061405429 * erfc_t - 1.453152027) * erfc_t + 1.421413741) * erfc_t - 0.284496736) * erfc_t + 0.254829592) * erfc_t) * exp(-v1 * v1));"
+
   # Utility
   - name: ABS
     value: 0x40
@@ -268,3 +287,54 @@ opcodes:
     value: 0x4E
     arity: 1
     wgsl: "regs[dst] = degrees(v1);"
+
+  # Branchless ternary: cond (third operand, via imm slot) selects v2 when
+  # truthy (> 0.5), else v1. Pairs with the comparison opcodes below.
+  - name: SELECT
+    value: 0x4F
+    arity: 3
+    wgsl: "regs[dst] = select(v1, v2, regs[imm & 0xFu] > 0.5);"
+
+  # Comparison — return 1.0 (true) or 0.0 (false). Feed into SELECT/MIX for
+  # piecewise functions and domain guards.
+  - name: LT
+    value: 0x50
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 < v2);"
+
+  - name: GT
+    value: 0x51
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 > v2);"
+
+  - name: LE
+    value: 0x52
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 <= v2);"
+
+  - name: GE
+    value: 0x53
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 >= v2);"
+
+  - name: EQ
+    value: 0x54
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 == v2);"
+
+  - name: NE
+    value: 0x55
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 != v2);"
+
+  # Stochastic — deterministic hash noise keyed on the argument.
+  # RAND: white noise in [0,1). NOISE: smooth (value-noise) interpolation.
+  - name: RAND
+    value: 0x60
+    arity: 1
+    wgsl: "regs[dst] = fract(sin(v1 * 12.9898) * 43758.5453);"
+
+  - name: NOISE
+    value: 0x61
+    arity: 1
+    wgsl: "let noise_i = floor(v1); let noise_f = fract(v1); let noise_u = noise_f * noise_f * (3.0 - 2.0 * noise_f); let noise_a = fract(sin(noise_i * 12.9898) * 43758.5453); let noise_b = fract(sin((noise_i + 1.0) * 12.9898) * 43758.5453); regs[dst] = mix(noise_a, noise_b, noise_u);"

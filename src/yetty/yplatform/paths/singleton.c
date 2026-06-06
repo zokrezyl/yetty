@@ -19,6 +19,7 @@
  */
 
 #include <stddef.h>
+#include <yetty/ycore/result.h>
 #include <stdlib.h>
 
 #include <yetty/yplatform/paths.h>
@@ -54,6 +55,7 @@ static void init_singleton(void)
 }
 #else
 static pthread_once_t g_once = PTHREAD_ONCE_INIT;
+YETTY_EXTERNAL_CALLBACK
 static void init_singleton_once(void)
 {
     struct yetty_yplatform_paths_ptr_result r = yetty_yplatform_paths_get_platform_paths();

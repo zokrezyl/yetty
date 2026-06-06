@@ -451,15 +451,15 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_popup_menu_is_open(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_popup_menu_is_open: invalid args");
     }
-    struct popup_menu_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj,
-                            yetty_ygui_popup_menu_class_get().value);
-    return d->open;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_popup_menu_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_popup_menu_is_open: data_get");
+    struct popup_menu_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_int, d->open);
 }
 
 [[clang::annotate("expose")]]
@@ -469,7 +469,9 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_ygui
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_toggle_at: NULL obj");
     }
-    if (yetty_ygui_popup_menu_is_open(obj)) {
+    struct yetty_ycore_int_result open_r = yetty_ygui_popup_menu_is_open(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, open_r, "popup_menu_toggle_at: is_open");
+    if (open_r.value) {
         return yetty_ygui_popup_menu_close(obj);
     }
     return yetty_ygui_popup_menu_open_at(obj, x, y);

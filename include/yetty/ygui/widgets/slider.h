@@ -20,6 +20,6 @@ struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_ygui_object *obj, float min, float max);
 struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_ygui_object *obj, float value);
-float yetty_ygui_slider_get_value(const struct yetty_ygui_object *obj);
+struct yetty_ycore_float_result yetty_ygui_slider_get_value(const struct yetty_ygui_object *obj);
 
 #endif

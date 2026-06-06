@@ -208,15 +208,15 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_ygui_object
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_toggle_get_on(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_toggle_get_on(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_toggle_get_on: invalid args");
     }
-    struct toggle_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_toggle_class_get().value);
-    return d->on;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_toggle_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_toggle_get_on: data_get");
+    struct toggle_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_int, d->on);
 }
 
 #include "toggle.gen.c"

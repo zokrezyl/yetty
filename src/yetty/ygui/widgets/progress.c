@@ -122,15 +122,15 @@ struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_ygui_o
 }
 
 [[clang::annotate("expose")]]
-float yetty_ygui_progress_get_value(const struct yetty_ygui_object *obj)
+struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0.0f;
+        return YETTY_OK(yetty_ycore_float, 0.0f);
     }
-    struct progress_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_progress_class_get().value);
-    return d->value;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_progress_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_float, d_dr, "yetty_ygui_progress_get_value: data_get");
+    struct progress_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_float, d->value);
 }
 
 [[clang::annotate("expose")]]

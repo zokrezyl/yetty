@@ -12,6 +12,22 @@
 const YPLOT_FLAG_GRID:   u32 = 1u;
 const YPLOT_FLAG_AXES:   u32 = 2u;
 const YPLOT_FLAG_LABELS: u32 = 4u;
+const YPLOT_FLAG_FIELD:  u32 = 16u;  // f(x,y) heatmap instead of a line curve
+
+// Viridis colormap (perceptually-uniform) — Matt Zucker's 6th-order
+// polynomial fit. Input clamped to [0,1]. Used for field/heatmap mode.
+fn yplot_colormap(t_in: f32) -> vec3<f32> {
+    let t = clamp(t_in, 0.0, 1.0);
+    let c0 = vec3<f32>(0.2777273272234177,   0.005407344544966578, 0.3340998053353061);
+    let c1 = vec3<f32>(0.1050930431085774,   1.404613529898575,    1.384590162594685);
+    let c2 = vec3<f32>(-0.3308618287255563,  0.214847559468213,    0.09509516302823659);
+    let c3 = vec3<f32>(-4.634230498983486,  -5.799100973351585,  -19.33244095627987);
+    let c4 = vec3<f32>(6.228269936347081,   14.17993336680509,    56.69055260068105);
+    let c5 = vec3<f32>(4.776384997670288,  -13.74514537774601,   -65.35303263337234);
+    let c6 = vec3<f32>(-5.435455855934631,   4.645852612178535,   26.3124352495832);
+    let rgb = c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
+    return clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+}
 
 // Plot chrome rides the brand palette: near-black canvas, teal-tinted
 // separators, mint axes. Curve colours are supplied per-function and are
@@ -105,18 +121,12 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
     let yMin       = yplot_get_y_min();
     let yMax       = yplot_get_y_max();
 
-    var color = YPLOT_BG_COLOR;
-
-    if ((flags & YPLOT_FLAG_GRID) != 0u) {
-        color = yplot_draw_grid(color, plotUV);
-    }
-    if ((flags & YPLOT_FLAG_AXES) != 0u) {
-        color = yplot_draw_axes(color, plotUV, xMin, xMax, yMin, yMax, bounds_w, bounds_h);
-    }
-
     let dataX = mix(xMin, xMax, plotUV.x);
+    // plotUV.y grows downward, so the top row (y=0) maps to yMax.
+    let dataY = mix(yMax, yMin, plotUV.y);
     let yRange = yMax - yMin;
     let lineWidth = 3.0 / bounds_h;
+    let isField = (flags & YPLOT_FLAG_FIELD) != 0u;
 
     // -------- pre-sample data buffers into the sampler array ---------------
     // Expressions that reference `f(x)` (where f was declared as `f=buffer`)
@@ -154,14 +164,30 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
         }
     }
 
+    // -------- base layer: heatmap field OR background + grid/axes ----------
+    var color = YPLOT_BG_COLOR;
+    if (isField && func_count > 0u) {
+        // 2D field f(x,y): evaluate function 0 per pixel and colormap it. The
+        // value is assumed to sit in [-1, 1]; scale your expression (or wrap
+        // it in tanh) to fit other ranges.
+        let bc_off = yplot_bytecode_offset();
+        let value = yfsvm_execute(bc_off, 0u, dataX, dataY, yplot_get_time(), samplers);
+        color = yplot_colormap(value * 0.5 + 0.5);
+    } else if ((flags & YPLOT_FLAG_GRID) != 0u) {
+        color = yplot_draw_grid(color, plotUV);
+    }
+    if ((flags & YPLOT_FLAG_AXES) != 0u) {
+        color = yplot_draw_axes(color, plotUV, xMin, xMax, yMin, yMax, bounds_w, bounds_h);
+    }
+
     // -------- expression curves (yfsvm bytecode) -----------------------------
-    if (func_count > 0u) {
+    if (!isField && func_count > 0u) {
         // bytecode begins at storage word 1 (word 0 is bytecode_len).
         let bc_off = yplot_bytecode_offset();
 
         for (var fi = 0u; fi < min(func_count, 8u); fi++) {
             let curve_color = yplot_unpack_color(yplot_get_colors(fi));
-            let y = yfsvm_execute(bc_off, fi, dataX, yplot_get_time(), samplers);
+            let y = yfsvm_execute(bc_off, fi, dataX, dataY, yplot_get_time(), samplers);
             let yNorm = (y - yMin) / yRange;
             color = yplot_line_blend(color, plotUV.y, yNorm, lineWidth, curve_color);
         }
@@ -170,8 +196,8 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
     // -------- data-buffer curves --------------------------------------------
     // Sequentially walk [data_count][len_0][samples_0...][len_1]...
     // The shader can't binary-search since each entry's length is data-driven,
-    // but a linear walk over N≤16 entries is fine.
-    {
+    // but a linear walk over N≤16 entries is fine. Skipped in field mode.
+    if (!isField) {
         var cursor: u32 = yplot_data_count_offset() + 1u;  // first len_i
 
         for (var bi = 0u; bi < YPLOT_MAX_CURVES; bi++) {

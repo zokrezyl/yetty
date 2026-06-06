@@ -21,6 +21,6 @@ struct yetty_ygui_object;
 struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_ygui_object *obj, const char *t);
 struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_ygui_object *obj, const char *t);
 struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_ygui_object *obj, struct yetty_ygui_object *menu);
-const char *yetty_ygui_combobox_get_text(const struct yetty_ygui_object *obj);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_combobox_get_text(const struct yetty_ygui_object *obj);
 
 #endif

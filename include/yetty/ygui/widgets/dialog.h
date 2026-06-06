@@ -21,6 +21,6 @@ struct yetty_ygui_object;
 struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_ygui_object *obj, const char *title);
 struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_ygui_object *obj, float x, float y, float width, float height);
 struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_ygui_object *obj);
-int yetty_ygui_dialog_is_open(const struct yetty_ygui_object *obj);
+struct yetty_ycore_int_result yetty_ygui_dialog_is_open(const struct yetty_ygui_object *obj);
 
 #endif

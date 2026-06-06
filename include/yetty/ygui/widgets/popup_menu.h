@@ -25,7 +25,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_ygui_
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_separator(struct yetty_ygui_object *obj);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_ygui_object *obj, float x, float y);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_ygui_object *obj);
-int yetty_ygui_popup_menu_is_open(const struct yetty_ygui_object *obj);
+struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_ygui_object *obj);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_ygui_object *obj, float x, float y);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_ygui_object *obj);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_ygui_object *obj, const char *title);

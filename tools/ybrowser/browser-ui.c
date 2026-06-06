@@ -858,7 +858,14 @@ static int key_cb(struct yetty_ygui_framework *fw, uint32_t key, int mods, void 
 	}
 	if (a->address_focused) {
 		if (key == '\r' || key == '\n') {
-			const char *txt = yetty_ygui_textinput_get_text(a->address);
+			struct yetty_ycore_const_char_ptr_result txt_r =
+				yetty_ygui_textinput_get_text(a->address);
+			const char *txt = NULL;
+			if (YETTY_IS_OK(txt_r)) {
+				txt = txt_r.value;
+			} else {
+				yetty_ycore_error_destroy(txt_r.error);
+			}
 			char *norm = normalize_url(txt ? txt : "");
 			a->address_focused = 0;
 			err_ok(yetty_ygui_textinput_set_focus(a->address, 0));

@@ -1,6 +1,7 @@
 /* RPC server implementation using event loop TCP server */
 
 #include <yetty/yctl/rpc-server.h>
+#include <yetty/ycore/result.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
@@ -163,6 +164,7 @@ static void rpc_on_alloc(void *conn_ctx_ptr, size_t suggested, char **buf, size_
     }
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void rpc_on_data(void *conn_ctx_ptr, struct yetty_yevent_conn *conn, const char *data,
                         long nread)
 {

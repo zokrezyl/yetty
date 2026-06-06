@@ -1833,7 +1833,13 @@ static void yui_titlebar_sync(struct yetty_yui *yui)
     }
     yui->titlebar_synced_count = count;
 
-    int wactive = yetty_ygui_tabbar_active(yui->titlebar_tabbar);
+    struct yetty_ycore_int_result wactive_r = yetty_ygui_tabbar_active(yui->titlebar_tabbar);
+    int wactive = -1;
+    if (YETTY_IS_OK(wactive_r)) {
+        wactive = wactive_r.value;
+    } else {
+        yetty_ycore_error_destroy(wactive_r.error);
+    }
     if (count > 0 && wactive != (int)active) {
         yetty_ycore_error_destroy_safe(
             yetty_ygui_tabbar_set_active(yui->titlebar_tabbar, (int)active));
@@ -2031,7 +2037,12 @@ const char *yetty_yui_get_field_text(const struct yetty_yui *yui, enum yetty_yui
     if (!in) {
         return NULL;
     }
-    return yetty_ygui_textinput_get_text(in);
+    struct yetty_ycore_const_char_ptr_result text_r = yetty_ygui_textinput_get_text(in);
+    if (YETTY_IS_ERR(text_r)) {
+        yetty_ycore_error_destroy(text_r.error);
+        return NULL;
+    }
+    return text_r.value;
 }
 
 const char *yetty_yui_get_exec_command(const struct yetty_yui *yui)
@@ -2044,8 +2055,15 @@ int yetty_yui_is_active(const struct yetty_yui *yui)
     if (!yui) {
         return 0;
     }
-    if (yui->app_menu && yetty_ygui_popup_menu_is_open(yui->app_menu)) {
-        return 1;
+    if (yui->app_menu) {
+        struct yetty_ycore_int_result open_r = yetty_ygui_popup_menu_is_open(yui->app_menu);
+        if (YETTY_IS_OK(open_r)) {
+            if (open_r.value) {
+                return 1;
+            }
+        } else {
+            yetty_ycore_error_destroy(open_r.error);
+        }
     }
     for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
         if (yui->dialogs[k] && yetty_ygui_widget_is_visible(yui->dialogs[k])) {
@@ -2088,7 +2106,13 @@ static int yui_compute_cursor_shape(struct yetty_yui *yui, float mouse_x, float 
     if (!w) {
         w = yetty_ygui_framework_hovered_widget(yui->engine);
     }
-    int axis = yetty_ygui_splitter_get_axis(w); /* -1 if not a splitter */
+    struct yetty_ycore_int_result axis_r = yetty_ygui_splitter_get_axis(w); /* -1 if not a splitter */
+    int axis = -1;
+    if (YETTY_IS_OK(axis_r)) {
+        axis = axis_r.value;
+    } else {
+        yetty_ycore_error_destroy(axis_r.error);
+    }
     if (axis >= 0) {
         /* axis 1 = vertical bar splitting side-by-side panes → ↔ HRESIZE;
          * axis 0 = horizontal bar splitting stacked panes → ↕ VRESIZE. */
@@ -2152,12 +2176,16 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     }
 
     switch (event->type) {
-    case YETTY_YCORE_MOUSE_DOWN:
+    case YETTY_YCORE_MOUSE_DOWN: {
         /* A press outside an open context / app menu dismisses it (and
          * is consumed so the stray click doesn't also act). A press
          * inside falls through to the engine, which routes it to the
          * menu's item dispatch. */
-        if (yui->app_menu && yetty_ygui_popup_menu_is_open(yui->app_menu)) {
+        struct yetty_ycore_int_result app_open_r =
+            yui->app_menu ? yetty_ygui_popup_menu_is_open(yui->app_menu)
+                          : YETTY_OK(yetty_ycore_int, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, app_open_r, "yui: app_menu is_open");
+        if (app_open_r.value) {
             struct yetty_ycore_rectangle mr = yetty_ygui_widget_rect(yui->app_menu);
             float mx = event->mouse.x / scale;
             float my = event->mouse.y / scale;
@@ -2176,6 +2204,7 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
             return YETTY_OK(yetty_ycore_int, 1);
         }
         return YETTY_OK(yetty_ycore_int, 0);
+    }
     case YETTY_YCORE_MOUSE_UP:
         yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_button(
             yui->engine, event->mouse.x / scale, event->mouse.y / scale, event->mouse.button, 0,

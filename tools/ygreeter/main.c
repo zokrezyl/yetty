@@ -2391,14 +2391,22 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
         return 1;
     }
     if (key == YETTY_YGUI_KEY_ARROW_LEFT) {
-        int active = yetty_ygui_tabbar_active(app->tabbar);
+        struct yetty_ycore_int_result active_r = yetty_ygui_tabbar_active(app->tabbar);
+        int active = YETTY_IS_OK(active_r) ? active_r.value : 0;
+        if (YETTY_IS_ERR(active_r)) {
+            yetty_ycore_error_destroy(active_r.error);
+        }
         int next = active > 0 ? active - 1 : TOP_TAB_COUNT - 1;
         struct yetty_ycore_void_result r = yetty_ygui_tabbar_set_active(app->tabbar, next);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         return 1;
     }
     if (key == YETTY_YGUI_KEY_ARROW_RIGHT) {
-        int active = yetty_ygui_tabbar_active(app->tabbar);
+        struct yetty_ycore_int_result active_r = yetty_ygui_tabbar_active(app->tabbar);
+        int active = YETTY_IS_OK(active_r) ? active_r.value : 0;
+        if (YETTY_IS_ERR(active_r)) {
+            yetty_ycore_error_destroy(active_r.error);
+        }
         int next = (active + 1) % TOP_TAB_COUNT;
         struct yetty_ycore_void_result r = yetty_ygui_tabbar_set_active(app->tabbar, next);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);

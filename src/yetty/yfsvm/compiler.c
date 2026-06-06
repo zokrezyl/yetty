@@ -122,6 +122,13 @@ static uint8_t compile_identifier(struct yetty_yfsvm_builder *b,
         return reg;
     }
 
+    if (strcmp(name, "y") == 0) {
+        uint8_t reg = builder_alloc_reg(b);
+        builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_LOAD_Y, reg, 0, 0, 0));
+        b->prog->uses_y = 1;
+        return reg;
+    }
+
     if (strcmp(name, "t") == 0 || strcmp(name, "time") == 0) {
         uint8_t reg = builder_alloc_reg(b);
         builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_LOAD_T, reg, 0, 0, 0));
@@ -254,6 +261,10 @@ static const struct yetty_yfsvm_func_map funcs_1arg[] = {
     {"saturate", YETTY_YFSVM_OP_CLAMP01},
     {"radians", YETTY_YFSVM_OP_RADIANS},
     {"degrees", YETTY_YFSVM_OP_DEGREES},
+    {"erf", YETTY_YFSVM_OP_ERF},
+    {"erfc", YETTY_YFSVM_OP_ERFC},
+    {"rand", YETTY_YFSVM_OP_RAND},
+    {"noise", YETTY_YFSVM_OP_NOISE},
     {NULL, 0},
 };
 
@@ -261,7 +272,10 @@ static const struct yetty_yfsvm_func_map funcs_2arg[] = {
     {"pow", YETTY_YFSVM_OP_POW},   {"atan2", YETTY_YFSVM_OP_ATAN2},
     {"min", YETTY_YFSVM_OP_MIN},   {"max", YETTY_YFSVM_OP_MAX},
     {"mod", YETTY_YFSVM_OP_MOD},   {"fmod", YETTY_YFSVM_OP_MOD},
-    {"step", YETTY_YFSVM_OP_STEP}, {NULL, 0},
+    {"step", YETTY_YFSVM_OP_STEP}, {"lt", YETTY_YFSVM_OP_LT},
+    {"gt", YETTY_YFSVM_OP_GT},     {"le", YETTY_YFSVM_OP_LE},
+    {"ge", YETTY_YFSVM_OP_GE},     {"eq", YETTY_YFSVM_OP_EQ},
+    {"ne", YETTY_YFSVM_OP_NE},     {NULL, 0},
 };
 
 static uint8_t compile_call(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
@@ -368,6 +382,8 @@ static uint8_t compile_call(struct yetty_yfsvm_builder *b, const struct yetty_ye
             builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_MIX, dst, a0, a1, a2 & 0xF));
         } else if (strcmp(name, "smoothstep") == 0) {
             builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_SMOOTHSTEP, dst, a0, a1, a2 & 0xF));
+        } else if (strcmp(name, "select") == 0) {
+            builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_SELECT, dst, a0, a1, a2 & 0xF));
         } else if (strcmp(name, "clamp") == 0) {
             uint8_t tmp = builder_alloc_reg(b);
             builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_MAX, tmp, a0, a1, 0));

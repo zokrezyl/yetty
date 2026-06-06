@@ -38,6 +38,10 @@ extern "C" {
  * subscribes the instance to the shared animation timer when this
  * bit is set; otherwise the plot is static and no timer ticks. */
 #define YETTY_YPLOT_FLAG_USES_TIME 0x8u
+/* Set by the sender when the compiled bytecode references `y` (yfsvm
+ * program's `uses_y` is true): the function is a 2D field f(x,y), and the
+ * shader renders it as a colormapped heatmap instead of a line curve. */
+#define YETTY_YPLOT_FLAG_FIELD 0x10u
 
 /* Geometry + axis configuration. NULL fields fall back to defaults. */
 struct yetty_yplot_render_config {

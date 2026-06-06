@@ -692,13 +692,16 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_close_menu(struct yetty_ygui_ob
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_ynodes_menu_is_open(const struct yetty_ygui_object *editor)
+struct yetty_ycore_int_result yetty_ygui_ynodes_menu_is_open(const struct yetty_ygui_object *editor)
 {
     if (!editor) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_ynodes_menu_is_open: NULL editor");
     }
     struct nodes_data *d = ynodes_data((struct yetty_ygui_object *)editor);
-    return d->menu && yetty_ygui_popup_menu_is_open(d->menu);
+    if (!d->menu) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    return yetty_ygui_popup_menu_is_open(d->menu);
 }
 
 /*-----------------------------------------------------------------------------
@@ -832,12 +835,16 @@ static struct yetty_ycore_int_result ynodes_on_press(struct yetty_yclass_ctx *yc
 
     /* A press anywhere while the menu is open dismisses it (clicks inside
      * the menu are consumed by the menu itself, raised above us). */
-    if (d->menu && yetty_ygui_popup_menu_is_open(d->menu)) {
-        struct yetty_ycore_void_result cr = yetty_ygui_popup_menu_close(d->menu);
-        if (YETTY_IS_ERR(cr)) {
-            return YETTY_ERR(yetty_ycore_int, "ynodes_on_press: close menu", cr);
+    if (d->menu) {
+        struct yetty_ycore_int_result open_r = yetty_ygui_popup_menu_is_open(d->menu);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, open_r, "ynodes_on_press: is_open");
+        if (open_r.value) {
+            struct yetty_ycore_void_result cr = yetty_ygui_popup_menu_close(d->menu);
+            if (YETTY_IS_ERR(cr)) {
+                return YETTY_ERR(yetty_ycore_int, "ynodes_on_press: close menu", cr);
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
         }
-        return YETTY_OK(yetty_ycore_int, 1);
     }
     /* Right-press on empty canvas → context menu; left-press → pan. */
     if (button == 1) {
