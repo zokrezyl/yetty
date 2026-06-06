@@ -10,6 +10,12 @@
 #     binaries are build products that don't exist at configure time
 #     (yinstall_embed_executables() below).
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32 AND NOT APPLE)
+    return()  # webasm and anything else without a desktop install model
+endif()
+if(YETTY_IOS OR YETTY_TVOS OR YETTY_ANDROID OR ANDROID)
+    # Apple is true for iOS/tvOS too; those (and Android) package via the app
+    # bundle / rootfs, not an installer. Match the module guard in
+    # src/yetty/CMakeLists.txt, which builds yetty_yinstall only on desktop.
     return()
 endif()
 if(NOT YETTY_ENABLE_LIB_INCBIN)
@@ -24,14 +30,12 @@ include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
 # yinstall_embed_executables(TARGET exe1 exe2 ...)
 #
 # Embeds built executables under the "bin/" prefix. Unlike incbin_add_directory
-# (which globs + compresses at configure time), this resolves each target's
-# output path with a generator expression and lets the assembler pull the
-# bytes in at build time via .incbin — so it works on build products. Each
-# binary is brotli-compressed at build time (executables are the bulk of the
-# installer; raw they dwarf everything else), and the runtime inflates +
-# chmods on extraction. Emits a yinstall_bin_manifest.h matching the shape the
-# platform backend consumes (register_bin_assets_c + HAS_BIN_MANIFEST), with
-# every entry marked compressed.
+# (which globs + compresses at configure time), this works on build products:
+# each binary is brotli-compressed at build time and embedded via .incbin
+# (GCC/Clang) or RT_RCDATA (MSVC, which has no inline asm — mirrors the split
+# in incbin.cmake). The runtime inflates + chmods on extraction. Emits a
+# yinstall_bin_manifest.h matching the shape the platform backend consumes
+# (register_bin_assets_c + HAS_BIN_MANIFEST), every entry marked compressed.
 # ---------------------------------------------------------------------
 function(yinstall_embed_executables TARGET)
     find_program(BROTLI_EXECUTABLE brotli)
@@ -42,23 +46,18 @@ function(yinstall_embed_executables TARGET)
         set(BROTLI_QUALITY 6)
     endif()
 
-    set(_incbin_src "${CMAKE_CURRENT_BINARY_DIR}/yinstall_bin_incbin.c")
     set(_manifest "${CMAKE_CURRENT_BINARY_DIR}/yinstall_bin_manifest.h")
     set(_br_dir "${CMAKE_CURRENT_BINARY_DIR}/embed-bin")
     file(MAKE_DIRECTORY "${_br_dir}")
 
-    set(_incbin_content "/* GENERATED — do not edit. */\n#include \"incbin.h\"\n\n")
-    set(_manifest_externs "")
-    set(_manifest_calls "")
+    # Build-time brotli of each binary — common to both backends. The .br path
+    # is fixed; the input is $<TARGET_FILE:exe>, so the command reruns whenever
+    # the binary changes.
     set(_br_files "")
-
+    set(_pairs "")  # "<safe>|<exe>" per binary
     foreach(_exe ${ARGN})
         string(MAKE_C_IDENTIFIER "${_exe}" _safe)
-        set(_symbol "bin_${_safe}")
         set(_br "${_br_dir}/${_safe}.br")
-        # Compress the built binary at build time. The .br path is fixed (no
-        # genex), while the input is $<TARGET_FILE:exe>; the command reruns
-        # whenever that binary changes.
         add_custom_command(
             OUTPUT "${_br}"
             COMMAND "${BROTLI_EXECUTABLE}" -q ${BROTLI_QUALITY} -f -o "${_br}" "$<TARGET_FILE:${_exe}>"
@@ -66,22 +65,102 @@ function(yinstall_embed_executables TARGET)
             COMMENT "yinstall: compressing ${_exe}"
             VERBATIM)
         list(APPEND _br_files "${_br}")
-        # .incbin the compressed blob; mark the manifest entry compressed.
-        string(APPEND _incbin_content "INCBIN(${_symbol}, \"${_br}\");\n")
-        string(APPEND _manifest_externs
-            "extern const unsigned char g${_symbol}Data[];\nextern const unsigned int g${_symbol}Size;\n")
-        string(APPEND _manifest_calls
-            "    cb(\"bin/${_exe}\", g${_symbol}Data, (size_t)g${_symbol}Size, 1);\n")
+        list(APPEND _pairs "${_safe}|${_exe}")
         add_dependencies(${TARGET} ${_exe})
     endforeach()
 
-    file(GENERATE OUTPUT "${_incbin_src}" CONTENT "${_incbin_content}")
-    # The incbin object reads the .br files at assemble time, so it must be
-    # (re)built after they're produced.
-    set_source_files_properties("${_incbin_src}" PROPERTIES OBJECT_DEPENDS "${_br_files}")
+    if(MSVC)
+        # RCDATA path: rc.exe streams each .br into the PE at build time;
+        # the generated register_bin_assets_c reads them back via FindResource.
+        enable_language(RC)
+        set(_rc "${CMAKE_CURRENT_BINARY_DIR}/yinstall_bin.rc")
+        set(_reg "${CMAKE_CURRENT_BINARY_DIR}/yinstall_bin_register.c")
+        file(WRITE "${_rc}" "// GENERATED — do not edit.\n")
+        file(WRITE "${_reg}"
+"// GENERATED — do not edit.
+#ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <stdint.h>
+#include <stddef.h>
 
-    file(WRITE "${_manifest}"
-"/* GENERATED — do not edit. yinstall embedded-executables manifest. */
+typedef void (*bin_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
+
+void register_bin_assets_c(bin_asset_callback_t cb)
+{
+    HMODULE module_handle = GetModuleHandleW(NULL);
+    HRSRC res_handle;
+    HGLOBAL res_global;
+    DWORD res_size;
+    const void *res_ptr;
+")
+        foreach(_pair ${_pairs})
+            string(REPLACE "|" ";" _parts "${_pair}")
+            list(GET _parts 0 _safe)
+            list(GET _parts 1 _exe)
+            string(TOUPPER "bin_${_safe}" _rcname)
+            file(APPEND "${_rc}" "${_rcname} RCDATA \"${_br_dir}/${_safe}.br\"\n")
+            file(APPEND "${_reg}"
+"    res_handle = FindResourceA(module_handle, \"${_rcname}\", (LPCSTR)RT_RCDATA);
+    if (res_handle) {
+        res_size = SizeofResource(module_handle, res_handle);
+        res_global = LoadResource(module_handle, res_handle);
+        if (res_global) {
+            res_ptr = LockResource(res_global);
+            if (res_ptr && res_size) cb(\"bin/${_exe}\", (const uint8_t *)res_ptr, (size_t)res_size, 1);
+        }
+    }
+")
+        endforeach()
+        file(APPEND "${_reg}" "}\n")
+
+        # rc.exe reads each .br at resource-compile time → the .rc must rebuild
+        # after they're produced.
+        set_source_files_properties("${_rc}" PROPERTIES OBJECT_DEPENDS "${_br_files}")
+        target_sources(${TARGET} PRIVATE "${_rc}" "${_reg}")
+
+        file(WRITE "${_manifest}"
+"/* GENERATED — do not edit. yinstall embedded-executables manifest (RCDATA). */
+#ifndef YINSTALL_BIN_MANIFEST_H
+#define YINSTALL_BIN_MANIFEST_H
+#include <stddef.h>
+#include <stdint.h>
+#ifdef __cplusplus
+extern \"C\" {
+#endif
+typedef void (*bin_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
+void register_bin_assets_c(bin_asset_callback_t cb);
+#ifdef __cplusplus
+}
+#endif
+#endif
+")
+    else()
+        # GCC/Clang: .incbin the .br blobs; a static-inline register walks them.
+        set(_incbin_src "${CMAKE_CURRENT_BINARY_DIR}/yinstall_bin_incbin.c")
+        set(_incbin_content "/* GENERATED — do not edit. */\n#include \"incbin.h\"\n\n")
+        set(_manifest_externs "")
+        set(_manifest_calls "")
+        foreach(_pair ${_pairs})
+            string(REPLACE "|" ";" _parts "${_pair}")
+            list(GET _parts 0 _safe)
+            list(GET _parts 1 _exe)
+            set(_symbol "bin_${_safe}")
+            string(APPEND _incbin_content "INCBIN(${_symbol}, \"${_br_dir}/${_safe}.br\");\n")
+            string(APPEND _manifest_externs
+                "extern const unsigned char g${_symbol}Data[];\nextern const unsigned int g${_symbol}Size;\n")
+            string(APPEND _manifest_calls
+                "    cb(\"bin/${_exe}\", g${_symbol}Data, (size_t)g${_symbol}Size, 1);\n")
+        endforeach()
+
+        file(GENERATE OUTPUT "${_incbin_src}" CONTENT "${_incbin_content}")
+        set_source_files_properties("${_incbin_src}" PROPERTIES OBJECT_DEPENDS "${_br_files}")
+        target_sources(${TARGET} PRIVATE "${_incbin_src}")
+        target_include_directories(${TARGET} PRIVATE ${INCBIN_INCLUDE_DIR})
+
+        file(WRITE "${_manifest}"
+"/* GENERATED — do not edit. yinstall embedded-executables manifest (incbin). */
 #ifndef YINSTALL_BIN_MANIFEST_H
 #define YINSTALL_BIN_MANIFEST_H
 #include <stddef.h>
@@ -97,11 +176,9 @@ ${_manifest_calls}}
 #endif
 #endif
 ")
+    endif()
 
-    target_sources(${TARGET} PRIVATE "${_incbin_src}")
-    target_include_directories(${TARGET} PRIVATE
-        ${CMAKE_CURRENT_BINARY_DIR}
-        ${INCBIN_INCLUDE_DIR})
+    target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
     target_compile_definitions(${TARGET} PRIVATE HAS_BIN_MANIFEST=1)
 endfunction()
 
