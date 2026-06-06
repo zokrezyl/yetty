@@ -22,6 +22,6 @@ struct yetty_ygui_object;
 typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_ygui_object *obj,
                                                              float dx, float dy, void *userdata);
 struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_ygui_object *obj, yetty_ygui_drag_cb cb, void *userdata);
-int yetty_ygui_draggable_is_dragging(const struct yetty_ygui_object *obj);
+struct yetty_ycore_int_result yetty_ygui_draggable_is_dragging(const struct yetty_ygui_object *obj);
 
 #endif

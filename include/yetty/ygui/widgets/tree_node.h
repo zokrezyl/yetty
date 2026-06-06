@@ -20,7 +20,7 @@ struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_tree_node_set_label(struct yetty_ygui_object *obj, const char *label);
 struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_ygui_object *obj, int o);
-int yetty_ygui_tree_node_is_open(const struct yetty_ygui_object *obj);
+struct yetty_ycore_int_result yetty_ygui_tree_node_is_open(const struct yetty_ygui_object *obj);
 struct yetty_ycore_void_result yetty_ygui_tree_node_on_toggle(struct yetty_ygui_object *obj, yetty_ygui_click_cb cb, void *userdata);
 
 #endif

@@ -8,7 +8,7 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 YPLOT="${YPLOT:-$ROOT/build-desktop-ytrace-release/tools/yplot/yplot}"
-PAUSE="${DEMO_PAUSE:-2}"
+PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YPLOT" ]; then
     echo "yplot binary not found at $YPLOT" >&2
@@ -53,4 +53,3 @@ printf '\nlatency model (cubic vs linear):\n'
     '@linear.color=#72D6C9'
 
 printf '\n=== done — holding open ===\n'
-sleep 600

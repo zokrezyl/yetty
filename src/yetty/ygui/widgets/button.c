@@ -118,7 +118,13 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    int pressed = yetty_ygui_clickable_is_pressed(obj);
+    struct yetty_ycore_int_result pressed_r = yetty_ygui_clickable_is_pressed(obj);
+    int pressed = 0;
+    if (YETTY_IS_OK(pressed_r)) {
+        pressed = pressed_r.value;
+    } else {
+        yetty_ycore_error_destroy(pressed_r.error);
+    }
     int hovered = yetty_ygui_object_is_hovered(obj);
 
     /* Pressed surface goes to accent + drops 1 px to give tactile feedback.
@@ -231,15 +237,15 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-const char *yetty_ygui_button_get_label(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_button_get_label: invalid args");
     }
-    struct button_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_button_class_get().value);
-    return d->label;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_button_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_button_get_label: data_get");
+    struct button_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_const_char_ptr, d->label);
 }
 
 #include "button.gen.c"

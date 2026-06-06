@@ -32,7 +32,7 @@ opcodes:
   - name: LOAD_C
     value: 0x02
     arity: 1
-    wgsl: "regs[dst] = bitcast<f32>(buf[constOffset + imm]);"
+    wgsl: "regs[dst] = bitcast<f32>(storage_buffer[constOffset + imm]);"
 
   - name: LOAD_X
     value: 0x03
@@ -53,6 +53,13 @@ opcodes:
     value: 0x06
     arity: 1
     wgsl: "regs[dst] = v1;"
+
+  # Second spatial input — the pixel's y coordinate. A program that reads it
+  # is a 2D field f(x,y); yplot renders such programs as a heatmap.
+  - name: LOAD_Y
+    value: 0x07
+    arity: 1
+    wgsl: "regs[dst] = y;"
 
   # Arithmetic
   - name: ADD
@@ -136,6 +143,27 @@ opcodes:
     arity: 1
     wgsl: "regs[dst] = tanh(v1);"
 
+  - name: ASINH
+    value: 0x2A
+    arity: 1
+    wgsl: "regs[dst] = asinh(v1);"
+
+  - name: ACOSH
+    value: 0x2B
+    arity: 1
+    wgsl: "regs[dst] = acosh(v1);"
+
+  - name: ATANH
+    value: 0x2C
+    arity: 1
+    wgsl: "regs[dst] = atanh(v1);"
+
+  # Cardinal sine, singularity-guarded: sinc(0) = 1 (no NaN at the origin).
+  - name: SINC
+    value: 0x2D
+    arity: 1
+    wgsl: "regs[dst] = select(sin(v1) / v1, 1.0, abs(v1) < 1e-6);"
+
   # Exponential/Logarithmic
   - name: EXP
     value: 0x30
@@ -171,6 +199,18 @@ opcodes:
     value: 0x36
     arity: 1
     wgsl: "regs[dst] = inverseSqrt(v1);"
+
+  # Error function (Abramowitz & Stegun 7.1.26 rational approximation,
+  # max error ~1.5e-7). erfc(x) = 1 - erf(x). The Gaussian CDF building block.
+  - name: ERF
+    value: 0x37
+    arity: 1
+    wgsl: "let erf_t = 1.0 / (1.0 + 0.3275911 * abs(v1)); regs[dst] = sign(v1) * (1.0 - (((((1.061405429 * erf_t - 1.453152027) * erf_t + 1.421413741) * erf_t - 0.284496736) * erf_t + 0.254829592) * erf_t) * exp(-v1 * v1));"
+
+  - name: ERFC
+    value: 0x38
+    arity: 1
+    wgsl: "let erfc_t = 1.0 / (1.0 + 0.3275911 * abs(v1)); regs[dst] = 1.0 - sign(v1) * (1.0 - (((((1.061405429 * erfc_t - 1.453152027) * erfc_t + 1.421413741) * erfc_t - 0.284496736) * erfc_t + 0.254829592) * erfc_t) * exp(-v1 * v1));"
 
   # Utility
   - name: ABS
@@ -227,3 +267,87 @@ opcodes:
     value: 0x4A
     arity: 3
     wgsl: "regs[dst] = mix(v1, v2, regs[imm & 0xFu]);"
+
+  - name: SMOOTHSTEP
+    value: 0x4B
+    arity: 3
+    wgsl: "regs[dst] = smoothstep(v1, v2, regs[imm & 0xFu]);"
+
+  - name: TRUNC
+    value: 0x4C
+    arity: 1
+    wgsl: "regs[dst] = trunc(v1);"
+
+  - name: RADIANS
+    value: 0x4D
+    arity: 1
+    wgsl: "regs[dst] = radians(v1);"
+
+  - name: DEGREES
+    value: 0x4E
+    arity: 1
+    wgsl: "regs[dst] = degrees(v1);"
+
+  # Branchless ternary: cond (third operand, via imm slot) selects v2 when
+  # truthy (> 0.5), else v1. Pairs with the comparison opcodes below.
+  - name: SELECT
+    value: 0x4F
+    arity: 3
+    wgsl: "regs[dst] = select(v1, v2, regs[imm & 0xFu] > 0.5);"
+
+  # Comparison — return 1.0 (true) or 0.0 (false). Feed into SELECT/MIX for
+  # piecewise functions and domain guards.
+  - name: LT
+    value: 0x50
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 < v2);"
+
+  - name: GT
+    value: 0x51
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 > v2);"
+
+  - name: LE
+    value: 0x52
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 <= v2);"
+
+  - name: GE
+    value: 0x53
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 >= v2);"
+
+  - name: EQ
+    value: 0x54
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 == v2);"
+
+  - name: NE
+    value: 0x55
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 != v2);"
+
+  # Stochastic — deterministic hash noise keyed on the argument.
+  # RAND: white noise in [0,1). NOISE: smooth (value-noise) interpolation.
+  - name: RAND
+    value: 0x60
+    arity: 1
+    wgsl: "regs[dst] = fract(sin(v1 * 12.9898) * 43758.5453);"
+
+  - name: NOISE
+    value: 0x61
+    arity: 1
+    wgsl: "let noise_i = floor(v1); let noise_f = fract(v1); let noise_u = noise_f * noise_f * (3.0 - 2.0 * noise_f); let noise_a = fract(sin(noise_i * 12.9898) * 43758.5453); let noise_b = fract(sin((noise_i + 1.0) * 12.9898) * 43758.5453); regs[dst] = mix(noise_a, noise_b, noise_u);"
+
+  # 2D variants — keyed on both arguments, so they vary in every direction
+  # (no directional banding). RAND2: white noise. NOISE2: bilinearly
+  # interpolated value noise over the integer lattice.
+  - name: RAND2
+    value: 0x62
+    arity: 2
+    wgsl: "regs[dst] = fract(sin(v1 * 12.9898 + v2 * 78.233) * 43758.5453);"
+
+  - name: NOISE2
+    value: 0x63
+    arity: 2
+    wgsl: "let n2_ix = floor(v1); let n2_iy = floor(v2); let n2_fx = fract(v1); let n2_fy = fract(v2); let n2_ux = n2_fx * n2_fx * (3.0 - 2.0 * n2_fx); let n2_uy = n2_fy * n2_fy * (3.0 - 2.0 * n2_fy); let n2_a = fract(sin(n2_ix * 12.9898 + n2_iy * 78.233) * 43758.5453); let n2_b = fract(sin((n2_ix + 1.0) * 12.9898 + n2_iy * 78.233) * 43758.5453); let n2_c = fract(sin(n2_ix * 12.9898 + (n2_iy + 1.0) * 78.233) * 43758.5453); let n2_d = fract(sin((n2_ix + 1.0) * 12.9898 + (n2_iy + 1.0) * 78.233) * 43758.5453); regs[dst] = mix(mix(n2_a, n2_b, n2_ux), mix(n2_c, n2_d, n2_ux), n2_uy);"

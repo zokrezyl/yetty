@@ -127,15 +127,15 @@ struct yetty_ycore_void_result yetty_ygui_label_set_text(struct yetty_ygui_objec
 }
 
 [[clang::annotate("expose")]]
-const char *yetty_ygui_label_get_text(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_label_get_text(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_label_get_text: invalid args");
     }
-    struct label_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_label_class_get().value);
-    return d->text;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_label_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_label_get_text: data_get");
+    struct label_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_const_char_ptr, d->text);
 }
 
 [[clang::annotate("expose")]]

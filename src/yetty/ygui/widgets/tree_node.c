@@ -184,15 +184,15 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_ygui_o
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_tree_node_is_open(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_tree_node_is_open(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_tree_node_is_open: NULL obj");
     }
-    return ((struct tn_data *)yetty_ygui_data_get(
-                (struct yetty_ygui_object *)obj,
-                yetty_ygui_tree_node_class_get().value))
-        ->open;
+    struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_tree_node_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result, "yetty_ygui_tree_node_is_open: data_get");
+    return YETTY_OK(yetty_ycore_int, ((struct tn_data *)data_result.value)->open);
 }
 
 [[clang::annotate("expose")]]

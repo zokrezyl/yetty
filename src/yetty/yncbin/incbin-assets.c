@@ -56,6 +56,16 @@ struct yetty_incbin_assets {
 #include "yetty_qemu_manifest.h"
 #endif
 
+/* C callback for manifest registration */
+static struct yetty_incbin_assets *g_current_assets = NULL;
+
+/* add_asset + register_asset_callback are the manifest-registration chain,
+ * reachable only from the HAS_*_MANIFEST blocks in _create() below. Most
+ * targets that link this file embed no manifest (tools, demos), so compile
+ * the whole chain only when a manifest is present — otherwise it sits dead
+ * and trips -Wunused-function. */
+#if defined(HAS_DATA_MANIFEST) || defined(HAS_YCONFIG_MANIFEST) || \
+    defined(HAS_YEMU_MANIFEST) || defined(HAS_QEMU_MANIFEST)
 /* Helper to add asset entry */
 static void add_asset(struct yetty_incbin_assets *assets, const char *name, const uint8_t *data,
                       size_t size, int compressed)
@@ -71,9 +81,6 @@ static void add_asset(struct yetty_incbin_assets *assets, const char *name, cons
     assets->count++;
 }
 
-/* C callback for manifest registration */
-static struct yetty_incbin_assets *g_current_assets = NULL;
-
 static void register_asset_callback(const char *name, const uint8_t *data, size_t size,
                                     int compressed)
 {
@@ -81,6 +88,7 @@ static void register_asset_callback(const char *name, const uint8_t *data, size_
         add_asset(g_current_assets, name, data, size, compressed);
     }
 }
+#endif
 
 /* Create assets container */
 struct yetty_incbin_assets *yetty_incbin_assets_create(void)

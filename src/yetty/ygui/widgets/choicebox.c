@@ -183,17 +183,18 @@ struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_ygui_object
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_choicebox_is_selected(const struct yetty_ygui_object *obj, int idx)
+struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(const struct yetty_ygui_object *obj, int idx)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_choicebox_is_selected: invalid args");
     }
-    struct cb_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj, yetty_ygui_choicebox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_choicebox_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_choicebox_is_selected: data_get");
+    struct cb_data *d = d_dr.value;
     if (idx < 0 || idx >= d->n) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    return d->rows[idx].selected;
+    return YETTY_OK(yetty_ycore_int, d->rows[idx].selected);
 }
 
 #include "choicebox.gen.c"

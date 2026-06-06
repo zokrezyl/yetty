@@ -528,6 +528,29 @@ static struct yetty_ycore_void_result handle_cmd(struct yetty_yrdawn_figure *f, 
         .payload_ref = 0,
         .figure_id = f->figure_id,
     };
+
+    /* On error, wrap the reply in an envelope carrying a NUL-terminated
+     * description so the client logs a clear message rather than a bare
+     * numeric status. Bodyless OK replies keep the legacy fast path. */
+    if (status != YETTY_YRDAWN_REPLY_OK) {
+        char desc[192];
+        int desc_len =
+            snprintf(desc, sizeof(desc), "yrdawn server: method %u failed: %s", hdr->method_id,
+                     yetty_yrdawn_reply_status_str(status));
+        if (desc_len < 0) {
+            desc_len = 0;
+        } else if ((size_t)desc_len >= sizeof(desc)) {
+            desc_len = (int)sizeof(desc) - 1;
+        }
+        yerror("yrdawn-figure id=%u: %s", f->figure_id, desc);
+        uint8_t envelope[sizeof(reply) + sizeof(desc)];
+        size_t envelope_len = sizeof(reply) + (size_t)desc_len + 1u;
+        reply.total_size = (uint32_t)envelope_len;
+        memcpy(envelope, &reply, sizeof(reply));
+        memcpy(envelope + sizeof(reply), desc, (size_t)desc_len + 1u);
+        return emit(f, YETTY_YRDAWN_OSC_SC_REPLY, envelope, envelope_len);
+    }
+
     return emit(f, YETTY_YRDAWN_OSC_SC_REPLY, &reply, sizeof(reply));
 }
 
@@ -866,8 +889,8 @@ static struct yetty_yfigure_figure_data_ptr_result yrdawn_factory(struct yetty_y
     YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, figure_obj_r, "yrdawn_factory: object_alloc");
     struct yetty_yrdawn_figure *f = yrdawn_figure_from_obj(figure_obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(figure_obj_r.value + 1);
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect); YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, set_r, "drop: yetty_yfigure_figure_rect_set"); }
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     f->args = args;
     f->target_format = args->context->runtime->gpu.surface_format;
     /* figure_id, session, pipeline assigned when SUB_HELLO arrives. */
@@ -1019,7 +1042,7 @@ struct yetty_ycore_void_result yrdawn_server_set_frame(void *ctx, uint32_t width
            height, bytes);
 
     f->has_frame = 1;
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     if (f->args && f->args->request_render_fn) {
         struct yetty_ycore_void_result rr =
             f->args->request_render_fn(f->args->request_render_user);

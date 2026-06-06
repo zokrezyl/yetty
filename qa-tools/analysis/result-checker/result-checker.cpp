@@ -101,16 +101,53 @@ static std::string get_type_name(QualType type)
 }
 
 /*
- * Check if a function's return type is a Result type.
+ * A source location is "foreign" — outside our own first-party code — when it
+ * sits in a system header or under a bundled third-party tree. We enforce the
+ * Result convention on yetty code only: third-party libraries have their own
+ * error idioms (e.g. miniaudio's ma_result), and flagging their functions — or
+ * flagging our code for not propagating *their* result types — is pure noise.
+ */
+static bool is_foreign_location(SourceLocation loc, const SourceManager &sm)
+{
+	if (loc.isInvalid())
+		return false;
+	if (sm.isInSystemHeader(loc))
+		return true;
+	StringRef filename = sm.getFilename(sm.getSpellingLoc(loc));
+	return filename.contains("/3rdparty/") || filename.contains("/_deps/");
+}
+
+/*
+ * Check if a type is a Result type whose propagation we enforce. It must end in
+ * "_result" AND be declared in first-party code. The location test (not a name
+ * prefix) is what keeps legitimate non-"yetty_"-prefixed result types such as
+ * `rectangle_result` and `yplatform_coro_ptr_result` in scope while excluding
+ * third-party look-alikes like `ma_result`.
+ */
+static bool is_enforced_result_type(QualType type, const ASTContext &ctx)
+{
+	if (!is_result_type(get_type_name(type)))
+		return false;
+
+	/* Our result types are always structs (YETTY_YRESULT_DECLARE emits a
+	 * struct); third-party offenders resolve to a tag decl too (ma_result is
+	 * a typedef'd enum). Locate that decl and reject it when it is foreign. */
+	const TagDecl *tag = type.getCanonicalType()->getAsTagDecl();
+	if (!tag)
+		return true;
+	return !is_foreign_location(tag->getLocation(), ctx.getSourceManager());
+}
+
+/*
+ * Check if a function's return type is a Result type we enforce.
  */
 static bool returns_result_type(const FunctionDecl *func)
 {
 	if (!func)
 		return false;
 
-	QualType ret_type = func->getReturnType();
-	std::string type_name = get_type_name(ret_type);
-	return is_result_type(type_name);
+	return is_enforced_result_type(func->getReturnType(),
+				       func->getASTContext());
 }
 
 /*
@@ -163,10 +200,11 @@ public:
 		if (!func->hasBody())
 			return true;
 
-		/* Skip functions in system headers */
+		/* Skip functions in system headers or bundled third-party code —
+		 * we only enforce the convention on first-party yetty sources. */
 		SourceManager &sm = context.getSourceManager();
 		SourceLocation loc = func->getLocation();
-		if (sm.isInSystemHeader(loc))
+		if (is_foreign_location(loc, sm))
 			return true;
 
 		/* Skip static inline functions in headers (they may be helpers) */
@@ -189,10 +227,16 @@ public:
 				return true;
 		}
 
-		/* Check if this function already returns a Result type */
+		/* The rule: a function that can fail returns a Result type, and
+		 * ANY function that calls a Result-returning function must itself
+		 * return a Result type so the error propagates up the call chain.
+		 * The only sanctioned non-propagating boundaries are 3rdparty /
+		 * main / functions tagged YETTY_EXTERNAL_CALLBACK (handled above).
+		 * Absorbing, (void)-casting, or otherwise consuming the result in
+		 * a non-Result-returning function is NOT allowed — it breaks the
+		 * propagation chain. */
 		bool func_returns_result = returns_result_type(func);
 
-		/* Collect all calls to result-returning functions */
 		collector.clear();
 		collector.TraverseStmt(func->getBody());
 
@@ -200,11 +244,8 @@ public:
 		if (result_calls.empty())
 			return true;
 
-		/* If this function calls result-returning functions but doesn't
-		 * return a result itself, report a violation */
-		if (!func_returns_result) {
+		if (!func_returns_result)
 			report_violation(func, result_calls);
-		}
 
 		return true;
 	}

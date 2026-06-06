@@ -38,6 +38,6 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_register_widget(struct yetty_yg
 struct yetty_ycore_void_result yetty_ygui_ynodes_open_canvas_menu(struct yetty_ygui_object *editor, float x, float y);
 struct yetty_ycore_void_result yetty_ygui_ynodes_open_node_menu(struct yetty_ygui_object *editor, struct yetty_ygui_object *node, float x, float y);
 struct yetty_ycore_void_result yetty_ygui_ynodes_close_menu(struct yetty_ygui_object *editor);
-int yetty_ygui_ynodes_menu_is_open(const struct yetty_ygui_object *editor);
+struct yetty_ycore_int_result yetty_ygui_ynodes_menu_is_open(const struct yetty_ygui_object *editor);
 
 #endif

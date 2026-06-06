@@ -126,56 +126,75 @@ static struct yetty_ycore_void_result push_scene(struct yrich_app *app)
     return yetty_ygui_framework_emit(app->ygui);
 }
 
-static void handle_event(struct yrich_app *app, const struct yetty_yui_event *ev)
+static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
+                                                   const struct yetty_yui_event *ev)
 {
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
         app->quit = 1;
-        return;
+        return YETTY_OK_VOID();
     case YETTY_YCORE_RESIZE: {
         uint32_t w = (uint32_t)ev->resize.width;
         uint32_t h = (uint32_t)ev->resize.height;
         if (w == 0 || h == 0) {
-            return;
+            return YETTY_OK_VOID();
         }
         app->surface_w = w;
         app->surface_h = h;
-        destroy_safe(yetty_yframework_reconfigure_surface(app->yrt, w, h));
+        struct yetty_ycore_void_result reconf_r = yetty_yframework_reconfigure_surface(app->yrt, w, h);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, reconf_r, "yrich: reconfigure surface");
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
-        destroy_safe(app->target->ops->resize(app->target, vp));
+        struct yetty_ycore_void_result resize_r = app->target->ops->resize(app->target, vp);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_r, "yrich: target resize");
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, (struct yetty_ycore_rectangle){
-            .min = {.x = 0.0f, .y = 0.0f},
-            .max = {.x = (float)w, .y = (float)h},
-        });
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
-        destroy_safe(push_scene(app));
-        return;
+        struct yetty_ycore_void_result rect_r =
+            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1,
+                                          (struct yetty_ycore_rectangle){
+                                              .min = {.x = 0.0f, .y = 0.0f},
+                                              .max = {.x = (float)w, .y = (float)h},
+                                          });
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_r, "yrich: root rect");
+        struct yetty_ycore_void_result dirty_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dirty_r, "yrich: root dirty");
+        struct yetty_ycore_void_result scene_r = push_scene(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
+        return YETTY_OK_VOID();
     }
     case YETTY_YCORE_KEY_DOWN:
         /* Esc / 'q' quit. */
         if (ev->key.key == 256 || ev->key.key == 81) {
             app->quit = 1;
         }
-        return;
-    case YETTY_YCORE_MOUSE_DOWN:
-        destroy_safe(yetty_ygui_framework_feed_mouse_button(app->ygui, ev->mouse.x, ev->mouse.y,
-                                                            ev->mouse.button, 1, ev->mouse.mods));
-        destroy_safe(push_scene(app));
-        return;
-    case YETTY_YCORE_MOUSE_UP:
-        destroy_safe(yetty_ygui_framework_feed_mouse_button(app->ygui, ev->mouse.x, ev->mouse.y,
-                                                            ev->mouse.button, 0, ev->mouse.mods));
-        destroy_safe(push_scene(app));
-        return;
+        return YETTY_OK_VOID();
+    case YETTY_YCORE_MOUSE_DOWN: {
+        struct yetty_ycore_void_result feed_r = yetty_ygui_framework_feed_mouse_button(
+            app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_r, "yrich: mouse down");
+        struct yetty_ycore_void_result scene_r = push_scene(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
+        return YETTY_OK_VOID();
+    }
+    case YETTY_YCORE_MOUSE_UP: {
+        struct yetty_ycore_void_result feed_r = yetty_ygui_framework_feed_mouse_button(
+            app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 0, ev->mouse.mods);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_r, "yrich: mouse up");
+        struct yetty_ycore_void_result scene_r = push_scene(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
+        return YETTY_OK_VOID();
+    }
     case YETTY_YCORE_MOUSE_MOVE:
-    case YETTY_YCORE_MOUSE_DRAG:
-        destroy_safe(yetty_ygui_framework_feed_mouse_motion(app->ygui, ev->mouse.x, ev->mouse.y));
-        destroy_safe(push_scene(app));
-        return;
+    case YETTY_YCORE_MOUSE_DRAG: {
+        struct yetty_ycore_void_result feed_r =
+            yetty_ygui_framework_feed_mouse_motion(app->ygui, ev->mouse.x, ev->mouse.y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_r, "yrich: mouse move");
+        struct yetty_ycore_void_result scene_r = push_scene(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
+        return YETTY_OK_VOID();
+    }
     default:
-        return;
+        return YETTY_OK_VOID();
     }
 }
 
@@ -276,7 +295,8 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
                 if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) {
                     break;
                 }
-                handle_event(app, &ev);
+                struct yetty_ycore_void_result ev_r = handle_event(app, &ev);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, ev_r, "yrich worker: handle_event");
                 had_events = 1;
             }
         }
@@ -294,7 +314,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             yerror("yrich-app: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf) - 1, 0);
+            { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf) - 1, 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
         }
         destroy_safe(app->target->ops->present(app->target));
         needs_render = 0;
@@ -320,7 +340,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
         app->font->ops->destroy(app->font);
         app->font = NULL;
     }
-    yetty_yframework_destroy(app->yrt);
+    (void)yetty_yframework_destroy(app->yrt);
     app->yrt = NULL;
     return YETTY_OK_VOID();
 }

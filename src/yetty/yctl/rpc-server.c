@@ -1,6 +1,7 @@
 /* RPC server implementation using event loop TCP server */
 
 #include <yetty/yctl/rpc-server.h>
+#include <yetty/ycore/result.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
@@ -94,7 +95,7 @@ static void dispatch_message(struct yetty_yctl_rpc_conn_ctx *ctx, struct yetty_y
 
         if (msg.type == YETTY_YCTL_MSG_REQUEST) {
             yetty_yctl_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
-            yetty_yctl_write_response_error(&wbuf, msg.msgid, "method not found");
+            (void)yetty_yctl_write_response_error(&wbuf, msg.msgid, "method not found");
             server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
         }
         free((void *)msg.params);
@@ -108,12 +109,12 @@ static void dispatch_message(struct yetty_yctl_rpc_conn_ctx *ctx, struct yetty_y
 
         if (result.ok) {
             if (result.value.data) {
-                yetty_yctl_write_response_ok(&wbuf, msg.msgid, result.value.data, result.value.len);
+                (void)yetty_yctl_write_response_ok(&wbuf, msg.msgid, result.value.data, result.value.len);
             } else {
-                yetty_yctl_write_response_bool(&wbuf, msg.msgid, result.value.bool_value);
+                (void)yetty_yctl_write_response_bool(&wbuf, msg.msgid, result.value.bool_value);
             }
         } else {
-            yetty_yctl_write_response_error(&wbuf, msg.msgid, result.error);
+            (void)yetty_yctl_write_response_error(&wbuf, msg.msgid, result.error);
         }
 
         server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
@@ -163,6 +164,7 @@ static void rpc_on_alloc(void *conn_ctx_ptr, size_t suggested, char **buf, size_
     }
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void rpc_on_data(void *conn_ctx_ptr, struct yetty_yevent_conn *conn, const char *data,
                         long nread)
 {

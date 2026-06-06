@@ -440,134 +440,117 @@ static struct yetty_ycore_void_result yzoo_update_connections(struct yetty_yzoo 
  * stroke_color/stroke_width slots stay zero; we paint via fill.
  *===========================================================================*/
 
-static void yzoo_emit_shape(struct yetty_ydraw_drawable_list *buf, uint32_t z_order, int choice,
-                            float cx, float cy, float size, uint32_t color)
+static struct yetty_ycore_void_result yzoo_emit_shape(struct yetty_ydraw_drawable_list *buf,
+                                                      uint32_t z_order, int choice, float cx,
+                                                      float cy, float size, uint32_t color)
 {
     switch (choice) {
     case 0: {
         struct yetty_ysdf_circle g = {cx, cy, size};
-        yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 1: {
         struct yetty_ysdf_box g = {cx, cy, size, size * 0.8f, size * 0.15f};
-        yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 2: {
         struct yetty_ysdf_segment g = {cx - size, cy, cx + size, cy};
         /* Segments paint via stroke. */
-        yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, size * 0.15f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z_order, 0u, color,
+                                                             size * 0.15f, &g);
     }
     case 3: {
         struct yetty_ysdf_triangle g = {
             cx, cy - size, cx - size, cy + size * 0.7f, cx + size, cy + size * 0.7f,
         };
-        yetty_ydraw_drawable_list_add_cmd_add_triangle(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_triangle(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 4: {
         struct yetty_ysdf_ellipse g = {cx, cy, size, size * 0.6f};
-        yetty_ydraw_drawable_list_add_cmd_add_ellipse(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_ellipse(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 5: {
         struct yetty_ysdf_arc g = {cx, cy, 0.866f, 0.5f, size, size * 0.2f};
-        yetty_ydraw_drawable_list_add_cmd_add_arc(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_arc(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 6: {
         struct yetty_ysdf_rounded_box g = {
             cx, cy, size, size * 0.7f, size * 0.2f, size * 0.2f, size * 0.2f, size * 0.2f,
         };
-        yetty_ydraw_drawable_list_add_cmd_add_rounded_box(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(buf, 0, z_order, color, 0u, 0.0f,
+                                                                 &g);
     }
     case 7: {
         struct yetty_ysdf_rhombus g = {cx, cy, size, size * 1.4f};
-        yetty_ydraw_drawable_list_add_cmd_add_rhombus(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_rhombus(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 8: {
         struct yetty_ysdf_pentagon g = {cx, cy, size};
-        yetty_ydraw_drawable_list_add_cmd_add_pentagon(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_pentagon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 9: {
         struct yetty_ysdf_hexagon g = {cx, cy, size};
-        yetty_ydraw_drawable_list_add_cmd_add_hexagon(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_hexagon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 10: {
         struct yetty_ysdf_star g = {cx, cy, size, 5.0f, 2.5f};
-        yetty_ydraw_drawable_list_add_cmd_add_star(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_star(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 11: {
         struct yetty_ysdf_pie g = {cx, cy, 0.866f, 0.5f, size};
-        yetty_ydraw_drawable_list_add_cmd_add_pie(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_pie(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 12: {
         struct yetty_ysdf_ring g = {cx, cy, 0.866f, 0.5f, size, size * 0.2f};
-        yetty_ydraw_drawable_list_add_cmd_add_ring(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_ring(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 13: {
         struct yetty_ysdf_heart g = {cx, cy, size};
-        yetty_ydraw_drawable_list_add_cmd_add_heart(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_heart(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 14: {
         struct yetty_ysdf_cross g = {cx, cy, size, size * 0.3f, size * 0.1f};
-        yetty_ydraw_drawable_list_add_cmd_add_cross(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_cross(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 15: {
         struct yetty_ysdf_rounded_x g = {cx, cy, size, size * 0.2f};
-        yetty_ydraw_drawable_list_add_cmd_add_rounded_x(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_rounded_x(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 16: {
         struct yetty_ysdf_capsule g = {cx - size * 0.7f, cy, cx + size * 0.7f, cy, size * 0.3f};
         /* Capsule has thickness already; paint via fill. */
-        yetty_ydraw_drawable_list_add_cmd_add_capsule(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_capsule(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 17: {
         struct yetty_ysdf_moon g = {cx, cy, size * 0.5f, size, size * 0.8f};
-        yetty_ydraw_drawable_list_add_cmd_add_moon(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_moon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 18: {
         struct yetty_ysdf_egg g = {cx, cy, size, size * 0.6f};
-        yetty_ydraw_drawable_list_add_cmd_add_egg(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_egg(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 19: {
         struct yetty_ysdf_octogon g = {cx, cy, size};
-        yetty_ydraw_drawable_list_add_cmd_add_octogon(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_octogon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 20: {
         struct yetty_ysdf_hexagram g = {cx, cy, size};
-        yetty_ydraw_drawable_list_add_cmd_add_hexagram(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_hexagram(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     case 21: {
         struct yetty_ysdf_pentagram g = {cx, cy, size};
-        yetty_ydraw_drawable_list_add_cmd_add_pentagram(buf, 0, z_order, color, 0u, 0.0f, &g);
-        break;
+        return yetty_ydraw_drawable_list_add_cmd_add_pentagram(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
     default:
         break;
     }
+    return YETTY_OK_VOID();
 }
 
-static uint32_t yzoo_emit_curve(struct yetty_ydraw_drawable_list *buf, uint32_t z_order, float p0x,
-                                float p0y, float cx, float cy, float p1x, float p1y, float width,
-                                uint32_t color, uint32_t n_segs)
+static struct yetty_ycore_void_result yzoo_emit_curve(struct yetty_ydraw_drawable_list *buf,
+                                                      uint32_t *z_order, float p0x, float p0y,
+                                                      float cx, float cy, float p1x, float p1y,
+                                                      float width, uint32_t color, uint32_t n_segs)
 {
     float prev_x = p0x;
     float prev_y = p0y;
@@ -577,11 +560,14 @@ static uint32_t yzoo_emit_curve(struct yetty_ydraw_drawable_list *buf, uint32_t 
         float x = omt * omt * p0x + 2.0f * omt * t * cx + t * t * p1x;
         float y = omt * omt * p0y + 2.0f * omt * t * cy + t * t * p1y;
         struct yetty_ysdf_segment g = {prev_x, prev_y, x, y};
-        yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z_order++, 0u, color, width, &g);
+        struct yetty_ycore_void_result add_result =
+            yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, (*z_order)++, 0u, color, width,
+                                                          &g);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "yzoo_emit_curve: add segment");
         prev_x = x;
         prev_y = y;
     }
-    return z_order;
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -682,8 +668,10 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
                 skipped++;
                 break;
             }
-            zo = yzoo_emit_curve(buf, zo, pa.x, pa.y, ctrl_x, ctrl_y, pb.x, pb.y, c->stroke_width,
-                                 color, z->config.bezier_segments);
+            struct yetty_ycore_void_result curve_result =
+                yzoo_emit_curve(buf, &zo, pa.x, pa.y, ctrl_x, ctrl_y, pb.x, pb.y, c->stroke_width,
+                                color, z->config.bezier_segments);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, curve_result, "yzoo_build_prims: curve");
             emitted++;
             break;
         }
@@ -700,7 +688,10 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
                 break;
             }
             struct yetty_ysdf_segment g = {pa.x, pa.y, pb.x, pb.y};
-            yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, zo++, 0u, color, c->stroke_width, &g);
+            struct yetty_ycore_void_result line_result =
+                yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, zo++, 0u, color,
+                                                              c->stroke_width, &g);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, line_result, "yzoo_build_prims: connection line");
             emitted++;
             break;
         }
@@ -726,7 +717,9 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
                 skipped++;
                 break;
             }
-            yzoo_emit_shape(buf, zo++, c->shape_choice, mid_x, mid_y, size, color);
+            struct yetty_ycore_void_result shape_result =
+                yzoo_emit_shape(buf, zo++, c->shape_choice, mid_x, mid_y, size, color);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, shape_result, "yzoo_build_prims: shape");
             emitted++;
             break;
         }
@@ -762,7 +755,9 @@ static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
             continue;
         }
         struct yetty_ysdf_circle g = {p.x, p.y, marker_size};
-        yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, zo++, color, 0u, 0.0f, &g);
+        struct yetty_ycore_void_result marker_result =
+            yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, zo++, color, 0u, 0.0f, &g);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, marker_result, "yzoo_build_prims: marker");
         emitted++;
     }
 

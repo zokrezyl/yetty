@@ -423,12 +423,16 @@ static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_ctx *ycl
     struct yetty_ygui_object *editor = ynode_editor(obj);
 
     /* A press while the editor's context menu is open just dismisses it. */
-    if (editor && yetty_ygui_ynodes_menu_is_open(editor)) {
-        struct yetty_ycore_void_result cr = yetty_ygui_ynodes_close_menu(editor);
-        if (YETTY_IS_ERR(cr)) {
-            return YETTY_ERR(yetty_ycore_int, "ynode_on_press: close menu", cr);
+    if (editor) {
+        struct yetty_ycore_int_result menu_open_r = yetty_ygui_ynodes_menu_is_open(editor);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, menu_open_r, "ynode_on_press: menu_is_open");
+        if (menu_open_r.value) {
+            struct yetty_ycore_void_result cr = yetty_ygui_ynodes_close_menu(editor);
+            if (YETTY_IS_ERR(cr)) {
+                return YETTY_ERR(yetty_ycore_int, "ynode_on_press: close menu", cr);
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
         }
-        return YETTY_OK(yetty_ycore_int, 1);
     }
     /* Right-press on node chrome → node context menu. */
     if (button == 1 && editor) {

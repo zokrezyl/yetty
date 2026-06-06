@@ -19,7 +19,7 @@ struct yetty_ygui_textinput_data_ptr_result yetty_ygui_textinput_data(struct yet
 struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_ygui_object *obj, const char *text);
-const char *yetty_ygui_textinput_get_text(const struct yetty_ygui_object *obj);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(const struct yetty_ygui_object *obj);
 struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty_ygui_object *obj, const char *placeholder);
 struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_ygui_object *obj, int focused);
 int yetty_ygui_textinput_handle_key(struct yetty_ygui_object *obj, uint32_t key);

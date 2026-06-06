@@ -53,7 +53,8 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_ctx *yc
     d->focused = 1;
     /* Place the caret at the clicked character. */
     float px = 0.0f, py = 0.0f;
-    yetty_ygui_clickable_press_pos(obj, &px, &py);
+    { struct yetty_ycore_void_result pp_r = yetty_ygui_clickable_press_pos(obj, &px, &py);
+          if (YETTY_IS_ERR(pp_r)) yetty_ycore_error_destroy(pp_r.error); }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float rel = px - (r.min.x + TEXTINPUT_TEXT_PAD);
     long idx = (long)((rel / TEXTINPUT_CHAR_W) + 0.5f);
@@ -249,14 +250,15 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_ygui_o
 }
 
 [[clang::annotate("expose")]]
-const char *yetty_ygui_textinput_get_text(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_textinput_get_text: invalid args");
     }
-    struct textinput_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj, yetty_ygui_textinput_class_get().value);
-    return d->text ? d->text : "";
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_textinput_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_textinput_get_text: data_get");
+    struct textinput_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_const_char_ptr, d->text ? d->text : "");
 }
 
 [[clang::annotate("expose")]]

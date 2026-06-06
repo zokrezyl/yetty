@@ -77,6 +77,24 @@ typedef void (*yetty_yplatform_memory_pty_wake_fn)(void *userdata);
 void yetty_yplatform_memory_pty_set_wake(struct yetty_platform_pty *endpoint,
                                          yetty_yplatform_memory_pty_wake_fn wake, void *userdata);
 
+/* Window-size propagation across the pair — the in-process analog of TIOCSWINSZ
+ * + SIGWINCH + TIOCGWINSZ. A resize on one endpoint records the size on the
+ * shared pair and fires the OTHER endpoint's resize callback, so the peer's
+ * owner can re-layout (e.g. call ygui_framework_set_viewport). Install the
+ * callback on the endpoint that needs to learn size changes; pass NULL to
+ * disarm. The memory-pty does not own `userdata`. */
+typedef void (*yetty_yplatform_memory_pty_resize_fn)(void *userdata, uint32_t cols, uint32_t rows,
+                                                     uint32_t pixel_w, uint32_t pixel_h);
+void yetty_yplatform_memory_pty_set_resize(struct yetty_platform_pty *endpoint,
+                                           yetty_yplatform_memory_pty_resize_fn resize,
+                                           void *userdata);
+
+/* Read back the window size recorded by the most recent resize on either
+ * endpoint (the TIOCGWINSZ analog). Any out-param may be NULL; all are zero
+ * until the first resize. */
+void yetty_yplatform_memory_pty_get_winsize(struct yetty_platform_pty *endpoint, uint32_t *cols,
+                                            uint32_t *rows, uint32_t *pixel_w, uint32_t *pixel_h);
+
 /* Host-side TCP port that the TinyEMU slirp hostfwd maps to the in-guest
  * telnetd (tcp/23). Keep in sync with assets/yemu/temu/yetty-temu-extended.cfg's
  * `hostfwd: ["tcp:2323-:23"]`. Used by --temu in pty-factory/default.c. */

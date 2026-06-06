@@ -744,14 +744,14 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
 
     /* Initialize VM */
     if (init_vm(pty) < 0) {
-        tinyemu_pty_destroy(&pty->base);
+        (void)tinyemu_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to initialize VM");
     }
 
     /* Start VM thread */
     pty->running = 1;
     if (pthread_create(&pty->vm_thread, NULL, vm_thread_func, pty) != 0) {
-        tinyemu_pty_destroy(&pty->base);
+        (void)tinyemu_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to start VM thread");
     }
 

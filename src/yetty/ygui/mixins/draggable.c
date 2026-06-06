@@ -124,14 +124,16 @@ struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_ygu
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_draggable_is_dragging(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_draggable_is_dragging(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_draggable_is_dragging: NULL obj");
     }
-    struct draggable_data *dd = yetty_ygui_data_get(
+    struct yetty_ygui_void_ptr_result dd_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_draggable_mixin_get().value);
-    return dd->dragging;
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "yetty_ygui_draggable_is_dragging: data_get");
+    struct draggable_data *dd = dd_dr.value;
+    return YETTY_OK(yetty_ycore_int, dd->dragging);
 }
 
 #include "draggable.gen.c"

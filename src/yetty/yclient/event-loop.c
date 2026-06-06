@@ -24,6 +24,7 @@
  */
 
 #include <yetty/yclient/event-loop.h>
+#include <yetty/ycore/result.h>
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
@@ -238,6 +239,7 @@ static void on_yface_raw(void *user, const char *bytes, size_t n)
  * stdin polling
  *===========================================================================*/
 
+YETTY_EXTERNAL_CALLBACK
 static void on_in_readable(uv_poll_t *handle, int status, int events)
 {
     struct yetty_yclient_event_loop *L = handle->data;

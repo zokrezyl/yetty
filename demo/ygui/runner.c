@@ -149,6 +149,25 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
     return 0;
 }
 
+/* Slave end of the memory-pty pair: a resize on the producer (ygui) endpoint
+ * arrives here — the SIGWINCH analog — and sizes the compositor's root
+ * container from the pixel extent. cols/rows are terminal-grid concepts the
+ * compositor has no use for. */
+static void runner_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, uint32_t pixel_w,
+                                 uint32_t pixel_h)
+{
+    struct demo_runner *r = userdata;
+    (void)cols;
+    (void)rows;
+    if (!r->root_container) {
+        return;
+    }
+    struct yetty_ycore_rectangle rr = {.min = {0, 0}, .max = {(float)pixel_w, (float)pixel_h}};
+    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, rr);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+}
+
 static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_listener *listener,
                                                    const struct yetty_yui_event *ev)
 {
@@ -219,12 +238,13 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
                 r->engine, (float)ev->resize.width, (float)ev->resize.height);
             if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
         }
-        if (r->root_container) {
-            struct yetty_ycore_rectangle rr = {
-                .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
-            struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
-            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, rr);
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+        /* Drive the compositor-side rect through the pty pair (→
+         * runner_pty_resize_cb) rather than poking the container directly, so
+         * the resize travels the pair like a real PTY's TIOCSWINSZ. */
+        if (r->pty_pair.a && r->pty_pair.a->ops->resize) {
+            struct yetty_ycore_void_result rrz = r->pty_pair.a->ops->resize(
+                r->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
+            if (YETTY_IS_ERR(rrz)) yetty_ycore_error_destroy(rrz.error);
         }
         if (r->yframework->event_loop->ops->request_render) {
             r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
@@ -468,6 +488,10 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         r->pty_pair.b,
         (yetty_yplatform_memory_pty_wake_fn)r->yframework->event_loop->ops->request_render,
         r->yframework->event_loop);
+
+    /* Window-size changes reach the compositor end through the pair, the same
+     * way bytes do. */
+    yetty_yplatform_memory_pty_set_resize(r->pty_pair.b, runner_pty_resize_cb, r);
 
     r->listener.handler = event_handler;
     struct yetty_ycore_void_result rel =

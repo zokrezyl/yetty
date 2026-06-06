@@ -327,30 +327,37 @@ struct seq_render {
     uint32_t z;
 };
 
-static void seq_text(struct seq_render *r, float x, float y, const char *t, float fs, uint32_t color)
+static struct yetty_ycore_void_result seq_text(struct seq_render *r, float x, float y,
+                                               const char *t, float fs, uint32_t color)
 {
     if (!t || !t[0]) {
-        return;
+        return YETTY_OK_VOID();
     }
     size_t n = strlen(t);
     struct yetty_ycore_buffer view = {.data = (uint8_t *)(uintptr_t)t, .capacity = n, .size = n};
-    (void)yetty_ydraw_drawable_list_add_text(r->buf, x, y, &view, fs, color, r->z++, -1, 0.0f);
+    struct yetty_ycore_void_result add_result =
+        yetty_ydraw_drawable_list_add_text(r->buf, x, y, &view, fs, color, r->z++, -1, 0.0f);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "seq_text: add text run");
+    return YETTY_OK_VOID();
 }
 
-static void seq_seg(struct seq_render *r, float x0, float y0, float x1, float y1, uint32_t color,
-                    float w)
+static struct yetty_ycore_void_result seq_seg(struct seq_render *r, float x0, float y0, float x1,
+                                              float y1, uint32_t color, float w)
 {
     struct yetty_ysdf_segment g = {.start_x = x0, .start_y = y0, .end_x = x1, .end_y = y1};
-    yetty_ydraw_drawable_list_add_cmd_add_segment(r->buf, 0, r->z++, 0, color, w, &g);
+    struct yetty_ycore_void_result add_result =
+        yetty_ydraw_drawable_list_add_cmd_add_segment(r->buf, 0, r->z++, 0, color, w, &g);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "seq_seg: add segment");
+    return YETTY_OK_VOID();
 }
 
-static void seq_dashed(struct seq_render *r, float x0, float y0, float x1, float y1, uint32_t color,
-                       float w)
+static struct yetty_ycore_void_result seq_dashed(struct seq_render *r, float x0, float y0, float x1,
+                                                 float y1, uint32_t color, float w)
 {
     float dx = x1 - x0, dy = y1 - y0;
     float length = sqrtf(dx * dx + dy * dy);
     if (length < 0.01f) {
-        return;
+        return YETTY_OK_VOID();
     }
     float ux = dx / length, uy = dy / length;
     float dash = 7.0f, gap = 5.0f, step = dash + gap;
@@ -364,12 +371,16 @@ static void seq_dashed(struct seq_render *r, float x0, float y0, float x1, float
                                        .start_y = y0 + uy * pos,
                                        .end_x = x0 + ux * end,
                                        .end_y = y0 + uy * end};
-        yetty_ydraw_drawable_list_add_cmd_add_segment(r->buf, 0, z, 0, color, w, &g);
+        struct yetty_ycore_void_result add_result =
+            yetty_ydraw_drawable_list_add_cmd_add_segment(r->buf, 0, z, 0, color, w, &g);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "seq_dashed: add dash segment");
     }
     r->z = z + 1;
+    return YETTY_OK_VOID();
 }
 
-static void seq_arrowhead(struct seq_render *r, float x, float y, float dir, uint32_t color)
+static struct yetty_ycore_void_result seq_arrowhead(struct seq_render *r, float x, float y,
+                                                    float dir, uint32_t color)
 {
     float size = 9.0f;
     float ax = dir > 0 ? x - size : x + size;
@@ -378,18 +389,140 @@ static void seq_arrowhead(struct seq_render *r, float x, float y, float dir, uin
         .vertex_b_x = ax,       .vertex_b_y = y - size * 0.45f,
         .vertex_c_x = ax,       .vertex_c_y = y + size * 0.45f,
     };
-    yetty_ydraw_drawable_list_add_cmd_add_triangle(r->buf, 0, r->z++, color, 0, 0.0f, &g);
+    struct yetty_ycore_void_result add_result =
+        yetty_ydraw_drawable_list_add_cmd_add_triangle(r->buf, 0, r->z++, color, 0, 0.0f, &g);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "seq_arrowhead: add triangle");
+    return YETTY_OK_VOID();
 }
 
-static void seq_box(struct seq_render *r, float cx, float cy, float w, float h, uint32_t fill,
-                    uint32_t stroke, float sw, float radius)
+static struct yetty_ycore_void_result seq_box(struct seq_render *r, float cx, float cy, float w,
+                                              float h, uint32_t fill, uint32_t stroke, float sw,
+                                              float radius)
 {
     struct yetty_ysdf_box g = {.center_x = cx,
                                .center_y = cy,
                                .half_width = w * 0.5f,
                                .half_height = h * 0.5f,
                                .corner_radius = radius};
-    yetty_ydraw_drawable_list_add_cmd_add_box(r->buf, 0, r->z++, fill, stroke, sw, &g);
+    struct yetty_ycore_void_result add_result =
+        yetty_ydraw_drawable_list_add_cmd_add_box(r->buf, 0, r->z++, fill, stroke, sw, &g);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "seq_box: add box");
+    return YETTY_OK_VOID();
+}
+
+/* Emit every drawable for the parsed sequence. Bails on the first failed
+ * append; the caller owns the buffer and tears it down on error. */
+static struct yetty_ycore_void_result seq_emit_drawables(
+    struct seq_render *r, const struct seq *s, yetty_ydiagram_measure_text_fn measure_fn,
+    void *measure_ud, float life_top, float life_bottom, uint32_t header_fill, uint32_t stroke,
+    uint32_t text_color, uint32_t lifeline_color, uint32_t note_fill)
+{
+    /* Lifelines (under everything). */
+    for (size_t i = 0; i < s->part_count; i++) {
+        float x = s->parts[i].x;
+        struct yetty_ycore_void_result lifeline_result =
+            seq_dashed(r, x, life_top, x, life_bottom, lifeline_color, 1.2f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, lifeline_result, "seq_emit: lifeline");
+    }
+
+    /* Participant header boxes (top and bottom). */
+    for (size_t i = 0; i < s->part_count; i++) {
+        const struct participant *p = &s->parts[i];
+        float lw = measure(measure_fn, measure_ud, p->label, SEQ_PART_FS);
+        float bw = lw + 24.0f;
+        if (bw < 70.0f) {
+            bw = 70.0f;
+        }
+        float top_cy = (float)SEQ_MARGIN + (float)SEQ_HEADER_H * 0.5f;
+        float bot_cy = life_bottom + (float)SEQ_HEADER_H * 0.5f;
+        struct yetty_ycore_void_result top_box_result =
+            seq_box(r, p->x, top_cy, bw, (float)SEQ_HEADER_H, header_fill, stroke, 2.0f, 4.0f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, top_box_result, "seq_emit: top header box");
+        struct yetty_ycore_void_result bot_box_result =
+            seq_box(r, p->x, bot_cy, bw, (float)SEQ_HEADER_H, header_fill, stroke, 2.0f, 4.0f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, bot_box_result, "seq_emit: bottom header box");
+        struct yetty_ycore_void_result top_text_result =
+            seq_text(r, p->x - lw * 0.5f, top_cy + SEQ_PART_FS / 3.0f, p->label, SEQ_PART_FS,
+                     text_color);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, top_text_result, "seq_emit: top header label");
+        struct yetty_ycore_void_result bot_text_result =
+            seq_text(r, p->x - lw * 0.5f, bot_cy + SEQ_PART_FS / 3.0f, p->label, SEQ_PART_FS,
+                     text_color);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, bot_text_result, "seq_emit: bottom header label");
+    }
+
+    /* Events. */
+    for (size_t i = 0; i < s->event_count; i++) {
+        const struct event *e = &s->events[i];
+        if (e->kind == EV_NOTE) {
+            float x = s->parts[e->src].x;
+            float tw = measure(measure_fn, measure_ud, e->text, SEQ_MSG_FS);
+            float bw = tw + 20.0f;
+            float cy = e->y + (float)SEQ_NOTE_H * 0.5f;
+            struct yetty_ycore_void_result note_box_result =
+                seq_box(r, x, cy, bw, (float)SEQ_NOTE_H, note_fill, stroke, 1.2f, 2.0f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, note_box_result, "seq_emit: note box");
+            struct yetty_ycore_void_result note_text_result =
+                seq_text(r, x - tw * 0.5f, cy + SEQ_MSG_FS / 3.0f, e->text, SEQ_MSG_FS, text_color);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, note_text_result, "seq_emit: note text");
+            continue;
+        }
+
+        float xs = s->parts[e->src].x;
+        float xt = s->parts[e->tgt].x;
+        if (e->src == e->tgt) {
+            /* Self-message: a small loop to the right of the lifeline. */
+            float loop_w = 36.0f;
+            float y0 = e->y, y1 = e->y + 20.0f;
+            struct yetty_ycore_void_result top_seg_result =
+                seq_seg(r, xs, y0, xs + loop_w, y0, stroke, 1.4f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, top_seg_result, "seq_emit: self-loop top");
+            struct yetty_ycore_void_result side_seg_result =
+                seq_seg(r, xs + loop_w, y0, xs + loop_w, y1, stroke, 1.4f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, side_seg_result, "seq_emit: self-loop side");
+            if (e->dashed) {
+                struct yetty_ycore_void_result ret_result =
+                    seq_dashed(r, xs + loop_w, y1, xs + 6.0f, y1, stroke, 1.4f);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, ret_result, "seq_emit: self-loop return");
+            } else {
+                struct yetty_ycore_void_result ret_result =
+                    seq_seg(r, xs + loop_w, y1, xs + 6.0f, y1, stroke, 1.4f);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, ret_result, "seq_emit: self-loop return");
+            }
+            if (e->arrow) {
+                struct yetty_ycore_void_result head_result =
+                    seq_arrowhead(r, xs + 6.0f, y1, -1.0f, stroke);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, head_result, "seq_emit: self-loop arrow");
+            }
+            struct yetty_ycore_void_result self_text_result = seq_text(
+                r, xs + loop_w + 8.0f, y0 + SEQ_MSG_FS / 3.0f, e->text, SEQ_MSG_FS, text_color);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, self_text_result, "seq_emit: self-loop text");
+            continue;
+        }
+
+        float dir = xt > xs ? 1.0f : -1.0f;
+        float tip = xt - dir * 1.0f;
+        if (e->dashed) {
+            struct yetty_ycore_void_result line_result =
+                seq_dashed(r, xs, e->y, tip, e->y, stroke, 1.4f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, line_result, "seq_emit: message line");
+        } else {
+            struct yetty_ycore_void_result line_result =
+                seq_seg(r, xs, e->y, tip, e->y, stroke, 1.4f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, line_result, "seq_emit: message line");
+        }
+        if (e->arrow) {
+            struct yetty_ycore_void_result head_result =
+                seq_arrowhead(r, tip, e->y, dir, stroke);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, head_result, "seq_emit: message arrow");
+        }
+        float tw = measure(measure_fn, measure_ud, e->text, SEQ_MSG_FS);
+        struct yetty_ycore_void_result msg_text_result =
+            seq_text(r, (xs + xt) * 0.5f - tw * 0.5f, e->y - 6.0f, e->text, SEQ_MSG_FS, text_color);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, msg_text_result, "seq_emit: message text");
+    }
+
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
@@ -463,80 +596,24 @@ struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
 
     struct seq_render r = {.buf = br.value, .z = 0};
     if (clear_canvas) {
-        (void)yetty_ydraw_drawable_list_add_cmd_zero(br.value);
+        struct yetty_ycore_void_result zero_result =
+            yetty_ydraw_drawable_list_add_cmd_zero(br.value);
+        if (YETTY_IS_ERR(zero_result)) {
+            yetty_ydraw_drawable_list_destroy(br.value);
+            seq_destroy(&s);
+            return YETTY_ERR(yetty_ydiagram_seq_buffer, "sequence_render: clear canvas",
+                             zero_result);
+        }
     }
     yetty_ydraw_drawable_list_set_scene_bounds(br.value, 0.0f, 0.0f, total_w, total_h);
 
-    /* Lifelines (under everything). */
-    for (size_t i = 0; i < s.part_count; i++) {
-        float x = s.parts[i].x;
-        seq_dashed(&r, x, life_top, x, life_bottom, lifeline_color, 1.2f);
-    }
-
-    /* Participant header boxes (top and bottom). */
-    for (size_t i = 0; i < s.part_count; i++) {
-        struct participant *p = &s.parts[i];
-        float lw = measure(measure_fn, measure_ud, p->label, SEQ_PART_FS);
-        float bw = lw + 24.0f;
-        if (bw < 70.0f) {
-            bw = 70.0f;
-        }
-        float top_cy = (float)SEQ_MARGIN + (float)SEQ_HEADER_H * 0.5f;
-        float bot_cy = life_bottom + (float)SEQ_HEADER_H * 0.5f;
-        seq_box(&r, p->x, top_cy, bw, (float)SEQ_HEADER_H, header_fill, stroke, 2.0f, 4.0f);
-        seq_box(&r, p->x, bot_cy, bw, (float)SEQ_HEADER_H, header_fill, stroke, 2.0f, 4.0f);
-        seq_text(&r, p->x - lw * 0.5f, top_cy + SEQ_PART_FS / 3.0f, p->label, SEQ_PART_FS,
-                 text_color);
-        seq_text(&r, p->x - lw * 0.5f, bot_cy + SEQ_PART_FS / 3.0f, p->label, SEQ_PART_FS,
-                 text_color);
-    }
-
-    /* Events. */
-    for (size_t i = 0; i < s.event_count; i++) {
-        struct event *e = &s.events[i];
-        if (e->kind == EV_NOTE) {
-            float x = s.parts[e->src].x;
-            float tw = measure(measure_fn, measure_ud, e->text, SEQ_MSG_FS);
-            float bw = tw + 20.0f;
-            float cy = e->y + (float)SEQ_NOTE_H * 0.5f;
-            seq_box(&r, x, cy, bw, (float)SEQ_NOTE_H, note_fill, stroke, 1.2f, 2.0f);
-            seq_text(&r, x - tw * 0.5f, cy + SEQ_MSG_FS / 3.0f, e->text, SEQ_MSG_FS, text_color);
-            continue;
-        }
-
-        float xs = s.parts[e->src].x;
-        float xt = s.parts[e->tgt].x;
-        if (e->src == e->tgt) {
-            /* Self-message: a small loop to the right of the lifeline. */
-            float loop_w = 36.0f;
-            float y0 = e->y, y1 = e->y + 20.0f;
-            seq_seg(&r, xs, y0, xs + loop_w, y0, stroke, 1.4f);
-            seq_seg(&r, xs + loop_w, y0, xs + loop_w, y1, stroke, 1.4f);
-            if (e->dashed) {
-                seq_dashed(&r, xs + loop_w, y1, xs + 6.0f, y1, stroke, 1.4f);
-            } else {
-                seq_seg(&r, xs + loop_w, y1, xs + 6.0f, y1, stroke, 1.4f);
-            }
-            if (e->arrow) {
-                seq_arrowhead(&r, xs + 6.0f, y1, -1.0f, stroke);
-            }
-            seq_text(&r, xs + loop_w + 8.0f, y0 + SEQ_MSG_FS / 3.0f, e->text, SEQ_MSG_FS,
-                     text_color);
-            continue;
-        }
-
-        float dir = xt > xs ? 1.0f : -1.0f;
-        float tip = xt - dir * 1.0f;
-        if (e->dashed) {
-            seq_dashed(&r, xs, e->y, tip, e->y, stroke, 1.4f);
-        } else {
-            seq_seg(&r, xs, e->y, tip, e->y, stroke, 1.4f);
-        }
-        if (e->arrow) {
-            seq_arrowhead(&r, tip, e->y, dir, stroke);
-        }
-        float tw = measure(measure_fn, measure_ud, e->text, SEQ_MSG_FS);
-        seq_text(&r, (xs + xt) * 0.5f - tw * 0.5f, e->y - 6.0f, e->text, SEQ_MSG_FS, text_color);
+    struct yetty_ycore_void_result emit_result =
+        seq_emit_drawables(&r, &s, measure_fn, measure_ud, life_top, life_bottom, header_fill,
+                           stroke, text_color, lifeline_color, note_fill);
+    if (YETTY_IS_ERR(emit_result)) {
+        yetty_ydraw_drawable_list_destroy(br.value);
+        seq_destroy(&s);
+        return YETTY_ERR(yetty_ydiagram_seq_buffer, "sequence_render: emit failed", emit_result);
     }
 
     seq_destroy(&s);

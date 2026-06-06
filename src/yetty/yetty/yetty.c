@@ -3,6 +3,7 @@
  */
 
 #include <yetty/yetty/yetty.h>
+#include <yetty/ycore/result.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
@@ -326,7 +327,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             apply.zoom_visual_apply.offset_x = yetty->visual_zoom_offset_x;
             apply.zoom_visual_apply.offset_y = yetty->visual_zoom_offset_y;
             if (yetty->tabbar) {
-                yetty_yui_tabbar_on_event(yetty->tabbar, &apply);
+                { struct yetty_ycore_int_result drop_r = yetty_yui_tabbar_on_event(yetty->tabbar, &apply); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event"); }
             }
         }
         if (yetty->event_loop && yetty->event_loop->ops->request_render) {
@@ -368,7 +369,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 apply.zoom_visual_apply.offset_x = yetty->visual_zoom_offset_x;
                 apply.zoom_visual_apply.offset_y = yetty->visual_zoom_offset_y;
                 if (yetty->tabbar) {
-                    yetty_yui_tabbar_on_event(yetty->tabbar, &apply);
+                    { struct yetty_ycore_int_result drop_r = yetty_yui_tabbar_on_event(yetty->tabbar, &apply); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event"); }
                 }
             }
             if (yetty->event_loop && yetty->event_loop->ops->request_render) {
@@ -442,7 +443,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * See terminal.c for the actual restructuring. */
     if (event->type == YETTY_YCORE_ZOOM_CELL_SIZE) {
         if (yetty->tabbar) {
-            yetty_yui_tabbar_on_event(yetty->tabbar, event);
+            { struct yetty_ycore_int_result drop_r = yetty_yui_tabbar_on_event(yetty->tabbar, event); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event"); }
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -489,7 +490,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             ws_height = 0.0f;
         }
         if (yetty->tabbar) {
-            yetty_yui_tabbar_resize(yetty->tabbar, (float)width, ws_height, (float)height);
+            { struct yetty_ycore_void_result drop_r = yetty_yui_tabbar_resize(yetty->tabbar, (float)width, ws_height, (float)height); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_resize"); }
         }
 
         /* Resize the app-level yui's scene canvas to match the full
@@ -588,13 +589,16 @@ static struct yetty_ycore_int_result yetty_event_handler(
             /* Make sure the new pane gets a non-empty rect now that a
              * root tile exists. */
             if (yetty->window_width > 0 && yetty->window_height > 0) {
-                yetty_yui_tabbar_resize(
-                    yetty->tabbar, yetty->window_width,
-                    yetty->window_height -
-                        (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f),
-                    yetty->window_height);
+                {
+                    struct yetty_ycore_void_result drop_r = yetty_yui_tabbar_resize(
+                        yetty->tabbar, yetty->window_width,
+                        yetty->window_height -
+                            (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f),
+                        yetty->window_height);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "yetty: tabbar resize");
+                }
             }
-            yetty_yui_workspace_set_active(ws, 1);
+            { struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(ws, 1); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_workspace_set_active"); }
             if (yetty->event_loop && yetty->event_loop->ops &&
                 yetty->event_loop->ops->request_render) {
                 yetty->event_loop->ops->request_render(yetty->event_loop);
@@ -641,17 +645,20 @@ static struct yetty_ycore_int_result yetty_event_handler(
                     //
                     yetty_ycore_error_destroy(tr.error);
                 } else {
-                    yetty_yui_tile_pane_push_view(new_pane, yetty_yterminal_terminal_as_view(tr.value));
+                    { struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(new_pane, yetty_yterminal_terminal_as_view(tr.value)); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tile_pane_push_view"); }
                 }
                 yetty_yui_tile_clear_focus(root);
                 yetty_yui_tile_pane_set_focused(new_pane, 1);
             }
             if (yetty->window_width > 0 && yetty->window_height > 0) {
-                yetty_yui_tabbar_resize(
-                    yetty->tabbar, yetty->window_width,
-                    yetty->window_height -
-                        (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f),
-                    yetty->window_height);
+                {
+                    struct yetty_ycore_void_result drop_r = yetty_yui_tabbar_resize(
+                        yetty->tabbar, yetty->window_width,
+                        yetty->window_height -
+                            (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f),
+                        yetty->window_height);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "yetty: tabbar resize");
+                }
             }
             if (yetty->event_loop && yetty->event_loop->ops &&
                 yetty->event_loop->ops->request_render) {
@@ -701,7 +708,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
     if (event->type == YETTY_YCORE_SHUTDOWN) {
         ydebug("yetty: SHUTDOWN — winding down");
         if (yetty->tabbar) {
-            yetty_yui_tabbar_on_event(yetty->tabbar, event);
+            { struct yetty_ycore_int_result drop_r = yetty_yui_tabbar_on_event(yetty->tabbar, event); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event"); }
         }
         if (yetty->event_loop && yetty->event_loop->ops->stop) {
             yetty->event_loop->ops->stop(yetty->event_loop);
@@ -945,6 +952,7 @@ static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, in
     yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
 {
     struct yetty_yetty_yetty *yetty = userdata;
@@ -1099,7 +1107,7 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
     /* Register event listeners */
     struct yetty_ycore_void_result res = register_event_listeners(yetty);
     if (!YETTY_IS_OK(res)) {
-        yetty_destroy(yetty);
+        (void)yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, "failed to register event listeners");
     }
 
@@ -1107,7 +1115,7 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
     ydebug("yetty_create: Creating tabbar...");
     struct yetty_yui_tabbar_ptr_result tb_res = yetty_yui_tabbar_create(config);
     if (!YETTY_IS_OK(tb_res)) {
-        yetty_destroy(yetty);
+        (void)yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, "Failed to create tabbar");
     }
     yetty->tabbar = tb_res.value;
@@ -1119,7 +1127,7 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
     struct yetty_ycore_void_result layout_res =
         yetty_yui_tabbar_add_workspace_from_config(yetty->tabbar, config, &yetty->context);
     if (!YETTY_IS_OK(layout_res)) {
-        yetty_destroy(yetty);
+        (void)yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, "yetty_create: load initial workspace failed",
                          layout_res);
     }
@@ -1227,7 +1235,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
     /* Destroy tabbar (cascades to each workspace, its tiles, and views). */
     if (yetty->tabbar) {
         ydebug("yetty_destroy: destroying tabbar");
-        yetty_yui_tabbar_destroy(yetty->tabbar);
+        (void)yetty_yui_tabbar_destroy(yetty->tabbar);
         yetty->tabbar = NULL;
         ydebug("yetty_destroy: tabbar destroyed");
     }

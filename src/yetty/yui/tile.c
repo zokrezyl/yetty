@@ -140,10 +140,10 @@ static struct yetty_ycore_void_result split_set_bounds(struct yetty_yui_tile *se
     }
 
     if (split->first) {
-        yetty_yui_tile_set_bounds(split->first, first_bounds);
+        { struct yetty_ycore_void_result drop_r = yetty_yui_tile_set_bounds(split->first, first_bounds); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_set_bounds"); }
     }
     if (split->second) {
-        yetty_yui_tile_set_bounds(split->second, second_bounds);
+        { struct yetty_ycore_void_result drop_r = yetty_yui_tile_set_bounds(split->second, second_bounds); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_set_bounds"); }
     }
 
     return YETTY_OK_VOID();
@@ -173,10 +173,10 @@ static struct yetty_ycore_int_result split_on_event(struct yetty_yui_tile *self,
 
         /* Pass to both children with their respective sizes */
         if (split->first) {
-            yetty_yui_tile_on_event(split->first, &first_event);
+            { struct yetty_ycore_int_result drop_r = yetty_yui_tile_on_event(split->first, &first_event); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tile_on_event"); }
         }
         if (split->second) {
-            yetty_yui_tile_on_event(split->second, &second_event);
+            { struct yetty_ycore_int_result drop_r = yetty_yui_tile_on_event(split->second, &second_event); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tile_on_event"); }
         }
 
         return YETTY_OK(yetty_ycore_int, 1);
@@ -330,7 +330,7 @@ static struct yetty_ycore_void_result pane_set_bounds(struct yetty_yui_tile *sel
 
     /* Propagate to active view */
     if (pane->view_count > 0 && pane->views[pane->view_count - 1]) {
-        yetty_yui_view_set_bounds(pane->views[pane->view_count - 1], bounds);
+        { struct yetty_ycore_void_result drop_r = yetty_yui_view_set_bounds(pane->views[pane->view_count - 1], bounds); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_view_set_bounds"); }
     }
 
     return YETTY_OK_VOID();
@@ -569,7 +569,7 @@ struct yetty_ycore_void_result yetty_yui_tile_pane_push_view(struct yetty_yui_ti
 
     /* Set bounds on new view */
     if (view) {
-        yetty_yui_view_set_bounds(view, pane->base.bounds);
+        { struct yetty_ycore_void_result drop_r = yetty_yui_view_set_bounds(view, pane->base.bounds); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_view_set_bounds"); }
     }
 
     return YETTY_OK_VOID();
@@ -858,17 +858,17 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
         if (ratio > 0.9f) {
             ratio = 0.9f;
         }
-        yetty_yui_tile_split_set_ratio(res.value, ratio);
+        { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_ratio(res.value, ratio); YETTY_RETURN_IF_ERR(yetty_yui_tile_ptr, drop_r, "drop: yetty_yui_tile_split_set_ratio"); }
 
         /* Create first child */
         first_config = config->ops->get_node(config, "first");
         if (first_config) {
             first_res = yetty_yui_tile_create_from_config(first_config, yetty_ctx);
             if (YETTY_IS_ERR(first_res)) {
-                yetty_yui_tile_destroy(res.value);
+                (void)yetty_yui_tile_destroy(res.value);
                 return first_res;
             }
-            yetty_yui_tile_split_set_first(res.value, first_res.value);
+            { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_first(res.value, first_res.value); YETTY_RETURN_IF_ERR(yetty_yui_tile_ptr, drop_r, "drop: yetty_yui_tile_split_set_first"); }
         }
 
         /* Create second child */
@@ -876,10 +876,10 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
         if (second_config) {
             second_res = yetty_yui_tile_create_from_config(second_config, yetty_ctx);
             if (YETTY_IS_ERR(second_res)) {
-                yetty_yui_tile_destroy(res.value);
+                (void)yetty_yui_tile_destroy(res.value);
                 return second_res;
             }
-            yetty_yui_tile_split_set_second(res.value, second_res.value);
+            { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_second(res.value, second_res.value); YETTY_RETURN_IF_ERR(yetty_yui_tile_ptr, drop_r, "drop: yetty_yui_tile_split_set_second"); }
         }
 
         return res;
@@ -963,11 +963,11 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
             struct yetty_ydvnc_viewer_ptr_result dv_res =
                 yetty_ydvnc_viewer_create(host, port, password, yetty_ctx);
             if (YETTY_IS_ERR(dv_res)) {
-                yetty_yui_tile_destroy(res.value);
+                (void)yetty_yui_tile_destroy(res.value);
                 return YETTY_ERR(yetty_yui_tile_ptr, "ydvnc viewer create failed", dv_res);
             }
 
-            yetty_yui_tile_pane_push_view(res.value, yetty_ydvnc_viewer_as_view(dv_res.value));
+            { struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(res.value, yetty_ydvnc_viewer_as_view(dv_res.value)); YETTY_RETURN_IF_ERR(yetty_yui_tile_ptr, drop_r, "drop: yetty_yui_tile_pane_push_view"); }
         } else if (vnc_client && strlen(vnc_client) > 0) {
             /* VNC client mode: create VNC viewer */
             char host[256] = {0};
@@ -988,11 +988,11 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
             struct yetty_vnc_viewer_ptr_result vnc_res =
                 yetty_yvnc_viewer_create(host, port, yetty_ctx);
             if (YETTY_IS_ERR(vnc_res)) {
-                yetty_yui_tile_destroy(res.value);
+                (void)yetty_yui_tile_destroy(res.value);
                 return YETTY_ERR(yetty_yui_tile_ptr, vnc_res.error.msg);
             }
 
-            yetty_yui_tile_pane_push_view(res.value, yetty_yvnc_viewer_as_view(vnc_res.value));
+            { struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(res.value, yetty_yvnc_viewer_as_view(vnc_res.value)); YETTY_RETURN_IF_ERR(yetty_yui_tile_ptr, drop_r, "drop: yetty_yui_tile_pane_push_view"); }
         } else {
             /* Normal mode: create terminal */
             const char *view_type;
@@ -1004,14 +1004,17 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
             if (strcmp(view_type, "terminal") == 0) {
                 term_res = yetty_yterminal_terminal_create(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
-                    yetty_yui_tile_destroy(res.value);
+                    (void)yetty_yui_tile_destroy(res.value);
                     return YETTY_ERR(yetty_yui_tile_ptr,
                                      "tile_create_from_config: terminal_create failed",
                                      term_res);
                 }
 
-                yetty_yui_tile_pane_push_view(res.value,
-                                              yetty_yterminal_terminal_as_view(term_res.value));
+                {
+                    struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(
+                        res.value, yetty_yterminal_terminal_as_view(term_res.value));
+                    YETTY_RETURN_IF_ERR(yetty_yui_tile_ptr, drop_r, "tile_create: push_view");
+                }
             }
         }
     }

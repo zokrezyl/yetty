@@ -12,7 +12,7 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 YPLOT="${YPLOT:-$ROOT/build-desktop-ytrace-release/tools/yplot/yplot}"
-PAUSE="${DEMO_PAUSE:-2}"
+PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YPLOT" ]; then
     echo "yplot binary not found at $YPLOT" >&2
@@ -63,4 +63,3 @@ printf '\n(3) static envelope, travelling phase:\n'
     '@travel.color=#74C5A5'
 
 printf '\n=== done — holding open ===\n'
-sleep 600

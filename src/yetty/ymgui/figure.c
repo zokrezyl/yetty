@@ -655,7 +655,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_input(
         f->frame_bytes = NULL;
         f->frame_size = 0;
         f->has_frame = 0;
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+        { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
         return YETTY_OK_VOID();
     case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
     case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
@@ -715,7 +715,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yf
         f->frame_bytes = NULL;
         f->frame_size = 0;
         f->has_frame = 0;
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+        { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
         return YETTY_OK_VOID();
     case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
     case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
@@ -792,26 +792,27 @@ struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_ymgui_figure *f = ymgui_figure_from_obj(figure_obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(figure_obj_r.value + 1);
 
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect); YETTY_RETURN_IF_ERR(yetty_ymgui_figure_ptr, set_r, "drop: yetty_yfigure_figure_rect_set"); }
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ymgui_figure_ptr, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     f->pipeline = pipeline;
     return YETTY_OK(yetty_ymgui_figure_ptr, f);
 }
 
-struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base)
+struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base)
 {
     if (!base || !((struct yetty_yclass_object *)(base) - 1)) {
-        return NULL;
+        return YETTY_ERR(yetty_ymgui_figure_ptr, "yetty_ymgui_figure_from_base: NULL base");
     }
     struct yetty_yclass_ptr_result cls_r = yetty_ymgui_figure_class_get();
     if (YETTY_IS_ERR(cls_r)) {
-        yetty_ycore_error_destroy(cls_r.error);
-        return NULL;
+        return YETTY_ERR(yetty_ymgui_figure_ptr, "yetty_ymgui_figure_from_base: class", cls_r);
     }
     if (((struct yetty_yclass_object *)(base) - 1)->klass != cls_r.value) {
-        return NULL;
+        /* base is not an ymgui figure — a valid downcast miss, not an error. */
+        return YETTY_OK(yetty_ymgui_figure_ptr, NULL);
     }
-    return ymgui_figure_from_obj((struct yetty_yclass_object *)base - 1);
+    return YETTY_OK(yetty_ymgui_figure_ptr,
+                    ymgui_figure_from_obj((struct yetty_yclass_object *)base - 1));
 }
 
 struct yetty_yfigure_figure *yetty_ymgui_figure_as_figure(struct yetty_ymgui_figure *f)
@@ -849,7 +850,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_ymgui_f
     f->frame_bytes = copy;
     f->frame_size = frame_size;
     f->has_frame = 1;
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     return YETTY_OK_VOID();
 }
 
@@ -914,7 +915,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_ymgui_f
     f->atlas_w = atlas_w;
     f->atlas_h = atlas_h;
     f->atlas_ready = 1;
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     ydebug("ymgui_figure_set_atlas: %ux%u R8", atlas_w, atlas_h);
     return YETTY_OK_VOID();
 }
@@ -1084,5 +1085,5 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
 /* Downcast helper. Returns the typed pointer when `base` is actually
  * an ymgui figure (identified by its ops vtable), NULL otherwise. Use
  * this to filter the heterogeneous children of a yfigure container. */
-struct yetty_ymgui_figure *yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base);
+struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base);
 #endif

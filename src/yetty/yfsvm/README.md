@@ -59,6 +59,7 @@ Programs are serialized as 32-bit words:
 | 0x04 | LOAD_T | Load time: `dst = t` |
 | 0x05 | LOAD_S | Load sampler: `dst = samplers[imm & 7]` |
 | 0x06 | MOV | Move: `dst = src1` |
+| 0x07 | LOAD_Y | Load 2nd spatial input: `dst = y` (field/heatmap mode) |
 
 ### Arithmetic
 | Opcode | Name | Description |
@@ -83,6 +84,10 @@ Programs are serialized as 32-bit words:
 | 0x27 | SINH | `dst = sinh(src1)` |
 | 0x28 | COSH | `dst = cosh(src1)` |
 | 0x29 | TANH | `dst = tanh(src1)` |
+| 0x2A | ASINH | `dst = asinh(src1)` |
+| 0x2B | ACOSH | `dst = acosh(src1)` |
+| 0x2C | ATANH | `dst = atanh(src1)` |
+| 0x2D | SINC | `dst = sin(src1)/src1` (1 at src1=0) |
 
 ### Exponential/Logarithmic
 | Opcode | Name | Description |
@@ -94,6 +99,8 @@ Programs are serialized as 32-bit words:
 | 0x34 | POW | `dst = src1^src2` |
 | 0x35 | SQRT | `dst = sqrt(src1)` |
 | 0x36 | RSQRT | `dst = 1/sqrt(src1)` |
+| 0x37 | ERF | `dst = erf(src1)` (Gaussian error function) |
+| 0x38 | ERFC | `dst = erfc(src1) = 1 - erf(src1)` |
 
 ### Utility
 | Opcode | Name | Description |
@@ -109,6 +116,29 @@ Programs are serialized as 32-bit words:
 | 0x48 | CLAMP01 | `dst = clamp(src1, 0, 1)` |
 | 0x49 | STEP | `dst = step(src1, src2)` |
 | 0x4A | MIX | `dst = mix(src1, src2, r[imm&0xF])` |
+| 0x4B | SMOOTHSTEP | `dst = smoothstep(src1, src2, r[imm&0xF])` |
+| 0x4C | TRUNC | `dst = trunc(src1)` |
+| 0x4D | RADIANS | `dst = radians(src1)` |
+| 0x4E | DEGREES | `dst = degrees(src1)` |
+| 0x4F | SELECT | `dst = cond>0.5 ? src2 : src1` (cond = r[imm&0xF]) |
+
+### Comparison (return 1.0 / 0.0)
+| Opcode | Name | Description |
+|--------|------|-------------|
+| 0x50 | LT | `dst = src1 < src2` |
+| 0x51 | GT | `dst = src1 > src2` |
+| 0x52 | LE | `dst = src1 <= src2` |
+| 0x53 | GE | `dst = src1 >= src2` |
+| 0x54 | EQ | `dst = src1 == src2` |
+| 0x55 | NE | `dst = src1 != src2` |
+
+### Stochastic
+| Opcode | Name | Description |
+|--------|------|-------------|
+| 0x60 | RAND | `dst = hash(src1)` white noise in [0,1) |
+| 0x61 | NOISE | `dst =` smooth value noise (interpolated lattice hash) |
+| 0x62 | RAND2 | `dst = hash(src1, src2)` 2D white noise in [0,1) |
+| 0x63 | NOISE2 | `dst =` smooth 2D value noise (bilinear lattice hash) |
 
 ## Limits
 

@@ -20,6 +20,6 @@ struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_ygui_object *obj, float v);
 struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_ygui_object *obj, float mn, float mx, float step);
-float yetty_ygui_spinner_get_value(const struct yetty_ygui_object *obj);
+struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_ygui_object *obj);
 
 #endif

@@ -265,15 +265,15 @@ struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_ygu
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_dropdown_get_selected(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_dropdown_get_selected: invalid args");
     }
-    struct dropdown_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_dropdown_class_get().value);
-    return d->selected;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_dropdown_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_dropdown_get_selected: data_get");
+    struct dropdown_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_int, d->selected);
 }
 
 [[clang::annotate("expose")]]

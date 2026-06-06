@@ -2391,14 +2391,22 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
         return 1;
     }
     if (key == YETTY_YGUI_KEY_ARROW_LEFT) {
-        int active = yetty_ygui_tabbar_active(app->tabbar);
+        struct yetty_ycore_int_result active_r = yetty_ygui_tabbar_active(app->tabbar);
+        int active = YETTY_IS_OK(active_r) ? active_r.value : 0;
+        if (YETTY_IS_ERR(active_r)) {
+            yetty_ycore_error_destroy(active_r.error);
+        }
         int next = active > 0 ? active - 1 : TOP_TAB_COUNT - 1;
         struct yetty_ycore_void_result r = yetty_ygui_tabbar_set_active(app->tabbar, next);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
         return 1;
     }
     if (key == YETTY_YGUI_KEY_ARROW_RIGHT) {
-        int active = yetty_ygui_tabbar_active(app->tabbar);
+        struct yetty_ycore_int_result active_r = yetty_ygui_tabbar_active(app->tabbar);
+        int active = YETTY_IS_OK(active_r) ? active_r.value : 0;
+        if (YETTY_IS_ERR(active_r)) {
+            yetty_ycore_error_destroy(active_r.error);
+        }
         int next = (active + 1) % TOP_TAB_COUNT;
         struct yetty_ycore_void_result r = yetty_ygui_tabbar_set_active(app->tabbar, next);
         if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
@@ -3081,6 +3089,26 @@ static float app_content_scale(const struct app *app)
     return s > 0.0f ? s : 1.0f;
 }
 
+/* Slave end of the memory-pty pair: a resize on the producer (ygui) endpoint
+ * lands here — the SIGWINCH analog — and we hand the new pixel size to the
+ * compositor's root container. cols/rows are terminal-grid concepts the
+ * compositor has no use for; only the pixel extent matters. */
+static void standalone_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows,
+                                     uint32_t pixel_w, uint32_t pixel_h)
+{
+    struct app *app = userdata;
+    (void)cols;
+    (void)rows;
+    if (!app->root_container) {
+        return;
+    }
+    struct yetty_ycore_rectangle root_rect = {.min = {0, 0},
+                                              .max = {(float)pixel_w, (float)pixel_h}};
+    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root_container);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, root_rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+}
+
 static struct yetty_ycore_int_result standalone_event_handler(
     struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
 {
@@ -3155,13 +3183,13 @@ static struct yetty_ycore_int_result standalone_event_handler(
                 app->engine, (float)ev->resize.width / scale, (float)ev->resize.height / scale);
             if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
         }
-        if (app->root_container) {
-            struct yetty_ycore_rectangle root_rect = {
-                .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
-            struct yetty_yfigure_figure *rf =
-                yetty_yfigure_container_as_figure(app->root_container);
-            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, root_rect);
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+        /* Drive the compositor-side rect through the pty pair (→
+         * standalone_pty_resize_cb) instead of poking the container directly,
+         * so the resize travels the same path as a real PTY's TIOCSWINSZ. */
+        if (app->pty_pair.a && app->pty_pair.a->ops->resize) {
+            struct yetty_ycore_void_result rr = app->pty_pair.a->ops->resize(
+                app->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
+            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
@@ -3256,7 +3284,20 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
         struct yetty_font_font_result fr =
             yetty_yfont_msdf_font_create(cdb_path, shader_path, "ygreeter_default");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: msdf_font_create");
+        if (YETTY_IS_ERR(fr)) {
+            /* The MSDF glyph cdb + shader are NOT embedded in ygreeter — they
+             * come from the main yetty install's asset extraction into the
+             * shared data dir. Name the exact paths on stderr (the Result msg
+             * can only carry a static literal, and the trace log is off by
+             * default) so the failure is actionable, then propagate. */
+            fprintf(stderr,
+                    "ygreeter: cannot load MSDF font — required runtime assets are missing.\n"
+                    "  glyph cdb: %s\n"
+                    "  shader:    %s\n"
+                    "  (provided by the main yetty install; run yetty once to extract fonts)\n",
+                    cdb_path, shader_path);
+            return YETTY_ERR(yetty_ycore_void, "standalone: msdf_font_create", fr);
+        }
         app->font = fr.value;
         struct yetty_ycore_void_result load = app->font->ops->load_basic_latin(app->font);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, load, "standalone: load_basic_latin");
@@ -3377,6 +3418,10 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         (yetty_yplatform_memory_pty_wake_fn)app->yframework->event_loop->ops->request_render,
         app->yframework->event_loop);
 
+    /* Window-size changes reach the compositor end the same way bytes do:
+     * the producer endpoint is resized, the pair delivers it to this peer. */
+    yetty_yplatform_memory_pty_set_resize(app->pty_pair.b, standalone_pty_resize_cb, app);
+
     app->listener.handler = standalone_event_handler;
     struct yetty_ycore_void_result rel =
         yetty_yevent_register_default_listeners(app->yframework->event_loop, &app->listener);
@@ -3476,6 +3521,39 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     return YETTY_OK_VOID();
 }
 
+/* Confirm the embedded assets the rich-content tabs depend on actually
+ * landed on disk. Extraction can report "success" while leaving nothing
+ * behind — a build without incbin (the no-op extractor stub), a stale
+ * skip-marker sitting over a wiped data dir, or a partial brotli decode
+ * all do it. Without this check the missing files are swallowed twice
+ * over (discover_* returns silently, rebuild_top discards the load
+ * error), so the tabs render blank instead of failing. Surface it as a
+ * hard error so startup aborts with a clear message — the same way yetty
+ * itself dies when its own asset extraction fails. */
+static struct yetty_ycore_void_result ygreeter_verify_assets(const char *data_dir)
+{
+    static const char *const required[] = {
+        "logo-1.jpeg",           "logo-2.jpeg",    "logo-3.jpeg", "logo-4.jpeg",
+        "yetty-unchained-2.mp4", "pdf-sample.pdf", "README.md",
+    };
+    int missing = 0;
+    char path_buf[1024];
+    for (size_t i = 0; i < sizeof(required) / sizeof(required[0]); ++i) {
+        snprintf(path_buf, sizeof(path_buf), "%s/%s", data_dir, required[i]);
+        if (yetty_yplatform_file_exists(path_buf)) {
+            continue;
+        }
+        yerror("ygreeter: required runtime asset missing: %s", path_buf);
+        missing++;
+    }
+    if (missing > 0) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "ygreeter: required runtime assets are missing from the data dir "
+                         "(embedded-asset extraction produced none) — see log for the list");
+    }
+    return YETTY_OK_VOID();
+}
+
 /* yinit-shaped wrapper for ygreeter's own incbin extractor (logos +
  * demo video). We don't reuse yetty's larger
  * `yetty_platform_extract_assets` here because that one drives off the
@@ -3484,10 +3562,14 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
 static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
 {
     const char *data_dir = yetty_yplatform_get_data_dir();
-    if (data_dir && ygreeter_embedded_assets_extract(data_dir) != 0) {
+    if (!data_dir || !*data_dir) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "ygreeter: could not resolve a data dir for asset extraction");
+    }
+    if (ygreeter_embedded_assets_extract(data_dir) != 0) {
         return YETTY_ERR(yetty_ycore_void, "ygreeter: embedded asset extraction failed");
     }
-    return YETTY_OK_VOID();
+    return ygreeter_verify_assets(data_dir);
 }
 
 static int run_standalone_mode(int argc, char **argv)

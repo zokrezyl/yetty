@@ -548,18 +548,18 @@ struct yetty_yplatform_pty_ptr_result yetty_yssh_ssh_pty_create(struct yetty_yco
     yetty_yssh_openssh_config_free(ssh_cfg);
 
     if (!pty->host || !pty->host_arg || !pty->username || !pty->term_type) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: string alloc failed");
     }
     if (!pty->password && !pty->private_key_path) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr,
                          "ssh: no credentials (set ssh/password, ssh/private-key-path, or "
                          "IdentityFile in ~/.ssh/config)");
     }
 
     if (pipe(pty->output_pipe) < 0) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: pipe failed");
     }
     fcntl(pty->output_pipe[0], F_SETFL, O_NONBLOCK);
@@ -567,34 +567,34 @@ struct yetty_yplatform_pty_ptr_result yetty_yssh_ssh_pty_create(struct yetty_yco
     pty->pipe_source.abstract = (uintptr_t)pty->output_pipe[0];
 
     if (libssh2_init(0) != 0) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: libssh2_init failed");
     }
     pty->libssh2_initialized = 1;
 
     pty->socket = ssh_pty_tcp_connect(pty->host, pty->port);
     if (pty->socket < 0) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: TCP connect failed");
     }
 
     pty->session = libssh2_session_init();
     if (!pty->session) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: session init failed");
     }
     libssh2_session_set_blocking(pty->session, 0);
 
     if (ssh_pty_handshake(pty) < 0) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: handshake failed");
     }
     if (ssh_pty_authenticate(pty) < 0) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: authentication failed");
     }
     if (ssh_pty_open_channel(pty) < 0) {
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: channel setup failed");
     }
 
@@ -604,7 +604,7 @@ struct yetty_yplatform_pty_ptr_result yetty_yssh_ssh_pty_create(struct yetty_yco
     pty->running = 1;
     if (pthread_create(&pty->reader_thread, NULL, ssh_pty_reader_thread, pty) != 0) {
         pty->running = 0;
-        ssh_pty_destroy(&pty->base);
+        (void)ssh_pty_destroy(&pty->base);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: reader thread failed");
     }
     pty->reader_started = 1;

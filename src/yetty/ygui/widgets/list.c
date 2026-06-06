@@ -186,15 +186,15 @@ struct yetty_ycore_void_result yetty_ygui_list_set_selected(struct yetty_ygui_ob
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_list_get_selected(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_list_get_selected(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_list_get_selected: NULL obj");
     }
-    return ((struct list_data *)yetty_ygui_data_get(
-                (struct yetty_ygui_object *)obj,
-                yetty_ygui_list_class_get().value))
-        ->selected;
+    struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_list_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result, "yetty_ygui_list_get_selected: data_get");
+    return YETTY_OK(yetty_ycore_int, ((struct list_data *)data_result.value)->selected);
 }
 
 #include "list.gen.c"

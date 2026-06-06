@@ -165,7 +165,6 @@ static struct config_node *navigate_path(struct config_node *root, const char *p
 
     struct config_node *current = root;
     char *token = strtok(buf, "/");
-    char *last_token = NULL;
 
     while (token) {
         char *next = strtok(NULL, "/");

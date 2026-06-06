@@ -608,10 +608,19 @@ def classify_struct_fields(name: str, struct_fields: dict[str, list[tuple[str, s
                                    nfn.lower() == base.lower()):
                     pointee = nft.replace("*", " ").replace("const", " ")
                     pointee = " ".join(pointee.split())
+                    # `const char *const *` (array of C strings, e.g.
+                    # WGPUDawnTogglesDescriptor::enabledToggles): the element
+                    # is itself a pointer, so stripping all `*` collapses it to
+                    # `char`. Detect the double indirection and mark it so the
+                    # codec serialises each string's bytes rather than the
+                    # (process-local, meaningless on the wire) pointer value.
+                    items = {"kind": "array_items", "ctype": pointee, "fname": nfn,
+                             "count_name": fname, "items_type": pointee}
+                    if pointee == "char" and nft.count("*") >= 2:
+                        items["string"] = True
                     out.append({"kind": "array_count", "ctype": traw, "fname": fname,
                                 "items_name": nfn, "items_type": pointee})
-                    out.append({"kind": "array_items", "ctype": pointee, "fname": nfn,
-                                "count_name": fname, "items_type": pointee})
+                    out.append(items)
                     skip_next = True
                     continue
         # WGPUStringView by value.
@@ -694,6 +703,8 @@ def field_kind_in_ctx(field: dict, handle_types: set[str], aliases: dict[str, st
                 return "fixed_array_scalar"
             return "unsupported"
         if field["kind"] == "array_items":
+            if field.get("string"):
+                return "array_string"
             t = field["items_type"]
             if t in handle_types:
                 return "array_handle"
@@ -763,6 +774,8 @@ def is_encodable_struct(name: str, struct_fields: dict[str, list[tuple[str, str]
             ok = False
             break
         if f["kind"] == "array_items":
+            if f.get("string"):
+                continue
             t = f["items_type"]
             if t in handle_types or t in pod_structs or t in _POD_SCALARS or t in aliases:
                 continue
@@ -799,7 +812,8 @@ def emit_struct_encoder_decoder(name: str, struct_fields: dict[str, list[tuple[s
     fields = classify_struct_fields(name, struct_fields)
 
     enc: list[str] = []
-    enc.append(f"void yrdawn_encode_{name}(const {name} *src, struct yetty_ycore_buffer *out);")
+    enc.append(f"struct yetty_ycore_void_result yrdawn_encode_{name}(const {name} *src, "
+               f"struct yetty_ycore_buffer *out);")
 
     dec: list[str] = []
     dec.append(f"int yrdawn_decode_{name}(void *ctx, const uint8_t **src, size_t *rem, "
@@ -817,31 +831,40 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
     body: list[str] = []
 
     # ----- encoder ----------------------------------------------------
-    body.append(f"void yrdawn_encode_{name}(const {name} *src,")
+    # Each serialised write returns a Result; we bail on the first failed
+    # append rather than absorbing it, so a buffer-grow failure surfaces to
+    # the caller instead of silently truncating the wire frame. `wresult` /
+    # `eresult` are block-scoped so the same name can repeat per field.
+    def write_prop(val_expr: str, size_expr: str, indent: str = "    ") -> None:
+        body.append(f"{indent}{{ struct yetty_ycore_void_result wresult = "
+                    f"yetty_ycore_buffer_write(out, {val_expr}, {size_expr}); "
+                    f"YETTY_RETURN_IF_ERR(yetty_ycore_void, wresult, "
+                    f"\"yrdawn_encode_{name}\"); }}")
+
+    def encode_prop(call_expr: str, indent: str = "    ") -> None:
+        body.append(f"{indent}{{ struct yetty_ycore_void_result eresult = {call_expr}; "
+                    f"YETTY_RETURN_IF_ERR(yetty_ycore_void, eresult, "
+                    f"\"yrdawn_encode_{name}\"); }}")
+
+    body.append(f"struct yetty_ycore_void_result yrdawn_encode_{name}(const {name} *src,")
     body.append("                                  struct yetty_ycore_buffer *out)")
     body.append("{")
     for f in fields:
         k = field_kind_in_ctx(f, handle_types, aliases, pod_structs, struct_names, encodable)
         fn = f["fname"]
         if k in ("scalar", "handle", "struct_pod"):
-            body.append(f"    {{ struct yetty_ycore_void_result r = "
-                        f"yetty_ycore_buffer_write(out, &src->{fn}, sizeof(src->{fn})); "
-                        f"if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error); }}")
+            write_prop(f"&src->{fn}", f"sizeof(src->{fn})")
         elif k == "struct_nonpod":
-            body.append(f"    yrdawn_encode_{f['ctype']}(&src->{fn}, out);")
+            encode_prop(f"yrdawn_encode_{f['ctype']}(&src->{fn}, out)")
         elif k == "stringview":
             body.append("    {")
             body.append(f"        uint64_t _len = (src->{fn}.length == WGPU_STRLEN || "
                         f"!src->{fn}.data)")
             body.append(f"            ? (src->{fn}.data ? (uint64_t)strlen(src->{fn}.data) : 0u)")
             body.append(f"            : (uint64_t)src->{fn}.length;")
-            body.append("        struct yetty_ycore_void_result _r1 = "
-                        "yetty_ycore_buffer_write(out, &_len, sizeof(_len));")
-            body.append("        if (YETTY_IS_ERR(_r1)) yetty_ycore_error_destroy(_r1.error);")
+            write_prop("&_len", "sizeof(_len)", indent="        ")
             body.append(f"        if (_len > 0 && src->{fn}.data) {{")
-            body.append(f"            struct yetty_ycore_void_result _r2 = "
-                        f"yetty_ycore_buffer_write(out, src->{fn}.data, (size_t)_len);")
-            body.append("            if (YETTY_IS_ERR(_r2)) yetty_ycore_error_destroy(_r2.error);")
+            write_prop(f"src->{fn}.data", "(size_t)_len", indent="            ")
             body.append("        }")
             body.append("    }")
         elif k == "next_in_chain":
@@ -855,16 +878,19 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
             body.append(f"        const WGPUChainedStruct *_ch = src->{fn};")
             body.append("        while (_ch) {")
             body.append("            uint8_t _tag = 1;")
-            body.append("            { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(out, &_tag, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            write_prop("&_tag", "1", indent="            ")
             body.append("            uint32_t _st = (uint32_t)_ch->sType;")
-            body.append("            { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(out, &_st, sizeof(_st)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            write_prop("&_st", "sizeof(_st)", indent="            ")
             body.append("            size_t _len_off = out->size;")
             body.append("            uint32_t _len_placeholder = 0;")
-            body.append("            { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(out, &_len_placeholder, sizeof(_len_placeholder)); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            write_prop("&_len_placeholder", "sizeof(_len_placeholder)", indent="            ")
             body.append("            size_t _body_off = out->size;")
             body.append("            switch (_st) {")
             for stype, struct in sorted(chainable.items()):
-                body.append(f"            case (uint32_t){stype}: yrdawn_encode_{struct}((const {struct} *)_ch, out); break;")
+                body.append(f"            case (uint32_t){stype}:")
+                encode_prop(f"yrdawn_encode_{struct}((const {struct} *)_ch, out)",
+                            indent="                ")
+                body.append("                break;")
             body.append("            default: break;")
             body.append("            }")
             body.append("            uint32_t _len = (uint32_t)(out->size - _body_off);")
@@ -872,7 +898,7 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
             body.append("            _ch = _ch->next;")
             body.append("        }")
             body.append("        uint8_t _term = 0;")
-            body.append("        { struct yetty_ycore_void_result _r = yetty_ycore_buffer_write(out, &_term, 1); if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }")
+            write_prop("&_term", "1", indent="        ")
             body.append("    }")
         elif k == "embedded_chain":
             # Header for an extension struct sitting in someone else's
@@ -887,49 +913,56 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
         elif k in ("ptr_pod", "ptr_nonpod"):
             body.append("    {")
             body.append(f"        uint8_t _present = src->{fn} ? 1u : 0u;")
-            body.append("        struct yetty_ycore_void_result _r1 = "
-                        "yetty_ycore_buffer_write(out, &_present, 1);")
-            body.append("        if (YETTY_IS_ERR(_r1)) yetty_ycore_error_destroy(_r1.error);")
+            write_prop("&_present", "1", indent="        ")
             body.append(f"        if (src->{fn}) {{")
             if k == "ptr_pod":
-                body.append(f"            struct yetty_ycore_void_result _r2 = "
-                            f"yetty_ycore_buffer_write(out, src->{fn}, sizeof(*src->{fn}));")
-                body.append("            if (YETTY_IS_ERR(_r2)) yetty_ycore_error_destroy(_r2.error);")
+                write_prop(f"src->{fn}", f"sizeof(*src->{fn})", indent="            ")
             else:
-                body.append(f"            yrdawn_encode_{f['ctype']}(src->{fn}, out);")
+                encode_prop(f"yrdawn_encode_{f['ctype']}(src->{fn}, out)", indent="            ")
             body.append("        }")
             body.append("    }")
         elif k == "array_count":
-            body.append(f"    {{ uint64_t _c = (uint64_t)src->{fn}; "
-                        f"struct yetty_ycore_void_result _r = "
-                        f"yetty_ycore_buffer_write(out, &_c, sizeof(_c)); "
-                        f"if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }}")
+            body.append(f"    {{ uint64_t _c = (uint64_t)src->{fn};")
+            write_prop("&_c", "sizeof(_c)", indent="      ")
+            body.append("    }")
         elif k in ("array_handle", "array_pod", "array_scalar"):
             cnt = f["count_name"]
             body.append(f"    for (size_t _i = 0; _i < (size_t)src->{cnt}; ++_i) {{")
-            body.append(f"        struct yetty_ycore_void_result _r = "
-                        f"yetty_ycore_buffer_write(out, &src->{fn}[_i], sizeof(src->{fn}[_i]));")
-            body.append("        if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error);")
+            write_prop(f"&src->{fn}[_i]", f"sizeof(src->{fn}[_i])", indent="        ")
             body.append("    }")
         elif k == "array_nonpod":
             cnt = f["count_name"]
-            body.append(f"    for (size_t _i = 0; _i < (size_t)src->{cnt}; ++_i)")
-            body.append(f"        yrdawn_encode_{f['items_type']}(&src->{fn}[_i], out);")
+            body.append(f"    for (size_t _i = 0; _i < (size_t)src->{cnt}; ++_i) {{")
+            encode_prop(f"yrdawn_encode_{f['items_type']}(&src->{fn}[_i], out)", indent="        ")
+            body.append("    }")
+        elif k == "array_string":
+            # Array of C strings: each element is a NUL-terminated pointer.
+            # Serialise length + bytes per string (the pointer value itself
+            # is process-local and useless across the wire).
+            cnt = f["count_name"]
+            body.append(f"    for (size_t _i = 0; _i < (size_t)src->{cnt}; ++_i) {{")
+            body.append(f"        const char *_s = src->{fn}[_i];")
+            body.append("        uint64_t _slen = _s ? (uint64_t)strlen(_s) : 0u;")
+            write_prop("&_slen", "sizeof(_slen)", indent="        ")
+            body.append("        if (_slen > 0) {")
+            write_prop("_s", "(size_t)_slen", indent="            ")
+            body.append("        }")
+            body.append("    }")
         elif k in ("fixed_array_scalar", "fixed_array_pod", "fixed_array_handle"):
             # 1-byte present flag + N elements (count from the IDL,
             # baked into the codec). Handles NULL pointers cleanly so
             # nullable Dawn fields round-trip.
             n = f["length"]
             elem_t = f["ctype"]
-            body.append(f"    {{ uint8_t _p = src->{fn} ? 1u : 0u; "
-                        f"struct yetty_ycore_void_result _r = "
-                        f"yetty_ycore_buffer_write(out, &_p, 1); "
-                        f"if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }}")
-            body.append(f"    if (src->{fn}) {{ struct yetty_ycore_void_result _r = "
-                        f"yetty_ycore_buffer_write(out, src->{fn}, sizeof({elem_t}) * {n}); "
-                        f"if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }}")
+            body.append(f"    {{ uint8_t _p = src->{fn} ? 1u : 0u;")
+            write_prop("&_p", "1", indent="      ")
+            body.append("    }")
+            body.append(f"    if (src->{fn}) {{")
+            write_prop(f"src->{fn}", f"sizeof({elem_t}) * {n}", indent="        ")
+            body.append("    }")
         else:
             body.append(f"    /* unsupported field {fn}: kind={k} */")
+    body.append("    return YETTY_OK_VOID();")
     body.append("}")
     body.append("")
 
@@ -1078,6 +1111,32 @@ def emit_struct_codec_body(name: str, struct_fields: dict[str, list[tuple[str, s
                 body.append("            *src += sizeof(_arr[_i]); *rem -= sizeof(_arr[_i]);")
             body.append("        }")
             body.append(f"        out->{fn} = _arr;")
+            body.append("    }")
+        elif k == "array_string":
+            # Array of C strings, arena-allocated (the whole arena is freed
+            # wholesale after dispatch, so no per-string free here).
+            cnt = f["count_name"]
+            body.append("    {")
+            body.append(f"        size_t _n = (size_t)out->{cnt};")
+            body.append("        const char **_arr = NULL;")
+            body.append("        if (_n > 0) {")
+            body.append("            _arr = (const char **)yrdawn_arena_alloc("
+                        "arena, _n * sizeof(const char *));")
+            body.append("            if (!_arr) return 0;")
+            body.append("        }")
+            body.append("        for (size_t _i = 0; _i < _n; ++_i) {")
+            body.append("            uint64_t _slen = 0;")
+            body.append("            if (*rem < sizeof(_slen)) return 0;")
+            body.append("            memcpy(&_slen, *src, sizeof(_slen)); "
+                        "*src += sizeof(_slen); *rem -= sizeof(_slen);")
+            body.append("            if (_slen > *rem) return 0;")
+            body.append("            char *_s = (char *)yrdawn_arena_alloc(arena, (size_t)_slen + 1u);")
+            body.append("            if (!_s) return 0;")
+            body.append("            memcpy(_s, *src, (size_t)_slen); _s[_slen] = '\\0';")
+            body.append("            *src += _slen; *rem -= (size_t)_slen;")
+            body.append("            _arr[_i] = _s;")
+            body.append("        }")
+            body.append(f"        out->{fn} = (const char *const *)_arr;")
             body.append("    }")
         elif k == "fixed_array_handle":
             n = f["length"]
@@ -1243,6 +1302,31 @@ def emit_client_struct_decoder_body(name: str, struct_fields, handle_types, alia
             body.append("        }")
             body.append(f"        out->{fn} = _arr;")
             body.append("    }")
+        elif k == "array_string":
+            # Array of C strings, malloc'd (freed element-by-element in the
+            # matching freer). Mirrors the server arena decoder.
+            cnt = f["count_name"]
+            body.append("    {")
+            body.append(f"        size_t _n = (size_t)out->{cnt};")
+            body.append("        const char **_arr = NULL;")
+            body.append("        if (_n > 0) {")
+            body.append("            _arr = (const char **)calloc(_n, sizeof(const char *));")
+            body.append("            if (!_arr) return 0;")
+            body.append("        }")
+            body.append("        for (size_t _i = 0; _i < _n; ++_i) {")
+            body.append("            uint64_t _slen = 0;")
+            body.append("            if (*rem < sizeof(_slen)) { free(_arr); return 0; }")
+            body.append("            memcpy(&_slen, *src, sizeof(_slen)); "
+                        "*src += sizeof(_slen); *rem -= sizeof(_slen);")
+            body.append("            if (_slen > *rem) { free(_arr); return 0; }")
+            body.append("            char *_s = (char *)malloc((size_t)_slen + 1u);")
+            body.append("            if (!_s) { free(_arr); return 0; }")
+            body.append("            memcpy(_s, *src, (size_t)_slen); _s[_slen] = '\\0';")
+            body.append("            *src += _slen; *rem -= (size_t)_slen;")
+            body.append("            _arr[_i] = _s;")
+            body.append("        }")
+            body.append(f"        out->{fn} = (const char *const *)_arr;")
+            body.append("    }")
         elif k in ("fixed_array_scalar", "fixed_array_pod", "fixed_array_handle"):
             n = f["length"]
             elem_t = f["ctype"]
@@ -1286,9 +1370,13 @@ def emit_client_struct_freer_body(name: str, struct_fields, handle_types, aliase
         elif k == "struct_nonpod":
             body.append(f"    yrdawn_client_free_{f['ctype']}(&s->{fn});")
         elif k in ("ptr_pod", "ptr_nonpod"):
+            # The field may be a `const WGPUFoo *` in webgpu.h, but the
+            # client decoder malloc'd the storage, so freeing it (and
+            # recursing into the nested freer that writes through it) is
+            # correct — cast the const away for both.
             if k == "ptr_nonpod":
-                body.append(f"    if (s->{fn}) yrdawn_client_free_{f['ctype']}(s->{fn});")
-            body.append(f"    free(s->{fn}); s->{fn} = NULL;")
+                body.append(f"    if (s->{fn}) yrdawn_client_free_{f['ctype']}(({f['ctype']} *)s->{fn});")
+            body.append(f"    free((void *)s->{fn}); s->{fn} = NULL;")
         elif k in ("array_handle", "array_pod", "array_scalar"):
             cnt = f["count_name"]
             body.append(f"    if (s->{fn}) {{ "
@@ -1300,6 +1388,15 @@ def emit_client_struct_freer_body(name: str, struct_fields, handle_types, aliase
             body.append(f"    if (s->{fn}) {{")
             body.append(f"        for (size_t _i = 0; _i < (size_t)s->{cnt}; ++_i)")
             body.append(f"            yrdawn_client_free_{it_t}((({it_t} *)s->{fn}) + _i);")
+            body.append(f"        free((void *)s->{fn}); s->{fn} = NULL;")
+            body.append("    }")
+        elif k == "array_string":
+            # Each string was malloc'd individually by the decoder, then the
+            # pointer array itself — free both.
+            cnt = f["count_name"]
+            body.append(f"    if (s->{fn}) {{")
+            body.append(f"        for (size_t _i = 0; _i < (size_t)s->{cnt}; ++_i)")
+            body.append(f"            free((void *)s->{fn}[_i]);")
             body.append(f"        free((void *)s->{fn}); s->{fn} = NULL;")
             body.append("    }")
         elif k in ("fixed_array_scalar", "fixed_array_pod", "fixed_array_handle"):
@@ -1892,7 +1989,13 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
         elif kind == "struct_pod":
             call_args.append(f"a->{an}"); call_arg_by_name[an] = f"a->{an}"
         elif kind == "pointer_to_pod":
-            call_args.append(f"(a->{an}_present ? &a->{an} : NULL)"); call_arg_by_name[an] = f"(a->{an}_present ? &a->{an} : NULL)"
+            # `a` is the const decoded-args struct, so `&a->{an}` is a
+            # `const ctype *`. Most WGPU params are `const ctype *` and take it
+            # as-is, but a few (e.g. wgpuInstanceWaitAny's WGPUFutureWaitInfo*,
+            # which writes `.completed` back) are non-const. Cast away const —
+            # the args buffer is server-owned scratch the call may write into.
+            arg_expr = f"(a->{an}_present ? ({ctype} *)&a->{an} : NULL)"
+            call_args.append(arg_expr); call_arg_by_name[an] = arg_expr
         elif kind == "pointer_to_encodable":
             body_lines.append(f"        uint8_t _f_{an} = 0;")
             body_lines.append(f"        if (_rem < 1) {{ yrdawn_arena_free(&_arena); "
@@ -2124,7 +2227,9 @@ def auto_spec_for(name: str, ret_type: str, args: list[tuple[str, str]],
                               f"yetty_ycore_buffer_write(&_reply_buf, _obytes_{an}, _obytes_{an}_n); "
                               f"if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }}")
         for c, an in out_structs:
-            body_lines.append(f"        yrdawn_encode_{c}(&_out_{an}, &_reply_buf);")
+            body_lines.append(f"        {{ struct yetty_ycore_void_result eresult = "
+                              f"yrdawn_encode_{c}(&_out_{an}, &_reply_buf); "
+                              f"if (YETTY_IS_ERR(eresult)) yetty_ycore_error_destroy(eresult.error); }}")
         # Server-side cleanup: Dawn may have allocated inner pointers
         # into the output struct (e.g. strings in WGPUAdapterInfo). Find
         # the corresponding wgpu<Type>FreeMembers function — if it
@@ -2252,7 +2357,9 @@ def _emit_auto_trampoline(method_name: str, cb_type: str,
     for at, an in cb_args:
         params.append(f"{at} {an}")
     sig = f"static {rt} yrdawn_trampoline_{method_name}({', '.join(params)})"
-    lines = [sig, "{"]
+    # Signature is dictated by Dawn's async callback typedef, so it cannot
+    # return a Result; emit_reply failures are absorbed at this boundary.
+    lines = ["YETTY_EXTERNAL_CALLBACK", sig, "{"]
     # First arg is conventionally a status enum we forward in the REPLY.
     first_arg = cb_args[0] if cb_args else None
     # Find userdata1 (used to carry our closure pointer).
@@ -2489,13 +2596,15 @@ def _emit_codec_runtime_decls(lines: list[str], codec_meta: dict | None, side: s
         return
     for n in codec_meta["encodable"]:
         if side == "client":
-            lines.append(f"void yrdawn_encode_{n}(const {n} *src, struct yetty_ycore_buffer *out);")
+            lines.append(f"struct yetty_ycore_void_result yrdawn_encode_{n}(const {n} *src, "
+                         f"struct yetty_ycore_buffer *out);")
             lines.append(f"int  yrdawn_client_decode_{n}(const uint8_t **src, size_t *rem, {n} *out);")
             lines.append(f"void yrdawn_client_free_{n}({n} *s);")
         else:
             # Server emits encoders too (for output structs) plus the
             # decoders (for descriptor args).
-            lines.append(f"void yrdawn_encode_{n}(const {n} *src, struct yetty_ycore_buffer *out);")
+            lines.append(f"struct yetty_ycore_void_result yrdawn_encode_{n}(const {n} *src, "
+                         f"struct yetty_ycore_buffer *out);")
             lines.append(f"int  yrdawn_decode_{n}(void *ctx, const uint8_t **src, size_t *rem, "
                          f"{n} *out, struct yrdawn_arena *arena);")
 
@@ -2722,7 +2831,9 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
                                  f"struct yetty_ycore_void_result _r = "
                                  f"yetty_ycore_buffer_write(&_body, &_f, 1); "
                                  f"if (YETTY_IS_ERR(_r)) yetty_ycore_error_destroy(_r.error); }}")
-                    lines.append(f"    if ({an}) yrdawn_encode_{a['ctype']}({an}, &_body);")
+                    lines.append(f"    if ({an}) {{ struct yetty_ycore_void_result eresult = "
+                                 f"yrdawn_encode_{a['ctype']}({an}, &_body); "
+                                 f"if (YETTY_IS_ERR(eresult)) yetty_ycore_error_destroy(eresult.error); }}")
                 elif k == "stringview":
                     lines.append("    {")
                     lines.append(f"        uint64_t _len = ({an}.length == WGPU_STRLEN || "

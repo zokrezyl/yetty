@@ -515,7 +515,7 @@ static struct yetty_ycore_void_result process_received_data(struct yetty_yvnc_cl
                 client->height = client->current_frame.height;
             }
 
-            ensure_resources(client, client->width, client->height);
+            { struct yetty_ycore_void_result drop_r = ensure_resources(client, client->width, client->height); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: ensure_resources"); }
             client->tiles_received = 0;
 
             /* Consume header and shift remaining data */

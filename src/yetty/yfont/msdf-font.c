@@ -263,7 +263,7 @@ static struct yetty_ycore_void_result msdf_load_glyphs(struct yetty_yfont_font *
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (size_t i = 0; i < count; i++) {
-        load_one(f, cps[i]);
+        { struct uint32_result drop_r = load_one(f, cps[i]); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one"); }
     }
     return YETTY_OK_VOID();
 }
@@ -275,7 +275,7 @@ static struct yetty_ycore_void_result msdf_load_basic_latin(struct yetty_yfont_f
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
-        load_one(f, cp);
+        { struct uint32_result drop_r = load_one(f, cp); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one"); }
     }
     return YETTY_OK_VOID();
 }
@@ -453,13 +453,15 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
     /* Load shader from file */
     struct yetty_ycore_buffer_result shader_res = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(shader_res)) {
-        return YETTY_ERR(yetty_font_font, shader_res.error.msg);
+        yerror("msdf_font: cannot read shader file: %s", shader_path);
+        return YETTY_ERR(yetty_font_font, "msdf font: cannot read shader file", shader_res);
     }
 
     struct yetty_ycdb_reader_result cdb_res = yetty_ycdb_reader_open(cdb_path);
     if (YETTY_IS_ERR(cdb_res)) {
+        yerror("msdf_font: cannot open glyph cdb: %s", cdb_path);
         free(shader_res.value.data);
-        return YETTY_ERR(yetty_font_font, cdb_res.error.msg);
+        return YETTY_ERR(yetty_font_font, "msdf font: cannot open glyph cdb", cdb_res);
     }
 
     struct yetty_yfont_msdf_font *font = calloc(1, sizeof(struct yetty_yfont_msdf_font));

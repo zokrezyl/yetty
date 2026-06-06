@@ -30,6 +30,14 @@ struct memory_pty_pair {
     struct memory_ring a_to_b;
     struct memory_ring b_to_a;
     int refs;
+    /* Shared window size — the kernel-tty analog. A resize on either endpoint
+     * records it here (TIOCSWINSZ) and the peer is signalled (SIGWINCH); both
+     * endpoints read it back from the same place (TIOCGWINSZ). Zero until the
+     * first resize. */
+    uint32_t cols;
+    uint32_t rows;
+    uint32_t pixel_w;
+    uint32_t pixel_h;
 };
 
 struct memory_pty_endpoint {
@@ -44,6 +52,11 @@ struct memory_pty_endpoint {
     struct memory_pty_endpoint *peer;
     yetty_yplatform_memory_pty_wake_fn wake_fn;
     void *wake_userdata;
+    /* Fired when the PEER endpoint is resized — the SIGWINCH analog, parallel
+     * to wake_fn. The endpoint that owns the "slave" role installs this to
+     * learn the window size the "master" end pushed. */
+    yetty_yplatform_memory_pty_resize_fn resize_fn;
+    void *resize_userdata;
 };
 
 /*===========================================================================
@@ -182,13 +195,27 @@ static struct yetty_ycore_size_result memory_pty_write(struct yetty_platform_pty
     return YETTY_OK(yetty_ycore_size, w);
 }
 
+/* Propagate the window size to the other end of the pair — the in-process
+ * analog of a kernel PTY's TIOCSWINSZ (record the winsize on the shared tty)
+ * plus SIGWINCH (notify the slave). Mirrors memory_pty_write, which likewise
+ * acts on this endpoint and signals the PEER. The size is recorded on the
+ * shared pair so either side can read it back via get_winsize (TIOCGWINSZ),
+ * and the peer's resize callback — if installed — is fired so its owner can
+ * re-layout (e.g. drive ygui_framework_set_viewport). */
 static struct yetty_ycore_void_result memory_pty_resize(struct yetty_platform_pty *self,
                                                         uint32_t cols, uint32_t rows,
                                                         uint32_t pixel_w, uint32_t pixel_h)
 {
-    (void)self;
-    (void)cols;
-    (void)rows;
+    struct memory_pty_endpoint *ep = container_of(self, struct memory_pty_endpoint, base);
+
+    ep->pair->cols = cols;
+    ep->pair->rows = rows;
+    ep->pair->pixel_w = pixel_w;
+    ep->pair->pixel_h = pixel_h;
+
+    if (ep->peer && ep->peer->resize_fn) {
+        ep->peer->resize_fn(ep->peer->resize_userdata, cols, rows, pixel_w, pixel_h);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -278,4 +305,37 @@ void yetty_yplatform_memory_pty_set_wake(struct yetty_platform_pty *endpoint,
     struct memory_pty_endpoint *ep = container_of(endpoint, struct memory_pty_endpoint, base);
     ep->wake_fn = wake;
     ep->wake_userdata = userdata;
+}
+
+void yetty_yplatform_memory_pty_set_resize(struct yetty_platform_pty *endpoint,
+                                           yetty_yplatform_memory_pty_resize_fn resize,
+                                           void *userdata)
+{
+    if (!endpoint || endpoint->ops != &memory_pty_ops) {
+        return;
+    }
+    struct memory_pty_endpoint *ep = container_of(endpoint, struct memory_pty_endpoint, base);
+    ep->resize_fn = resize;
+    ep->resize_userdata = userdata;
+}
+
+void yetty_yplatform_memory_pty_get_winsize(struct yetty_platform_pty *endpoint, uint32_t *cols,
+                                            uint32_t *rows, uint32_t *pixel_w, uint32_t *pixel_h)
+{
+    if (!endpoint || endpoint->ops != &memory_pty_ops) {
+        return;
+    }
+    struct memory_pty_endpoint *ep = container_of(endpoint, struct memory_pty_endpoint, base);
+    if (cols) {
+        *cols = ep->pair->cols;
+    }
+    if (rows) {
+        *rows = ep->pair->rows;
+    }
+    if (pixel_w) {
+        *pixel_w = ep->pair->pixel_w;
+    }
+    if (pixel_h) {
+        *pixel_h = ep->pair->pixel_h;
+    }
 }

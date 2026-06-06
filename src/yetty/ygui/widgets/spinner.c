@@ -196,15 +196,15 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_ygui_ob
     return yetty_ygui_object_set_dirty(obj);
 }
 [[clang::annotate("expose")]]
-float yetty_ygui_spinner_get_value(const struct yetty_ygui_object *obj)
+struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_float, "yetty_ygui_spinner_get_value: NULL obj");
     }
-    return ((struct spinner_data *)yetty_ygui_data_get(
-                (struct yetty_ygui_object *)obj,
-                yetty_ygui_spinner_class_get().value))
-        ->value;
+    struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_spinner_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_float, data_result, "yetty_ygui_spinner_get_value: data_get");
+    return YETTY_OK(yetty_ycore_float, ((struct spinner_data *)data_result.value)->value);
 }
 
 #include "spinner.gen.c"

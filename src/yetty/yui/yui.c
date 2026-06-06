@@ -651,7 +651,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(yui->figure_registry, &yui->figure_args);
         if (!YETTY_IS_OK(rf)) {
-            yetty_yfigure_registry_destroy(yui->figure_registry);
+            (void)yetty_yfigure_registry_destroy(yui->figure_registry);
             yetty_ydraw_composite_factory_destroy(yui->composite_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
@@ -665,7 +665,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 yui->figure_registry, producer_kinds[i], &yui->figure_args);
             if (!YETTY_IS_OK(kr)) {
-                yetty_yfigure_registry_destroy(yui->figure_registry);
+                (void)yetty_yfigure_registry_destroy(yui->figure_registry);
                 yetty_ydraw_composite_factory_destroy(yui->composite_factory);
                 yui->font->ops->destroy(yui->font);
                 free(yui);
@@ -676,7 +676,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             struct yetty_ycore_void_result fr = yetty_yframework_register_figure_factories(
                 context->runtime, yui->figure_registry, context);
             if (!YETTY_IS_OK(fr)) {
-                yetty_yfigure_registry_destroy(yui->figure_registry);
+                (void)yetty_yfigure_registry_destroy(yui->figure_registry);
                 yetty_ydraw_composite_factory_destroy(yui->composite_factory);
                 yui->font->ops->destroy(yui->font);
                 free(yui);
@@ -691,7 +691,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         struct yetty_yclass_ctx yclass_ctx = {0};
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         if (!YETTY_IS_OK(obj_res)) {
-            yetty_yfigure_registry_destroy(yui->figure_registry);
+            (void)yetty_yfigure_registry_destroy(yui->figure_registry);
             yui->font->ops->destroy(yui->font);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: root_container", obj_res);
@@ -978,8 +978,9 @@ static void yui_splitter_walk_tree(struct yetty_yui *yui, struct yetty_yui_tile 
 
         e->widget = yui_add(yui->root, yetty_ygui_splitter_class_get());
         if (e->widget) {
-            yetty_ygui_splitter_set_axis(e->widget, orient == YETTY_YUI_VERTICAL ? 1 : 0);
-            yetty_ygui_splitter_set_min(e->widget, 30.0f);
+            yetty_ycore_error_destroy_safe(
+            yetty_ygui_splitter_set_axis(e->widget, orient == YETTY_YUI_VERTICAL ? 1 : 0));
+            yetty_ycore_error_destroy_safe(yetty_ygui_splitter_set_min(e->widget, 30.0f));
 
             struct yetty_yui_splitter_thunk *t = calloc(1, sizeof(*t));
             if (t) {
@@ -987,12 +988,14 @@ static void yui_splitter_walk_tree(struct yetty_yui *yui, struct yetty_yui_tile 
                 t->workspace_id = workspace_id;
                 t->split_id = split_id;
                 e->thunk = t;
-                yetty_ygui_splitter_on_change(e->widget, yui_splitter_on_change, t);
+                yetty_ycore_error_destroy_safe(
+                    yetty_ygui_splitter_on_change(e->widget, yui_splitter_on_change, t));
             }
         }
     } else if (e->widget) {
         e->workspace_id = workspace_id;
-        yetty_ygui_splitter_set_axis(e->widget, orient == YETTY_YUI_VERTICAL ? 1 : 0);
+        yetty_ycore_error_destroy_safe(
+            yetty_ygui_splitter_set_axis(e->widget, orient == YETTY_YUI_VERTICAL ? 1 : 0));
     }
     e->seen = 1;
 
@@ -1258,7 +1261,7 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
         struct yetty_ycore_void_result rr =
             yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui root_container render");
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
+        { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
     }
     return YETTY_OK_VOID();
 }
@@ -1833,7 +1836,13 @@ static void yui_titlebar_sync(struct yetty_yui *yui)
     }
     yui->titlebar_synced_count = count;
 
-    int wactive = yetty_ygui_tabbar_active(yui->titlebar_tabbar);
+    struct yetty_ycore_int_result wactive_r = yetty_ygui_tabbar_active(yui->titlebar_tabbar);
+    int wactive = -1;
+    if (YETTY_IS_OK(wactive_r)) {
+        wactive = wactive_r.value;
+    } else {
+        yetty_ycore_error_destroy(wactive_r.error);
+    }
     if (count > 0 && wactive != (int)active) {
         yetty_ycore_error_destroy_safe(
             yetty_ygui_tabbar_set_active(yui->titlebar_tabbar, (int)active));
@@ -1858,7 +1867,12 @@ static void yui_titlebar_on_new_tab(struct yetty_ygui_object *tabbar, void *user
     if (!yui || !yui->tabbar_model) {
         return;
     }
-    yetty_yui_tabbar_add_workspace_of_kind(yui->tabbar_model, YETTY_YUI_TAB_SHELL);
+    struct yetty_ycore_void_result add_r =
+        yetty_yui_tabbar_add_workspace_of_kind(yui->tabbar_model, YETTY_YUI_TAB_SHELL);
+    if (YETTY_IS_ERR(add_r)) {
+        yerror("yui: titlebar new-tab failed: %s", add_r.error.msg);
+        yetty_ycore_error_destroy(add_r.error);
+    }
 }
 
 static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_ctx *ctx,
@@ -1909,7 +1923,7 @@ static struct yetty_ycore_void_result yui_titlebar_on_tab_change(
     }
     size_t idx = (size_t)event->i0;
     if (idx != yetty_yui_tabbar_active_index(yui->tabbar_model)) {
-        yetty_yui_tabbar_switch_to(yui->tabbar_model, idx);
+        { struct yetty_ycore_void_result drop_r = yetty_yui_tabbar_switch_to(yui->tabbar_model, idx); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tabbar_switch_to"); }
     }
     return YETTY_OK_VOID();
 }
@@ -1923,7 +1937,12 @@ static void yui_titlebar_on_tab_close(struct yetty_ygui_object *tabbar, int inde
     if (!yui || !yui->tabbar_model || index < 0) {
         return;
     }
-    yetty_yui_tabbar_close_at(yui->tabbar_model, (size_t)index);
+    struct yetty_ycore_void_result close_r =
+        yetty_yui_tabbar_close_at(yui->tabbar_model, (size_t)index);
+    if (YETTY_IS_ERR(close_r)) {
+        yerror("yui: titlebar close-tab failed: %s", close_r.error.msg);
+        yetty_ycore_error_destroy(close_r.error);
+    }
 }
 
 static struct yetty_ycore_void_result yui_dialog_connect(struct yetty_yclass_ctx *ctx,
@@ -2031,7 +2050,12 @@ const char *yetty_yui_get_field_text(const struct yetty_yui *yui, enum yetty_yui
     if (!in) {
         return NULL;
     }
-    return yetty_ygui_textinput_get_text(in);
+    struct yetty_ycore_const_char_ptr_result text_r = yetty_ygui_textinput_get_text(in);
+    if (YETTY_IS_ERR(text_r)) {
+        yetty_ycore_error_destroy(text_r.error);
+        return NULL;
+    }
+    return text_r.value;
 }
 
 const char *yetty_yui_get_exec_command(const struct yetty_yui *yui)
@@ -2044,8 +2068,15 @@ int yetty_yui_is_active(const struct yetty_yui *yui)
     if (!yui) {
         return 0;
     }
-    if (yui->app_menu && yetty_ygui_popup_menu_is_open(yui->app_menu)) {
-        return 1;
+    if (yui->app_menu) {
+        struct yetty_ycore_int_result open_r = yetty_ygui_popup_menu_is_open(yui->app_menu);
+        if (YETTY_IS_OK(open_r)) {
+            if (open_r.value) {
+                return 1;
+            }
+        } else {
+            yetty_ycore_error_destroy(open_r.error);
+        }
     }
     for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
         if (yui->dialogs[k] && yetty_ygui_widget_is_visible(yui->dialogs[k])) {
@@ -2088,7 +2119,13 @@ static int yui_compute_cursor_shape(struct yetty_yui *yui, float mouse_x, float 
     if (!w) {
         w = yetty_ygui_framework_hovered_widget(yui->engine);
     }
-    int axis = yetty_ygui_splitter_get_axis(w); /* -1 if not a splitter */
+    struct yetty_ycore_int_result axis_r = yetty_ygui_splitter_get_axis(w); /* -1 if not a splitter */
+    int axis = -1;
+    if (YETTY_IS_OK(axis_r)) {
+        axis = axis_r.value;
+    } else {
+        yetty_ycore_error_destroy(axis_r.error);
+    }
     if (axis >= 0) {
         /* axis 1 = vertical bar splitting side-by-side panes → ↔ HRESIZE;
          * axis 0 = horizontal bar splitting stacked panes → ↕ VRESIZE. */
@@ -2152,12 +2189,16 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     }
 
     switch (event->type) {
-    case YETTY_YCORE_MOUSE_DOWN:
+    case YETTY_YCORE_MOUSE_DOWN: {
         /* A press outside an open context / app menu dismisses it (and
          * is consumed so the stray click doesn't also act). A press
          * inside falls through to the engine, which routes it to the
          * menu's item dispatch. */
-        if (yui->app_menu && yetty_ygui_popup_menu_is_open(yui->app_menu)) {
+        struct yetty_ycore_int_result app_open_r =
+            yui->app_menu ? yetty_ygui_popup_menu_is_open(yui->app_menu)
+                          : YETTY_OK(yetty_ycore_int, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, app_open_r, "yui: app_menu is_open");
+        if (app_open_r.value) {
             struct yetty_ycore_rectangle mr = yetty_ygui_widget_rect(yui->app_menu);
             float mx = event->mouse.x / scale;
             float my = event->mouse.y / scale;
@@ -2176,6 +2217,7 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
             return YETTY_OK(yetty_ycore_int, 1);
         }
         return YETTY_OK(yetty_ycore_int, 0);
+    }
     case YETTY_YCORE_MOUSE_UP:
         yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_button(
             yui->engine, event->mouse.x / scale, event->mouse.y / scale, event->mouse.button, 0,
@@ -2256,10 +2298,14 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
             (float)surface_h / yui->content_scale));
     }
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container);
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, (struct yetty_ycore_rectangle){
-        .min = {.x = 0.0f, .y = 0.0f},
-        .max = {.x = (float)surface_w, .y = (float)surface_h},
-    });
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+    {
+        struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_rect_set(
+            (struct yetty_yclass_object *)(rf) - 1, (struct yetty_ycore_rectangle){
+                .min = {.x = 0.0f, .y = 0.0f},
+                .max = {.x = (float)surface_w, .y = (float)surface_h},
+            });
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "yui_resize: root rect");
+    }
+    { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
     return YETTY_OK_VOID();
 }

@@ -1316,7 +1316,7 @@ struct yetty_ycore_void_result yetty_yvterm_text_layer_render_figures(
     }
     struct yetty_ycore_void_result fr = yetty_yfigure_render(NULL, sgf_obj, target);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "text_layer_render_figures: shader_glyph render");
-    yetty_yfigure_figure_dirty_set(sgf_obj, 0);
+    { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set(sgf_obj, 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
     return YETTY_OK_VOID();
 }
 

@@ -28,10 +28,26 @@
 #include "netsurf/types.h"
 #include "netsurf/bitmap.h"
 
+#include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
+
+/* Translate a drawable-list append failure into the netsurf error domain. The
+ * plotter entry points below have signatures dictated by netsurf's
+ * plotter_table vtable, so they cannot return a yetty Result; an append failure
+ * (out of memory growing the list) surfaces to netsurf as NSERROR_NOMEM instead
+ * of being silently dropped. The yetty error chain has no consumer here, so it
+ * is freed. */
+static nserror ns_from_void_result(struct yetty_ycore_void_result result)
+{
+    if (YETTY_IS_ERR(result)) {
+        yetty_ycore_error_destroy(result.error);
+        return NSERROR_NOMEM;
+    }
+    return NSERROR_OK;
+}
 
 /* ----- color ------------------------------------------------------------
  * NetSurf colour is 0x00BBGGRR (R in low byte, no alpha). ydraw shader
@@ -86,6 +102,7 @@ static nserror p_clip(const struct redraw_context *ctx, const struct rect *r)
     return NSERROR_OK;
 }
 
+YETTY_EXTERNAL_CALLBACK
 static nserror p_rectangle(const struct redraw_context *ctx, const plot_style_t *s,
                            const struct rect *r)
 {
@@ -106,11 +123,11 @@ static nserror p_rectangle(const struct redraw_context *ctx, const plot_style_t 
         .half_height = hh,
         .corner_radius = 0,
     };
-    (void)yetty_ydraw_drawable_list_add_cmd_add_box(ns->cur_buf, 0, ns->z_counter++, fill_rgba(s),
-                                                stroke_rgba(s), stroke_w(s), &box);
-    return NSERROR_OK;
+    return ns_from_void_result(yetty_ydraw_drawable_list_add_cmd_add_box(
+        ns->cur_buf, 0, ns->z_counter++, fill_rgba(s), stroke_rgba(s), stroke_w(s), &box));
 }
 
+YETTY_EXTERNAL_CALLBACK
 static nserror p_disc(const struct redraw_context *ctx, const plot_style_t *s, int x, int y,
                       int radius)
 {
@@ -124,11 +141,11 @@ static nserror p_disc(const struct redraw_context *ctx, const plot_style_t *s, i
         .center_y = y,
         .radius = radius,
     };
-    (void)yetty_ydraw_drawable_list_add_cmd_add_circle(ns->cur_buf, 0, ns->z_counter++, fill_rgba(s),
-                                                   stroke_rgba(s), stroke_w(s), &c);
-    return NSERROR_OK;
+    return ns_from_void_result(yetty_ydraw_drawable_list_add_cmd_add_circle(
+        ns->cur_buf, 0, ns->z_counter++, fill_rgba(s), stroke_rgba(s), stroke_w(s), &c));
 }
 
+YETTY_EXTERNAL_CALLBACK
 static nserror p_line(const struct redraw_context *ctx, const plot_style_t *s, const struct rect *l)
 {
     struct yetty_ynetsurf *ns = ctx->priv;
@@ -150,11 +167,11 @@ static nserror p_line(const struct redraw_context *ctx, const plot_style_t *s, c
     if (col == 0) {
         col = to_rgba(s->stroke_colour);
     }
-    (void)yetty_ydraw_drawable_list_add_cmd_add_segment(ns->cur_buf, 0, ns->z_counter++, 0, col,
-                                                    stroke_w(s), &seg);
-    return NSERROR_OK;
+    return ns_from_void_result(yetty_ydraw_drawable_list_add_cmd_add_segment(
+        ns->cur_buf, 0, ns->z_counter++, 0, col, stroke_w(s), &seg));
 }
 
+YETTY_EXTERNAL_CALLBACK
 static nserror p_arc(const struct redraw_context *ctx, const plot_style_t *s, int x, int y,
                      int radius, int angle1, int angle2)
 {
@@ -177,19 +194,19 @@ static nserror p_arc(const struct redraw_context *ctx, const plot_style_t *s, in
         .thickness = stroke_w(s),
     };
     (void)ac; /* arc orientation is implicit in aperture vector */
-    (void)yetty_ydraw_drawable_list_add_cmd_add_arc(ns->cur_buf, 0, ns->z_counter++, 0, stroke_rgba(s),
-                                                stroke_w(s), &arc);
-    return NSERROR_OK;
+    return ns_from_void_result(yetty_ydraw_drawable_list_add_cmd_add_arc(
+        ns->cur_buf, 0, ns->z_counter++, 0, stroke_rgba(s), stroke_w(s), &arc));
 }
 
 /* fan-triangulate around vertex[0]. Convex assumption — CSS borders and
  * libsvgtiny output are convex once flattened; complex concave shapes
  * lose interior detail, an acceptable MVP trade-off. */
-static void fan_triangulate(struct yetty_ynetsurf *ns, const float *xs, const float *ys, unsigned n,
-                            uint32_t fill, uint32_t stroke, float sw)
+static struct yetty_ycore_void_result fan_triangulate(struct yetty_ynetsurf *ns, const float *xs,
+                                                      const float *ys, unsigned n, uint32_t fill,
+                                                      uint32_t stroke, float sw)
 {
     if (n < 3) {
-        return;
+        return YETTY_OK_VOID();
     }
     for (unsigned i = 1; i + 1 < n; i++) {
         struct yetty_ysdf_triangle t = {
@@ -200,11 +217,14 @@ static void fan_triangulate(struct yetty_ynetsurf *ns, const float *xs, const fl
             .vertex_c_x = xs[i + 1],
             .vertex_c_y = ys[i + 1],
         };
-        (void)yetty_ydraw_drawable_list_add_cmd_add_triangle(ns->cur_buf, 0, ns->z_counter++, fill,
-                                                         stroke, sw, &t);
+        struct yetty_ycore_void_result add_result = yetty_ydraw_drawable_list_add_cmd_add_triangle(
+            ns->cur_buf, 0, ns->z_counter++, fill, stroke, sw, &t);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "fan_triangulate: add triangle");
     }
+    return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 static nserror p_polygon(const struct redraw_context *ctx, const plot_style_t *s, const int *p,
                          unsigned int n)
 {
@@ -238,12 +258,13 @@ static nserror p_polygon(const struct redraw_context *ctx, const plot_style_t *s
             ymax = p[i * 2 + 1];
         }
     }
+    struct yetty_ycore_void_result fan_result = YETTY_OK_VOID();
     if (aabb_visible(ns, xmin, ymin, xmax, ymax)) {
-        fan_triangulate(ns, xs, ys, n, fill_rgba(s), stroke_rgba(s), stroke_w(s));
+        fan_result = fan_triangulate(ns, xs, ys, n, fill_rgba(s), stroke_rgba(s), stroke_w(s));
     }
     free(xs);
     free(ys);
-    return NSERROR_OK;
+    return ns_from_void_result(fan_result);
 }
 
 /* ----- path: cubic-Bezier flattening -> segments ------------------------- */
@@ -261,6 +282,7 @@ static void apply_xform(const float t[6], float x, float y, float *ox, float *oy
     *oy = t[1] * x + t[3] * y + t[5];
 }
 
+YETTY_EXTERNAL_CALLBACK
 static nserror p_path(const struct redraw_context *ctx, const plot_style_t *s, const float *p,
                       unsigned int n, const float t[6])
 {
@@ -347,7 +369,13 @@ static nserror p_path(const struct redraw_context *ctx, const plot_style_t *s, c
         }
         if (aabb_visible(ns, (int)xmin, (int)ymin, (int)xmax, (int)ymax)) {
             if (s->fill_type != PLOT_OP_TYPE_NONE) {
-                fan_triangulate(ns, xs, ys, cnt, fill_rgba(s), 0, 0);
+                struct yetty_ycore_void_result fan_result =
+                    fan_triangulate(ns, xs, ys, cnt, fill_rgba(s), 0, 0);
+                if (YETTY_IS_ERR(fan_result)) {
+                    free(xs);
+                    free(ys);
+                    return ns_from_void_result(fan_result);
+                }
             }
             if (s->stroke_type != PLOT_OP_TYPE_NONE) {
                 uint32_t col = stroke_rgba(s);
@@ -359,8 +387,15 @@ static nserror p_path(const struct redraw_context *ctx, const plot_style_t *s, c
                         .end_x = xs[k],
                         .end_y = ys[k],
                     };
-                    (void)yetty_ydraw_drawable_list_add_cmd_add_segment(ns->cur_buf, 0, ns->z_counter++,
-                                                                    0, col, sw, &seg);
+                    struct yetty_ycore_void_result seg_result =
+                        yetty_ydraw_drawable_list_add_cmd_add_segment(ns->cur_buf, 0,
+                                                                      ns->z_counter++, 0, col, sw,
+                                                                      &seg);
+                    if (YETTY_IS_ERR(seg_result)) {
+                        free(xs);
+                        free(ys);
+                        return ns_from_void_result(seg_result);
+                    }
                 }
             }
         }
@@ -374,6 +409,7 @@ static nserror p_path(const struct redraw_context *ctx, const plot_style_t *s, c
 
 /* ----- bitmap: placeholder filled box --------------------------------- */
 
+YETTY_EXTERNAL_CALLBACK
 static nserror p_bitmap(const struct redraw_context *ctx, struct bitmap *bm, int x, int y,
                         int width, int height, colour bg, bitmap_flags_t flags)
 {
@@ -392,12 +428,13 @@ static nserror p_bitmap(const struct redraw_context *ctx, struct bitmap *bm, int
         .corner_radius = 0,
     };
     uint32_t fill = bm != NULL ? 0xc0c0c0ffu : 0xe0e0e0ffu;
-    (void)yetty_ydraw_drawable_list_add_cmd_add_box(ns->cur_buf, 0, ns->z_counter++, fill, 0, 0, &box);
-    return NSERROR_OK;
+    return ns_from_void_result(yetty_ydraw_drawable_list_add_cmd_add_box(
+        ns->cur_buf, 0, ns->z_counter++, fill, 0, 0, &box));
 }
 
 /* ----- text: TEXT_DRAWABLE_LIST drawable-list entry prim ----------------------------------- */
 
+YETTY_EXTERNAL_CALLBACK
 static nserror p_text(const struct redraw_context *ctx, const plot_font_style_t *fstyle, int x,
                       int y, const char *text, size_t length)
 {
@@ -417,10 +454,9 @@ static nserror p_text(const struct redraw_context *ctx, const plot_font_style_t 
         .capacity = length,
         .size = length,
     };
-    (void)yetty_ydraw_drawable_list_add_text(ns->cur_buf, (float)x, (float)y, &txt, pt,
-                                         to_rgba(fstyle->foreground), ns->z_counter++,
-                                         ns->default_font_id, 0.0f);
-    return NSERROR_OK;
+    return ns_from_void_result(yetty_ydraw_drawable_list_add_text(
+        ns->cur_buf, (float)x, (float)y, &txt, pt, to_rgba(fstyle->foreground), ns->z_counter++,
+        ns->default_font_id, 0.0f));
 }
 
 const struct plotter_table yetty_ynetsurf_plotters = {

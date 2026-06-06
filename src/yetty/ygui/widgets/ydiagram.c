@@ -154,15 +154,15 @@ struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_ygui_
 }
 
 [[clang::annotate("expose")]]
-const char *yetty_ygui_ydiagram_get_source(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_ydiagram_get_source(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_ydiagram_get_source: invalid args");
     }
-    struct ydiagram_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_ydiagram_class_get().value);
-    return d->source;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_ydiagram_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_ydiagram_get_source: data_get");
+    struct ydiagram_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_const_char_ptr, d->source);
 }
 
 #include "ydiagram.gen.c"

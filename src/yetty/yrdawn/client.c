@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include <yetty/ycore/result.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yplatform/io.h>
@@ -185,9 +186,19 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         slot->req_id = 0;
         slot->cb = NULL;
         slot->user = NULL;
+        const uint8_t *body = payload + sizeof(*hdr);
+        size_t body_len = payload_len - sizeof(*hdr);
+        /* Surface server-side failures: the error reply's body is a
+         * NUL-terminated description (see yetty_yrdawn_wire_reply_hdr). Log it
+         * so a failed remote WebGPU call is diagnosable instead of silently
+         * returning a bad handle. The status still flows to the waiter via the
+         * callback below. */
+        if (hdr->status != YETTY_YRDAWN_REPLY_OK) {
+            yerror("yrdawn client: method %u failed: %s%s%.*s", method_id,
+                   yetty_yrdawn_reply_status_str(hdr->status), body_len > 0 ? " — " : "",
+                   (int)body_len, body_len > 0 ? (const char *)body : "");
+        }
         if (cb) {
-            const uint8_t *body = payload + sizeof(*hdr);
-            size_t body_len = payload_len - sizeof(*hdr);
             cb(cb_user, hdr->status, method_id, body, body_len);
         }
         return;

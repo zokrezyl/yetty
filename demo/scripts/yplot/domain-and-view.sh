@@ -16,7 +16,7 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 YPLOT="${YPLOT:-$ROOT/build-desktop-ytrace-release/tools/yplot/yplot}"
-PAUSE="${DEMO_PAUSE:-2}"
+PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YPLOT" ]; then
     echo "yplot binary not found at $YPLOT" >&2
@@ -56,4 +56,3 @@ printf '\n(4) wide eval, narrow view:\n'
     'x=-10..10; @view=-2..2,-1..1; damped=sin(x)*exp(-abs(x)/3); @damped.color=#AA96DA'
 
 printf '\n=== done — holding open ===\n'
-sleep 600

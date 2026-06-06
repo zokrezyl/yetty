@@ -1177,7 +1177,7 @@ static struct yetty_ycore_void_result write_cdb_file(const char *cdb_path,
         size_t need = sizeof(struct yetty_ymsdf_wgsl_glyph_header) + pix_bytes;
         if (u8_vec_reserve(&val, need) < 0) {
             u8_vec_free(&val);
-            yetty_ycdb_writer_finish(w);
+            { struct yetty_ycore_void_result drop_r = yetty_ycdb_writer_finish(w); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_ycdb_writer_finish"); }
             return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: alloc value");
         }
 
@@ -1207,7 +1207,7 @@ static struct yetty_ycore_void_result write_cdb_file(const char *cdb_path,
             yetty_ycdb_writer_add(w, &key, sizeof(key), val.data, need);
         if (YETTY_IS_ERR(ar)) {
             u8_vec_free(&val);
-            yetty_ycdb_writer_finish(w);
+            { struct yetty_ycore_void_result drop_r = yetty_ycdb_writer_finish(w); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_ycdb_writer_finish"); }
             return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: CDB add", ar);
         }
     }

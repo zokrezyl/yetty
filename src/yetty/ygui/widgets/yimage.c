@@ -198,27 +198,27 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-const uint8_t *yetty_ygui_yimage_bytes(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_const_uint8_ptr, "yetty_ygui_yimage_bytes: invalid args");
     }
-    struct yimage_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_yimage_class_get().value);
-    return d->bytes;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_uint8_ptr, d_dr, "yetty_ygui_yimage_bytes: data_get");
+    struct yimage_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_const_uint8_ptr, d->bytes);
 }
 
 [[clang::annotate("expose")]]
-size_t yetty_ygui_yimage_bytes_len(const struct yetty_ygui_object *obj)
+struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "yetty_ygui_yimage_bytes_len: invalid args");
     }
-    struct yimage_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_yimage_class_get().value);
-    return d->len;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, d_dr, "yetty_ygui_yimage_bytes_len: data_get");
+    struct yimage_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_size, d->len);
 }
 
 #include "yimage.gen.c"

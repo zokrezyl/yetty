@@ -2,6 +2,7 @@
 #define YETTY_YCORE_RESULT_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #ifdef __cplusplus
@@ -48,8 +49,14 @@ struct yetty_ycore_error {
 YETTY_YRESULT_DECLARE(yetty_ycore_void, int);
 YETTY_YRESULT_DECLARE(yetty_ycore_int, int);
 YETTY_YRESULT_DECLARE(yetty_ycore_size, size_t);
+YETTY_YRESULT_DECLARE(yetty_ycore_float, float);
+YETTY_YRESULT_DECLARE(yetty_ycore_uint32, uint32_t);
 /* Owned heap string (caller frees value). Used by figure dump_state. */
 YETTY_YRESULT_DECLARE(yetty_ycore_char_ptr, char *);
+/* Borrowed strings/bytes (caller does NOT free). Used by ygui value accessors
+ * that return a pointer into the widget's own state. */
+YETTY_YRESULT_DECLARE(yetty_ycore_const_char_ptr, const char *);
+YETTY_YRESULT_DECLARE(yetty_ycore_const_uint8_ptr, const uint8_t *);
 
 /* Helper for chaining: heap-copies `prev` so the new error owns its chain.
  * Returns NULL on alloc failure (chain is silently truncated — we're already

@@ -19,6 +19,6 @@ struct yetty_ygui_colorpicker_data_ptr_result yetty_ygui_colorpicker_data(struct
 struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_ygui_object *obj, uint32_t c);
-uint32_t yetty_ygui_colorpicker_get_color(const struct yetty_ygui_object *obj);
+struct yetty_ycore_uint32_result yetty_ygui_colorpicker_get_color(const struct yetty_ygui_object *obj);
 
 #endif

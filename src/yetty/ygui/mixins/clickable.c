@@ -111,36 +111,35 @@ struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_yg
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_clickable_is_pressed: NULL obj");
     }
-    struct clickable_data *cd = yetty_ygui_data_get(
+    struct yetty_ygui_void_ptr_result cd_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_clickable_mixin_get().value);
-    return cd->pressed;
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, cd_dr, "yetty_ygui_clickable_is_pressed: data_get");
+    struct clickable_data *cd = cd_dr.value;
+    return YETTY_OK(yetty_ycore_int, cd->pressed);
 }
 
 [[clang::annotate("expose")]]
-void yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj, float *x, float *y)
+struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj, float *x, float *y)
 {
     if (!obj) {
-        if (x) {
-            *x = 0.0f;
-        }
-        if (y) {
-            *y = 0.0f;
-        }
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_clickable_press_pos: NULL obj");
     }
-    struct clickable_data *cd = yetty_ygui_data_get(
+    struct yetty_ygui_void_ptr_result cd_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_clickable_mixin_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cd_dr, "yetty_ygui_clickable_press_pos: data_get");
+    struct clickable_data *cd = cd_dr.value;
     if (x) {
         *x = cd->press_x;
     }
     if (y) {
         *y = cd->press_y;
     }
+    return YETTY_OK_VOID();
 }
 
 #include "clickable.gen.c"

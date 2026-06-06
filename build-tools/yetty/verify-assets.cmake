@@ -78,7 +78,6 @@ endif()
 # Shader directory structure
 check_dir("${ASSETS_PREFIX}/shaders" "Shaders directory")
 check_dir("${ASSETS_PREFIX}/shaders/lib" "Shader lib directory")
-check_dir("${ASSETS_PREFIX}/shaders/cards" "Shader cards directory")
 check_dir("${ASSETS_PREFIX}/shaders/effects" "Shader effects directory")
 check_dir("${ASSETS_PREFIX}/shaders/pre-effects" "Shader pre-effects directory")
 check_dir("${ASSETS_PREFIX}/shaders/post-effects" "Shader post-effects directory")
@@ -87,13 +86,6 @@ check_dir("${ASSETS_PREFIX}/shaders/post-effects" "Shader post-effects directory
 check_file("${ASSETS_PREFIX}/shaders/gpu-screen.wgsl" "Main GPU screen shader")
 check_file("${ASSETS_PREFIX}/shaders/cursor.wgsl" "Cursor shader")
 check_file("${ASSETS_PREFIX}/shaders/msdf_gen.wgsl" "MSDF generation shader")
-
-# Card shaders
-check_file("${ASSETS_PREFIX}/shaders/cards/0x0000-texture.wgsl" "Texture card shader")
-check_file("${ASSETS_PREFIX}/shaders/cards/0x0001-plot.wgsl" "Plot card shader")
-check_file("${ASSETS_PREFIX}/shaders/cards/0x0003-ydraw.wgsl" "Ydraw card shader")
-check_file("${ASSETS_PREFIX}/shaders/cards/0x0004-ydraw.wgsl" "Kdraw card shader")
-check_file("${ASSETS_PREFIX}/shaders/cards/0x0006-ytext.wgsl" "Ytext card shader")
 
 #-----------------------------------------------------------------------------
 # WebAssembly specific

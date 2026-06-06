@@ -164,6 +164,13 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
         u->flags |= YETTY_YPLOT_FLAG_USES_TIME;
     }
 
+    /* A program that reads `y` is a 2D field f(x,y) — flag it so the shader
+     * renders a colormapped heatmap rather than treating the result as a
+     * line height. */
+    if (prog.value.uses_y) {
+        u->flags |= YETTY_YPLOT_FLAG_FIELD;
+    }
+
     uint32_t bc_len = yetty_yfsvm_program_serialize(&prog.value, bc_buf, bc_cap);
     if (bc_len == 0) {
         return YETTY_ERR(yetty_ycore_void, "yplot: bytecode serialize failed");

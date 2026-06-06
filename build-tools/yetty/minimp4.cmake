@@ -33,6 +33,18 @@ file(WRITE "${_MINIMP4_IMPL_C}"
      "#include <minimp4.h>\n")
 
 add_library(minimp4 STATIC "${_MINIMP4_IMPL_C}")
-target_include_directories(minimp4 PUBLIC "${_MINIMP4_DIR}/include")
+
+# Vendored single-header 3rdparty: its own code emits -Wsign-compare /
+# -Wunused-{variable,function}. We do not patch upstream — silence the
+# whole TU (matches the vterm / imgui / wasm3 / cdb vendored targets).
+if(MSVC)
+    target_compile_options(minimp4 PRIVATE /w)
+else()
+    target_compile_options(minimp4 PRIVATE -w)
+endif()
+
+# SYSTEM so consumers that PUBLIC-include <minimp4.h> (yvideo-mp4.c,
+# vnc-server.c) likewise don't inherit warnings from the vendored header.
+target_include_directories(minimp4 SYSTEM PUBLIC "${_MINIMP4_DIR}/include")
 
 message(STATUS "minimp4: prebuilt @${YETTY_3RDPARTY_minimp4_VERSION} (${_MINIMP4_DIR}/include/minimp4.h)")

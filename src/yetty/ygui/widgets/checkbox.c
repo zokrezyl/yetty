@@ -203,15 +203,15 @@ struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_ygui
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_checkbox_get_checked(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_checkbox_get_checked(const struct yetty_ygui_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_checkbox_get_checked: invalid args");
     }
-    struct checkbox_data *d = yetty_ygui_data_get(
-        (struct yetty_ygui_object *)obj,
-        yetty_ygui_checkbox_class_get().value);
-    return d->checked;
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_checkbox_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_checkbox_get_checked: data_get");
+    struct checkbox_data *d = d_dr.value;
+    return YETTY_OK(yetty_ycore_int, d->checked);
 }
 
 #include "checkbox.gen.c"

@@ -453,7 +453,7 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
     struct yetty_ycore_event_loop_result el_res =
         yetty_ycore_event_loop_create(rt->platform_input_pipe);
     if (!YETTY_IS_OK(el_res)) {
-        yetty_yframework_destroy(rt);
+        (void)yetty_yframework_destroy(rt);
         return YETTY_ERR(yetty_yframework_ptr, "yframework: event_loop_create failed", el_res);
     }
     rt->event_loop = el_res.value;
@@ -463,14 +463,14 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
     struct yplatform_wgpu_ptr_result wgpu_res =
         yetty_yplatform_wgpu_create(yinit_rt->instance, rt->event_loop);
     if (!YETTY_IS_OK(wgpu_res)) {
-        yetty_yframework_destroy(rt);
+        (void)yetty_yframework_destroy(rt);
         return YETTY_ERR(yetty_yframework_ptr, "yframework: wgpu_create failed", wgpu_res);
     }
     rt->wgpu = wgpu_res.value;
 
     struct yetty_ycore_void_result gpu_res = init_gpu(rt, yinit_rt->instance, yinit_rt->surface);
     if (!YETTY_IS_OK(gpu_res)) {
-        yetty_yframework_destroy(rt);
+        (void)yetty_yframework_destroy(rt);
         return YETTY_ERR(yetty_yframework_ptr, "yframework: gpu init failed", gpu_res);
     }
 
@@ -494,7 +494,7 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
             } else {
                 yerror("yframework: rpc_server_start failed: %s", sr.error.msg);
                 yetty_ycore_error_destroy(sr.error);
-                yetty_yctl_server_destroy(rt->rpc_server);
+                (void)yetty_yctl_server_destroy(rt->rpc_server);
                 rt->rpc_server = NULL;
             }
         } else {
