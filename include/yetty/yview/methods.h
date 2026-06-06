@@ -1,0 +1,20 @@
+/* GENERATED — do not edit. */
+#ifndef YETTY_YCLASSGEN_YVIEW_METHODS_H
+#define YETTY_YCLASSGEN_YVIEW_METHODS_H
+
+#include <yetty/yclass/class.h>
+#include <yetty/ycore/types.h>
+#include "yetty/yview/types.h"
+
+struct yetty_ycore_void_result;
+struct yetty_ydraw_drawable_list;
+
+struct yetty_ycore_void_result yetty_yview_configure(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, int fd, uint32_t child_id, uint32_t kind, uint32_t bg_color, float min_x, float min_y, float max_x, float max_y);
+struct yetty_ycore_void_result yetty_yview_set_content(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, const struct yetty_ydraw_drawable_list * content);
+struct yetty_ycore_void_result yetty_yview_set_content_size(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, float content_w, float content_h);
+struct yetty_ycore_void_result yetty_yview_scroll_to(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, float scroll_x, float scroll_y);
+struct yetty_ycore_void_result yetty_yview_scroll_by(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, float delta_x, float delta_y);
+struct yetty_ycore_void_result yetty_yview_set_rect(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, float min_x, float min_y, float max_x, float max_y);
+struct yetty_ycore_void_result yetty_yview_destroy(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
+
+#endif

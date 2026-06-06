@@ -1,0 +1,177 @@
+methods:
+  - slot: configure
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fd
+        type: int
+      - name: child_id
+        type: uint32_t
+      - name: kind
+        type: uint32_t
+      - name: bg_color
+        type: uint32_t
+      - name: min_x
+        type: float
+      - name: min_y
+        type: float
+      - name: max_x
+        type: float
+      - name: max_y
+        type: float
+    local: true
+  - slot: set_content
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: content
+        type: "const struct yetty_ydraw_drawable_list *"
+    local: true
+  - slot: set_content_size
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: content_w
+        type: float
+      - name: content_h
+        type: float
+    local: true
+  - slot: scroll_to
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: scroll_x
+        type: float
+      - name: scroll_y
+        type: float
+    local: true
+  - slot: scroll_by
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: delta_x
+        type: float
+      - name: delta_y
+        type: float
+    local: true
+  - slot: set_rect
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: min_x
+        type: float
+      - name: min_y
+        type: float
+      - name: max_x
+        type: float
+      - name: max_y
+        type: float
+    local: true
+  - slot: destroy
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+classes:
+  - name: view
+    domain: yview
+    accessor: yetty_yview_view_class_get
+    type: regular
+    source_file: src/yetty/yview/view.c
+    parent: null
+    mixins: []
+    data: struct view_data
+    data_fields:
+      - name: fd
+        type: int
+        get: false
+        set: false
+      - name: child_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: kind
+        type: uint32_t
+        get: false
+        set: false
+      - name: bg_color
+        type: uint32_t
+        get: false
+        set: false
+      - name: rect
+        type: struct yetty_ycore_rectangle
+        get: false
+        set: false
+      - name: content_w
+        type: float
+        get: false
+        set: false
+      - name: content_h
+        type: float
+        get: false
+        set: false
+      - name: scroll_x
+        type: float
+        get: false
+        set: false
+      - name: scroll_y
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: configure
+        slot_domain: yview
+        impl: view_configure
+      - slot: set_content
+        slot_domain: yview
+        impl: view_set_content
+      - slot: set_content_size
+        slot_domain: yview
+        impl: view_set_content_size
+      - slot: scroll_to
+        slot_domain: yview
+        impl: view_scroll_to
+      - slot: scroll_by
+        slot_domain: yview
+        impl: view_scroll_by
+      - slot: set_rect
+        slot_domain: yview
+        impl: view_set_rect
+      - slot: destroy
+        slot_domain: yview
+        impl: view_destroy
