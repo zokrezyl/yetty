@@ -123,9 +123,18 @@ decompresses transparently on extraction.
 |-----------|--------|-------------|--------|------|----------|
 | Executables | `bin/` | `BIN` | — | yes | `yetty`, companion CLIs (`ycat`, `yplot`, `ygreeter`, `ydoc`, `ysheet`, `yslide`, …) and the `demo-*` programs |
 | Shaders & fonts | `data/` | `DATA` | — | no | WGSL shaders, TTF + MSDF fonts |
+| Greeter assets | `greeter/` | `DATA` | — | no | ygreeter logos, intro video, samples |
+| Demos | `demos/` | `DATA` | `demos` | no | the `demo/` tree — assets, scripts and sources |
 | Default config | `yconfig/` | `CONFIG` | — | no | `config.yaml`, `defaults.yaml`, temu cfgs |
 | RISC-V VM runtime | `yemu/` | `DATA` | `yemu` | no | kernel, OpenSBI firmware, root filesystem |
 | QEMU emulator | `qemu/` | `DATA` | `qemu` | yes | `qemu-system-riscv64` |
+
+The installer carries the assets of **every** tool it ships, not just yetty's:
+each app binary (yetty, ygreeter, …) is thin on desktop and reads its assets
+from the installed `DATA` dir. A binary self-contains its assets only where
+there is no installer — the riscv VM rootfs and mobile bundles — controlled by
+the CMake option `YETTY_EMBED_ASSETS_IN_BINARIES` (OFF on desktop, forced ON
+for those targets).
 
 This table *is* the contract between the installer and everything it ships.
 Read top to bottom, it is also exactly the order things are installed and
@@ -194,13 +203,15 @@ yetty installer · version a1b2c3d
 
 Installing to this machine:
 
-  Executables          →  ~/.local/bin/               199.0 MB  (13 files, unpacked from 67.3 MB)
-  Shaders & fonts      →  ~/.local/share/yetty/       167.6 MB  (69 files, unpacked from 35.6 MB)
-  Default config       →  ~/.config/yetty/            22.5 KB   (4 files, unpacked from 6.8 KB)
-  RISC-V VM runtime    →  ~/.local/share/yetty/yemu/  417.2 MB  (5 files, unpacked from 87.8 MB)
-  QEMU emulator        →  ~/.local/share/yetty/qemu/  6.6 MB    (1 files, unpacked from 2.0 MB)
+  Executables          →  ~/.local/bin/                194.6 MB  (13 files, unpacked from 62.9 MB)
+  Shaders & fonts      →  ~/.local/share/yetty/        167.6 MB  (69 files, unpacked from 35.6 MB)
+  Greeter assets       →  ~/.local/share/yetty/        4.5 MB    (7 files, unpacked from 4.4 MB)
+  Demos                →  ~/.local/share/yetty/demos/  9.0 MB    (185 files, unpacked from 8.3 MB)
+  Default config       →  ~/.config/yetty/             22.5 KB   (4 files, unpacked from 6.8 KB)
+  RISC-V VM runtime    →  ~/.local/share/yetty/yemu/   417.2 MB  (5 files, unpacked from 87.8 MB)
+  QEMU emulator        →  ~/.local/share/yetty/qemu/   6.6 MB    (1 files, unpacked from 2.0 MB)
 
-Installed 5 components · 790.5 MB written.
+Installed 7 components · 799.6 MB written.
 yetty is ready -- run:  ~/.local/bin/yetty
 
 Note: ~/.local/bin is not on your PATH. Add it to run `yetty` directly.

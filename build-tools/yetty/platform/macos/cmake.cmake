@@ -69,7 +69,7 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # Embed all assets only for a standalone build. By default the desktop yetty
 # is thin — the yinstall installer carries the assets (and yetty itself).
 # The build version is stamped either way.
-if(YETTY_EMBED_ASSETS_IN_YETTY)
+if(YETTY_EMBED_ASSETS_IN_BINARIES)
     yetty_embed_assets(yetty)
 else()
     yetty_compute_build_version()

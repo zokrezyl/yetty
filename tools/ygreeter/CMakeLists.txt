@@ -197,33 +197,45 @@ endif()
 # embedded-assets.c becomes a no-op then and the Images tab falls back
 # to whatever logo-N.jpeg the user has under <data_dir>/.
 if(YETTY_ENABLE_LIB_INCBIN)
-    include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
-
     yetty_compute_build_version()
     target_compile_definitions(ygreeter PRIVATE
         YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
-    set(_YGREETER_EMBED_DIR "${CMAKE_CURRENT_BINARY_DIR}/embed-data")
-    file(REMOVE_RECURSE "${_YGREETER_EMBED_DIR}")
-    file(MAKE_DIRECTORY "${_YGREETER_EMBED_DIR}")
-
-    foreach(_F
-            "assets/logo-1.jpeg"
-            "assets/logo-2.jpeg"
-            "assets/logo-3.jpeg"
-            "assets/logo-4.jpeg"
-            "assets/yetty-unchained-2.mp4"
-            "test/ut/ypdf/pdf-sample.pdf"
-            "README.md")
-        if(EXISTS "${YETTY_ROOT}/${_F}")
-            get_filename_component(_NAME "${_F}" NAME)
-            configure_file("${YETTY_ROOT}/${_F}"
-                "${_YGREETER_EMBED_DIR}/${_NAME}" COPYONLY)
-        endif()
-    endforeach()
-
-    incbin_add_directory(ygreeter "data" "${_YGREETER_EMBED_DIR}" "*" TRUE)
-
+    # Brotli stays linked unconditionally: embedded-assets.c uses it when the
+    # data manifest is present, and other deps (freetype/woff2, curl) may pull
+    # it in too. Harmless when unused — the linker drops it.
     include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
     target_link_libraries(ygreeter PRIVATE brotlidec brotlicommon)
+
+    # Desktop ygreeter is thin: the yinstall installer carries its logos /
+    # intro video / samples and deploys them to <data_dir>/, so a baked-in
+    # copy would only bloat the binary and the installer that embeds it.
+    # YETTY_EMBED_ASSETS_IN_BINARIES is forced ON for the riscv VM rootfs
+    # (no installer there — the tool must self-extract its assets at boot).
+    # When OFF, embedded-assets.c compiles to a no-op and ygreeter reads the
+    # logos straight from <data_dir>/.
+    if(YETTY_EMBED_ASSETS_IN_BINARIES)
+        include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
+
+        set(_YGREETER_EMBED_DIR "${CMAKE_CURRENT_BINARY_DIR}/embed-data")
+        file(REMOVE_RECURSE "${_YGREETER_EMBED_DIR}")
+        file(MAKE_DIRECTORY "${_YGREETER_EMBED_DIR}")
+
+        foreach(_F
+                "assets/logo-1.jpeg"
+                "assets/logo-2.jpeg"
+                "assets/logo-3.jpeg"
+                "assets/logo-4.jpeg"
+                "assets/yetty-unchained-2.mp4"
+                "test/ut/ypdf/pdf-sample.pdf"
+                "README.md")
+            if(EXISTS "${YETTY_ROOT}/${_F}")
+                get_filename_component(_NAME "${_F}" NAME)
+                configure_file("${YETTY_ROOT}/${_F}"
+                    "${_YGREETER_EMBED_DIR}/${_NAME}" COPYONLY)
+            endif()
+        endforeach()
+
+        incbin_add_directory(ygreeter "data" "${_YGREETER_EMBED_DIR}" "*" TRUE)
+    endif()
 endif()

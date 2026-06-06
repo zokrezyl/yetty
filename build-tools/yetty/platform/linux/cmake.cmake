@@ -102,7 +102,7 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # the build version is stamped so runtime markers / --version still work.
 # Shared RISC-V runtime + QEMU binary are fetched at configure time in
 # shared.cmake regardless.
-if(YETTY_EMBED_ASSETS_IN_YETTY)
+if(YETTY_EMBED_ASSETS_IN_BINARIES)
     yetty_embed_assets(yetty)
 else()
     yetty_compute_build_version()
