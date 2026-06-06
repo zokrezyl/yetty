@@ -26,6 +26,7 @@ typedef long long ssize_t;
 #include <unistd.h>
 #endif
 
+#include <yetty/ycore/terminal-detect.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -187,9 +188,9 @@ struct yetty_ywire_wire_statemachine {
     uint8_t enc_b64_carry_n;
     struct yetty_ycore_buffer *enc_out_buf; /* borrowed during write */
 
-    /* tmux passthrough — cached once per SM. True only when running tmux
-     * inside yetty (YETTY_TMUX_PASSTHROUGH=1 AND $TMUX set; see
-     * yetty_ywire_tmux_passthrough_active). In that case tmux parses/
+    /* tmux passthrough — cached once per SM. True only when running inside
+     * tmux (TERM_PROGRAM=tmux; see yetty_ywire_tmux_passthrough_active). In
+     * that case tmux parses/
      * re-renders pane output and will NOT forward our OSC/DCS envelopes to
      * the outer terminal — except the `ESC P tmux; <payload, every ESC
      * doubled> ESC \` wrapper, which it unwraps verbatim (with
@@ -1662,19 +1663,15 @@ enum yetty_ywire_envelope_kind yetty_ywire_wire_statemachine_kind(
 
 int yetty_ywire_tmux_passthrough_active(void)
 {
-    /* "Am I running tmux inside yetty, so my output must be passthrough-
-     * wrapped to reach yetty?" — TRUE only when BOTH hold:
-     *   - the host terminal is yetty (YETTY_TMUX_PASSTHROUGH=1, set by yetty
-     *     and inherited through tmux), and
-     *   - a tmux actually sits in between ($TMUX set).
-     * Directly under yetty (no tmux) there is nothing to wrap around, so we
-     * emit bare envelopes. */
-    const char *yetty = getenv("YETTY_TMUX_PASSTHROUGH");
-    if (!yetty || yetty[0] != '1') {
-        return 0;
-    }
-    const char *tmux = getenv("TMUX");
-    return tmux && tmux[0] != '\0';
+    /* "Am I running inside tmux, so my output must be passthrough-wrapped to
+     * reach yetty?" — TRUE iff TERM_PROGRAM=tmux. tmux sets that for its own
+     * panes; in yetty's model a tmux is hosted by yetty, so it re-renders
+     * pane output and will NOT forward our OSC/DCS envelopes to the outer
+     * terminal except the `ESC P tmux; <payload, every ESC doubled> ESC \`
+     * wrapper (which it unwraps verbatim with `allow-passthrough on`).
+     * Directly under yetty (TERM_PROGRAM=yetty) there is no multiplexer to
+     * wrap around, so we emit bare envelopes. */
+    return yetty_term_program_is_tmux();
 }
 
 /* tmux passthrough wrapping. Lazily decide (and cache) whether emitted
