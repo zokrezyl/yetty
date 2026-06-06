@@ -63,6 +63,12 @@ struct yetty_yview_config {
      * Callers that may run concurrently (several panes / windows) should pass
      * distinct non-zero ids so their figures don't collide. */
     uint32_t child_id;
+    /* Opaque background fill drawn behind the content, as 0xAARRGGBB. The
+     * alpha byte is the opacity; 0 (fully transparent) draws no background, so
+     * the terminal text underneath shows through (the figure is composited,
+     * not cleared). Only applied for YGRID-kind views. A pager typically wants
+     * an opaque background so the shell text beneath is occluded. */
+    uint32_t bg_color;
 };
 
 /* Allocate a view handle. Emits nothing yet — the figure is minted on the

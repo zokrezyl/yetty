@@ -7,7 +7,8 @@
  * ONCE as a positioned, viewport-anchored figure (DCS YCOMPOSITOR_BIN) and
  * then stays in the foreground translating keystrokes into scroll commands.
  * Scrolling is server-side state: each key sends a tiny SET_CHILD_SCROLL
- * record, never re-shipping the content.
+ * record, never re-shipping the content. On exit the figure is removed
+ * (DELETE_CHILD), so the surface is cleared.
  *
  * Content comes from a file argument or stdin; keystrokes are read from
  * /dev/tty (so a piped stdin still leaves a usable keyboard). Envelopes are
@@ -17,6 +18,7 @@
  */
 #include <yetty/ycat/ycat.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yplatform/getopt.h>
 #include <yetty/yview/yview.h>
 
 #include <fcntl.h>
@@ -28,6 +30,61 @@
 #include <termios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+
+/*=============================================================================
+ * Options
+ *===========================================================================*/
+
+struct yless_opts {
+    int x_cells;    /* origin column (cells); 0 = pane left */
+    int y_cells;    /* origin row (cells);    0 = pane top  */
+    int w_cells;    /* width  in cells; 0 = to right edge */
+    int h_cells;    /* height in cells; 0 = to bottom edge */
+    float opacity;  /* background opacity 0.0..1.0 (1.0 = opaque) */
+};
+
+/* Brand near-black background (#0B1014), per the palette. RGB only — the
+ * opacity flag supplies the alpha byte. */
+#define YLESS_BG_RGB 0x0B1014u
+
+static void usage(FILE *out, const char *prog)
+{
+    fprintf(out,
+            "Usage: %s [options] [file]\n"
+            "\n"
+            "A pager that renders FILE (or stdin) into a positioned, server-side\n"
+            "scrollable figure inside yetty — like `less`, but the content is a\n"
+            "graphical surface (syntax-highlighted source, image, svg, diagram,\n"
+            "pdf) that scrolls on the server. Unlike ycat it does NOT go to the\n"
+            "scrollback; on exit the surface is cleared.\n"
+            "\n"
+            "Supported content: source files (tree-sitter), images, svg, mermaid\n"
+            "diagrams, pdf (first page).\n"
+            "\n"
+            "Options (position/size are in terminal CELLS; default = whole pane):\n"
+            "  -x, --x=N        origin column   (default 0)\n"
+            "  -y, --y=N        origin row      (default 0)\n"
+            "  -w, --width=N    width in cells  (default: to right edge)\n"
+            "  -H, --height=N   height in cells (default: to bottom edge)\n"
+            "  -a, --alpha=F    background opacity 0.0..1.0 (default 1.0 = opaque;\n"
+            "                   0.0 = transparent, terminal text shows through)\n"
+            "  -h, --help       show this help\n"
+            "\n"
+            "Keys (interactive):\n"
+            "  j / Down / Enter   scroll down one line\n"
+            "  k / Up             scroll up one line\n"
+            "  Space / f / PgDn   page down\n"
+            "  b / PgUp           page up\n"
+            "  g / Home           jump to top\n"
+            "  G / End            jump to bottom\n"
+            "  q / Ctrl-C / Ctrl-D / Esc   quit (clears the surface)\n"
+            "\n"
+            "Examples:\n"
+            "  %s main.c                 # page a source file, whole pane\n"
+            "  %s -w 40 -H 20 a.svg      # an svg in a 40x20-cell box at the top-left\n"
+            "  %s -x 42 -w 38 b.pdf      # a pdf in the right-hand half\n",
+            prog, prog, prog, prog);
+}
 
 /*=============================================================================
  * Input read helpers
@@ -114,6 +171,89 @@ static struct viewport probe_viewport(int tty_fd)
 }
 
 /*=============================================================================
+ * Content rendering — ycat's MIME dispatch, collapsed to one drawable list
+ *===========================================================================*/
+
+/* Streaming handlers (markdown/pdf) emit one envelope per tile/page. A single
+ * scrollable figure wants one list, so we keep the FIRST envelope (page 1 of a
+ * pdf, first tile of markdown). Merging all pages into one tall figure is a
+ * follow-up. The captured list is cloned because the handler frees its own. */
+struct stream_capture {
+    struct yetty_ydraw_drawable_list *first;
+};
+
+static struct yetty_ycore_void_result capture_first_envelope(
+    void *user_data, const struct yetty_ydraw_drawable_list *envelope)
+{
+    struct stream_capture *capture = user_data;
+    if (capture->first) {
+        return YETTY_OK_VOID(); /* keep only the first */
+    }
+    const uint8_t *blob = NULL;
+    size_t blob_len = yetty_ydraw_drawable_list_serialize(
+        (struct yetty_ydraw_drawable_list *)envelope, &blob);
+    if (blob_len == 0 || !blob) {
+        return YETTY_ERR(yetty_ycore_void, "capture_first_envelope: serialize empty");
+    }
+    struct yetty_ydraw_drawable_list_result clone_r =
+        yetty_ydraw_drawable_list_create_from_bytes(blob, blob_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, clone_r, "capture_first_envelope: clone");
+    capture->first = clone_r.value;
+    return YETTY_OK_VOID();
+}
+
+/* Render `bytes` into a single drawable list, or NULL on failure (message on
+ * stderr). Mirrors ycat's dispatch: streaming handler (pdf/markdown) → single-
+ * shot handler (image/svg/mermaid) → tree-sitter (source). */
+static struct yetty_ydraw_drawable_list *render_content(const uint8_t *bytes, size_t len,
+                                                        const char *path,
+                                                        const struct yetty_ycat_config *cfg)
+{
+    enum yetty_ycat_type type = yetty_ycat_detect(bytes, len, path);
+
+    yetty_ycat_handler_streaming_fn stream_fn = yetty_ycat_get_handler_streaming(type);
+    if (stream_fn) {
+        struct stream_capture capture = {0};
+        struct yetty_ycore_void_result sr =
+            stream_fn(bytes, len, path, cfg, capture_first_envelope, &capture);
+        if (YETTY_IS_OK(sr) && capture.first) {
+            return capture.first;
+        }
+        if (YETTY_IS_ERR(sr)) {
+            yetty_ycore_error_destroy(sr.error);
+        }
+        if (capture.first) {
+            yetty_ydraw_drawable_list_destroy(capture.first);
+        }
+        /* fall through to the other paths */
+    }
+
+    yetty_ycat_handler_fn handler_fn = yetty_ycat_get_handler(type);
+    if (handler_fn) {
+        struct yetty_ydraw_drawable_list_result r = handler_fn(bytes, len, path, cfg);
+        if (YETTY_IS_OK(r)) {
+            return r.value;
+        }
+        yetty_ycore_error_destroy(r.error);
+    }
+
+    const char *grammar = yetty_ycat_grammar_lookup(NULL, path);
+    if (grammar) {
+        struct yetty_ydraw_drawable_list_result r = yetty_ycat_ts_render(bytes, len, grammar, cfg);
+        if (YETTY_IS_OK(r)) {
+            return r.value;
+        }
+        fprintf(stderr, "yless: render failed: %s\n", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+        return NULL;
+    }
+
+    fprintf(stderr, "yless: no renderer for this content type "
+                    "(supported: source files, images, svg, mermaid, pdf)\n");
+    return NULL;
+}
+
+/*=============================================================================
  * Raw-mode keyboard
  *===========================================================================*/
 
@@ -128,7 +268,10 @@ enum key {
     KEY_BOTTOM,
 };
 
-/* Read one logical key, decoding the common CSI arrow / page sequences. */
+/* Read one logical key, decoding the common CSI arrow / page sequences.
+ * Ctrl-C (0x03) and Ctrl-D (0x04) map to quit — raw mode disables ISIG so
+ * they arrive as bytes and the normal cleanup (which clears the surface)
+ * still runs. */
 static enum key read_key(int tty_fd)
 {
     uint8_t c;
@@ -139,6 +282,8 @@ static enum key read_key(int tty_fd)
     switch (c) {
     case 'q':
     case 'Q':
+    case 0x03: /* Ctrl-C */
+    case 0x04: /* Ctrl-D */
         return KEY_QUIT;
     case 'j':
     case '\r':
@@ -161,11 +306,10 @@ static enum key read_key(int tty_fd)
         return KEY_NONE;
     }
 
-    /* ESC: peek the next two bytes for a CSI arrow / page key. A bare ESC
-     * (no follow-on within the buffered read) quits, matching less. */
+    /* ESC: peek the next two bytes for a CSI arrow / page key. */
     uint8_t seq[2];
     if (read(tty_fd, &seq[0], 1) <= 0) {
-        return KEY_QUIT;
+        return KEY_QUIT; /* bare ESC → quit, like less */
     }
     if (seq[0] != '[' && seq[0] != 'O') {
         return KEY_NONE;
@@ -183,9 +327,9 @@ static enum key read_key(int tty_fd)
     case 'F':
         return KEY_BOTTOM;
     case '5':
-        return KEY_PAGE_UP; /* CSI 5 ~ (PageUp); trailing '~' consumed below */
+        return KEY_PAGE_UP; /* CSI 5 ~ */
     case '6':
-        return KEY_PAGE_DOWN; /* CSI 6 ~ (PageDown) */
+        return KEY_PAGE_DOWN; /* CSI 6 ~ */
     default:
         return KEY_NONE;
     }
@@ -197,7 +341,49 @@ static enum key read_key(int tty_fd)
 
 int main(int argc, char **argv)
 {
-    const char *path = (argc > 1) ? argv[1] : NULL;
+    struct yless_opts opts = {.opacity = 1.0f};
+
+    static const struct yetty_yplatform_option long_opts[] = {
+        {"x", required_argument, NULL, 'x'},      {"y", required_argument, NULL, 'y'},
+        {"width", required_argument, NULL, 'w'},  {"height", required_argument, NULL, 'H'},
+        {"alpha", required_argument, NULL, 'a'},  {"help", no_argument, NULL, 'h'},
+        {NULL, 0, NULL, 0},
+    };
+
+    int c;
+    while ((c = yetty_yplatform_getopt_long(argc, argv, "x:y:w:H:a:h", long_opts, NULL)) != -1) {
+        switch (c) {
+        case 'x':
+            opts.x_cells = atoi(yetty_yplatform_optarg);
+            break;
+        case 'y':
+            opts.y_cells = atoi(yetty_yplatform_optarg);
+            break;
+        case 'w':
+            opts.w_cells = atoi(yetty_yplatform_optarg);
+            break;
+        case 'H':
+            opts.h_cells = atoi(yetty_yplatform_optarg);
+            break;
+        case 'a':
+            opts.opacity = (float)atof(yetty_yplatform_optarg);
+            if (opts.opacity < 0.0f) {
+                opts.opacity = 0.0f;
+            }
+            if (opts.opacity > 1.0f) {
+                opts.opacity = 1.0f;
+            }
+            break;
+        case 'h':
+            usage(stdout, argv[0]);
+            return 0;
+        default:
+            usage(stderr, argv[0]);
+            return 2;
+        }
+    }
+
+    const char *path = (yetty_yplatform_optind < argc) ? argv[yetty_yplatform_optind] : NULL;
 
     /* Read the content bytes. */
     struct byte_buf input = {0};
@@ -230,53 +416,35 @@ int main(int argc, char **argv)
 
     struct viewport vp = probe_viewport(tty_fd);
 
-    /* Render the content into a single drawable list. Mirror ycat's dispatch
-     * for the single-shot paths: try a dedicated handler (image/svg/mermaid),
-     * then fall back to the tree-sitter renderer for source files. (Streaming
-     * formats — markdown/pdf — tile per envelope for the scrolling layer; a
-     * single-figure pager needs them merged, which is a follow-up.) */
+    /* Resolve the viewport rect (cells → pixels), defaulting to the pane. */
+    float origin_x = (float)opts.x_cells * (float)vp.cell_w;
+    float origin_y = (float)opts.y_cells * (float)vp.cell_h;
+    float rect_w = opts.w_cells > 0 ? (float)opts.w_cells * (float)vp.cell_w : vp.pixel_w - origin_x;
+    float rect_h = opts.h_cells > 0 ? (float)opts.h_cells * (float)vp.cell_h : vp.pixel_h - origin_y;
+
     struct yetty_ycat_config cfg = {
         .cell_width = vp.cell_w,
         .cell_height = vp.cell_h,
-        .width_cells = vp.cols,
+        .width_cells = opts.w_cells > 0 ? (uint32_t)opts.w_cells : vp.cols,
         .height_cells = 0,
     };
-    struct yetty_ydraw_drawable_list *content = NULL;
-    struct yetty_ydraw_drawable_list_result render_r =
-        yetty_ycat_render(input.data, input.len, path, &cfg);
-    if (YETTY_IS_OK(render_r)) {
-        content = render_r.value;
-    } else {
-        yetty_ycore_error_destroy(render_r.error);
-        const char *grammar = yetty_ycat_grammar_lookup(NULL, path);
-        if (grammar) {
-            struct yetty_ydraw_drawable_list_result ts_r =
-                yetty_ycat_ts_render(input.data, input.len, grammar, &cfg);
-            if (YETTY_IS_OK(ts_r)) {
-                content = ts_r.value;
-            } else {
-                fprintf(stderr, "yless: render failed: %s\n", ts_r.error.msg);
-                yetty_ycore_error_destroy(ts_r.error);
-            }
-        } else {
-            fprintf(stderr,
-                    "yless: no renderer for this content type "
-                    "(supported: source files, images, svg, mermaid)\n");
-        }
-    }
+
+    struct yetty_ydraw_drawable_list *content = render_content(input.data, input.len, path, &cfg);
     if (!content) {
         free(input.data);
         close(tty_fd);
         return 1;
     }
 
-    /* Mint the scrollable view over the whole viewport. */
+    /* Mint the scrollable view over the resolved rect. */
     struct yetty_yview_config view_cfg = {
         .fd = STDOUT_FILENO,
-        .rect = {.min = {.x = 0.0f, .y = 0.0f}, .max = {.x = vp.pixel_w, .y = vp.pixel_h}},
+        .rect = {.min = {.x = origin_x, .y = origin_y},
+                 .max = {.x = origin_x + rect_w, .y = origin_y + rect_h}},
         .kind = 0, /* default YGRID */
         .flags = YETTY_YVIEW_FLAG_NONE,
         .child_id = (uint32_t)getpid(),
+        .bg_color = ((uint32_t)(opts.opacity * 255.0f + 0.5f) << 24) | YLESS_BG_RGB,
     };
     struct yetty_yview_ptr_result view_r = yetty_yview_create(&view_cfg);
     if (YETTY_IS_ERR(view_r)) {
@@ -303,12 +471,15 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Raw mode on the tty for unbuffered, un-echoed key reads. */
+    /* Raw mode on the tty: unbuffered, un-echoed reads, and ISIG cleared so
+     * Ctrl-C/Z/\ arrive as bytes (we handle Ctrl-C/D as quit) and the normal
+     * exit path — which clears the surface — always runs. */
     struct termios saved;
     bool raw_active = false;
     if (tcgetattr(tty_fd, &saved) == 0) {
         struct termios raw = saved;
-        raw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+        raw.c_lflag &= (tcflag_t) ~(ICANON | ECHO | ISIG);
+        raw.c_iflag &= (tcflag_t) ~(IXON);
         raw.c_cc[VMIN] = 1;
         raw.c_cc[VTIME] = 0;
         if (tcsetattr(tty_fd, TCSANOW, &raw) == 0) {
@@ -317,7 +488,7 @@ int main(int argc, char **argv)
     }
 
     const float line = (float)vp.cell_h;
-    const float page = vp.pixel_h > line ? vp.pixel_h - line : line;
+    const float page = rect_h > line ? rect_h - line : line;
     const float to_bottom = 1.0e9f; /* clamped server-side and in yview */
 
     bool running = true;
@@ -359,6 +530,7 @@ int main(int argc, char **argv)
     if (raw_active) {
         tcsetattr(tty_fd, TCSANOW, &saved);
     }
+    /* Clear the surface: DELETE_CHILD removes the figure from the container. */
     struct yetty_ycore_void_result dr = yetty_yview_destroy(view);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
