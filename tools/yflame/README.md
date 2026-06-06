@@ -8,8 +8,10 @@ a yetty session. Two pieces:
 - **`yflame.sh`** — a friendly wrapper that records with `perf`, collapses the
   stacks, and renders, in one command.
 
-For the rendering internals (tree, layout, colours, primitives) see the module
-docs in [`src/yetty/yflame/README.md`](../../src/yetty/yflame/README.md).
+The renderer is the `yflame:flame` yclass class; the CLI is a thin frontend
+over it (`create → configure → parse → render → emit_osc`). For the rendering
+internals (tree, layout, colours, primitives) and the full class API see the
+module docs in [`src/yetty/yflame/README.md`](../../src/yetty/yflame/README.md).
 
 ---
 

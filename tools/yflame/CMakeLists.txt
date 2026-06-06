@@ -3,6 +3,7 @@
 
 add_executable(yflame
     main.c
+    interactive.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 
@@ -16,6 +17,7 @@ target_include_directories(yflame PRIVATE
 find_package(Threads REQUIRED)
 target_link_libraries(yflame PRIVATE
     yetty_yflame
+    yetty_yview
     Threads::Threads
     yetty_yplatform_core
 )
