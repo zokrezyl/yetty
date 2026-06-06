@@ -694,8 +694,8 @@ function(yetty_embed_assets TARGET)
         "${YETTY_ROOT}/assets/yemu/temu/yetty-temu-extended.cfg"
         DESTINATION "${EMBED_CONFIG_DIR}/temu")
 
-    # Embed config (not compressed)
-    incbin_add_directory(${TARGET} "yconfig" "${EMBED_CONFIG_DIR}" "*" FALSE)
+    # Embed config (brotli-compressed; the extractor inflates on the way out)
+    incbin_add_directory(${TARGET} "yconfig" "${EMBED_CONFIG_DIR}" "*" TRUE)
 
     # Embed shared RISC-V runtime (kernel, opensbi, rootfs) under yemu/ prefix.
     # Used by both --temu (TinyEMU, in-process) and --qemu (external QEMU via

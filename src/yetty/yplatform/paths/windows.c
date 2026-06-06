@@ -32,9 +32,14 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
     if (localAppData && *localAppData) {
         snprintf(p->cache_dir_buf, sizeof(p->cache_dir_buf), "%s\\yetty\\cache", localAppData);
         snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "%s\\yetty\\data", localAppData);
+        /* bin_dir → %LOCALAPPDATA%\Programs\yetty (the convention modern
+         * per-user installers use, e.g. VS Code, Python). Executables land
+         * here; the installer offers to add it to the user PATH. */
+        snprintf(p->bin_dir_buf, sizeof(p->bin_dir_buf), "%s\\Programs\\yetty", localAppData);
     } else {
         snprintf(p->cache_dir_buf, sizeof(p->cache_dir_buf), "C:\\temp\\yetty");
         snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "C:\\temp\\yetty");
+        snprintf(p->bin_dir_buf, sizeof(p->bin_dir_buf), "C:\\temp\\yetty\\bin");
     }
 
     const char *temp = getenv("TEMP");

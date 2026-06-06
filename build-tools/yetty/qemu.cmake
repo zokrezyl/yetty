@@ -235,6 +235,7 @@ function(qemu_embed_runtime TARGET)
         message(WARNING "qemu_embed_runtime: ${_BIN_NAME} not found at '${_BIN}'; QEMU will be embedded empty")
     endif()
 
-    # Not compressed — it's an executable, runtime extracts and chmods it
-    incbin_add_directory(${TARGET} "qemu" "${_STAGING}" "*" FALSE)
+    # Brotli-compressed — the runtime inflates, writes, then chmods +x. Halves
+    # the carried bytes versus embedding the raw binary.
+    incbin_add_directory(${TARGET} "qemu" "${_STAGING}" "*" TRUE)
 endfunction()

@@ -95,10 +95,19 @@ add_executable(yetty
 
 target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCLUDES} ${JPEG_INCLUDE_DIRS} ${BROTLI_INCLUDE_DIR})
 
-# Embed all assets (logo, shaders, fonts, CDB files, TinyEMU).
-# Shared RISC-V runtime (OpenSBI, kernel, Alpine rootfs) and QEMU binary have
-# already been fetched at configure time in shared.cmake.
-yetty_embed_assets(yetty)
+# Embed all assets (logo, shaders, fonts, CDB files, TinyEMU) — only for a
+# standalone build. By default the desktop yetty is thin: the yinstall
+# installer carries the assets (and yetty itself), so baking them in here
+# would just bloat the binary and the installer that embeds it. Either way
+# the build version is stamped so runtime markers / --version still work.
+# Shared RISC-V runtime + QEMU binary are fetched at configure time in
+# shared.cmake regardless.
+if(YETTY_EMBED_ASSETS_IN_YETTY)
+    yetty_embed_assets(yetty)
+else()
+    yetty_compute_build_version()
+    target_compile_definitions(yetty PRIVATE YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
+endif()
 
 # Dummy platforms for dependency tracking (legacy)
 add_custom_target(copy-shaders-for-incbin)

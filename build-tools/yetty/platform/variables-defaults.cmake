@@ -148,6 +148,16 @@ option(YETTY_ENABLE_TOOL_YRDAWN_DEMO       "yrdawn-demo tool (bridge smoke test)
 option(YETTY_ENABLE_TOOL_YPLOT           "yplot tool"                        ON)
 option(YETTY_ENABLE_TOOL_YTOP            "ytop tool (CPU monitor)"           ON)
 option(YETTY_ENABLE_TOOL_YGREETER        "ygreeter first-contact tool"       ON)
+option(YETTY_ENABLE_TOOL_YINSTALL        "yinstall installer"                ON)
+
+# Whether the desktop `yetty` binary bakes its assets (shaders / fonts /
+# config / VM runtime) into itself. OFF by default: on desktop the assets
+# (and the binary itself) ship via the yinstall installer, so a baked-in
+# copy would only bloat both the yetty binary and the installer that embeds
+# it. Mobile (ios/android/tvos) and webasm ignore this — they have no
+# installer and always bundle their assets. Set ON to build a standalone,
+# self-extracting desktop yetty.
+option(YETTY_EMBED_ASSETS_IN_YETTY "Bake assets into the desktop yetty binary" OFF)
 option(YETTY_ENABLE_TOOL_YMESH           "ymesh tool (.glb → OSC)"           ON)
 option(YETTY_ENABLE_TOOL_YVIDEO          "yvideo tool (.h264 → OSC stream)"  ON)
 option(YETTY_ENABLE_TOOL_YAUDIO_INTERVALS "yaudio-intervals tool (WAV energy interval finder)" ON)
