@@ -37,6 +37,40 @@ methods:
       - name: content
         type: "const struct yetty_ydraw_drawable_list *"
     local: true
+  - slot: set_text
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+      - name: font_size
+        type: float
+    local: true
+  - slot: set_plot
+    domain: yview
+    owning_class: view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: expr
+        type: "const char *"
+      - name: x_min
+        type: float
+      - name: x_max
+        type: float
+      - name: y_min
+        type: float
+      - name: y_max
+        type: float
+    local: true
   - slot: set_content_size
     domain: yview
     owning_class: view
@@ -160,6 +194,12 @@ classes:
       - slot: set_content
         slot_domain: yview
         impl: view_set_content
+      - slot: set_text
+        slot_domain: yview
+        impl: view_set_text
+      - slot: set_plot
+        slot_domain: yview
+        impl: view_set_plot
       - slot: set_content_size
         slot_domain: yview
         impl: view_set_content_size
@@ -175,3 +215,55 @@ classes:
       - slot: destroy
         slot_domain: yview
         impl: view_destroy
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_pixel_coord
+    kind: struct
+    fields:
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - name: yetty_ycore_rectangle
+    kind: struct
+    fields:
+      - name: min
+        type: struct yetty_ycore_pixel_coord
+      - name: max
+        type: struct yetty_ycore_pixel_coord
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error

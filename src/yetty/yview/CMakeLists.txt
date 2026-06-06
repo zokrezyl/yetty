@@ -22,6 +22,7 @@ target_link_libraries(yetty_yview PUBLIC
     yetty_yclass
     yetty_yface
     yetty_ydraw_core
+    yetty_yplot_core   # set_plot: render a yplot expression to a drawable list (GPU-less)
 )
 
 # view.c carries `[[clang::annotate(...)]]` (C23 attribute syntax); see

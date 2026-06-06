@@ -8,6 +8,10 @@ static yetty_yview_configure_fn yetty_yview_view_yetty_yview_configure_check = v
 [[maybe_unused]]
 static yetty_yview_set_content_fn yetty_yview_view_yetty_yview_set_content_check = view_set_content;
 [[maybe_unused]]
+static yetty_yview_set_text_fn yetty_yview_view_yetty_yview_set_text_check = view_set_text;
+[[maybe_unused]]
+static yetty_yview_set_plot_fn yetty_yview_view_yetty_yview_set_plot_check = view_set_plot;
+[[maybe_unused]]
 static yetty_yview_set_content_size_fn yetty_yview_view_yetty_yview_set_content_size_check = view_set_content_size;
 [[maybe_unused]]
 static yetty_yview_scroll_to_fn yetty_yview_view_yetty_yview_scroll_to_check = view_scroll_to;
@@ -32,6 +36,8 @@ struct yetty_yclass_ptr_result yetty_yview_view_class_get(void)
     static const struct yetty_yclass_op ops[] = {
         {"yetty_yview", "configure", (yetty_yclass_method_id_t)yetty_yview_configure, (yetty_yclass_impl_t)view_configure},
         {"yetty_yview", "set_content", (yetty_yclass_method_id_t)yetty_yview_set_content, (yetty_yclass_impl_t)view_set_content},
+        {"yetty_yview", "set_text", (yetty_yclass_method_id_t)yetty_yview_set_text, (yetty_yclass_impl_t)view_set_text},
+        {"yetty_yview", "set_plot", (yetty_yclass_method_id_t)yetty_yview_set_plot, (yetty_yclass_impl_t)view_set_plot},
         {"yetty_yview", "set_content_size", (yetty_yclass_method_id_t)yetty_yview_set_content_size, (yetty_yclass_impl_t)view_set_content_size},
         {"yetty_yview", "scroll_to", (yetty_yclass_method_id_t)yetty_yview_scroll_to, (yetty_yclass_impl_t)view_scroll_to},
         {"yetty_yview", "scroll_by", (yetty_yclass_method_id_t)yetty_yview_scroll_by, (yetty_yclass_impl_t)view_scroll_by},

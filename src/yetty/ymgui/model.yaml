@@ -189,3 +189,29 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
  * an ymgui figure (identified by its ops vtable), NULL otherwise. Use
  * this to filter the heterogeneous children of a yfigure container. */
 struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base);"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"

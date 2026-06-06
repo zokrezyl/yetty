@@ -144,6 +144,13 @@ option(YETTY_ENABLE_TOOL_YDRAW_GENERATOR "ydraw-generator tool"              OFF
 option(YETTY_ENABLE_TOOL_YDRAW_BENCH    "ydraw-bench tool"                 ON)
 option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
 option(YETTY_ENABLE_TOOL_YLESS           "yless pager tool"                  ON)
+
+# FFI shared library (libyetty_ffi.so). OFF for the normal static build so the
+# fast non-PIC application archives stay uncompromised; turned ON only in the
+# dedicated PIC "double build" tree (make build-desktop-ffi-release), which
+# also sets CMAKE_POSITION_INDEPENDENT_CODE=ON so the linked module archives
+# are position-independent. The bindings under bindings/<lang>/ dlopen it.
+option(YETTY_BUILD_FFI_SHARED            "Build libyetty_ffi.so for language bindings (PIC)" OFF)
 option(YETTY_ENABLE_TOOL_YECHO           "yecho tool"                        ON)
 option(YETTY_ENABLE_TOOL_GEN_ERROR       "gen-error tool (malformed OSC test) " ON)
 option(YETTY_ENABLE_TOOL_YRDAWN_DEMO       "yrdawn-demo tool (bridge smoke test)" ON)

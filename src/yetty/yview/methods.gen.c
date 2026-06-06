@@ -52,6 +52,50 @@ struct yetty_ycore_void_result yetty_yview_set_content(struct yetty_yclass_ctx *
     return ((yetty_yview_set_content_fn)dispatch_impl_r.value)(ctx, obj, content);
 }
 
+struct yetty_ycore_void_result yetty_yview_set_text(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, const char * text, float font_size)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r =
+            yetty_yclass_method_slot_get("yetty_yview", (yetty_yclass_method_id_t)yetty_yview_set_text);
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR(yetty_ycore_void, "yetty_yview_set_text: method_slot_get failed", method_slot_r);
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) return YETTY_ERR(yetty_ycore_void, "yetty_yview_set_text: NULL object");
+
+    struct yetty_yclass_ptr_result object_class_r =
+        yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r, "yetty_yview_set_text: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yview_set_text: dispatch_lookup failed");
+    return ((yetty_yview_set_text_fn)dispatch_impl_r.value)(ctx, obj, text, font_size);
+}
+
+struct yetty_ycore_void_result yetty_yview_set_plot(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, const char * expr, float x_min, float x_max, float y_min, float y_max)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r =
+            yetty_yclass_method_slot_get("yetty_yview", (yetty_yclass_method_id_t)yetty_yview_set_plot);
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR(yetty_ycore_void, "yetty_yview_set_plot: method_slot_get failed", method_slot_r);
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) return YETTY_ERR(yetty_ycore_void, "yetty_yview_set_plot: NULL object");
+
+    struct yetty_yclass_ptr_result object_class_r =
+        yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r, "yetty_yview_set_plot: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yview_set_plot: dispatch_lookup failed");
+    return ((yetty_yview_set_plot_fn)dispatch_impl_r.value)(ctx, obj, expr, x_min, x_max, y_min, y_max);
+}
+
 struct yetty_ycore_void_result yetty_yview_set_content_size(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, float content_w, float content_h)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
