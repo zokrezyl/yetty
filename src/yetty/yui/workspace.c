@@ -160,7 +160,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_set_active(struct yetty_yui_w
      * "you are the foreground view now". */
     struct yetty_yui_event ev = {.type = YETTY_YCORE_SET_FOCUS};
     ev.set_focus.object_id = active ? yetty_yui_tile_id(focused) : 0;
-    yetty_yui_tile_on_event(focused, &ev);
+    { struct yetty_ycore_int_result drop_r = yetty_yui_tile_on_event(focused, &ev); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_on_event"); }
     return YETTY_OK_VOID();
 }
 
@@ -253,7 +253,7 @@ static struct yetty_ycore_void_result workspace_split_pane_impl(
         new_pane_res = yetty_yui_pane_create();
     }
     if (YETTY_IS_ERR(new_pane_res)) {
-        yetty_yui_tile_destroy(split);
+        (void)yetty_yui_tile_destroy(split);
         return YETTY_ERR(yetty_ycore_void, new_pane_res.error.msg);
     }
     new_pane = new_pane_res.value;
@@ -261,15 +261,15 @@ static struct yetty_ycore_void_result workspace_split_pane_impl(
     /* Set up split children */
     res = yetty_yui_tile_split_set_first(split, target);
     if (YETTY_IS_ERR(res)) {
-        yetty_yui_tile_destroy(split);
-        yetty_yui_tile_destroy(new_pane);
+        (void)yetty_yui_tile_destroy(split);
+        (void)yetty_yui_tile_destroy(new_pane);
         return res;
     }
 
     res = yetty_yui_tile_split_set_second(split, new_pane);
     if (YETTY_IS_ERR(res)) {
-        yetty_yui_tile_destroy(split);
-        yetty_yui_tile_destroy(new_pane);
+        (void)yetty_yui_tile_destroy(split);
+        (void)yetty_yui_tile_destroy(new_pane);
         return res;
     }
 
@@ -282,7 +282,7 @@ static struct yetty_ycore_void_result workspace_split_pane_impl(
     /* Find parent and replace */
     parent_split = yetty_yui_tile_find_parent_split(ws->root, pane_id);
     if (!parent_split) {
-        yetty_yui_tile_destroy(split);
+        (void)yetty_yui_tile_destroy(split);
         return YETTY_ERR(yetty_ycore_void, "parent split not found");
     }
 
@@ -385,7 +385,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
 
     /* Closing root? */
     if (yetty_yui_tile_id(ws->root) == tile_id) {
-        yetty_yui_tile_destroy(ws->root);
+        (void)yetty_yui_tile_destroy(ws->root);
         ws->root = NULL;
         return YETTY_OK_VOID();
     }
@@ -406,9 +406,9 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
     /* Parent split is root? Promote sibling to root */
     if (ws->root == parent_split) {
         /* Clear parent's children to prevent double-free */
-        yetty_yui_tile_split_set_first(parent_split, NULL);
-        yetty_yui_tile_split_set_second(parent_split, NULL);
-        yetty_yui_tile_destroy(parent_split);
+        { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_first(parent_split, NULL); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_first"); }
+        { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_second(parent_split, NULL); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_second"); }
+        (void)yetty_yui_tile_destroy(parent_split);
 
         ws->root = sibling;
         if (sibling && ws->width > 0 && ws->height > 0) {
@@ -425,8 +425,8 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
     }
 
     /* Clear parent's children to prevent double-free */
-    yetty_yui_tile_split_set_first(parent_split, NULL);
-    yetty_yui_tile_split_set_second(parent_split, NULL);
+    { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_first(parent_split, NULL); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_first"); }
+    { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_second(parent_split, NULL); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_second"); }
 
     if (yetty_yui_tile_split_first(grandparent) == parent_split) {
         res = yetty_yui_tile_split_set_first(grandparent, sibling);
@@ -434,7 +434,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
         res = yetty_yui_tile_split_set_second(grandparent, sibling);
     }
 
-    yetty_yui_tile_destroy(parent_split);
+    (void)yetty_yui_tile_destroy(parent_split);
 
     if (YETTY_IS_ERR(res)) {
         return res;
@@ -516,12 +516,15 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                 struct yetty_ydvnc_viewer_ptr_result dv_res =
                     yetty_ydvnc_viewer_create(host, port, password, yetty_ctx);
                 if (YETTY_IS_ERR(dv_res)) {
-                    yetty_yui_tile_destroy(tile_res.value);
+                    (void)yetty_yui_tile_destroy(tile_res.value);
                     return YETTY_ERR(yetty_ycore_void, "ydvnc viewer create failed", dv_res);
                 }
 
-                yetty_yui_tile_pane_push_view(tile_res.value,
-                                              yetty_ydvnc_viewer_as_view(dv_res.value));
+                {
+                    struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(
+                        tile_res.value, yetty_ydvnc_viewer_as_view(dv_res.value));
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "workspace: push ydvnc view");
+                }
                 yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             } else if (vnc_client && strlen(vnc_client) > 0) {
                 /* Parse host:port */
@@ -543,12 +546,15 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                 struct yetty_vnc_viewer_ptr_result vnc_res =
                     yetty_yvnc_viewer_create(host, port, yetty_ctx);
                 if (YETTY_IS_ERR(vnc_res)) {
-                    yetty_yui_tile_destroy(tile_res.value);
+                    (void)yetty_yui_tile_destroy(tile_res.value);
                     return YETTY_ERR(yetty_ycore_void, vnc_res.error.msg);
                 }
 
-                yetty_yui_tile_pane_push_view(tile_res.value,
-                                              yetty_yvnc_viewer_as_view(vnc_res.value));
+                {
+                    struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(
+                        tile_res.value, yetty_yvnc_viewer_as_view(vnc_res.value));
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "workspace: push yvnc view");
+                }
                 yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             } else {
                 /* Create terminal */
@@ -557,13 +563,16 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
 
                 term_res = yetty_yterminal_terminal_create(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
-                    yetty_yui_tile_destroy(tile_res.value);
+                    (void)yetty_yui_tile_destroy(tile_res.value);
                     return YETTY_ERR(yetty_ycore_void,
                                      "workspace_load_layout: terminal_create failed", term_res);
                 }
 
-                yetty_yui_tile_pane_push_view(tile_res.value,
-                                              yetty_yterminal_terminal_as_view(term_res.value));
+                {
+                    struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(
+                        tile_res.value, yetty_yterminal_terminal_as_view(term_res.value));
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "workspace: push terminal view");
+                }
                 yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             }
         }

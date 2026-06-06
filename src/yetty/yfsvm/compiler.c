@@ -275,7 +275,8 @@ static const struct yetty_yfsvm_func_map funcs_2arg[] = {
     {"step", YETTY_YFSVM_OP_STEP}, {"lt", YETTY_YFSVM_OP_LT},
     {"gt", YETTY_YFSVM_OP_GT},     {"le", YETTY_YFSVM_OP_LE},
     {"ge", YETTY_YFSVM_OP_GE},     {"eq", YETTY_YFSVM_OP_EQ},
-    {"ne", YETTY_YFSVM_OP_NE},     {NULL, 0},
+    {"ne", YETTY_YFSVM_OP_NE},     {"rand2", YETTY_YFSVM_OP_RAND2},
+    {"noise2", YETTY_YFSVM_OP_NOISE2}, {NULL, 0},
 };
 
 static uint8_t compile_call(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)

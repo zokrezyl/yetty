@@ -137,6 +137,8 @@ Programs are serialized as 32-bit words:
 |--------|------|-------------|
 | 0x60 | RAND | `dst = hash(src1)` white noise in [0,1) |
 | 0x61 | NOISE | `dst =` smooth value noise (interpolated lattice hash) |
+| 0x62 | RAND2 | `dst = hash(src1, src2)` 2D white noise in [0,1) |
+| 0x63 | NOISE2 | `dst =` smooth 2D value noise (bilinear lattice hash) |
 
 ## Limits
 

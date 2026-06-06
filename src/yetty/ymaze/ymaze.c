@@ -395,23 +395,39 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
 
             if ((w & YMAZE_WALL_N) && row == 0) {
                 seg = (struct yetty_ysdf_segment){x0, y0, x1, y0};
-                yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z++, 0u, m->config.wall_color,
-                                                          m->config.wall_width, &seg);
+                {
+                    struct yetty_ycore_void_result set_r =
+                        yetty_ydraw_drawable_list_add_cmd_add_segment(
+                            buf, 0, z++, 0u, m->config.wall_color, m->config.wall_width, &seg);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "ymaze: wall segment");
+                }
             }
             if (w & YMAZE_WALL_S) {
                 seg = (struct yetty_ysdf_segment){x0, y1, x1, y1};
-                yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z++, 0u, m->config.wall_color,
-                                                          m->config.wall_width, &seg);
+                {
+                    struct yetty_ycore_void_result set_r =
+                        yetty_ydraw_drawable_list_add_cmd_add_segment(
+                            buf, 0, z++, 0u, m->config.wall_color, m->config.wall_width, &seg);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "ymaze: wall segment");
+                }
             }
             if ((w & YMAZE_WALL_W) && col == 0) {
                 seg = (struct yetty_ysdf_segment){x0, y0, x0, y1};
-                yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z++, 0u, m->config.wall_color,
-                                                          m->config.wall_width, &seg);
+                {
+                    struct yetty_ycore_void_result set_r =
+                        yetty_ydraw_drawable_list_add_cmd_add_segment(
+                            buf, 0, z++, 0u, m->config.wall_color, m->config.wall_width, &seg);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "ymaze: wall segment");
+                }
             }
             if (w & YMAZE_WALL_E) {
                 seg = (struct yetty_ysdf_segment){x1, y0, x1, y1};
-                yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z++, 0u, m->config.wall_color,
-                                                          m->config.wall_width, &seg);
+                {
+                    struct yetty_ycore_void_result set_r =
+                        yetty_ydraw_drawable_list_add_cmd_add_segment(
+                            buf, 0, z++, 0u, m->config.wall_color, m->config.wall_width, &seg);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "ymaze: wall segment");
+                }
             }
         }
     }
@@ -425,7 +441,7 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
             .center_y = ymaze_cell_y(m, m->start_row),
             .radius = cell_min * 0.3f,
         };
-        yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z++, m->config.start_color, 0u, 0.0f, &c);
+        { struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z++, m->config.start_color, 0u, 0.0f, &c); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_ydraw_drawable_list_add_cmd_add_circle"); }
     }
 
     /* End marker — 5-point star. */
@@ -437,7 +453,7 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
             .num_points = 5.0f,
             .inner_ratio = 2.2f,
         };
-        yetty_ydraw_drawable_list_add_cmd_add_star(buf, 0, z++, m->config.end_color, 0u, 0.0f, &s);
+        { struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_star(buf, 0, z++, m->config.end_color, 0u, 0.0f, &s); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_ydraw_drawable_list_add_cmd_add_star"); }
     }
 
     if (m->path_len == 0) {
@@ -467,8 +483,11 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
                 .end_y = ymaze_cell_y(m, m->path[i + 1].row),
             };
             /* Segment has no interior — paint via stroke. */
-            yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z++, 0u, trail_color, trail_width,
-                                                      &seg);
+            {
+                struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_segment(
+                    buf, 0, z++, 0u, trail_color, trail_width, &seg);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "ymaze: trail segment");
+            }
         }
     }
 
@@ -496,7 +515,7 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
             .center_y = ay,
             .radius = cell_min * 0.28f,
         };
-        yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z++, m->config.actor_color, 0u, 0.0f, &c);
+        { struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z++, m->config.actor_color, 0u, 0.0f, &c); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_ydraw_drawable_list_add_cmd_add_circle"); }
     }
 
     return YETTY_OK_VOID();

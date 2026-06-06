@@ -262,7 +262,7 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
 {
     (void)event;
     struct yetty_yshadertoy_figure *f = figure_from_listener(listener);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_int, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     figure_request_render(f);
     return YETTY_OK(yetty_ycore_int, 0);
 }
@@ -325,7 +325,7 @@ static struct yetty_ycore_void_result figure_apply_shader(struct yetty_yshaderto
         f->binder = NULL;
     }
     f->binder_finalized = 0;
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     return YETTY_OK_VOID();
 }
 
@@ -561,8 +561,8 @@ static struct yetty_yshadertoy_figure_ptr_result figure_construct(
     struct yetty_yshadertoy_figure *f = yshadertoy_figure_from_obj(obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(obj_r.value + 1);
 
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect); YETTY_RETURN_IF_ERR(yetty_yshadertoy_figure_ptr, set_r, "drop: yetty_yfigure_figure_rect_set"); }
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_yshadertoy_figure_ptr, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
 
     f->context = context;
 

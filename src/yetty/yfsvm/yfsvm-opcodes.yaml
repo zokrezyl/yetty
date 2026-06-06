@@ -338,3 +338,16 @@ opcodes:
     value: 0x61
     arity: 1
     wgsl: "let noise_i = floor(v1); let noise_f = fract(v1); let noise_u = noise_f * noise_f * (3.0 - 2.0 * noise_f); let noise_a = fract(sin(noise_i * 12.9898) * 43758.5453); let noise_b = fract(sin((noise_i + 1.0) * 12.9898) * 43758.5453); regs[dst] = mix(noise_a, noise_b, noise_u);"
+
+  # 2D variants — keyed on both arguments, so they vary in every direction
+  # (no directional banding). RAND2: white noise. NOISE2: bilinearly
+  # interpolated value noise over the integer lattice.
+  - name: RAND2
+    value: 0x62
+    arity: 2
+    wgsl: "regs[dst] = fract(sin(v1 * 12.9898 + v2 * 78.233) * 43758.5453);"
+
+  - name: NOISE2
+    value: 0x63
+    arity: 2
+    wgsl: "let n2_ix = floor(v1); let n2_iy = floor(v2); let n2_fx = fract(v1); let n2_fy = fract(v2); let n2_ux = n2_fx * n2_fx * (3.0 - 2.0 * n2_fx); let n2_uy = n2_fy * n2_fy * (3.0 - 2.0 * n2_fy); let n2_a = fract(sin(n2_ix * 12.9898 + n2_iy * 78.233) * 43758.5453); let n2_b = fract(sin((n2_ix + 1.0) * 12.9898 + n2_iy * 78.233) * 43758.5453); let n2_c = fract(sin(n2_ix * 12.9898 + (n2_iy + 1.0) * 78.233) * 43758.5453); let n2_d = fract(sin((n2_ix + 1.0) * 12.9898 + (n2_iy + 1.0) * 78.233) * 43758.5453); regs[dst] = mix(mix(n2_a, n2_b, n2_ux), mix(n2_c, n2_d, n2_ux), n2_uy);"

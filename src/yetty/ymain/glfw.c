@@ -48,7 +48,7 @@ static struct yetty_ycore_void_result yetty_worker(struct yetty_yinit_runtime *r
      * yinit) and the yetty-specific pty_factory. */
     struct yetty_yetty_yetty_result yres = yetty_create(yframework, pty_factory);
     if (!YETTY_IS_OK(yres)) {
-        yetty_yframework_destroy(yframework);
+        (void)yetty_yframework_destroy(yframework);
         pty_factory->ops->destroy(pty_factory);
         return YETTY_ERR(yetty_ycore_void, "ymain: yetty_create failed", yres);
     }
@@ -68,8 +68,8 @@ static struct yetty_ycore_void_result yetty_worker(struct yetty_yinit_runtime *r
     /* Strict order: yetty (terminal/yui/tabbar) must die BEFORE yframework
      * tears down the render target / wgpu await / event loop / device,
      * because pending readback callbacks dereference those. */
-    yetty_destroy(yetty);
-    yetty_yframework_destroy(yframework);
+    (void)yetty_destroy(yetty);
+    (void)yetty_yframework_destroy(yframework);
     pty_factory->ops->destroy(pty_factory);
     return run_res;
 }

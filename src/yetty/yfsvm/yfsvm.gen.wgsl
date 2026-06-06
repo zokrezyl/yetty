@@ -71,6 +71,8 @@ const YFSVM_OP_EQ: u32 = 0x54u;
 const YFSVM_OP_NE: u32 = 0x55u;
 const YFSVM_OP_RAND: u32 = 0x60u;
 const YFSVM_OP_NOISE: u32 = 0x61u;
+const YFSVM_OP_RAND2: u32 = 0x62u;
+const YFSVM_OP_NOISE2: u32 = 0x63u;
 
 // Instruction decoding
 fn yfsvm_decode_opcode(instr: u32) -> u32 { return (instr >> 24u) & 0xFFu; }
@@ -233,6 +235,8 @@ fn yfsvm_execute(bytecodeOffset: u32, funcIndex: u32, x: f32, y: f32, t: f32, sa
             case YFSVM_OP_NE: { regs[dst] = select(0.0, 1.0, v1 != v2); }
             case YFSVM_OP_RAND: { regs[dst] = fract(sin(v1 * 12.9898) * 43758.5453); }
             case YFSVM_OP_NOISE: { let noise_i = floor(v1); let noise_f = fract(v1); let noise_u = noise_f * noise_f * (3.0 - 2.0 * noise_f); let noise_a = fract(sin(noise_i * 12.9898) * 43758.5453); let noise_b = fract(sin((noise_i + 1.0) * 12.9898) * 43758.5453); regs[dst] = mix(noise_a, noise_b, noise_u); }
+            case YFSVM_OP_RAND2: { regs[dst] = fract(sin(v1 * 12.9898 + v2 * 78.233) * 43758.5453); }
+            case YFSVM_OP_NOISE2: { let n2_ix = floor(v1); let n2_iy = floor(v2); let n2_fx = fract(v1); let n2_fy = fract(v2); let n2_ux = n2_fx * n2_fx * (3.0 - 2.0 * n2_fx); let n2_uy = n2_fy * n2_fy * (3.0 - 2.0 * n2_fy); let n2_a = fract(sin(n2_ix * 12.9898 + n2_iy * 78.233) * 43758.5453); let n2_b = fract(sin((n2_ix + 1.0) * 12.9898 + n2_iy * 78.233) * 43758.5453); let n2_c = fract(sin(n2_ix * 12.9898 + (n2_iy + 1.0) * 78.233) * 43758.5453); let n2_d = fract(sin((n2_ix + 1.0) * 12.9898 + (n2_iy + 1.0) * 78.233) * 43758.5453); regs[dst] = mix(mix(n2_a, n2_b, n2_ux), mix(n2_c, n2_d, n2_ux), n2_uy); }
             default: {}
         }
     }

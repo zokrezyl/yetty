@@ -97,16 +97,16 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
     struct yetty_ylexbor *lx = lr.value;
     struct yetty_ycore_void_result hr = yetty_ylexbor_load_html(lx, d->html, d->html_len);
     if (YETTY_IS_ERR(hr)) {
-        yetty_ylexbor_destroy(lx);
+        (void)yetty_ylexbor_destroy(lx);
         return YETTY_ERR(yetty_ycore_void, "ybrowser_render: load_html", hr);
     }
     struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(dlr)) {
-        yetty_ylexbor_destroy(lx);
+        (void)yetty_ylexbor_destroy(lx);
         return YETTY_ERR(yetty_ycore_void, "ybrowser_render: dl_create", dlr);
     }
     struct yetty_ycore_void_result rr = yetty_ylexbor_render(lx, dlr.value);
-    yetty_ylexbor_destroy(lx);
+    (void)yetty_ylexbor_destroy(lx);
     if (YETTY_IS_ERR(rr)) {
         yetty_ydraw_drawable_list_destroy(dlr.value);
         return YETTY_ERR(yetty_ycore_void, "ybrowser_render: render", rr);

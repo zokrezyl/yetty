@@ -81,6 +81,8 @@ typedef enum yetty_yfsvm_YfsvmOpcode {
     YETTY_YFSVM_OP_NE = 0x55,
     YETTY_YFSVM_OP_RAND = 0x60,
     YETTY_YFSVM_OP_NOISE = 0x61,
+    YETTY_YFSVM_OP_RAND2 = 0x62,
+    YETTY_YFSVM_OP_NOISE2 = 0x63,
 } YfsvmOpcode;
 
 // Instruction format (32-bit):
@@ -246,6 +248,10 @@ static inline const char *yfsvm_opcode_name(YfsvmOpcode op)
         return "RAND";
     case YETTY_YFSVM_OP_NOISE:
         return "NOISE";
+    case YETTY_YFSVM_OP_RAND2:
+        return "RAND2";
+    case YETTY_YFSVM_OP_NOISE2:
+        return "NOISE2";
     default:
         return "UNKNOWN";
     }

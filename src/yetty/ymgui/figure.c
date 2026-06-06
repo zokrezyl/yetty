@@ -655,7 +655,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_input(
         f->frame_bytes = NULL;
         f->frame_size = 0;
         f->has_frame = 0;
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+        { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
         return YETTY_OK_VOID();
     case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
     case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
@@ -715,7 +715,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yf
         f->frame_bytes = NULL;
         f->frame_size = 0;
         f->has_frame = 0;
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+        { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
         return YETTY_OK_VOID();
     case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
     case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
@@ -792,8 +792,8 @@ struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_ymgui_figure *f = ymgui_figure_from_obj(figure_obj_r.value);
     f->base = (struct yetty_yfigure_figure *)(figure_obj_r.value + 1);
 
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect); YETTY_RETURN_IF_ERR(yetty_ymgui_figure_ptr, set_r, "drop: yetty_yfigure_figure_rect_set"); }
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ymgui_figure_ptr, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     f->pipeline = pipeline;
     return YETTY_OK(yetty_ymgui_figure_ptr, f);
 }
@@ -850,7 +850,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_ymgui_f
     f->frame_bytes = copy;
     f->frame_size = frame_size;
     f->has_frame = 1;
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     return YETTY_OK_VOID();
 }
 
@@ -915,7 +915,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_ymgui_f
     f->atlas_w = atlas_w;
     f->atlas_h = atlas_h;
     f->atlas_ready = 1;
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
     ydebug("ymgui_figure_set_atlas: %ux%u R8", atlas_w, atlas_h);
     return YETTY_OK_VOID();
 }

@@ -78,7 +78,6 @@ endif()
 # Shader directory structure
 check_dir("${ASSETS_PREFIX}/shaders" "Shaders directory")
 check_dir("${ASSETS_PREFIX}/shaders/lib" "Shader lib directory")
-check_dir("${ASSETS_PREFIX}/shaders/cards" "Shader cards directory")
 check_dir("${ASSETS_PREFIX}/shaders/effects" "Shader effects directory")
 check_dir("${ASSETS_PREFIX}/shaders/pre-effects" "Shader pre-effects directory")
 check_dir("${ASSETS_PREFIX}/shaders/post-effects" "Shader post-effects directory")

@@ -53,10 +53,11 @@ printf '\n(4) Hyperbolic saddle  tanh(x·y):\n'
     'field=tanh(x*y)'
 p
 
-# (5) Procedural value-noise terrain, sampled on a 2D lattice. A first taste
-# of GPU procedural texturing straight from the expression language.
-printf '\n(5) Procedural value noise  noise(2x+13y):\n'
-"$YPLOT" -w 360 -H 360 --xrange=0..8 --yrange=0..8 \
-    'field=noise(2*x+13*y)*2-1'
+# (5) Procedural terrain via fBm: three octaves of noise2 at decorrelated
+# (non-integer) frequencies. Summing octaves buries the axis-aligned grid
+# structure of single-octave value noise and reads as organic terrain.
+printf '\n(5) Procedural terrain  fBm(noise2):\n'
+"$YPLOT" -w 360 -H 360 --xrange=0..4 --yrange=0..4 \
+    'field=(0.55*noise2(x,y)+0.3*noise2(x*2.13,y*2.13)+0.15*noise2(x*4.27,y*4.27))*2-1'
 
 printf '\n=== done — holding open ===\n'

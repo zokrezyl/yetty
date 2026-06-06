@@ -2457,7 +2457,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         uint32_t root_slot;
         struct yetty_ycore_void_result ar = entity_alloc_slot(g, &root_slot);
         if (YETTY_IS_ERR(ar)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: alloc root slot", ar);
         }
         g->entities[root_slot].parent_slot = YGRID_INVALID_SLOT;
@@ -2472,7 +2472,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         struct yetty_ydraw_drawable_list_registry_ptr_result rr =
             yetty_ydraw_drawable_list_registry_create();
         if (YETTY_IS_ERR(rr)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry", rr);
         }
         g->registry = rr.value;
@@ -2481,50 +2481,50 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_CMD_BASE,
                                                 YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
         if (YETTY_IS_ERR(hr)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry cmd", hr);
         }
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_RESOURCE_FONT,
                                                 YETTY_YDRAW_RESOURCE_FONT,
                                                 yetty_ydraw_font_resource_handler);
         if (YETTY_IS_ERR(hr)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry font", hr);
         }
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
                                                 YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
                                                 yetty_ydraw_text_drawable_list_handler);
         if (YETTY_IS_ERR(hr)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
         }
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
                                                 0xFFFFFFFFu, yetty_ydraw_composite_handler);
         if (YETTY_IS_ERR(hr)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);
         }
     }
 
     struct yetty_ycore_void_result cr = cells_alloc(g);
     if (YETTY_IS_ERR(cr)) {
-        ygrid_destroy(g->base);
+        (void)ygrid_destroy(g->base);
         return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: cells_alloc", cr);
     }
     if (!headless) {
         struct yetty_ycore_void_result lr = load_sdf_lib(g, context);
         if (YETTY_IS_ERR(lr)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_sdf_lib", lr);
         }
         struct yetty_ycore_void_result ls = load_layer_shader(g, context);
         if (YETTY_IS_ERR(ls)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_layer_shader", ls);
         }
         struct yetty_ycore_void_result br = build_binder(g);
         if (YETTY_IS_ERR(br)) {
-            ygrid_destroy(g->base);
+            (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: build_binder", br);
         }
     }
@@ -2580,8 +2580,11 @@ static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_impl(struct yet
     /* Mirror the coordinate mode onto the yfigure base so the owning
      * container's hit-test can re-origin (local) or pass through (absolute)
      * the cursor without reaching into ygrid-private state. */
-    yetty_yfigure_figure_absolute_coords_set(
-        (struct yetty_yclass_object *)yetty_ygrid_as_figure(gr.value) - 1, absolute_coords);
+    {
+        struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_absolute_coords_set(
+            (struct yetty_yclass_object *)yetty_ygrid_as_figure(gr.value) - 1, absolute_coords);
+        YETTY_RETURN_IF_ERR(yetty_yfigure_figure_data_ptr, drop_r, "ygrid: absolute_coords");
+    }
     if (user) {
         const struct yetty_ygrid_factory_args *args = user;
         if (args->default_font) {

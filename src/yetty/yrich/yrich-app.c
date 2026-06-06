@@ -145,11 +145,12 @@ static void handle_event(struct yrich_app *app, const struct yetty_yui_event *ev
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
         destroy_safe(app->target->ops->resize(app->target, vp));
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, (struct yetty_ycore_rectangle){
-            .min = {.x = 0.0f, .y = 0.0f},
-            .max = {.x = (float)w, .y = (float)h},
-        });
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+        (void)yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1,
+                                            (struct yetty_ycore_rectangle){
+                                                .min = {.x = 0.0f, .y = 0.0f},
+                                                .max = {.x = (float)w, .y = (float)h},
+                                            });
+        (void)yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
         destroy_safe(push_scene(app));
         return;
     }
@@ -294,7 +295,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             yerror("yrich-app: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf) - 1, 0);
+            { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf) - 1, 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
         }
         destroy_safe(app->target->ops->present(app->target));
         needs_render = 0;
@@ -320,7 +321,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
         app->font->ops->destroy(app->font);
         app->font = NULL;
     }
-    yetty_yframework_destroy(app->yrt);
+    (void)yetty_yframework_destroy(app->yrt);
     app->yrt = NULL;
     return YETTY_OK_VOID();
 }

@@ -398,7 +398,7 @@ static struct yetty_ycore_void_result ms_msdf_load_glyphs(struct yetty_yfont_ms_
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (size_t i = 0; i < count; i++) {
-        load_one(f, cps[i], YETTY_YFONT_MS_STYLE_REGULAR);
+        { struct uint32_result drop_r = load_one(f, cps[i], YETTY_YFONT_MS_STYLE_REGULAR); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one"); }
     }
     return YETTY_OK_VOID();
 }
@@ -410,7 +410,7 @@ static struct yetty_ycore_void_result ms_msdf_load_basic_latin(struct yetty_yfon
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
-        load_one(f, cp, YETTY_YFONT_MS_STYLE_REGULAR);
+        { struct uint32_result drop_r = load_one(f, cp, YETTY_YFONT_MS_STYLE_REGULAR); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one"); }
     }
     return YETTY_OK_VOID();
 }
@@ -707,7 +707,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
 	 * cell size would visibly shift as glyphs (especially descenders like
 	 * underscore, or wide glyphs) load on demand. */
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
-        load_one(font, cp, YETTY_YFONT_MS_STYLE_REGULAR);
+        { struct uint32_result drop_r = load_one(font, cp, YETTY_YFONT_MS_STYLE_REGULAR); YETTY_RETURN_IF_ERR(yetty_font_ms_font, drop_r, "drop: load_one"); }
     }
     if (font->max_ascent <= 0.0f || font->advance_cdb <= 0.0f) {
         free(font->meta);

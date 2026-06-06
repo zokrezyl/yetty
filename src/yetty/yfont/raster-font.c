@@ -284,7 +284,7 @@ static struct yetty_ycore_void_result raster_load_glyphs(struct yetty_yfont_font
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (size_t i = 0; i < count; i++) {
-        load_one(f, cps[i]);
+        { struct uint32_result drop_r = load_one(f, cps[i]); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one"); }
     }
     return YETTY_OK_VOID();
 }
@@ -296,7 +296,7 @@ static struct yetty_ycore_void_result raster_load_basic_latin(struct yetty_yfont
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
-        load_one(f, cp);
+        { struct uint32_result drop_r = load_one(f, cp); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one"); }
     }
     return YETTY_OK_VOID();
 }

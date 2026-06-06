@@ -988,7 +988,7 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_ytermin
         struct yetty_ycore_void_result rr =
             yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "terminal_render_frame: root container render");
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
+        { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
     }
 
     ydebug("terminal_render_frame: done (content layer + root container, no blend)");
@@ -1510,8 +1510,8 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
         };
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container);
-        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, new_rect);
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+        { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, new_rect); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_rect_set"); }
+        { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
     }
     /* The shader-glyph figure tracks the resize through the content layer's own
      * resize_grid op above (it owns the text grid) — no separate push needed. */
