@@ -111,10 +111,11 @@ done
 #
 # Layout:
 #   /home/yetty/.local/bin/    — riscv64 tools (per-user XDG bin prefix).
-#                                Each tool carries its own assets via
-#                                incbin and extracts them on first run
-#                                into /home/yetty/.local/share/<tool>,
-#                                so each binary is standalone-redistributable.
+#                                The tools are thin (no embedded assets);
+#                                the assets they need are installed alongside
+#                                under /home/yetty/.local/share/yetty and
+#                                /home/yetty/.config/yetty during this image
+#                                build (see the share/config staging below).
 #   /yetty/repo                — `git archive HEAD` of this rev, kept for
 #                                the user to explore additional demos +
 #                                source code that the embedded assets
@@ -131,6 +132,30 @@ echo "==> staging riscv64 binaries to /home/yetty/.local/bin"
 for b in "${BINARIES[@]}"; do
     cp "$b" "$BIN_STAGE/"
 done
+
+# Per-user share + config. The riscv tools are thin — they don't embed their
+# own assets — so the assets they need are installed straight into the image
+# here, the riscv equivalent of what the desktop yinstall installer deploys.
+# The VM has no GPU, so shaders/CDBs are skipped; only what the client-mode
+# tools actually use is staged: ygreeter's logos + intro video, the demos,
+# fonts and config. Everything under $STAGE/home/yetty is injected below by
+# the existing /home/yetty inject_tree (uid 1000), so no extra inject needed.
+SHARE_STAGE="$STAGE/home/yetty/.local/share/yetty"
+CONFIG_STAGE="$STAGE/home/yetty/.config/yetty"
+mkdir -p "$SHARE_STAGE/fonts" "$SHARE_STAGE/demos" "$CONFIG_STAGE/temu"
+
+echo "==> staging ygreeter assets + demos + fonts to /home/yetty/.local/share/yetty"
+cp "$REPO_ROOT"/assets/logo-*.jpeg                "$SHARE_STAGE/"        2>/dev/null || true
+cp "$REPO_ROOT/assets/yetty-unchained-2.mp4"      "$SHARE_STAGE/"        2>/dev/null || true
+cp "$REPO_ROOT/test/ut/ypdf/pdf-sample.pdf"       "$SHARE_STAGE/"        2>/dev/null || true
+cp "$REPO_ROOT/README.md"                         "$SHARE_STAGE/"        2>/dev/null || true
+cp -a "$REPO_ROOT"/demo/.                          "$SHARE_STAGE/demos/"
+cp "$REPO_ROOT"/assets/fonts/*.ttf                "$SHARE_STAGE/fonts/"  2>/dev/null || true
+
+echo "==> staging config to /home/yetty/.config/yetty"
+cp "$REPO_ROOT/build-tools/yetty/platform/config-defaults.yaml" "$CONFIG_STAGE/config.yaml"
+cp "$REPO_ROOT/build-tools/yetty/platform/config-defaults.yaml" "$CONFIG_STAGE/defaults.yaml"
+cp "$REPO_ROOT"/assets/yemu/temu/*.cfg            "$CONFIG_STAGE/temu/"  2>/dev/null || true
 
 echo "==> staging git archive HEAD to /yetty/repo"
 git -C "$REPO_ROOT" archive HEAD | tar -x -C "$REPO_STAGE"

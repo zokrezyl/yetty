@@ -28,6 +28,12 @@
 #ifdef HAS_DATA_MANIFEST
 #include "yinstall_data_manifest.h"
 #endif
+#ifdef HAS_GREETER_MANIFEST
+#include "yinstall_greeter_manifest.h"
+#endif
+#ifdef HAS_DEMOS_MANIFEST
+#include "yinstall_demos_manifest.h"
+#endif
 #ifdef HAS_YCONFIG_MANIFEST
 #include "yinstall_yconfig_manifest.h"
 #endif
@@ -77,6 +83,12 @@ yetty_yplatform_install_foreach_asset(yetty_yplatform_install_asset_fn callback,
 #endif
 #ifdef HAS_DATA_MANIFEST
     register_data_assets_c(bridge_trampoline);
+#endif
+#ifdef HAS_GREETER_MANIFEST
+    register_greeter_assets_c(bridge_trampoline);
+#endif
+#ifdef HAS_DEMOS_MANIFEST
+    register_demos_assets_c(bridge_trampoline);
 #endif
 #ifdef HAS_YCONFIG_MANIFEST
     register_yconfig_assets_c(bridge_trampoline);

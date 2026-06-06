@@ -226,6 +226,34 @@ endif()
 # yinstall_{data,yconfig,yemu,qemu}_manifest.h headers the backend includes.
 yetty_embed_assets(yinstall)
 
+# greeter/ — ygreeter's own assets (logos, intro video, pdf/readme samples).
+# ygreeter is thin on desktop and reads these from <data_dir>/, so the
+# installer carries them. Staged with basenames to match what ygreeter opens
+# (e.g. <data_dir>/logo-1.jpeg).
+set(_yinstall_greeter_dir "${CMAKE_CURRENT_BINARY_DIR}/embed-greeter")
+file(REMOVE_RECURSE "${_yinstall_greeter_dir}")
+file(MAKE_DIRECTORY "${_yinstall_greeter_dir}")
+foreach(_F
+        "assets/logo-1.jpeg"
+        "assets/logo-2.jpeg"
+        "assets/logo-3.jpeg"
+        "assets/logo-4.jpeg"
+        "assets/yetty-unchained-2.mp4"
+        "test/ut/ypdf/pdf-sample.pdf"
+        "README.md")
+    if(EXISTS "${YETTY_ROOT}/${_F}")
+        get_filename_component(_NAME "${_F}" NAME)
+        configure_file("${YETTY_ROOT}/${_F}" "${_yinstall_greeter_dir}/${_NAME}" COPYONLY)
+    endif()
+endforeach()
+incbin_add_directory(yinstall "greeter" "${_yinstall_greeter_dir}" "*" TRUE)
+
+# demos/ — the demo tree (assets, scripts, sources) → <data_dir>/demos, so the
+# installed demo programs find their assets and the user can explore them.
+if(EXISTS "${YETTY_ROOT}/demo")
+    incbin_add_directory(yinstall "demos" "${YETTY_ROOT}/demo" "*" TRUE)
+endif()
+
 # bin/ — the curated set of user-facing executables. Each is embedded only
 # if it exists in this configuration, so the list stays robust across the
 # feature flags. Internal codegen / dev tools are intentionally absent.
