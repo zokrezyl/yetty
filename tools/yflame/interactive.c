@@ -18,7 +18,8 @@
 #include <yetty/yflame/flame.h>
 #include <yetty/yflame/rpc.h>
 #include <yetty/yclass/class.h>
-#include <yetty/yview/yview.h>
+#include <yetty/yview/rpc.h>  /* yetty_yview_view_create */
+#include <yetty/yview/view.h> /* yetty_yview_configure / _set_content / _set_rect / _destroy */
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
@@ -84,7 +85,7 @@ static void tty_restore(void)
 
 struct ui_state {
     struct yetty_yclass_object *flame;
-    struct yetty_yview *view;
+    struct yetty_yclass_object *view;
     int out_fd;
     float viewport_w;
     float viewport_h;
@@ -135,7 +136,7 @@ static void rerender(struct ui_state *ui)
                                  ui->base_flags);
     struct yetty_ydraw_drawable_list_result rr = yetty_yflame_render(NULL, ui->flame);
     if (YETTY_IS_OK(rr)) {
-        (void)yetty_yview_set_content(ui->view, rr.value);
+        (void)yetty_yview_set_content(NULL, ui->view, rr.value);
         yetty_ydraw_drawable_list_destroy(rr.value);
     } else {
         yetty_ycore_error_destroy(rr.error);
@@ -226,9 +227,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         if (rz->width > 0.0f && rz->height > 0.0f) {
             ui->viewport_w = rz->width;
             ui->viewport_h = rz->height;
-            struct yetty_ycore_rectangle rect = {.min = {.x = 0.0f, .y = 0.0f},
-                                                 .max = {.x = ui->viewport_w, .y = ui->viewport_h}};
-            (void)yetty_yview_set_rect(ui->view, rect);
+            (void)yetty_yview_set_rect(NULL, ui->view, 0.0f, 0.0f, ui->viewport_w, ui->viewport_h);
             ui->dirty = true;
         }
     } else {
@@ -292,20 +291,24 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
         return 1;
     }
 
-    struct yetty_yview_config view_cfg = {
-        .fd = STDOUT_FILENO,
-        .rect = {.min = {.x = 0.0f, .y = 0.0f}, .max = {.x = viewport_w, .y = viewport_h}},
-        .kind = 0, /* default YGRID */
-        .flags = YETTY_YVIEW_FLAG_NONE,
-        .child_id = (uint32_t)getpid(),
-        .bg_color = YFLAME_BG_COLOR,
-    };
-    struct yetty_yview_ptr_result view_r = yetty_yview_create(&view_cfg);
+    struct yetty_yclass_object_ptr_result view_r = yetty_yview_view_create(NULL);
     if (YETTY_IS_ERR(view_r)) {
         fprintf(stderr, "yflame: view create failed: %s\n", view_r.error.msg);
         yetty_ycore_error_destroy(view_r.error);
         (void)yetty_yflame_destroy(NULL, flame);
         return 1;
+    }
+    {
+        struct yetty_ycore_void_result cfg_r = yetty_yview_configure(
+            NULL, view_r.value, STDOUT_FILENO, (uint32_t)getpid(), /*kind=*/0u, YFLAME_BG_COLOR,
+            0.0f, 0.0f, viewport_w, viewport_h);
+        if (YETTY_IS_ERR(cfg_r)) {
+            fprintf(stderr, "yflame: view configure failed: %s\n", cfg_r.error.msg);
+            yetty_ycore_error_destroy(cfg_r.error);
+            (void)yetty_yview_destroy(NULL, view_r.value);
+            (void)yetty_yflame_destroy(NULL, flame);
+            return 1;
+        }
     }
 
     struct ui_state ui = {
@@ -324,7 +327,7 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     if (YETTY_IS_ERR(yface_r)) {
         fprintf(stderr, "yflame: yface create failed: %s\n", yface_r.error.msg);
         yetty_ycore_error_destroy(yface_r.error);
-        (void)yetty_yview_destroy(ui.view);
+        (void)yetty_yview_destroy(NULL, ui.view);
         (void)yetty_yflame_destroy(NULL, flame);
         return 1;
     }
@@ -338,7 +341,7 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     if (tty_raw() < 0) {
         fprintf(stderr, "yflame: cannot put stdin into raw mode\n");
         yetty_yface_destroy(yface);
-        (void)yetty_yview_destroy(ui.view);
+        (void)yetty_yview_destroy(NULL, ui.view);
         (void)yetty_yflame_destroy(NULL, flame);
         return 1;
     }
@@ -388,7 +391,7 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
         (void)write(STDOUT_FILENO, mouse_off, sizeof(mouse_off) - 1);
     }
     subscribe_input(STDOUT_FILENO, 0u);
-    (void)yetty_yview_destroy(ui.view);
+    (void)yetty_yview_destroy(NULL, ui.view);
     tty_restore();
     yetty_yface_destroy(yface);
     (void)yetty_yflame_destroy(NULL, flame);
