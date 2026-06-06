@@ -10,27 +10,40 @@
  * record, never re-shipping the content. On exit the figure is removed
  * (DELETE_CHILD), so the surface is cleared.
  *
- * Content comes from a file argument or stdin; keystrokes are read from
- * /dev/tty (so a piped stdin still leaves a usable keyboard). Envelopes are
+ * Content comes from a file argument or stdin; keystrokes are read from stdin
+ * via the cross-platform yplatform TTY abstraction (raw mode, size, byte
+ * reads) — so the tool builds on Windows too. Interactive paging needs stdin
+ * to be a terminal (i.e. give the content as a FILE argument). Envelopes are
  * written to stdout — the PTY connected to the parent yetty.
- *
- * Unix/tty only: a pager is inherently an interactive terminal program.
  */
 #include <yetty/ycat/ycat.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplatform/getopt.h>
-#include <yetty/yview/rpc.h>  /* yetty_yview_view_create */
-#include <yetty/yview/view.h> /* yetty_yview_configure / _set_content / _scroll_* / _destroy */
+#include <yetty/yplatform/term.h> /* yetty_yplatform_term_get_size */
+#include <yetty/yplatform/tty.h>  /* raw mode + stdin read, cross-platform */
+#include <yetty/yview/rpc.h>      /* yetty_yview_view_create */
+#include <yetty/yview/view.h>     /* yetty_yview_configure / _set_content / _scroll_* / _destroy */
 
-#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
+#ifdef _WIN32
+#include <io.h>      /* _fileno */
+#include <process.h> /* _getpid */
+#else
+#include <unistd.h> /* STDOUT_FILENO, getpid */
+#endif
+
+/* Portable fd of stdout (the PTY to the parent yetty) + process id. */
+#ifdef _WIN32
+#define YLESS_STDOUT_FD (_fileno(stdout))
+#define YLESS_GETPID() ((uint32_t)_getpid())
+#else
+#define YLESS_STDOUT_FD (STDOUT_FILENO)
+#define YLESS_GETPID() ((uint32_t)getpid())
+#endif
 
 /*=============================================================================
  * Options
@@ -116,19 +129,16 @@ static int byte_buf_append(struct byte_buf *buffer, const uint8_t *src, size_t c
     return 0;
 }
 
-static int read_all_fd(int fd, struct byte_buf *out)
+static int read_all_stream(FILE *stream, struct byte_buf *out)
 {
     uint8_t chunk[65536];
     for (;;) {
-        ssize_t count = read(fd, chunk, sizeof(chunk));
-        if (count < 0) {
+        size_t count = fread(chunk, 1, sizeof(chunk), stream);
+        if (count > 0 && byte_buf_append(out, chunk, count) < 0) {
             return -1;
         }
-        if (count == 0) {
-            return 0;
-        }
-        if (byte_buf_append(out, chunk, (size_t)count) < 0) {
-            return -1;
+        if (count < sizeof(chunk)) {
+            return ferror(stream) ? -1 : 0;
         }
     }
 }
@@ -145,29 +155,23 @@ struct viewport {
     uint32_t cols;
 };
 
-static struct viewport probe_viewport(int tty_fd)
+static struct viewport probe_viewport(void)
 {
-    struct viewport vp = {.pixel_w = 80 * 8, .pixel_h = 24 * 16, .cell_w = 8, .cell_h = 16,
-                          .cols = 80};
-    struct winsize ws = {0};
-    if (ioctl(tty_fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
-        vp.cols = ws.ws_col;
-        if (ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
-            vp.pixel_w = (float)ws.ws_xpixel;
-            vp.pixel_h = (float)ws.ws_ypixel;
-            vp.cell_w = ws.ws_xpixel / ws.ws_col;
-            vp.cell_h = ws.ws_ypixel / ws.ws_row;
-        } else {
-            vp.pixel_w = (float)(ws.ws_col * vp.cell_w);
-            vp.pixel_h = (float)(ws.ws_row * vp.cell_h);
-        }
+    /* yplatform exposes the terminal size in CELLS (portable). Pixels are
+     * approximated with a fixed cell size — good enough to place the figure;
+     * the server clips to the rect regardless. */
+    struct viewport vp = {.cell_w = 8, .cell_h = 16, .cols = 80};
+    int cols = 80, rows = 24;
+    (void)yetty_yplatform_term_get_size(&cols, &rows);
+    if (cols <= 0) {
+        cols = 80;
     }
-    if (vp.cell_w == 0) {
-        vp.cell_w = 8;
+    if (rows <= 0) {
+        rows = 24;
     }
-    if (vp.cell_h == 0) {
-        vp.cell_h = 16;
-    }
+    vp.cols = (uint32_t)cols;
+    vp.pixel_w = (float)(cols * (int)vp.cell_w);
+    vp.pixel_h = (float)(rows * (int)vp.cell_h);
     return vp;
 }
 
@@ -269,17 +273,14 @@ enum key {
     KEY_BOTTOM,
 };
 
-/* Read one logical key, decoding the common CSI arrow / page sequences.
- * Ctrl-C (0x03) and Ctrl-D (0x04) map to quit — raw mode disables ISIG so
- * they arrive as bytes and the normal cleanup (which clears the surface)
- * still runs. */
-static enum key read_key(int tty_fd)
+/* Decode one logical key from `buf` starting at *idx, advancing *idx past the
+ * bytes consumed. Handles plain keys + the common CSI arrow/page sequences
+ * (when the sequence is contained in this chunk). Ctrl-C (0x03) / Ctrl-D
+ * (0x04) map to quit — raw mode disables signal generation, so they arrive as
+ * bytes and the normal cleanup (which clears the surface) still runs. */
+static enum key decode_key(const char *buf, int n, int *idx)
 {
-    uint8_t c;
-    ssize_t n = read(tty_fd, &c, 1);
-    if (n <= 0) {
-        return KEY_QUIT; /* tty closed → exit */
-    }
+    unsigned char c = (unsigned char)buf[(*idx)++];
     switch (c) {
     case 'q':
     case 'Q':
@@ -306,19 +307,19 @@ static enum key read_key(int tty_fd)
     default:
         return KEY_NONE;
     }
-
-    /* ESC: peek the next two bytes for a CSI arrow / page key. */
-    uint8_t seq[2];
-    if (read(tty_fd, &seq[0], 1) <= 0) {
-        return KEY_QUIT; /* bare ESC → quit, like less */
+    /* ESC: '[' or 'O' then a final byte, all within this chunk. */
+    if (*idx >= n) {
+        return KEY_QUIT; /* lone ESC → quit, like less */
     }
-    if (seq[0] != '[' && seq[0] != 'O') {
+    char intro = buf[*idx];
+    if (intro != '[' && intro != 'O') {
         return KEY_NONE;
     }
-    if (read(tty_fd, &seq[1], 1) <= 0) {
+    (*idx)++;
+    if (*idx >= n) {
         return KEY_NONE;
     }
-    switch (seq[1]) {
+    switch (buf[(*idx)++]) {
     case 'A':
         return KEY_LINE_UP;
     case 'B':
@@ -389,33 +390,25 @@ int main(int argc, char **argv)
     /* Read the content bytes. */
     struct byte_buf input = {0};
     if (path) {
-        int fd = open(path, O_RDONLY);
-        if (fd < 0) {
+        FILE *f = fopen(path, "rb");
+        if (!f) {
             fprintf(stderr, "yless: %s: cannot open\n", path);
             return 1;
         }
-        int rc = read_all_fd(fd, &input);
-        close(fd);
+        int rc = read_all_stream(f, &input);
+        fclose(f);
         if (rc < 0) {
             fprintf(stderr, "yless: %s: read failed\n", path);
             free(input.data);
             return 1;
         }
-    } else if (read_all_fd(STDIN_FILENO, &input) < 0) {
+    } else if (read_all_stream(stdin, &input) < 0) {
         fprintf(stderr, "yless: stdin: read failed\n");
         free(input.data);
         return 1;
     }
 
-    /* Keyboard comes from the controlling tty so a piped stdin still works. */
-    int tty_fd = open("/dev/tty", O_RDWR);
-    if (tty_fd < 0) {
-        fprintf(stderr, "yless: no controlling tty\n");
-        free(input.data);
-        return 1;
-    }
-
-    struct viewport vp = probe_viewport(tty_fd);
+    struct viewport vp = probe_viewport();
 
     /* Resolve the viewport rect (cells → pixels), defaulting to the pane. */
     float origin_x = (float)opts.x_cells * (float)vp.cell_w;
@@ -433,7 +426,6 @@ int main(int argc, char **argv)
     struct yetty_ydraw_drawable_list *content = render_content(input.data, input.len, path, &cfg);
     if (!content) {
         free(input.data);
-        close(tty_fd);
         return 1;
     }
 
@@ -447,13 +439,12 @@ int main(int argc, char **argv)
         yetty_ycore_error_destroy(view_r.error);
         yetty_ydraw_drawable_list_destroy(content);
         free(input.data);
-        close(tty_fd);
         return 1;
     }
     struct yetty_yclass_object *view = view_r.value;
 
     struct yetty_ycore_void_result cfg_r =
-        yetty_yview_configure(NULL, view, STDOUT_FILENO, (uint32_t)getpid(), /*kind=*/0u, bg_color,
+        yetty_yview_configure(NULL, view, YLESS_STDOUT_FD, YLESS_GETPID(), /*kind=*/0u, bg_color,
                               origin_x, origin_y, origin_x + rect_w, origin_y + rect_h);
     if (YETTY_IS_ERR(cfg_r)) {
         fprintf(stderr, "yless: configure failed: %s\n", cfg_r.error.msg);
@@ -464,7 +455,6 @@ int main(int argc, char **argv)
         }
         yetty_ydraw_drawable_list_destroy(content);
         free(input.data);
-        close(tty_fd);
         return 1;
     }
 
@@ -478,75 +468,78 @@ int main(int argc, char **argv)
             yetty_ycore_error_destroy(dr.error);
         }
         free(input.data);
-        close(tty_fd);
         return 1;
     }
 
-    /* Raw mode on the tty: unbuffered, un-echoed reads, and ISIG cleared so
-     * Ctrl-C/Z/\ arrive as bytes (we handle Ctrl-C/D as quit) and the normal
-     * exit path — which clears the surface — always runs. */
-    struct termios saved;
-    bool raw_active = false;
-    if (tcgetattr(tty_fd, &saved) == 0) {
-        struct termios raw = saved;
-        raw.c_lflag &= (tcflag_t) ~(ICANON | ECHO | ISIG);
-        raw.c_iflag &= (tcflag_t) ~(IXON);
-        raw.c_cc[VMIN] = 1;
-        raw.c_cc[VTIME] = 0;
-        if (tcsetattr(tty_fd, TCSANOW, &raw) == 0) {
-            raw_active = true;
-        }
-    }
-
+    /* Raw stdin (cross-platform): byte-at-a-time, no echo, no signal
+     * generation — so Ctrl-C/D arrive as bytes and the normal exit path (which
+     * clears the surface) always runs. Interactive only when stdin is a tty;
+     * with piped content there is no keyboard, so just emit and exit. */
     const float line = (float)vp.cell_h;
     const float page = rect_h > line ? rect_h - line : line;
     const float to_bottom = 1.0e9f; /* clamped server-side and in yview */
 
-    bool running = true;
-    while (running) {
-        enum key k = read_key(tty_fd);
-        struct yetty_ycore_void_result sr = YETTY_OK_VOID();
-        switch (k) {
-        case KEY_QUIT:
-            running = false;
-            break;
-        case KEY_LINE_DOWN:
-            sr = yetty_yview_scroll_by(NULL, view, 0.0f, line);
-            break;
-        case KEY_LINE_UP:
-            sr = yetty_yview_scroll_by(NULL, view, 0.0f, -line);
-            break;
-        case KEY_PAGE_DOWN:
-            sr = yetty_yview_scroll_by(NULL, view, 0.0f, page);
-            break;
-        case KEY_PAGE_UP:
-            sr = yetty_yview_scroll_by(NULL, view, 0.0f, -page);
-            break;
-        case KEY_TOP:
-            sr = yetty_yview_scroll_to(NULL, view, 0.0f, 0.0f);
-            break;
-        case KEY_BOTTOM:
-            sr = yetty_yview_scroll_to(NULL, view, 0.0f, to_bottom);
-            break;
-        case KEY_NONE:
-        default:
-            break;
-        }
-        if (YETTY_IS_ERR(sr)) {
-            yetty_ycore_error_destroy(sr.error);
-            running = false;
+    if (yetty_yplatform_tty_stdin_is_tty()) {
+        yetty_yplatform_tty_binary_io();
+        if (yetty_yplatform_tty_set_raw() == 0) {
+            char buf[64];
+            bool running = true;
+            while (running) {
+                int rdy = yetty_yplatform_tty_stdin_wait(200);
+                if (rdy < 0) {
+                    break;
+                }
+                if (rdy == 0) {
+                    continue;
+                }
+                int n = yetty_yplatform_tty_stdin_read(buf, sizeof(buf));
+                if (n <= 0) {
+                    break; /* EOF / error */
+                }
+                int i = 0;
+                while (i < n && running) {
+                    struct yetty_ycore_void_result sr = YETTY_OK_VOID();
+                    switch (decode_key(buf, n, &i)) {
+                    case KEY_QUIT:
+                        running = false;
+                        break;
+                    case KEY_LINE_DOWN:
+                        sr = yetty_yview_scroll_by(NULL, view, 0.0f, line);
+                        break;
+                    case KEY_LINE_UP:
+                        sr = yetty_yview_scroll_by(NULL, view, 0.0f, -line);
+                        break;
+                    case KEY_PAGE_DOWN:
+                        sr = yetty_yview_scroll_by(NULL, view, 0.0f, page);
+                        break;
+                    case KEY_PAGE_UP:
+                        sr = yetty_yview_scroll_by(NULL, view, 0.0f, -page);
+                        break;
+                    case KEY_TOP:
+                        sr = yetty_yview_scroll_to(NULL, view, 0.0f, 0.0f);
+                        break;
+                    case KEY_BOTTOM:
+                        sr = yetty_yview_scroll_to(NULL, view, 0.0f, to_bottom);
+                        break;
+                    case KEY_NONE:
+                    default:
+                        break;
+                    }
+                    if (YETTY_IS_ERR(sr)) {
+                        yetty_ycore_error_destroy(sr.error);
+                        running = false;
+                    }
+                }
+            }
+            yetty_yplatform_tty_restore();
         }
     }
 
-    if (raw_active) {
-        tcsetattr(tty_fd, TCSANOW, &saved);
-    }
     /* Clear the surface: DELETE_CHILD removes the figure from the container. */
     struct yetty_ycore_void_result dr = yetty_yview_destroy(NULL, view);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }
-    close(tty_fd);
     free(input.data);
     return 0;
 }

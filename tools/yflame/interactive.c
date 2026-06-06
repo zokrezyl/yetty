@@ -26,61 +26,41 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterminal/client-input.h>
+#include <yetty/yplatform/term.h> /* yetty_yplatform_term_get_size */
+#include <yetty/yplatform/tty.h>  /* cross-platform raw mode + stdin read */
 #include <yetty/ytrace/ytrace.h>
 
-#include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <termios.h>
+#ifdef _WIN32
+#include <io.h>      /* _write, _fileno */
+#include <process.h> /* _getpid */
+#define YFLAME_STDOUT_FD (_fileno(stdout))
+#define YFLAME_GETPID() ((uint32_t)_getpid())
+#define yflame_write(fd, p, n) ((int)_write((fd), (p), (unsigned)(n)))
+#else
 #include <unistd.h>
+#define YFLAME_STDOUT_FD (STDOUT_FILENO)
+#define YFLAME_GETPID() ((uint32_t)getpid())
+#define yflame_write(fd, p, n) ((int)write((fd), (p), (n)))
+#endif
 
 /* Brand near-black, opaque (0xAARRGGBB) — the figure background. */
 #define YFLAME_BG_COLOR 0xFF0B1014u
 
-/* Signal flag + saved tty: a foreground CLI needs file-scope here because a
- * signal handler cannot carry userdata (same shape as tools/ynetsurf). */
+/* Signal flag: a foreground CLI needs file-scope here because a signal handler
+ * cannot carry userdata (same shape as tools/ynetsurf). Raw-mode state lives
+ * in the yplatform tty layer, restored via yetty_yplatform_tty_restore. */
 static volatile sig_atomic_t g_signal_quit = 0;
-static struct termios g_saved_tty;
-static int g_tty_raw = 0;
 
 static void on_signal(int sig)
 {
     (void)sig;
     g_signal_quit = 1;
-}
-
-static int tty_raw(void)
-{
-    if (!isatty(STDIN_FILENO)) {
-        return -1;
-    }
-    if (tcgetattr(STDIN_FILENO, &g_saved_tty) < 0) {
-        return -1;
-    }
-    struct termios raw = g_saved_tty;
-    raw.c_lflag &= (tcflag_t)~(ICANON | ECHO | ISIG);
-    raw.c_iflag &= (tcflag_t)~(IXON | ICRNL);
-    raw.c_cc[VMIN] = 1;
-    raw.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0) {
-        return -1;
-    }
-    g_tty_raw = 1;
-    return 0;
-}
-
-static void tty_restore(void)
-{
-    if (g_tty_raw) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_tty);
-        g_tty_raw = 0;
-    }
 }
 
 struct ui_state {
@@ -104,7 +84,7 @@ static int emit_envelope(int out_fd, int osc_code, int compressed, const void *b
         yetty_yface_emit(osc_code, compressed, NULL, 0, body, body_len, &envelope);
     int rc = 0;
     if (YETTY_IS_OK(r) && envelope.size > 0) {
-        if (write(out_fd, envelope.data, envelope.size) < 0) {
+        if (yflame_write(out_fd, envelope.data, envelope.size) < 0) {
             rc = 1;
         }
     } else if (YETTY_IS_ERR(r)) {
@@ -252,19 +232,23 @@ static void on_raw(void *user, const char *bytes, size_t n)
 int yflame_interactive_run(const char *input, size_t input_len, float min_width,
                            uint32_t base_flags)
 {
-    if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
+    if (!yetty_yplatform_tty_stdin_is_tty() || !yetty_yplatform_tty_stdout_is_tty()) {
         fprintf(stderr, "yflame: --interactive needs a terminal (run inside yetty)\n");
         return 2;
     }
 
-    /* Viewport in pixels from the controlling terminal. */
-    float viewport_w = 80.0f * 8.0f;
-    float viewport_h = 24.0f * 16.0f;
-    struct winsize ws = {0};
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
-        viewport_w = (float)ws.ws_xpixel;
-        viewport_h = (float)ws.ws_ypixel;
+    /* Viewport in pixels, approximated from the terminal cell size (yplatform
+     * reports cells, not pixels; the server clips to the rect regardless). */
+    int cols = 80, rows = 24;
+    (void)yetty_yplatform_term_get_size(&cols, &rows);
+    if (cols <= 0) {
+        cols = 80;
     }
+    if (rows <= 0) {
+        rows = 24;
+    }
+    float viewport_w = (float)cols * 8.0f;
+    float viewport_h = (float)rows * 16.0f;
 
     struct yetty_ycore_void_result reg = yetty_yflame_register();
     if (YETTY_IS_ERR(reg)) {
@@ -300,7 +284,7 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     }
     {
         struct yetty_ycore_void_result cfg_r = yetty_yview_configure(
-            NULL, view_r.value, STDOUT_FILENO, (uint32_t)getpid(), /*kind=*/0u, YFLAME_BG_COLOR,
+            NULL, view_r.value, YFLAME_STDOUT_FD, YFLAME_GETPID(), /*kind=*/0u, YFLAME_BG_COLOR,
             0.0f, 0.0f, viewport_w, viewport_h);
         if (YETTY_IS_ERR(cfg_r)) {
             fprintf(stderr, "yflame: view configure failed: %s\n", cfg_r.error.msg);
@@ -314,7 +298,7 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     struct ui_state ui = {
         .flame = flame,
         .view = view_r.value,
-        .out_fd = STDOUT_FILENO,
+        .out_fd = YFLAME_STDOUT_FD,
         .viewport_w = viewport_w,
         .viewport_h = viewport_h,
         .frame_height = 34.0f, /* fixed, readable row height (font ≈ 25px) */
@@ -338,7 +322,8 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     signal(SIGTERM, on_signal);
     signal(SIGHUP, on_signal);
 
-    if (tty_raw() < 0) {
+    yetty_yplatform_tty_binary_io();
+    if (yetty_yplatform_tty_set_raw() < 0) {
         fprintf(stderr, "yflame: cannot put stdin into raw mode\n");
         yetty_yface_destroy(yface);
         (void)yetty_yview_destroy(NULL, ui.view);
@@ -346,7 +331,7 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
         return 1;
     }
 
-    subscribe_input(STDOUT_FILENO,
+    subscribe_input(YFLAME_STDOUT_FD,
                     YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK | YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE);
     /* Enable mouse reporting the way the terminal's libvterm path expects:
      * DEC ?1500h (click) + ?1501h (move) set VTERM_PROP_CARDCLICK/CARDMOVE, so
@@ -354,29 +339,23 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
      * FIGURE_MOUSE events to ours. Without this the terminal never forwards. */
     {
         static const char mouse_on[] = "\x1b[?1500h\x1b[?1501h";
-        (void)write(STDOUT_FILENO, mouse_on, sizeof(mouse_on) - 1);
+        (void)yflame_write(YFLAME_STDOUT_FD, mouse_on, sizeof(mouse_on) - 1);
     }
 
     rerender(&ui);
 
     char buf[8192];
     while (!g_signal_quit && !ui.want_quit) {
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(STDIN_FILENO, &rfds);
-        int rdy = select(STDIN_FILENO + 1, &rfds, NULL, NULL, NULL);
+        int rdy = yetty_yplatform_tty_stdin_wait(200);
         if (rdy < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
             break;
         }
         ui.dirty = false;
-        if (FD_ISSET(STDIN_FILENO, &rfds)) {
-            ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
+        if (rdy > 0) {
+            int n = yetty_yplatform_tty_stdin_read(buf, sizeof(buf));
             if (n > 0) {
                 (void)yetty_yface_feed_bytes(yface, buf, (size_t)n);
-            } else if (n == 0) {
+            } else if (n == 0 && !yetty_yplatform_tty_stdin_is_tty()) {
                 break;
             }
         }
@@ -388,11 +367,11 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     /* Teardown: disable mouse reporting, drop the figure, unsubscribe, restore. */
     {
         static const char mouse_off[] = "\x1b[?1500l\x1b[?1501l";
-        (void)write(STDOUT_FILENO, mouse_off, sizeof(mouse_off) - 1);
+        (void)yflame_write(YFLAME_STDOUT_FD, mouse_off, sizeof(mouse_off) - 1);
     }
-    subscribe_input(STDOUT_FILENO, 0u);
+    subscribe_input(YFLAME_STDOUT_FD, 0u);
     (void)yetty_yview_destroy(NULL, ui.view);
-    tty_restore();
+    yetty_yplatform_tty_restore();
     yetty_yface_destroy(yface);
     (void)yetty_yflame_destroy(NULL, flame);
     return 0;
