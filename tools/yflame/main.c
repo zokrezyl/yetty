@@ -14,10 +14,14 @@
  * Inside a yetty terminal the OSC renders; outside, the bytes print raw.
  */
 
-#include <yetty/yflame/yflame.h>
+#include <yetty/yflame/flame.h>
+#include <yetty/yflame/rpc.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/drawable-list.h>
+
+#include <unistd.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -38,7 +42,13 @@ struct yflame_opts {
     bool icicle;
     bool no_labels;
     bool no_newline;
+    bool interactive;
 };
+
+/* Implemented in interactive.c: ship the graph as a live yview figure and drive
+ * hover-highlight + click-to-zoom from pane mouse events. */
+int yflame_interactive_run(const char *input, size_t input_len, float min_width,
+                           uint32_t base_flags);
 
 static void usage(FILE *out, const char *prog)
 {
@@ -58,6 +68,8 @@ static void usage(FILE *out, const char *prog)
         "      --min-width=N     skip boxes narrower than N pixels (default 0.5)\n"
         "      --icicle          root at the top, growing downward\n"
         "      --no-labels       omit frame-name labels\n"
+        "  -I, --interactive     live figure: hover highlights, left-click zooms\n"
+        "                        in, right-click/Esc zooms out, q quits (in yetty)\n"
         "  -n                    no trailing newline\n"
         "  -h, --help            show this help\n"
         "\n"
@@ -112,18 +124,20 @@ int main(int argc, char **argv)
         {"min-width",    required_argument, NULL, OPT_MIN_WIDTH},
         {"icicle",       no_argument,       NULL, OPT_ICICLE},
         {"no-labels",    no_argument,       NULL, OPT_NO_LABELS},
+        {"interactive",  no_argument,       NULL, 'I'},
         {"help",         no_argument,       NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
 
     int c;
-    while ((c = yetty_yplatform_getopt_long(argc, argv, "w:f:nh", long_opts, NULL)) != -1) {
+    while ((c = yetty_yplatform_getopt_long(argc, argv, "w:f:nhI", long_opts, NULL)) != -1) {
         switch (c) {
         case 'w':           opts.width = (float)atof(yetty_yplatform_optarg); break;
         case 'f':           opts.frame_height = (float)atof(yetty_yplatform_optarg); break;
         case OPT_MIN_WIDTH: opts.min_width = (float)atof(yetty_yplatform_optarg); break;
         case OPT_ICICLE:    opts.icicle = true; break;
         case OPT_NO_LABELS: opts.no_labels = true; break;
+        case 'I':           opts.interactive = true; break;
         case 'n':           opts.no_newline = true; break;
         case 'h':           usage(stdout, argv[0]); return 0;
         default:            usage(stderr, argv[0]); return 2;
@@ -158,26 +172,59 @@ int main(int argc, char **argv)
         flags |= YETTY_YFLAME_FLAG_ICICLE;
     }
 
-    struct yetty_yflame_render_config cfg = {
-        .bounds_w = opts.width,
-        .frame_height = opts.frame_height,
-        .min_width = opts.min_width,
-        .flags = flags,
-    };
+    /* Interactive mode: ship a live yview figure and drive it from mouse/keys. */
+    if (opts.interactive) {
+        int rc = yflame_interactive_run(input, input_len, opts.min_width, flags);
+        free(input);
+        return rc;
+    }
 
-    struct yetty_ydraw_drawable_list_result rr = yetty_yflame_render(input, input_len, &cfg);
+    /* Register the yclass, build a flame, parse the folded input, and render
+     * the one-shot drawable list into a YDRAW_BIN envelope on stdout. */
+    struct yetty_ycore_void_result reg = yetty_yflame_register();
+    if (YETTY_IS_ERR(reg)) {
+        fprintf(stderr, "yflame: class register failed: %s\n", reg.error.msg);
+        yetty_ycore_error_destroy(reg.error);
+        free(input);
+        return 1;
+    }
+
+    struct yetty_yclass_object_ptr_result obj_r = yetty_yflame_flame_create(NULL);
+    if (YETTY_IS_ERR(obj_r)) {
+        fprintf(stderr, "yflame: create failed: %s\n", obj_r.error.msg);
+        yetty_ycore_error_destroy(obj_r.error);
+        free(input);
+        return 1;
+    }
+    struct yetty_yclass_object *flame = obj_r.value;
+
+    yetty_yflame_configure(NULL, flame, opts.width, opts.frame_height, opts.min_width, flags);
+
+    struct yetty_ycore_void_result pr = yetty_yflame_parse(NULL, flame, input, input_len);
     free(input);
+    if (YETTY_IS_ERR(pr)) {
+        fprintf(stderr, "yflame: parse failed: %s\n", pr.error.msg);
+        for (const struct yetty_ycore_error *e = pr.error.cause; e; e = e->cause) {
+            fprintf(stderr, "  caused by: %s\n", e->msg);
+        }
+        yetty_ycore_error_destroy(pr.error);
+        (void)yetty_yflame_destroy(NULL, flame);
+        return 1;
+    }
+
+    struct yetty_ydraw_drawable_list_result rr = yetty_yflame_render(NULL, flame);
     if (YETTY_IS_ERR(rr)) {
         fprintf(stderr, "yflame: render failed: %s\n", rr.error.msg);
         for (const struct yetty_ycore_error *e = rr.error.cause; e; e = e->cause) {
             fprintf(stderr, "  caused by: %s\n", e->msg);
         }
         yetty_ycore_error_destroy(rr.error);
+        (void)yetty_yflame_destroy(NULL, flame);
         return 1;
     }
 
     int rc = 0;
-    struct yetty_ycore_size_result wr = yetty_yflame_osc_bin_emit(rr.value, stdout);
+    struct yetty_ycore_void_result wr = yetty_yflame_emit_osc(rr.value, STDOUT_FILENO);
     yetty_ydraw_drawable_list_destroy(rr.value);
     if (YETTY_IS_ERR(wr)) {
         fprintf(stderr, "yflame: OSC emit failed: %s\n", wr.error.msg);
@@ -187,6 +234,8 @@ int main(int argc, char **argv)
         yetty_ycore_error_destroy(wr.error);
         rc = 1;
     }
+
+    (void)yetty_yflame_destroy(NULL, flame);
 
     if (!opts.no_newline) {
         fputc('\n', stdout);
