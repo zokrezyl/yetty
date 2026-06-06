@@ -15,6 +15,8 @@ set(YETTY_ENABLE_TOOL_YBROWSER    OFF CACHE BOOL "" FORCE)
 
 # ycat: yetty_ycat library is skipped on iOS (desktop-only POSIX bits).
 set(YETTY_ENABLE_TOOL_YCAT OFF CACHE BOOL "" FORCE)
+# yless links yetty_ycat (skipped on iOS) — the pager can't build without it.
+set(YETTY_ENABLE_TOOL_YLESS OFF CACHE BOOL "" FORCE)
 
 # ygreeter / ytop drive their own libuv event loops via ygui (full). On
 # iOS the host process is the UIKit-owned yetty app — standalone tools

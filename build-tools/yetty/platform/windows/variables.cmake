@@ -19,6 +19,8 @@ set(YETTY_ENABLE_FEATURE_DEMO      OFF CACHE BOOL "" FORCE)  # hardcodes shared/
 set(YETTY_ENABLE_TOOL_YDOC         OFF CACHE BOOL "" FORCE)  # poll.h, termios.h, unistd.h
 set(YETTY_ENABLE_TOOL_YSHEET       OFF CACHE BOOL "" FORCE)  # uses yrich-runner (POSIX TTY)
 set(YETTY_ENABLE_TOOL_YSLIDE       OFF CACHE BOOL "" FORCE)  # uses yrich-runner (POSIX TTY)
+set(YETTY_ENABLE_TOOL_YLESS        OFF CACHE BOOL "" FORCE)  # pager uses termios.h (POSIX TTY)
+set(YETTY_ENABLE_TOOL_YFLAME       OFF CACHE BOOL "" FORCE)  # interactive viewer uses termios.h
 # ygreeter re-enabled — the POSIX uses that originally blocked the
 # Windows build (STDOUT/STDERR_FILENO via unistd.h, raw struct stat)
 # were removed when main.c migrated to the yplatform fs/tty shims, and
