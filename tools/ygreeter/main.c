@@ -3284,7 +3284,20 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
         struct yetty_font_font_result fr =
             yetty_yfont_msdf_font_create(cdb_path, shader_path, "ygreeter_default");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: msdf_font_create");
+        if (YETTY_IS_ERR(fr)) {
+            /* The MSDF glyph cdb + shader are NOT embedded in ygreeter — they
+             * come from the main yetty install's asset extraction into the
+             * shared data dir. Name the exact paths on stderr (the Result msg
+             * can only carry a static literal, and the trace log is off by
+             * default) so the failure is actionable, then propagate. */
+            fprintf(stderr,
+                    "ygreeter: cannot load MSDF font — required runtime assets are missing.\n"
+                    "  glyph cdb: %s\n"
+                    "  shader:    %s\n"
+                    "  (provided by the main yetty install; run yetty once to extract fonts)\n",
+                    cdb_path, shader_path);
+            return YETTY_ERR(yetty_ycore_void, "standalone: msdf_font_create", fr);
+        }
         app->font = fr.value;
         struct yetty_ycore_void_result load = app->font->ops->load_basic_latin(app->font);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, load, "standalone: load_basic_latin");
@@ -3508,6 +3521,39 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     return YETTY_OK_VOID();
 }
 
+/* Confirm the embedded assets the rich-content tabs depend on actually
+ * landed on disk. Extraction can report "success" while leaving nothing
+ * behind — a build without incbin (the no-op extractor stub), a stale
+ * skip-marker sitting over a wiped data dir, or a partial brotli decode
+ * all do it. Without this check the missing files are swallowed twice
+ * over (discover_* returns silently, rebuild_top discards the load
+ * error), so the tabs render blank instead of failing. Surface it as a
+ * hard error so startup aborts with a clear message — the same way yetty
+ * itself dies when its own asset extraction fails. */
+static struct yetty_ycore_void_result ygreeter_verify_assets(const char *data_dir)
+{
+    static const char *const required[] = {
+        "logo-1.jpeg",           "logo-2.jpeg",    "logo-3.jpeg", "logo-4.jpeg",
+        "yetty-unchained-2.mp4", "pdf-sample.pdf", "README.md",
+    };
+    int missing = 0;
+    char path_buf[1024];
+    for (size_t i = 0; i < sizeof(required) / sizeof(required[0]); ++i) {
+        snprintf(path_buf, sizeof(path_buf), "%s/%s", data_dir, required[i]);
+        if (yetty_yplatform_file_exists(path_buf)) {
+            continue;
+        }
+        yerror("ygreeter: required runtime asset missing: %s", path_buf);
+        missing++;
+    }
+    if (missing > 0) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "ygreeter: required runtime assets are missing from the data dir "
+                         "(embedded-asset extraction produced none) — see log for the list");
+    }
+    return YETTY_OK_VOID();
+}
+
 /* yinit-shaped wrapper for ygreeter's own incbin extractor (logos +
  * demo video). We don't reuse yetty's larger
  * `yetty_platform_extract_assets` here because that one drives off the
@@ -3516,10 +3562,14 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
 static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
 {
     const char *data_dir = yetty_yplatform_get_data_dir();
-    if (data_dir && ygreeter_embedded_assets_extract(data_dir) != 0) {
+    if (!data_dir || !*data_dir) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "ygreeter: could not resolve a data dir for asset extraction");
+    }
+    if (ygreeter_embedded_assets_extract(data_dir) != 0) {
         return YETTY_ERR(yetty_ycore_void, "ygreeter: embedded asset extraction failed");
     }
-    return YETTY_OK_VOID();
+    return ygreeter_verify_assets(data_dir);
 }
 
 static int run_standalone_mode(int argc, char **argv)

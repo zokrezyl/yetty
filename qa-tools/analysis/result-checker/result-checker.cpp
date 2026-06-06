@@ -26,7 +26,6 @@
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Attr.h>
-#include <clang/AST/ParentMapContext.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/TokenKinds.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -152,63 +151,6 @@ static bool returns_result_type(const FunctionDecl *func)
 }
 
 /*
- * Decide whether the value produced by a Result-returning call is *handled*
- * rather than silently dropped. The real rule we enforce is "never drop a
- * Result" — not "always return one" — so a call is fine when its result is:
- *   - bound to a variable      (struct ... r = foo();  then checked / RETURN_IF_ERR)
- *   - assigned to an lvalue    (x = foo();)
- *   - passed to another call   (destroy_safe(foo()), yetty_ycore_error_destroy(foo().error), …)
- *   - returned                 (return foo();)
- *   - cast to void             ((void)foo();  — explicit, deliberate ignore)
- *   - inspected via `.error`   (YETTY_IS_ERR(foo()) reads .error)
- *
- * It is a DROP when the temporary's `.value` is taken without ever checking the
- * error (foo().value), or when the call stands alone as a bare statement
- * (foo();). Those are exactly the silent-failure sites that hide bugs.
- */
-static bool result_is_handled(const CallExpr *call, ASTContext &ctx)
-{
-	const Stmt *node = call;
-	for (;;) {
-		auto parents = ctx.getParents(*node);
-		if (parents.empty())
-			return true; /* no enclosing context we understand — don't cry wolf */
-
-		if (parents[0].get<Decl>())
-			return true; /* initializer of a VarDecl — bound, then checked */
-
-		const Stmt *parent = parents[0].get<Stmt>();
-		if (!parent)
-			return true;
-
-		/* Transparent wrappers — look through to the real consumer. */
-		if (isa<ParenExpr>(parent) || isa<ImplicitCastExpr>(parent) ||
-		    isa<ExprWithCleanups>(parent) || isa<ConstantExpr>(parent) ||
-		    isa<MaterializeTemporaryExpr>(parent)) {
-			node = parent;
-			continue;
-		}
-		if (const auto *cast = dyn_cast<CStyleCastExpr>(parent)) {
-			if (cast->getType()->isVoidType())
-				return true; /* (void)foo() — deliberate */
-			node = parent;
-			continue;
-		}
-		if (const auto *member = dyn_cast<MemberExpr>(parent)) {
-			/* foo().value drops the error; foo().error inspects it. */
-			return member->getMemberDecl()->getNameAsString() != "value";
-		}
-		if (isa<CompoundStmt>(parent))
-			return false; /* bare statement: foo(); — dropped */
-
-		/* ReturnStmt, CallExpr (arg), assignment, conditions, etc. all
-		 * consume the result in a way that doesn't silently drop the
-		 * error — treat as handled. */
-		return true;
-	}
-}
-
-/*
  * Visitor that collects all function calls within a function body.
  */
 class CallCollector : public RecursiveASTVisitor<CallCollector> {
@@ -285,7 +227,16 @@ public:
 				return true;
 		}
 
-		/* Collect all calls to result-returning functions */
+		/* The rule: a function that can fail returns a Result type, and
+		 * ANY function that calls a Result-returning function must itself
+		 * return a Result type so the error propagates up the call chain.
+		 * The only sanctioned non-propagating boundaries are 3rdparty /
+		 * main / functions tagged YETTY_EXTERNAL_CALLBACK (handled above).
+		 * Absorbing, (void)-casting, or otherwise consuming the result in
+		 * a non-Result-returning function is NOT allowed — it breaks the
+		 * propagation chain. */
+		bool func_returns_result = returns_result_type(func);
+
 		collector.clear();
 		collector.TraverseStmt(func->getBody());
 
@@ -293,15 +244,8 @@ public:
 		if (result_calls.empty())
 			return true;
 
-		/* Report every call whose Result is silently dropped — the error
-		 * is neither propagated, checked, nor explicitly discarded. */
-		std::vector<CallExpr *> dropped;
-		for (CallExpr *call : result_calls) {
-			if (!result_is_handled(call, context))
-				dropped.push_back(call);
-		}
-		if (!dropped.empty())
-			report_violation(func, dropped);
+		if (!func_returns_result)
+			report_violation(func, result_calls);
 
 		return true;
 	}
@@ -318,8 +262,8 @@ private:
 
 		llvm::errs() << filename << ":" << line << ": warning: "
 			     << "function '" << func->getNameAsString()
-			     << "' drops the Result of call(s) — the error is "
-			     << "neither propagated, checked, nor (void)-cast\n";
+			     << "' calls result-returning function(s) but "
+			     << "does not return a Result type\n";
 
 		/* Show which calls triggered this */
 		for (const CallExpr *call : calls) {
