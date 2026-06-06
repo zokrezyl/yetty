@@ -239,6 +239,10 @@ if(YETTY_ENABLE_FEATURE_YPLOT)
     add_subdirectory(yplot)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YFLAME)
+    add_subdirectory(yflame)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YPDF)
     add_subdirectory(ypdf)
 endif()

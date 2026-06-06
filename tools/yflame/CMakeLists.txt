@@ -1,14 +1,25 @@
+# yflame tool — emits a flame-graph OSC envelope from folded-stack input.
+# Pure C frontend over the yetty_yflame library. First-party deps only.
+
 add_executable(yflame
-    main.cpp
-    flame-renderer.cpp
-    ${CMAKE_SOURCE_DIR}/src/yetty/ydraw/ydraw-buffer.cpp
-    ${CMAKE_SOURCE_DIR}/src/yetty/ycat/osc.cpp
+    main.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 
 target_include_directories(yflame PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/src/yetty/ycat
+    ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
 )
 
-target_link_libraries(yflame PRIVATE ytrace::ytrace)
-target_compile_features(yflame PRIVATE cxx_std_20)
+# Threads::Threads picks the right thing per platform (linux/macos: pthread;
+# android: bionic libc). Same pattern as tools/yplot.
+find_package(Threads REQUIRED)
+target_link_libraries(yflame PRIVATE
+    yetty_yflame
+    Threads::Threads
+    yetty_yplatform_core
+)
+
+if(NOT MSVC)
+    target_compile_options(yflame PRIVATE -Wall -Wextra)
+endif()

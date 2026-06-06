@@ -181,26 +181,34 @@ static void test_clickable_state_machine(void)
     struct yetty_ygui_object *btn = yetty_ygui_add(yetty_ygui_button_class_get().value, NULL).value;
     assert(btn);
     yetty_ygui_button_set_label(btn, "OK");
-    assert(strcmp(yetty_ygui_button_get_label(btn), "OK") == 0);
+    struct yetty_ycore_const_char_ptr_result label = yetty_ygui_button_get_label(btn);
+    assert(YETTY_IS_OK(label));
+    assert(strcmp(label.value, "OK") == 0);
 
     click_fired = 0;
     struct yetty_ycore_void_result sr =
         yetty_ygui_clickable_on_click_set(btn, on_click_cb, &click_fired);
     assert(YETTY_IS_OK(sr));
 
-    assert(!yetty_ygui_clickable_is_pressed(btn));
+    struct yetty_ycore_int_result pressed_before = yetty_ygui_clickable_is_pressed(btn);
+    assert(YETTY_IS_OK(pressed_before));
+    assert(!pressed_before.value);
     struct yetty_ycore_int_result pr =
         yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
-    assert(yetty_ygui_clickable_is_pressed(btn));
+    struct yetty_ycore_int_result pressed_after = yetty_ygui_clickable_is_pressed(btn);
+    assert(YETTY_IS_OK(pressed_after));
+    assert(pressed_after.value);
     assert(click_fired == 0); /* not yet — press alone doesn't fire */
 
     struct yetty_ycore_int_result rr =
         yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
     assert(YETTY_IS_OK(rr));
     assert(rr.value == 1);
-    assert(!yetty_ygui_clickable_is_pressed(btn));
+    struct yetty_ycore_int_result pressed_released = yetty_ygui_clickable_is_pressed(btn);
+    assert(YETTY_IS_OK(pressed_released));
+    assert(!pressed_released.value);
     assert(click_fired == 1);
 
     /* Release without prior press → no fire. */
