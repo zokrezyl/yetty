@@ -2901,4 +2901,32 @@ static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
                     ygrid_dump((struct yetty_yfigure_figure *)(obj + 1), indent));
 }
 
+/* Scrollable-figure slots — the container drives these by id (wire
+ * SET_CHILD_SCROLL / SET_CHILD_CONTENT_SIZE, or the terminal's autonomous
+ * wheel/key handler). Both wrap the in-process setters and mark the figure
+ * base dirty so the compositor repaints the (re-clipped) viewport. */
+[[clang::annotate("override@ygrid:grid:yfigure:set_scroll")]]
+static struct yetty_ycore_void_result yetty_ygrid_grid_set_scroll_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
+{
+    (void)ctx;
+    struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
+    struct yetty_ygrid_grid *grid = grid_r.value;
+    yetty_ygrid_set_scroll(grid, scroll_x, scroll_y);
+    return yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(grid->base) - 1, 1);
+}
+
+[[clang::annotate("override@ygrid:grid:yfigure:set_content_size")]]
+static struct yetty_ycore_void_result yetty_ygrid_grid_set_content_size_impl(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float content_w, float content_h)
+{
+    (void)ctx;
+    struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
+    struct yetty_ygrid_grid *grid = grid_r.value;
+    yetty_ygrid_set_content_size(grid, content_w, content_h);
+    return yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(grid->base) - 1, 1);
+}
+
 #include "grid.gen.c"

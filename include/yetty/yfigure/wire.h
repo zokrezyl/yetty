@@ -80,6 +80,25 @@ enum yetty_yfigure_wire_admin_op {
      * and last body — re-showing it costs one record, not a re-CREATE +
      * full-body re-ship. Used for dialogs that open/close repeatedly. */
     YETTY_YFIGURE_ADMIN_SET_CHILD_HIDDEN = 7,
+
+    /* Set a scrollable child's scroll offset — the content coordinate
+     * shown at the child's rect top-left. Payload after admin_op:
+     *   u32   child_id
+     *   f32   scroll_x, scroll_y
+     * The child keeps its already-shipped content; only the view moves, so
+     * this is a single record, no body re-ship. A client that owns a
+     * scrollable surface (e.g. an nvim plugin viewport) emits this as the
+     * user scrolls within its region. Ignored by children that aren't
+     * scrollable (no set_scroll slot). */
+    YETTY_YFIGURE_ADMIN_SET_CHILD_SCROLL = 8,
+
+    /* Declare a scrollable child's content extent in px. Payload:
+     *   u32   child_id
+     *   f32   content_w, content_h
+     * The child's rect stays the visible window; content larger than the
+     * rect makes it a scroll viewport. Optional — a child that derives its
+     * content extent from the shipped body (scene bounds) never needs this. */
+    YETTY_YFIGURE_ADMIN_SET_CHILD_CONTENT_SIZE = 9,
 };
 
 /* Figure-kind codes — registered with yetty_yfigure_registry by each

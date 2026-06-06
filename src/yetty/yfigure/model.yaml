@@ -129,6 +129,34 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+  - slot: set_scroll
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: scroll_x
+        type: float
+      - name: scroll_y
+        type: float
+    local: true
+  - slot: set_content_size
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: content_w
+        type: float
+      - name: content_h
+        type: float
+    local: true
 classes:
   - name: container
     domain: yfigure
@@ -252,6 +280,12 @@ classes:
       - slot: dump_state
         slot_domain: yfigure
         impl: yetty_yfigure_figure_default_dump_state
+      - slot: set_scroll
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_set_scroll
+      - slot: set_content_size
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_set_content_size
 exposed:
   - source_file: src/yetty/yfigure/container.c
     type_text: "struct yetty_yfigure_hit {

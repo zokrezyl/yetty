@@ -142,6 +142,7 @@ option(YETTY_ENABLE_TOOL_CARD_RUNNER     "card-runner tool"                  OFF
 option(YETTY_ENABLE_TOOL_YDRAW_GENERATOR "ydraw-generator tool"              OFF)
 option(YETTY_ENABLE_TOOL_YDRAW_BENCH    "ydraw-bench tool"                 ON)
 option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
+option(YETTY_ENABLE_TOOL_YLESS           "yless pager tool"                  ON)
 option(YETTY_ENABLE_TOOL_YECHO           "yecho tool"                        ON)
 option(YETTY_ENABLE_TOOL_GEN_ERROR       "gen-error tool (malformed OSC test) " ON)
 option(YETTY_ENABLE_TOOL_YRDAWN_DEMO       "yrdawn-demo tool (bridge smoke test)" ON)

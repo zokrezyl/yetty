@@ -15,6 +15,10 @@ static yetty_yfigure_process_bytes_fn yetty_yfigure_figure_yetty_yfigure_process
 static yetty_yfigure_reset_content_fn yetty_yfigure_figure_yetty_yfigure_reset_content_check = yetty_yfigure_figure_default_reset_content;
 [[maybe_unused]]
 static yetty_yfigure_dump_state_fn yetty_yfigure_figure_yetty_yfigure_dump_state_check = yetty_yfigure_figure_default_dump_state;
+[[maybe_unused]]
+static yetty_yfigure_set_scroll_fn yetty_yfigure_figure_yetty_yfigure_set_scroll_check = yetty_yfigure_figure_default_set_scroll;
+[[maybe_unused]]
+static yetty_yfigure_set_content_size_fn yetty_yfigure_figure_yetty_yfigure_set_content_size_check = yetty_yfigure_figure_default_set_content_size;
 
 struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
 {
@@ -34,6 +38,8 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
         {"yetty_yfigure", "process_bytes", (yetty_yclass_method_id_t)yetty_yfigure_process_bytes, (yetty_yclass_impl_t)yetty_yfigure_figure_default_process_bytes},
         {"yetty_yfigure", "reset_content", (yetty_yclass_method_id_t)yetty_yfigure_reset_content, (yetty_yclass_impl_t)yetty_yfigure_figure_default_reset_content},
         {"yetty_yfigure", "dump_state", (yetty_yclass_method_id_t)yetty_yfigure_dump_state, (yetty_yclass_impl_t)yetty_yfigure_figure_default_dump_state},
+        {"yetty_yfigure", "set_scroll", (yetty_yclass_method_id_t)yetty_yfigure_set_scroll, (yetty_yclass_impl_t)yetty_yfigure_figure_default_set_scroll},
+        {"yetty_yfigure", "set_content_size", (yetty_yclass_method_id_t)yetty_yfigure_set_content_size, (yetty_yclass_impl_t)yetty_yfigure_figure_default_set_content_size},
     };
     struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
