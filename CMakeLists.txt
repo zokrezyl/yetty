@@ -73,3 +73,10 @@ endif()
 if(YETTY_ENABLE_FEATURE_DEMO)
     add_subdirectory(${YETTY_ROOT}/demo ${CMAKE_BINARY_DIR}/demo)
 endif()
+
+# yinstall — the installer. Added last, after the yetty binary, every tool
+# and every demo, so each executable it embeds already exists as a target
+# (the bin/ component is built from `if(TARGET ...)` over those names).
+if(YETTY_ENABLE_TOOL_YINSTALL)
+    add_subdirectory(${YETTY_ROOT}/tools/yinstall ${CMAKE_BINARY_DIR}/tools/yinstall)
+endif()

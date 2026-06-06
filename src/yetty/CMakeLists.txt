@@ -141,6 +141,14 @@ add_subdirectory(ygrid)
 # (PUBLIC dep) and before any tool / consumer of its target names.
 add_subdirectory(yplatform)
 
+# yinstall — installer module/library (the tool lives in tools/yinstall).
+# Desktop-only: there is no install step on webasm / android / ios / tvos.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR WIN32 OR APPLE)
+    if(NOT YETTY_IOS AND NOT YETTY_TVOS AND NOT YETTY_ANDROID AND NOT ANDROID)
+        add_subdirectory(yinstall)
+    endif()
+endif()
+
 if(YETTY_ENABLE_FEATURE_YFACE)
     add_subdirectory(yface)
 endif()

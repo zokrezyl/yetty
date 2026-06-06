@@ -73,6 +73,21 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
         }
     }
 
+    /* bin_dir = $XDG_BIN_HOME || $HOME/.local/bin || /tmp/yetty-bin.
+     * Executables (yetty + companion tools) install here; the user adds
+     * it to PATH. ~/.local/bin is the de-facto user-binary dir on Linux. */
+    const char *xdg_bin = getenv("XDG_BIN_HOME");
+    if (xdg_bin && *xdg_bin) {
+        snprintf(p->bin_dir_buf, sizeof(p->bin_dir_buf), "%s", xdg_bin);
+    } else {
+        const char *home = getenv("HOME");
+        if (home && *home) {
+            snprintf(p->bin_dir_buf, sizeof(p->bin_dir_buf), "%s/.local/bin", home);
+        } else {
+            snprintf(p->bin_dir_buf, sizeof(p->bin_dir_buf), "/tmp/yetty-bin");
+        }
+    }
+
     return YETTY_OK(yetty_yplatform_paths_ptr, p);
 }
 

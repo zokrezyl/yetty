@@ -41,6 +41,11 @@ extern "C" {
  *   assets_dir  — read-only bundled assets (shaders, fonts) shipped
  *                  alongside the executable. Resolved from the exec
  *                  path; honoured by $YETTY_ASSETS_DIR override.
+ *   bin_dir     — where user-facing executables are installed (the
+ *                  yinstall BIN destination). Linux/macOS: ~/.local/bin
+ *                  (honours $XDG_BIN_HOME). Windows:
+ *                  %LOCALAPPDATA%\Programs\yetty. Empty on platforms with
+ *                  no install step (webasm / android / ios / tvos).
  *
  * PATH_MAX is platform-specific (4096 on Linux, 1024 on macOS, 260 on
  * Windows MAX_PATH). 5×PATH_MAX ≈ 20 KiB on Linux — chunky for a heap
@@ -52,6 +57,7 @@ struct yetty_yplatform_paths {
     char runtime_dir_buf[PATH_MAX];
     char config_dir_buf[PATH_MAX];
     char assets_dir_buf[PATH_MAX];
+    char bin_dir_buf[PATH_MAX];
 };
 
 YETTY_YRESULT_DECLARE(yetty_yplatform_paths_ptr, struct yetty_yplatform_paths *);
@@ -88,6 +94,7 @@ const char *yetty_yplatform_get_data_dir(void);
 const char *yetty_yplatform_get_runtime_dir(void);
 const char *yetty_yplatform_get_config_dir(void);
 const char *yetty_yplatform_get_assets_dir(void);
+const char *yetty_yplatform_get_bin_dir(void);
 
 #ifdef __cplusplus
 }
