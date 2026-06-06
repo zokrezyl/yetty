@@ -3839,3 +3839,269 @@ struct yetty_yplot_buffer_input;"
         type: "const uint8_t *"
       - name: len
         type: size_t
+types:
+  - name: uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_uint8_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const uint8_t *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_float_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: float
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_pixel_coord
+    kind: struct
+    fields:
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - name: yetty_ycore_rectangle
+    kind: struct
+    fields:
+      - name: min
+        type: struct yetty_ycore_pixel_coord
+      - name: max
+        type: struct yetty_ycore_pixel_coord
+  - name: yetty_ycore_rgba
+    kind: struct
+    fields:
+      - name: r
+        type: uint8_t
+      - name: g
+        type: uint8_t
+      - name: b
+        type: uint8_t
+      - name: a
+        type: uint8_t
+  - name: yetty_ycore_size_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: size_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygui_flex_align
+    kind: enum
+    values:
+      - name: YETTY_YGUI_ALIGN_START
+        value: 0
+      - name: YETTY_YGUI_ALIGN_CENTER
+        value: 1
+      - name: YETTY_YGUI_ALIGN_END
+        value: 2
+      - name: YETTY_YGUI_ALIGN_STRETCH
+        value: 3
+  - name: yetty_ygui_flex_direction
+    kind: enum
+    values:
+      - name: YETTY_YGUI_FLEX_ROW
+        value: 0
+      - name: YETTY_YGUI_FLEX_COLUMN
+        value: 1
+  - name: yetty_ygui_flex_justify
+    kind: enum
+    values:
+      - name: YETTY_YGUI_JUSTIFY_START
+        value: 0
+      - name: YETTY_YGUI_JUSTIFY_CENTER
+        value: 1
+      - name: YETTY_YGUI_JUSTIFY_END
+        value: 2
+      - name: YETTY_YGUI_JUSTIFY_SPACE_BETWEEN
+        value: 3
+  - name: yetty_ygui_layout
+    kind: struct
+    fields:
+      - name: direction
+        type: enum yetty_ygui_flex_direction
+      - name: justify
+        type: enum yetty_ygui_flex_justify
+      - name: align
+        type: enum yetty_ygui_flex_align
+      - name: gap
+        type: float
+      - name: padding_top
+        type: float
+      - name: padding_right
+        type: float
+      - name: padding_bottom
+        type: float
+      - name: padding_left
+        type: float
+      - name: width
+        type: float
+      - name: height
+        type: float
+      - name: flex_grow
+        type: float
+      - name: flex_shrink
+        type: float
+      - name: min_width
+        type: float
+      - name: max_width
+        type: float
+      - name: min_height
+        type: float
+      - name: max_height
+        type: float
+      - name: absolute
+        type: int
+      - name: pos_x
+        type: float
+      - name: pos_y
+        type: float
+      - name: hidden
+        type: int
+  - name: yetty_ygui_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygui_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygui_yplot_config
+    kind: struct
+    fields:
+      - name: x_min
+        type: float
+      - name: x_max
+        type: float
+      - name: y_min
+        type: float
+      - name: y_max
+        type: float
+      - name: flags
+        type: uint32_t
+  - name: yetty_yrich_input_mods
+    kind: struct
+    fields:
+      - name: shift
+        type: bool
+      - name: ctrl
+        type: bool
+      - name: alt
+        type: bool
+      - name: meta
+        type: bool
+  - name: ynode_drag_mode
+    kind: enum
+    values:
+      - name: YNODE_DRAG_NONE
+        value: 0
+      - name: YNODE_DRAG_MOVE
+        value: 1
+      - name: YNODE_DRAG_LINK
+        value: 2
+      - name: YNODE_DRAG_RESIZE
+        value: 3

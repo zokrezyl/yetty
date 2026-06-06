@@ -282,3 +282,172 @@ classes:
       - slot: set_content_size
         slot_domain: yfigure
         impl: yetty_ygrid_grid_set_content_size_impl
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: capacity
+        type: size_t
+      - name: size
+        type: size_t
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_pixel_size
+    kind: struct
+    fields:
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yrender_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: size
+        type: size_t
+      - name: capacity
+        type: size_t
+      - name: name
+        type: "char[64]"
+      - name: wgsl_type
+        type: "char[64]"
+      - name: readonly
+        type: int
+      - name: dirty
+        type: int
+  - name: yetty_yrender_gpu_resource_set
+    kind: struct
+    fields:
+      - name: namespace
+        type: "char[64]"
+      - name: pixel_size
+        type: struct yetty_ycore_pixel_size
+      - name: textures
+        type: "struct yetty_yrender_texture[4]"
+      - name: texture_count
+        type: size_t
+      - name: buffers
+        type: "struct yetty_yrender_buffer[4]"
+      - name: buffer_count
+        type: size_t
+      - name: uniforms
+        type: "struct yetty_yrender_uniform[32]"
+      - name: uniform_count
+        type: size_t
+      - name: shader
+        type: struct yetty_yrender_shader_code
+      - name: children
+        type: "struct yetty_yrender_gpu_resource_set *[64]"
+      - name: children_count
+        type: size_t
+      - name: instance_count
+        type: uint32_t
+  - name: yetty_yrender_shader_code
+    kind: struct
+    fields:
+      - name: data
+        type: "const char *"
+      - name: size
+        type: size_t
+      - name: hash
+        type: uint64_t
+  - name: yetty_yrender_texture
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: width
+        type: uint32_t
+      - name: height
+        type: uint32_t
+      - name: format
+        type: uint32_t
+      - name: name
+        type: "char[64]"
+      - name: wgsl_type
+        type: "char[64]"
+      - name: sampler_name
+        type: "char[64]"
+      - name: sampler_filter
+        type: uint32_t
+      - name: dirty
+        type: int
+  - name: yetty_yrender_uniform
+    kind: struct
+    fields:
+      - name: name
+        type: "char[64]"
+      - name: type
+        type: enum yetty_yrender_uniform_type
+      - name: 
+        kind: union
+        fields:
+          - name: f32
+            type: float
+          - name: vec2
+            type: "float[2]"
+          - name: vec3
+            type: "float[3]"
+          - name: vec4
+            type: "float[4]"
+          - name: mat4
+            type: "float[16]"
+          - name: u32
+            type: uint32_t
+          - name: i32
+            type: int32_t
+  - name: yetty_yrender_uniform_type
+    kind: enum
+    values:
+      - name: YETTY_YRENDER_UNIFORM_F32
+        value: 0
+      - name: YETTY_YRENDER_UNIFORM_VEC2
+        value: 1
+      - name: YETTY_YRENDER_UNIFORM_VEC3
+        value: 2
+      - name: YETTY_YRENDER_UNIFORM_VEC4
+        value: 3
+      - name: YETTY_YRENDER_UNIFORM_MAT4
+        value: 4
+      - name: YETTY_YRENDER_UNIFORM_U32
+        value: 5
+      - name: YETTY_YRENDER_UNIFORM_I32
+        value: 6

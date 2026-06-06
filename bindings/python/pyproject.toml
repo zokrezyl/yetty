@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yetty"
+version = "0.0.1"
+description = "Python bindings for the yetty terminal's yclass modules (ctypes)"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+# yetty + yetty.generated. The shared library is loaded at runtime (env
+# YETTY_FFI_LIB or yetty.load(path)); it is not packaged here.
+include = ["yetty*"]

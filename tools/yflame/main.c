@@ -21,7 +21,13 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/drawable-list.h>
 
+#ifdef _WIN32
+#include <io.h> /* _fileno */
+#define YFLAME_STDOUT_FD (_fileno(stdout))
+#else
 #include <unistd.h>
+#define YFLAME_STDOUT_FD (STDOUT_FILENO)
+#endif
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -224,7 +230,7 @@ int main(int argc, char **argv)
     }
 
     int rc = 0;
-    struct yetty_ycore_void_result wr = yetty_yflame_emit_osc(rr.value, STDOUT_FILENO);
+    struct yetty_ycore_void_result wr = yetty_yflame_emit_osc(rr.value, YFLAME_STDOUT_FD);
     yetty_ydraw_drawable_list_destroy(rr.value);
     if (YETTY_IS_ERR(wr)) {
         fprintf(stderr, "yflame: OSC emit failed: %s\n", wr.error.msg);

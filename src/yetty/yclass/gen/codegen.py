@@ -456,6 +456,173 @@ def _split_ann(ann: str):
     return verb.strip(), [p.strip() for p in rest.split(":") if p.strip()]
 
 
+# ---------------------------------------------------------------------------
+# Type harvesting — emit concrete layouts (struct fields, enum values) for
+# every by-value type the module's signatures reference, so model.yaml is
+# self-describing and the FFI generator never needs to re-parse C. Pointers
+# stay opaque (the binding treats them as handles), scalars/typedefs are known
+# to the per-language runtime, so only NON-pointer struct / enum types are
+# emitted, resolved transitively through struct fields.
+# ---------------------------------------------------------------------------
+
+def _record_field_list(decl: dict) -> list:
+    """Field list for a RecordDecl, inlining anonymous nested struct/union
+    members. An anonymous member is emitted as {name, kind: struct|union,
+    fields: [...]} instead of {name, type} — so a Result's anonymous
+    {error,value} union is captured structurally rather than as clang's
+    path-bearing `(anonymous at …)` type string (which would also be
+    non-deterministic across machines)."""
+    fields = []
+    pending_anon = None  # (kind, fields) from an immediately-preceding anon record
+    for child in decl.get("inner", []) or []:
+        ckind = child.get("kind")
+        if ckind == "RecordDecl":
+            if not child.get("name"):
+                pending_anon = (child.get("tagUsed", "struct"), _record_field_list(child))
+            continue  # named nested records are captured as their own entry
+        if ckind != "FieldDecl":
+            continue
+        name = child.get("name") or ""
+        qual = child.get("type", {}).get("qualType", "")
+        if ("(anonymous" in qual or "(unnamed" in qual) and pending_anon is not None:
+            anon_kind, anon_fields = pending_anon
+            fields.append({"name": name, "kind": anon_kind, "fields": anon_fields})
+        else:
+            fields.append({"name": name, "type": qual})
+        pending_anon = None
+    return fields
+
+
+def _collect_type_decls(node: dict, record_reg: dict, enum_reg: dict):
+    """Index every named struct/union definition (tag -> field list) and enum
+    (tag -> value list) reachable in the AST. Forward declarations (no fields)
+    never overwrite a real definition."""
+    if not isinstance(node, dict):
+        return
+    kind = node.get("kind")
+    if kind == "RecordDecl" and node.get("name"):
+        fields = _record_field_list(node)
+        if fields:
+            record_reg[node["name"]] = fields
+    elif kind == "EnumDecl" and node.get("name"):
+        values = _enum_values(node)
+        if values:
+            enum_reg[node["name"]] = values
+    for child in node.get("inner", []) or []:
+        _collect_type_decls(child, record_reg, enum_reg)
+
+
+def _first_int_value(node: dict):
+    """Best-effort: the first decimal integer literal under an enumerator's
+    initialiser subtree, or None for an implicit (auto-incremented) value."""
+    for child in node.get("inner", []) or []:
+        v = child.get("value")
+        if isinstance(v, str) and re.fullmatch(r"-?\d+", v):
+            return int(v)
+        sub = _first_int_value(child)
+        if sub is not None:
+            return sub
+    return None
+
+
+def _enum_values(decl: dict) -> list:
+    values = []
+    counter = 0
+    for child in decl.get("inner", []) or []:
+        if child.get("kind") != "EnumConstantDecl":
+            continue
+        explicit = _first_int_value(child)
+        if explicit is not None:
+            counter = explicit
+        values.append({"name": child.get("name") or "", "value": counter})
+        counter += 1
+    return values
+
+
+def _classify_type(type_str: str):
+    """Map a C type string to (category, tag). category is one of
+    'ptr' (opaque handle), 'struct', 'union', 'enum', or 'scalar'
+    (primitive / typedef the runtime already knows). tag is the bare
+    record/enum name for struct/union/enum, else None."""
+    t = type_str.strip()
+    if "*" in t:
+        return ("ptr", None)
+    t = re.sub(r"^(const|volatile)\s+", "", t).strip()
+    # Strip a trailing array extent (`T[4]`, `T[4][2]`) so an array-of-struct
+    # field resolves to its element type for harvesting + layout.
+    t = re.sub(r"(\s*\[[0-9]+\])+$", "", t).strip()
+    m = re.match(r"^struct\s+(\w+)$", t)
+    if m:
+        return ("struct", m.group(1))
+    m = re.match(r"^union\s+(\w+)$", t)
+    if m:
+        return ("union", m.group(1))
+    m = re.match(r"^enum\s+(\w+)$", t)
+    if m:
+        return ("enum", m.group(1))
+    return ("scalar", None)
+
+
+def _harvest_types(model: dict, record_reg: dict, enum_reg: dict) -> list:
+    """Transitive closure of by-value struct/enum types referenced by the
+    module's methods, class data fields, and exposed functions. Result-named
+    structs are tagged kind 'result' so the FFI generator can unwrap them."""
+    seen: set = set()
+    queue: list = []
+
+    def consider(type_str: str):
+        category, tag = _classify_type(type_str or "")
+        if category in ("struct", "union") and tag in record_reg and tag not in seen:
+            seen.add(tag)
+            queue.append(("struct", tag))
+        elif category == "enum" and tag in enum_reg and tag not in seen:
+            seen.add(tag)
+            queue.append(("enum", tag))
+
+    def consider_fields(fields: list):
+        """Walk a field list (including inlined anonymous nested records) so
+        every referenced by-value type is pulled into the closure."""
+        for field in fields:
+            if "fields" in field:
+                consider_fields(field["fields"])
+            elif "type" in field:
+                consider(field["type"])
+
+    for method in model.get("methods", []):
+        consider(method.get("return_type", ""))
+        for arg in method.get("args", []):
+            consider(arg.get("type", ""))
+    for cls in model.get("classes", []):
+        for field in cls.get("data_fields", []):
+            consider(field.get("type", ""))
+    for item in model.get("exposed", []):
+        if "return_type" in item:
+            consider(item["return_type"])
+        for arg in item.get("args", []):
+            consider(arg.get("type", ""))
+    # Every regular class gets a generated `<class>_create` returning
+    # yetty_yclass_object_ptr_result (see rpc.h). No method signature names
+    # it, so seed it explicitly — the FFI needs its layout to type create().
+    if any(cls.get("type") == "regular" for cls in model.get("classes", [])):
+        consider("struct yetty_yclass_object_ptr_result")
+
+    types: list = []
+    cursor = 0
+    while cursor < len(queue):
+        category, tag = queue[cursor]
+        cursor += 1
+        if category == "struct":
+            fields = record_reg[tag]
+            consider_fields(fields)  # transitive: grows the queue
+            kind = "result" if tag.endswith("_result") else "struct"
+            types.append({"name": tag, "kind": kind, "fields": fields})
+        else:
+            types.append({"name": tag, "kind": "enum", "values": enum_reg[tag]})
+
+    types.sort(key=lambda entry: entry["name"])
+    return types
+
+
 def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     """Walk annotated sources, build the model. `module` is the
     codegen's CLI argument; the `<domain>` segment in every class/
@@ -467,6 +634,10 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     classes: dict = {}
     local_slots: set = set()
     exposed: list = []
+    # Type registries for `types:` harvesting — every named struct/enum
+    # definition seen across the parsed TUs, keyed by tag.
+    record_reg: dict = {}
+    enum_reg: dict = {}
 
     def bucket(name: str) -> dict:
         if name not in classes:
@@ -507,6 +678,8 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                 file_bytes_cache[str(path)].decode("utf-8", errors="replace")):
             exposed.append({"source_file": str(path), "verbatim": block})
         tu = ast_dump(path, include_dirs)
+        # Index every struct/enum definition this TU sees, for `types:`.
+        _collect_type_decls(tu, record_reg, enum_reg)
         # The .c being processed is the default "current file" for the
         # top-level translation unit — clang annotates the file change
         # only on the FIRST declaration that moves into a header.
@@ -709,6 +882,12 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # `exposed: []` out of every other module's model.yaml.
     if exposed:
         model["exposed"] = exposed
+    # Concrete layouts for by-value struct/enum types referenced by the
+    # module's signatures (Result family, POD structs, enums) — transitively
+    # resolved so the FFI generator is fully model-driven.
+    harvested = _harvest_types(model, record_reg, enum_reg)
+    if harvested:
+        model["types"] = harvested
     return model
 
 

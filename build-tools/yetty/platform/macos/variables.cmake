@@ -5,6 +5,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/../variables-defaults.cmake)
 set(YETTY_ENABLE_LIB_LIBMAGIC  OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_YCAT  OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YCAT     OFF CACHE BOOL "" FORCE)
+# yless links yetty_ycat (disabled above) — the pager can't build without it.
+set(YETTY_ENABLE_TOOL_YLESS    OFF CACHE BOOL "" FORCE)
 
 # QA tools hardcode Linux LLVM paths.
 set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)

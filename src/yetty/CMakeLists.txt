@@ -189,6 +189,12 @@ if(YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
     add_subdirectory(yview)
 endif()
 
+# yffi — libyetty_ffi.so for language bindings. Only in the PIC double-build
+# tree; never part of the static application build.
+if(YETTY_BUILD_FFI_SHARED)
+    add_subdirectory(yffi)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YNETSURF)
     add_subdirectory(ynetsurf)
 endif()

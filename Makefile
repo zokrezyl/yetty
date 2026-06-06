@@ -19,6 +19,9 @@ BUILD_DIR_DESKTOP_YTRACE_DEBUG := build-desktop-ytrace-debug
 BUILD_DIR_DESKTOP_YTRACE_RELEASE := build-desktop-ytrace-release
 BUILD_DIR_DESKTOP_YTRACE_ASAN := build-desktop-ytrace-asan
 BUILD_DIR_DESKTOP_YINFO_RELEASE := build-desktop-yinfo-release
+# Separate PIC tree for the FFI shared library — the "double build". The
+# static application trees above stay non-PIC and uncompromised.
+BUILD_DIR_DESKTOP_FFI_RELEASE := build-desktop-ffi-release
 
 # Linux cross-compile (from x86_64 host using stock distro cross gcc)
 BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE := build-linux-aarch64-ytrace-release
@@ -153,7 +156,7 @@ all: help
 # Codegen's clang -fsyntax-only step tolerates missing third-party
 # headers — it needs the annotation AST nodes, not a clean compile.
 
-YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame
+YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame yview
 
 .PHONY: codegen
 codegen: ## Run yclass codegen for all annotated modules (output committed to git)
@@ -180,6 +183,11 @@ codegen: ## Run yclass codegen for all annotated modules (output committed to gi
 		done; \
 	done
 
+.PHONY: ffi
+ffi: ## Generate FFI language bindings from the per-module model.yaml (run after codegen)
+	uv run tools/ffi-codegen/ffigen.py python
+	uv run tools/ffi-codegen/ffigen.py lua
+
 #=============================================================================
 # Desktop - ytrace (full logging)
 #=============================================================================
@@ -203,6 +211,15 @@ build-desktop-ytrace-debug: ## Build desktop ytrace debug
 build-desktop-ytrace-release: ## Build desktop ytrace release (daily driver)
 	@if [ ! -f "$(BUILD_DIR_DESKTOP_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-desktop-ytrace-release; fi
 	PATH="$(SYSTEM_PATH)" $(CMAKE) --build $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) $(CMAKE_PARALLEL)
+
+.PHONY: config-desktop-ffi-release
+config-desktop-ffi-release: ## Configure the PIC FFI build tree (libyetty_ffi.so)
+	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_FFI_RELEASE) $(CMAKE_GENERATOR) $(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_DESKTOP_COMPILER) $(CMAKE_COMPILER_LAUNCHER) -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DYETTY_BUILD_FFI_SHARED=ON
+
+.PHONY: build-desktop-ffi-release
+build-desktop-ffi-release: ## Build libyetty_ffi.so (PIC double-build; static app build untouched)
+	@if [ ! -f "$(BUILD_DIR_DESKTOP_FFI_RELEASE)/build.ninja" ]; then $(MAKE) config-desktop-ffi-release; fi
+	PATH="$(SYSTEM_PATH)" $(CMAKE) --build $(BUILD_DIR_DESKTOP_FFI_RELEASE) $(CMAKE_PARALLEL) --target yetty_ffi
 
 .PHONY: run-desktop-ytrace-debug
 run-desktop-ytrace-debug: build-desktop-ytrace-debug ## Run desktop ytrace debug build
