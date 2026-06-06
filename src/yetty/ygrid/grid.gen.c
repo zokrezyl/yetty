@@ -44,13 +44,17 @@ struct yetty_yclass_ptr_result yetty_ygrid_grid_class_get(void)
         {"yetty_yfigure", "dump_state", (yetty_yclass_method_id_t)yetty_yfigure_dump_state, (yetty_yclass_impl_t)yetty_ygrid_grid_dump_state_impl},
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_yfigure_figure_class_get();
-    if (YETTY_IS_ERR(parent_class_r))
+    if (YETTY_IS_ERR(parent_class_r)) {
+        yerror("yetty_ygrid_grid_class_get: parent accessor failed: %s", parent_class_r.error.msg);
         return YETTY_ERR(yetty_yclass_ptr, "yetty_ygrid_grid_class_get: parent accessor failed", parent_class_r);
+    }
     struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                               parent_class_r.value, NULL, 0);
-    if (YETTY_IS_ERR(register_class_r))
+    if (YETTY_IS_ERR(register_class_r)) {
+        yerror("yetty_ygrid_grid_class_get: class_register failed: %s", register_class_r.error.msg);
         return YETTY_ERR(yetty_yclass_ptr, "yetty_ygrid_grid_class_get: class_register failed", register_class_r);
+    }
     cls = register_class_r.value;
     return register_class_r;
 }

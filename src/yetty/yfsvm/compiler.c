@@ -231,6 +231,10 @@ static const struct yetty_yfsvm_func_map funcs_1arg[] = {
     {"sinh", YETTY_YFSVM_OP_SINH},
     {"cosh", YETTY_YFSVM_OP_COSH},
     {"tanh", YETTY_YFSVM_OP_TANH},
+    {"asinh", YETTY_YFSVM_OP_ASINH},
+    {"acosh", YETTY_YFSVM_OP_ACOSH},
+    {"atanh", YETTY_YFSVM_OP_ATANH},
+    {"sinc", YETTY_YFSVM_OP_SINC},
     {"exp", YETTY_YFSVM_OP_EXP},
     {"exp2", YETTY_YFSVM_OP_EXP2},
     {"log", YETTY_YFSVM_OP_LOG},
@@ -243,10 +247,13 @@ static const struct yetty_yfsvm_func_map funcs_1arg[] = {
     {"floor", YETTY_YFSVM_OP_FLOOR},
     {"ceil", YETTY_YFSVM_OP_CEIL},
     {"round", YETTY_YFSVM_OP_ROUND},
+    {"trunc", YETTY_YFSVM_OP_TRUNC},
     {"fract", YETTY_YFSVM_OP_FRACT},
     {"frac", YETTY_YFSVM_OP_FRACT},
     {"sign", YETTY_YFSVM_OP_SIGN},
     {"saturate", YETTY_YFSVM_OP_CLAMP01},
+    {"radians", YETTY_YFSVM_OP_RADIANS},
+    {"degrees", YETTY_YFSVM_OP_DEGREES},
     {NULL, 0},
 };
 
@@ -359,6 +366,8 @@ static uint8_t compile_call(struct yetty_yfsvm_builder *b, const struct yetty_ye
 
         if (strcmp(name, "mix") == 0 || strcmp(name, "lerp") == 0) {
             builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_MIX, dst, a0, a1, a2 & 0xF));
+        } else if (strcmp(name, "smoothstep") == 0) {
+            builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_SMOOTHSTEP, dst, a0, a1, a2 & 0xF));
         } else if (strcmp(name, "clamp") == 0) {
             uint8_t tmp = builder_alloc_reg(b);
             builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_MAX, tmp, a0, a1, 0));

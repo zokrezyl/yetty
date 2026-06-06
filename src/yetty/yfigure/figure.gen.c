@@ -38,8 +38,10 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
     struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
                               NULL, NULL, 0);
-    if (YETTY_IS_ERR(register_class_r))
+    if (YETTY_IS_ERR(register_class_r)) {
+        yerror("yetty_yfigure_figure_class_get: class_register failed: %s", register_class_r.error.msg);
         return YETTY_ERR(yetty_yclass_ptr, "yetty_yfigure_figure_class_get: class_register failed", register_class_r);
+    }
     cls = register_class_r.value;
     return register_class_r;
 }

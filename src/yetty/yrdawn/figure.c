@@ -528,6 +528,29 @@ static struct yetty_ycore_void_result handle_cmd(struct yetty_yrdawn_figure *f, 
         .payload_ref = 0,
         .figure_id = f->figure_id,
     };
+
+    /* On error, wrap the reply in an envelope carrying a NUL-terminated
+     * description so the client logs a clear message rather than a bare
+     * numeric status. Bodyless OK replies keep the legacy fast path. */
+    if (status != YETTY_YRDAWN_REPLY_OK) {
+        char desc[192];
+        int desc_len =
+            snprintf(desc, sizeof(desc), "yrdawn server: method %u failed: %s", hdr->method_id,
+                     yetty_yrdawn_reply_status_str(status));
+        if (desc_len < 0) {
+            desc_len = 0;
+        } else if ((size_t)desc_len >= sizeof(desc)) {
+            desc_len = (int)sizeof(desc) - 1;
+        }
+        yerror("yrdawn-figure id=%u: %s", f->figure_id, desc);
+        uint8_t envelope[sizeof(reply) + sizeof(desc)];
+        size_t envelope_len = sizeof(reply) + (size_t)desc_len + 1u;
+        reply.total_size = (uint32_t)envelope_len;
+        memcpy(envelope, &reply, sizeof(reply));
+        memcpy(envelope + sizeof(reply), desc, (size_t)desc_len + 1u);
+        return emit(f, YETTY_YRDAWN_OSC_SC_REPLY, envelope, envelope_len);
+    }
+
     return emit(f, YETTY_YRDAWN_OSC_SC_REPLY, &reply, sizeof(reply));
 }
 

@@ -32,7 +32,7 @@ opcodes:
   - name: LOAD_C
     value: 0x02
     arity: 1
-    wgsl: "regs[dst] = bitcast<f32>(buf[constOffset + imm]);"
+    wgsl: "regs[dst] = bitcast<f32>(storage_buffer[constOffset + imm]);"
 
   - name: LOAD_X
     value: 0x03
@@ -136,6 +136,27 @@ opcodes:
     arity: 1
     wgsl: "regs[dst] = tanh(v1);"
 
+  - name: ASINH
+    value: 0x2A
+    arity: 1
+    wgsl: "regs[dst] = asinh(v1);"
+
+  - name: ACOSH
+    value: 0x2B
+    arity: 1
+    wgsl: "regs[dst] = acosh(v1);"
+
+  - name: ATANH
+    value: 0x2C
+    arity: 1
+    wgsl: "regs[dst] = atanh(v1);"
+
+  # Cardinal sine, singularity-guarded: sinc(0) = 1 (no NaN at the origin).
+  - name: SINC
+    value: 0x2D
+    arity: 1
+    wgsl: "regs[dst] = select(sin(v1) / v1, 1.0, abs(v1) < 1e-6);"
+
   # Exponential/Logarithmic
   - name: EXP
     value: 0x30
@@ -227,3 +248,23 @@ opcodes:
     value: 0x4A
     arity: 3
     wgsl: "regs[dst] = mix(v1, v2, regs[imm & 0xFu]);"
+
+  - name: SMOOTHSTEP
+    value: 0x4B
+    arity: 3
+    wgsl: "regs[dst] = smoothstep(v1, v2, regs[imm & 0xFu]);"
+
+  - name: TRUNC
+    value: 0x4C
+    arity: 1
+    wgsl: "regs[dst] = trunc(v1);"
+
+  - name: RADIANS
+    value: 0x4D
+    arity: 1
+    wgsl: "regs[dst] = radians(v1);"
+
+  - name: DEGREES
+    value: 0x4E
+    arity: 1
+    wgsl: "regs[dst] = degrees(v1);"

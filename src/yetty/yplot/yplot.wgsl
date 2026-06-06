@@ -13,9 +13,12 @@ const YPLOT_FLAG_GRID:   u32 = 1u;
 const YPLOT_FLAG_AXES:   u32 = 2u;
 const YPLOT_FLAG_LABELS: u32 = 4u;
 
-const YPLOT_BG_COLOR:   vec3<f32> = vec3<f32>(0.102, 0.102, 0.180);
-const YPLOT_GRID_COLOR: vec3<f32> = vec3<f32>(0.267, 0.267, 0.267);
-const YPLOT_AXIS_COLOR: vec3<f32> = vec3<f32>(0.667, 0.667, 0.667);
+// Plot chrome rides the brand palette: near-black canvas, teal-tinted
+// separators, mint axes. Curve colours are supplied per-function and are
+// left untouched.
+const YPLOT_BG_COLOR:   vec3<f32> = vec3<f32>(0.043, 0.063, 0.078); // BRAND_BG       #0B1014
+const YPLOT_GRID_COLOR: vec3<f32> = vec3<f32>(0.212, 0.290, 0.278); // BRAND_BORDER   #364A47
+const YPLOT_AXIS_COLOR: vec3<f32> = vec3<f32>(0.420, 0.659, 0.573); // BRAND_ACCENT   #6BA892 (mint)
 
 // Max curves the shader will iterate. Generous static bound for WGSL —
 // the actual count is read from data; this just stops the loop from being
@@ -43,25 +46,29 @@ fn yplot_draw_grid(bg: vec3<f32>, plotUV: vec2<f32>) -> vec3<f32> {
 }
 
 fn yplot_draw_axes(bg: vec3<f32>, plotUV: vec2<f32>,
-                   xMin: f32, xMax: f32, yMin: f32, yMax: f32) -> vec3<f32> {
+                   xMin: f32, xMax: f32, yMin: f32, yMax: f32,
+                   bounds_w: f32, bounds_h: f32) -> vec3<f32> {
     var color = bg;
-    let lineWidth = 0.008;
+    // Thickness in PIXELS, not plot-UV — a UV width makes the vertical axis
+    // fat on wide plots and the horizontal axis thin on short ones. Half-width
+    // 1.0 → a crisp ~2px line at any plot size.
+    let halfPx = 1.0;
 
     // Y-axis at x=0
     let xZero = (0.0 - xMin) / (xMax - xMin);
-    if (xZero >= 0.0 && xZero <= 1.0 && abs(plotUV.x - xZero) < lineWidth) {
+    if (xZero >= 0.0 && xZero <= 1.0 && abs(plotUV.x - xZero) * bounds_w < halfPx) {
         color = YPLOT_AXIS_COLOR;
     }
 
     // X-axis at y=0
     let yZero = (0.0 - yMin) / (yMax - yMin);
-    if (yZero >= 0.0 && yZero <= 1.0 && abs(plotUV.y - yZero) < lineWidth) {
+    if (yZero >= 0.0 && yZero <= 1.0 && abs(plotUV.y - yZero) * bounds_h < halfPx) {
         color = YPLOT_AXIS_COLOR;
     }
 
     // Border
-    if (plotUV.x < lineWidth || plotUV.x > 1.0 - lineWidth ||
-        plotUV.y < lineWidth || plotUV.y > 1.0 - lineWidth) {
+    if (plotUV.x * bounds_w < halfPx || (1.0 - plotUV.x) * bounds_w < halfPx ||
+        plotUV.y * bounds_h < halfPx || (1.0 - plotUV.y) * bounds_h < halfPx) {
         color = YPLOT_AXIS_COLOR * 0.7;
     }
 
@@ -104,7 +111,7 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
         color = yplot_draw_grid(color, plotUV);
     }
     if ((flags & YPLOT_FLAG_AXES) != 0u) {
-        color = yplot_draw_axes(color, plotUV, xMin, xMax, yMin, yMax);
+        color = yplot_draw_axes(color, plotUV, xMin, xMax, yMin, yMax, bounds_w, bounds_h);
     }
 
     let dataX = mix(xMin, xMax, plotUV.x);

@@ -1250,9 +1250,12 @@ def emit_class_accessor(cls: dict) -> str:
         parent_accessor = f"yetty_{parent['domain']}_{parent['name']}_class_get"
         parent_block = (
             f"    struct yetty_yclass_ptr_result parent_class_r = {parent_accessor}();\n"
-            f"    if (YETTY_IS_ERR(parent_class_r))\n"
+            f"    if (YETTY_IS_ERR(parent_class_r)) {{\n"
+            f"        yerror(\"{qname}_class_get: parent accessor failed: %s\", "
+            f"parent_class_r.error.msg);\n"
             f"        return YETTY_ERR(yetty_yclass_ptr, "
             f"\"{qname}_class_get: parent accessor failed\", parent_class_r);\n"
+            f"    }}\n"
         )
         parent_expr = "parent_class_r.value"
     else:
@@ -1267,9 +1270,12 @@ def emit_class_accessor(cls: dict) -> str:
             mixin_accessor = f"yetty_{m['domain']}_{m['name']}_mixin_get"
             mixin_lines.append(
                 f"    struct yetty_yclass_ptr_result mixin_class_r_{i} = {mixin_accessor}();\n"
-                f"    if (YETTY_IS_ERR(mixin_class_r_{i}))\n"
+                f"    if (YETTY_IS_ERR(mixin_class_r_{i})) {{\n"
+                f"        yerror(\"{qname}_class_get: mixin{i} accessor failed: %s\", "
+                f"mixin_class_r_{i}.error.msg);\n"
                 f"        return YETTY_ERR(yetty_yclass_ptr, "
                 f"\"{qname}_class_get: mixin{i} accessor failed\", mixin_class_r_{i});\n"
+                f"    }}\n"
             )
             mixin_values.append(f"mixin_class_r_{i}.value")
         mixin_block = "".join(mixin_lines)
@@ -1299,8 +1305,13 @@ def emit_class_accessor(cls: dict) -> str:
         data_accessor_block = (
             f"\nstruct {result_id}_result {qcls}_data(struct yetty_ygui_object *obj)\n"
             f"{{\n"
+            f"    struct yetty_yclass_ptr_result class_r = {accessor}();\n"
+            f"    if (YETTY_IS_ERR(class_r)) {{\n"
+            f'        yerror("{qcls}_data: class accessor failed: %s", class_r.error.msg);\n'
+            f'        return YETTY_ERR({result_id}, "{qcls}_data: class accessor failed", class_r);\n'
+            f"    }}\n"
             f"    struct yetty_ygui_void_ptr_result data_slice_r =\n"
-            f"        yetty_ygui_data_get_result(obj, {accessor}().value);\n"
+            f"        yetty_ygui_data_get_result(obj, class_r.value);\n"
             f"    if (YETTY_IS_ERR(data_slice_r))\n"
             f'        return YETTY_ERR({result_id}, "{qcls}_data", data_slice_r);\n'
             f"    return YETTY_OK({result_id}, ({data} *)data_slice_r.value);\n"
@@ -1377,8 +1388,10 @@ struct yetty_yclass_ptr_result {accessor}(void)
     struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, {ops_args},
                               {parent_expr}, {mixin_arg}, {mixin_count});
-    if (YETTY_IS_ERR(register_class_r))
+    if (YETTY_IS_ERR(register_class_r)) {{
+        yerror("{qname}_class_get: class_register failed: %s", register_class_r.error.msg);
         return YETTY_ERR(yetty_yclass_ptr, "{qname}_class_get: class_register failed", register_class_r);
+    }}
     cls = register_class_r.value;
     return register_class_r;
 }}

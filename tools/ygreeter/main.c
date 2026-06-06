@@ -3081,6 +3081,26 @@ static float app_content_scale(const struct app *app)
     return s > 0.0f ? s : 1.0f;
 }
 
+/* Slave end of the memory-pty pair: a resize on the producer (ygui) endpoint
+ * lands here — the SIGWINCH analog — and we hand the new pixel size to the
+ * compositor's root container. cols/rows are terminal-grid concepts the
+ * compositor has no use for; only the pixel extent matters. */
+static void standalone_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows,
+                                     uint32_t pixel_w, uint32_t pixel_h)
+{
+    struct app *app = userdata;
+    (void)cols;
+    (void)rows;
+    if (!app->root_container) {
+        return;
+    }
+    struct yetty_ycore_rectangle root_rect = {.min = {0, 0},
+                                              .max = {(float)pixel_w, (float)pixel_h}};
+    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root_container);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, root_rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+}
+
 static struct yetty_ycore_int_result standalone_event_handler(
     struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
 {
@@ -3155,13 +3175,13 @@ static struct yetty_ycore_int_result standalone_event_handler(
                 app->engine, (float)ev->resize.width / scale, (float)ev->resize.height / scale);
             if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
         }
-        if (app->root_container) {
-            struct yetty_ycore_rectangle root_rect = {
-                .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
-            struct yetty_yfigure_figure *rf =
-                yetty_yfigure_container_as_figure(app->root_container);
-            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, root_rect);
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+        /* Drive the compositor-side rect through the pty pair (→
+         * standalone_pty_resize_cb) instead of poking the container directly,
+         * so the resize travels the same path as a real PTY's TIOCSWINSZ. */
+        if (app->pty_pair.a && app->pty_pair.a->ops->resize) {
+            struct yetty_ycore_void_result rr = app->pty_pair.a->ops->resize(
+                app->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
+            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
@@ -3376,6 +3396,10 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         app->pty_pair.b,
         (yetty_yplatform_memory_pty_wake_fn)app->yframework->event_loop->ops->request_render,
         app->yframework->event_loop);
+
+    /* Window-size changes reach the compositor end the same way bytes do:
+     * the producer endpoint is resized, the pair delivers it to this peer. */
+    yetty_yplatform_memory_pty_set_resize(app->pty_pair.b, standalone_pty_resize_cb, app);
 
     app->listener.handler = standalone_event_handler;
     struct yetty_ycore_void_result rel =

@@ -190,6 +190,35 @@ enum yetty_yrdawn_reply_status {
     YETTY_YRDAWN_REPLY_INTERNAL = 5,
 };
 
+/* Human-readable name for a reply status, for diagnostics/logging. Returns a
+ * static string ("ok", "validation-error", …); never NULL. Unknown values map
+ * to "unknown". Inline so both the client (yetty_yrdawn) and server
+ * (yetty_yrdawn_server) libraries get it without a cross-library dependency. */
+static inline const char *yetty_yrdawn_reply_status_str(uint32_t status)
+{
+    switch (status) {
+    case YETTY_YRDAWN_REPLY_OK:
+        return "ok";
+    case YETTY_YRDAWN_REPLY_VALIDATION_ERROR:
+        return "validation-error";
+    case YETTY_YRDAWN_REPLY_OUT_OF_MEMORY:
+        return "out-of-memory";
+    case YETTY_YRDAWN_REPLY_DEVICE_LOST:
+        return "device-lost";
+    case YETTY_YRDAWN_REPLY_UNKNOWN_METHOD:
+        return "unknown-method";
+    case YETTY_YRDAWN_REPLY_INTERNAL:
+        return "internal-error";
+    default:
+        return "unknown";
+    }
+}
+
+/* On an error reply (status != OK) the server appends a NUL-terminated, UTF-8
+ * description after the reply header so the client can log a clear message
+ * instead of a bare numeric status. The OK path keeps the method-specific
+ * reply body unchanged. */
+
 struct yetty_yrdawn_wire_reply_hdr {
     uint32_t magic; /* YETTY_YRDAWN_MAGIC_REPLY */
     uint32_t version;

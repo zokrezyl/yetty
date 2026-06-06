@@ -83,6 +83,10 @@ Programs are serialized as 32-bit words:
 | 0x27 | SINH | `dst = sinh(src1)` |
 | 0x28 | COSH | `dst = cosh(src1)` |
 | 0x29 | TANH | `dst = tanh(src1)` |
+| 0x2A | ASINH | `dst = asinh(src1)` |
+| 0x2B | ACOSH | `dst = acosh(src1)` |
+| 0x2C | ATANH | `dst = atanh(src1)` |
+| 0x2D | SINC | `dst = sin(src1)/src1` (1 at src1=0) |
 
 ### Exponential/Logarithmic
 | Opcode | Name | Description |
@@ -109,6 +113,10 @@ Programs are serialized as 32-bit words:
 | 0x48 | CLAMP01 | `dst = clamp(src1, 0, 1)` |
 | 0x49 | STEP | `dst = step(src1, src2)` |
 | 0x4A | MIX | `dst = mix(src1, src2, r[imm&0xF])` |
+| 0x4B | SMOOTHSTEP | `dst = smoothstep(src1, src2, r[imm&0xF])` |
+| 0x4C | TRUNC | `dst = trunc(src1)` |
+| 0x4D | RADIANS | `dst = radians(src1)` |
+| 0x4E | DEGREES | `dst = degrees(src1)` |
 
 ## Limits
 

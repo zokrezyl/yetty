@@ -14,7 +14,7 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 YPLOT="${YPLOT:-$ROOT/build-desktop-ytrace-release/tools/yplot/yplot}"
-PAUSE="${DEMO_PAUSE:-2}"
+PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YPLOT" ]; then
     echo "yplot binary not found at $YPLOT" >&2
@@ -64,4 +64,3 @@ printf '\n(4) time-modulated buffer (animated):\n'
     '@live.color=#6BA892'
 
 printf '\n=== done — holding open ===\n'
-sleep 600

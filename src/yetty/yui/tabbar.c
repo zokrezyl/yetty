@@ -614,10 +614,10 @@ static void tabbar_request_render(const struct yetty_yui_tabbar *bar)
     }
 }
 
-static void tabbar_switch(struct yetty_yui_tabbar *bar, size_t idx)
+static struct yetty_ycore_void_result tabbar_switch(struct yetty_yui_tabbar *bar, size_t idx)
 {
     if (idx >= bar->count || idx == bar->active) {
-        return;
+        return YETTY_OK_VOID();
     }
     /* Deactivate the previously active workspace, then activate the new
      * one. Both calls cascade SET_FOCUS down through the focused pane to
@@ -626,14 +626,21 @@ static void tabbar_switch(struct yetty_yui_tabbar *bar, size_t idx)
      * cursor blink, future focus reporting CSEQ, etc.) lags one step
      * behind the visible tab. */
     if (bar->workspaces[bar->active]) {
-        yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0);
+        struct yetty_ycore_void_result deactivate_result =
+            yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, deactivate_result,
+                            "tabbar_switch: deactivate previous workspace");
     }
     bar->active = idx;
     if (bar->workspaces[bar->active]) {
-        yetty_yui_workspace_set_active(bar->workspaces[bar->active], 1);
+        struct yetty_ycore_void_result activate_result =
+            yetty_yui_workspace_set_active(bar->workspaces[bar->active], 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, activate_result,
+                            "tabbar_switch: activate new workspace");
     }
     ydebug("tabbar: switched to workspace %zu/%zu", idx + 1, bar->count);
     tabbar_request_render(bar);
+    return YETTY_OK_VOID();
 }
 
 /*---------------------------------------------------------------------------
@@ -706,12 +713,21 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                                     : (bar->active + 1) % bar->count;
                 /* Route through tabbar_switch so the SET_FOCUS cascade
                  * runs — direct bar->active assignment would skip it. */
-                tabbar_switch(bar, next);
+                struct yetty_ycore_void_result switch_result = tabbar_switch(bar, next);
+                if (YETTY_IS_ERR(switch_result)) {
+                    yerror("tabbar: switch failed: %s", switch_result.error.msg);
+                    yetty_ycore_error_destroy(switch_result.error);
+                }
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (k >= KEY_1 && k <= KEY_9) {
-            tabbar_switch(bar, (size_t)(k - KEY_1));
+            struct yetty_ycore_void_result switch_result =
+                tabbar_switch(bar, (size_t)(k - KEY_1));
+            if (YETTY_IS_ERR(switch_result)) {
+                yerror("tabbar: switch failed: %s", switch_result.error.msg);
+                yetty_ycore_error_destroy(switch_result.error);
+            }
             return YETTY_OK(yetty_ycore_int, 1);
         }
     }
@@ -971,7 +987,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_switch_to(struct yetty_yui_tabba
     if (!bar) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_switch_to: NULL");
     }
-    tabbar_switch(bar, idx);
+    struct yetty_ycore_void_result switch_result = tabbar_switch(bar, idx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, switch_result, "tabbar_switch_to");
     return YETTY_OK_VOID();
 }
 

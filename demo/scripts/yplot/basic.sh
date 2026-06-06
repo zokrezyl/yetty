@@ -9,7 +9,7 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 YPLOT="${YPLOT:-$ROOT/build-desktop-ytrace-release/tools/yplot/yplot}"
-PAUSE="${DEMO_PAUSE:-2}"
+PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YPLOT" ]; then
     echo "yplot binary not found at $YPLOT — set YPLOT=path/to/yplot" >&2
@@ -59,4 +59,3 @@ echo 'audio harmonics:'
     '@c.color=#AA96DA'
 
 printf '\n=== done — holding open ===\n'
-sleep 600
