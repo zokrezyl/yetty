@@ -652,8 +652,11 @@ function(yetty_embed_assets TARGET)
         file(COPY "${GLYPH_FILE}" DESTINATION "${EMBED_DATA_DIR}/shaders/glyph-shaders")
     endforeach()
 
-    # Copy fonts
-    file(GLOB FONT_FILES "${YETTY_ROOT}/assets/fonts/*.ttf")
+    # Copy fonts (.ttf text faces + .otf — e.g. Emmentaler, the music font ymusic
+    # renders with — so they extract to the runtime fonts dir alongside DejaVu).
+    file(GLOB FONT_FILES
+        "${YETTY_ROOT}/assets/fonts/*.ttf"
+        "${YETTY_ROOT}/assets/fonts/*.otf")
     foreach(FONT_FILE ${FONT_FILES})
         file(COPY "${FONT_FILE}" DESTINATION "${EMBED_DATA_DIR}/fonts")
     endforeach()

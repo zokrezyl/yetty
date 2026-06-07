@@ -175,17 +175,24 @@ static struct uint32_result load_one(struct yetty_yfont_msdf_font *f, uint32_t c
     uint32_t ax = col * f->cell_size;
     uint32_t ay = row * f->cell_size;
 
-    /* Center glyph in cell */
+    /* Center the glyph in its cell. Symbol fonts (music clefs, large rests)
+     * can produce glyph bitmaps bigger than the cell; clamp the copy to the
+     * cell and centre-crop the source so an oversized glyph degrades to a clip
+     * instead of underflowing (unsigned) ox/oy and writing out of bounds. */
     uint32_t gw = hdr.width;
     uint32_t gh = hdr.height;
-    uint32_t ox = (f->cell_size - gw) / 2;
-    uint32_t oy = (f->cell_size - gh) / 2;
+    uint32_t copy_w = gw < f->cell_size ? gw : f->cell_size;
+    uint32_t copy_h = gh < f->cell_size ? gh : f->cell_size;
+    uint32_t ox = (f->cell_size - copy_w) / 2;
+    uint32_t oy = (f->cell_size - copy_h) / 2;
+    uint32_t src_x = (gw - copy_w) / 2;
+    uint32_t src_y = (gh - copy_h) / 2;
 
-    /* Copy pixels into atlas cell */
-    for (uint32_t y = 0; y < gh; y++) {
+    /* Copy pixels into atlas cell (clipped to the cell). */
+    for (uint32_t y = 0; y < copy_h; y++) {
         size_t dst = ((size_t)(ay + oy + y) * f->atlas_width + ax + ox) * 4;
-        size_t src = (size_t)y * gw * 4;
-        memcpy(f->atlas_pixels + dst, pixels + src, gw * 4);
+        size_t src = ((size_t)(src_y + y) * gw + src_x) * 4;
+        memcpy(f->atlas_pixels + dst, pixels + src, (size_t)copy_w * 4);
     }
 
     f->next_cell++;
@@ -438,7 +445,11 @@ static const struct yetty_yfont_font_ops msdf_font_ops = {
  * Create
  *===========================================================================*/
 
-#define DEFAULT_CELL_SIZE 64
+/* Cell must fit the tallest glyph in the font. Text/PDF Latin glyphs fit in 64
+ * at the 32px generation size, but symbol fonts (music clefs, large rests)
+ * exceed that — 128 fits Emmentaler's glyphs without clipping. load_one also
+ * clamps as a hard backstop. */
+#define DEFAULT_CELL_SIZE 128
 
 struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
                                                            const char *shader_path,

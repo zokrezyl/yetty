@@ -1,0 +1,276 @@
+methods:
+  - slot: configure
+    domain: ymusic
+    owning_class: music
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: float
+      - name: staff_space
+        type: float
+      - name: flags
+        type: uint32_t
+    local: true
+  - slot: set_font_path
+    domain: ymusic
+    owning_class: music
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    local: true
+  - slot: parse
+    domain: ymusic
+    owning_class: music
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: input
+        type: "const char *"
+      - name: len
+        type: size_t
+    local: true
+  - slot: render
+    domain: ymusic
+    owning_class: music
+    return_type: struct yetty_ydraw_drawable_list_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: hit_test
+    domain: ymusic
+    owning_class: music
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    local: true
+  - slot: set_highlight
+    domain: ymusic
+    owning_class: music
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: element_id
+        type: int32_t
+    local: true
+  - slot: destroy
+    domain: ymusic
+    owning_class: music
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+classes:
+  - name: music
+    domain: ymusic
+    accessor: yetty_ymusic_music_class_get
+    type: regular
+    source_file: src/yetty/ymusic/music.c
+    parent: null
+    mixins: []
+    data: struct music_data
+    data_fields:
+      - name: width
+        type: float
+        get: false
+        set: false
+      - name: staff_space
+        type: float
+        get: false
+        set: false
+      - name: flags
+        type: uint32_t
+        get: false
+        set: false
+      - name: font_path
+        type: "char *"
+        get: false
+        set: false
+      - name: font_bytes
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: font_len
+        type: size_t
+        get: false
+        set: false
+      - name: staff
+        type: struct ymusic_staff
+        get: false
+        set: false
+      - name: index
+        type: "struct ymusic_element **"
+        get: false
+        set: false
+      - name: element_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: highlight_id
+        type: int32_t
+        get: false
+        set: false
+      - name: content_w
+        type: float
+        get: false
+        set: false
+      - name: content_h
+        type: float
+        get: false
+        set: false
+      - name: elements_x0
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: configure
+        slot_domain: ymusic
+        impl: music_configure
+      - slot: set_font_path
+        slot_domain: ymusic
+        impl: music_set_font_path
+      - slot: parse
+        slot_domain: ymusic
+        impl: music_parse
+      - slot: render
+        slot_domain: ymusic
+        impl: music_render
+      - slot: hit_test
+        slot_domain: ymusic
+        impl: music_hit_test
+      - slot: set_highlight
+        slot_domain: ymusic
+        impl: music_set_highlight
+      - slot: destroy
+        slot_domain: ymusic
+        impl: music_obj_destroy
+exposed:
+  - source_file: src/yetty/ymusic/music.c
+    verbatim: "/* Public constants — copied verbatim into the generated music.h. */
+#define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
+#define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */"
+  - source_file: src/yetty/ymusic/music.c
+    name: yetty_ymusic_emit_osc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: list
+        type: "const struct yetty_ydraw_drawable_list *"
+      - name: fd
+        type: int
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ydraw_drawable_list_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ydraw_drawable_list *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: ymusic_clef
+    kind: enum
+    values:
+      - name: YMUSIC_CLEF_TREBLE
+        value: 0
+      - name: YMUSIC_CLEF_BASS
+        value: 1
+      - name: YMUSIC_CLEF_ALTO
+        value: 2
+      - name: YMUSIC_CLEF_TENOR
+        value: 3
+  - name: ymusic_staff
+    kind: struct
+    fields:
+      - name: clef
+        type: enum ymusic_clef
+      - name: key_fifths
+        type: int
+      - name: time_num
+        type: int
+      - name: time_den
+        type: int
+      - name: measures
+        type: "struct ymusic_measure **"
+      - name: count
+        type: size_t
+      - name: cap
+        type: size_t

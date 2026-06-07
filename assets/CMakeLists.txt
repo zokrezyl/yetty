@@ -9,6 +9,10 @@ set(FONT_FILES
     ${ASSETS_SRC_DIR}/fonts/DejaVuSansMNerdFontMono-Bold.ttf
     ${ASSETS_SRC_DIR}/fonts/DejaVuSansMNerdFontMono-Oblique.ttf
     ${ASSETS_SRC_DIR}/fonts/DejaVuSansMNerdFontMono-BoldOblique.ttf
+    # Emmentaler — LilyPond's music-notation font (SIL OFL 1.1), used by ymusic
+    # for clefs, noteheads, rests, accidentals and flags. See Emmentaler-OFL.txt.
+    ${ASSETS_SRC_DIR}/fonts/Emmentaler-20.otf
+    ${ASSETS_SRC_DIR}/fonts/Emmentaler-OFL.txt
 )
 
 # Create custom target to copy assets
