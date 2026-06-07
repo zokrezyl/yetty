@@ -1080,17 +1080,28 @@ static struct yetty_ycore_char_ptr_result container_dump(const struct yetty_yfig
  * Public API
  *=========================================================================*/
 
-/* Downcast from the yclass header to the container body. Callers
- * that hold a `yetty_yclass_object *` (e.g. from
- * `yetty_yfigure_container_create`) use this to reach the typed body
- * for setter calls. Layout invariant: body starts at `obj + 1` (see
- * the yclass instance layout comment further up). */
+/* Downcast from the yclass header to the container body. Callers that hold a
+ * `yetty_yclass_object *` (e.g. from `yetty_yfigure_container_create`) use this
+ * to reach the typed body for setter calls. It resolves the container's own
+ * data slice via the class chain (yetty_yclass_object_data) — that is the
+ * correct offset even when the figure base class occupies an earlier slice. A
+ * raw `obj + 1` cast lands on the figure slice, not the container body, and
+ * would read a bogus `base`. The Result from object_data has nowhere to
+ * propagate through this exposed plain-pointer FFI signature, so a lookup miss
+ * collapses to NULL at this boundary. */
 [[clang::annotate("expose")]]
-struct yetty_yfigure_container *yetty_yfigure_container_from(struct yetty_yclass_object *obj)
+YETTY_EXTERNAL_CALLBACK struct yetty_yfigure_container *yetty_yfigure_container_from(
+    struct yetty_yclass_object *obj)
 {
-    /* Layout invariant: the container body is the first data slice, sitting
-     * immediately after the yclass object header (see the constructor). */
-    return obj ? (struct yetty_yfigure_container *)(obj + 1) : NULL;
+    if (!obj) {
+        return NULL;
+    }
+    struct yetty_yclass_void_ptr_result container_r = container_from_obj(obj);
+    if (YETTY_IS_ERR(container_r)) {
+        yetty_ycore_error_destroy(container_r.error);
+        return NULL;
+    }
+    return container_r.value;
 }
 
 /* Setters for per-instance runtime state. These are owner-side

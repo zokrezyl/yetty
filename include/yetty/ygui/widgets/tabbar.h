@@ -19,7 +19,8 @@ struct yetty_ygui_tabbar_data_ptr_result yetty_ygui_tabbar_data(struct yetty_ygu
 struct yetty_ygui_object;
 
 struct yetty_ygui_object;
-typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index, void *userdata);
+typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index,
+                                        void *userdata);
 typedef void (*yetty_ygui_tab_new_cb)(struct yetty_ygui_object *tabbar, void *userdata);
 struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ygui_object *tabbar, const char *label);
 struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_ygui_object *tabbar, int index);

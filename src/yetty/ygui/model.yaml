@@ -2402,8 +2402,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_obje
 
 /* Place the widget at an absolute (pos_x, pos_y) inside its parent's
  * content box (sets layout.absolute). */
-struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
-                                                              float y);
+struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj,
+                                                              float x, float y);
 
 /* Promote this widget to its own receiver-side child figure of `kind`
  * (e.g. YETTY_YFIGURE_KIND_YGRID) stacked at `z`. The whole subtree
@@ -2425,7 +2425,7 @@ int32_t yetty_ygui_widget_figure_z(const struct yetty_ygui_object *obj);
  * it paints last (front) and wins the hit-test — click-to-front, no
  * figures involved. */
 struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_ygui_object *obj,
-                                                             int floating);
+                                                              int floating);
 int yetty_ygui_widget_is_floating(const struct yetty_ygui_object *obj);
 
 /* Apply a small CSS-like declaration string to the widget's layout.
@@ -3120,7 +3120,8 @@ typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_ygui_object *splitter
         type: int
   - source_file: src/yetty/ygui/widgets/tabbar.c
     verbatim: "struct yetty_ygui_object;
-typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index, void *userdata);
+typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index,
+                                        void *userdata);
 typedef void (*yetty_ygui_tab_new_cb)(struct yetty_ygui_object *tabbar, void *userdata);"
   - source_file: src/yetty/ygui/widgets/tabbar.c
     name: yetty_ygui_tabbar_add_tab

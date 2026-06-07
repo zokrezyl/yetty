@@ -115,8 +115,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_obje
 
 /* Place the widget at an absolute (pos_x, pos_y) inside its parent's
  * content box (sets layout.absolute). */
-struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
-                                                              float y);
+struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj,
+                                                              float x, float y);
 
 /* Promote this widget to its own receiver-side child figure of `kind`
  * (e.g. YETTY_YFIGURE_KIND_YGRID) stacked at `z`. The whole subtree
@@ -138,7 +138,7 @@ int32_t yetty_ygui_widget_figure_z(const struct yetty_ygui_object *obj);
  * it paints last (front) and wins the hit-test — click-to-front, no
  * figures involved. */
 struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_ygui_object *obj,
-                                                             int floating);
+                                                              int floating);
 int yetty_ygui_widget_is_floating(const struct yetty_ygui_object *obj);
 
 /* Apply a small CSS-like declaration string to the widget's layout.
