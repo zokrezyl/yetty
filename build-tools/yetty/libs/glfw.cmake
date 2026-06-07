@@ -135,9 +135,11 @@ endif()
 # is #included at the foot of window-manager.c; methods.gen.c / rpc.gen.c are
 # separate codegen TUs.
 if(NOT TARGET yetty_yplatform_window_manager)
+    # methods.gen.c (the platform-independent method stubs) lives in
+    # yetty_yplatform_core so it links on every platform; here we only build the
+    # GLFW impl + the create/register (rpc.gen.c) that need a real window.
     add_library(yetty_yplatform_window_manager STATIC
         ${YETTY_ROOT}/src/yetty/yplatform/window-manager.c
-        ${YETTY_ROOT}/src/yetty/yplatform/methods.gen.c
         ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c)
     target_include_directories(yetty_yplatform_window_manager
         PUBLIC ${YETTY_ROOT}/include

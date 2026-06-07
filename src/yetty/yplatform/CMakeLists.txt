@@ -69,6 +69,11 @@ endif()
 add_library(yetty_yplatform_core STATIC
     getopt.c
     paths/singleton.c
+    # window_manager yclass method stubs: pure yclass dispatch, no GLFW — the
+    # GLFW impl (window-manager.c) is desktop-only, but yui calls these stub
+    # symbols on every platform, so they must link everywhere (they early-return
+    # on the NULL object that non-desktop platforms always have).
+    methods.gen.c
     ${_core_per_os}
 )
 
@@ -77,8 +82,9 @@ target_include_directories(yetty_yplatform_core PUBLIC
     ${YETTY_ROOT}/src
 )
 
-# yetty_ycore provides the result-type macros every API uses.
-target_link_libraries(yetty_yplatform_core PUBLIC yetty_ycore)
+# yetty_ycore provides the result-type macros every API uses; yetty_yclass
+# provides the dispatch runtime the window_manager method stubs call.
+target_link_libraries(yetty_yplatform_core PUBLIC yetty_ycore yetty_yclass)
 
 # Windows winsock + advapi (used by socket/ipc-socket/process impls).
 if(WIN32)
