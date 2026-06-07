@@ -7,4 +7,8 @@
 
 #include <yetty/ycore/result.h>
 
+/* `render` returns a drawable list by value; its result type must be complete
+ * (not just forward-declared) in the generated method stubs. */
+#include <yetty/ydraw-core/drawable-list.h>
+
 #endif /* YETTY_YCLASSGEN_YCHROME_TYPES_H */

@@ -48,6 +48,16 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
+/* Framework-level draw primitives — the SAME layer ygui paints into (a ygui
+ * widget calls these from its paint; see ygui/widgets/button.c). Using them
+ * here keeps chrome ygui-free: it draws its own titlebar like any framework
+ * primitive would. */
+#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ysdf/funcs.gen.h>
+#include <yetty/ysdf/types.gen.h>
+
+#include <string.h>
+
 #include <stdint.h>
 
 #ifdef YCLASS_CODEGEN
@@ -67,9 +77,21 @@ enum {
     /* Default resize-border thickness if configure() is passed 0. A touch wider
      * than common desktop slop (5–6 px) because there's no visible frame. */
     YCHROME_DEFAULT_EDGE_PX = 8,
-    /* Window-manager minimum the platform backend already clamps to; mirrored
-     * here only for documentation. */
+    /* Width (px) of each window-control button (minimize/maximize/close). The
+     * three sit flush against the right edge; render and hit-test share this. */
+    YCHROME_BTN_W = 46,
 };
+
+/* Caption fill + glyph colours, packed 0xAABBGGRR (the encoding ydraw uses).
+ * Match yetty's titlebar: BRAND_BG_ROW strip, off-white glyphs. */
+#define YCHROME_STRIP_BG 0xFF2C261Eu   /* #1E262C */
+#define YCHROME_GLYPH_COLOR 0xFFE4E5E0u /* #E0E5E4 */
+
+/* Window-control glyphs, in left→right order: minimize, maximize, close. Same
+ * codepoints yui's titlebar uses (in the bundled font): − □ × */
+#define YCHROME_GLYPH_MINIMIZE "\xE2\x88\x92"
+#define YCHROME_GLYPH_MAXIMIZE "\xE2\x96\xA1"
+#define YCHROME_GLYPH_CLOSE "\xC3\x97"
 
 struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     /* Borrowed yplatform:window_manager yclass object — set by configure(). */
@@ -230,6 +252,96 @@ static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_c
 }
 
 /*=============================================================================
+ * Self-rendering — draw the caption bar via ydraw (no ygui)
+ *===========================================================================*/
+
+/* Which window-control button is at (x, y): 1=minimize, 2=maximize, 3=close,
+ * or 0 for none. The three are flush against the right edge, each YCHROME_BTN_W
+ * wide, within the caption strip. Shared by render() (placement) and
+ * handle_event() (hit-test). */
+static int chrome_button_at(const struct chrome_data *chrome, float x, float y)
+{
+    if (y < 0.0f || y >= chrome->caption_height) {
+        return 0;
+    }
+    float close_left = chrome->width - (float)YCHROME_BTN_W;
+    float max_left = close_left - (float)YCHROME_BTN_W;
+    float min_left = max_left - (float)YCHROME_BTN_W;
+    if (x >= close_left && x <= chrome->width) {
+        return 3;
+    }
+    if (x >= max_left && x < close_left) {
+        return 2;
+    }
+    if (x >= min_left && x < max_left) {
+        return 1;
+    }
+    return 0;
+}
+
+/* Paint the caption strip into a fresh drawable list and return it: a filled
+ * background spanning (width × caption_height) plus the minimize/maximize/close
+ * glyphs flush right. The caller composites the list as a pinned top figure and
+ * destroys it. Uses font_id=-1 (the default font), so no font dependency. */
+[[clang::annotate("override@ychrome:chrome:render")]]
+[[clang::annotate("local@ychrome:render")]]
+static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass_ctx *ctx,
+                                                             struct yetty_yclass_object *obj)
+{
+    (void)ctx;
+    struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, data_r, "chrome render: object");
+    struct chrome_data *chrome = data_r.value;
+    float width = chrome->width;
+    float height = chrome->caption_height;
+    if (width <= 0.0f || height <= 0.0f) {
+        return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: zero caption size");
+    }
+
+    struct yetty_ydraw_drawable_list_config config = {
+        .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = width, .scene_max_y = height};
+    struct yetty_ydraw_drawable_list_result list_r =
+        yetty_ydraw_drawable_list_config_buffer_create(&config);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_r, "chrome render: list create");
+    struct yetty_ydraw_drawable_list *list = list_r.value;
+
+    /* Background strip. */
+    struct yetty_ysdf_box bg = {.center_x = width * 0.5f,
+                                .center_y = height * 0.5f,
+                                .half_width = width * 0.5f,
+                                .half_height = height * 0.5f,
+                                .corner_radius = 0.0f};
+    struct yetty_ycore_void_result bg_r =
+        yetty_ydraw_drawable_list_add_cmd_add_box(list, /*id=*/0, /*z_order=*/0, YCHROME_STRIP_BG,
+                                                  /*stroke=*/0u, /*stroke_width=*/0.0f, &bg);
+    if (YETTY_IS_ERR(bg_r)) {
+        yetty_ydraw_drawable_list_destroy(list);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: bg box", bg_r);
+    }
+
+    /* Window-control glyphs, flush right. Glyph metrics aren't measured (no font
+     * dep), so each glyph is placed at a fixed inset inside its slot — close
+     * enough for single symbols. */
+    const char *glyphs[3] = {YCHROME_GLYPH_MINIMIZE, YCHROME_GLYPH_MAXIMIZE, YCHROME_GLYPH_CLOSE};
+    float font_size = height * 0.5f;
+    float baseline = height * 0.5f + font_size * 0.35f;
+    for (int i = 0; i < 3; i++) {
+        float slot_left = width - (float)((3 - i) * YCHROME_BTN_W);
+        struct yetty_ycore_buffer glyph = {.data = (uint8_t *)(uintptr_t)glyphs[i],
+                                           .capacity = strlen(glyphs[i]),
+                                           .size = strlen(glyphs[i])};
+        struct yetty_ycore_void_result glyph_r = yetty_ydraw_drawable_list_add_text(
+            list, slot_left + (float)YCHROME_BTN_W * 0.34f, baseline, &glyph, font_size,
+            YCHROME_GLYPH_COLOR, /*layer=*/1, /*font_id=*/-1, /*rotation=*/0.0f);
+        if (YETTY_IS_ERR(glyph_r)) {
+            yetty_ydraw_drawable_list_destroy(list);
+            return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: glyph", glyph_r);
+        }
+    }
+    return YETTY_OK(yetty_ydraw_drawable_list, list);
+}
+
+/*=============================================================================
  * Event handling — the gesture state machine
  *===========================================================================*/
 
@@ -329,6 +441,26 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
         return YETTY_OK(yetty_ycore_int, 0);
     }
     int in_caption = y < chrome->caption_height;
+
+    /* --- window-control buttons (minimize / maximize / close) ---------- *
+     * Checked before the drag arm so a press on a button doesn't start a
+     * window move. Acts on press; the matching release falls through (chrome
+     * isn't dragging, so it's a no-op). */
+    if (in_caption && event->type == YETTY_YCORE_MOUSE_DOWN) {
+        int button = chrome_button_at(chrome, x, y);
+        if (button == 1) {
+            wm_absorb(yetty_yplatform_window_manager_iconify(NULL, wm));
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        if (button == 2) {
+            wm_absorb(yetty_yplatform_window_manager_toggle_maximize(NULL, wm));
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        if (button == 3) {
+            wm_absorb(yetty_yplatform_window_manager_request_close(NULL, wm));
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
 
     /* --- caption double-click → toggle maximize ------------------------ */
     if ((chrome->flags & YETTY_YCHROME_FLAG_MAXIMIZE) && in_caption &&

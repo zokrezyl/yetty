@@ -22,6 +22,11 @@ target_include_directories(yetty_ychrome PRIVATE ${YETTY_ROOT}/src)
 target_link_libraries(yetty_ychrome PUBLIC
     yetty_ycore
     yetty_yclass
+    # Framework-level draw primitives (the same layer ygui paints into) so
+    # chrome can render its own titlebar without pulling in ygui.
+    yetty_ydraw_core
+    yetty_ysdf
+    yetty_yface
 )
 
 # chrome.c carries C23 `[[clang::annotate(...)]]` attributes.
