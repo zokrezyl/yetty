@@ -71,22 +71,23 @@ struct yetty_yui_tabbar {
     float drag_anchor_y;
 
     /* Edge/corner resize state. GLFW_DECORATED=FALSE removed the OS
-     * resize handles; we re-implement the bottom + right + bottom-right
-     * grips in software here. dir_x and dir_y are each ±1 / 0 telling
-     * the resize_by handler which axes grow. We track resize_last_*
-     * (not an anchor) and emit per-MOUSE_MOVE step deltas — the window
-     * top-left stays fixed during resize, so the cursor's
-     * window-relative position grows in lockstep with the window's
-     * right/bottom edge as we expand. */
+     * resize handles; we re-implement them in software here for all four
+     * margins + corners. Right/bottom keep the top-left fixed → track
+     * incrementally from resize_last. Left/top move the origin (handled by the
+     * window_manager from fresh geometry) → after each move the window-relative
+     * cursor snaps back to the press anchor, so they measure from resize_anchor
+     * (not updated) to avoid a feedback loop. Matches ychrome's engine. */
     int resizing;
-    int resize_dir_x;
-    int resize_dir_y;
+    int resize_left;
+    int resize_right;
+    int resize_top;
+    int resize_bottom;
     float resize_last_x;
     float resize_last_y;
-    float resize_anchor_x; /* MOUSE_DOWN position — used for slop check  */
-    float resize_anchor_y; /* before handing the gesture to the compositor */
-    int resize_edge;       /* yetty_ycore_resize_edge bitmask (xdg-shell) */
-    int resize_grab_sent;  /* begin_interactive_resize fired once per gesture */
+    float resize_anchor_x; /* MOUSE_DOWN position — slop check + left/top ref */
+    float resize_anchor_y;
+    int resize_edge;      /* yetty_ycore_resize_edge bitmask (xdg-shell) */
+    int resize_grab_sent; /* begin_interactive_resize fired once per gesture */
 
     /* Full window height including the bottom statusbar inset. `height`
      * above is the workspace region only (window_height - statusbar_h),
@@ -238,25 +239,22 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *
 int yetty_yui_tabbar_edge_cursor_at(const struct yetty_yui_tabbar *bar, float x, float y)
 {
     /* Same EDGE band and edge selection rules as the resize hit-test in
-     * the event handler — keep in sync if one changes. */
+     * the event handler — keep in sync if one changes. All four margins +
+     * corners resize; the thin top band wins over strip-drag. */
     if (!bar || bar->width <= 0 || bar->height <= 0) {
-        return YETTY_YCORE_CURSOR_DEFAULT;
-    }
-    /* Anything in the strip is window-drag territory, not resize — let
-     * yui's other cursor logic (or the default arrow) handle it. */
-    if (y < tabbar_dp(bar, YETTY_YUI_TABBAR_HEIGHT_DP)) {
         return YETTY_YCORE_CURSOR_DEFAULT;
     }
     const float EDGE = 8.0f;
     const float bottom_y = bar->total_height > 0 ? bar->total_height : bar->height;
-    int right = x >= bar->width - EDGE && x <= bar->width;
-    int bottom = y >= bottom_y - EDGE && y <= bottom_y;
-    /* Corner falls back to HRESIZE — the cursor enum has no diagonal
-     * shape yet (extending to GLFW_RESIZE_NWSE_CURSOR is a follow-up). */
-    if (right) {
+    int left = x >= 0.0f && x < EDGE;
+    int right = x > bar->width - EDGE && x <= bar->width;
+    int top = y >= 0.0f && y < EDGE;
+    int bottom = y > bottom_y - EDGE && y <= bottom_y;
+    /* Corners fall back to HRESIZE — the cursor enum has no diagonal shape yet. */
+    if (left || right) {
         return YETTY_YCORE_CURSOR_HRESIZE;
     }
-    if (bottom) {
+    if (top || bottom) {
         return YETTY_YCORE_CURSOR_VRESIZE;
     }
     return YETTY_YCORE_CURSOR_DEFAULT;
@@ -916,25 +914,30 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
          * guard, every fresh edge-press re-inits cleanly regardless of
          * stale state from a previous gesture. */
         if (have_xy && event->type == YETTY_YCORE_MOUSE_DOWN && wm) {
-            int right = mx >= bar->width - EDGE && mx <= bar->width;
-            int bottom = my >= bottom_y - EDGE && my <= bottom_y;
-            if (right || bottom) {
+            /* Left/right/bottom margins + the two bottom corners. Top is the
+             * tab strip (drag territory), so it's excluded here — this block
+             * only runs for presses the strip-drag handler above didn't claim. */
+            int left = mx >= 0.0f && mx < EDGE;
+            int right = mx > bar->width - EDGE && mx <= bar->width;
+            int bottom = my > bottom_y - EDGE && my <= bottom_y;
+            if (left || right || bottom) {
                 bar->resizing = 1;
-                bar->resize_dir_x = right ? 1 : 0;
-                bar->resize_dir_y = bottom ? 1 : 0;
+                bar->resize_left = left;
+                bar->resize_right = right;
+                bar->resize_top = 0;
+                bar->resize_bottom = bottom;
                 bar->resize_last_x = mx;
                 bar->resize_last_y = my;
                 bar->resize_anchor_x = mx;
                 bar->resize_anchor_y = my;
                 bar->resize_grab_sent = 0;
-                /* xdg-shell wire enum: top=1, bottom=2, left=4, right=8,
-                 * corners are bitwise OR. We only ever wire bottom +
-                 * right + bottom-right (top/left would collide with the
-                 * strip and with workspace interaction respectively). */
-                bar->resize_edge = (right ? YETTY_YCORE_RESIZE_EDGE_RIGHT : 0) |
+                /* xdg-shell wire enum: top=1, bottom=2, left=4, right=8;
+                 * corners are bitwise OR. The window_manager applies the
+                 * left-edge origin shift from fresh geometry. */
+                bar->resize_edge = (left ? YETTY_YCORE_RESIZE_EDGE_LEFT : 0) |
+                                   (right ? YETTY_YCORE_RESIZE_EDGE_RIGHT : 0) |
                                    (bottom ? YETTY_YCORE_RESIZE_EDGE_BOTTOM : 0);
-                ydebug("tabbar: resize start dirs=(%d,%d) edge=%d at (%.1f, %.1f)",
-                       bar->resize_dir_x, bar->resize_dir_y, bar->resize_edge, mx, my);
+                ydebug("tabbar: resize start edge=%d at (%.1f, %.1f)", bar->resize_edge, mx, my);
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
@@ -961,14 +964,24 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                     wm_absorb(yetty_yplatform_window_manager_begin_interactive_resize(
                         NULL, wm, bar->resize_edge));
                 }
-                int step_dx = (int)(mx - bar->resize_last_x) * bar->resize_dir_x;
-                int step_dy = (int)(my - bar->resize_last_y) * bar->resize_dir_y;
+                /* Per-axis delta: right/bottom track incrementally (top-left
+                 * fixed); left measures from the fixed anchor (the window-move
+                 * resets the window-relative cursor) to avoid a feedback loop. */
+                int step_dx = 0, step_dy = 0;
+                if (bar->resize_right) {
+                    step_dx = (int)(mx - bar->resize_last_x);
+                    bar->resize_last_x = mx;
+                } else if (bar->resize_left) {
+                    step_dx = (int)(mx - bar->resize_anchor_x);
+                }
+                if (bar->resize_bottom) {
+                    step_dy = (int)(my - bar->resize_last_y);
+                    bar->resize_last_y = my;
+                }
                 if (wm && (step_dx != 0 || step_dy != 0)) {
                     wm_absorb(yetty_yplatform_window_manager_resize_by(NULL, wm, step_dx, step_dy,
                                                                        bar->resize_edge));
                 }
-                bar->resize_last_x = mx;
-                bar->resize_last_y = my;
                 return YETTY_OK(yetty_ycore_int, 1);
             }
             if (event->type == YETTY_YCORE_MOUSE_UP) {

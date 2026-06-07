@@ -2356,21 +2356,6 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
 
 /* Title-bar close-x handler — the window widget emits EVENT_CLOSE; we
  * react by running the app's mode-specific stop hook. */
-static struct yetty_ycore_void_result on_window_close(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *target,
-                                                      const struct yetty_ygui_event *event,
-                                                      void *userdata)
-{
-    (void)ctx;
-    (void)target;
-    (void)event;
-    struct app *app = (struct app *)userdata;
-    if (app && app->stop_cb) {
-        app->stop_cb(app);
-    }
-    return YETTY_OK_VOID();
-}
-
 static struct yetty_ycore_void_result build_ui(struct app *app)
 {
     /* yinit already ran ygreeter_extract_assets_cb early in startup, so
@@ -2383,26 +2368,20 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
     discover_readme(app);
     discover_pdf(app);
 
-    /* The app's main window — a framed window with a title bar carrying
-     * a close "x" (set_closable). Closing emits EVENT_CLOSE, handled by
-     * on_window_close above. The chrome (tabbar / body / statusbar) lives
-     * in the window's auto body. */
+    /* Root is a plain vbox — the window title bar + close are provided by the
+     * real OS-window chrome (ychrome), so no in-canvas window widget. The
+     * greeter's own content (its tabbar / body / statusbar) stacks directly in
+     * here. Standalone mode insets the top by the chrome caption height (see
+     * run_standalone_mode); close arrives via ychrome → window_manager →
+     * WINDOW_CLOSE, handled in the event loop. */
     struct yetty_ygui_object_ptr_result rr =
-        yetty_ygui_add(yetty_ygui_window_class_get().value, NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root window add");
+        yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root add");
     app->root = rr.value;
-    yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(app->root, "yetty"));
-    yetty_ycore_error_destroy_safe(yetty_ygui_window_set_closable(app->root, 1));
-    struct yetty_ycore_void_result clsub =
-        yetty_ygui_object_subscribe(app->root, YETTY_YGUI_EVENT_CLOSE, on_window_close, app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, clsub, "build_ui: close subscribe");
     struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(app->engine, app->root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "build_ui: set_root");
 
-    struct yetty_ygui_object *content = yetty_ygui_window_body(app->root);
-    if (!content) {
-        return YETTY_ERR(yetty_ycore_void, "build_ui: window body");
-    }
+    struct yetty_ygui_object *content = app->root;
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(content);
         l.align = YETTY_YGUI_ALIGN_STRETCH;
@@ -3630,6 +3609,13 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
+            /* Inset the greeter content below the chrome caption so its own
+             * tabbar isn't hidden under the titlebar. */
+            if (app->root) {
+                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(app->root);
+                l.padding_top = 34.0f;
+                yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(app->root, &l));
+            }
         } else {
             ywarn("ygreeter standalone: chrome host create failed: %s", chrome_r.error.msg);
             yetty_ycore_error_destroy(chrome_r.error);
