@@ -278,7 +278,8 @@ static void build_lists_trees(struct yetty_ygui_object *area)
     err_ok(yetty_ygui_list_set_selected(lst, 0));
 
     /* tree_node owns its own header strip + indented children. */
-    struct yetty_ygui_object *tn = add_w(sec, yetty_ygui_tree_node_class_get().value, 22 + 2 * 24 + 2);
+    struct yetty_ygui_object *tn =
+        add_w(sec, yetty_ygui_tree_node_class_get().value, 22 + 2 * 24 + 2);
     err_ok(yetty_ygui_tree_node_set_label(tn, "Tree root"));
     err_ok(yetty_ygui_tree_node_set_open(tn, 1));
     if (tn) {

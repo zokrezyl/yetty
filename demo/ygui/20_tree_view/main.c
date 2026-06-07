@@ -15,7 +15,9 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
@@ -39,11 +41,11 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, c, "child");
         err_ok(yetty_ygui_label_set_text(c.value, "main.c"));
         struct yetty_ygui_object *w = c.value;
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
-        l.height = 24;
-        err_ok(yetty_ygui_widget_layout_set(w, &l));
-    }
+        {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            l.height = 24;
+            err_ok(yetty_ygui_widget_layout_set(w, &l));
+        }
     }
     {
         struct yetty_ygui_object_ptr_result c =
@@ -51,11 +53,11 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, c, "child");
         err_ok(yetty_ygui_label_set_text(c.value, "utils.c"));
         struct yetty_ygui_object *w = c.value;
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
-        l.height = 24;
-        err_ok(yetty_ygui_widget_layout_set(w, &l));
-    }
+        {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            l.height = 24;
+            err_ok(yetty_ygui_widget_layout_set(w, &l));
+        }
     }
     return YETTY_OK_VOID();
 }

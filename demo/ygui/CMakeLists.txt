@@ -86,6 +86,7 @@ target_link_libraries(demo_ygui_runner PUBLIC
     yetty_yplatform_core
     yetty_yplatform_move_resize
     yetty_yplatform_window_manager
+    yetty_ychrome
     yetty_yco
     yetty_telnet
 )
@@ -126,6 +127,7 @@ function(demo_ygui_add name)
         yetty_yplatform_core
         yetty_yplatform_move_resize
         yetty_yplatform_window_manager
+        yetty_ychrome
         yetty_yco
         yetty_telnet
         ${BROTLIDEC_LIBRARIES}
@@ -199,3 +201,6 @@ demo_ygui_add(34-textarea 34_textarea)
 demo_ygui_add(35-collapsing-header 35_collapsing_header_open)
 demo_ygui_add(37-scrollarea 37_scrollarea)
 demo_ygui_add(38-ynodes 38_ynodes)
+
+# Window-chrome POC: standalone window gains drag/resize/maximize via ychrome.
+demo_ygui_add(42-window-chrome 42_window_chrome)

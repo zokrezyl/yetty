@@ -15,7 +15,9 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
@@ -28,11 +30,11 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     err_ok(yetty_ygui_button_set_label(br.value, "Dialog is open"));
     {
         struct yetty_ygui_object *w = br.value;
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
-        l.height = 32;
-        err_ok(yetty_ygui_widget_layout_set(w, &l));
-    }
+        {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            l.height = 32;
+            err_ok(yetty_ygui_widget_layout_set(w, &l));
+        }
     }
     struct yetty_ygui_object_ptr_result dr =
         yetty_ygui_add(yetty_ygui_dialog_class_get().value, root);

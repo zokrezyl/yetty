@@ -15,7 +15,9 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
@@ -30,7 +32,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     l.min_height = 200.0f;
     err_ok(yetty_ygui_widget_layout_set(tr.value, &l));
     return yetty_ygui_textarea_set_text(tr.value,
-        "Type here.\nMulti-line input via the textarea widget.");
+                                        "Type here.\nMulti-line input via the textarea widget.");
 }
 
 int main(int argc, char **argv)

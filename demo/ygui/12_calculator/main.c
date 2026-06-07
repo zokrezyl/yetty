@@ -15,7 +15,9 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
@@ -23,10 +25,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     const char *keys[] = {
-        "7", "8", "9", "/",
-        "4", "5", "6", "*",
-        "1", "2", "3", "-",
-        "0", ".", "=", "+",
+        "7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "=", "+",
     };
     for (int row = 0; row < 4; ++row) {
         struct yetty_ygui_object_ptr_result rr =

@@ -15,7 +15,9 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
@@ -28,22 +30,26 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             yetty_ygui_add(yetty_ygui_label_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "label");
         err_ok(yetty_ygui_label_set_text(lr.value, channels[i]));
-        { struct yetty_ygui_object *w = lr.value;
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
-        l.height = 20;
-        err_ok(yetty_ygui_widget_layout_set(w, &l));
-    } }
+        {
+            struct yetty_ygui_object *w = lr.value;
+            {
+                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+                l.height = 20;
+                err_ok(yetty_ygui_widget_layout_set(w, &l));
+            }
+        }
         struct yetty_ygui_object_ptr_result sr =
             yetty_ygui_add(yetty_ygui_slider_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "slider");
         err_ok(yetty_ygui_slider_set_value(sr.value, 0.5f));
-        { struct yetty_ygui_object *w = sr.value;
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
-        l.height = 28;
-        err_ok(yetty_ygui_widget_layout_set(w, &l));
-    } }
+        {
+            struct yetty_ygui_object *w = sr.value;
+            {
+                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+                l.height = 28;
+                err_ok(yetty_ygui_widget_layout_set(w, &l));
+            }
+        }
     }
     return YETTY_OK_VOID();
 }

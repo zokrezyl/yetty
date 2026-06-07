@@ -28,6 +28,13 @@ typedef struct yetty_ycore_void_result (*demo_build_fn)(struct demo_runner *runn
 /* Run a demo. Returns 0 on clean shutdown, non-zero on error. */
 int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build);
 
+/* Same as demo_runner_run, but in standalone (own-window) mode the runner also
+ * draws a caption strip and wires the ychrome engine, so the borderless window
+ * can be dragged (caption), maximized (double-click) and resized (edges). In
+ * client mode (inside a host yetty) this behaves exactly like demo_runner_run.
+ * This is the POC integration path for window chrome. */
+int demo_runner_run_chrome(int argc, char **argv, const char *name, demo_build_fn build);
+
 /* Accessors for demos that need them. */
 struct yetty_ygui_framework *demo_runner_engine(struct demo_runner *runner);
 struct yetty_ygui_object *demo_runner_root(struct demo_runner *runner);
