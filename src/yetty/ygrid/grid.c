@@ -2613,12 +2613,11 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         /* Font cache + MSDF generator for wire-shipped fonts (custom figure
          * fonts). Best-effort: if the cache can't be created, wire fonts are
          * dropped but SDF prims still render. */
-        const char *shaders_dir =
-            context->runtime->config->ops->get_string(context->runtime->config, "paths/shaders", "");
+        const char *shaders_dir = context->runtime->config->ops->get_string(
+            context->runtime->config, "paths/shaders", "");
         snprintf(g->shaders_dir, sizeof(g->shaders_dir), "%s", shaders_dir ? shaders_dir : "");
         g->msdf_generator = context->runtime->gpu.msdf_generator;
-        struct yetty_yfont_cache_ptr_result font_cache_r =
-            yetty_yfont_cache_create(g->shaders_dir);
+        struct yetty_yfont_cache_ptr_result font_cache_r = yetty_yfont_cache_create(g->shaders_dir);
         if (YETTY_IS_OK(font_cache_r)) {
             g->font_cache = font_cache_r.value;
         } else {

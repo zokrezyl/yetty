@@ -141,7 +141,7 @@ struct ymusic_measure {
 
 struct ymusic_staff {
     enum ymusic_clef clef;
-    int key_fifths;       /* -7..+7 (negative = flats) */
+    int key_fifths; /* -7..+7 (negative = flats) */
     int time_num, time_den;
     struct ymusic_measure **measures;
     size_t count;
@@ -203,8 +203,7 @@ static int element_add_note(struct ymusic_element *element, int step, int octave
 {
     if (element->note_count == element->note_cap) {
         size_t new_cap = element->note_cap ? element->note_cap * 2 : 4;
-        struct ymusic_note *grown =
-            realloc(element->notes, new_cap * sizeof(struct ymusic_note));
+        struct ymusic_note *grown = realloc(element->notes, new_cap * sizeof(struct ymusic_note));
         if (!grown) {
             return -1;
         }
@@ -536,8 +535,11 @@ static struct yetty_ycore_void_result parse_lilypond(struct music_data *music, c
                                                      size_t len)
 {
     struct ymusic_staff *staff = &music->staff;
-    struct parse_state state = {.prev_dur_log = 2, .prev_dots = 0, .relative = 0,
-                                .rel_step = 0, .rel_oct = 4 /* c' reference */};
+    struct parse_state state = {.prev_dur_log = 2,
+                                .prev_dots = 0,
+                                .relative = 0,
+                                .rel_step = 0,
+                                .rel_oct = 4 /* c' reference */};
     uint32_t next_element_id = 0;
     uint32_t next_measure_id = 0;
     size_t pos = 0;
@@ -1084,14 +1086,15 @@ static struct yetty_ycore_void_result emit_element(struct yetty_ydraw_drawable_l
     float notehead_w = geom->staff_space * 1.18f;
     float stem_thickness = geom->staff_space * 0.13f;
     float line_thickness = geom->staff_space * 0.12f;
-    float notehead_x = element->x + (element_has_accidental(element) ? geom->staff_space * 1.1f : 0.0f);
+    float notehead_x =
+        element->x + (element_has_accidental(element) ? geom->staff_space * 1.1f : 0.0f);
 
     if (element->type == YMUSIC_ELEM_REST) {
         /* Rests hang from / sit on the middle line by convention. */
         float baseline = (element->dur_log == 0) ? y_of_offset(geom, 2) : geom->y_middle;
-        struct yetty_ycore_void_result rest_r = emit_glyph(buf, notehead_x, baseline,
-                                                           rest_glyph(element->dur_log),
-                                                           geom->glyph_em, YMUSIC_INK, font_id, z);
+        struct yetty_ycore_void_result rest_r =
+            emit_glyph(buf, notehead_x, baseline, rest_glyph(element->dur_log), geom->glyph_em,
+                       YMUSIC_INK, font_id, z);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rest_r, "ymusic: rest");
         return YETTY_OK_VOID();
     }
@@ -1153,12 +1156,12 @@ static struct yetty_ycore_void_result emit_element(struct yetty_ydraw_drawable_l
         float stem_y0, stem_y1;
         if (stem_up) {
             stem_x = notehead_x + notehead_w - stem_thickness * 0.5f;
-            stem_y0 = max_y;             /* lowest notehead */
-            stem_y1 = min_y - stem_len;  /* up past the highest */
+            stem_y0 = max_y;            /* lowest notehead */
+            stem_y1 = min_y - stem_len; /* up past the highest */
         } else {
             stem_x = notehead_x + stem_thickness * 0.5f;
-            stem_y0 = min_y;             /* highest notehead */
-            stem_y1 = max_y + stem_len;  /* down past the lowest */
+            stem_y0 = min_y;            /* highest notehead */
+            stem_y1 = max_y + stem_len; /* down past the lowest */
         }
         struct yetty_ycore_void_result stem_r =
             emit_line(buf, stem_x, stem_y0, stem_x, stem_y1, YMUSIC_INK, stem_thickness, z);
@@ -1183,9 +1186,10 @@ static struct yetty_ycore_void_result emit_element(struct yetty_ydraw_drawable_l
                 dot_y -= geom->half_space; /* nudge a line-note's dot into the space */
             }
             for (int d = 0; d < element->dots; d++) {
-                float dot_x = notehead_x + notehead_w + geom->staff_space * (0.35f + 0.5f * (float)d);
-                struct yetty_ycore_void_result dot_r =
-                    emit_glyph(buf, dot_x, dot_y, GLYPH_DOT, geom->glyph_em, YMUSIC_INK, font_id, z);
+                float dot_x =
+                    notehead_x + notehead_w + geom->staff_space * (0.35f + 0.5f * (float)d);
+                struct yetty_ycore_void_result dot_r = emit_glyph(
+                    buf, dot_x, dot_y, GLYPH_DOT, geom->glyph_em, YMUSIC_INK, font_id, z);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, dot_r, "ymusic: dot");
             }
         }
@@ -1484,7 +1488,8 @@ static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_
         if (measure->count == 0) {
             continue;
         }
-        if (cursor > system_start && cursor + measure_width(music, measure, bar_gutter) > right_edge) {
+        if (cursor > system_start &&
+            cursor + measure_width(music, measure, bar_gutter) > right_edge) {
             system++;
             system_start = left_margin + prefix_width(music, staff_space, /*show_time=*/0);
             cursor = system_start;
