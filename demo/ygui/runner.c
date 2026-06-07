@@ -670,6 +670,11 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         bl.flex_grow = 1.0f;
         bl.padding_top = bl.padding_bottom = 24;
         bl.padding_left = bl.padding_right = 24;
+        /* The caption figure overlays the top strip; inset the body so its
+         * content isn't hidden behind it. */
+        if (r->enable_chrome) {
+            bl.padding_top += DEMO_CHROME_CAPTION_H;
+        }
         bl.gap = 12;
         /* Center the demo's content vertically when it doesn't fill the
          * available height — small demos (single slider, single button)
@@ -1478,7 +1483,9 @@ static int demo_runner_run_impl(int argc, char **argv, const char *name, demo_bu
 
 int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build)
 {
-    return demo_runner_run_impl(argc, argv, name, build, /*enable_chrome=*/0);
+    /* Window chrome is on for every demo now — they're all standalone windows
+     * that benefit from a draggable/resizable titlebar. */
+    return demo_runner_run_impl(argc, argv, name, build, /*enable_chrome=*/1);
 }
 
 int demo_runner_run_chrome(int argc, char **argv, const char *name, demo_build_fn build)
