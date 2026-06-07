@@ -18,7 +18,6 @@ struct yetty_ygui_yvideo_data_ptr_result yetty_ygui_yvideo_data(struct yetty_ygu
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_ygui_object *obj,
-                                                           const uint8_t *bytes, size_t len);
+struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_ygui_object *obj, const uint8_t *bytes, size_t len);
 
 #endif

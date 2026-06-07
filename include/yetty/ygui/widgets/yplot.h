@@ -31,13 +31,8 @@ struct yetty_ygui_yplot_config {
     uint32_t flags;
 };
 struct yetty_yplot_buffer_input;
-struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_object *obj,
-                                                           const char *source);
-struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
-    struct yetty_ygui_object *obj, const struct yetty_ygui_yplot_config *cfg);
-struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
-    struct yetty_ygui_object *obj, const char *source, size_t source_len,
-    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
-    const struct yetty_ygui_yplot_config *config);
+struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_object *obj, const char *source);
+struct yetty_ycore_void_result yetty_ygui_yplot_set_config(struct yetty_ygui_object *obj, const struct yetty_ygui_yplot_config *cfg);
+struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(struct yetty_ygui_object *obj, const char *source, size_t source_len, const struct yetty_yplot_buffer_input *buffers, size_t buffer_count, const struct yetty_ygui_yplot_config *config);
 
 #endif

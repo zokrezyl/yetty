@@ -247,7 +247,7 @@ decodes a wire call, looks up the impl, and invokes it) and the
 
 - `transport-fd.c` — a file-descriptor transport.
 - `transport-dcs.c` — DCS-framed transport (rides the terminal's escape-sequence
-  channel; see [Terminal Layers](../../docs/term-layers.md)).
+  channel; see [Layered Rendering](../../docs/layered-rendering.md)).
 - `rpc-dcs-server.c` — the server side over DCS.
 
 Because the slot id is a 28-bit value that fits the RPC header, and the qualified

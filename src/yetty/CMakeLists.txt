@@ -249,6 +249,12 @@ if(YETTY_ENABLE_FEATURE_YFLAME)
     add_subdirectory(yflame)
 endif()
 
+# ychrome — widget-free window-chrome gesture engine (drives a
+# yplatform:window_manager). Pure logic (ycore + yclass only), so it builds on
+# every platform; consumers that want OS-window control link it alongside
+# yetty_yplatform_window_manager.
+add_subdirectory(ychrome)
+
 if(YETTY_ENABLE_FEATURE_YPDF)
     add_subdirectory(ypdf)
 endif()

@@ -73,7 +73,6 @@ if(YETTY_ENABLE_LIB_WEBGPU)
         ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/window-manager/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     )
 endif()
@@ -167,6 +166,7 @@ if(YETTY_ENABLE_LIB_WEBGPU)
         yetty_yplot
         ${YETTY_LIBS}
         yetty_yplatform_move_resize
+        yetty_yplatform_window_manager
         ${FONTCONFIG_LIBRARIES}
     )
     target_include_directories(ygreeter PRIVATE ${FONTCONFIG_INCLUDE_DIRS})

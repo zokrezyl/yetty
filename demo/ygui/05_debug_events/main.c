@@ -15,7 +15,9 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
@@ -26,7 +28,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_add(yetty_ygui_label_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "label");
     err_ok(yetty_ygui_label_set_text(lr.value,
-        "Press keys / click to exercise the event path. q to quit."));
+                                     "Press keys / click to exercise the event path. q to quit."));
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(lr.value);
     l.flex_grow = 1.0f;
     l.min_height = 32.0f;

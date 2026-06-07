@@ -24,7 +24,9 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 /*-----------------------------------------------------------------------------
@@ -32,23 +34,23 @@ static inline void err_ok(struct yetty_ycore_void_result r)
  * self-contained and blends with the demo's dark canvas. The engine reads
  * <style> blocks via libcss, so plain class selectors work throughout.
  *---------------------------------------------------------------------------*/
-#define COMMON_CSS                                                                                  \
-    "html,body{margin:0;padding:0;}"                                                                \
-    "body{background:#0B1014;color:#E0E5E4;font-size:15px;padding:18px 22px;}"                      \
-    "h1{color:#74C5A5;}h2{color:#6BA892;}h3{color:#9FA7A8;}"                                        \
-    "p{margin:0 0 10px;}"                                                                           \
-    "a{color:#6BA892;}"                                                                             \
-    ".muted{color:#9FA7A8;}"                                                                        \
-    ".accent{color:#74C5A5;}"                                                                       \
-    "code{color:#74C5A5;}"                                                                          \
-    "hr{border:0;border-top:1px solid #364A47;margin:16px 0;}"                                      \
-    ".card{background:#141A1F;border:1px solid #364A47;border-radius:10px;"                         \
+#define COMMON_CSS                                                                                 \
+    "html,body{margin:0;padding:0;}"                                                               \
+    "body{background:#0B1014;color:#E0E5E4;font-size:15px;padding:18px 22px;}"                     \
+    "h1{color:#74C5A5;}h2{color:#6BA892;}h3{color:#9FA7A8;}"                                       \
+    "p{margin:0 0 10px;}"                                                                          \
+    "a{color:#6BA892;}"                                                                            \
+    ".muted{color:#9FA7A8;}"                                                                       \
+    ".accent{color:#74C5A5;}"                                                                      \
+    "code{color:#74C5A5;}"                                                                         \
+    "hr{border:0;border-top:1px solid #364A47;margin:16px 0;}"                                     \
+    ".card{background:#141A1F;border:1px solid #364A47;border-radius:10px;"                        \
     "padding:16px 18px;margin:0 0 14px;}"
 
 /* DOC(extra_css, body) — assemble a complete HTML document. extra_css and
  * body are string literals; adjacent concatenation stitches them in. */
-#define DOC(EXTRA_CSS, BODY)                                                                        \
-    "<!doctype html><html lang=en><head><meta charset=utf-8><style>" COMMON_CSS EXTRA_CSS           \
+#define DOC(EXTRA_CSS, BODY)                                                                       \
+    "<!doctype html><html lang=en><head><meta charset=utf-8><style>" COMMON_CSS EXTRA_CSS          \
     "</style></head><body>" BODY "</body></html>"
 
 /*-----------------------------------------------------------------------------
@@ -229,7 +231,8 @@ static const char *const *demo_pages(int *count)
             "<script>"
             "function cell(t){return '<div class=\"jc\">'+t+'</div>';}"
             "var out = document.querySelector('#out');"
-            "var html = '<div class=\"jrow jhead\">'+cell('n')+cell('n squared')+cell('2^n')+'</div>';"
+            "var html = '<div class=\"jrow jhead\">'+cell('n')+cell('n "
+            "squared')+cell('2^n')+'</div>';"
             "for (var n = 1; n <= 6; n++) {"
             "  html += '<div class=\"jrow\">'+cell(n)+cell(n*n)+cell(Math.pow(2,n))+'</div>';"
             "}"
@@ -257,9 +260,9 @@ static const char *const *demo_labels(int *count)
 /* Tabbar VALUE_CHANGED → swap the ybrowser's document to the picked page.
  * userdata is the ybrowser widget itself (it outlives the subscription). */
 static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *target,
-                                                     const struct yetty_ygui_event *event,
-                                                     void *userdata)
+                                                    struct yetty_yclass_object *target,
+                                                    const struct yetty_ygui_event *event,
+                                                    void *userdata)
 {
     (void)ctx;
     (void)target;
@@ -296,8 +299,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     int label_count = 0;
     const char *const *labels = demo_labels(&label_count);
     for (int i = 0; i < label_count; ++i) {
-        struct yetty_ygui_object_ptr_result hr =
-            yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
+        struct yetty_ygui_object_ptr_result hr = yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "tabbar add_tab");
     }
 

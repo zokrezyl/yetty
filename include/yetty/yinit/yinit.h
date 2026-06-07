@@ -64,7 +64,8 @@ struct yetty_yinit_runtime {
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     struct yetty_ycore_xthread_event_pipe *output_pipe;
     struct yetty_platform_clipboard_manager *clipboard_manager;
-    struct yetty_yplatform_window_manager *window_manager;
+    /* yplatform:window_manager yclass object (or NULL). Borrowed. */
+    struct yetty_yclass_object *window_manager;
 };
 
 /* Worker function — runs on a dedicated thread (or on the main thread

@@ -53,7 +53,8 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 #include <yetty/yconfig/config.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/clipboard-manager.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/methods.h> /* window_manager configure/destroy slots */
+#include <yetty/yplatform/rpc.h>     /* yetty_yplatform_window_manager_create / _register */
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -373,7 +374,7 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
      * NULL is OK in headless mode: copy/paste silently no-ops. */
     struct yetty_ycore_xthread_event_pipe *output_pipe = NULL;
     struct yetty_platform_clipboard_manager *clipboard_manager = NULL;
-    struct yetty_yplatform_window_manager *window_manager = NULL;
+    struct yetty_yclass_object *window_manager = NULL;
     if (!headless) {
         struct yetty_yplatform_input_pipe_result op_res = yetty_platform_input_pipe_create();
         if (YETTY_IS_OK(op_res)) {
@@ -382,10 +383,27 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
             /* Window manager first so we can hand it to the clipboard
              * manager's drain: the drain reads every event off the pipe
              * and dispatches by type, sending WINDOW_* through here. */
-            struct yetty_yplatform_window_manager_ptr_result wm_res =
-                yetty_yplatform_window_manager_create(window, output_pipe, platform_input_pipe);
+            struct yetty_ycore_void_result wm_reg = yetty_yplatform_register();
+            if (YETTY_IS_ERR(wm_reg)) {
+                ywarn("yinit: window manager register failed: %s", wm_reg.error.msg);
+                yetty_ycore_error_destroy(wm_reg.error);
+            }
+            struct yetty_yclass_object_ptr_result wm_res =
+                yetty_yplatform_window_manager_create(NULL);
             if (YETTY_IS_OK(wm_res)) {
                 window_manager = wm_res.value;
+                struct yetty_ycore_void_result wm_cfg = yetty_yplatform_window_manager_configure(
+                    NULL, window_manager, window, output_pipe, platform_input_pipe);
+                if (YETTY_IS_ERR(wm_cfg)) {
+                    ywarn("yinit: window manager configure failed: %s", wm_cfg.error.msg);
+                    yetty_ycore_error_destroy(wm_cfg.error);
+                    struct yetty_ycore_void_result wm_destroy =
+                        yetty_yplatform_window_manager_destroy(NULL, window_manager);
+                    if (YETTY_IS_ERR(wm_destroy)) {
+                        yetty_ycore_error_destroy(wm_destroy.error);
+                    }
+                    window_manager = NULL;
+                }
             } else {
                 ywarn("yinit: window manager create failed: %s", wm_res.error.msg);
                 yetty_ycore_error_destroy(wm_res.error);
@@ -400,7 +418,11 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
                 ywarn("yinit: clipboard manager create failed: %s", clip_res.error.msg);
                 yetty_ycore_error_destroy(clip_res.error);
                 if (window_manager) {
-                    window_manager->ops->destroy(window_manager);
+                    struct yetty_ycore_void_result wm_destroy =
+                        yetty_yplatform_window_manager_destroy(NULL, window_manager);
+                    if (YETTY_IS_ERR(wm_destroy)) {
+                        yetty_ycore_error_destroy(wm_destroy.error);
+                    }
                     window_manager = NULL;
                 }
                 output_pipe->ops->destroy(output_pipe);
@@ -475,7 +497,11 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
         }
     }
     if (window_manager) {
-        window_manager->ops->destroy(window_manager);
+        struct yetty_ycore_void_result wm_destroy =
+            yetty_yplatform_window_manager_destroy(NULL, window_manager);
+        if (YETTY_IS_ERR(wm_destroy)) {
+            yetty_ycore_error_destroy(wm_destroy.error);
+        }
     }
     if (output_pipe) {
         output_pipe->ops->destroy(output_pipe);

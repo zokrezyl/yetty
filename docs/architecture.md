@@ -23,13 +23,14 @@ core, start with the [Design Overview](design.md).
                               └────────┬─────────┘   render target, VNC + RPC srv
                                        │
    terminal application       ┌────────┴─────────┐   yetty → yui (tabs/panes) →
-                              │       yetty       │   yterm (terminals)
+                              │       yetty       │   yterminal (terminals)
                               └────────┬─────────┘
                                        │
-   per terminal:           layers (text, ydraw)  +  yfigure container (compositor)
-                                       │                       │
-                         libvterm, SDF primitives     ygui, ymgui, yrdawn, ygrid,
-                                                       yplot, yimage, yvideo, …
+   per terminal:          content layer       +    root yfigure compositor
+                              (text + ydraw)            (z-ordered figures)
+                                      │                         │
+                         libvterm, SDF canvas     ygui, ymgui, yrdawn, ygrid,
+                                                  yplot, yimage, yvideo, …
 ```
 
 The full startup/ownership chain and context structs are in
@@ -53,7 +54,8 @@ The full startup/ownership chain and context structs are in
 
 | Module | Purpose | |
 |---|---|---|
-| `yterm` | The terminal: text-layer (libvterm) + ydraw-scrolling-layer, screen state, scroll/alt-screen plumbing | ✓ |
+| `yterminal` | Terminal view: owns one composite content layer plus the root `yfigure` compositor; handles PTY, scrollback, selection, input forwarding | ✓ |
+| `yvterm` | Terminal content internals: libvterm text grid, scrolling ydraw canvas, shader-glyph figure, scroll/alt-screen cross-wiring | ✓ |
 | `ytrace` | Switchable trace points, near-zero cost when off ([ytrace](../src/yetty/ytrace/README.md)) | ✓ |
 | `ycore` | Result/error types, math, buffers, util — the foundation everything builds on ([result](result.md)) | ✓ |
 | `yconfig` | YAML config parser with path-based key/value API | ✓ |
@@ -61,7 +63,7 @@ The full startup/ownership chain and context structs are in
 | `yco` | Coroutine wrapper over libco ([coroutines](coroutines.md)) | ✓ |
 | `ynotify` | Thread-safe user-facing notifications | ✓ |
 | `ycdb` | Constant-database (cdb) key/value store | ✓ |
-| `yclass` | Annotation-driven class/object runtime + RPC + binding model ([yclass](../src/yclass/README.md)) | ✓ |
+| `yclass` | Annotation-driven class/object runtime + RPC + binding model ([yclass](../src/yetty/yclass/README.md)) | ✓ |
 
 ## Rendering pipeline
 
@@ -158,11 +160,12 @@ The full startup/ownership chain and context structs are in
 
 ## How the pieces connect
 
-- **Input → screen:** PTY bytes → libvterm (text-layer) and OSC/DCS envelopes →
-  `ywire`/`yface` → `yterm` layers + `yfigure` container → `yrender` → screen.
-- **Rich content:** a child process emits an OSC envelope; `ywire` dispatches it
-  to a figure factory; the figure (yplot, yimage, ymgui, yrdawn, …) lives in the
-  terminal's `yfigure` container and composites after the text/ydraw layers.
+- **Input → screen:** PTY bytes → `ywire` → raw text into libvterm or
+  DCS/OSC envelopes into ydraw / yfigure handlers → content layer + root
+  `yfigure` compositor → `yrender` → screen.
+- **Rich content:** a child process emits DCS figure records; `ywire` dispatches
+  them to the root `yfigure` container. The figure (yplot, yimage, ymgui,
+  yrdawn, ygrid, …) composites by z-order after the terminal content layer.
 - **Remote rendering:** `yrdawn` lets a remote (or WebAssembly) process render
   WebGPU content that yetty composites as a figure; `yctl` exposes an RPC control
   plane; `yvnc`/`ydvnc` bring remote desktops in as content.

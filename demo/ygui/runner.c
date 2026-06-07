@@ -27,6 +27,7 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
+#include <yetty/yfigure/methods.h> /* process_bytes / reset_content for the caption figure */
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
@@ -48,6 +49,21 @@
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ywire/wire-statemachine.h>
+
+/* Window chrome (drag/resize/maximize the borderless OS window) — the
+ * reusable, ygui/yui-independent engine. This is the POC integration other
+ * apps copy. */
+#include <yetty/ychrome/chrome.h>
+#include <yetty/ychrome/methods.h>
+#include <yetty/ychrome/rpc.h>
+#include <yetty/ygui/mixins/clickable.h>
+#include <yetty/ygui/widgets/button.h>
+#include <yetty/ygui/widgets/label.h>
+#include <yetty/yplatform/methods.h> /* window_manager iconify/toggle_maximize/request_close */
+
+/* Caption-strip height (px) for chrome-enabled demos. The drawn strip and the
+ * engine's drag/double-click zone share this value. */
+#define DEMO_CHROME_CAPTION_H 34.0f
 
 #include <signal.h>
 #include <stdio.h>
@@ -84,6 +100,13 @@ struct demo_runner {
     struct yetty_yevent_event_listener frame_listener;
     yetty_yevent_timer_id frame_timer;
     struct yetty_ydraw_target *render_target;
+
+    /* Window chrome (standalone mode only). When enable_chrome is set the
+     * runner draws a caption strip and routes unclaimed mouse events through
+     * `chrome` to move/resize/maximize the borderless OS window. */
+    int enable_chrome;
+    struct yetty_yclass_object *chrome;        /* ychrome:chrome object, or NULL */
+    struct yetty_ygrid_grid *chrome_caption;   /* pinned figure compositing chrome's bar */
 };
 
 static struct yetty_ycore_int_result frame_tick(struct yetty_yevent_event_listener *listener,
@@ -186,6 +209,92 @@ static void runner_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, u
     yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
 }
 
+/* Re-paint the chrome caption: ask ychrome to render its titlebar+buttons into
+ * a drawable list (pure ydraw, no ygui), then load that record stream into the
+ * pinned ygrid figure that composites it. Called on create + on resize. */
+static void runner_chrome_caption_refresh(struct demo_runner *r)
+{
+    if (!r->chrome || !r->chrome_caption) {
+        return;
+    }
+    struct yetty_ydraw_drawable_list_result lr = yetty_ychrome_render(NULL, r->chrome);
+    if (YETTY_IS_ERR(lr)) {
+        yetty_ycore_error_destroy(lr.error);
+        return;
+    }
+    struct yetty_ydraw_drawable_list *list = lr.value;
+    const uint8_t *data = (const uint8_t *)yetty_ydraw_drawable_list_data(list);
+    size_t size = yetty_ydraw_drawable_list_size(list);
+    struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(r->chrome_caption);
+    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig) - 1;
+    struct yetty_ycore_void_result rc = yetty_yfigure_reset_content(NULL, fobj);
+    if (YETTY_IS_ERR(rc)) {
+        yetty_ycore_error_destroy(rc.error);
+    }
+    if (data && size > 0) {
+        struct yetty_ycore_void_result pb = yetty_yfigure_process_bytes(NULL, fobj, data, size);
+        if (YETTY_IS_ERR(pb)) {
+            yetty_ycore_error_destroy(pb.error);
+        }
+    }
+    struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(fobj, 1);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
+    yetty_ydraw_drawable_list_destroy(list);
+}
+
+/* Create the pinned ygrid figure that composites chrome's self-rendered caption
+ * on top of the app content. The caption pixels come entirely from ychrome
+ * (ydraw), not ygui — a ygrid is just the framework's drawable-list→GPU figure. */
+static struct yetty_ycore_void_result runner_chrome_caption_create(
+    struct demo_runner *r, const struct yetty_context *ctx, float width)
+{
+    struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
+                                         .max = {width, DEMO_CHROME_CAPTION_H}};
+    struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, 1, 1, ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "demo_runner: chrome caption grid");
+    r->chrome_caption = gr.value;
+    if (r->font) {
+        struct yetty_ycore_void_result fr = yetty_ygrid_set_font(r->chrome_caption, 0, r->font);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
+    }
+    struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(r->chrome_caption);
+    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig) - 1;
+    /* Pin to the top (no scroll) and force on top of the app content. */
+    struct yetty_ycore_void_result ar = yetty_yfigure_figure_absolute_coords_set(fobj, 1);
+    if (YETTY_IS_ERR(ar)) {
+        yetty_ycore_error_destroy(ar.error);
+    }
+    struct yetty_ycore_void_result zr = yetty_yfigure_figure_z_set(fobj, 100000);
+    if (YETTY_IS_ERR(zr)) {
+        yetty_ycore_error_destroy(zr.error);
+    }
+    struct yetty_ycore_void_result adr =
+        yetty_yfigure_container_add_child(r->root_container, fig, 0x7FFF0001u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, adr, "demo_runner: chrome caption add_child");
+    runner_chrome_caption_refresh(r);
+    return YETTY_OK_VOID();
+}
+
+/* Forward one event to the window-chrome engine. Returns 1 if chrome claimed
+ * it (caption drag/maximize, edge resize), 0 otherwise. No-op when chrome is
+ * disabled (client mode / chrome create failed). */
+static int runner_chrome_handle(struct demo_runner *r, const struct yetty_yui_event *ev)
+{
+    if (!r->enable_chrome || !r->chrome) {
+        return 0;
+    }
+    struct yetty_ycore_int_result cr = yetty_ychrome_handle_event(NULL, r->chrome, ev);
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+        return 0;
+    }
+    return cr.value;
+}
+
 static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_listener *listener,
                                                    const struct yetty_yui_event *ev)
 {
@@ -278,6 +387,25 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
                 yetty_ycore_error_destroy(rrz.error);
             }
         }
+        /* Keep chrome's edge bands + the caption figure tracking the window. */
+        if (r->enable_chrome && r->chrome) {
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
+                NULL, r->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            if (YETTY_IS_ERR(csz)) {
+                yetty_ycore_error_destroy(csz.error);
+            }
+            if (r->chrome_caption) {
+                struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(r->chrome_caption);
+                struct yetty_ycore_rectangle rect = {
+                    .min = {0.0f, 0.0f}, .max = {(float)ev->resize.width, DEMO_CHROME_CAPTION_H}};
+                struct yetty_ycore_void_result rr =
+                    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(fig) - 1, rect);
+                if (YETTY_IS_ERR(rr)) {
+                    yetty_ycore_error_destroy(rr.error);
+                }
+                runner_chrome_caption_refresh(r);
+            }
+        }
         if (r->yframework->event_loop->ops->request_render) {
             r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
         }
@@ -300,11 +428,30 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
     }
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP: {
-        struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_mouse_button(
-            r->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button,
-            ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0, ev->mouse.mods);
-        if (YETTY_IS_ERR(fr)) {
-            yetty_ycore_error_destroy(fr.error);
+        /* Chrome integration model: the widget tree gets first dibs on a
+         * press, so caption controls (and any widget near a resize edge) keep
+         * working. Chrome only arms a window gesture when no widget consumed
+         * the press — non-interactive caption fill (panel/label) doesn't
+         * capture, so a press on the empty strip falls through to chrome. On
+         * release, chrome ends an active move/resize before the widget tree. */
+        if (ev->type == YETTY_YCORE_MOUSE_DOWN) {
+            struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_mouse_button(
+                r->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
+            if (r->enable_chrome && r->chrome &&
+                !yetty_ygui_framework_has_pressed_widget(r->engine)) {
+                runner_chrome_handle(r, ev);
+            }
+        } else {
+            if (!runner_chrome_handle(r, ev)) {
+                struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_mouse_button(
+                    r->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button, 0, ev->mouse.mods);
+                if (YETTY_IS_ERR(fr)) {
+                    yetty_ycore_error_destroy(fr.error);
+                }
+            }
         }
         if (r->yframework->event_loop->ops->request_render) {
             r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
@@ -325,10 +472,14 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
     }
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        struct yetty_ycore_void_result fr =
-            yetty_ygui_framework_feed_mouse_motion(r->engine, ev->mouse.x, ev->mouse.y);
-        if (YETTY_IS_ERR(fr)) {
-            yetty_ycore_error_destroy(fr.error);
+        /* While chrome owns an active move/resize it consumes motion; otherwise
+         * the widget tree gets it (hover, slider drag, …). */
+        if (!runner_chrome_handle(r, ev)) {
+            struct yetty_ycore_void_result fr =
+                yetty_ygui_framework_feed_mouse_motion(r->engine, ev->mouse.x, ev->mouse.y);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
         }
         /* Motion can flip hover state — request a render so the next
          * emit cycle picks up the new hovered widget and repaints it
@@ -341,6 +492,17 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
+    case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
+        /* Double-click in the caption toggles maximize. Chrome gates on the
+         * caption height internally, so a double-click on body content (below
+         * the strip) is ignored here and falls through to the widget tree. */
+        if (runner_chrome_handle(r, ev)) {
+            if (r->yframework->event_loop->ops->request_render) {
+                r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        break;
     default:
         break;
     }
@@ -492,6 +654,10 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(r->engine, r->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "demo_runner: set_root");
 
+        /* The chrome caption is NOT a ygui widget — it's painted by ychrome via
+         * ydraw and composited as a pinned ygrid figure (runner_chrome_caption_*
+         * below), so it stays independent of ygui. */
+
         struct yetty_ygui_object_ptr_result br =
             yetty_ygui_add(yetty_ygui_panel_class_get().value, r->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "demo_runner: body add");
@@ -504,6 +670,11 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         bl.flex_grow = 1.0f;
         bl.padding_top = bl.padding_bottom = 24;
         bl.padding_left = bl.padding_right = 24;
+        /* The caption figure overlays the top strip; inset the body so its
+         * content isn't hidden behind it. */
+        if (r->enable_chrome) {
+            bl.padding_top += DEMO_CHROME_CAPTION_H;
+        }
         bl.gap = 12;
         /* Center the demo's content vertically when it doesn't fill the
          * available height — small demos (single slider, single button)
@@ -513,6 +684,43 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         bl.justify = YETTY_YGUI_JUSTIFY_CENTER;
         struct yetty_ycore_void_result blr = yetty_ygui_widget_layout_set(body, &bl);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, blr, "demo_runner: body layout");
+    }
+
+    /* Window-chrome engine — bind it to the borderless OS window's manager so
+     * the caption strip and edges drive real move/resize/maximize. Borrowed
+     * window_manager comes from yinit via yframework; absent in headless. A
+     * failure here just leaves chrome disabled (window stays static) rather
+     * than aborting the demo. */
+    if (r->enable_chrome && r->yframework->window_manager) {
+        struct yetty_ycore_void_result creg = yetty_ychrome_register();
+        if (YETTY_IS_ERR(creg)) {
+            yetty_ycore_error_destroy(creg.error);
+        }
+        struct yetty_yclass_object_ptr_result cor = yetty_ychrome_chrome_create(NULL);
+        if (YETTY_IS_OK(cor)) {
+            r->chrome = cor.value;
+            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(
+                NULL, r->chrome, r->yframework->window_manager, DEMO_CHROME_CAPTION_H,
+                /*edge_size=*/8.0f, YETTY_YCHROME_FLAG_ALL);
+            if (YETTY_IS_ERR(ccfg)) {
+                yetty_ycore_error_destroy(ccfg.error);
+            }
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
+                NULL, r->chrome, (float)rt->surface_width, (float)rt->surface_height);
+            if (YETTY_IS_ERR(csz)) {
+                yetty_ycore_error_destroy(csz.error);
+            }
+            /* Composite the chrome-painted caption as a pinned top figure. */
+            struct yetty_ycore_void_result cap =
+                runner_chrome_caption_create(r, &ctx, (float)rt->surface_width);
+            if (YETTY_IS_ERR(cap)) {
+                ywarn("demo_runner: chrome caption create failed: %s", cap.error.msg);
+                yetty_ycore_error_destroy(cap.error);
+            }
+        } else {
+            ywarn("demo_runner: chrome create failed: %s", cor.error.msg);
+            yetty_ycore_error_destroy(cor.error);
+        }
     }
 
     yetty_ygui_framework_set_key_cb(r->engine, on_key, r);
@@ -574,6 +782,13 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
     }
 
     /* Teardown — mirror ygreeter's order. */
+    if (r->chrome) {
+        struct yetty_ycore_void_result dr = yetty_ychrome_destroy(NULL, r->chrome);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+        r->chrome = NULL;
+    }
     if (r->engine) {
         struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(r->engine);
         if (YETTY_IS_ERR(dr)) {
@@ -1058,7 +1273,7 @@ static void client_close_cb(uv_handle_t *h)
     (void)h;
 }
 
-static int run_client_mode(const char *name, demo_build_fn build)
+static int run_client_mode(const char *name, demo_build_fn build, int enable_chrome)
 {
     (void)name;
     struct client_state cs = {0};
@@ -1084,7 +1299,8 @@ static int run_client_mode(const char *name, demo_build_fn build)
         return 1;
     }
 
-    struct demo_runner r = {.name = name, .build = build, .engine = fr.value};
+    struct demo_runner r = {
+        .name = name, .build = build, .engine = fr.value, .enable_chrome = enable_chrome};
     cs.runner = &r;
     cs.running = 1;
     yetty_ygui_framework_set_key_cb(r.engine, client_on_key, &cs);
@@ -1116,6 +1332,10 @@ static int run_client_mode(const char *name, demo_build_fn build)
             yetty_ycore_error_destroy(sr.error);
             return 1;
         }
+        /* NOTE: in-terminal (client) mode renders into the host yetty's
+         * compositor via OSC, not a local container, so the chrome caption
+         * figure isn't composited here yet — the in-terminal window manager will
+         * own that path. Standalone mode shows the full chrome. */
         struct yetty_ygui_object_ptr_result br =
             yetty_ygui_add(yetty_ygui_panel_class_get().value, r.root);
         if (YETTY_IS_ERR(br)) {
@@ -1239,15 +1459,18 @@ static int in_yetty_terminal(void)
     return yetty_running_under_yetty();
 }
 
-int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build)
+static int demo_runner_run_impl(int argc, char **argv, const char *name, demo_build_fn build,
+                                int enable_chrome)
 {
     ytrace_init();
 #ifdef YETTY_YGUI_HAS_UV
     if (in_yetty_terminal()) {
-        return run_client_mode(name, build);
+        /* Client mode runs inside a host yetty pane — there's no borderless OS
+         * window to drag, so chrome is irrelevant here. */
+        return run_client_mode(name, build, enable_chrome);
     }
 #endif
-    struct demo_runner r = {.name = name, .build = build};
+    struct demo_runner r = {.name = name, .build = build, .enable_chrome = enable_chrome};
     struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
     struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, &cfg, worker, &r);
     if (YETTY_IS_ERR(run_result)) {
@@ -1256,4 +1479,16 @@ int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build
         return 1;
     }
     return run_result.value;
+}
+
+int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build)
+{
+    /* Window chrome is on for every demo now — they're all standalone windows
+     * that benefit from a draggable/resizable titlebar. */
+    return demo_runner_run_impl(argc, argv, name, build, /*enable_chrome=*/1);
+}
+
+int demo_runner_run_chrome(int argc, char **argv, const char *name, demo_build_fn build)
+{
+    return demo_runner_run_impl(argc, argv, name, build, /*enable_chrome=*/1);
 }

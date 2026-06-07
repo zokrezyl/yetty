@@ -22,7 +22,7 @@ Terminals are stuck in the 1970s — text, maybe colors, that's it. Meanwhile, t
 ## Design Principles
 
 - **Pure C, FFI-first** — no hidden costs, bind from Rust, Go, Python, Swift, Kotlin
-- **Layered rendering** — text and graphics coexist, scroll together
+- **Figure-based composition** — text and graphics share one z-ordered surface
 - **Composable primitives** — simple (SDF shapes) and complex (figures)
 - **Dirty-driven pipeline** — nothing runs unless something changed
 - **GPU resource binding** — all buffers and textures packed into minimal GPU bindings
@@ -31,17 +31,20 @@ Terminals are stuck in the 1970s — text, maybe colors, that's it. Meanwhile, t
 
 ```
 Terminal
-  ├── text-layer        libvterm (VT100/xterm)
-  ├── ydraw-layer       SDF primitives: circles, boxes, lines, glyphs
-  └── figure container  the compositor — renders after the layers
-        └── figures: yplot · yimage · yvideo · ygui · ymgui · yrdawn ·
-                     ydiagram · ysvg · ypdf · yvnc · ...
+  ├── content layer      terminal text + row-anchored ydraw content
+  │     ├── text grid    libvterm (VT100/xterm)
+  │     └── ydraw canvas SDF primitives: circles, boxes, lines, glyphs
+  └── root yfigure       generic compositor with z-ordered figures
+        └── yplot · yimage · yvideo · ygui · ymgui · yrdawn · ygrid ·
+            ydiagram · ysvg · ypdf · yvnc · ...
 ```
 
-A **figure** is a composite that integrates with the terminal grid: it
-scrolls with text, shares the GPU resource model, and can be nested (figures may
-contain other figures). The terminal renders two real layers (text and ydraw)
-plus a `yfigure` container that hosts the rich content.
+A **figure** is the generic composition unit in yetty: it has position,
+size, dirty state, GPU resources, and z-order, and figures may contain other
+figures. The old fixed terminal-layer stack has been collapsed into one content
+layer for text + row-anchored ydraw content, plus a root `yfigure` compositor for
+rich content. Conceptually this still gives layered output, but the layering now
+comes from render order and figure z-order.
 
 > Yetty is built from ~70 small C modules. See the **[Architecture & Module
 > Map](docs/architecture.md)** for the complete inventory and how the pieces
@@ -153,7 +156,7 @@ picture, then dive into a subsystem.
 **Rendering**
 | Document | Description |
 |----------|-------------|
-| [Layered Rendering](docs/layered-rendering.md) | Direct-to-target layer stack and figure compositor |
+| [Layered Rendering](docs/layered-rendering.md) | Virtual layers, direct-to-target rendering, yfigures, scrolling, alt-screen |
 | [WebGPU Architecture](docs/webgpu-architecture.md) | WebGPU object ownership |
 | [WebGPU Concepts](docs/webgpu.md) | WebGPU primer (C) |
 | [GPU Resource Binding](docs/gpu-resource-binding.md) | Buffer packing and atlas textures |
@@ -167,7 +170,6 @@ picture, then dive into a subsystem.
 | Document | Description |
 |----------|-------------|
 | [Terminal Screen](docs/terminal-screen.md) | Screen state and compositing |
-| [Terminal Layers](docs/term-layers.md) | Scrolling, alt-screen, rolling rows |
 | [Platform Abstraction](docs/platform.md) | PTY, event loop, per-OS layout |
 | [Platform PTY](docs/platform-pty.md) | PTY backends |
 | [Platform Pipe](docs/platform-pipe.md) | Cross-thread input pipe |

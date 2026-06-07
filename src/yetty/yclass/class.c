@@ -1,8 +1,8 @@
 /* Class runtime — per-domain slot tables.
  *
  * One slot_table per domain (allocated lazily on slot_table_get).
- * yetty_yclass_method_slot values pack the domain id in bits 27..24
- * and the per-domain local index in bits 23..0, so two domains can
+ * yetty_yclass_method_slot values pack the domain id in bits 27..22
+ * and the per-domain local index in bits 21..0, so two domains can
  * share local names without colliding. The global class_registry
  * stays keyed by the qualified class name; classes carry per-domain
  * dispatch slices, indexed by the same domain id encoded in

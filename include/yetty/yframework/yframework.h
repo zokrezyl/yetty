@@ -34,7 +34,7 @@ struct yetty_yinit_runtime;
 struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
 struct yetty_platform_clipboard_manager;
-struct yetty_yplatform_window_manager;
+struct yetty_yclass_object;
 struct yetty_yevent_event_loop;
 struct yetty_yplatform_wgpu;
 struct yetty_yvnc_server;
@@ -54,7 +54,8 @@ struct yetty_yframework {
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     struct yetty_ycore_xthread_event_pipe *output_pipe;
     struct yetty_platform_clipboard_manager *clipboard_manager;
-    struct yetty_yplatform_window_manager *window_manager;
+    /* yplatform:window_manager yclass object (or NULL). Borrowed from yinit. */
+    struct yetty_yclass_object *window_manager;
 
     /* Adapter + device + queue + surface_format + allocator + msdf_generator,
      * plus the embedded yinit_gpu_context with instance/surface/dims/x11. */

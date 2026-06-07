@@ -338,6 +338,10 @@ struct yetty_ycore_event_window_drag {
 struct yetty_ycore_event_window_resize {
     int dx;
     int dy;
+    /* yetty_ycore_resize_edge bitmask — which edge(s)/corner the gesture grabbed.
+     * The X11 per-pixel handler uses it to move the origin for left/top edges
+     * (right/bottom keep the top-left fixed). 0 = legacy right/bottom growth. */
+    int edge;
 };
 
 /* Carries the edge mask for WINDOW_BEGIN_INTERACTIVE_RESIZE. Holds an

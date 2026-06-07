@@ -1,0 +1,255 @@
+methods:
+  - slot: window_manager_configure
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: os_window
+        type: "void *"
+      - name: output_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+    local: true
+  - slot: window_manager_destroy
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: window_manager_iconify
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: window_manager_toggle_maximize
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: window_manager_request_close
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: window_manager_drag_by
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: dx
+        type: int
+      - name: dy
+        type: int
+    local: true
+  - slot: window_manager_resize_by
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: dx
+        type: int
+      - name: dy
+        type: int
+      - name: edge
+        type: int
+    local: true
+  - slot: window_manager_begin_interactive_move
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: window_manager_begin_interactive_resize
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: edge
+        type: int
+    local: true
+  - slot: window_manager_set_cursor
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: shape
+        type: int
+    local: true
+  - slot: window_manager_handle_event
+    domain: yplatform
+    owning_class: window_manager
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: event
+        type: "const struct yetty_yui_event *"
+    local: true
+classes:
+  - name: window_manager
+    domain: yplatform
+    accessor: yetty_yplatform_window_manager_class_get
+    type: regular
+    source_file: src/yetty/yplatform/window-manager.c
+    parent: null
+    mixins: []
+    data: struct window_manager_data
+    data_fields:
+      - name: window
+        type: "GLFWwindow *"
+        get: false
+        set: false
+      - name: output_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+      - name: cursors
+        type: "GLFWcursor *[5]"
+        get: false
+        set: false
+      - name: applied_shape
+        type: int
+        get: false
+        set: false
+      - name: macos_maximized
+        type: int
+        get: false
+        set: false
+      - name: macos_saved_x
+        type: int
+        get: false
+        set: false
+      - name: macos_saved_y
+        type: int
+        get: false
+        set: false
+      - name: macos_saved_w
+        type: int
+        get: false
+        set: false
+      - name: macos_saved_h
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: window_manager_configure
+        slot_domain: yplatform
+        impl: window_manager_configure
+      - slot: window_manager_destroy
+        slot_domain: yplatform
+        impl: window_manager_destroy
+      - slot: window_manager_iconify
+        slot_domain: yplatform
+        impl: window_manager_iconify
+      - slot: window_manager_toggle_maximize
+        slot_domain: yplatform
+        impl: window_manager_toggle_maximize
+      - slot: window_manager_request_close
+        slot_domain: yplatform
+        impl: window_manager_request_close
+      - slot: window_manager_drag_by
+        slot_domain: yplatform
+        impl: window_manager_drag_by
+      - slot: window_manager_resize_by
+        slot_domain: yplatform
+        impl: window_manager_resize_by
+      - slot: window_manager_begin_interactive_move
+        slot_domain: yplatform
+        impl: window_manager_begin_interactive_move
+      - slot: window_manager_begin_interactive_resize
+        slot_domain: yplatform
+        impl: window_manager_begin_interactive_resize
+      - slot: window_manager_set_cursor
+        slot_domain: yplatform
+        impl: window_manager_set_cursor
+      - slot: window_manager_handle_event
+        slot_domain: yplatform
+        impl: window_manager_handle_event
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error

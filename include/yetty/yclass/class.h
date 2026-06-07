@@ -2,16 +2,17 @@
  *
  * Each module ("domain") owns its own slot_table with its own 0-based
  * local index space. A yetty_yclass_method_slot value is the packed pair
- * (domain_id << 24) | local_idx:
+ * (domain_id << 22) | local_idx:
  *
  *     bits 31..28   reserved (always 0 for valid slots; UINT32_MAX
  *                   is the sentinel YETTY_YCLASS_METHOD_SLOT_UNDEFINED).
- *     bits 27..24   domain_id (1..15; 0 is invalid / never returned).
- *     bits 23..0    local index inside that domain's slot_table.
+ *     bits 27..22   domain_id (1..63; 0 is invalid / never returned).
+ *     bits 21..0    local index inside that domain's slot_table.
  *
  * The wire treats yetty_yclass_method_slot as opaque — both sides
  * exchange 28-bit ids that round-trip through this packing. The
- * encoding fits inside the rpc header's 28-bit id field.
+ * encoding fits inside the rpc header's 28-bit id field (domain+index
+ * = 28 bits, so the top 4 bits stay clear for the wire op field).
  *
  * Every fallible runtime entry point returns a Result type from
  * <yetty/ycore/result.h>. Callers check YETTY_IS_ERR and either
@@ -44,15 +45,23 @@ typedef void (*yetty_yclass_impl_t)(void);
 typedef uint32_t yetty_yclass_method_slot;
 #define YETTY_YCLASS_METHOD_SLOT_UNDEFINED UINT32_MAX
 
-#define YETTY_YCLASS_METHOD_SLOT_DOMAIN_BITS 4
+#define YETTY_YCLASS_METHOD_SLOT_DOMAIN_BITS 6
 #define YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS (1u << YETTY_YCLASS_METHOD_SLOT_DOMAIN_BITS)
-#define YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT 24
+#define YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT 22
 #define YETTY_YCLASS_METHOD_SLOT_INDEX_MASK ((1u << YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT) - 1)
-#define YETTY_YCLASS_METHOD_SLOT_DOMAIN_OF(s) (((s) >> YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT) & 0xFu)
+#define YETTY_YCLASS_METHOD_SLOT_DOMAIN_OF(s)                                                      \
+    (((s) >> YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT) & (YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS - 1u))
 #define YETTY_YCLASS_METHOD_SLOT_INDEX_OF(s) ((s) & YETTY_YCLASS_METHOD_SLOT_INDEX_MASK)
 #define YETTY_YCLASS_METHOD_SLOT_PACK(dom, idx)                                                    \
     (((uint32_t)(dom) << YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT) |                                   \
      ((idx) & YETTY_YCLASS_METHOD_SLOT_INDEX_MASK))
+
+/* The packed (domain_id, local index) rides in the rpc wire header's
+ * 28-bit id field; the top 4 bits carry enum yetty_yclass_rpc_op (see
+ * yclass/rpc.h, YETTY_YCLASS_RPC_OP_SHIFT == 28). Keep domain+index
+ * within 28 bits or remote dispatch silently corrupts the op field. */
+_Static_assert(YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT + YETTY_YCLASS_METHOD_SLOT_DOMAIN_BITS <= 28,
+               "yclass slot (domain+index) must fit the 28-bit rpc wire id field");
 
 struct yetty_yclass_descriptor {
     const char *name; /* qualified, e.g. "yetty_yvehicle_sportscar" */

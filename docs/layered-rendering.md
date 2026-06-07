@@ -2,205 +2,315 @@
 
 ## Overview
 
-A terminal is drawn as a stack of **layers** plus a **figure container**, all
-painting **directly into one shared render target**. There are no per-layer
-intermediate textures and no separate blend pass: each layer draws into the
-target with `LoadOp_Load` (so pixels persist), and the target is wiped once per
-frame by a single global `clear()`. The root `yfigure` container renders **last**,
-on top of the layers.
+The name "layered rendering" is historical, but the current architecture no
+longer exposes a fixed stack of terminal-owned layers. Yetty now uses **virtual
+layering**:
+
+1. `yui` paints the pane background.
+2. The terminal paints one **content layer**: the libvterm text grid, the
+   row-anchored ydraw canvas, and the text-owned shader-glyph figure.
+3. The terminal paints the root **`yfigure` container** last. That container is a
+   generic compositor: figures have bounds, dirty state, GPU resources, and
+   z-order, and figures may contain other figures.
+
+Everything paints **directly into one shared render target**. There are no
+per-layer intermediate textures and no terminal blend pass. Each render pass uses
+`LoadOp_Load`, and the target is wiped once per frame by the root event handler's
+global `clear()`.
 
 ```
-yui paints the pane background ──► target   (the terminal owns NO background layer)
+yui pane background ─────────────────────────────────────► target
 
 terminal_render_frame(terminal, target, force)
-    │  (target already cleared once this frame by the root event handler)
     │
-    ├── for each layer in terminal->layers[], bottom → top:  ──► target  (LoadOp_Load)
-    │       text-layer  →  ydraw-scrolling-layer
-    │       layer->ops->render(layer, target, force)
+    ├── content layer ───────────────────────────────────► target (LoadOp_Load)
+    │     ├── text grid         libvterm cells / cursor / selection
+    │     ├── ydraw canvas      row-anchored SDF/MSDF primitives
+    │     └── shader-glyph fig  text-owned figure pass
     │
-    └── root yfigure container renders LAST                  ──► target  (figures on top)
-                                                                  │
-                                                                  ▼
-                                             surface / texture / VNC / X11-tile
+    └── root yfigure container ─────────────────────────► target (LoadOp_Load)
+          └── z-ordered figures: ygui, ymgui, yrdawn, ygrid,
+                                 yplot, yimage, yvideo, ...
 ```
 
-The terminal's `layers[]` holds exactly two layers — **text-layer** and
-**ydraw-scrolling-layer**. The pane background is painted by `yui` (the
-tab/pane chrome), not by the terminal; there is no terminal background layer.
+The terminal still has a C compatibility/base interface named
+`yetty_yrender_terminal_layer`; today `terminal->layer` points to exactly one
+`yetty_yvterm_content_layer`. Treat that as an implementation detail around the
+content renderer, not as the old public model of sibling terminal layers.
 
-**Why direct-to-target (no blend round-trip).** The previous model rendered each
-layer to its own texture and blended them. At 4K that is 4 × ~33 MB layer render
-targets plus a ~33 MB blend output read and written every frame — enough to
-starve the display compositor (observed on tvOS). Painting every layer straight
-into the shared target removes that bandwidth entirely.
+**Why direct-to-target.** The previous model rendered each layer to its own
+texture and blended them. At 4K that was 4 x ~33 MB layer render targets plus a
+~33 MB blend output read and written every frame, enough to starve the display
+compositor on tvOS. Painting everything straight into the shared target removes
+that bandwidth cost.
 
-**Why `LoadOp_Load` everywhere.** Because `loadOp` ignores the scissor rect, a
-`Clear` on any layer pass would wipe *every* pane sharing the big target. So no
-layer pass ever clears; the only wipe is the one global `clear()` the root event
-handler issues before the panes render.
+**Why `LoadOp_Load` everywhere.** `loadOp` ignores the scissor rect, so a `Clear`
+on any pane pass would wipe every other pane sharing the big target. The only
+wipe is the one global clear before panes render.
 
 ---
 
-## Layers vs figures
+## Surfaces
 
 | Surface | What it is |
 |---|---|
-| **pane background** | Painted by **`yui`** (the tab/pane chrome), *not* a terminal layer. The terminal never owns a background layer. |
-| **text-layer, ydraw-scrolling-layer** | The two `yetty_yrender_terminal_layer`s in `terminal->layers[]`, painted bottom→top directly into the target. text-layer hosts libvterm; the ydraw scrolling layer holds SDF primitives. |
-| **figure container** (`yfigure`) | The root container, *outside* `layers[]`. Hosts the rich-content **figures** (ygui, ymgui, yrdawn, ygrid, yplot, …) and renders after the layers — it is the compositor for figures. |
+| **pane background** | Painted by `yui` / tile chrome, not by the terminal. It provides the opaque per-pane wipe on a shared target. |
+| **content layer** | One `yetty_yvterm_content_layer` owned by `yterminal`. It internally renders the text grid, ydraw canvas, and shader-glyph figure. |
+| **root `yfigure` container** | The generic compositor for rich content. Figures are positioned in pane pixels and composed by z-order after the content layer. |
 
-Shader-glyph, ymgui, and yrdawn used to be layers; they are now figures in the
-container, so `layers[]` is down to just text + ydraw-scrolling. See
-[ydraw](../src/yetty/ydraw/README.md) for the primitive/figure model and
-[Terminal Layers](term-layers.md) for the scroll/alt-screen state shared across
-both.
-
----
-
-## The render target (`render-target.h`)
-
-A render target is the destination a layer or figure paints into. It is owned by
-`yframework` (`yetty_yframework.render_target`) and handed to the terminal each
-frame.
-
-```c
-struct yetty_yrender_target_ops {
-    void (*destroy)(struct yetty_ydraw_target *self);
-    struct yetty_ycore_void_result (*clear)(struct yetty_ydraw_target *self);  /* once/frame */
-    struct yetty_ycore_void_result (*render_layer)(struct yetty_ydraw_target *self,
-                                                   struct yetty_yrender_terminal_layer *layer);
-    struct yetty_ycore_void_result (*blend)(struct yetty_ydraw_target *self,
-                                            struct yetty_ydraw_target **sources, size_t count);
-    struct yetty_ycore_void_result (*present)(struct yetty_ydraw_target *self);
-    WGPUTextureView (*get_view)(const struct yetty_ydraw_target *self);
-    WGPUTexture (*get_texture)(const struct yetty_ydraw_target *self);
-    struct yetty_ycore_void_result (*resize)(struct yetty_ydraw_target *self,
-                                             struct yetty_yrender_viewport viewport);
-    struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ydraw_target *self,
-                                                      float scale, float ox, float oy);
-};
-```
-
-The type is `struct yetty_ydraw_target`. A layer's `render` op ultimately calls
-the target's `render_layer` (which begins a `LoadOp_Load` pass and draws into the
-target's view). `present()` outputs the finished frame; `get_texture()` /
-`get_view()` expose the backing texture for readback.
-
-Implementations (in `src/yetty/yrender/`):
-
-- **surface target** — on-screen window (WGPUSurface).
-- **texture target** (`render-target-texture.c`) — offscreen render-to-texture.
-- **VNC target** (`render-target-vnc.c`) — VNC server framebuffer (headless).
-- **X11-tile target** (`render-target-x11-tile.c`) — X11 tiled output.
-
-> The `blend` op is part of the interface but is **not** used on the terminal
-> render path today (kept for the offscreen/compose-from-sources use case). The
-> older `blender.h`, `layer-renderer.h`, and `rendered-layer.h` headers likewise
-> remain in `yrender` but are not on this path — the terminal allocates no
-> per-layer renderer and no blender.
-
-### Legacy: `terminal->layer_targets[]`
-
-The terminal *does* still allocate and resize one render target per layer
-(`terminal->layer_targets[]`, set up in `terminal_create` and kept in sync on
-resize) — a remnant of the old render-to-texture-then-blend model.
-`terminal_render_frame()` no longer uses them: it renders every layer into the
-single shared target passed in. So `layer_targets[]` is dead weight on the
-current direct path (nothing reads it) and is pending cleanup — documented here
-so it isn't mistaken for part of the live render flow.
+`ymgui`, `yrdawn`, `ygrid`, `ygui`, and other rich views are figures, not
+terminal layers. `ymgui-layer.c` and `yrdawn-layer.c` are gone. A visual object
+that should anchor to terminal rows belongs in the ydraw canvas; a visual object
+that should float above terminal content belongs in the root `yfigure` tree.
 
 ---
 
-## The frame loop (two passes)
+## The Content Layer
 
-`terminal_render_frame()` (`src/yetty/yterm/terminal.c`) runs two passes over
-`layers[]`:
+The content layer is implemented by `src/yetty/yvterm/content-layer.c`. It embeds
+the terminal-layer base as its first member so the terminal can call a single
+render/resize/input interface, but it owns two sub-renderers:
 
-1. **Dirty scan.** If `force_redraw` is set, or *any* layer reports
-   `is_dirty()`, or the root container is dirty → set `force = 1`. A dirty
-   top layer must force the layers *below* it to repaint, otherwise the dirty
-   layer's old pixels (e.g. the silhouette an ymgui window just vacated) would
-   survive under it.
-2. **Render bottom→top.** For each layer: skip if empty (`is_empty`), else
-   `layer->ops->render(layer, target, force)`. The op returns `1` iff it
-   actually drew; that propagates `force = 1` upward so layers above a repaint
-   also refresh.
+| Sub-renderer | Owns | Driven by |
+|---|---|---|
+| **text grid** (`text-layer.c`) | one `VTerm`, primary + alt buffers, scrollback arena, cursor, selection | PTY bytes: text + CSI/OSC |
+| **ydraw canvas** (`ydraw-content.c`) | scrolling `ydraw_canvas`, keyed by rolling rows | DCS `600000`-`600003` |
+
+Both sub-renderers keep their own GPU resource set and shader. The content
+layer's render op drives them into the same target, bottom to top:
+
+1. text grid (`text-layer.wgsl`),
+2. ydraw canvas (`ydraw-layer.wgsl`), unless the new-OSC text-only mode skips it,
+3. shader-glyph figure owned by the text grid.
+
+State that used to round-trip through terminal-wide layer broadcasts now lives
+inside the content layer: scroll, cursor, alt-screen, clear, selection, view-top,
+resize, and visual zoom.
+
+---
+
+## Root Figures
+
+The root `yfigure` container is outside the content layer. It receives compositor
+records over DCS `630000` (`YETTY_DCS_YCOMPOSITOR_BIN`) and owns the figure tree.
+Each figure has its own dirty state and can contribute GPU resources through the
+same binder model as other renderable components.
+
+Root-container figures are compositor-positioned in pane pixels. They do **not**
+automatically participate in terminal row scrolling or alt-screen save/restore.
+That is deliberate: the row-scrolling model belongs to the content layer. If a
+producer wants content to scroll with terminal rows, it emits ydraw primitives or
+a row-anchored drawable. If it wants an overlay or application surface, it emits
+a figure.
+
+Bulk drawing and figure payloads ride DCS envelopes because they are large opaque
+payloads that terminal multiplexers can pass through verbatim. Short
+control/metadata, such as client input subscription and delivery, remains OSC.
+See `docs/ansi-codes.md` for the code table.
+
+---
+
+## Frame Loop
+
+`terminal_render_frame()` in `src/yetty/yterminal/terminal.c` does one dirty scan
+and two top-level paints:
 
 ```c
 int force = force_redraw;
-for (size_t i = 0; !force && i < terminal->layer_count; i++)
-    if (layer_is_dirty(terminal->layers[i])) force = 1;
-if (!force && root_container_dirty(terminal)) force = 1;
+struct yetty_yrender_terminal_layer *layer = terminal->layer;
 
-for (size_t i = 0; i < terminal->layer_count; i++) {
-    struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
-    if (layer_is_empty(layer)) continue;
-    struct yetty_ycore_int_result r = layer->ops->render(layer, target, force);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "layer render failed");
-    if (r.value == 1) force = 1;
-}
+if (!force && layer->ops->is_dirty && layer->ops->is_dirty(layer))
+    force = 1;
 
-/* Root container renders LAST, on top of every layer. */
-struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(terminal->root_container);
-yetty_yfigure_render(NULL, /* the figure object */ ..., target);
-rf->dirty = 0;
+if (!force && root_container_is_dirty(terminal))
+    force = 1;
+
+layer->ops->render(layer, target, force);
+
+yetty_yfigure_render(root_container_as_figure, target);
+root_container->dirty = 0;
 ```
 
-**New-OSC path.** When `YGRID_USE_NEW_OSC=1` (`terminal->new_osc_path_active`),
-the loop skips every legacy layer except text-layer — the figure container plus
-text-layer (background + terminal text) are the only paints.
+A dirty root figure forces the content layer to repaint underneath before the
+figure tree composites again. Otherwise, pixels vacated by a moved or deleted
+semi-transparent figure could survive on the shared target.
 
 ---
 
-## Per-layer GPU binding
+## Render Target
 
-Each layer produces a `struct yetty_yrender_gpu_resource_set` (buffers, textures,
-uniforms, shader, children). A `gpu-resource-binder` flattens that set, packs it
-into one storage buffer + per-format atlas textures + one uniform block, and
-caches the compiled pipeline keyed by a shader-code hash (recompiling only when
-the shader text changes — uniform/buffer changes reuse the pipeline). That
-mechanism is unchanged by the direct-to-target switch; see
-[GPU Resource Binding](gpu-resource-binding.md) and
-[Render Pipeline](render.md) for the binder flow and the dirty-driven upload.
+A render target is the destination the content layer or a figure paints into. It
+is owned by `yframework` (`yetty_yframework.render_target`) and handed to the
+terminal each frame.
 
----
+The target interface lives in `include/yetty/yrender/render-target.h` and is
+implemented under `src/yetty/yrender/`:
 
-## File Structure
+- `render-target-texture.c` - offscreen texture target,
+- `render-target-vnc.c` - VNC server framebuffer,
+- `render-target-x11-tile.c` - X11 tiled output,
+- surface target - on-screen window / `WGPUSurface`.
 
-```
-include/yetty/yrender/
-├── render-target.h          # target interface (yetty_ydraw_target)
-├── render-target-x11-tile.h # X11-tile target
-├── gpu-resource-set.h       # resource set tree
-├── gpu-resource-binder.h    # binder interface
-├── gpu-allocator.h          # GPU allocation tracking
-├── pipeline.h               # shared pipeline (two-tier binder)
-├── primitive-gpu-binder.h   # SDF primitive binder
-├── font-dispatcher.h        # glyph → atlas dispatch
-├── texture-format.h         # format helpers
-├── types.h                  # buffer / texture / uniform types
-└── blender.h, layer-renderer.h, rendered-layer.h   # legacy — not on the current path
-
-src/yetty/yrender/
-├── render-target-texture.c  # offscreen texture target (the LoadOp_Load render_layer impl)
-├── render-target-vnc.c      # VNC server buffer target
-├── render-target-x11-tile.c # X11-tile target
-├── gpu-resource-binder.c    # flatten / pack / codegen / upload
-├── gpu-allocator.c          # allocation tracking
-├── pipeline.c               # shared pipeline
-├── primitive-gpu-binder.c   # SDF primitive binder
-├── font-dispatcher.c        # glyph dispatch
-└── types.c                  # type utilities
-
-src/yetty/yterm/terminal.c   # terminal_render_frame — the loop above
-src/yetty/yfigure/container.c# the root container (compositor) rendered last
-```
+The `blend` op remains in the target interface for offscreen composition use
+cases, but the terminal render path does not use it.
 
 ---
 
-## Future Extensions (Out of Scope)
+## GPU Resource Binding
 
-- **Multi-target** — render to multiple targets simultaneously.
-- **Layer effects** — per-layer post-processing.
-- **Dirty regions** — partial re-rendering instead of whole-target repaint.
+Renderable components expose a `struct yetty_yrender_gpu_resource_set`: buffers,
+textures, uniforms, shader code, and child resource sets. The
+`gpu-resource-binder` flattens the tree and packs it into:
+
+- one storage buffer,
+- per-format atlas textures,
+- one uniform block,
+- generated WGSL binding declarations, offsets, and atlas regions.
+
+This lets terminal content and figures share one binding strategy without being
+hard-coded into a fixed layer stack. See `docs/gpu-resource-binding.md` and
+`docs/render.md` for binder details.
+
+---
+
+## Scroll Model: Rolling Rows
+
+A naive scroll-on-line-add costs O(lines x primitives) per scroll event. With
+thousands of cells filling and the user holding `j` in vim, that is not viable.
+The ydraw canvas addresses lines by an **absolute monotonic counter**: the
+rolling row. Lines never move; the viewport's idea of "row 0 on screen" advances
+through `ydraw_rolling_row_0`, a u32 uniform set by
+`ydraw-content.c::set_rolling_row_0`.
+
+```
+                rolling rows (monotonic, never decrement)
+                      ^
+   primary:  17 18 19 20 21 22 23 24 25 26 27 28 ...
+                         ^
+                  row0_absolute = 21
+```
+
+A primitive placed at the cursor stores `rolling_row = row0_absolute +
+cursor_row`. On screen its y pixel is `(rolling_row - row0_absolute) * cell_h`.
+Scroll is a single counter bump; no primitive rewrites its coordinates.
+
+### Cross-Renderer Propagation
+
+When one content sub-renderer scrolls, the other must follow so text and ydraw
+anchors stay aligned. This is internal to the content layer:
+
+```
+text grid (libvterm line falls off top)
+   -> scroll_fn(content_on_layer_scroll)
+content-layer.c
+   -> for each sub-renderer != source:
+        sub->ops->scroll(sub, lines)
+```
+
+The `in_external_scroll` flag prevents ping-pong. Cursor moves follow the same
+shape through `content_on_layer_cursor` and each sub-renderer's `set_cursor` op.
+The terminal no longer owns scroll/cursor broadcast callbacks.
+
+### Scrollback View
+
+Mouse-wheel up or PageUp enters scrollback. The terminal pins a
+`view_top_total_idx` absolute row index and pushes it to the content layer via
+`set_view_top(active, view_top_total_idx)`. The content layer fans it out to the
+text grid and ydraw canvas, each of which freezes its display at that absolute
+row while live content keeps arriving below.
+
+The index is stable because text and ydraw share the same live anchor. The
+content layer's `get_live_anchor` returns the max across sub-renderers as a safe
+fallback. Pressing Enter, typing, or scrolling past the live anchor exits back to
+live tracking.
+
+Scrollback is held in RAM today. Text scrollback is stored by the per-terminal
+cells/lines ring arena fed by libvterm's `sb_pushline` callback. The ydraw canvas
+keeps primitives keyed by rolling row until their line drops off the front.
+Nothing is persisted across restart.
+
+---
+
+## Alt-Screen
+
+DEC modes `?1049`, `?1047`, and `?47` ask the terminal to swap to a separate
+screen buffer. The text grid and ydraw canvas must switch together so a fullscreen
+program such as vim does not inherit row-anchored drawings from the shell.
+
+```
+PTY byte stream
+   -> libvterm settermprop(VTERM_PROP_ALTSCREEN, bool)
+   -> text-layer.c::on_settermprop
+   -> content-layer.c::content_on_alt_screen
+   -> each sub-renderer set_alt_screen(active)
+```
+
+The text grid lets libvterm own the primary/alt buffer swap and refreshes the GPU
+cell buffer pointer. The ydraw canvas lazily builds a sibling `ydraw_canvas` on
+the first toggle, then swaps `canvas` and `saved_canvas`.
+
+No data copy, GPU re-upload, or re-resize is required. Both halves coexist and
+track the same grid and cell size. Root-container figures are outside this model
+and are not saved/restored by alt-screen toggles; a producer that wants a figure
+to disappear under vim removes or stops emitting that figure.
+
+Full-screen erase (`CSI 2J` / `CSI 3J`) follows the same content-layer routing:
+the text grid's clear hook lands in `content_on_clear_screen`, which forwards to
+each sub-renderer's `clear_screen` op.
+
+---
+
+## Future: Persistent Scrollback
+
+> Status: exploratory design note, not implemented.
+
+The rolling-row event stream could become an append-only history log. Each event
+a sub-renderer accepts could also be forwarded to a background log writer:
+
+```c
+struct entry {
+    uint64_t rolling_row;
+    uint8_t  source_id;   // text grid, ydraw, figure
+    uint8_t  kind;        // text-line, prim-add, frame, clear, ...
+    uint16_t flags;
+    uint32_t body_len;
+    uint8_t  body[];
+    uint8_t  prev_hash[32];
+    uint8_t  self_hash[32];
+};
+```
+
+The useful properties are append-only history, hash-linked tamper detection,
+content addressing, Merkle-friendly range proofs, and deduplication across
+sessions. This should include privacy design before implementation: per-session
+encryption keys and explicit redaction events for sensitive content.
+
+This would not change the render path. Persistence would be a parallel sink fed
+from accepted content events.
+
+---
+
+## File Index
+
+```
+include/yetty/yterminal/terminal.h       terminal view + content-layer base ops
+src/yetty/yterminal/terminal.c           terminal_render_frame, scrollback, input forwarding
+include/yetty/yvterm/content-layer.h     content-layer public constructor / wire registration
+src/yetty/yvterm/content-layer.c         text <-> ydraw cross-wiring and content render
+src/yetty/yvterm/text-layer.c            libvterm grid, scrollback, alt-screen hooks
+src/yetty/yvterm/ydraw-content.c         rolling ydraw canvas, row anchors, alt-screen canvas swap
+src/yetty/yfigure/container.c            root figure compositor and wire consumer
+include/yetty/yfigure/wire.h             compositor figure record format
+include/yetty/yterminal/dcs-codes.h      ydraw / compositor / RPC DCS codes
+include/yetty/yterminal/osc-codes.h      OSC namespace note
+include/yetty/yterminal/client-input.h   client-input OSC payloads
+```
+
+---
+
+## Future Extensions
+
+- Multi-target rendering.
+- Figure-level post-processing effects.
+- Dirty regions / partial target repaint.
+- Persistent scrollback history.

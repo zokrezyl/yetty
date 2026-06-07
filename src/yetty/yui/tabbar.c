@@ -16,7 +16,7 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/methods.h> /* yetty_yplatform_window_manager_* slots */
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
@@ -687,6 +687,17 @@ static int event_y(const struct yetty_yui_event *e, float *out)
     }
 }
 
+/* Window-manager slots are fire-and-forget from the render thread (they post a
+ * request onto the output_pipe). A failure here can only be an object-resolve
+ * error, which is non-recoverable at this call site — absorb the chain so it
+ * isn't leaked. */
+static void wm_absorb(struct yetty_ycore_void_result window_manager_result)
+{
+    if (YETTY_IS_ERR(window_manager_result)) {
+        yetty_ycore_error_destroy(window_manager_result.error);
+    }
+}
+
 struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar *bar,
                                                         const struct yetty_yui_event *event)
 {
@@ -773,7 +784,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
      *   - on completely-empty strip pixels at unusual sizes.
      * Either way → start a window drag. */
     if (in_strip && event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
-        struct yetty_yplatform_window_manager *wm =
+        struct yetty_yclass_object *wm =
             bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
         if (wm) {
             bar->dragging = 1;
@@ -799,10 +810,10 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
      * leak a dangling drag state. */
     if (in_strip && event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK && event->mouse.button == 0 &&
         bar->count > 0) {
-        struct yetty_yplatform_window_manager *wm =
+        struct yetty_yclass_object *wm =
             bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
-        if (wm && wm->ops && wm->ops->toggle_maximize) {
-            wm->ops->toggle_maximize(wm);
+        if (wm) {
+            wm_absorb(yetty_yplatform_window_manager_toggle_maximize(NULL, wm));
         }
         bar->dragging = 0;
         ydebug("tabbar: double-click → toggle maximize");
@@ -814,7 +825,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
      * across the whole screen; everything else gets swallowed for the
      * duration of the drag. */
     if (bar->dragging) {
-        struct yetty_yplatform_window_manager *wm =
+        struct yetty_yclass_object *wm =
             bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
         if (event->type == YETTY_YCORE_MOUSE_MOVE || event->type == YETTY_YCORE_MOUSE_DRAG) {
             int dx = (int)(event->mouse.x - bar->drag_anchor_x);
@@ -827,21 +838,21 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
             if (dx * dx + dy * dy < DRAG_SLOP_PX * DRAG_SLOP_PX) {
                 return YETTY_OK(yetty_ycore_int, 1);
             }
-            if (wm && !bar->drag_move_grab_sent && wm->ops->begin_interactive_move) {
+            if (wm && !bar->drag_move_grab_sent) {
                 /* Threshold crossed — commit to a drag. On Wayland the
                  * compositor grabs the pointer here and we won't see
                  * further MOVE events until the user releases. On X11
                  * it's a no-op and the per-pixel drag_by below keeps
                  * driving glfwSetWindowPos. */
                 bar->drag_move_grab_sent = 1;
-                wm->ops->begin_interactive_move(wm);
+                wm_absorb(yetty_yplatform_window_manager_begin_interactive_move(NULL, wm));
             }
             ydebug("DRAGTRACE: [render-thread] tabbar MOVE during drag: "
                    "mouse=(%.1f,%.1f) anchor=(%.1f,%.1f) dx=%d dy=%d wm=%p",
                    event->mouse.x, event->mouse.y, bar->drag_anchor_x, bar->drag_anchor_y, dx, dy,
                    (void *)wm);
             if (wm && (dx != 0 || dy != 0)) {
-                wm->ops->drag_by(wm, dx, dy);
+                wm_absorb(yetty_yplatform_window_manager_drag_by(NULL, wm, dx, dy));
                 /* Don't update the anchor: glfwSetWindowPos absolutely
                  * repositions, which leaves the cursor exactly at the
                  * anchor in the moved window's frame. Resetting would
@@ -896,7 +907,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         default:
             break;
         }
-        struct yetty_yplatform_window_manager *wm =
+        struct yetty_yclass_object *wm =
             bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
 
         /* No `!bar->resizing` guard. On Wayland the compositor consumes
@@ -940,20 +951,21 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                 if (ax * ax + ay * ay < RESIZE_SLOP_PX * RESIZE_SLOP_PX) {
                     return YETTY_OK(yetty_ycore_int, 1);
                 }
-                if (wm && !bar->resize_grab_sent && wm->ops->begin_interactive_resize &&
-                    bar->resize_edge != 0) {
+                if (wm && !bar->resize_grab_sent && bar->resize_edge != 0) {
                     /* Threshold crossed — on Wayland the compositor grabs
                      * the pointer here and we won't see further MOVE/UP
                      * for this gesture. On X11 it's a no-op and the
                      * per-pixel resize_by below keeps driving
                      * glfwSetWindowSize. */
                     bar->resize_grab_sent = 1;
-                    wm->ops->begin_interactive_resize(wm, bar->resize_edge);
+                    wm_absorb(yetty_yplatform_window_manager_begin_interactive_resize(
+                        NULL, wm, bar->resize_edge));
                 }
                 int step_dx = (int)(mx - bar->resize_last_x) * bar->resize_dir_x;
                 int step_dy = (int)(my - bar->resize_last_y) * bar->resize_dir_y;
                 if (wm && (step_dx != 0 || step_dy != 0)) {
-                    wm->ops->resize_by(wm, step_dx, step_dy);
+                    wm_absorb(yetty_yplatform_window_manager_resize_by(NULL, wm, step_dx, step_dy,
+                                                                       bar->resize_edge));
                 }
                 bar->resize_last_x = mx;
                 bar->resize_last_y = my;
@@ -1062,9 +1074,9 @@ void yetty_yui_tabbar_iconify(struct yetty_yui_tabbar *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->runtime->window_manager;
-    if (wm && wm->ops && wm->ops->iconify) {
-        wm->ops->iconify(wm);
+    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
+    if (wm) {
+        wm_absorb(yetty_yplatform_window_manager_iconify(NULL, wm));
     }
 }
 
@@ -1073,9 +1085,9 @@ void yetty_yui_tabbar_toggle_maximize(struct yetty_yui_tabbar *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->runtime->window_manager;
-    if (wm && wm->ops && wm->ops->toggle_maximize) {
-        wm->ops->toggle_maximize(wm);
+    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
+    if (wm) {
+        wm_absorb(yetty_yplatform_window_manager_toggle_maximize(NULL, wm));
     }
 }
 
@@ -1084,9 +1096,9 @@ void yetty_yui_tabbar_close_window(struct yetty_yui_tabbar *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yplatform_window_manager *wm = bar->yetty_ctx->runtime->window_manager;
-    if (wm && wm->ops && wm->ops->request_close) {
-        wm->ops->request_close(wm);
+    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
+    if (wm) {
+        wm_absorb(yetty_yplatform_window_manager_request_close(NULL, wm));
     }
 }
 

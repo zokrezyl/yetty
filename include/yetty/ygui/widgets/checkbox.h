@@ -18,10 +18,8 @@ struct yetty_ygui_checkbox_data_ptr_result yetty_ygui_checkbox_data(struct yetty
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_ygui_object *obj,
-                                                             const char *label);
-struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_ygui_object *obj,
-                                                               int checked);
+struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_ygui_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_ygui_object *obj, int checked);
 struct yetty_ycore_int_result yetty_ygui_checkbox_get_checked(const struct yetty_ygui_object *obj);
 
 #endif

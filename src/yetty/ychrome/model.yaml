@@ -1,0 +1,255 @@
+methods:
+  - slot: configure
+    domain: ychrome
+    owning_class: chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: window_manager
+        type: "struct yetty_yclass_object *"
+      - name: caption_height
+        type: float
+      - name: edge_size
+        type: float
+      - name: flags
+        type: uint32_t
+    local: true
+  - slot: set_size
+    domain: ychrome
+    owning_class: chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: float
+      - name: height
+        type: float
+    local: true
+  - slot: destroy
+    domain: ychrome
+    owning_class: chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: edge_cursor_at
+    domain: ychrome
+    owning_class: chrome
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    local: true
+  - slot: render
+    domain: ychrome
+    owning_class: chrome
+    return_type: struct yetty_ydraw_drawable_list_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: handle_event
+    domain: ychrome
+    owning_class: chrome
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: event
+        type: "const struct yetty_yui_event *"
+    local: true
+classes:
+  - name: chrome
+    domain: ychrome
+    accessor: yetty_ychrome_chrome_class_get
+    type: regular
+    source_file: src/yetty/ychrome/chrome.c
+    parent: null
+    mixins: []
+    data: struct chrome_data
+    data_fields:
+      - name: window_manager
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: caption_height
+        type: float
+        get: false
+        set: false
+      - name: edge_size
+        type: float
+        get: false
+        set: false
+      - name: width
+        type: float
+        get: false
+        set: false
+      - name: height
+        type: float
+        get: false
+        set: false
+      - name: flags
+        type: uint32_t
+        get: false
+        set: false
+      - name: dragging
+        type: int
+        get: false
+        set: false
+      - name: drag_grab_sent
+        type: int
+        get: false
+        set: false
+      - name: drag_anchor_x
+        type: float
+        get: false
+        set: false
+      - name: drag_anchor_y
+        type: float
+        get: false
+        set: false
+      - name: resizing
+        type: int
+        get: false
+        set: false
+      - name: resize_grab_sent
+        type: int
+        get: false
+        set: false
+      - name: resize_edge
+        type: int
+        get: false
+        set: false
+      - name: resize_dir_x
+        type: int
+        get: false
+        set: false
+      - name: resize_dir_y
+        type: int
+        get: false
+        set: false
+      - name: resize_last_x
+        type: float
+        get: false
+        set: false
+      - name: resize_last_y
+        type: float
+        get: false
+        set: false
+      - name: resize_anchor_x
+        type: float
+        get: false
+        set: false
+      - name: resize_anchor_y
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: configure
+        slot_domain: ychrome
+        impl: chrome_configure
+      - slot: set_size
+        slot_domain: ychrome
+        impl: chrome_set_size
+      - slot: destroy
+        slot_domain: ychrome
+        impl: chrome_destroy
+      - slot: edge_cursor_at
+        slot_domain: ychrome
+        impl: chrome_edge_cursor_at
+      - slot: render
+        slot_domain: ychrome
+        impl: chrome_render
+      - slot: handle_event
+        slot_domain: ychrome
+        impl: chrome_handle_event
+exposed:
+  - source_file: src/yetty/ychrome/chrome.c
+    verbatim: "/* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
+ * Copied verbatim into the generated chrome.h. */
+#define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
+#define YETTY_YCHROME_FLAG_RESIZE 0x2u   /* right/bottom edges resize          */
+#define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
+#define YETTY_YCHROME_FLAG_ALL                                                                     \\
+    (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ydraw_drawable_list_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ydraw_drawable_list *"
+          - name: error
+            type: struct yetty_ycore_error

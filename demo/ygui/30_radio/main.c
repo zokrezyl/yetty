@@ -15,7 +15,9 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
@@ -28,13 +30,15 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             yetty_ygui_add(yetty_ygui_radio_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "radio");
         err_ok(yetty_ygui_radio_set_label(r.value, opts[i]));
-        if (i == 0) err_ok(yetty_ygui_radio_set_selected(r.value, 1));
+        if (i == 0) {
+            err_ok(yetty_ygui_radio_set_selected(r.value, 1));
+        }
         struct yetty_ygui_object *w = r.value;
-    {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
-        l.height = 28;
-        err_ok(yetty_ygui_widget_layout_set(w, &l));
-    }
+        {
+            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            l.height = 28;
+            err_ok(yetty_ygui_widget_layout_set(w, &l));
+        }
     }
     return YETTY_OK_VOID();
 }

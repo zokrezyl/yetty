@@ -14,19 +14,15 @@ struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
 struct yetty_ygui_object;
 struct clickable_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_clickable_data_ptr, struct clickable_data *);
-struct yetty_ygui_clickable_data_ptr_result yetty_ygui_clickable_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_clickable_data_ptr_result yetty_ygui_clickable_data(struct yetty_ygui_object *obj);
 
 struct yetty_ygui_object;
 
 typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
                                                               void *userdata);
-struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_ygui_object *obj,
-                                                                 yetty_ygui_click_cb cb,
-                                                                 void *userdata);
+struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_ygui_object *obj, yetty_ygui_click_cb cb, void *userdata);
 struct yetty_ycore_int_result yetty_ygui_clickable_is_pressed(const struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj,
-                                                              float *x, float *y);
+struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj, float *x, float *y);
 
 #endif

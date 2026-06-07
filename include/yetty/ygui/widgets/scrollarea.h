@@ -14,7 +14,6 @@ struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void);
 struct yetty_ygui_object;
 struct scrollarea_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_scrollarea_data_ptr, struct scrollarea_data *);
-struct yetty_ygui_scrollarea_data_ptr_result yetty_ygui_scrollarea_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_scrollarea_data_ptr_result yetty_ygui_scrollarea_data(struct yetty_ygui_object *obj);
 
 #endif

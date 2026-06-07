@@ -21,7 +21,7 @@
  * doesn't handle, so other producers can share the same pipe. */
 
 #include <yetty/yplatform/clipboard-manager.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/methods.h> /* yetty_yplatform_window_manager_handle_event */
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ycore/types.h>
@@ -47,8 +47,9 @@ struct yetty_yplatform_glfw_clipboard_manager {
     struct yetty_ycore_xthread_event_pipe *output_pipe;
     struct yetty_ycore_xthread_event_pipe *input_pipe;
     /* Optional — non-clipboard events drained off the pipe are handed
-     * off here. NULL means "drop unknown events". */
-    struct yetty_yplatform_window_manager *window_manager;
+     * off here. NULL means "drop unknown events". yplatform:window_manager
+     * yclass object; borrowed. */
+    struct yetty_yclass_object *window_manager;
 };
 
 /* Write `len` bytes of `text` to the X11 PRIMARY selection (Wayland's
@@ -307,9 +308,15 @@ static struct yetty_ycore_void_result glfw_clipboard_drain(
              * output_pipe is FIFO with a single reader, so this delegation
              * is how multiple producers share one pipe — clipboard owns
              * the read side and routes each event by type. */
-            if (m->window_manager && m->window_manager->ops &&
-                m->window_manager->ops->handle_event) {
-                m->window_manager->ops->handle_event(m->window_manager, &ev);
+            if (m->window_manager) {
+                /* Best-effort drain dispatch: absorb (don't propagate) a
+                 * handle_event failure so one bad event can't abort draining
+                 * the rest of the pipe. */
+                struct yetty_ycore_void_result handle_result =
+                    yetty_yplatform_window_manager_handle_event(NULL, m->window_manager, &ev);
+                if (YETTY_IS_ERR(handle_result)) {
+                    yetty_ycore_error_destroy(handle_result.error);
+                }
             }
             break;
         }
@@ -326,8 +333,7 @@ static const struct yetty_platform_clipboard_manager_ops glfw_clipboard_ops = {
 
 struct yetty_yplatform_clipboard_manager_result yetty_platform_clipboard_manager_create(
     struct yetty_ycore_xthread_event_pipe *output_pipe,
-    struct yetty_ycore_xthread_event_pipe *input_pipe,
-    struct yetty_yplatform_window_manager *window_manager)
+    struct yetty_ycore_xthread_event_pipe *input_pipe, struct yetty_yclass_object *window_manager)
 {
     if (!output_pipe || !input_pipe) {
         return YETTY_ERR(yetty_yplatform_clipboard_manager,

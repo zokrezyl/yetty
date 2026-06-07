@@ -156,7 +156,7 @@ all: help
 # Codegen's clang -fsyntax-only step tolerates missing third-party
 # headers — it needs the annotation AST nodes, not a clean compile.
 
-YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame yview
+YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame yview yplatform ychrome
 
 .PHONY: codegen
 codegen: ## Run yclass codegen for all annotated modules (output committed to git)

@@ -44,12 +44,12 @@ platform / yinit
     │
     └── yetty  (yetty_create)
         └── tabs / panes / terminals
-            ├── layers[]: text-layer, ydraw-scrolling-layer
-            │       each layer's render() draws ITSELF into the shared target
-            │       via target->ops->render_layer (no per-layer renderer object,
-            │       no intermediate texture); a binder packs the layer's
-            │       resource set and caches its pipeline by shader hash
-            └── figure container (compositor), rendered last
+            ├── content layer: text grid + ydraw canvas
+            │       content-layer render() draws its sub-renderers into the
+            │       shared target (no per-layer renderer object, no intermediate
+            │       texture); binders pack each resource set and cache pipelines
+            │       by shader hash
+            └── root yfigure container, rendered last by z-order
                     per-figure binders; one shared pipeline per figure kind
 ```
 

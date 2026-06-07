@@ -23,12 +23,16 @@
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static void set_grow(struct yetty_ygui_object *w, float grow)
 {
-    if (!w) return;
+    if (!w) {
+        return;
+    }
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
     l.flex_grow = grow;
     err_ok(yetty_ygui_widget_layout_set(w, &l));
@@ -53,7 +57,9 @@ static struct yetty_ygui_object *add_section(struct yetty_ygui_object *area, con
  * section height (summed below) reserves exactly the right space. */
 static struct yetty_ygui_object *add_diagram(struct yetty_ygui_object *sec, const char *mermaid)
 {
-    if (!sec) return NULL;
+    if (!sec) {
+        return NULL;
+    }
     struct yetty_ygui_object_ptr_result r =
         yetty_ygui_add(yetty_ygui_ydiagram_class_get().value, sec);
     if (YETTY_IS_ERR(r)) {
@@ -69,7 +75,9 @@ static struct yetty_ygui_object *add_diagram(struct yetty_ygui_object *sec, cons
  * after every child is added. */
 static void finalize_section(struct yetty_ygui_object *sec)
 {
-    if (!sec) return;
+    if (!sec) {
+        return;
+    }
     const struct yetty_ygui_layout *sl = yetty_ygui_widget_layout_get(sec);
     float total = sl->padding_top + sl->padding_bottom;
     int n = 0;
@@ -79,7 +87,9 @@ static void finalize_section(struct yetty_ygui_object *sec)
         total += cl->height > 0.0f ? cl->height : 0.0f;
         n++;
     }
-    if (n > 1) total += sl->gap * (float)(n - 1);
+    if (n > 1) {
+        total += sl->gap * (float)(n - 1);
+    }
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(sec);
     l.height = total;
     err_ok(yetty_ygui_widget_layout_set(sec, &l));
@@ -87,64 +97,59 @@ static void finalize_section(struct yetty_ygui_object *sec)
 
 /* ---- Diagram sources (all use only parser-supported Mermaid) ---- */
 
-static const char *k_flowchart =
-    "graph TD\n"
-    "  A[Start] --> B{Decision}\n"
-    "  B -->|Yes| C(Process)\n"
-    "  B -->|No|  D((Done))\n"
-    "  C --> D\n";
+static const char *k_flowchart = "graph TD\n"
+                                 "  A[Start] --> B{Decision}\n"
+                                 "  B -->|Yes| C(Process)\n"
+                                 "  B -->|No|  D((Done))\n"
+                                 "  C --> D\n";
 
-static const char *k_pipeline =
-    "graph LR\n"
-    "  A[node a] --> B[node b]\n"
-    "  B --> C[node c]\n"
-    "  C --> D[node d]\n"
-    "  A --> D\n";
+static const char *k_pipeline = "graph LR\n"
+                                "  A[node a] --> B[node b]\n"
+                                "  B --> C[node c]\n"
+                                "  C --> D[node d]\n"
+                                "  A --> D\n";
 
-static const char *k_shapes =
-    "graph TD\n"
-    "  R[rectangle]\n"
-    "  RR(rounded)\n"
-    "  C((circle))\n"
-    "  D{diamond}\n"
-    "  H{{hexagon}}\n"
-    "  CY[(cylinder)]\n"
-    "  S([stadium])\n"
-    "  PR[/parallelogram/]\n"
-    "  R  --> RR\n"
-    "  RR --> C\n"
-    "  C  --> D\n"
-    "  D  --> H\n"
-    "  H  --> CY\n"
-    "  CY --> S\n"
-    "  S  --> PR\n";
+static const char *k_shapes = "graph TD\n"
+                              "  R[rectangle]\n"
+                              "  RR(rounded)\n"
+                              "  C((circle))\n"
+                              "  D{diamond}\n"
+                              "  H{{hexagon}}\n"
+                              "  CY[(cylinder)]\n"
+                              "  S([stadium])\n"
+                              "  PR[/parallelogram/]\n"
+                              "  R  --> RR\n"
+                              "  RR --> C\n"
+                              "  C  --> D\n"
+                              "  D  --> H\n"
+                              "  H  --> CY\n"
+                              "  CY --> S\n"
+                              "  S  --> PR\n";
 
-static const char *k_subgraphs =
-    "graph TD\n"
-    "  subgraph frontend [Frontend]\n"
-    "    UI[UI layer]\n"
-    "    API[API client]\n"
-    "    UI --> API\n"
-    "  end\n"
-    "  subgraph backend [Backend services]\n"
-    "    Gateway[Gateway]\n"
-    "    Auth[Auth]\n"
-    "    Store[(Store)]\n"
-    "    Gateway --> Auth\n"
-    "    Auth    --> Store\n"
-    "  end\n"
-    "  API --> Gateway\n";
+static const char *k_subgraphs = "graph TD\n"
+                                 "  subgraph frontend [Frontend]\n"
+                                 "    UI[UI layer]\n"
+                                 "    API[API client]\n"
+                                 "    UI --> API\n"
+                                 "  end\n"
+                                 "  subgraph backend [Backend services]\n"
+                                 "    Gateway[Gateway]\n"
+                                 "    Auth[Auth]\n"
+                                 "    Store[(Store)]\n"
+                                 "    Gateway --> Auth\n"
+                                 "    Auth    --> Store\n"
+                                 "  end\n"
+                                 "  API --> Gateway\n";
 
-static const char *k_state_machine =
-    "flowchart TD\n"
-    "  Start((start)) --> Idle[Idle]\n"
-    "  Idle -->|connect|     Connecting{{Connecting}}\n"
-    "  Connecting -->|ok|    Ready(Ready)\n"
-    "  Connecting -->|fail|  Failed[/Failed/]\n"
-    "  Ready  -->|disconnect| Idle\n"
-    "  Ready  -->|crash|      Failed\n"
-    "  Failed -->|retry|      Connecting\n"
-    "  Failed -->|abort|      Done((done))\n";
+static const char *k_state_machine = "flowchart TD\n"
+                                     "  Start((start)) --> Idle[Idle]\n"
+                                     "  Idle -->|connect|     Connecting{{Connecting}}\n"
+                                     "  Connecting -->|ok|    Ready(Ready)\n"
+                                     "  Connecting -->|fail|  Failed[/Failed/]\n"
+                                     "  Ready  -->|disconnect| Idle\n"
+                                     "  Ready  -->|crash|      Failed\n"
+                                     "  Failed -->|retry|      Connecting\n"
+                                     "  Failed -->|abort|      Done((done))\n";
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_ygui_object *root)

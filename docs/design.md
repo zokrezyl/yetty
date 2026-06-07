@@ -79,17 +79,18 @@ See [Result Types](result.md) for the macro definitions and usage patterns.
 
 ## Layered Rendering
 
-The terminal screen is a stack of render layers (text grid with selection and
-cursor, plus a ydraw overlay) topped by a `yfigure` container that composites the
-rich-content figures. Each layer:
+The terminal screen used to be a fixed stack of render layers. The current
+model is one composite content layer (text grid, row-anchored ydraw content, and
+the text-owned shader-glyph figure) topped by a root `yfigure` container that
+composites rich-content figures by z-order. Each renderable component:
 
 - Owns a `struct yetty_yrender_gpu_resource_set` describing its GPU needs
 - Has a `dirty` flag — no re-render unless content changed
-- Implements the layer ops interface (`get_gpu_resource_set`, `write`, `resize`, `destroy`)
+- Implements the relevant render or figure ops (`get_gpu_resource_set`, `resize`, `render`, `destroy`, and figure dirty/z-order state where applicable)
 
-The terminal only renders when at least one layer is dirty. After rendering, dirty flags are cleared.
+The terminal only renders when the content layer or root figure tree is dirty. After rendering, dirty flags are cleared.
 
-See [Layered Rendering](layered-rendering.md) for the full layer chain, compositor design, and data source separation.
+See [Layered Rendering](layered-rendering.md) for the virtual layer order, direct-to-target rendering, compositor design, scrolling, and alt-screen state.
 
 ## GPU Resource Set Tree
 
