@@ -46,6 +46,7 @@
 #include <yetty/yevent/event.h>      /* event types + resize-edge / cursor enums */
 #include <yetty/yplatform/methods.h> /* window_manager gesture slots */
 #include <yetty/ycore/types.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stdint.h>
 
@@ -250,11 +251,17 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     struct chrome_data *chrome = data_r.value;
     struct yetty_yclass_object *wm = chrome->window_manager;
     if (!wm) {
+        ydebug("CHROMETRACE: handle_event type=%d but window_manager is NULL — ignoring",
+               (int)event->type);
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
     float x = 0.0f, y = 0.0f;
     int have_xy = chrome_event_xy(event, &x, &y);
+    ydebug("CHROMETRACE: type=%d xy=(%.1f,%.1f) have_xy=%d caption_h=%.1f wh=(%.1f,%.1f) "
+           "dragging=%d resizing=%d flags=0x%x",
+           (int)event->type, x, y, have_xy, chrome->caption_height, chrome->width, chrome->height,
+           chrome->dragging, chrome->resizing, chrome->flags);
 
     /* --- continue an in-progress resize -------------------------------- */
     if (chrome->resizing) {

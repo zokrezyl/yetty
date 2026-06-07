@@ -55,7 +55,10 @@
 #include <yetty/ychrome/chrome.h>
 #include <yetty/ychrome/methods.h>
 #include <yetty/ychrome/rpc.h>
+#include <yetty/ygui/mixins/clickable.h>
+#include <yetty/ygui/widgets/button.h>
 #include <yetty/ygui/widgets/label.h>
+#include <yetty/yplatform/methods.h> /* window_manager iconify/toggle_maximize/request_close */
 
 /* Caption-strip height (px) for chrome-enabled demos. The drawn strip and the
  * engine's drag/double-click zone share this value. */
@@ -202,6 +205,83 @@ static void runner_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, u
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
     yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, rr);
     yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
+}
+
+/* Window-control button click handlers. Each drives the OS window_manager
+ * directly (the same slots chrome uses) — these are the app's own controls, so
+ * they're wired here rather than in the generic chrome engine. userdata is the
+ * demo_runner. */
+static struct yetty_ycore_void_result runner_winbtn_minimize(struct yetty_yclass_ctx *ctx,
+                                                             struct yetty_yclass_object *obj,
+                                                             void *userdata)
+{
+    (void)ctx;
+    (void)obj;
+    struct demo_runner *r = userdata;
+    if (r->yframework && r->yframework->window_manager) {
+        struct yetty_ycore_void_result wr =
+            yetty_yplatform_window_manager_iconify(NULL, r->yframework->window_manager);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_error_destroy(wr.error);
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result runner_winbtn_maximize(struct yetty_yclass_ctx *ctx,
+                                                             struct yetty_yclass_object *obj,
+                                                             void *userdata)
+{
+    (void)ctx;
+    (void)obj;
+    struct demo_runner *r = userdata;
+    if (r->yframework && r->yframework->window_manager) {
+        struct yetty_ycore_void_result wr =
+            yetty_yplatform_window_manager_toggle_maximize(NULL, r->yframework->window_manager);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_error_destroy(wr.error);
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result runner_winbtn_close(struct yetty_yclass_ctx *ctx,
+                                                          struct yetty_yclass_object *obj,
+                                                          void *userdata)
+{
+    (void)ctx;
+    (void)obj;
+    struct demo_runner *r = userdata;
+    if (r->yframework && r->yframework->window_manager) {
+        struct yetty_ycore_void_result wr =
+            yetty_yplatform_window_manager_request_close(NULL, r->yframework->window_manager);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_error_destroy(wr.error);
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Add one fixed-width window-control button to the caption strip. */
+static struct yetty_ycore_void_result runner_add_winbtn(struct yetty_ygui_object *caption,
+                                                        struct demo_runner *r, const char *label,
+                                                        yetty_ygui_click_cb on_click)
+{
+    struct yetty_ygui_object_ptr_result br =
+        yetty_ygui_add(yetty_ygui_button_class_get().value, caption);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "demo_runner: winbtn add");
+    struct yetty_ycore_void_result lt = yetty_ygui_button_set_label(br.value, label);
+    if (YETTY_IS_ERR(lt)) {
+        yetty_ycore_error_destroy(lt.error);
+    }
+    struct yetty_ygui_layout bl = *yetty_ygui_widget_layout_get(br.value);
+    bl.flex_grow = 0.0f;
+    bl.width = bl.min_width = bl.max_width = 44.0f;
+    struct yetty_ycore_void_result blr = yetty_ygui_widget_layout_set(br.value, &bl);
+    if (YETTY_IS_ERR(blr)) {
+        yetty_ycore_error_destroy(blr.error);
+    }
+    return yetty_ygui_clickable_on_click_set(br.value, on_click, r);
 }
 
 /* Forward one event to the window-chrome engine. Returns 1 if chrome claimed
@@ -568,11 +648,12 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(r->engine, r->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "demo_runner: set_root");
 
-        /* Chrome caption strip — a fixed-height band at the top of the root.
-         * It's the visible grab area; the chrome engine treats the top
-         * DEMO_CHROME_CAPTION_H px as drag/double-click territory. The strip is
-         * non-interactive (a panel + a label), so a press on it doesn't capture
-         * in the widget tree and falls through to chrome (see event_handler). */
+        /* Chrome caption strip — a fixed-height band at the top of the root:
+         * title label (left) + minimize/maximize/close buttons (right). The
+         * chrome engine treats the top DEMO_CHROME_CAPTION_H px as
+         * drag/double-click territory. The label and empty fill don't capture
+         * presses, so they fall through to chrome (drag); the buttons are
+         * clickable and consume their own presses (see event_handler). */
         if (r->enable_chrome) {
             struct yetty_ygui_object_ptr_result capr =
                 yetty_ygui_add(yetty_ygui_panel_class_get().value, r->root);
@@ -601,6 +682,26 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
             if (YETTY_IS_ERR(lblt)) {
                 yetty_ycore_error_destroy(lblt.error);
             }
+            /* Title flex-grows so the window-control buttons pin to the right. */
+            struct yetty_ygui_layout lbll = *yetty_ygui_widget_layout_get(lblr.value);
+            lbll.flex_grow = 1.0f;
+            struct yetty_ycore_void_result lbllr = yetty_ygui_widget_layout_set(lblr.value, &lbll);
+            if (YETTY_IS_ERR(lbllr)) {
+                yetty_ycore_error_destroy(lbllr.error);
+            }
+
+            /* Minimize / maximize / close — wired straight to the OS
+             * window_manager. As clickable widgets they consume their own
+             * presses, so chrome won't mistake a button click for a drag. */
+            YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                                runner_add_winbtn(caption, r, "—", runner_winbtn_minimize),
+                                "demo_runner: minimize button");
+            YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                                runner_add_winbtn(caption, r, "▢", runner_winbtn_maximize),
+                                "demo_runner: maximize button");
+            YETTY_RETURN_IF_ERR(yetty_ycore_void,
+                                runner_add_winbtn(caption, r, "✕", runner_winbtn_close),
+                                "demo_runner: close button");
         }
 
         struct yetty_ygui_object_ptr_result br =
