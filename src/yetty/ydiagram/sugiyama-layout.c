@@ -734,7 +734,7 @@ static void place_nodes(struct yetty_ydiagram_graph *g,
  * Phase 6: route edges (straight, attach at top/bottom).
  *===========================================================================*/
 
-static void route_edges(struct yetty_ydiagram_graph *g)
+static struct yetty_ycore_void_result route_edges(struct yetty_ydiagram_graph *g)
 {
     for (size_t i = 0; i < g->edge_count; i++) {
         struct yetty_ydiagram_edge *e = &g->edges[i];
@@ -749,11 +749,16 @@ static void route_edges(struct yetty_ydiagram_graph *g)
         float sy = s->y + s->height * 0.5f;
         float tx = t->x;
         float ty = t->y - t->height * 0.5f;
-        (void)yetty_ydiagram_edge_add_control_point(e, sx, sy);
-        (void)yetty_ydiagram_edge_add_control_point(e, tx, ty);
+        struct yetty_ycore_void_result source_point_res =
+            yetty_ydiagram_edge_add_control_point(e, sx, sy);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, source_point_res, "route_edges: source point");
+        struct yetty_ycore_void_result target_point_res =
+            yetty_ydiagram_edge_add_control_point(e, tx, ty);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, target_point_res, "route_edges: target point");
         e->label_position.x = (sx + tx) * 0.5f;
         e->label_position.y = (sy + ty) * 0.5f;
     }
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -951,7 +956,8 @@ struct yetty_ycore_void_result yetty_ydiagram_layout(
     place_nodes(g, &p, &t);
     layer_table_free(&t);
 
-    route_edges(g);
+    struct yetty_ycore_void_result route_res = route_edges(g);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, route_res, "layout: route_edges");
     compute_bounds(g);
     apply_direction(g);
     translate_to_non_negative(g);

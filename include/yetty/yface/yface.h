@@ -110,7 +110,10 @@ struct yetty_yface_bin_meta {
  * Lifecycle
  *---------------------------------------------------------------------------*/
 struct yetty_yface_ptr_result yetty_yface_create(void);
-void yetty_yface_destroy(struct yetty_yface *yface);
+/* Best-effort teardown — always frees the yface; the Result surfaces the
+ * first sub-destroy failure (e.g. the wire statemachine) for callers that
+ * want to observe it. */
+struct yetty_ycore_void_result yetty_yface_destroy(struct yetty_yface *yface);
 
 /*-----------------------------------------------------------------------------
  * Buffer access — in_buf / out_buf are owned by yface; caller may read

@@ -43,6 +43,7 @@ struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget_data {
  * unregistered class), so the accessor's Result is always OK here and
  * .value is safe. Registration can only fail on the first call, which
  * happens at widget-creation time where the Result is checked. */
+YETTY_EXTERNAL_CALLBACK
 static const struct yetty_yclass *widget_class(void)
 {
     return yetty_ygui_widget_class_get().value;
@@ -335,8 +336,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_obje
     return yetty_ygui_object_set_dirty(obj);
 }
 
-struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
-                                                              float y)
+struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj,
+                                                              float x, float y)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_position: NULL obj");
@@ -375,7 +376,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_ygui_
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_ygui_object *obj,
-                                                             int floating)
+                                                              int floating)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_floating: NULL obj");
@@ -514,8 +515,7 @@ static void css_apply_decl(struct yetty_ygui_layout *l, const char *prop, size_t
         }
     } else if (css_token_is(prop, plen, "direction") ||
                css_token_is(prop, plen, "flex-direction")) {
-        l->direction =
-            strcmp(vbuf, "column") == 0 ? YETTY_YGUI_FLEX_COLUMN : YETTY_YGUI_FLEX_ROW;
+        l->direction = strcmp(vbuf, "column") == 0 ? YETTY_YGUI_FLEX_COLUMN : YETTY_YGUI_FLEX_ROW;
     }
     /* align-self: per-child cross-align isn't modelled in the new flex
      * pass (the parent's align governs); accepted and ignored so yui's
@@ -664,8 +664,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_ygui_obje
 
 /* Place the widget at an absolute (pos_x, pos_y) inside its parent's
  * content box (sets layout.absolute). */
-struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj, float x,
-                                                              float y);
+struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_ygui_object *obj,
+                                                              float x, float y);
 
 /* Promote this widget to its own receiver-side child figure of `kind`
  * (e.g. YETTY_YFIGURE_KIND_YGRID) stacked at `z`. The whole subtree
@@ -687,7 +687,7 @@ int32_t yetty_ygui_widget_figure_z(const struct yetty_ygui_object *obj);
  * it paints last (front) and wins the hit-test — click-to-front, no
  * figures involved. */
 struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_ygui_object *obj,
-                                                             int floating);
+                                                              int floating);
 int yetty_ygui_widget_is_floating(const struct yetty_ygui_object *obj);
 
 /* Apply a small CSS-like declaration string to the widget's layout.

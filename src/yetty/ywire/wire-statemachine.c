@@ -65,11 +65,11 @@ enum scan_state {
  * same-process loopback emits (a GUI app under tmux that wraps and then
  * feeds its own SM) and direct pipes. Bare input passes through untouched. */
 enum unwrap_state {
-    UNWRAP_NORMAL = 0,  /* passthrough; watching for ESC */
-    UNWRAP_AFTER_ESC,   /* saw ESC; could begin ESC P tmux; */
-    UNWRAP_MATCH_TMUX,  /* saw ESC P; matching the literal "tmux;" */
-    UNWRAP_INNER,       /* inside the wrapper payload; un-doubling ESCs */
-    UNWRAP_INNER_ESC,   /* saw ESC inside payload; ESC→one ESC, \ →end */
+    UNWRAP_NORMAL = 0, /* passthrough; watching for ESC */
+    UNWRAP_AFTER_ESC,  /* saw ESC; could begin ESC P tmux; */
+    UNWRAP_MATCH_TMUX, /* saw ESC P; matching the literal "tmux;" */
+    UNWRAP_INNER,      /* inside the wrapper payload; un-doubling ESCs */
+    UNWRAP_INNER_ESC,  /* saw ESC inside payload; ESC→one ESC, \ →end */
 };
 
 /* Envelope string terminators (ECMA-48 / xterm):
@@ -115,6 +115,8 @@ struct handler_coro {
     struct yetty_yplatform_coro *coro;
     struct yetty_ycore_void_result result;
 };
+
+YETTY_YRESULT_DECLARE(yetty_ywire_handler_coro_ptr, struct handler_coro *);
 
 /* Buffered-handler wrapper. Owned by the SM; freed at destroy. Used by
  * the register_buffered / set_envelope_default_buffered / set_default_buffered
@@ -797,6 +799,7 @@ static struct yetty_ycore_void_result raw_pump(struct yetty_ywire_wire_statemach
  * tuples gets ONE persistent coro.
  *=========================================================================*/
 
+YETTY_EXTERNAL_CALLBACK
 static void sm_coro_entry(void *arg);
 
 YETTY_EXTERNAL_CALLBACK
@@ -822,16 +825,16 @@ static struct handler_coro *find_handler_coro(struct yetty_ywire_wire_statemachi
     return NULL;
 }
 
-static struct handler_coro *get_or_spawn_handler_coro(struct yetty_ywire_wire_statemachine *sm,
-                                                      yetty_ywire_process_input_fn fn,
-                                                      void *userdata)
+static struct yetty_ywire_handler_coro_ptr_result get_or_spawn_handler_coro(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_process_input_fn fn, void *userdata)
 {
     struct handler_coro *existing = find_handler_coro(sm, userdata);
     if (existing) {
-        return existing;
+        return YETTY_OK(yetty_ywire_handler_coro_ptr, existing);
     }
     if (!fn || !userdata) {
-        return NULL;
+        return YETTY_ERR(yetty_ywire_handler_coro_ptr,
+                         "wire_sm: get_or_spawn: fn and userdata must be non-NULL");
     }
 
     if (sm->handler_coro_count == sm->handler_coro_cap) {
@@ -839,14 +842,15 @@ static struct handler_coro *get_or_spawn_handler_coro(struct yetty_ywire_wire_st
         struct handler_coro **grown =
             realloc(sm->handler_coros, nc * sizeof(struct handler_coro *));
         if (!grown) {
-            return NULL;
+            return YETTY_ERR(yetty_ywire_handler_coro_ptr,
+                             "wire_sm: get_or_spawn: handler_coros realloc failed");
         }
         sm->handler_coros = grown;
         sm->handler_coro_cap = nc;
     }
     struct handler_coro *hc = calloc(1, sizeof(struct handler_coro));
     if (!hc) {
-        return NULL;
+        return YETTY_ERR(yetty_ywire_handler_coro_ptr, "wire_sm: get_or_spawn: calloc failed");
     }
     hc->fn = fn;
     hc->userdata = userdata;
@@ -855,19 +859,19 @@ static struct handler_coro *get_or_spawn_handler_coro(struct yetty_ywire_wire_st
     struct yplatform_coro_ptr_result spawn_res =
         yetty_yplatform_coro_spawn(handler_coro_entry, hc, 1024 * 1024, "wire-handler");
     if (YETTY_IS_ERR(spawn_res)) {
-        yetty_ycore_error_destroy(spawn_res.error);
         free(hc);
-        return NULL;
+        return YETTY_ERR(yetty_ywire_handler_coro_ptr, "wire_sm: get_or_spawn: coro spawn failed",
+                         spawn_res);
     }
     hc->coro = spawn_res.value;
     sm->handler_coros[sm->handler_coro_count++] = hc;
-    return hc;
+    return YETTY_OK(yetty_ywire_handler_coro_ptr, hc);
 }
 
-static int respawn_handler_coro(struct handler_coro *hc)
+static struct yetty_ycore_void_result respawn_handler_coro(struct handler_coro *hc)
 {
     if (!hc) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: respawn: hc is NULL");
     }
     if (YETTY_IS_ERR(hc->result)) {
         yetty_ycore_error_destroy(hc->result.error);
@@ -879,12 +883,9 @@ static int respawn_handler_coro(struct handler_coro *hc)
     }
     struct yplatform_coro_ptr_result sp =
         yetty_yplatform_coro_spawn(handler_coro_entry, hc, 1024 * 1024, "wire-handler");
-    if (YETTY_IS_ERR(sp)) {
-        yetty_ycore_error_destroy(sp.error);
-        return 0;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sp, "wire_sm: respawn: coro spawn failed");
     hc->coro = sp.value;
-    return 1;
+    return YETTY_OK_VOID();
 }
 
 static void envelope_reset(struct yetty_ywire_wire_statemachine *sm)
@@ -1018,9 +1019,9 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
             sm->handlers[i].has_args = has_args ? 1 : 0;
             sm->handlers[i].fn = fn;
             sm->handlers[i].userdata = userdata;
-            if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
-                return YETTY_ERR(yetty_ycore_void, "wire_sm: handler coro spawn failed");
-            }
+            struct yetty_ywire_handler_coro_ptr_result coro_res =
+                get_or_spawn_handler_coro(sm, fn, userdata);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, coro_res, "wire_sm: handler coro spawn failed");
             return YETTY_OK_VOID();
         }
     }
@@ -1035,9 +1036,10 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
     }
     sm->handlers[sm->handler_count++] = (struct wire_handler){
         .kind = kind, .code = code, .has_args = has_args ? 1 : 0, .fn = fn, .userdata = userdata};
-    if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: handler coro spawn failed in register");
-    }
+    struct yetty_ywire_handler_coro_ptr_result coro_res =
+        get_or_spawn_handler_coro(sm, fn, userdata);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, coro_res,
+                        "wire_sm: handler coro spawn failed in register");
     return YETTY_OK_VOID();
 }
 
@@ -1230,9 +1232,9 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default(
     }
     sm->default_fn = fn;
     sm->default_userdata = userdata;
-    if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: default coro spawn failed");
-    }
+    struct yetty_ywire_handler_coro_ptr_result coro_res =
+        get_or_spawn_handler_coro(sm, fn, userdata);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, coro_res, "wire_sm: default coro spawn failed");
     return YETTY_OK_VOID();
 }
 
@@ -1300,9 +1302,11 @@ static void sm_coro_entry(void *arg)
                             ywarn("wire: default coro had exited (%s); respawning",
                                   hc->result.error.msg);
                         }
-                        if (!respawn_handler_coro(hc)) {
-                            sm->sm_result = YETTY_ERR(yetty_ycore_void,
-                                                      "wire: respawn of dead default coro failed");
+                        struct yetty_ycore_void_result respawn_res = respawn_handler_coro(hc);
+                        if (YETTY_IS_ERR(respawn_res)) {
+                            sm->sm_result =
+                                YETTY_ERR(yetty_ycore_void,
+                                          "wire: respawn of dead default coro failed", respawn_res);
                             return;
                         }
                     }
@@ -1512,9 +1516,11 @@ static void sm_coro_entry(void *arg)
                               "respawning and dropping current envelope body",
                               (unsigned)sm->current_kind, sm->current_code, hc->result.error.msg);
                     }
-                    if (!respawn_handler_coro(hc)) {
-                        sm->sm_result = YETTY_ERR(yetty_ycore_void,
-                                                  "wire: respawn of dead handler coro failed");
+                    struct yetty_ycore_void_result respawn_res = respawn_handler_coro(hc);
+                    if (YETTY_IS_ERR(respawn_res)) {
+                        sm->sm_result =
+                            YETTY_ERR(yetty_ycore_void, "wire: respawn of dead handler coro failed",
+                                      respawn_res);
                         return;
                     }
                     sm->current_handler = NULL;
@@ -2246,9 +2252,9 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_envelope_defaul
     sm->envelope_default_fn = fn;
     sm->envelope_default_userdata = userdata;
     sm->envelope_default_has_args = has_args ? 1 : 0;
-    if (!get_or_spawn_handler_coro(sm, fn, userdata)) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: envelope_default coro spawn failed");
-    }
+    struct yetty_ywire_handler_coro_ptr_result coro_res =
+        get_or_spawn_handler_coro(sm, fn, userdata);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, coro_res, "wire_sm: envelope_default coro spawn failed");
     return YETTY_OK_VOID();
 }
 

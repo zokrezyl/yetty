@@ -52,11 +52,16 @@ struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_ygui_object *o
     if (!obj || !self_class || !method_id) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_super_void: NULL arg");
     }
-    yetty_yclass_method_slot slot = yetty_ygui_method_slot_get(method_id);
+    struct yetty_yclass_method_slot_result slot_result = yetty_ygui_method_slot_get(method_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_result, "yetty_ygui_super_void: slot lookup");
+    yetty_yclass_method_slot slot = slot_result.value;
     if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_super_void: slot lookup failed");
     }
-    yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(self_class, slot);
+    struct yetty_yclass_impl_t_result impl_result =
+        yetty_ygui_dispatch_lookup_super(self_class, slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, impl_result, "yetty_ygui_super_void: dispatch lookup");
+    yetty_yclass_impl_t impl = impl_result.value;
     if (!impl) {
         return YETTY_OK_VOID();
     }
@@ -72,11 +77,16 @@ struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_ygui_object *obj
     if (!obj || !self_class || !method_id) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_super_int: NULL arg");
     }
-    yetty_yclass_method_slot slot = yetty_ygui_method_slot_get(method_id);
+    struct yetty_yclass_method_slot_result slot_result = yetty_ygui_method_slot_get(method_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, slot_result, "yetty_ygui_super_int: slot lookup");
+    yetty_yclass_method_slot slot = slot_result.value;
     if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_super_int: slot lookup failed");
     }
-    yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(self_class, slot);
+    struct yetty_yclass_impl_t_result impl_result =
+        yetty_ygui_dispatch_lookup_super(self_class, slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_super_int: dispatch lookup");
+    yetty_yclass_impl_t impl = impl_result.value;
     if (!impl) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -105,52 +115,48 @@ struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_ygui_object *obj
 /* If `cls` matches `target`, write `offset` to `*out_offset` and
  * return 1. Otherwise advance `offset` by `cls`'s data_size and
  * return 0. NULL `cls` is silently skipped. */
-static int try_match(const struct yetty_yclass *cls, const struct yetty_yclass *target,
-                     size_t *offset, size_t *out_offset)
+static struct yetty_ycore_int_result try_match(const struct yetty_yclass *cls,
+                                               const struct yetty_yclass *target, size_t *offset,
+                                               size_t *out_offset)
 {
     if (!cls) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     if (cls == target) {
         *out_offset = *offset;
-        return 1;
+        return YETTY_OK(yetty_ycore_int, 1);
     }
-    struct yetty_ycore_size_result ds = yetty_yclass_data_size(cls);
-    if (YETTY_IS_ERR(ds)) {
-        yetty_ycore_error_destroy(ds.error);
-        return 0;
-    }
-    *offset += ds.value;
-    return 0;
+    struct yetty_ycore_size_result data_size = yetty_yclass_data_size(cls);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_size, "try_match: data_size");
+    *offset += data_size.value;
+    return YETTY_OK(yetty_ycore_int, 0);
 }
 
 /* Walk `cls`'s mixins, checking each against `target`. Returns 1 + sets
  * `*out_offset` when found. */
-static int walk_mixins(const struct yetty_yclass *cls, const struct yetty_yclass *target,
-                       size_t *offset, size_t *out_offset)
+static struct yetty_ycore_int_result walk_mixins(const struct yetty_yclass *cls,
+                                                 const struct yetty_yclass *target, size_t *offset,
+                                                 size_t *out_offset)
 {
-    struct yetty_ycore_size_result mc = yetty_yclass_mixin_count(cls);
-    if (YETTY_IS_ERR(mc)) {
-        yetty_ycore_error_destroy(mc.error);
-        return 0;
-    }
-    for (size_t i = 0; i < mc.value; ++i) {
-        struct yetty_yclass_ptr_result mxr = yetty_yclass_mixin_at(cls, i);
-        if (YETTY_IS_ERR(mxr)) {
-            yetty_ycore_error_destroy(mxr.error);
-            continue;
-        }
-        if (try_match(mxr.value, target, offset, out_offset)) {
-            return 1;
+    struct yetty_ycore_size_result mixin_count = yetty_yclass_mixin_count(cls);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, mixin_count, "walk_mixins: mixin_count");
+    for (size_t i = 0; i < mixin_count.value; ++i) {
+        struct yetty_yclass_ptr_result mixin = yetty_yclass_mixin_at(cls, i);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, mixin, "walk_mixins: mixin_at");
+        struct yetty_ycore_int_result matched = try_match(mixin.value, target, offset, out_offset);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, matched, "walk_mixins: try_match");
+        if (matched.value) {
+            return YETTY_OK(yetty_ycore_int, 1);
         }
     }
-    return 0;
+    return YETTY_OK(yetty_ycore_int, 0);
 }
 
 /* Compute the byte offset of `target`'s data slice within an instance
  * of `leaf`'s class. Returns SIZE_MAX if `target` isn't in the chain
  * (programmer error). */
-static size_t data_offset(const struct yetty_yclass *leaf, const struct yetty_yclass *target)
+static struct yetty_ycore_size_result data_offset(const struct yetty_yclass *leaf,
+                                                  const struct yetty_yclass *target)
 {
     size_t offset = sizeof(struct yetty_ygui_object);
     size_t out_offset = 0;
@@ -162,42 +168,50 @@ static size_t data_offset(const struct yetty_yclass *leaf, const struct yetty_yc
     {
         const struct yetty_yclass *cur = leaf;
         for (;;) {
-            struct yetty_yclass_ptr_result pr = yetty_yclass_parent(cur);
-            if (YETTY_IS_ERR(pr)) {
-                yetty_ycore_error_destroy(pr.error);
-                break;
-            }
-            if (!pr.value) {
+            struct yetty_yclass_ptr_result parent = yetty_yclass_parent(cur);
+            YETTY_RETURN_IF_ERR(yetty_ycore_size, parent, "data_offset: parent walk");
+            if (!parent.value) {
                 break;
             }
             if (chain_len >= sizeof(chain) / sizeof(chain[0])) {
-                return SIZE_MAX;
+                return YETTY_OK(yetty_ycore_size, SIZE_MAX);
             }
-            chain[chain_len++] = pr.value;
-            cur = pr.value;
+            chain[chain_len++] = parent.value;
+            cur = parent.value;
         }
     }
 
     /* Iterate root → direct parent: each level's data first, then its
      * mixins. */
     for (size_t i = chain_len; i > 0; --i) {
-        const struct yetty_yclass *p = chain[i - 1];
-        if (try_match(p, target, &offset, &out_offset)) {
-            return out_offset;
+        const struct yetty_yclass *parent_class = chain[i - 1];
+        struct yetty_ycore_int_result matched =
+            try_match(parent_class, target, &offset, &out_offset);
+        YETTY_RETURN_IF_ERR(yetty_ycore_size, matched, "data_offset: parent try_match");
+        if (matched.value) {
+            return YETTY_OK(yetty_ycore_size, out_offset);
         }
-        if (walk_mixins(p, target, &offset, &out_offset)) {
-            return out_offset;
+        struct yetty_ycore_int_result mixin_matched =
+            walk_mixins(parent_class, target, &offset, &out_offset);
+        YETTY_RETURN_IF_ERR(yetty_ycore_size, mixin_matched, "data_offset: parent walk_mixins");
+        if (mixin_matched.value) {
+            return YETTY_OK(yetty_ycore_size, out_offset);
         }
     }
 
     /* Leaf's own data, then leaf's mixins. */
-    if (try_match(leaf, target, &offset, &out_offset)) {
-        return out_offset;
+    struct yetty_ycore_int_result leaf_matched = try_match(leaf, target, &offset, &out_offset);
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, leaf_matched, "data_offset: leaf try_match");
+    if (leaf_matched.value) {
+        return YETTY_OK(yetty_ycore_size, out_offset);
     }
-    if (walk_mixins(leaf, target, &offset, &out_offset)) {
-        return out_offset;
+    struct yetty_ycore_int_result leaf_mixin_matched =
+        walk_mixins(leaf, target, &offset, &out_offset);
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, leaf_mixin_matched, "data_offset: leaf walk_mixins");
+    if (leaf_mixin_matched.value) {
+        return YETTY_OK(yetty_ycore_size, out_offset);
     }
-    return SIZE_MAX;
+    return YETTY_OK(yetty_ycore_size, SIZE_MAX);
 }
 
 struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_ygui_object *obj,
@@ -212,23 +226,38 @@ struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_ygui_o
     if (!cls) {
         return YETTY_ERR(yetty_ygui_void_ptr, "yetty_ygui_data_get_result: NULL class");
     }
-    size_t off = data_offset(obj->klass, cls);
-    if (off == SIZE_MAX) {
+    struct yetty_ycore_size_result off = data_offset(obj->klass, cls);
+    YETTY_RETURN_IF_ERR(yetty_ygui_void_ptr, off, "yetty_ygui_data_get_result: data_offset");
+    if (off.value == SIZE_MAX) {
         return YETTY_ERR(yetty_ygui_void_ptr,
                          "yetty_ygui_data_get_result: class not in object's chain");
     }
-    return YETTY_OK(yetty_ygui_void_ptr, (char *)obj + off);
+    return YETTY_OK(yetty_ygui_void_ptr, (char *)obj + off.value);
 }
 
+/* Assert-based convenience accessor for value getters whose public
+ * signature returns a plain value (widget_rect, layout_get, …) and
+ * cannot become a Result without cascading through ~90 call sites in
+ * modules outside this one. The class/offset walk only fails on a
+ * programmer error (target class not in the object's chain), which the
+ * assert below catches in debug builds; the inner Result has nowhere to
+ * propagate at this deliberately non-Result boundary. New code should
+ * prefer yetty_ygui_data_get_result. */
+YETTY_EXTERNAL_CALLBACK
 void *yetty_ygui_data_get(struct yetty_ygui_object *obj, const struct yetty_yclass *cls)
 {
     assert(obj && cls);
-    size_t off = data_offset(obj->klass, cls);
-    assert(off != SIZE_MAX && "yetty_ygui_data_get: class not in object's chain");
-    if (off == SIZE_MAX) {
+    struct yetty_ycore_size_result off = data_offset(obj->klass, cls);
+    if (YETTY_IS_ERR(off)) {
+        yetty_ycore_error_destroy(off.error);
+        assert(0 && "yetty_ygui_data_get: data_offset failed");
         return NULL;
     }
-    return (char *)obj + off;
+    assert(off.value != SIZE_MAX && "yetty_ygui_data_get: class not in object's chain");
+    if (off.value == SIZE_MAX) {
+        return NULL;
+    }
+    return (char *)obj + off.value;
 }
 
 /* Add `cls`'s own data_size + every mixin's data_size to `*total`.

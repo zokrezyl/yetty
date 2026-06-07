@@ -29,10 +29,10 @@
 #include <string.h>
 
 /* Forward decls — recursive. */
-static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x, float origin_y,
-                          float content_w);
-static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin_x, float origin_y,
-                             float content_w, int text_align);
+static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
+                                        float origin_y, float content_w);
+static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
+                                           float origin_y, float content_w, int text_align);
 
 /* ---------------------------------------------------------------------------
  * Wrap one inline-text box into one-or-more lines. Replaces the original
@@ -40,8 +40,8 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
  * lines. Returns the total height (line_count * line_height).
  * -------------------------------------------------------------------------*/
 
-static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin_x, float origin_y,
-                             float content_w, int text_align)
+static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
+                                           float origin_y, float content_w, int text_align)
 {
     struct yetty_ylexbor_box *b = &r->boxes.data[idx];
     const char *text = b->text;
@@ -127,9 +127,7 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
             /* Need a new sibling box. Reserve, copy style. */
             struct yetty_ycore_void_result rr =
                 _yetty_ylexbor_box_vec_reserve(&r->boxes, r->boxes.size + 1);
-            if (YETTY_IS_ERR(rr)) {
-                return y - origin_y;
-            }
+            YETTY_RETURN_IF_ERR(float, rr, "wrap_inline_box: reserve");
             uint32_t new_idx = r->boxes.size++;
             /* The base pointer may have moved — re-fetch. */
             b = &r->boxes.data[idx];
@@ -183,7 +181,7 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
         b->h = 0;
     }
 
-    return y - origin_y;
+    return YETTY_OK(float, y - origin_y);
 }
 
 /* ---------------------------------------------------------------------------
@@ -196,12 +194,12 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
  * page. Real flex semantics are a follow-up.
  * -------------------------------------------------------------------------*/
 
-static float layout_flex_row(struct yetty_ylexbor *r, uint32_t idx, float origin_x, float origin_y,
-                             float content_w)
+static struct float_result layout_flex_row(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
+                                           float origin_y, float content_w)
 {
     uint32_t slots = r->boxes.data[idx].child_count;
     if (slots == 0) {
-        return 0;
+        return YETTY_OK(float, 0);
     }
 
     float slot_w = content_w / (float)slots;
@@ -219,9 +217,14 @@ static float layout_flex_row(struct yetty_ylexbor *r, uint32_t idx, float origin
         c->w = slot_w;
         float h = 0;
         if (c->kind == YL_BOX_BLOCK) {
-            h = layout_block(r, cidx, cursor_x, origin_y, slot_w);
+            struct float_result block_res = layout_block(r, cidx, cursor_x, origin_y, slot_w);
+            YETTY_RETURN_IF_ERR(float, block_res, "layout_flex_row: layout_block");
+            h = block_res.value;
         } else if (c->kind == YL_BOX_INLINE_TEXT) {
-            h = wrap_inline_box(r, cidx, cursor_x, origin_y, slot_w, /*text_align=*/0);
+            struct float_result wrap_res =
+                wrap_inline_box(r, cidx, cursor_x, origin_y, slot_w, /*text_align=*/0);
+            YETTY_RETURN_IF_ERR(float, wrap_res, "layout_flex_row: wrap_inline_box");
+            h = wrap_res.value;
         } else if (c->kind == YL_BOX_INLINE_IMAGE) {
             h = 100;
             c->w = slot_w;
@@ -234,15 +237,15 @@ static float layout_flex_row(struct yetty_ylexbor *r, uint32_t idx, float origin
         }
         cursor_x += slot_w;
     }
-    return row_h;
+    return YETTY_OK(float, row_h);
 }
 
 /* ---------------------------------------------------------------------------
  * Lay out a block box and its children. Returns the height consumed.
  * -------------------------------------------------------------------------*/
 
-static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x, float origin_y,
-                          float content_w)
+static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
+                                        float origin_y, float content_w)
 {
     /* Flex row goes through its own splitter. Flex column degrades
 	 * to plain block stacking — same vertical flow, just gated by
@@ -321,7 +324,10 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
             c->x = child_origin_x;
             c->y = cursor_y;
             c->w = child_w;
-            float child_h = layout_block(r, cidx, child_origin_x, cursor_y, child_w);
+            struct float_result child_res =
+                layout_block(r, cidx, child_origin_x, cursor_y, child_w);
+            YETTY_RETURN_IF_ERR(float, child_res, "layout_block: child block");
+            float child_h = child_res.value;
             /* Re-fetch — vector may have relocated. */
             c = &r->boxes.data[cidx];
             /* `height: <px>` from CSS pins; otherwise content
@@ -340,9 +346,10 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
 			 * appending new line-fragment boxes to `idx`. Our
 			 * loop walks `next_sibling` so it picks them up
 			 * naturally. text_align comes from the parent block. */
-            float h = wrap_inline_box(r, cidx, content_origin_x, cursor_y, content_width,
-                                      self->text_align);
-            cursor_y += h;
+            struct float_result wrap_res = wrap_inline_box(r, cidx, content_origin_x, cursor_y,
+                                                           content_width, self->text_align);
+            YETTY_RETURN_IF_ERR(float, wrap_res, "layout_block: wrap_inline_box");
+            cursor_y += wrap_res.value;
             prev_margin_bottom = 0;
             has_prev = 1;
 
@@ -376,7 +383,7 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
 	 * padding-bottom. The caller stored origin_y as our top, so
 	 * (cursor_y - origin_y) already counts pad_top + content; just
 	 * add pad_bottom. */
-    return (cursor_y - origin_y) + pad_bottom;
+    return YETTY_OK(float, (cursor_y - origin_y) + pad_bottom);
 }
 
 /* ===========================================================================
@@ -396,7 +403,9 @@ struct yetty_ycore_void_result yetty_ylexbor_layout(struct yetty_ylexbor *r)
     root->y = 0;
     root->w = (float)r->viewport_w;
 
-    float h = layout_block(r, 0, 0, 0, (float)r->viewport_w);
+    struct float_result layout_res = layout_block(r, 0, 0, 0, (float)r->viewport_w);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "ylexbor_layout: layout_block");
+    float h = layout_res.value;
     r->boxes.data[0].h = h;
     r->content_height = (int)h;
 

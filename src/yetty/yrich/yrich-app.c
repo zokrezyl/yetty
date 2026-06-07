@@ -75,10 +75,8 @@ struct yrich_app {
  * resolve an engine and get wire ids when added underneath it. */
 static struct yetty_ycore_void_result build_editor(struct yrich_app *app)
 {
-    struct yetty_ygui_object_ptr_result rootr =
-        yetty_ygui_add(yetty_ygui_class_expect(yetty_ygui_vbox_class_get(),
-                                               "yetty_ygui_vbox_class_get"),
-                       NULL);
+    struct yetty_ygui_object_ptr_result rootr = yetty_ygui_add(
+        yetty_ygui_class_expect(yetty_ygui_vbox_class_get(), "yetty_ygui_vbox_class_get"), NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rootr, "build_editor: root add");
     app->win = rootr.value;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(app->win);
@@ -119,8 +117,8 @@ static struct yetty_ycore_void_result push_scene(struct yrich_app *app)
     if (!app->ygui) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-        app->ygui, (float)app->surface_w, (float)app->surface_h);
+    struct yetty_ycore_void_result vr =
+        yetty_ygui_framework_set_viewport(app->ygui, (float)app->surface_w, (float)app->surface_h);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "push_scene: set_viewport");
     yetty_ygui_framework_mark_dirty(app->ygui);
     return yetty_ygui_framework_emit(app->ygui);
@@ -142,21 +140,21 @@ static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
         }
         app->surface_w = w;
         app->surface_h = h;
-        struct yetty_ycore_void_result reconf_r = yetty_yframework_reconfigure_surface(app->yrt, w, h);
+        struct yetty_ycore_void_result reconf_r =
+            yetty_yframework_reconfigure_surface(app->yrt, w, h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, reconf_r, "yrich: reconfigure surface");
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
         struct yetty_ycore_void_result resize_r = app->target->ops->resize(app->target, vp);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_r, "yrich: target resize");
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-        struct yetty_ycore_void_result rect_r =
-            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1,
-                                          (struct yetty_ycore_rectangle){
-                                              .min = {.x = 0.0f, .y = 0.0f},
-                                              .max = {.x = (float)w, .y = (float)h},
-                                          });
+        struct yetty_ycore_void_result rect_r = yetty_yfigure_figure_rect_set(
+            (struct yetty_yclass_object *)(rf)-1, (struct yetty_ycore_rectangle){
+                                                      .min = {.x = 0.0f, .y = 0.0f},
+                                                      .max = {.x = (float)w, .y = (float)h},
+                                                  });
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_r, "yrich: root rect");
         struct yetty_ycore_void_result dirty_r =
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dirty_r, "yrich: root dirty");
         struct yetty_ycore_void_result scene_r = push_scene(app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
@@ -250,7 +248,8 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     app->registry = reg_r.value;
     app->figure_args.default_font = app->font;
     app->figure_args.composite_factory = NULL;
-    struct yetty_ycore_void_result result_234 = yetty_ygrid_register_factory(app->registry, &app->figure_args);
+    struct yetty_ycore_void_result result_234 =
+        yetty_ygrid_register_factory(app->registry, &app->figure_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_234, "ygrid_register_factory failed");
 
     struct yetty_ycore_rectangle root_rect = {
@@ -270,7 +269,8 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     struct yetty_ygui_framework_ptr_result eng_r = yetty_ygui_framework_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, eng_r, "ygui framework alloc failed");
     app->ygui = eng_r.value;
-    struct yetty_ycore_void_result result_255 = yetty_ygui_framework_set_container_obj(app->ygui, app->container_obj);
+    struct yetty_ycore_void_result result_255 =
+        yetty_ygui_framework_set_container_obj(app->ygui, app->container_obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_255, "framework set_container_obj failed");
 
     struct yetty_ycore_void_result result_259 = build_editor(app);
@@ -278,7 +278,8 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     struct yetty_ycore_void_result result_260 = push_scene(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_260, "initial push_scene failed");
 
-    struct yetty_ycore_int_result fdr = rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
+    struct yetty_ycore_int_result fdr =
+        rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fdr, "pipe read_fd failed");
     int pipe_fd = fdr.value;
 
@@ -290,8 +291,8 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
         if (pr > 0 && (pfd.revents & POLLIN)) {
             for (;;) {
                 struct yetty_yui_event ev = {0};
-                struct yetty_ycore_size_result rr = rt->platform_input_pipe->ops->read(
-                    rt->platform_input_pipe, &ev, sizeof(ev));
+                struct yetty_ycore_size_result rr =
+                    rt->platform_input_pipe->ops->read(rt->platform_input_pipe, &ev, sizeof(ev));
                 if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) {
                     break;
                 }
@@ -304,7 +305,8 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
         struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
-        if (!(needs_render || had_events || yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf) - 1).value)) {
+        if (!(needs_render || had_events ||
+              yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf)-1).value)) {
             continue;
         }
         destroy_safe(app->target->ops->clear(app->target));
@@ -314,7 +316,12 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
             yerror("yrich-app: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf) - 1, 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
+            {
+                struct yetty_ycore_void_result drop_r =
+                    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf)-1, 0);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r,
+                                    "drop: yetty_yfigure_figure_dirty_set");
+            }
         }
         destroy_safe(app->target->ops->present(app->target));
         needs_render = 0;
@@ -345,11 +352,12 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     return YETTY_OK_VOID();
 }
 
-int yetty_yrich_app_run(int argc, char **argv, struct yetty_yrich_document *doc,
-                        enum yetty_yrich_app_kind kind)
+struct yetty_ycore_int_result yetty_yrich_app_run(int argc, char **argv,
+                                                  struct yetty_yrich_document *doc,
+                                                  enum yetty_yrich_app_kind kind)
 {
     if (!doc) {
-        return 2;
+        return YETTY_OK(yetty_ycore_int, 2);
     }
     struct yrich_app app = {0};
     app.doc = doc;

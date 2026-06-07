@@ -123,14 +123,33 @@ static const char *encode_key(uint32_t key, char *scratch, size_t scratch_n, siz
         return scratch;
     }
     switch (key) {
-    case 256: scratch[0] = 0x1B; *out_len = 1; return scratch;       /* ESC */
-    case 257: scratch[0] = '\r'; *out_len = 1; return scratch;        /* Enter */
-    case 259: scratch[0] = 0x7F; *out_len = 1; return scratch;        /* Backspace */
-    case 263: *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[D"); return scratch;
-    case 262: *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[C"); return scratch;
-    case 265: *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[A"); return scratch;
-    case 264: *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[B"); return scratch;
-    default: *out_len = 0; return NULL;
+    case 256:
+        scratch[0] = 0x1B;
+        *out_len = 1;
+        return scratch; /* ESC */
+    case 257:
+        scratch[0] = '\r';
+        *out_len = 1;
+        return scratch; /* Enter */
+    case 259:
+        scratch[0] = 0x7F;
+        *out_len = 1;
+        return scratch; /* Backspace */
+    case 263:
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[D");
+        return scratch;
+    case 262:
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[C");
+        return scratch;
+    case 265:
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[A");
+        return scratch;
+    case 264:
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[B");
+        return scratch;
+    default:
+        *out_len = 0;
+        return NULL;
     }
 }
 
@@ -140,8 +159,7 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
     (void)mods;
     struct demo_runner *r = (struct demo_runner *)userdata;
     if (key == 'q' || key == 'Q' || key == 0x03 || key == 0x04) {
-        if (r->yframework && r->yframework->event_loop &&
-            r->yframework->event_loop->ops->stop) {
+        if (r->yframework && r->yframework->event_loop && r->yframework->event_loop->ops->stop) {
             r->yframework->event_loop->ops->stop(r->yframework->event_loop);
         }
         return 1;
@@ -164,8 +182,8 @@ static void runner_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, u
     }
     struct yetty_ycore_rectangle rr = {.min = {0, 0}, .max = {(float)pixel_w, (float)pixel_h}};
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, rr);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, rr);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
 }
 
 static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_listener *listener,
@@ -182,30 +200,41 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
     }
 
     if (ev->type == YETTY_YCORE_RENDER) {
-        if (!r->render_target) return YETTY_OK(yetty_ycore_int, 0);
-        if (r->render_target->ops->is_busy &&
-            r->render_target->ops->is_busy(r->render_target)) {
+        if (!r->render_target) {
+            return YETTY_OK(yetty_ycore_int, 0);
+        }
+        if (r->render_target->ops->is_busy && r->render_target->ops->is_busy(r->render_target)) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (yetty_ygui_framework_is_dirty(r->engine)) {
             struct yetty_ycore_void_result er = yetty_ygui_framework_emit(r->engine);
-            if (YETTY_IS_ERR(er)) yetty_ycore_error_destroy(er.error);
+            if (YETTY_IS_ERR(er)) {
+                yetty_ycore_error_destroy(er.error);
+            }
         }
         if (r->wire_sm) {
             struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(r->wire_sm);
-            if (YETTY_IS_ERR(pr)) yetty_ycore_error_destroy(pr.error);
+            if (YETTY_IS_ERR(pr)) {
+                yetty_ycore_error_destroy(pr.error);
+            }
         }
         struct yetty_ycore_void_result cl = r->render_target->ops->clear(r->render_target);
-        if (YETTY_IS_ERR(cl)) yetty_ycore_error_destroy(cl.error);
+        if (YETTY_IS_ERR(cl)) {
+            yetty_ycore_error_destroy(cl.error);
+        }
         if (r->root_container) {
             struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
             struct yetty_ycore_void_result rr =
                 yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, r->render_target);
-            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+            }
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
         }
         struct yetty_ycore_void_result pp = r->render_target->ops->present(r->render_target);
-        if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
+        if (YETTY_IS_ERR(pp)) {
+            yetty_ycore_error_destroy(pp.error);
+        }
         /* Animation pump: an animated widget (e.g. ymaze) re-marks itself
          * dirty during emit. present() throttles to vsync, so re-arming a
          * render whenever the framework is still dirty gives a steady frame
@@ -221,8 +250,7 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
-        if (r->yframework && r->yframework->event_loop &&
-            r->yframework->event_loop->ops->stop) {
+        if (r->yframework && r->yframework->event_loop && r->yframework->event_loop->ops->stop) {
             r->yframework->event_loop->ops->stop(r->yframework->event_loop);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -236,7 +264,9 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         {
             struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
                 r->engine, (float)ev->resize.width, (float)ev->resize.height);
-            if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
+            if (YETTY_IS_ERR(vr)) {
+                yetty_ycore_error_destroy(vr.error);
+            }
         }
         /* Drive the compositor-side rect through the pty pair (→
          * runner_pty_resize_cb) rather than poking the container directly, so
@@ -244,7 +274,9 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         if (r->pty_pair.a && r->pty_pair.a->ops->resize) {
             struct yetty_ycore_void_result rrz = r->pty_pair.a->ops->resize(
                 r->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
-            if (YETTY_IS_ERR(rrz)) yetty_ycore_error_destroy(rrz.error);
+            if (YETTY_IS_ERR(rrz)) {
+                yetty_ycore_error_destroy(rrz.error);
+            }
         }
         if (r->yframework->event_loop->ops->request_render) {
             r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
@@ -257,7 +289,9 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         if (bytes && n > 0) {
             struct yetty_ycore_void_result fr =
                 yetty_ygui_framework_feed_input(r->engine, bytes, n);
-            if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
             if (r->yframework->event_loop->ops->request_render) {
                 r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
             }
@@ -269,7 +303,9 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_mouse_button(
             r->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button,
             ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0, ev->mouse.mods);
-        if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
         if (r->yframework->event_loop->ops->request_render) {
             r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
         }
@@ -279,7 +315,9 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_mouse_scroll(
             r->engine, ev->mouse_scroll.x, ev->mouse_scroll.y, ev->mouse_scroll.dx,
             ev->mouse_scroll.dy);
-        if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
         if (r->yframework->event_loop->ops->request_render) {
             r->yframework->event_loop->ops->request_render(r->yframework->event_loop);
         }
@@ -289,7 +327,9 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
     case YETTY_YCORE_MOUSE_DRAG: {
         struct yetty_ycore_void_result fr =
             yetty_ygui_framework_feed_mouse_motion(r->engine, ev->mouse.x, ev->mouse.y);
-        if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
         /* Motion can flip hover state — request a render so the next
          * emit cycle picks up the new hovered widget and repaints it
          * with the hover variant. Without this, the engine stays dirty
@@ -322,10 +362,10 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     /* MSDF font for the receiver-side ygrid. */
     {
-        const char *fonts_dir = r->yframework->config->ops->get_string(
-            r->yframework->config, "paths/fonts", "");
-        const char *shaders_dir = r->yframework->config->ops->get_string(
-            r->yframework->config, "paths/shaders", "");
+        const char *fonts_dir =
+            r->yframework->config->ops->get_string(r->yframework->config, "paths/fonts", "");
+        const char *shaders_dir =
+            r->yframework->config->ops->get_string(r->yframework->config, "paths/shaders", "");
         char cdb_path[768];
         char shader_path[768];
         snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
@@ -341,24 +381,26 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     /* Raw figure factory + producer kinds (yplot, yimage). */
     {
-        struct yetty_ydraw_composite_factory_ptr_result ffr =
-            yetty_ydraw_composite_factory_create(
-                r->yframework->gpu.device, r->yframework->gpu.queue,
-                r->yframework->gpu.surface_format, r->yframework->gpu.allocator,
-                r->yframework->event_loop);
+        struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
+            r->yframework->gpu.device, r->yframework->gpu.queue, r->yframework->gpu.surface_format,
+            r->yframework->gpu.allocator, r->yframework->event_loop);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "demo_runner: raw_composite_factory_create");
         r->composite_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             struct yetty_ycore_void_result rr =
                 yetty_ydraw_composite_factory_register(r->composite_factory, yplot_f);
-            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+            }
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             struct yetty_ycore_void_result rr =
                 yetty_ydraw_composite_factory_register(r->composite_factory, yimage_f);
-            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+            }
         }
     }
 
@@ -383,20 +425,17 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
                                 "demo_runner: ygrid_register_factory_for_kind");
         }
         /* yshadertoy has its own factory + renderer (not the ygrid path). */
-        struct yetty_ycore_void_result sr =
-            yetty_yshadertoy_register_factory(r->figure_registry);
+        struct yetty_ycore_void_result sr = yetty_yshadertoy_register_factory(r->figure_registry);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "demo_runner: yshadertoy_register_factory");
     }
 
     /* Local container. */
-    struct yetty_context ctx = {.runtime = r->yframework,
-                                .event_loop = r->yframework->event_loop};
+    struct yetty_context ctx = {.runtime = r->yframework, .event_loop = r->yframework->event_loop};
     {
         struct yetty_ycore_rectangle root_rect = {
             .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
         struct yetty_yclass_ctx yclass_ctx = {0};
-        struct yetty_yclass_object_ptr_result obj_res =
-            yetty_yfigure_container_create(&yclass_ctx);
+        struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "demo_runner: container_create");
         r->root_container = yetty_yfigure_container_from(obj_res.value);
         yetty_yfigure_container_set_context(r->root_container, &ctx);
@@ -425,13 +464,14 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     /* ygui framework on producer end. */
     {
-        struct yetty_ygui_framework_ptr_result fr =
-            yetty_ygui_framework_create(r->pty_pair.a);
+        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(r->pty_pair.a);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "demo_runner: framework_create");
         r->engine = fr.value;
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
             r->engine, (float)rt->surface_width, (float)rt->surface_height);
-        if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
+        if (YETTY_IS_ERR(vr)) {
+            yetty_ycore_error_destroy(vr.error);
+        }
     }
 
     /* Two-level root: an outer vbox owns the viewport; an inner body
@@ -441,7 +481,8 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
      * window with a black void below their widgets. */
     struct yetty_ygui_object *body = NULL;
     {
-        struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+        struct yetty_ygui_object_ptr_result rr =
+            yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "demo_runner: root add");
         r->root = rr.value;
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(r->root);
@@ -506,12 +547,18 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
             r->frame_timer = tr.value;
             r->frame_listener.handler = frame_tick;
             struct yetty_ycore_void_result cr = loop->ops->config_timer(loop, r->frame_timer, 33);
-            if (YETTY_IS_ERR(cr)) yetty_ycore_error_destroy(cr.error);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
             struct yetty_ycore_void_result lr =
                 loop->ops->register_timer_listener(loop, r->frame_timer, &r->frame_listener);
-            if (YETTY_IS_ERR(lr)) yetty_ycore_error_destroy(lr.error);
+            if (YETTY_IS_ERR(lr)) {
+                yetty_ycore_error_destroy(lr.error);
+            }
             struct yetty_ycore_void_result st = loop->ops->start_timer(loop, r->frame_timer);
-            if (YETTY_IS_ERR(st)) yetty_ycore_error_destroy(st.error);
+            if (YETTY_IS_ERR(st)) {
+                yetty_ycore_error_destroy(st.error);
+            }
         } else {
             yetty_ycore_error_destroy(tr.error);
         }
@@ -522,27 +569,37 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     struct yetty_ycore_void_result run_res =
         r->yframework->event_loop->ops->start(r->yframework->event_loop);
-    if (YETTY_IS_ERR(run_res)) yetty_ycore_error_destroy(run_res.error);
+    if (YETTY_IS_ERR(run_res)) {
+        yetty_ycore_error_destroy(run_res.error);
+    }
 
     /* Teardown — mirror ygreeter's order. */
     if (r->engine) {
         struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(r->engine);
-        if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
         r->engine = NULL;
     }
     if (r->wire_sm) {
         struct yetty_ycore_void_result dr = yetty_ywire_wire_statemachine_destroy(r->wire_sm);
-        if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
         r->wire_sm = NULL;
     }
     if (r->has_pty_pair) {
         if (r->pty_pair.a && r->pty_pair.a->ops->destroy) {
             struct yetty_ycore_void_result dr = r->pty_pair.a->ops->destroy(r->pty_pair.a);
-            if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
         }
         if (r->pty_pair.b && r->pty_pair.b->ops->destroy) {
             struct yetty_ycore_void_result dr = r->pty_pair.b->ops->destroy(r->pty_pair.b);
-            if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
         }
         r->has_pty_pair = 0;
     }
@@ -550,7 +607,9 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
         struct yetty_ycore_void_result dr =
             yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
-        if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
         r->root_container = NULL;
     }
     if (r->figure_registry) {
@@ -605,13 +664,19 @@ static void runner_tty_restore(void)
 
 static int runner_tty_raw(void)
 {
-    if (!isatty(STDIN_FILENO)) return 0;
-    if (tcgetattr(STDIN_FILENO, &runner_saved_tty) < 0) return -1;
+    if (!isatty(STDIN_FILENO)) {
+        return 0;
+    }
+    if (tcgetattr(STDIN_FILENO, &runner_saved_tty) < 0) {
+        return -1;
+    }
     struct termios raw = runner_saved_tty;
     cfmakeraw(&raw);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0) return -1;
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0) {
+        return -1;
+    }
     runner_tty_active = 1;
     atexit(runner_tty_restore);
     return 0;
@@ -642,9 +707,13 @@ static struct yetty_ycore_size_result stdout_pty_write(struct yetty_platform_pty
                                                        const char *data, size_t len)
 {
     struct stdout_pty *p = (struct stdout_pty *)self;
-    if (len == 0) return YETTY_OK(yetty_ycore_size, 0);
+    if (len == 0) {
+        return YETTY_OK(yetty_ycore_size, 0);
+    }
     struct stdout_write *w = calloc(1, sizeof(*w));
-    if (!w) return YETTY_ERR(yetty_ycore_size, "stdout_pty_write: calloc req");
+    if (!w) {
+        return YETTY_ERR(yetty_ycore_size, "stdout_pty_write: calloc req");
+    }
     w->data = malloc(len);
     if (!w->data) {
         free(w);
@@ -723,7 +792,8 @@ struct client_state {
     int running;
 };
 
-static int client_on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
+static int client_on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods,
+                         void *userdata)
 {
     (void)engine;
     (void)mods;
@@ -794,15 +864,17 @@ static const struct yetty_platform_pty_ops *stdin_pty_ops_get(void)
  * keyboard input from the controlling terminal. Forward them to ygui's
  * input decoder verbatim (it understands CSI arrow sequences + ASCII).
  *---------------------------------------------------------------------------*/
-static struct yetty_ycore_void_result client_default_sink(
-    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+static struct yetty_ycore_void_result client_default_sink(void *userdata,
+                                                          struct yetty_ywire_wire_statemachine *sm)
 {
     struct client_state *cs = (struct client_state *)userdata;
     uint8_t buf[256];
     for (;;) {
         struct yetty_ycore_size_result rr =
             yetty_ywire_wire_statemachine_read(sm, buf, sizeof(buf));
-        if (YETTY_IS_ERR(rr)) return YETTY_ERR(yetty_ycore_void, "default_sink: read", rr);
+        if (YETTY_IS_ERR(rr)) {
+            return YETTY_ERR(yetty_ycore_void, "default_sink: read", rr);
+        }
         if (rr.value == 0) {
             /* Empty read in SCAN_RAW means _read yielded internally and
              * came back with nothing — just loop and try again. The SM
@@ -811,7 +883,9 @@ static struct yetty_ycore_void_result client_default_sink(
         }
         struct yetty_ycore_void_result fr =
             yetty_ygui_framework_feed_input(cs->runner->engine, (const char *)buf, rr.value);
-        if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
     }
 }
 
@@ -821,8 +895,8 @@ static struct yetty_ycore_void_result client_default_sink(
  * Drain the envelope body, sanity-check the magic, dispatch to ygui's
  * framework_feed_mouse_* entry points (same path standalone uses).
  *---------------------------------------------------------------------------*/
-static struct yetty_ycore_void_result client_mouse_handler(
-    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
+                                                           struct yetty_ywire_wire_statemachine *sm)
 {
     /* userdata is cs.runner (distinct from set_default's &cs — see
      * the comment at the registration site). */
@@ -831,9 +905,11 @@ static struct yetty_ycore_void_result client_mouse_handler(
         struct yetty_client_input_mouse msg;
         size_t got = 0;
         while (got < sizeof(msg)) {
-            struct yetty_ycore_size_result rr = yetty_ywire_wire_statemachine_read(
-                sm, ((uint8_t *)&msg) + got, sizeof(msg) - got);
-            if (YETTY_IS_ERR(rr)) return YETTY_ERR(yetty_ycore_void, "mouse: read", rr);
+            struct yetty_ycore_size_result rr =
+                yetty_ywire_wire_statemachine_read(sm, ((uint8_t *)&msg) + got, sizeof(msg) - got);
+            if (YETTY_IS_ERR(rr)) {
+                return YETTY_ERR(yetty_ycore_void, "mouse: read", rr);
+            }
             if (rr.value == 0) {
                 /* Envelope ended (terminator + no more bytes) — bail out
                  * of inner read, drop any partial struct, loop back to
@@ -850,13 +926,17 @@ static struct yetty_ycore_void_result client_mouse_handler(
             case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
                 struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_button(
                     runner->engine, msg.x, msg.y, msg.button, msg.pressed, 0);
-                if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+                if (YETTY_IS_ERR(r)) {
+                    yetty_ycore_error_destroy(r.error);
+                }
                 break;
             }
             case YETTY_YMGUI_INPUT_MOUSE_POS: {
                 struct yetty_ycore_void_result r =
                     yetty_ygui_framework_feed_mouse_motion(runner->engine, msg.x, msg.y);
-                if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+                if (YETTY_IS_ERR(r)) {
+                    yetty_ycore_error_destroy(r.error);
+                }
                 break;
             }
             default:
@@ -899,7 +979,9 @@ static struct yetty_ycore_void_result client_enable_mouse_forwarding(struct clie
 static void client_stdin_cb(uv_poll_t *handle, int status, int events)
 {
     struct client_state *cs = (struct client_state *)handle->data;
-    if (status < 0 || !(events & UV_READABLE)) return;
+    if (status < 0 || !(events & UV_READABLE)) {
+        return;
+    }
     char buf[1024];
     ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
     if (n > 0) {
@@ -909,13 +991,16 @@ static void client_stdin_cb(uv_poll_t *handle, int status, int events)
          * tty) flow through the default sink to framework_feed_input. */
         if (cs->wire_sm) {
             yetty_ywire_wire_statemachine_feed(cs->wire_sm, buf, (size_t)n);
-            struct yetty_ycore_void_result pr =
-                yetty_ywire_wire_statemachine_process(cs->wire_sm);
-            if (YETTY_IS_ERR(pr)) yetty_ycore_error_destroy(pr.error);
+            struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(cs->wire_sm);
+            if (YETTY_IS_ERR(pr)) {
+                yetty_ycore_error_destroy(pr.error);
+            }
         } else {
             struct yetty_ycore_void_result r =
                 yetty_ygui_framework_feed_input(cs->runner->engine, buf, (size_t)n);
-            if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+            if (YETTY_IS_ERR(r)) {
+                yetty_ycore_error_destroy(r.error);
+            }
         }
     } else if (n == 0 && !isatty(STDIN_FILENO)) {
         /* Real EOF — only treat n==0 as terminal when stdin is NOT a
@@ -931,7 +1016,9 @@ static void client_pickup_winsz(struct client_state *cs)
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
         struct yetty_ycore_void_result r = yetty_ygui_framework_set_viewport(
             cs->runner->engine, (float)ws.ws_xpixel, (float)ws.ws_ypixel);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
     }
 }
 
@@ -957,7 +1044,9 @@ static void client_prep_cb(uv_prepare_t *handle)
     struct client_state *cs = (struct client_state *)handle->data;
     if (yetty_ygui_framework_is_dirty(cs->runner->engine)) {
         struct yetty_ycore_void_result r = yetty_ygui_framework_emit(cs->runner->engine);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
     }
     if (!cs->running) {
         uv_stop(handle->loop);
@@ -1021,8 +1110,7 @@ static int run_client_mode(const char *name, demo_build_fn build)
             yetty_ycore_error_destroy(lr.error);
             return 1;
         }
-        struct yetty_ycore_void_result sr =
-            yetty_ygui_framework_set_root(r.engine, r.root);
+        struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(r.engine, r.root);
         if (YETTY_IS_ERR(sr)) {
             yetty_ycore_error_print(stderr, "demo_runner client: set_root", sr.error);
             yetty_ycore_error_destroy(sr.error);
@@ -1045,7 +1133,9 @@ static int run_client_mode(const char *name, demo_build_fn build)
         bl.gap = 12;
         bl.justify = YETTY_YGUI_JUSTIFY_CENTER;
         struct yetty_ycore_void_result blr = yetty_ygui_widget_layout_set(body, &bl);
-        if (YETTY_IS_ERR(blr)) yetty_ycore_error_destroy(blr.error);
+        if (YETTY_IS_ERR(blr)) {
+            yetty_ycore_error_destroy(blr.error);
+        }
     }
 
     if (r.build) {
@@ -1068,9 +1158,11 @@ static int run_client_mode(const char *name, demo_build_fn build)
     }
     cs.wire_sm = smr.value;
     {
-        struct yetty_ycore_void_result rd = yetty_ywire_wire_statemachine_set_default(
-            cs.wire_sm, client_default_sink, &cs);
-        if (YETTY_IS_ERR(rd)) yetty_ycore_error_destroy(rd.error);
+        struct yetty_ycore_void_result rd =
+            yetty_ywire_wire_statemachine_set_default(cs.wire_sm, client_default_sink, &cs);
+        if (YETTY_IS_ERR(rd)) {
+            yetty_ycore_error_destroy(rd.error);
+        }
     }
     {
         /* MUST pass distinct userdata from set_default — the wire SM
@@ -1081,7 +1173,9 @@ static int run_client_mode(const char *name, demo_build_fn build)
         struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
             cs.wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE,
             /*has_args=*/1, client_mouse_handler, cs.runner);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
     }
     /* Tell the host yetty to forward pointer events to our stdin. */
     {
@@ -1123,12 +1217,16 @@ static int run_client_mode(const char *name, demo_build_fn build)
 
     if (cs.wire_sm) {
         struct yetty_ycore_void_result wr = yetty_ywire_wire_statemachine_destroy(cs.wire_sm);
-        if (YETTY_IS_ERR(wr)) yetty_ycore_error_destroy(wr.error);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_error_destroy(wr.error);
+        }
         cs.wire_sm = NULL;
     }
 
     struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(r.engine);
-    if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
     uv_loop_close(&cs.loop);
     runner_tty_restore();
     return 0;
@@ -1151,5 +1249,11 @@ int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build
 #endif
     struct demo_runner r = {.name = name, .build = build};
     struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
-    return yetty_yinit_run(argc, argv, &cfg, worker, &r);
+    struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, &cfg, worker, &r);
+    if (YETTY_IS_ERR(run_result)) {
+        yetty_ycore_error_print(stderr, "demo-runner: run", run_result.error);
+        yetty_ycore_error_destroy(run_result.error);
+        return 1;
+    }
+    return run_result.value;
 }

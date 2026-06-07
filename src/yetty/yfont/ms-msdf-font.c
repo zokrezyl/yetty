@@ -136,7 +136,8 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
         style = YETTY_YFONT_MS_STYLE_REGULAR;
     }
     /* Variant not on disk → render that style with the Regular face. */
-    struct yetty_ycdb_reader *cdb = f->cdb[style] ? f->cdb[style] : f->cdb[YETTY_YFONT_MS_STYLE_REGULAR];
+    struct yetty_ycdb_reader *cdb =
+        f->cdb[style] ? f->cdb[style] : f->cdb[YETTY_YFONT_MS_STYLE_REGULAR];
     if (!f->cdb[style]) {
         style = YETTY_YFONT_MS_STYLE_REGULAR;
     }
@@ -398,7 +399,10 @@ static struct yetty_ycore_void_result ms_msdf_load_glyphs(struct yetty_yfont_ms_
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (size_t i = 0; i < count; i++) {
-        { struct uint32_result drop_r = load_one(f, cps[i], YETTY_YFONT_MS_STYLE_REGULAR); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one"); }
+        {
+            struct uint32_result drop_r = load_one(f, cps[i], YETTY_YFONT_MS_STYLE_REGULAR);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one");
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -410,7 +414,10 @@ static struct yetty_ycore_void_result ms_msdf_load_basic_latin(struct yetty_yfon
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
-        { struct uint32_result drop_r = load_one(f, cp, YETTY_YFONT_MS_STYLE_REGULAR); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one"); }
+        {
+            struct uint32_result drop_r = load_one(f, cp, YETTY_YFONT_MS_STYLE_REGULAR);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one");
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -527,32 +534,37 @@ static void close_all_cdb(struct yetty_yfont_ms_msdf_font *font)
 }
 
 /* Open a style variant by swapping the "-Regular.cdb" suffix of the regular
- * path for `suffix`. Returns NULL (not an error) when the path doesn't follow
- * the convention or the variant file is absent — callers fall back to the
- * regular face. */
-static struct yetty_ycdb_reader *open_style_variant(const char *regular_path, const char *suffix)
+ * path for `suffix`. Returns OK(NULL) (not an error) when the path doesn't
+ * follow the convention, the assembled path won't fit, or the variant file is
+ * absent — callers fall back to the regular face. A genuine open failure is
+ * propagated as an error. */
+static struct yetty_ycdb_reader_result open_style_variant(const char *regular_path,
+                                                          const char *suffix)
 {
     const char *tail = "-Regular.cdb";
     size_t plen = strlen(regular_path);
     size_t tlen = strlen(tail);
     if (plen < tlen || strcmp(regular_path + plen - tlen, tail) != 0) {
-        return NULL;
+        return YETTY_OK(yetty_ycdb_reader, NULL);
     }
     size_t base = plen - tlen;
     char path[1024];
     if (base + strlen(suffix) + 1 > sizeof(path)) {
-        return NULL;
+        return YETTY_OK(yetty_ycdb_reader, NULL);
     }
     memcpy(path, regular_path, base);
     strcpy(path + base, suffix);
 
+    /* An absent variant file is the expected case (most faces ship only a
+     * regular). Treat a failed open as "no variant" and fall back, but keep
+     * the error chain available for the caller's diagnostics. */
     struct yetty_ycdb_reader_result r = yetty_ycdb_reader_open(path);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
-        return NULL;
+        return YETTY_OK(yetty_ycdb_reader, NULL);
     }
     ydebug("ms_msdf_font: loaded style variant %s", path);
-    return r.value;
+    return r;
 }
 
 struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
@@ -596,9 +608,10 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     font->cdb[YETTY_YFONT_MS_STYLE_REGULAR] = cdb_res.value;
     /* Bold / italic / bold-italic faces share the regular's atlas + metadata;
      * absent variants stay NULL and fall back to regular at lookup time. */
-    font->cdb[YETTY_YFONT_MS_STYLE_BOLD] = open_style_variant(cdb_path, "-Bold.cdb");
-    font->cdb[YETTY_YFONT_MS_STYLE_ITALIC] = open_style_variant(cdb_path, "-Oblique.cdb");
-    font->cdb[YETTY_YFONT_MS_STYLE_BOLD_ITALIC] = open_style_variant(cdb_path, "-BoldOblique.cdb");
+    font->cdb[YETTY_YFONT_MS_STYLE_BOLD] = open_style_variant(cdb_path, "-Bold.cdb").value;
+    font->cdb[YETTY_YFONT_MS_STYLE_ITALIC] = open_style_variant(cdb_path, "-Oblique.cdb").value;
+    font->cdb[YETTY_YFONT_MS_STYLE_BOLD_ITALIC] =
+        open_style_variant(cdb_path, "-BoldOblique.cdb").value;
     font->requested_size = font_size;
     font->base_size = 32.0f; /* TODO: read from CDB or config */
     font->pixel_range = 4.0f;
@@ -707,7 +720,10 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
 	 * cell size would visibly shift as glyphs (especially descenders like
 	 * underscore, or wide glyphs) load on demand. */
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
-        { struct uint32_result drop_r = load_one(font, cp, YETTY_YFONT_MS_STYLE_REGULAR); YETTY_RETURN_IF_ERR(yetty_font_ms_font, drop_r, "drop: load_one"); }
+        {
+            struct uint32_result drop_r = load_one(font, cp, YETTY_YFONT_MS_STYLE_REGULAR);
+            YETTY_RETURN_IF_ERR(yetty_font_ms_font, drop_r, "drop: load_one");
+        }
     }
     if (font->max_ascent <= 0.0f || font->advance_cdb <= 0.0f) {
         free(font->meta);

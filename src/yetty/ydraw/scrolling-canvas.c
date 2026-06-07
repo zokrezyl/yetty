@@ -455,18 +455,26 @@ static struct yetty_yfont_cache_ref_result resolve_blob_font_handle(struct scrol
  * Lifecycle
  *===========================================================================*/
 
-static void scrolling_canvas_destroy_internals(struct scrolling_canvas *c)
+static struct yetty_ycore_void_result scrolling_canvas_destroy_internals(struct scrolling_canvas *c)
 {
     /* No per-envelope state to tear down — process_input runs on a coro
      * stack, all per-envelope state is local. If a coro is in-flight at
      * Wire Statemachine destroy time, the Wire Statemachine drops the coro handle (process is exiting,
-     * OS reclaims the stack). */
+     * OS reclaims the stack).
+     *
+     * Best-effort teardown: every step runs, the first error is stashed
+     * and returned at the end so a single failing sub-destroy can't strand
+     * the remaining resources. */
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (c->grid) {
         struct yetty_ycore_void_result gr =
             yetty_ydraw_scrolling_grid_destroy(c->grid, c->font_cache);
         if (YETTY_IS_ERR(gr)) {
-            yerror("scrolling-canvas: grid destroy: %s", gr.error.msg);
-            yetty_ycore_error_destroy(gr.error);
+            if (YETTY_IS_OK(first_err)) {
+                first_err = YETTY_ERR(yetty_ycore_void, "scrolling-canvas: grid destroy", gr);
+            } else {
+                yetty_ycore_error_destroy(gr.error);
+            }
         }
         c->grid = NULL;
     }
@@ -488,6 +496,7 @@ static void scrolling_canvas_destroy_internals(struct scrolling_canvas *c)
     }
     free(c->grid_staging);
     free(c->drawable_staging);
+    return first_err;
 }
 
 struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
@@ -507,7 +516,8 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     c->raster_base_size = 32.0f;
 
     /* Drawable-list registry. */
-    struct yetty_ydraw_drawable_list_registry_ptr_result entry_res = yetty_ydraw_drawable_list_registry_create_default();
+    struct yetty_ydraw_drawable_list_registry_ptr_result entry_res =
+        yetty_ydraw_drawable_list_registry_create_default();
     if (YETTY_IS_ERR(entry_res)) {
         free(c);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "drawable-list-registry create", entry_res);
@@ -517,11 +527,14 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     /* figure factory + built-in registrations. */
     struct yetty_ydraw_composite_factory_ptr_result factory_res =
         yetty_ydraw_composite_factory_create(context->runtime->gpu.device,
-                                              context->runtime->gpu.queue,
-                                              context->runtime->gpu.surface_format,
-                                              context->runtime->gpu.allocator, context->event_loop);
+                                             context->runtime->gpu.queue,
+                                             context->runtime->gpu.surface_format,
+                                             context->runtime->gpu.allocator, context->event_loop);
     if (YETTY_IS_ERR(factory_res)) {
-        scrolling_canvas_destroy_internals(c);
+        struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+        if (YETTY_IS_ERR(teardown_res)) {
+            yetty_ycore_error_destroy(teardown_res.error);
+        }
         free(c);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "factory create", factory_res);
     }
@@ -530,7 +543,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     {
         struct yetty_ydraw_concrete_factory *f = yetty_yplot_factory_create();
         if (!f) {
-            scrolling_canvas_destroy_internals(c);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yplot factory create");
         }
@@ -538,7 +554,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             yetty_ydraw_composite_factory_register(c->composite_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yplot_factory_destroy(f);
-            scrolling_canvas_destroy_internals(c);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yplot register", rr);
         }
@@ -546,7 +565,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     {
         struct yetty_ydraw_concrete_factory *f = yetty_yimage_factory_create();
         if (!f) {
-            scrolling_canvas_destroy_internals(c);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yimage factory create");
         }
@@ -554,7 +576,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             yetty_ydraw_composite_factory_register(c->composite_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yimage_factory_destroy(f);
-            scrolling_canvas_destroy_internals(c);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yimage register", rr);
         }
@@ -563,7 +588,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     {
         struct yetty_ydraw_concrete_factory *f = yetty_ymesh_factory_create();
         if (!f) {
-            scrolling_canvas_destroy_internals(c);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "ymesh factory create");
         }
@@ -571,7 +599,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             yetty_ydraw_composite_factory_register(c->composite_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_ymesh_factory_destroy(f);
-            scrolling_canvas_destroy_internals(c);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "ymesh register", rr);
         }
@@ -581,7 +612,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     {
         struct yetty_ydraw_concrete_factory *f = yetty_yvideo_factory_create();
         if (!f) {
-            scrolling_canvas_destroy_internals(c);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yvideo factory create");
         }
@@ -589,7 +623,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             yetty_ydraw_composite_factory_register(c->composite_factory, f);
         if (YETTY_IS_ERR(rr)) {
             yetty_yvideo_factory_destroy(f);
-            scrolling_canvas_destroy_internals(c);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yvideo register", rr);
         }
@@ -615,7 +652,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     /* Per-canvas font cache. */
     struct yetty_yfont_cache_ptr_result cache_res = yetty_yfont_cache_create(shaders_dir);
     if (YETTY_IS_ERR(cache_res)) {
-        scrolling_canvas_destroy_internals(c);
+        struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+        if (YETTY_IS_ERR(teardown_res)) {
+            yetty_ycore_error_destroy(teardown_res.error);
+        }
         free(c);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "font cache create", cache_res);
     }
@@ -624,7 +664,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     /* Default font installs at slot 0. */
     struct yetty_yfont_cache_ref_result def_res = get_default_font_ref(c);
     if (YETTY_IS_ERR(def_res)) {
-        scrolling_canvas_destroy_internals(c);
+        struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+        if (YETTY_IS_ERR(teardown_res)) {
+            yetty_ycore_error_destroy(teardown_res.error);
+        }
         free(c);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "default font create", def_res);
     }
@@ -635,7 +678,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     /* Opaque grid. */
     struct yetty_ydraw_scrolling_grid_ptr_result grid_res = yetty_ydraw_scrolling_grid_create();
     if (YETTY_IS_ERR(grid_res)) {
-        scrolling_canvas_destroy_internals(c);
+        struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+        if (YETTY_IS_ERR(teardown_res)) {
+            yetty_ycore_error_destroy(teardown_res.error);
+        }
         free(c);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "scrolling-grid create", grid_res);
     }
@@ -650,8 +696,9 @@ static struct yetty_ycore_void_result scrolling_destroy(struct yetty_ydraw_canva
         return YETTY_OK_VOID();
     }
     struct scrolling_canvas *c = as_scrolling(base);
-    scrolling_canvas_destroy_internals(c);
+    struct yetty_ycore_void_result internals_res = scrolling_canvas_destroy_internals(c);
     free(c);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, internals_res, "scrolling_destroy: teardown internals");
     return YETTY_OK_VOID();
 }
 
@@ -919,9 +966,8 @@ static struct uint32_result add_drawable_internal(
         yetty_ydraw_scrolling_grid_dirty_line(c->grid, drawable_grid_line);
     YETTY_RETURN_IF_ERR(uint32, dl, "add_drawable: dirty_line");
 
-    struct uint32_result push_res =
-        yetty_ydraw_scrolling_grid_push_prim(c->grid, drawable_grid_line, drawable_rolling_row,
-                                             (const float *)entry->data, word_count);
+    struct uint32_result push_res = yetty_ydraw_scrolling_grid_push_prim(
+        c->grid, drawable_grid_line, drawable_rolling_row, (const float *)entry->data, word_count);
     YETTY_RETURN_IF_ERR(uint32, push_res, "add_drawable: push_prim");
     uint32_t drawable_index = push_res.value;
 
@@ -972,8 +1018,8 @@ static struct uint32_result add_drawable_internal(
     if (yetty_ydraw_is_composite(drawable_type)) {
         struct yetty_ydraw_figure_ptr_result inst_res =
             yetty_ydraw_composite_factory_create_instance(c->composite_factory, entry->data,
-                                                           word_count * sizeof(uint32_t),
-                                                           drawable_rolling_row);
+                                                          word_count * sizeof(uint32_t),
+                                                          drawable_rolling_row);
         YETTY_RETURN_IF_ERR(uint32, inst_res, "add_drawable: create_instance");
         /* Mark fresh — the FIRST render must paint this figure even
          * though no listener has fired yet. ydraw_layer_render's

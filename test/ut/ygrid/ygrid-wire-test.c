@@ -58,7 +58,8 @@ static struct yetty_ygrid_grid *make_headless_grid(float w, float h)
 
 static struct yetty_ydraw_drawable_list *make_buf(void)
 {
-    struct yetty_ydraw_drawable_list_result r = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result r =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "buffer_create failed\n");
         yetty_ycore_error_destroy(r.error);
@@ -73,7 +74,7 @@ static void feed_grid(struct yetty_ygrid_grid *grid, const struct yetty_ydraw_dr
     const uint8_t *bytes = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
     size_t len = yetty_ydraw_drawable_list_size(buf);
     struct yetty_ycore_void_result r =
-        yetty_yfigure_process_bytes(NULL, ((struct yetty_yclass_object *)(fig) - 1), bytes, len);
+        yetty_yfigure_process_bytes(NULL, ((struct yetty_yclass_object *)(fig)-1), bytes, len);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "ygrid process_bytes failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);
@@ -83,7 +84,14 @@ static void feed_grid(struct yetty_ygrid_grid *grid, const struct yetty_ydraw_dr
 
 static char *dump_grid(struct yetty_ygrid_grid *grid)
 {
-    return yetty_yfigure_dump(yetty_ygrid_as_figure(grid), 0);
+    struct yetty_ycore_char_ptr_result dump_result =
+        yetty_yfigure_dump(yetty_ygrid_as_figure(grid), 0);
+    if (YETTY_IS_ERR(dump_result)) {
+        fprintf(stderr, "yfigure_dump failed: %s\n", dump_result.error.msg);
+        yetty_ycore_error_destroy(dump_result.error);
+        exit(3);
+    }
+    return dump_result.value;
 }
 
 static void destroy_grid(struct yetty_ygrid_grid *grid)
@@ -104,7 +112,7 @@ static void add_box(struct yetty_ydraw_drawable_list *buf, float x, float y, flo
         .corner_radius = 0.0f,
     };
     yetty_ydraw_drawable_list_add_cmd_add_box(buf, /*id=*/0, /*z_order=*/0, color, /*stroke=*/0,
-                                          /*stroke_w=*/0.0f, &geom);
+                                              /*stroke_w=*/0.0f, &geom);
 }
 
 /*===========================================================================
@@ -118,22 +126,21 @@ static void test_empty_grid(void)
     g_tests++;
     struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
     char *dump = dump_grid(g);
-    const char *expected =
-        "kind: ygrid\n"
-        "rect: [0.0, 0.0, 100.0, 100.0]\n"
-        "dirty: 1\n"
-        "grid_cols: 1\n"
-        "grid_rows: 1\n"
-        "prim_count: 0\n"
-        "prim_count_with_tombstones: 0\n"
-        "bytes_len: 0\n"
-        "entity_high_water: 1\n"
-        "entities:\n"
-        "  - slot: 0\n"
-        "    external_id: 0\n"
-        "    parent_slot: ~\n"
-        "    prim_count: 0\n"
-        "    children: []\n";
+    const char *expected = "kind: ygrid\n"
+                           "rect: [0.0, 0.0, 100.0, 100.0]\n"
+                           "dirty: 1\n"
+                           "grid_cols: 1\n"
+                           "grid_rows: 1\n"
+                           "prim_count: 0\n"
+                           "prim_count_with_tombstones: 0\n"
+                           "bytes_len: 0\n"
+                           "entity_high_water: 1\n"
+                           "entities:\n"
+                           "  - slot: 0\n"
+                           "    external_id: 0\n"
+                           "    parent_slot: ~\n"
+                           "    prim_count: 0\n"
+                           "    children: []\n";
     ASSERT_STR_EQ("empty_grid", dump, expected);
     free(dump);
     destroy_grid(g);
@@ -154,28 +161,28 @@ static void test_add_one_box_at_root(void)
 
     char *dump = dump_grid(g);
     /* One live prim attached to the root entity (slot 0). */
-    const char *expected_head =
-        "kind: ygrid\n"
-        "rect: [0.0, 0.0, 100.0, 100.0]\n"
-        "dirty: 1\n"
-        "grid_cols: 1\n"
-        "grid_rows: 1\n"
-        "prim_count: 1\n"
-        "prim_count_with_tombstones: 1\n";
+    const char *expected_head = "kind: ygrid\n"
+                                "rect: [0.0, 0.0, 100.0, 100.0]\n"
+                                "dirty: 1\n"
+                                "grid_cols: 1\n"
+                                "grid_rows: 1\n"
+                                "prim_count: 1\n"
+                                "prim_count_with_tombstones: 1\n";
     if (strncmp(dump, expected_head, strlen(expected_head)) != 0) {
         fprintf(stderr, "FAIL add_one_box_at_root: head mismatch\n--- got ---\n%s", dump);
         g_failures++;
     } else {
         /* The root entity must now own that prim. */
-        if (strstr(dump,
-                   "entities:\n"
-                   "  - slot: 0\n"
-                   "    external_id: 0\n"
-                   "    parent_slot: ~\n"
-                   "    prim_count: 1\n"
-                   "    children: []\n") == NULL) {
-            fprintf(stderr, "FAIL add_one_box_at_root: root entity prim_count wrong\n"
-                            "--- got ---\n%s", dump);
+        if (strstr(dump, "entities:\n"
+                         "  - slot: 0\n"
+                         "    external_id: 0\n"
+                         "    parent_slot: ~\n"
+                         "    prim_count: 1\n"
+                         "    children: []\n") == NULL) {
+            fprintf(stderr,
+                    "FAIL add_one_box_at_root: root entity prim_count wrong\n"
+                    "--- got ---\n%s",
+                    dump);
             g_failures++;
         } else {
             fprintf(stderr, "ok   add_one_box_at_root\n");
@@ -207,30 +214,29 @@ static void test_cmd_group_one_entity(void)
     yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_grid(g);
-    const char *expected =
-        "kind: ygrid\n"
-        "rect: [0.0, 0.0, 100.0, 100.0]\n"
-        "dirty: 1\n"
-        "grid_cols: 1\n"
-        "grid_rows: 1\n"
-        "prim_count: 1\n"
-        "prim_count_with_tombstones: 1\n"
-        /* CMD_GROUP header is parsed but NOT appended to bytes[]; only
+    const char *expected = "kind: ygrid\n"
+                           "rect: [0.0, 0.0, 100.0, 100.0]\n"
+                           "dirty: 1\n"
+                           "grid_cols: 1\n"
+                           "grid_rows: 1\n"
+                           "prim_count: 1\n"
+                           "prim_count_with_tombstones: 1\n"
+                           /* CMD_GROUP header is parsed but NOT appended to bytes[]; only
          * ADD records land there. So bytes_len = 1 box record = 40 B
          * (10 words: type + 4 style + 5 geom; id=0 omits id slot). */
-        "bytes_len: 40\n"
-        "entity_high_water: 2\n"
-        "entities:\n"
-        "  - slot: 0\n"
-        "    external_id: 0\n"
-        "    parent_slot: ~\n"
-        "    prim_count: 0\n"
-        "    children: [1]\n"
-        "  - slot: 1\n"
-        "    external_id: 42\n"
-        "    parent_slot: 0\n"
-        "    prim_count: 1\n"
-        "    children: []\n";
+                           "bytes_len: 40\n"
+                           "entity_high_water: 2\n"
+                           "entities:\n"
+                           "  - slot: 0\n"
+                           "    external_id: 0\n"
+                           "    parent_slot: ~\n"
+                           "    prim_count: 0\n"
+                           "    children: [1]\n"
+                           "  - slot: 1\n"
+                           "    external_id: 42\n"
+                           "    parent_slot: 0\n"
+                           "    prim_count: 1\n"
+                           "    children: []\n";
     ASSERT_STR_EQ("cmd_group_one_entity", dump, expected);
     free(dump);
     destroy_grid(g);
@@ -258,34 +264,33 @@ static void test_nested_cmd_group(void)
     char *dump = dump_grid(g);
     /* Three live prims: 1 in outer, 2 in inner. Two entities: outer
      * under root, inner under outer. */
-    const char *expected =
-        "kind: ygrid\n"
-        "rect: [0.0, 0.0, 100.0, 100.0]\n"
-        "dirty: 1\n"
-        "grid_cols: 1\n"
-        "grid_rows: 1\n"
-        "prim_count: 3\n"
-        "prim_count_with_tombstones: 3\n"
-        /* CMD_GROUP headers don't land in bytes[] — only the 3 box
+    const char *expected = "kind: ygrid\n"
+                           "rect: [0.0, 0.0, 100.0, 100.0]\n"
+                           "dirty: 1\n"
+                           "grid_cols: 1\n"
+                           "grid_rows: 1\n"
+                           "prim_count: 3\n"
+                           "prim_count_with_tombstones: 3\n"
+                           /* CMD_GROUP headers don't land in bytes[] — only the 3 box
          * ADD records do: 3 * 40 = 120 B. */
-        "bytes_len: 120\n"
-        "entity_high_water: 3\n"
-        "entities:\n"
-        "  - slot: 0\n"
-        "    external_id: 0\n"
-        "    parent_slot: ~\n"
-        "    prim_count: 0\n"
-        "    children: [1]\n"
-        "  - slot: 1\n"
-        "    external_id: 42\n"
-        "    parent_slot: 0\n"
-        "    prim_count: 1\n"
-        "    children: [2]\n"
-        "  - slot: 2\n"
-        "    external_id: 100\n"
-        "    parent_slot: 1\n"
-        "    prim_count: 2\n"
-        "    children: []\n";
+                           "bytes_len: 120\n"
+                           "entity_high_water: 3\n"
+                           "entities:\n"
+                           "  - slot: 0\n"
+                           "    external_id: 0\n"
+                           "    parent_slot: ~\n"
+                           "    prim_count: 0\n"
+                           "    children: [1]\n"
+                           "  - slot: 1\n"
+                           "    external_id: 42\n"
+                           "    parent_slot: 0\n"
+                           "    prim_count: 1\n"
+                           "    children: [2]\n"
+                           "  - slot: 2\n"
+                           "    external_id: 100\n"
+                           "    parent_slot: 1\n"
+                           "    prim_count: 2\n"
+                           "    children: []\n";
     ASSERT_STR_EQ("nested_cmd_group", dump, expected);
     free(dump);
     destroy_grid(g);
@@ -321,16 +326,19 @@ static void test_reopen_cmd_group_replaces_prims(void)
      * are tombstoned (still present in bytes/prims array, just dropped
      * from cells and entity prim_indices). */
     if (strstr(dump, "prim_count: 1\nprim_count_with_tombstones: 3\n") == NULL) {
-        fprintf(stderr, "FAIL reopen_cmd_group_replaces_prims: prim counts wrong\n"
-                        "--- got ---\n%s", dump);
+        fprintf(stderr,
+                "FAIL reopen_cmd_group_replaces_prims: prim counts wrong\n"
+                "--- got ---\n%s",
+                dump);
         g_failures++;
-    } else if (strstr(dump,
-                      "  - slot: 1\n"
-                      "    external_id: 42\n"
-                      "    parent_slot: 0\n"
-                      "    prim_count: 1\n") == NULL) {
-        fprintf(stderr, "FAIL reopen_cmd_group_replaces_prims: entity 42 prim_count\n"
-                        "--- got ---\n%s", dump);
+    } else if (strstr(dump, "  - slot: 1\n"
+                            "    external_id: 42\n"
+                            "    parent_slot: 0\n"
+                            "    prim_count: 1\n") == NULL) {
+        fprintf(stderr,
+                "FAIL reopen_cmd_group_replaces_prims: entity 42 prim_count\n"
+                "--- got ---\n%s",
+                dump);
         g_failures++;
     } else {
         fprintf(stderr, "ok   reopen_cmd_group_replaces_prims\n");
@@ -364,8 +372,10 @@ static void test_cmd_delete_drops_entity(void)
         fprintf(stderr, "FAIL cmd_delete_drops_entity: prim counts wrong\n--- got ---\n%s", dump);
         g_failures++;
     } else if (strstr(dump, "external_id: 42") != NULL) {
-        fprintf(stderr, "FAIL cmd_delete_drops_entity: entity 42 still present\n"
-                        "--- got ---\n%s", dump);
+        fprintf(stderr,
+                "FAIL cmd_delete_drops_entity: entity 42 still present\n"
+                "--- got ---\n%s",
+                dump);
         g_failures++;
     } else {
         fprintf(stderr, "ok   cmd_delete_drops_entity\n");
@@ -394,22 +404,21 @@ static void test_cmd_zero_clears(void)
     yetty_ydraw_drawable_list_destroy(buf2);
 
     char *dump = dump_grid(g);
-    const char *expected =
-        "kind: ygrid\n"
-        "rect: [0.0, 0.0, 100.0, 100.0]\n"
-        "dirty: 1\n"
-        "grid_cols: 1\n"
-        "grid_rows: 1\n"
-        "prim_count: 0\n"
-        "prim_count_with_tombstones: 0\n"
-        "bytes_len: 0\n"
-        "entity_high_water: 1\n"
-        "entities:\n"
-        "  - slot: 0\n"
-        "    external_id: 0\n"
-        "    parent_slot: ~\n"
-        "    prim_count: 0\n"
-        "    children: []\n";
+    const char *expected = "kind: ygrid\n"
+                           "rect: [0.0, 0.0, 100.0, 100.0]\n"
+                           "dirty: 1\n"
+                           "grid_cols: 1\n"
+                           "grid_rows: 1\n"
+                           "prim_count: 0\n"
+                           "prim_count_with_tombstones: 0\n"
+                           "bytes_len: 0\n"
+                           "entity_high_water: 1\n"
+                           "entities:\n"
+                           "  - slot: 0\n"
+                           "    external_id: 0\n"
+                           "    parent_slot: ~\n"
+                           "    prim_count: 0\n"
+                           "    children: []\n";
     ASSERT_STR_EQ("cmd_zero_clears", dump, expected);
     free(dump);
     destroy_grid(g);

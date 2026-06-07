@@ -29,10 +29,9 @@ static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *y
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_ybrowser_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_ybrowser_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ybrowser_ctor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
@@ -57,10 +56,8 @@ static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *yc
     struct ybrowser_data *d = d_dr.value;
     free(d->html);
     d->html = NULL;
-    return yetty_ygui_super_void(
-        obj,
-        yetty_ygui_ybrowser_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_ybrowser_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass_ctx,
@@ -100,7 +97,8 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
         (void)yetty_ylexbor_destroy(lx);
         return YETTY_ERR(yetty_ycore_void, "ybrowser_render: load_html", hr);
     }
-    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result dlr =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(dlr)) {
         (void)yetty_ylexbor_destroy(lx);
         return YETTY_ERR(yetty_ycore_void, "ybrowser_render: dl_create", dlr);
@@ -137,11 +135,14 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *ycl
         struct yetty_ycore_void_result rr = ybr_render(NULL, yclass_obj, w, h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ybrowser_emit_body: render");
     }
-    yetty_yclass_method_slot slot =
+    struct yetty_yclass_method_slot_result slot_result =
         yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
-    yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(
-        yetty_ygui_ybrowser_class_get().value,
-        slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_result, "ybrowser_emit_body: slot");
+    yetty_yclass_method_slot slot = slot_result.value;
+    struct yetty_yclass_impl_t_result impl_result =
+        yetty_ygui_dispatch_lookup_super(yetty_ygui_ybrowser_class_get().value, slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, impl_result, "ybrowser_emit_body: dispatch");
+    yetty_yclass_impl_t impl = impl_result.value;
     if (!impl) {
         return YETTY_OK_VOID();
     }

@@ -38,6 +38,7 @@ ch_data {
     float open_height;
 };
 
+YETTY_EXTERNAL_CALLBACK
 static const struct yetty_yclass *ch_class(void)
 {
     return yetty_ygui_collapsing_header_class_get().value;
@@ -65,8 +66,8 @@ static struct yetty_ycore_void_result ch_rounded(struct yetty_ygui_emit_ctx *ctx
                                        .radius_bottom_right = radius,
                                        .radius_top_left = radius,
                                        .radius_bottom_left = radius};
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill, stroke,
-                                                         stroke_w, &g);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill,
+                                                             stroke, stroke_w, &g);
 }
 
 /* Chevron: down-pointing triangle when open, right-pointing when closed,
@@ -91,8 +92,8 @@ static struct yetty_ycore_void_result ch_chevron(struct yetty_ygui_emit_ctx *ctx
         t.vertex_c_x = cx + s * 0.45f;
         t.vertex_c_y = cy;
     }
-    return yetty_ydraw_drawable_list_add_cmd_add_triangle(ctx->ygrid_drawable_list, 0, 0, CH_CHEVRON, 0, 0,
-                                                      &t);
+    return yetty_ydraw_drawable_list_add_cmd_add_triangle(ctx->ygrid_drawable_list, 0, 0,
+                                                          CH_CHEVRON, 0, 0, &t);
 }
 
 /* Fold the children's subtrees in/out of layout + emit. */
@@ -166,8 +167,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct ch_data *d = d_dr.value;
     free(d->title);
-    return yetty_ygui_super_void(obj, ch_class(),
-                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, ch_class(), (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:collapsing_header:widget_on_press")]]
@@ -218,28 +218,33 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     /* Framed body behind the children, painted first so the strip and
      * its contents sit on top. */
     if (d->open && h > HEADER_H + 0.5f) {
-        struct yetty_ycore_void_result result_221 = ch_rounded(ctx, r.min.x, r.min.y + HEADER_H, w, h - HEADER_H, CH_BG_BODY,
-                                       CH_BORDER, 1.0f, CH_RADIUS);
+        struct yetty_ycore_void_result result_221 =
+            ch_rounded(ctx, r.min.x, r.min.y + HEADER_H, w, h - HEADER_H, CH_BG_BODY, CH_BORDER,
+                       1.0f, CH_RADIUS);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_221, "ch: body");
     }
 
     /* Header strip. */
-    struct yetty_ycore_void_result result_228 = ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, CH_BG_HEADER, 0, 0.0f, CH_RADIUS);
+    struct yetty_ycore_void_result result_228 =
+        ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, CH_BG_HEADER, 0, 0.0f, CH_RADIUS);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_228, "ch: header");
 
-    struct yetty_ycore_void_result result_233 = ch_chevron(ctx, r.min.x + 14.0f, r.min.y + HEADER_H * 0.5f, d->open);
+    struct yetty_ycore_void_result result_233 =
+        ch_chevron(ctx, r.min.x + 14.0f, r.min.y + HEADER_H * 0.5f, d->open);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_233, "ch: chevron");
 
     if (d->title) {
         float fs = 14.0f;
         float ty = r.min.y + (HEADER_H + fs) * 0.5f - 3.0f;
-        struct yetty_ycore_void_result result_240 = yguix_text(ctx, d->title, r.min.x + 26.0f, ty, fs, CH_TITLE);
+        struct yetty_ycore_void_result result_240 =
+            yguix_text(ctx, d->title, r.min.x + 26.0f, ty, fs, CH_TITLE);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_240, "ch: title");
     }
 
     /* Accent outline over the strip while hovered. */
     if (yetty_ygui_object_is_hovered(obj)) {
-        struct yetty_ycore_void_result result_247 = ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, 0u, CH_HOVER, 1.5f, CH_RADIUS);
+        struct yetty_ycore_void_result result_247 =
+            ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, 0u, CH_HOVER, 1.5f, CH_RADIUS);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_247, "ch: hover");
     }
     return YETTY_OK_VOID();

@@ -284,43 +284,49 @@ bool yetty_ydiagram_mermaid_can_parse(const char *input, size_t len)
  * doesn't. Returns the node's *index* in g->nodes (stable across later
  * appends), or -1 on alloc failure. The pointer obtained via
  * `&g->nodes[idx]` is only valid until the next add_node/add_edge call. */
-static int ensure_node_idx(struct yetty_ydiagram_graph *g, struct slice id, struct slice label,
-                           enum yetty_ydiagram_node_shape shape, const char *current_subgraph)
+static struct yetty_ycore_int_result ensure_node_idx(struct yetty_ydiagram_graph *g,
+                                                     struct slice id, struct slice label,
+                                                     enum yetty_ydiagram_node_shape shape,
+                                                     const char *current_subgraph)
 {
     char *id_z = slice_to_cstr(id);
     if (!id_z) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_int, "ensure_node_idx: slice_to_cstr id");
     }
     for (size_t i = 0; i < g->node_count; i++) {
         if (g->nodes[i].id && strcmp(g->nodes[i].id, id_z) == 0) {
             free(id_z);
-            return (int)i;
+            return YETTY_OK(yetty_ycore_int, (int)i);
         }
     }
     char *lbl_z = slice_to_cstr(label);
     if (!lbl_z) {
         free(id_z);
-        return -1;
+        return YETTY_ERR(yetty_ycore_int, "ensure_node_idx: slice_to_cstr label");
     }
     struct yetty_ycore_int_result ar = yetty_ydiagram_graph_add_node(g, id_z, lbl_z, shape);
     free(lbl_z);
     if (YETTY_IS_ERR(ar)) {
         free(id_z);
-        return -1;
+        return YETTY_ERR(yetty_ycore_int, "ensure_node_idx: add_node", ar);
     }
     if (current_subgraph) {
         g->nodes[ar.value].cluster_id = strdup(current_subgraph);
         struct yetty_ydiagram_cluster *c = yetty_ydiagram_graph_find_cluster(g, current_subgraph);
         if (c) {
-            (void)yetty_ydiagram_cluster_add_node(c, id_z);
+            struct yetty_ycore_void_result cr = yetty_ydiagram_cluster_add_node(c, id_z);
+            if (YETTY_IS_ERR(cr)) {
+                free(id_z);
+                return YETTY_ERR(yetty_ycore_int, "ensure_node_idx: cluster_add_node", cr);
+            }
         }
     }
     free(id_z);
-    return ar.value;
+    return YETTY_OK(yetty_ycore_int, ar.value);
 }
 
-static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
-                       const char *current_subgraph)
+static struct yetty_ycore_void_result parse_line(struct slice line, struct yetty_ydiagram_graph *g,
+                                                 const char *current_subgraph)
 {
     size_t arrow_pos = (size_t)-1;
     const char *arrow_str = NULL;
@@ -330,9 +336,11 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
         struct node_def nd;
         struct slice trimmed = slice_trim(line);
         if (parse_node_def(trimmed, &nd)) {
-            (void)ensure_node_idx(g, nd.id, nd.label, nd.shape, current_subgraph);
+            struct yetty_ycore_int_result node_res =
+                ensure_node_idx(g, nd.id, nd.label, nd.shape, current_subgraph);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, node_res, "parse_line: standalone node");
         }
-        return;
+        return YETTY_OK_VOID();
     }
 
     size_t arrow_len = strlen(arrow_str);
@@ -367,10 +375,10 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
         src_nd.label = source_part;
         src_nd.shape = YETTY_YDIAGRAM_SHAPE_RECTANGLE;
     }
-    int src_idx = ensure_node_idx(g, src_nd.id, src_nd.label, src_nd.shape, current_subgraph);
-    if (src_idx < 0) {
-        return;
-    }
+    struct yetty_ycore_int_result src_res =
+        ensure_node_idx(g, src_nd.id, src_nd.label, src_nd.shape, current_subgraph);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, src_res, "parse_line: source node");
+    int src_idx = src_res.value;
 
     /* Detect a chained arrow in target_part: A --> B --> C. We pull out
      * the first target then recurse on `<first_target> <rest>`. */
@@ -389,10 +397,10 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
         tgt_nd.label = first_target;
         tgt_nd.shape = YETTY_YDIAGRAM_SHAPE_RECTANGLE;
     }
-    int tgt_idx = ensure_node_idx(g, tgt_nd.id, tgt_nd.label, tgt_nd.shape, current_subgraph);
-    if (tgt_idx < 0) {
-        return;
-    }
+    struct yetty_ycore_int_result tgt_res =
+        ensure_node_idx(g, tgt_nd.id, tgt_nd.label, tgt_nd.shape, current_subgraph);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, tgt_res, "parse_line: target node");
+    int tgt_idx = tgt_res.value;
 
     /* Strdup the ids NOW — they're stable in g->nodes[idx].id but the
      * pointers into g->nodes themselves are not stable across add_edge
@@ -402,14 +410,19 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
     char *src_id = strdup(g->nodes[src_idx].id);
     char *tgt_id = strdup(g->nodes[tgt_idx].id);
     char *lbl = slice_to_cstr(edge_label);
+    struct yetty_ycore_void_result line_res = YETTY_OK_VOID();
     if (src_id && tgt_id && lbl) {
         struct yetty_ydiagram_edge_style style = g->default_edge_style;
         apply_arrow_style(arrow_str, &style);
-        (void)yetty_ydiagram_graph_add_edge(g, src_id, tgt_id, lbl, &style);
+        struct yetty_ycore_int_result edge_res =
+            yetty_ydiagram_graph_add_edge(g, src_id, tgt_id, lbl, &style);
+        if (YETTY_IS_ERR(edge_res)) {
+            line_res = YETTY_ERR(yetty_ycore_void, "parse_line: add_edge", edge_res);
+        }
     }
 
     /* Recurse on the rest of the chain: <first_target_id> <chain_arrow>... */
-    if (chain_pos != (size_t)-1 && tgt_id) {
+    if (YETTY_IS_OK(line_res) && chain_pos != (size_t)-1 && tgt_id) {
         size_t rest_off = chain_pos;
         const char *rest_p = target_part.p + rest_off;
         size_t rest_n = target_part.n - rest_off;
@@ -423,14 +436,19 @@ static void parse_line(struct slice line, struct yetty_ydiagram_graph *g,
             memcpy(buf + off, rest_p, rest_n);
             off += rest_n;
             buf[off] = 0;
-            parse_line(slice_make(buf, off), g, current_subgraph);
+            struct yetty_ycore_void_result rec =
+                parse_line(slice_make(buf, off), g, current_subgraph);
             free(buf);
+            if (YETTY_IS_ERR(rec)) {
+                line_res = YETTY_ERR(yetty_ycore_void, "parse_line: chain recurse", rec);
+            }
         }
     }
 
     free(src_id);
     free(tgt_id);
     free(lbl);
+    return line_res;
 }
 
 struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(const char *input, size_t len,
@@ -492,7 +510,14 @@ struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(const char *input, s
             char *id_z = slice_to_cstr(sub_id);
             char *lbl_z = slice_to_cstr(sub_label);
             if (id_z && lbl_z) {
-                (void)yetty_ydiagram_graph_add_cluster(g, id_z, lbl_z);
+                struct yetty_ycore_int_result cluster_res =
+                    yetty_ydiagram_graph_add_cluster(g, id_z, lbl_z);
+                if (YETTY_IS_ERR(cluster_res)) {
+                    free(id_z);
+                    free(lbl_z);
+                    free(current_subgraph);
+                    return YETTY_ERR(yetty_ycore_void, "mermaid_parse: add_cluster", cluster_res);
+                }
                 free(current_subgraph);
                 current_subgraph = strdup(id_z);
             }
@@ -508,7 +533,11 @@ struct yetty_ycore_void_result yetty_ydiagram_mermaid_parse(const char *input, s
         }
 
         if (in_graph) {
-            parse_line(line, g, current_subgraph);
+            struct yetty_ycore_void_result line_res = parse_line(line, g, current_subgraph);
+            if (YETTY_IS_ERR(line_res)) {
+                free(current_subgraph);
+                return YETTY_ERR(yetty_ycore_void, "mermaid_parse: parse_line", line_res);
+            }
         }
     }
 

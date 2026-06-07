@@ -190,8 +190,9 @@ struct yetty_ycore_void_result yetty_yrdawn_factory_args_release(
 /* Upcast. Stable pointer. */
 struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_figure *figure);
 
-/* Downcast helper. Returns NULL when `base` isn't a yrdawn figure. */
-struct yetty_yrdawn_figure *yetty_yrdawn_figure_from_base(struct yetty_yfigure_figure *base);
+/* Downcast helper. Returns a NULL value when `base` isn't a yrdawn figure. */
+struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from_base(
+    struct yetty_yfigure_figure *base);
 
 #ifdef __cplusplus
 }

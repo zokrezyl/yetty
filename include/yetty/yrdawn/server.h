@@ -92,6 +92,7 @@ void yrdawn_arena_free(struct yrdawn_arena *a);
  * will fire later from a callback trampoline. req_id is the originating
  * CMD's req_id — async dispatchers stash it in the closure so the
  * trampoline can address its REPLY. */
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_server_dispatch(void *ctx, uint32_t method_id, uint32_t req_id, const void *body,
                                 size_t body_len);
 

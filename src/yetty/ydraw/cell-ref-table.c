@@ -11,7 +11,7 @@
 
 /* Slot 0 is reserved so handle 0 reads as "none". */
 #define CELL_REF_TABLE_INITIAL_SLOTS 8
-#define CELL_REF_TABLE_INITIAL_REFS  2
+#define CELL_REF_TABLE_INITIAL_REFS 2
 
 /*===========================================================================
  * Internal helpers
@@ -160,16 +160,19 @@ struct yetty_ydraw_cell_handle_result yetty_ydraw_cell_ref_table_alloc(
     return YETTY_OK(yetty_ydraw_cell_handle, handle);
 }
 
-void yetty_ydraw_cell_ref_table_release(struct yetty_ydraw_cell_ref_table *table, uint32_t handle)
+struct yetty_ycore_void_result yetty_ydraw_cell_ref_table_release(
+    struct yetty_ydraw_cell_ref_table *table, uint32_t handle)
 {
     if (handle == 0 || handle >= table->count || !table->slots[handle]) {
-        return;
+        return YETTY_OK_VOID();
     }
     slot_free(table, handle);
-    /* Best-effort recycle; if the free-list cannot grow, the id is simply
-     * not reused — the slot stays NULL and remains correct. */
+    /* If the free-list cannot grow, the id is simply not reused — the slot
+     * stays NULL and remains correct — but surface the alloc failure so the
+     * caller can react to memory pressure. */
     struct yetty_ycore_void_result recycle = free_list_push(table, handle);
-    (void)recycle;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, recycle, "cell_ref_table_release: recycle id");
+    return YETTY_OK_VOID();
 }
 
 struct drawable_ref_array *yetty_ydraw_cell_ref_table_get(
@@ -221,11 +224,26 @@ void yetty_ydraw_cell_ref_table_gc_mark(struct yetty_ydraw_cell_ref_table *table
     }
 }
 
-void yetty_ydraw_cell_ref_table_gc_end(struct yetty_ydraw_cell_ref_table *table)
+struct yetty_ycore_void_result yetty_ydraw_cell_ref_table_gc_end(
+    struct yetty_ydraw_cell_ref_table *table)
 {
+    /* Sweep every unmarked slot. A single failed recycle (free-list could
+     * not grow) must not stop the sweep — stash the first error, finish
+     * releasing the rest, and surface it at the end. */
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     for (uint32_t handle = 1; handle < table->count; handle++) {
         if (table->slots[handle] && !table->marks[handle]) {
-            yetty_ydraw_cell_ref_table_release(table, handle);
+            struct yetty_ycore_void_result release_res =
+                yetty_ydraw_cell_ref_table_release(table, handle);
+            if (YETTY_IS_ERR(release_res)) {
+                if (YETTY_IS_OK(first_err)) {
+                    first_err =
+                        YETTY_ERR(yetty_ycore_void, "cell_ref_table_gc_end: release", release_res);
+                } else {
+                    yetty_ycore_error_destroy(release_res.error);
+                }
+            }
         }
     }
+    return first_err;
 }

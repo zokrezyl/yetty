@@ -41,8 +41,8 @@ void yetty_yui_config_dialog_destroy(struct yetty_yui_config_dialog *dlg);
 
 /* Toggle visibility. Show also re-marks the engine dirty so the next
  * frame paints the dialog. NULL-safe. */
-void yetty_yui_config_dialog_show(struct yetty_yui_config_dialog *dlg);
-void yetty_yui_config_dialog_hide(struct yetty_yui_config_dialog *dlg);
+struct yetty_ycore_void_result yetty_yui_config_dialog_show(struct yetty_yui_config_dialog *dlg);
+struct yetty_ycore_void_result yetty_yui_config_dialog_hide(struct yetty_yui_config_dialog *dlg);
 
 /* True iff the dialog window is currently visible. Used by yui's
  * is_active to capture pointer events while the dialog is open. */

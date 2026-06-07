@@ -14,12 +14,12 @@
 #define FP_PAD 8.0f
 
 /* Brand palette, packed 0xAABBGGRR. */
-#define FP_BG 0xFF14100Bu       /* BRAND_BG            (11,16,20)  */
+#define FP_BG 0xFF14100Bu        /* BRAND_BG            (11,16,20)  */
 #define FP_HEADER_BG 0xFF2C261Eu /* BRAND_BG_ROW       (30,38,44)  */
-#define FP_BORDER 0xFF474A36u   /* BRAND_BORDER        (54,74,71)  */
-#define FP_TEXT 0xFFE4E5E0u     /* BRAND_TEXT_PRIMARY  (224,229,228) */
-#define FP_DIR 0xFF92A86Bu      /* BRAND_ACCENT        (107,168,146) */
-#define FP_SEL_BG 0xFF1F1A14u   /* BRAND_BG_LIFTED     (20,26,31)  */
+#define FP_BORDER 0xFF474A36u    /* BRAND_BORDER        (54,74,71)  */
+#define FP_TEXT 0xFFE4E5E0u      /* BRAND_TEXT_PRIMARY  (224,229,228) */
+#define FP_DIR 0xFF92A86Bu       /* BRAND_ACCENT        (107,168,146) */
+#define FP_SEL_BG 0xFF1F1A14u    /* BRAND_BG_LIFTED     (20,26,31)  */
 
 struct [[clang::annotate("class@ygui:filepicker")]] [[clang::annotate(
     "parent@ygui:primitive_widget")]] fp_data {
@@ -33,6 +33,7 @@ struct [[clang::annotate("class@ygui:filepicker")]] [[clang::annotate(
     int press_scroll;
 };
 
+YETTY_EXTERNAL_CALLBACK
 static const struct yetty_yclass *fp_class(void)
 {
     return yetty_ygui_filepicker_class_get().value;
@@ -165,8 +166,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct fp_data *d = d_dr.value;
     fp_free_entries(d);
     free(d->cwd);
-    return yetty_ygui_super_void(obj, fp_class(),
-                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, fp_class(), (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:filepicker:widget_paint")]]
@@ -195,14 +195,15 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                    .half_width = w * 0.5f,
                                    .half_height = h * 0.5f,
                                    .corner_radius = 0.0f};
-    struct yetty_ycore_void_result result_198 = yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 0, FP_BG,
-                                                              FP_BORDER, 1.0f, &frame);
+    struct yetty_ycore_void_result result_198 = yetty_ydraw_drawable_list_add_cmd_add_box(
+        ctx->ygrid_drawable_list, 0, 0, FP_BG, FP_BORDER, 1.0f, &frame);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_198, "fp: frame");
-    struct yetty_ycore_void_result result_202 = yguix_box(ctx, r.min.x, r.min.y, w, FP_HEADER_H, FP_HEADER_BG, 0.0f);
+    struct yetty_ycore_void_result result_202 =
+        yguix_box(ctx, r.min.x, r.min.y, w, FP_HEADER_H, FP_HEADER_BG, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_202, "fp: header");
     if (d->cwd) {
-        struct yetty_ycore_void_result result_206 = yguix_text(ctx, d->cwd, r.min.x + FP_PAD,
-                                       r.min.y + (FP_HEADER_H + fs) * 0.5f - 3.0f, fs, FP_TEXT);
+        struct yetty_ycore_void_result result_206 = yguix_text(
+            ctx, d->cwd, r.min.x + FP_PAD, r.min.y + (FP_HEADER_H + fs) * 0.5f - 3.0f, fs, FP_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_206, "fp: cwd");
     }
 
@@ -220,13 +221,14 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     for (int i = first; i < last; i++) {
         float ry = list_y + (float)(i - first) * FP_ROW_H;
         if (i == d->selected) {
-            struct yetty_ycore_void_result result_226 = yguix_box(ctx, r.min.x + 2.0f, ry, w - 4.0f, FP_ROW_H, FP_SEL_BG, 0.0f);
+            struct yetty_ycore_void_result result_226 =
+                yguix_box(ctx, r.min.x + 2.0f, ry, w - 4.0f, FP_ROW_H, FP_SEL_BG, 0.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_226, "fp: sel");
         }
         const char *e = d->entries[i];
         uint32_t col = (e && strchr(e, '/')) ? FP_DIR : FP_TEXT;
-        struct yetty_ycore_void_result result_232 = yguix_text(ctx, e ? e : "", r.min.x + FP_PAD,
-                                       ry + (FP_ROW_H + fs) * 0.5f - 3.0f, fs, col);
+        struct yetty_ycore_void_result result_232 = yguix_text(
+            ctx, e ? e : "", r.min.x + FP_PAD, ry + (FP_ROW_H + fs) * 0.5f - 3.0f, fs, col);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_232, "fp: row");
     }
 
@@ -240,7 +242,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         if (track_h > list_h) {
             track_h = list_h;
         }
-        struct yetty_ycore_void_result result_248 = yguix_box(ctx, sb_x, list_y, sb_w, track_h, FP_SEL_BG, sb_w * 0.5f);
+        struct yetty_ycore_void_result result_248 =
+            yguix_box(ctx, sb_x, list_y, sb_w, track_h, FP_SEL_BG, sb_w * 0.5f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_248, "fp: sb track");
         float thumb_h = track_h * (float)visible / (float)d->entry_count;
         if (thumb_h < 16.0f) {
@@ -252,7 +255,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         int max_scroll = d->entry_count - visible;
         float frac = max_scroll > 0 ? (float)d->scroll / (float)max_scroll : 0.0f;
         float thumb_y = list_y + frac * (track_h - thumb_h);
-        struct yetty_ycore_void_result result_261 = yguix_box(ctx, sb_x, thumb_y, sb_w, thumb_h, FP_DIR, sb_w * 0.5f);
+        struct yetty_ycore_void_result result_261 =
+            yguix_box(ctx, sb_x, thumb_y, sb_w, thumb_h, FP_DIR, sb_w * 0.5f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_261, "fp: sb thumb");
     }
     return YETTY_OK_VOID();
@@ -496,7 +500,8 @@ const char *yetty_ygui_filepicker_get_dir(const struct yetty_ygui_object *obj)
     if (!obj) {
         return NULL;
     }
-    return ((struct fp_data *)yetty_ygui_data_get((struct yetty_ygui_object *)obj, fp_class()))->cwd;
+    return ((struct fp_data *)yetty_ygui_data_get((struct yetty_ygui_object *)obj, fp_class()))
+        ->cwd;
 }
 
 #include "filepicker.gen.c"

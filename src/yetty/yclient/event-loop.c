@@ -329,12 +329,12 @@ static void on_post_async(uv_async_t *handle)
  * Lifecycle
  *===========================================================================*/
 
-struct yetty_yclient_event_loop *yetty_yclient_event_loop_create(
+struct yetty_yclient_event_loop_ptr_result yetty_yclient_event_loop_create(
     const struct yetty_yclient_lib_event_loop_config *cfg)
 {
     struct yetty_yclient_event_loop *L = calloc(1, sizeof(*L));
     if (!L) {
-        return NULL;
+        return YETTY_ERR(yetty_yclient_event_loop_ptr, "yclient event-loop: calloc failed");
     }
 
     L->in_fd = (cfg && cfg->in_fd >= 0) ? cfg->in_fd : STDIN_FILENO;
@@ -343,58 +343,117 @@ struct yetty_yclient_event_loop *yetty_yclient_event_loop_create(
     L->next_timer_id = 1;
 
     if (uv_loop_init(&L->loop) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr, "yclient event-loop: uv_loop_init failed");
     }
 
     /* Stream decoder. */
     {
         struct yetty_yface_ptr_result yr = yetty_yface_create();
-        if (!yr.ok) {
-            goto fail;
+        if (YETTY_IS_ERR(yr)) {
+            {
+                struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+                if (YETTY_IS_ERR(partial)) {
+                    yetty_ycore_error_destroy(partial.error);
+                }
+            }
+            return YETTY_ERR(yetty_yclient_event_loop_ptr, "yclient event-loop: yface create", yr);
         }
         L->yface = yr.value;
         yetty_yface_set_handlers(L->yface, on_yface_osc, on_yface_raw, L);
     }
 
     if (uv_poll_init(&L->loop, &L->in_poll, L->in_fd) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr, "yclient event-loop: uv_poll_init failed");
     }
     L->in_poll.data = L;
     if (uv_poll_start(&L->in_poll, UV_READABLE, on_in_readable) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr, "yclient event-loop: uv_poll_start failed");
     }
     L->in_poll_active = 1;
 
     if (uv_async_init(&L->loop, &L->stop_async, on_stop_async) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr,
+                         "yclient event-loop: uv_async_init (stop) failed");
     }
     L->stop_async.data = L;
     if (uv_async_init(&L->loop, &L->frame_async, on_frame_async) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr,
+                         "yclient event-loop: uv_async_init (frame) failed");
     }
     L->frame_async.data = L;
     if (uv_async_init(&L->loop, &L->post_async, on_post_async) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr,
+                         "yclient event-loop: uv_async_init (post) failed");
     }
     L->post_async.data = L;
 
     if (uv_check_init(&L->loop, &L->frame_check) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr, "yclient event-loop: uv_check_init failed");
     }
     L->frame_check.data = L;
     if (uv_check_start(&L->frame_check, on_frame_check) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr, "yclient event-loop: uv_check_start failed");
     }
 
     if (uv_mutex_init(&L->post_mutex) != 0) {
-        goto fail;
+        {
+            struct yetty_ycore_void_result partial = yetty_yclient_event_loop_destroy(L);
+            if (YETTY_IS_ERR(partial)) {
+                yetty_ycore_error_destroy(partial.error);
+            }
+        }
+        return YETTY_ERR(yetty_yclient_event_loop_ptr, "yclient event-loop: uv_mutex_init failed");
     }
 
-    return L;
-
-fail:
-    yetty_yclient_event_loop_destroy(L);
-    return NULL;
+    return YETTY_OK(yetty_yclient_event_loop_ptr, L);
 }
 
 static void on_handle_close(uv_handle_t *h)
@@ -402,10 +461,10 @@ static void on_handle_close(uv_handle_t *h)
     (void)h;
 }
 
-void yetty_yclient_event_loop_destroy(struct yetty_yclient_event_loop *L)
+struct yetty_ycore_void_result yetty_yclient_event_loop_destroy(struct yetty_yclient_event_loop *L)
 {
     if (!L) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     if (L->in_poll_active) {
@@ -442,8 +501,15 @@ void yetty_yclient_event_loop_destroy(struct yetty_yclient_event_loop *L)
     uv_mutex_destroy(&L->post_mutex);
     uv_loop_close(&L->loop);
 
+    /* Best-effort teardown: stash the first sub-destroy error, but finish
+     * freeing every resource and surface the error at the end. */
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (L->yface) {
-        yetty_yface_destroy(L->yface);
+        struct yetty_ycore_void_result fr = yetty_yface_destroy(L->yface);
+        if (YETTY_IS_ERR(fr)) {
+            first_err = YETTY_ERR(yetty_ycore_void, "yclient event-loop destroy: yface", fr);
+        }
+        L->yface = NULL;
     }
 
     /* Drain post queue (in case any tasks were posted after destroy). */
@@ -454,6 +520,7 @@ void yetty_yclient_event_loop_destroy(struct yetty_yclient_event_loop *L)
     }
 
     free(L);
+    return first_err;
 }
 
 /*=============================================================================

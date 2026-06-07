@@ -66,15 +66,18 @@ struct yetty_yface_ptr_result yetty_yface_create(void)
     return YETTY_OK(yetty_yface_ptr, y);
 }
 
-void yetty_yface_destroy(struct yetty_yface *y)
+struct yetty_ycore_void_result yetty_yface_destroy(struct yetty_yface *y)
 {
     if (!y) {
-        return;
+        return YETTY_OK_VOID();
     }
+    /* Best-effort teardown: run every step, stash the first error, free the
+     * yface regardless, and surface the error at the end. */
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (y->sm) {
         struct yetty_ycore_void_result dr = yetty_ywire_wire_statemachine_destroy(y->sm);
         if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
+            first_err = YETTY_ERR(yetty_ycore_void, "yface: SM destroy", dr);
         }
         y->sm = NULL;
     }
@@ -82,6 +85,7 @@ void yetty_yface_destroy(struct yetty_yface *y)
     yetty_ycore_buffer_destroy(&y->out_buf);
     yetty_ycore_buffer_destroy(&y->dec_b64_accum);
     free(y);
+    return first_err;
 }
 
 struct yetty_ycore_buffer *yetty_yface_in_buf(struct yetty_yface *y)

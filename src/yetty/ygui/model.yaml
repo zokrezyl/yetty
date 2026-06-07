@@ -3260,7 +3260,7 @@ typedef void (*yetty_ygui_tab_new_cb)(struct yetty_ygui_object *tabbar, void *us
         type: int
   - source_file: src/yetty/ygui/widgets/textinput.c
     name: yetty_ygui_textinput_handle_key
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_ygui_object *"

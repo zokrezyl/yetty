@@ -295,7 +295,7 @@ exposed:
 };"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_dump
-    return_type: "char *"
+    return_type: struct yetty_ycore_char_ptr_result
     args:
       - name: self
         type: "const struct yetty_yfigure_figure *"
@@ -325,7 +325,7 @@ exposed:
         type: "const struct yetty_context *"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_rect
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: container
         type: "struct yetty_yfigure_container *"

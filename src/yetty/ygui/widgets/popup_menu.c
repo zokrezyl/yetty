@@ -64,8 +64,7 @@ static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj,
-                              yetty_ygui_popup_menu_class_get().value,
+        yetty_ygui_super_void(obj, yetty_ygui_popup_menu_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "popup_menu_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
@@ -105,8 +104,7 @@ static struct yetty_ycore_void_result popup_menu_destructor(struct yetty_yclass_
     d->items = NULL;
     free(d->title);
     d->title = NULL;
-    return yetty_ygui_super_void(obj,
-                                 yetty_ygui_popup_menu_class_get().value,
+    return yetty_ygui_super_void(obj, yetty_ygui_popup_menu_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -180,8 +178,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
-                                                     &geom);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
+                                                         0.0f, &geom);
     }
     if (radius > w * 0.5f) {
         radius = w * 0.5f;
@@ -199,8 +197,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
-                                                         0.0f, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill,
+                                                             0u, 0.0f, &geom);
 }
 
 [[clang::annotate("override@ygui:popup_menu:widget_paint")]]
@@ -247,8 +245,8 @@ static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_ctx *
         float ty = ry + (MENU_ITEM_H + MENU_FONT_SIZE) * 0.5f - 3.0f;
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)label, .capacity = strlen(label), .size = strlen(label)};
-        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + MENU_PAD_X, ty, &tb,
-                                            MENU_FONT_SIZE, COLOR_TEXT, 0, -1, 0.0f);
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + MENU_PAD_X, ty,
+                                                &tb, MENU_FONT_SIZE, COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "popup_menu_paint: label");
     }
     return YETTY_OK_VOID();
@@ -394,13 +392,17 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_separator(struct yetty_
 
 /* Mark the most-recently-added item as a drill / back row (keeps the
  * menu open + re-measures after its callback). */
-static void mark_last_drill(struct yetty_ygui_object *obj)
+static struct yetty_ycore_void_result mark_last_drill(struct yetty_ygui_object *obj)
 {
-    struct popup_menu_data *d =
-        yetty_ygui_data_get(obj, yetty_ygui_popup_menu_class_get().value);
+    struct yetty_yclass_ptr_result class_result = yetty_ygui_popup_menu_class_get();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, class_result, "mark_last_drill: class");
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "mark_last_drill: data_get");
+    struct popup_menu_data *d = d_dr.value;
     if (d->n_items > 0) {
         d->items[d->n_items - 1].is_drill = 1;
     }
+    return YETTY_OK_VOID();
 }
 
 [[clang::annotate("expose")]]
@@ -456,7 +458,8 @@ struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_y
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_popup_menu_is_open: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_popup_menu_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_popup_menu_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_popup_menu_is_open: data_get");
     struct popup_menu_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->open);
@@ -536,10 +539,8 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_ygui_
      * (keeps the menu open after the callback). */
     struct yetty_ycore_void_result r =
         yetty_ygui_popup_menu_add_item(obj, label ? label : "‹ Back", cb, userdata);
-    if (YETTY_IS_OK(r)) {
-        mark_last_drill(obj);
-    }
-    return r;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_popup_menu_set_back: add_item");
+    return mark_last_drill(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -549,10 +550,8 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty
                                                                     void *userdata)
 {
     struct yetty_ycore_void_result r = yetty_ygui_popup_menu_add_item(obj, label, cb, userdata);
-    if (YETTY_IS_OK(r)) {
-        mark_last_drill(obj);
-    }
-    return r;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_popup_menu_add_drill_item: add_item");
+    return mark_last_drill(obj);
 }
 
 [[clang::annotate("expose")]]

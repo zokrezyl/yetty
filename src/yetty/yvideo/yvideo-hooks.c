@@ -373,10 +373,10 @@ static size_t yvideo_find_start_code(const uint8_t *buf, size_t size, size_t fro
  * device's ring.
  *-------------------------------------------------------------------------*/
 
-static void yvideo_pump_audio(struct yvideo_instance_data *st)
+static struct yetty_ycore_void_result yvideo_pump_audio(struct yvideo_instance_data *st)
 {
     if (st->paused || !st->audio_decoder || !st->audio_device) {
-        return;
+        return YETTY_OK_VOID();
     }
     /* Walk packets while at least the u32 length prefix is present. */
     while (st->audio_ring_consumed + sizeof(uint32_t) <= st->audio_ring_size) {
@@ -388,7 +388,7 @@ static void yvideo_pump_audio(struct yvideo_instance_data *st)
         size_t padded_len = (packet_len + 3u) & ~3u;
         if (payload_off + padded_len > st->audio_ring_size) {
             /* Incomplete packet — wait for more bytes. */
-            return;
+            return YETTY_OK_VOID();
         }
         struct yetty_ycore_void_result fr = yetty_yacodec_decoder_feed(
             st->audio_decoder, st->audio_ring + payload_off, (size_t)packet_len);
@@ -423,6 +423,7 @@ static void yvideo_pump_audio(struct yvideo_instance_data *st)
             }
         }
     }
+    return YETTY_OK_VOID();
 }
 
 /*---------------------------------------------------------------------------
@@ -436,38 +437,43 @@ enum yvideo_decode_step {
     YVIDEO_DECODE_STEP_NO_INPUT, /* no complete NAL available — yield */
 };
 
+YETTY_YRESULT_DECLARE(yvideo_decode_step, enum yvideo_decode_step);
+
 /* One decoder step. Either feeds at most one NAL or reports no input.
  * Three-valued return lets the coroutine decide whether to yield. */
-static enum yvideo_decode_step yvideo_decode_one_step(struct yvideo_instance_data *st)
+static struct yvideo_decode_step_result yvideo_decode_one_step(struct yvideo_instance_data *st)
 {
     if (!st->decoder || !st->nal_ring) {
-        return YVIDEO_DECODE_STEP_NO_INPUT;
+        return YETTY_OK(yvideo_decode_step, YVIDEO_DECODE_STEP_NO_INPUT);
     }
     size_t curr = yvideo_find_start_code(st->nal_ring, st->nal_ring_size, st->nal_ring_consumed);
     if (curr == (size_t)-1) {
-        return YVIDEO_DECODE_STEP_NO_INPUT;
+        return YETTY_OK(yvideo_decode_step, YVIDEO_DECODE_STEP_NO_INPUT);
     }
     size_t next = yvideo_find_start_code(st->nal_ring, st->nal_ring_size, curr + 3);
     if (next == (size_t)-1) {
-        return YVIDEO_DECODE_STEP_NO_INPUT;
+        return YETTY_OK(yvideo_decode_step, YVIDEO_DECODE_STEP_NO_INPUT);
     }
     size_t nal_size = next - curr;
     struct yetty_ycore_void_result fr =
         yetty_yvcodec_decoder_feed(st->decoder, st->nal_ring + curr, nal_size);
     st->nal_ring_consumed = next;
     if (YETTY_IS_ERR(fr)) {
+        /* A single corrupt NAL is non-fatal in a streaming context —
+         * absorb the per-NAL decode failure and report progress so the
+         * coro keeps draining the ring. */
         yetty_ycore_error_destroy(fr.error);
-        return YVIDEO_DECODE_STEP_PROGRESS;
+        return YETTY_OK(yvideo_decode_step, YVIDEO_DECODE_STEP_PROGRESS);
     }
     struct yetty_yvcodec_yuv_frame yuv = {0};
     bool got = false;
     struct yetty_ycore_void_result gr = yetty_yvcodec_decoder_get_frame(st->decoder, &yuv, &got);
     if (YETTY_IS_ERR(gr)) {
         yetty_ycore_error_destroy(gr.error);
-        return YVIDEO_DECODE_STEP_PROGRESS;
+        return YETTY_OK(yvideo_decode_step, YVIDEO_DECODE_STEP_PROGRESS);
     }
     if (!got) {
-        return YVIDEO_DECODE_STEP_PROGRESS;
+        return YETTY_OK(yvideo_decode_step, YVIDEO_DECODE_STEP_PROGRESS);
     }
     if (yuv.width != st->video_w || yuv.height != st->video_h) {
         if (!st->size_mismatch_warned) {
@@ -476,7 +482,7 @@ static enum yvideo_decode_step yvideo_decode_one_step(struct yvideo_instance_dat
                    yuv.width, yuv.height, st->video_w, st->video_h);
             st->size_mismatch_warned = true;
         }
-        return YVIDEO_DECODE_STEP_PROGRESS;
+        return YETTY_OK(yvideo_decode_step, YVIDEO_DECODE_STEP_PROGRESS);
     }
     /* Stride-strip copy — see comment block in the previous v2 version. */
     for (uint32_t row = 0u; row < st->video_h; row++) {
@@ -491,7 +497,7 @@ static enum yvideo_decode_step yvideo_decode_one_step(struct yvideo_instance_dat
     }
     st->have_frame = true;
     st->frames_displayed++;
-    return YVIDEO_DECODE_STEP_FRAME;
+    return YETTY_OK(yvideo_decode_step, YVIDEO_DECODE_STEP_FRAME);
 }
 
 /* Decode coroutine entry. Pumps audio + video to completion, then
@@ -506,16 +512,27 @@ static enum yvideo_decode_step yvideo_decode_one_step(struct yvideo_instance_dat
  * `have_frame` flips true — see yvideo_target_frame). We need the
  * first decode attempt to bootstrap that flip, so the loop must run
  * the body at least once when both are 0. */
+YETTY_EXTERNAL_CALLBACK
 static void yvideo_decode_coro_entry(void *arg)
 {
+    /* Coroutine entry signature is dictated by yetty_yplatform_coro_spawn
+     * (void (*)(void *)) — there is nowhere to propagate a Result, so the
+     * pump steps' errors are absorbed at this boundary. */
     struct yvideo_instance_data *st = (struct yvideo_instance_data *)arg;
     while (!st->coro_should_exit) {
         if (!st->paused) {
-            yvideo_pump_audio(st);
+            struct yetty_ycore_void_result pump_result = yvideo_pump_audio(st);
+            if (YETTY_IS_ERR(pump_result)) {
+                yetty_ycore_error_destroy(pump_result.error);
+            }
 
             while (st->frames_displayed <= st->coro_target_frame && !st->coro_should_exit) {
-                enum yvideo_decode_step step = yvideo_decode_one_step(st);
-                if (step == YVIDEO_DECODE_STEP_NO_INPUT) {
+                struct yvideo_decode_step_result step_result = yvideo_decode_one_step(st);
+                if (YETTY_IS_ERR(step_result)) {
+                    yetty_ycore_error_destroy(step_result.error);
+                    break;
+                }
+                if (step_result.value == YVIDEO_DECODE_STEP_NO_INPUT) {
                     break;
                 }
             }
@@ -641,11 +658,12 @@ static struct yetty_ycore_int_result yvideo_on_tick(struct yetty_yevent_event_li
  * Instance lifecycle teardown.
  *-------------------------------------------------------------------------*/
 
-static void yvideo_state_destroy(struct yvideo_instance_data *st)
+static struct yetty_ycore_void_result yvideo_state_destroy(struct yvideo_instance_data *st)
 {
     if (!st) {
-        return;
+        return YETTY_OK_VOID();
     }
+    struct yetty_ycore_void_result first_error = YETTY_OK_VOID();
     /* Drain + destroy the decode coro BEFORE freeing the decoder /
      * ring buffers it walks. The coro is suspended (yielded) by
      * invariant — we only ever reach here from the event-loop thread,
@@ -671,7 +689,11 @@ static void yvideo_state_destroy(struct yvideo_instance_data *st)
          * destroy frees the ring the callback drains from. */
         struct yetty_ycore_void_result spr = yetty_yplatform_audio_device_stop(st->audio_device);
         if (YETTY_IS_ERR(spr)) {
-            yetty_ycore_error_destroy(spr.error);
+            if (YETTY_IS_OK(first_error)) {
+                first_error = spr;
+            } else {
+                yetty_ycore_error_destroy(spr.error);
+            }
         }
         yetty_yplatform_audio_device_destroy(st->audio_device);
     }
@@ -681,6 +703,7 @@ static void yvideo_state_destroy(struct yvideo_instance_data *st)
     free(st->nal_ring);
     free(st->audio_ring);
     free(st);
+    return first_error;
 }
 
 /*---------------------------------------------------------------------------
@@ -694,15 +717,21 @@ static void yvideo_state_destroy(struct yvideo_instance_data *st)
  * quiescent during the reset.
  *-------------------------------------------------------------------------*/
 
-static void yvideo_do_seek(struct yvideo_instance_data *st, uint32_t pts_ms)
+static struct yetty_ycore_void_result yvideo_do_seek(struct yvideo_instance_data *st,
+                                                     uint32_t pts_ms)
 {
+    /* Audio start/stop here is best-effort: the ring flush + decoder
+     * reset MUST complete regardless so the figure isn't left in an
+     * inconsistent state. Stash the first audio error and surface it at
+     * the end rather than bailing mid-seek. */
+    struct yetty_ycore_void_result first_error = YETTY_OK_VOID();
     /* Stop audio first so the backend thread isn't reading the ring
      * while we flush it. Restart after flush so playback resumes when
      * the sender feeds new bytes. */
     if (st->audio_device) {
         struct yetty_ycore_void_result sr = yetty_yplatform_audio_device_stop(st->audio_device);
         if (YETTY_IS_ERR(sr)) {
-            yetty_ycore_error_destroy(sr.error);
+            first_error = sr;
         }
         yetty_yplatform_audio_device_flush(st->audio_device);
         /* Capture the device's lifetime played_out so we can subtract
@@ -737,28 +766,38 @@ static void yvideo_do_seek(struct yvideo_instance_data *st, uint32_t pts_ms)
          * round-trip through the lazy-start condition. */
         struct yetty_ycore_void_result sr = yetty_yplatform_audio_device_start(st->audio_device);
         if (YETTY_IS_ERR(sr)) {
-            yetty_ycore_error_destroy(sr.error);
+            if (YETTY_IS_OK(first_error)) {
+                first_error = sr;
+            } else {
+                yetty_ycore_error_destroy(sr.error);
+            }
         }
     }
 
     yinfo("yvideo: seek to %u ms", pts_ms);
+    return first_error;
 }
 
-static void yvideo_do_set_playing(struct yvideo_instance_data *st, bool playing)
+static struct yetty_ycore_void_result yvideo_do_set_playing(struct yvideo_instance_data *st,
+                                                            bool playing)
 {
     if (playing == !st->paused) {
-        return; /* no-op */
+        return YETTY_OK_VOID(); /* no-op */
     }
     extern double yetty_yplatform_ytime_monotonic_sec(void);
     double now = yetty_yplatform_ytime_monotonic_sec();
 
+    /* Audio start/stop is best-effort — the paused-state transition must
+     * complete either way so the figure's playback state stays coherent.
+     * Stash the first audio error and surface it after the transition. */
+    struct yetty_ycore_void_result first_error = YETTY_OK_VOID();
     if (playing) {
         /* Resume. */
         if (st->audio_device) {
             struct yetty_ycore_void_result sr =
                 yetty_yplatform_audio_device_start(st->audio_device);
             if (YETTY_IS_ERR(sr)) {
-                yetty_ycore_error_destroy(sr.error);
+                first_error = sr;
             }
         } else if (st->paused_at_sec > 0.0) {
             /* Wall-clock master: shift start_monotonic_sec by the pause
@@ -774,7 +813,7 @@ static void yvideo_do_set_playing(struct yvideo_instance_data *st, bool playing)
              * extra offset bookkeeping needed for the audio path. */
             struct yetty_ycore_void_result sr = yetty_yplatform_audio_device_stop(st->audio_device);
             if (YETTY_IS_ERR(sr)) {
-                yetty_ycore_error_destroy(sr.error);
+                first_error = sr;
             }
         } else {
             st->paused_at_sec = now;
@@ -782,6 +821,7 @@ static void yvideo_do_set_playing(struct yvideo_instance_data *st, bool playing)
         st->paused = true;
     }
     yinfo("yvideo: %s", playing ? "play" : "pause");
+    return first_error;
 }
 
 static void yvideo_do_set_speed(struct yvideo_instance_data *st, float speed)
@@ -868,19 +908,28 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(struct yetty_ydraw_fi
     st->u_buf = calloc(1u, st->uv_buf_size);
     st->v_buf = calloc(1u, st->uv_buf_size);
     if (!st->y_buf || !st->u_buf || !st->v_buf) {
-        yvideo_state_destroy(st);
+        struct yetty_ycore_void_result destroy_result = yvideo_state_destroy(st);
+        if (YETTY_IS_ERR(destroy_result)) {
+            yetty_ycore_error_destroy(destroy_result.error);
+        }
         return YETTY_ERR(yetty_ycore_void, "yvideo: plane buf alloc failed");
     }
     struct yetty_yvcodec_decoder_ptr_result dr = yetty_yvcodec_decoder_create_h264();
     if (YETTY_IS_ERR(dr)) {
-        yvideo_state_destroy(st);
+        struct yetty_ycore_void_result destroy_result = yvideo_state_destroy(st);
+        if (YETTY_IS_ERR(destroy_result)) {
+            yetty_ycore_error_destroy(destroy_result.error);
+        }
         return YETTY_ERR(yetty_ycore_void, "yvideo: decoder create failed", dr);
     }
     st->decoder = dr.value;
 
     if (nal_byte_count > 0u) {
         if (!yvideo_nal_ring_append(st, nal_bytes, nal_byte_count)) {
-            yvideo_state_destroy(st);
+            struct yetty_ycore_void_result destroy_result = yvideo_state_destroy(st);
+            if (YETTY_IS_ERR(destroy_result)) {
+                yetty_ycore_error_destroy(destroy_result.error);
+            }
             return YETTY_ERR(yetty_ycore_void, "yvideo: NAL ring grow failed");
         }
     }
@@ -977,14 +1026,21 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(struct yetty_ydraw_fi
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 void yvideo_hook_instance_destroy(struct yetty_ydraw_figure *instance)
 {
+    /* Generated hook contract (yvideo-gen.c) declares this destroy hook as
+     * void — there is nowhere to propagate, so the best-effort teardown
+     * error is absorbed at this boundary. */
     struct yvideo_instance_data *st = yvideo_state(instance);
     if (st && st->subscribed && instance->factory) {
         yvideo_animation_unsubscribe(instance->factory, &instance->listener);
         st->subscribed = false;
     }
-    yvideo_state_destroy(st);
+    struct yetty_ycore_void_result destroy_result = yvideo_state_destroy(st);
+    if (YETTY_IS_ERR(destroy_result)) {
+        yetty_ycore_error_destroy(destroy_result.error);
+    }
     instance->instance_data = NULL;
     instance->listener.handler = NULL;
 }
@@ -1051,7 +1107,8 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(struct yetty_ydraw_fi
         }
         uint32_t pts_ms;
         memcpy(&pts_ms, body, sizeof(pts_ms));
-        yvideo_do_seek(st, pts_ms);
+        struct yetty_ycore_void_result seek_result = yvideo_do_seek(st, pts_ms);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, seek_result, "yvideo update: seek");
         return YETTY_OK_VOID();
     }
 
@@ -1059,7 +1116,8 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(struct yetty_ydraw_fi
         if (body_size < 1u) {
             return YETTY_ERR(yetty_ycore_void, "yvideo update: SET_PLAYING body < 1 byte");
         }
-        yvideo_do_set_playing(st, body[0] != 0u);
+        struct yetty_ycore_void_result playing_result = yvideo_do_set_playing(st, body[0] != 0u);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, playing_result, "yvideo update: set playing");
         return YETTY_OK_VOID();
     }
 

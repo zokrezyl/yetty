@@ -103,19 +103,11 @@ struct [[clang::annotate("class@yflame:flame")]] flame_data {
     float total_height;
 };
 
-static struct flame_data *flame_from_obj(struct yetty_yclass_object *obj)
+static struct yetty_yclass_void_ptr_result flame_from_obj(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_ptr_result class_r = yetty_yflame_flame_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        yetty_ycore_error_destroy(class_r.error);
-        return NULL;
-    }
-    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
-    if (YETTY_IS_ERR(slice_r)) {
-        yetty_ycore_error_destroy(slice_r.error);
-        return NULL;
-    }
-    return (struct flame_data *)slice_r.value;
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, class_r, "flame_from_obj: class");
+    return yetty_yclass_object_data(obj, class_r.value);
 }
 
 /*=============================================================================
@@ -332,8 +324,7 @@ static struct yflame_frame *flame_relayout(struct flame_data *flame)
     flame->max_depth = 0;
     layout(focus, 0.0f, width, 0, &flame->max_depth);
     /* Reserve the top bar for the buttons; the graph occupies the rest. */
-    flame->total_height =
-        (float)YFLAME_BAR_HEIGHT + (float)(flame->max_depth + 1) * frame_height;
+    flame->total_height = (float)YFLAME_BAR_HEIGHT + (float)(flame->max_depth + 1) * frame_height;
     return focus;
 }
 
@@ -397,10 +388,10 @@ static size_t utf8_clamp(const char *text, size_t len)
  *===========================================================================*/
 
 static struct yetty_ycore_void_result emit(struct yetty_ydraw_drawable_list *buf,
-                                          const struct yflame_frame *node,
-                                          const struct flame_data *flame, float frame_height,
-                                          float min_width, int icicle, int labels,
-                                          int32_t highlight_id, uint32_t *z)
+                                           const struct yflame_frame *node,
+                                           const struct flame_data *flame, float frame_height,
+                                           float min_width, int icicle, int labels,
+                                           int32_t highlight_id, uint32_t *z)
 {
     float box_width = node->x_end - node->x_start;
     if (box_width >= min_width) {
@@ -476,7 +467,7 @@ static struct yetty_ycore_void_result emit(struct yetty_ydraw_drawable_list *buf
 
 /* Find the visible frame at (x, target_depth) within the focus subtree. */
 static const struct yflame_frame *hit_find(const struct yflame_frame *node, float x,
-                                          uint32_t target_depth)
+                                           uint32_t target_depth)
 {
     if (node->depth == target_depth) {
         if (x >= node->x_start && x < node->x_end) {
@@ -560,18 +551,16 @@ static int button_hit(float x, float y)
 
 /* configure: set graph width, row height, min visible box width, and flags.
  * 0 selects the default for each. Call after create(), before parse(). */
-[[clang::annotate("override@yflame:flame:configure")]] [[clang::annotate(
-    "local@yflame:configure")]]
+[[clang::annotate("override@yflame:flame:configure")]] [[clang::annotate("local@yflame:configure")]]
 static struct yetty_ycore_void_result flame_configure(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float width,
                                                       float frame_height, float min_width,
                                                       uint32_t flags)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (!flame) {
-        return YETTY_ERR(yetty_ycore_void, "yflame configure: bad object");
-    }
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame configure: from_obj");
+    struct flame_data *flame = flame_r.value;
     flame->width = width;
     flame->frame_height = frame_height;
     flame->min_width = min_width;
@@ -587,10 +576,9 @@ static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_ctx *ctx,
                                                   const char *input, size_t len)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (!flame) {
-        return YETTY_ERR(yetty_ycore_void, "yflame parse: bad object");
-    }
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame parse: from_obj");
+    struct flame_data *flame = flame_r.value;
     if (!input && len > 0) {
         return YETTY_ERR(yetty_ycore_void, "yflame parse: NULL input");
     }
@@ -641,8 +629,10 @@ static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_
                                                             struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (!flame || !flame->root) {
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, flame_r, "yflame render: from_obj");
+    struct flame_data *flame = flame_r.value;
+    if (!flame->root) {
         return YETTY_ERR(yetty_ydraw_drawable_list, "yflame render: nothing parsed");
     }
     struct yflame_frame *focus = flame_relayout(flame);
@@ -670,8 +660,9 @@ static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_r, "yflame render: list create");
 
     uint32_t z = 0;
-    struct yetty_ycore_void_result emitted = emit(list_r.value, focus, flame, frame_height,
-                                                 min_width, icicle, labels, flame->highlight_id, &z);
+    struct yetty_ycore_void_result emitted =
+        emit(list_r.value, focus, flame, frame_height, min_width, icicle, labels,
+             flame->highlight_id, &z);
     if (YETTY_IS_ERR(emitted)) {
         yetty_ydraw_drawable_list_destroy(list_r.value);
         return YETTY_ERR(yetty_ydraw_drawable_list, "yflame render: emit", emitted);
@@ -699,8 +690,10 @@ static struct yetty_ycore_int_result flame_hit_test(struct yetty_yclass_ctx *ctx
                                                     float y)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (!flame || !flame->root) {
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, flame_r, "yflame hit_test: from_obj");
+    struct flame_data *flame = flame_r.value;
+    if (!flame->root) {
         return YETTY_ERR(yetty_ycore_int, "yflame hit_test: nothing parsed");
     }
     /* The navigation buttons are a fixed overlay — test them before the tree. */
@@ -738,10 +731,9 @@ static struct yetty_ycore_void_result flame_focus(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj, int32_t node_id)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (!flame) {
-        return YETTY_ERR(yetty_ycore_void, "yflame focus: bad object");
-    }
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus: from_obj");
+    struct flame_data *flame = flame_r.value;
     ydebug("yflame focus: %d -> %d (node_count=%u)", flame->focus_id, node_id, flame->node_count);
     if (node_id >= 0 && (uint32_t)node_id < flame->node_count) {
         flame->focus_id = node_id;
@@ -756,10 +748,9 @@ static struct yetty_ycore_void_result flame_focus_parent(struct yetty_yclass_ctx
                                                          struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (!flame) {
-        return YETTY_ERR(yetty_ycore_void, "yflame focus_parent: bad object");
-    }
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus_parent: from_obj");
+    struct flame_data *flame = flame_r.value;
     struct yflame_frame *node = flame_focus_node(flame);
     ydebug("yflame focus_parent: focus_id=%d node=%s parent=%s", flame->focus_id,
            node ? node->name : "(null)", (node && node->parent) ? node->parent->name : "(none)");
@@ -775,10 +766,9 @@ static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (!flame) {
-        return YETTY_ERR(yetty_ycore_void, "yflame reset: bad object");
-    }
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame reset: from_obj");
+    struct flame_data *flame = flame_r.value;
     flame->focus_id = 0;
     return YETTY_OK_VOID();
 }
@@ -791,10 +781,9 @@ static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_ct
                                                           int32_t node_id)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (!flame) {
-        return YETTY_ERR(yetty_ycore_void, "yflame set_highlight: bad object");
-    }
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame set_highlight: from_obj");
+    struct flame_data *flame = flame_r.value;
     flame->highlight_id = (node_id >= 0 && (uint32_t)node_id < flame->node_count) ? node_id : -1;
     return YETTY_OK_VOID();
 }
@@ -805,8 +794,11 @@ static struct yetty_ycore_void_result flame_obj_destroy(struct yetty_yclass_ctx 
                                                         struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    struct flame_data *flame = flame_from_obj(obj);
-    if (flame) {
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    if (YETTY_IS_ERR(flame_r)) {
+        yetty_ycore_error_destroy(flame_r.error);
+    } else {
+        struct flame_data *flame = flame_r.value;
         frame_destroy(flame->root);
         free(flame->nodes);
         flame->root = NULL;

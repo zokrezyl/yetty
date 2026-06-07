@@ -74,8 +74,9 @@ static struct yetty_yctl_handler_entry *find_handler(struct yetty_yctl_server *s
 
 /* Dispatch a single already-parsed message: find handler, invoke it,
  * write any response back. Owns msg.params (frees it on return). */
-static void dispatch_message(struct yetty_yctl_rpc_conn_ctx *ctx, struct yetty_yevent_conn *conn,
-                             struct yetty_yctl_message msg)
+static struct yetty_ycore_void_result dispatch_message(struct yetty_yctl_rpc_conn_ctx *ctx,
+                                                       struct yetty_yevent_conn *conn,
+                                                       struct yetty_yctl_message msg)
 {
     struct yetty_yctl_server *server = ctx->server;
     struct yetty_yctl_handler_entry *handler;
@@ -95,11 +96,23 @@ static void dispatch_message(struct yetty_yctl_rpc_conn_ctx *ctx, struct yetty_y
 
         if (msg.type == YETTY_YCTL_MSG_REQUEST) {
             yetty_yctl_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
-            (void)yetty_yctl_write_response_error(&wbuf, msg.msgid, "method not found");
-            server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
+            struct yetty_ycore_void_result encode_res =
+                yetty_yctl_write_response_error(&wbuf, msg.msgid, "method not found");
+            if (YETTY_IS_ERR(encode_res)) {
+                free((void *)msg.params);
+                return YETTY_ERR(yetty_ycore_void, "yctl: encode method-not-found response",
+                                 encode_res);
+            }
+            struct yetty_ycore_size_result send_res =
+                server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
+            if (YETTY_IS_ERR(send_res)) {
+                free((void *)msg.params);
+                return YETTY_ERR(yetty_ycore_void, "yctl: send method-not-found response",
+                                 send_res);
+            }
         }
         free((void *)msg.params);
-        return;
+        return YETTY_OK_VOID();
     }
 
     result = handler->handler(&msg, handler->userdata);
@@ -107,20 +120,33 @@ static void dispatch_message(struct yetty_yctl_rpc_conn_ctx *ctx, struct yetty_y
     if (msg.type == YETTY_YCTL_MSG_REQUEST) {
         yetty_yctl_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
 
+        struct yetty_ycore_void_result encode_res;
         if (result.ok) {
             if (result.value.data) {
-                (void)yetty_yctl_write_response_ok(&wbuf, msg.msgid, result.value.data, result.value.len);
+                encode_res = yetty_yctl_write_response_ok(&wbuf, msg.msgid, result.value.data,
+                                                          result.value.len);
             } else {
-                (void)yetty_yctl_write_response_bool(&wbuf, msg.msgid, result.value.bool_value);
+                encode_res =
+                    yetty_yctl_write_response_bool(&wbuf, msg.msgid, result.value.bool_value);
             }
         } else {
-            (void)yetty_yctl_write_response_error(&wbuf, msg.msgid, result.error);
+            encode_res = yetty_yctl_write_response_error(&wbuf, msg.msgid, result.error);
+        }
+        if (YETTY_IS_ERR(encode_res)) {
+            free((void *)msg.params);
+            return YETTY_ERR(yetty_ycore_void, "yctl: encode response", encode_res);
         }
 
-        server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
+        struct yetty_ycore_size_result send_res =
+            server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
+        if (YETTY_IS_ERR(send_res)) {
+            free((void *)msg.params);
+            return YETTY_ERR(yetty_ycore_void, "yctl: send response", send_res);
+        }
     }
 
     free((void *)msg.params);
+    return YETTY_OK_VOID();
 }
 
 /* TCP server callbacks */
@@ -203,7 +229,15 @@ static void rpc_on_data(void *conn_ctx_ptr, struct yetty_yevent_conn *conn, cons
             break;
         }
 
-        dispatch_message(ctx, conn, pres.value);
+        struct yetty_ycore_void_result dispatch_res = dispatch_message(ctx, conn, pres.value);
+        if (YETTY_IS_ERR(dispatch_res)) {
+            /* libuv read callback — no Result to propagate into. Log and
+             * absorb the response-write failure; keep draining the buffer
+             * so a single bad send doesn't strand the remaining frames. */
+            ytrace("yctl: dispatch failed: %s",
+                   dispatch_res.error.msg ? dispatch_res.error.msg : "(no msg)");
+            yetty_ycore_error_destroy(dispatch_res.error);
+        }
         off += consumed;
     }
 

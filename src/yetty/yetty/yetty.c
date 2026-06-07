@@ -141,7 +141,13 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * before yui composites on top. Read once here; yui_render's
          * own sync runs again (idempotent) and emits + drains the OSC
          * frame. */
-        int yui_force = yetty_yui_is_dirty(yetty->yui);
+        struct yetty_ycore_int_result dirty_result = yetty_yui_is_dirty(yetty->yui);
+        int yui_force = 1; /* on a failed probe, force a redraw to avoid stale chrome */
+        if (YETTY_IS_OK(dirty_result)) {
+            yui_force = dirty_result.value;
+        } else {
+            yetty_ycore_error_destroy(dirty_result.error);
+        }
 
         ytime_start(workspace_render);
         if (yetty->tabbar) {
@@ -327,7 +333,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
             apply.zoom_visual_apply.offset_x = yetty->visual_zoom_offset_x;
             apply.zoom_visual_apply.offset_y = yetty->visual_zoom_offset_y;
             if (yetty->tabbar) {
-                { struct yetty_ycore_int_result drop_r = yetty_yui_tabbar_on_event(yetty->tabbar, &apply); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event"); }
+                {
+                    struct yetty_ycore_int_result drop_r =
+                        yetty_yui_tabbar_on_event(yetty->tabbar, &apply);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event");
+                }
             }
         }
         if (yetty->event_loop && yetty->event_loop->ops->request_render) {
@@ -369,7 +379,12 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 apply.zoom_visual_apply.offset_x = yetty->visual_zoom_offset_x;
                 apply.zoom_visual_apply.offset_y = yetty->visual_zoom_offset_y;
                 if (yetty->tabbar) {
-                    { struct yetty_ycore_int_result drop_r = yetty_yui_tabbar_on_event(yetty->tabbar, &apply); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event"); }
+                    {
+                        struct yetty_ycore_int_result drop_r =
+                            yetty_yui_tabbar_on_event(yetty->tabbar, &apply);
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r,
+                                            "drop: yetty_yui_tabbar_on_event");
+                    }
                 }
             }
             if (yetty->event_loop && yetty->event_loop->ops->request_render) {
@@ -443,7 +458,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * See terminal.c for the actual restructuring. */
     if (event->type == YETTY_YCORE_ZOOM_CELL_SIZE) {
         if (yetty->tabbar) {
-            { struct yetty_ycore_int_result drop_r = yetty_yui_tabbar_on_event(yetty->tabbar, event); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event"); }
+            {
+                struct yetty_ycore_int_result drop_r =
+                    yetty_yui_tabbar_on_event(yetty->tabbar, event);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event");
+            }
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -490,7 +509,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
             ws_height = 0.0f;
         }
         if (yetty->tabbar) {
-            { struct yetty_ycore_void_result drop_r = yetty_yui_tabbar_resize(yetty->tabbar, (float)width, ws_height, (float)height); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_resize"); }
+            {
+                struct yetty_ycore_void_result drop_r =
+                    yetty_yui_tabbar_resize(yetty->tabbar, (float)width, ws_height, (float)height);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_resize");
+            }
         }
 
         /* Resize the app-level yui's scene canvas to match the full
@@ -578,8 +601,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
                     yerror("yetty: PANE_CREATE: terminal create: %s", tr.error.msg);
                     yetty_ycore_error_destroy(tr.error);
                 } else {
-                    struct yetty_ycore_void_result pr =
-                        yetty_yui_tile_pane_push_view(pane, yetty_yterminal_terminal_as_view(tr.value));
+                    struct yetty_ycore_void_result pr = yetty_yui_tile_pane_push_view(
+                        pane, yetty_yterminal_terminal_as_view(tr.value));
                     if (YETTY_IS_ERR(pr)) {
                         yerror("yetty: PANE_CREATE: push_view: %s", pr.error.msg);
                         yetty_ycore_error_destroy(pr.error);
@@ -598,7 +621,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
                     YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "yetty: tabbar resize");
                 }
             }
-            { struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(ws, 1); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_workspace_set_active"); }
+            {
+                struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(ws, 1);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r,
+                                    "drop: yetty_yui_workspace_set_active");
+            }
             if (yetty->event_loop && yetty->event_loop->ops &&
                 yetty->event_loop->ops->request_render) {
                 yetty->event_loop->ops->request_render(yetty->event_loop);
@@ -645,7 +672,12 @@ static struct yetty_ycore_int_result yetty_event_handler(
                     //
                     yetty_ycore_error_destroy(tr.error);
                 } else {
-                    { struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(new_pane, yetty_yterminal_terminal_as_view(tr.value)); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tile_pane_push_view"); }
+                    {
+                        struct yetty_ycore_void_result drop_r = yetty_yui_tile_pane_push_view(
+                            new_pane, yetty_yterminal_terminal_as_view(tr.value));
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r,
+                                            "drop: yetty_yui_tile_pane_push_view");
+                    }
                 }
                 yetty_yui_tile_clear_focus(root);
                 yetty_yui_tile_pane_set_focused(new_pane, 1);
@@ -708,7 +740,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
     if (event->type == YETTY_YCORE_SHUTDOWN) {
         ydebug("yetty: SHUTDOWN — winding down");
         if (yetty->tabbar) {
-            { struct yetty_ycore_int_result drop_r = yetty_yui_tabbar_on_event(yetty->tabbar, event); YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event"); }
+            {
+                struct yetty_ycore_int_result drop_r =
+                    yetty_yui_tabbar_on_event(yetty->tabbar, event);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_on_event");
+            }
         }
         if (yetty->event_loop && yetty->event_loop->ops->stop) {
             yetty->event_loop->ops->stop(yetty->event_loop);
@@ -767,8 +803,12 @@ static struct yetty_ycore_int_result yetty_event_handler(
             if (menu_cs <= 0.0f) {
                 menu_cs = 1.0f;
             }
-            yetty_yui_show_context_menu(yetty->yui, event->mouse.x / menu_cs,
-                                        event->mouse.y / menu_cs);
+            struct yetty_ycore_void_result menu_result = yetty_yui_show_context_menu(
+                yetty->yui, event->mouse.x / menu_cs, event->mouse.y / menu_cs);
+            if (YETTY_IS_ERR(menu_result)) {
+                yetty_ycore_error_print(stderr, "yetty: show context menu", menu_result.error);
+                yetty_ycore_error_destroy(menu_result.error);
+            }
             if (yetty->event_loop && yetty->event_loop->ops &&
                 yetty->event_loop->ops->request_render) {
                 yetty->event_loop->ops->request_render(yetty->event_loop);
@@ -818,13 +858,19 @@ static struct yetty_ycore_void_result register_event_listeners(struct yetty_yett
  * tabbar kind and spawns a new workspace.
  *===========================================================================*/
 
+YETTY_EXTERNAL_CALLBACK
 static void yetty_on_v_menu_click(void *userdata, float anchor_x, float anchor_y)
 {
     struct yetty_yetty_yetty *yetty = userdata;
     if (!yetty || !yetty->yui) {
         return;
     }
-    yetty_yui_show_view_menu(yetty->yui, anchor_x, anchor_y);
+    struct yetty_ycore_void_result menu_result =
+        yetty_yui_show_view_menu(yetty->yui, anchor_x, anchor_y);
+    if (YETTY_IS_ERR(menu_result)) {
+        yetty_ycore_error_print(stderr, "yetty: show view menu", menu_result.error);
+        yetty_ycore_error_destroy(menu_result.error);
+    }
     if (yetty->event_loop && yetty->event_loop->ops->request_render) {
         yetty->event_loop->ops->request_render(yetty->event_loop);
     }
@@ -835,12 +881,12 @@ static void yetty_on_v_menu_click(void *userdata, float anchor_x, float anchor_y
  * terminal_create / viewer_create reads them. Returns 0 on success,
  * non-zero when validation fails (e.g. SSH/Telnet with empty host) —
  * caller surfaces a toast and aborts. */
-static int yetty_apply_view_kind_to_config(struct yetty_yetty_yetty *yetty,
-                                           enum yetty_yui_view_kind kind)
+static struct yetty_ycore_void_result yetty_apply_view_kind_to_config(
+    struct yetty_yetty_yetty *yetty, enum yetty_yui_view_kind kind)
 {
     struct yetty_yconfig_config *config = yetty->context.runtime->config;
     if (!config || !config->ops || !config->ops->set_string) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "apply_view_kind: config has no set_string");
     }
     /* Reset the exclusive flags up front so every kind has a clean slate. */
     config->ops->set_string(config, YETTY_YCONFIG_KEY_SSH, "false");
@@ -849,23 +895,33 @@ static int yetty_apply_view_kind_to_config(struct yetty_yetty_yetty *yetty,
     switch (kind) {
     case YETTY_YUI_VIEW_SHELL:
         config->ops->set_string(config, "shell/command", "");
-        return 0;
+        return YETTY_OK_VOID();
     case YETTY_YUI_VIEW_EXEC: {
-        const char *cmd = yetty_yui_get_exec_command(yetty->yui);
+        struct yetty_ycore_const_char_ptr_result cmd_result =
+            yetty_yui_get_exec_command(yetty->yui);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cmd_result, "apply_view_kind: get exec command");
+        const char *cmd = cmd_result.value;
         if (!cmd || !cmd[0]) {
-            ywarn("yetty: EXEC: empty command");
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "apply_view_kind: EXEC empty command");
         }
         config->ops->set_string(config, "shell/command", cmd);
-        return 0;
+        return YETTY_OK_VOID();
     }
     case YETTY_YUI_VIEW_SSH: {
-        const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
-        const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
-        const char *key = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
+        struct yetty_ycore_const_char_ptr_result host_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "apply_view_kind: SSH host");
+        struct yetty_ycore_const_char_ptr_result port_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, port_result, "apply_view_kind: SSH port");
+        struct yetty_ycore_const_char_ptr_result key_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, key_result, "apply_view_kind: SSH key");
+        const char *host = host_result.value;
+        const char *port = port_result.value;
+        const char *key = key_result.value;
         if (!host || !host[0]) {
-            ywarn("yetty: SSH: empty host");
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "apply_view_kind: SSH empty host");
         }
         char cmd[1024];
         int n = snprintf(cmd, sizeof(cmd), "ssh");
@@ -877,33 +933,38 @@ static int yetty_apply_view_kind_to_config(struct yetty_yetty_yetty *yetty,
         }
         snprintf(cmd + n, sizeof(cmd) - (size_t)n, " %s", host);
         config->ops->set_string(config, "shell/command", cmd);
-        return 0;
+        return YETTY_OK_VOID();
     }
     case YETTY_YUI_VIEW_TELNET: {
-        const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 0);
-        const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 1);
+        struct yetty_ycore_const_char_ptr_result host_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "apply_view_kind: Telnet host");
+        struct yetty_ycore_const_char_ptr_result port_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, port_result, "apply_view_kind: Telnet port");
+        const char *host = host_result.value;
+        const char *port = port_result.value;
         if (!host || !host[0]) {
-            ywarn("yetty: Telnet: empty host");
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "apply_view_kind: Telnet empty host");
         }
         int port_i = (port && port[0]) ? atoi(port) : 23;
         if (port_i <= 0 || port_i > 65535) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "apply_view_kind: Telnet bad port");
         }
         char port_str[16];
         snprintf(port_str, sizeof(port_str), "%d", port_i);
         config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET, "true");
         config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET_HOST, host);
         config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET_PORT, port_str);
-        return 0;
+        return YETTY_OK_VOID();
     }
     case YETTY_YUI_VIEW_YVNC:
         /* The yvnc dialog stashes host:port in vnc/client (TODO when
          * the dialog gets wired); for now the new pane will fall back
          * to a terminal if vnc/client is empty. */
-        return 0;
+        return YETTY_OK_VOID();
     }
-    return -1;
+    return YETTY_ERR(yetty_ycore_void, "apply_view_kind: unknown view kind");
 }
 
 /* Right-click context menu: pre-allocate the new pane + split ids and
@@ -913,13 +974,16 @@ static int yetty_apply_view_kind_to_config(struct yetty_yetty_yetty *yetty,
  * round-trip. orientation argument: 1 = horizontal divider (panes
  * side-by-side), 0 = vertical (panes stacked) — matches the labels in
  * the yui submenu. */
+YETTY_EXTERNAL_CALLBACK
 static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, int horizontal)
 {
     struct yetty_yetty_yetty *yetty = userdata;
     if (!yetty || !yetty->tabbar) {
         return;
     }
-    if (yetty_apply_view_kind_to_config(yetty, kind) != 0) {
+    struct yetty_ycore_void_result apply_result = yetty_apply_view_kind_to_config(yetty, kind);
+    if (YETTY_IS_ERR(apply_result)) {
+        yetty_ycore_error_destroy(apply_result.error);
         ynotify(YETTY_YNOTIFY_WARN, "Split aborted: missing fields");
         return;
     }
@@ -975,7 +1039,12 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         /* Take the command from the EXEC dialog's textinput and stash it
          * in shell/command. The PTY's get_shell_argv tokenizes it instead
          * of running $SHELL. */
-        const char *cmd = yetty_yui_get_exec_command(yetty->yui);
+        struct yetty_ycore_const_char_ptr_result cmd_result =
+            yetty_yui_get_exec_command(yetty->yui);
+        const char *cmd = YETTY_IS_OK(cmd_result) ? cmd_result.value : NULL;
+        if (YETTY_IS_ERR(cmd_result)) {
+            yetty_ycore_error_destroy(cmd_result.error);
+        }
         if (!cmd || !cmd[0]) {
             ywarn("yetty: EXEC connect with empty command — ignoring");
             return;
@@ -990,9 +1059,24 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         break;
     }
     case YETTY_YUI_VIEW_SSH: {
-        const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
-        const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
-        const char *key = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
+        struct yetty_ycore_const_char_ptr_result host_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
+        struct yetty_ycore_const_char_ptr_result port_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
+        struct yetty_ycore_const_char_ptr_result key_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
+        const char *host = YETTY_IS_OK(host_result) ? host_result.value : NULL;
+        const char *port = YETTY_IS_OK(port_result) ? port_result.value : NULL;
+        const char *key = YETTY_IS_OK(key_result) ? key_result.value : NULL;
+        if (YETTY_IS_ERR(host_result)) {
+            yetty_ycore_error_destroy(host_result.error);
+        }
+        if (YETTY_IS_ERR(port_result)) {
+            yetty_ycore_error_destroy(port_result.error);
+        }
+        if (YETTY_IS_ERR(key_result)) {
+            yetty_ycore_error_destroy(key_result.error);
+        }
         if (!host || !host[0]) {
             ywarn("yetty: SSH connect with empty host — ignoring");
             return;
@@ -1016,8 +1100,18 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         break;
     }
     case YETTY_YUI_VIEW_TELNET: {
-        const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 0);
-        const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 1);
+        struct yetty_ycore_const_char_ptr_result host_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 0);
+        struct yetty_ycore_const_char_ptr_result port_result =
+            yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 1);
+        const char *host = YETTY_IS_OK(host_result) ? host_result.value : NULL;
+        const char *port = YETTY_IS_OK(port_result) ? port_result.value : NULL;
+        if (YETTY_IS_ERR(host_result)) {
+            yetty_ycore_error_destroy(host_result.error);
+        }
+        if (YETTY_IS_ERR(port_result)) {
+            yetty_ycore_error_destroy(port_result.error);
+        }
         if (!host || !host[0]) {
             ywarn("yetty: Telnet connect with empty host — ignoring");
             return;

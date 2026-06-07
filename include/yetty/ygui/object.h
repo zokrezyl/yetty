@@ -49,8 +49,9 @@ struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj);
 YETTY_YRESULT_DECLARE(yetty_ygui_void_ptr, void *);
 
 struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_ygui_object *obj,
-                                                              const struct yetty_yclass *cls);
+                                                             const struct yetty_yclass *cls);
 
+YETTY_EXTERNAL_CALLBACK
 void *yetty_ygui_data_get(struct yetty_ygui_object *obj, const struct yetty_yclass *cls);
 
 /* Parent / first-child / next-sibling access. NULL when no relation. */

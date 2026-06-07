@@ -350,12 +350,13 @@ static void css_collect_walk(struct yetty_ylexbor *r, lxb_dom_node_t *node, stru
  * The big win is phase 2 — Wikipedia's two external sheets used to
  * fetch one after the other (~100ms RTT each = 200ms). Multiplexed
  * over a single HTTP/2 connection they finish in one RTT. */
-static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *node)
+static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_ylexbor *r,
+                                                                lxb_dom_node_t *node)
 {
     struct css_collect cc = {0};
     css_collect_walk(r, node, &cc);
     if (cc.count == 0) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* Count externals + allocate fetch I/O arrays. */
@@ -397,7 +398,10 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
         }
     }
 
-    /* Apply each entry in document order. */
+    /* Apply each entry in document order. The per-entry frees below must
+	 * run for every entry, so on an add_css failure stash the first error
+	 * and keep cleaning up rather than bailing mid-loop. */
+    struct yetty_ycore_void_result apply_res = YETTY_OK_VOID();
     for (int i = 0; i < cc.count; i++) {
         struct css_entry *e = &cc.items[i];
         if (e->is_external) {
@@ -413,7 +417,12 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
                 struct yetty_ycore_void_result ar =
                     yetty_ylexbor_add_css(r, bodies[slot], lens[slot]);
                 if (YETTY_IS_ERR(ar)) {
-                    g_css_failed++;
+                    if (YETTY_IS_OK(apply_res)) {
+                        apply_res =
+                            YETTY_ERR(yetty_ycore_void, "load_external_stylesheets: add_css", ar);
+                    } else {
+                        yetty_ycore_error_destroy(ar.error);
+                    }
                 } else {
                     g_css_loaded++;
                 }
@@ -428,7 +437,12 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
             struct yetty_ycore_void_result ar =
                 yetty_ylexbor_add_css(r, e->inline_body, e->inline_len);
             if (YETTY_IS_ERR(ar)) {
-                g_css_failed++;
+                if (YETTY_IS_OK(apply_res)) {
+                    apply_res = YETTY_ERR(yetty_ycore_void,
+                                          "load_external_stylesheets: add_css inline", ar);
+                } else {
+                    yetty_ycore_error_destroy(ar.error);
+                }
             } else {
                 g_css_inline++;
             }
@@ -441,6 +455,7 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
     free(status);
     free(slot_to_entry);
     free(cc.items);
+    return apply_res;
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, const char *html,
@@ -465,7 +480,9 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
 	 * reads make sense; done before box-build so colored backgrounds
 	 * land on the boxes we paint. Skipped silently when libcurl is
 	 * unavailable or a fetch errors. */
-    load_external_stylesheets(r, lxb_dom_interface_node(r->document));
+    struct yetty_ycore_void_result css_res =
+        load_external_stylesheets(r, lxb_dom_interface_node(r->document));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, css_res, "load_html: load_external_stylesheets");
 
     /* Run inline + external <script> blocks. */
     (void)yetty_ylexbor_js_run_inline_scripts(r);

@@ -113,8 +113,9 @@ static int yinit_worker_trampoline(void *arg)
     return 0;
 }
 
-int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *app_cfg,
-                    yetty_yinit_worker_fn worker, void *user)
+struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
+                                              const struct yetty_yinit_app_config *app_cfg,
+                                              yetty_yinit_worker_fn worker, void *user)
 {
     struct yetty_yinit_app_config defaults = {0};
     if (!app_cfg) {
@@ -163,10 +164,7 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
     if (app_cfg->extract_assets_fn) {
         struct yetty_ycore_void_result extract_result = app_cfg->extract_assets_fn();
         if (!YETTY_IS_OK(extract_result)) {
-            fprintf(stderr, "Failed to extract assets: %s\n",
-                    extract_result.error.msg ? extract_result.error.msg : "(no msg)");
-            yetty_ycore_error_destroy(extract_result.error);
-            return 1;
+            return YETTY_ERR(yetty_ycore_int, "yinit: failed to extract assets", extract_result);
         }
         ydebug("yinit: assets extracted");
     } else {
@@ -180,8 +178,7 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
      * ever printing usage. */
     struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv, &paths);
     if (!YETTY_IS_OK(config_result)) {
-        fprintf(stderr, "Failed to create config\n");
-        return 1;
+        return YETTY_ERR(yetty_ycore_int, "yinit: failed to create config", config_result);
     }
     struct yetty_yconfig_config *config = config_result.value;
 
@@ -215,9 +212,8 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
 #endif
 
         if (!glfwInit()) {
-            fprintf(stderr, "Failed to initialize GLFW\n");
             config->ops->destroy(config);
-            return 1;
+            return YETTY_ERR(yetty_ycore_int, "yinit: failed to initialize GLFW");
         }
     } else {
         ydebug("yinit: headless mode, skipping glfwInit");
@@ -233,10 +229,9 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
         ydebug("yinit: creating window %dx%d", width, height);
         window = yetty_yplatform_create_window(width, height, "yetty");
         if (!window) {
-            fprintf(stderr, "Failed to create window\n");
             config->ops->destroy(config);
             glfwTerminate();
-            return 1;
+            return YETTY_ERR(yetty_ycore_int, "yinit: failed to create window");
         }
         ydebug("yinit: window created");
     } else {
@@ -251,7 +246,6 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
     struct yetty_yplatform_input_pipe_result pipe_result = yetty_platform_input_pipe_create();
     ydebug("yinit: platform input pipe created, ok=%d", pipe_result.ok);
     if (!YETTY_IS_OK(pipe_result)) {
-        fprintf(stderr, "Failed to create platform input pipe\n");
         if (window) {
             yetty_yplatform_destroy_window(window);
         }
@@ -259,7 +253,8 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
         if (!headless) {
             glfwTerminate();
         }
-        return 1;
+        return YETTY_ERR(yetty_ycore_int, "yinit: failed to create platform input pipe",
+                         pipe_result);
     }
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe = pipe_result.value;
     if (window) {
@@ -310,7 +305,6 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
     WGPUInstance instance = wgpuCreateInstance(&instance_desc);
     ydebug("yinit: wgpuCreateInstance returned instance=%p", (void *)instance);
     if (!instance) {
-        fprintf(stderr, "Failed to create WebGPU instance\n");
         platform_input_pipe->ops->destroy(platform_input_pipe);
         if (window) {
             yetty_yplatform_destroy_window(window);
@@ -319,7 +313,7 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
         if (!headless) {
             glfwTerminate();
         }
-        return 1;
+        return YETTY_ERR(yetty_ycore_int, "yinit: failed to create WebGPU instance");
     }
 
     /* Surface (NULL for headless mode) */
@@ -327,13 +321,12 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
     if (window) {
         surface = yetty_yplatform_create_surface(instance, window);
         if (!surface) {
-            fprintf(stderr, "Failed to create WebGPU surface\n");
             wgpuInstanceRelease(instance);
             platform_input_pipe->ops->destroy(platform_input_pipe);
             yetty_yplatform_destroy_window(window);
             config->ops->destroy(config);
             glfwTerminate();
-            return 1;
+            return YETTY_ERR(yetty_ycore_int, "yinit: failed to create WebGPU surface");
         }
     }
 
@@ -500,5 +493,8 @@ int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *
     }
     ydebug("yinit: cleanup complete");
 
-    return wa.result;
+    /* wa.result is the worker's process exit code. The worker's own Result
+     * error (if any) was already printed and freed at the thread-trampoline
+     * boundary, so only the numeric code remains to carry up to main(). */
+    return YETTY_OK(yetty_ycore_int, wa.result);
 }

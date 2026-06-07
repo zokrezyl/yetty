@@ -76,6 +76,7 @@ struct [[clang::annotate("class@ygui:ynode")]] [[clang::annotate("parent@ygui:vb
     int selected;
 };
 
+YETTY_EXTERNAL_CALLBACK
 static const struct yetty_yclass *ynode_class(void)
 {
     return yetty_ygui_ynode_class_get().value;
@@ -89,6 +90,7 @@ static struct node_data *ynode_data(struct yetty_ygui_object *node)
 /* The owning editor: a node's parent is its ynodes editor. Returns NULL
  * if the parent is missing or is not a ynodes instance (a node used
  * outside an editor — every interactive helper degrades to a no-op). */
+YETTY_EXTERNAL_CALLBACK
 static struct yetty_ygui_object *ynode_editor(struct yetty_ygui_object *node)
 {
     struct yetty_ygui_object *parent = yetty_ygui_object_parent(node);
@@ -118,8 +120,8 @@ static struct yetty_ycore_void_result ynode_constructor(struct yetty_yclass_ctx 
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, ynode_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, ynode_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ynode_constructor: super");
 
     struct node_data *d = ynode_data(obj);
@@ -186,7 +188,7 @@ static struct yetty_ycore_void_result ynode_destructor(struct yetty_yclass_ctx *
     d->in_count = d->out_count = 0;
 
     return yetty_ygui_super_void(obj, ynode_class(),
-                                (yetty_yclass_method_id_t)yetty_ygui_destructor);
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 /*-----------------------------------------------------------------------------
@@ -336,8 +338,7 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
     };
     uint32_t border = d->selected ? YNODE_BORDER_SEL : YNODE_BORDER;
     struct yetty_ycore_void_result result_338 = yetty_ydraw_drawable_list_add_cmd_add_rounded_box(
-                            ctx->ygrid_drawable_list, 0, 0, YNODE_BG, border, d->selected ? 2.0f : 1.0f,
-                            &frame);
+        ctx->ygrid_drawable_list, 0, 0, YNODE_BG, border, d->selected ? 2.0f : 1.0f, &frame);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_338, "ynode_paint: frame");
 
     /* Title bar — a filled strip across the top. Square bottom corners,
@@ -357,14 +358,15 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
             .radius_top_left = 0.0f,
             .radius_bottom_left = corner,
         };
-        struct yetty_ycore_void_result result_361 = yetty_ydraw_drawable_list_add_cmd_add_rounded_box(
-                                ctx->ygrid_drawable_list, 0, 0, YNODE_TITLE_BG, 0, 0.0f, &title);
+        struct yetty_ycore_void_result result_361 =
+            yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0,
+                                                              YNODE_TITLE_BG, 0, 0.0f, &title);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_361, "ynode_paint: title bar");
         if (d->title && d->title[0]) {
             float font_size = YNODE_TITLE_FONT * zoom;
             float ty = r.min.y + (title_h + font_size) * 0.5f - 2.0f;
-            struct yetty_ycore_void_result result_368 = yguix_text(ctx, d->title, r.min.x + 10.0f * zoom, ty, font_size,
-                                           YNODE_TITLE_FG);
+            struct yetty_ycore_void_result result_368 =
+                yguix_text(ctx, d->title, r.min.x + 10.0f * zoom, ty, font_size, YNODE_TITLE_FG);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_368, "ynode_paint: title text");
         }
     }
@@ -379,7 +381,8 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
             if (!yetty_ygui_ynode_pin_pos(obj, side, (int)i, &px, &py)) {
                 continue;
             }
-            struct yetty_ycore_void_result result_385 = yguix_circle(ctx, px, py, pin_r, pins[i].color ? pins[i].color : YNODE_PIN);
+            struct yetty_ycore_void_result result_385 =
+                yguix_circle(ctx, px, py, pin_r, pins[i].color ? pins[i].color : YNODE_PIN);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_385, "ynode_paint: pin");
         }
     }
@@ -401,8 +404,9 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
                 .end_x = xc + sx * far * grip,
                 .end_y = r.max.y - 0.18f * grip,
             };
-            struct yetty_ycore_void_result result_409 = yetty_ydraw_drawable_list_add_cmd_add_segment(
-                                    ctx->ygrid_drawable_list, 0, 0, 0u, YNODE_GRIP, grip_w, &seg);
+            struct yetty_ycore_void_result result_409 =
+                yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 0, 0u,
+                                                              YNODE_GRIP, grip_w, &seg);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_409, "ynode_paint: grip");
         }
     }
@@ -473,8 +477,8 @@ static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_ctx *ycl
 
 [[clang::annotate("override@ygui:ynode:widget_on_motion")]]
 static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj, float x,
-                                                     float y)
+                                                     struct yetty_yclass_object *yclass_obj,
+                                                     float x, float y)
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;

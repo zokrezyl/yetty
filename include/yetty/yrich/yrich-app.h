@@ -16,6 +16,8 @@
 #ifndef YETTY_YRICH_YRICH_APP_H
 #define YETTY_YRICH_YRICH_APP_H
 
+#include <yetty/ycore/result.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,9 +34,10 @@ enum yetty_yrich_app_kind {
 /* Open a window and run the decorated editor for `doc`. Takes ownership
  * of `doc` (destroyed with the widget tree on exit). `argc`/`argv` are
  * forwarded to yinit_run for its own flag parsing. Blocks until the
- * window closes. Returns a process exit code (0 = clean). */
-int yetty_yrich_app_run(int argc, char **argv, struct yetty_yrich_document *doc,
-                        enum yetty_yrich_app_kind kind);
+ * window closes. On success the value is a process exit code (0 = clean). */
+struct yetty_ycore_int_result yetty_yrich_app_run(int argc, char **argv,
+                                                  struct yetty_yrich_document *doc,
+                                                  enum yetty_yrich_app_kind kind);
 
 #ifdef __cplusplus
 }

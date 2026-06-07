@@ -53,8 +53,8 @@
 #include <string.h>
 
 enum {
-    WAVE_BUCKETS    = 4096,           /* per-frame bucket count for envelope */
-    WAVE_DEC_CAP    = 2 * WAVE_BUCKETS, /* worst case = (min,max) pair per bucket */
+    WAVE_BUCKETS = 4096,             /* per-frame bucket count for envelope */
+    WAVE_DEC_CAP = 2 * WAVE_BUCKETS, /* worst case = (min,max) pair per bucket */
 };
 
 /* Stage of the background load — drives the progress-bar caption and the
@@ -81,33 +81,33 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
 
 struct yaudio_app {
     const char *wav_path;
-    struct yetty_yaudio_wav       *wav;
-    struct yetty_yaudio_envelope  *env;
+    struct yetty_yaudio_wav *wav;
+    struct yetty_yaudio_envelope *env;
     struct yetty_yaudio_intervals *iv;
-    float                         *env_dbfs;  /* env->rms in dBFS, for plotting */
-    size_t                         env_dbfs_n;
-    int    selected;
+    float *env_dbfs; /* env->rms in dBFS, for plotting */
+    size_t env_dbfs_n;
+    int selected;
 
     /* Generic GPU/event/render bring-up — owned here, lives for the
      * lifetime of the worker. yui borrows everything through ctx.runtime. */
-    struct yetty_yframework         *runtime;
-    struct yetty_context           ctx;
+    struct yetty_yframework *runtime;
+    struct yetty_context ctx;
 
     /* Render-target alias for the loop (= runtime->render_target). */
-    struct yetty_ydraw_target     *render_target;
+    struct yetty_ydraw_target *render_target;
 
     /* Bound to runtime->event_loop in yaudio_worker via
      * yetty_yevent_register_default_listeners. Receives RENDER, RESIZE,
      * MOUSE_*, KEY_*, SHUTDOWN, etc. */
     struct yetty_yevent_event_listener listener;
 
-    struct yetty_yui              *yui;
-    struct yetty_ygui_object      *plot_widget;        /* energy envelope (dBFS) */
-    struct yetty_ygui_object      *wave_widget;        /* raw waveform of zoomed window */
-    struct yetty_ygui_object      *plots_vbox;         /* flex column holding both plots + label */
-    struct yetty_ygui_object      *prev_btn;
-    struct yetty_ygui_object      *next_btn;
-    struct yetty_ygui_object      *status_label;
+    struct yetty_yui *yui;
+    struct yetty_ygui_object *plot_widget; /* energy envelope (dBFS) */
+    struct yetty_ygui_object *wave_widget; /* raw waveform of zoomed window */
+    struct yetty_ygui_object *plots_vbox;  /* flex column holding both plots + label */
+    struct yetty_ygui_object *prev_btn;
+    struct yetty_ygui_object *next_btn;
+    struct yetty_ygui_object *status_label;
 
     /* Scratch buffers for the waveform widget.
      *
@@ -124,34 +124,34 @@ struct yaudio_app {
      *                     so individual cycles are visible.
      *   wave_dec_n  — actual sample count written; passed as buffer
      *                 count to yplot. */
-    float  *wave_raw;
-    size_t  wave_raw_cap;
-    float  *wave_dec;
-    size_t  wave_dec_n;
+    float *wave_raw;
+    size_t wave_raw_cap;
+    float *wave_dec;
+    size_t wave_dec_n;
 
     /* Current view window into the file. Updated by Prev/Next clicks
      * AND mouse-wheel events (plain=scroll, ctrl=amp zoom, ctrl+shift=
      * time zoom). apply_view() pushes this into both yplot widgets. */
-    double   view_t_min;
-    double   view_t_max;
-    float    wave_y_max;          /* waveform amplitude clamp (zooms y of wave plot) */
+    double view_t_min;
+    double view_t_max;
+    float wave_y_max; /* waveform amplitude clamp (zooms y of wave plot) */
 
     /* Click-drag pan state. Captured on MOUSE_DOWN inside the plots
      * vbox; consumed by MOUSE_DRAG / MOUSE_MOVE while held. Anchoring
      * the view to drag-start values (not incremental dx) avoids drift
      * from accumulated rounding. */
-    int      dragging;
-    float    drag_start_mx;       /* pixel x at MOUSE_DOWN */
-    double   drag_start_t_min;
-    double   drag_start_t_max;
-    float    drag_plot_w;         /* plots-vbox width in pixels (fixed during a drag) */
+    int dragging;
+    float drag_start_mx; /* pixel x at MOUSE_DOWN */
+    double drag_start_t_min;
+    double drag_start_t_max;
+    float drag_plot_w; /* plots-vbox width in pixels (fixed during a drag) */
 
     /* View-changed flag. Set by drag / wheel / Prev / Next so the
      * (expensive) waveform re-decimation runs at most once per render
      * frame. Without this, each high-frequency mouse-move event would
      * drive a full mmap walk and the worker thread would never reach
      * the render call — freezing the UI. */
-    int      view_dirty;
+    int view_dirty;
 
     /* --- Asynchronous load ------------------------------------------
      * The window + a centred progress bar come up first; the heavy WAV
@@ -161,24 +161,24 @@ struct yaudio_app {
      * handler) and posts throttled RENDER events to wake the loop;
      * load_state + load_err carry the outcome to yaudio_load_done(), which
      * builds the real UI on the loop thread. */
-    struct yetty_yplatform_yworkpool         *load_pool;
-    struct yetty_ycore_xthread_event_pipe    *input_pipe; /* worker → loop wake */
-    struct yetty_yinit_runtime               *rt;         /* for build_widgets() in done() */
+    struct yetty_yplatform_yworkpool *load_pool;
+    struct yetty_ycore_xthread_event_pipe *input_pipe; /* worker → loop wake */
+    struct yetty_yinit_runtime *rt;                    /* for build_widgets() in done() */
 
-    volatile double load_progress;        /* 0..1, monotonic; worker writes, loop reads */
-    volatile int    load_phase;           /* enum yaudio_load_phase */
-    volatile int    load_state;           /* enum yaudio_load_state */
-    char            load_err[160];        /* failure message (worker writes, done() reads) */
-    double          last_posted_progress; /* worker-local: throttles RENDER posts */
+    volatile double load_progress; /* 0..1, monotonic; worker writes, loop reads */
+    volatile int load_phase;       /* enum yaudio_load_phase */
+    volatile int load_state;       /* enum yaudio_load_state */
+    char load_err[160];            /* failure message (worker writes, done() reads) */
+    double last_posted_progress;   /* worker-local: throttles RENDER posts */
 
     /* Loading-screen widgets, hidden once the real plot UI is built. */
     struct yetty_ygui_object *load_bar;
     struct yetty_ygui_object *load_label;
-    int    ui_built;                      /* real plot UI constructed yet? */
+    int ui_built; /* real plot UI constructed yet? */
 };
 
 #define MOD_SHIFT 0x0001u
-#define MOD_CTRL  0x0002u
+#define MOD_CTRL 0x0002u
 
 /* ----------------------------------------------------------------------- */
 /* Loading                                                                  */
@@ -191,8 +191,7 @@ struct yaudio_app {
  * the time it dispatches the RENDER. */
 static void yaudio_worker_wake(struct yaudio_app *app)
 {
-    yetty_yevent_post_async(app->input_pipe,
-                            &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
+    yetty_yevent_post_async(app->input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 }
 
 /* Library progress callback — runs on the worker thread. Folds each pass's
@@ -204,9 +203,15 @@ static void yaudio_progress_cb(void *ud, double f)
     struct yaudio_app *app = ud;
     double g;
     switch (app->load_phase) {
-    case YAUDIO_PHASE_ENVELOPE:  g = 0.02 + f * 0.49; break; /* envelope:  2%..51%  */
-    case YAUDIO_PHASE_INTERVALS: g = 0.51 + f * 0.49; break; /* intervals: 51%..100% */
-    default:                     g = f;               break;
+    case YAUDIO_PHASE_ENVELOPE:
+        g = 0.02 + f * 0.49;
+        break; /* envelope:  2%..51%  */
+    case YAUDIO_PHASE_INTERVALS:
+        g = 0.51 + f * 0.49;
+        break; /* intervals: 51%..100% */
+    default:
+        g = f;
+        break;
     }
     app->load_progress = g;
     if (g - app->last_posted_progress >= 0.005 || g >= 0.999) {
@@ -215,10 +220,9 @@ static void yaudio_progress_cb(void *ud, double f)
     }
 }
 
-static struct yetty_ycore_void_result
-yaudio_load(struct yaudio_app *app)
+static struct yetty_ycore_void_result yaudio_load(struct yaudio_app *app)
 {
-    app->load_phase    = YAUDIO_PHASE_OPEN;
+    app->load_phase = YAUDIO_PHASE_OPEN;
     app->load_progress = 0.0;
     yaudio_worker_wake(app);
 
@@ -256,18 +260,19 @@ yaudio_load(struct yaudio_app *app)
      * the dynamic range across the plot. Floor at -90 dBFS so the
      * log doesn't explode on perfect-silence frames. */
     app->env_dbfs_n = app->env->n;
-    app->env_dbfs   = malloc(app->env_dbfs_n * sizeof(float));
+    app->env_dbfs = malloc(app->env_dbfs_n * sizeof(float));
     if (!app->env_dbfs) {
         return YETTY_ERR(yetty_ycore_void, "yaudio: env_dbfs alloc failed");
     }
     for (size_t i = 0; i < app->env_dbfs_n; i++) {
         float v = app->env->rms[i];
-        if (v < 1e-5f) v = 1e-5f;
+        if (v < 1e-5f) {
+            v = 1e-5f;
+        }
         app->env_dbfs[i] = (float)(20.0 * log10((double)v));
     }
 
-    yinfo("yaudio: loaded %s — %.1f s, %zu intervals",
-          app->wav_path,
+    yinfo("yaudio: loaded %s — %.1f s, %zu intervals", app->wav_path,
           (double)app->wav->frames / (double)app->wav->sample_rate, app->iv->n);
     return YETTY_OK_VOID();
 }
@@ -287,21 +292,29 @@ yaudio_load(struct yaudio_app *app)
  *     buckets pick alternating-sign peaks. */
 static int load_waveform_window(struct yaudio_app *app, double t_min, double t_max)
 {
-    if (!app->wav || t_max <= t_min) return 0;
-    if (t_min < 0.0) t_min = 0.0;
+    if (!app->wav || t_max <= t_min) {
+        return 0;
+    }
+    if (t_min < 0.0) {
+        t_min = 0.0;
+    }
     double dur_total = (double)app->wav->frames / (double)app->wav->sample_rate;
-    if (t_max > dur_total) t_max = dur_total;
+    if (t_max > dur_total) {
+        t_max = dur_total;
+    }
 
-    double sr    = (double)app->wav->sample_rate;
+    double sr = (double)app->wav->sample_rate;
     size_t f_min = (size_t)(t_min * sr);
     size_t f_max = (size_t)(t_max * sr);
-    if (f_max <= f_min) return 0;
+    if (f_max <= f_min) {
+        return 0;
+    }
     size_t span = f_max - f_min;
 
     /* ---- Tight zoom: raw samples straight into wave_dec. ---- */
     if (span <= (size_t)WAVE_BUCKETS) {
-        struct yetty_ycore_size_result rr = yetty_yaudio_wav_read_channel_f32(
-            app->wav, 0, f_min, app->wave_dec, span);
+        struct yetty_ycore_size_result rr =
+            yetty_yaudio_wav_read_channel_f32(app->wav, 0, f_min, app->wave_dec, span);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_destroy(rr.error);
             app->wave_dec_n = 0;
@@ -312,29 +325,35 @@ static int load_waveform_window(struct yaudio_app *app, double t_min, double t_m
     }
 
     /* ---- Wide zoom: min/max envelope per bucket. ---- */
-    size_t buckets    = WAVE_BUCKETS;
+    size_t buckets = WAVE_BUCKETS;
     size_t max_bucket = (span + buckets - 1) / buckets + 1;
-    if (max_bucket < 16) max_bucket = 16;
+    if (max_bucket < 16) {
+        max_bucket = 16;
+    }
     if (max_bucket > app->wave_raw_cap) {
         float *nb = realloc(app->wave_raw, max_bucket * sizeof(float));
         if (!nb) {
             yerror("yaudio: wave_raw realloc(%zu) failed", max_bucket);
             return 0;
         }
-        app->wave_raw     = nb;
+        app->wave_raw = nb;
         app->wave_raw_cap = max_bucket;
     }
 
     for (size_t i = 0; i < buckets; i++) {
-        size_t bs = f_min + (span * i)       / buckets;
+        size_t bs = f_min + (span * i) / buckets;
         size_t be = f_min + (span * (i + 1)) / buckets;
-        if (be <= bs) be = bs + 1;
-        if (be > f_max) be = f_max;
+        if (be <= bs) {
+            be = bs + 1;
+        }
+        if (be > f_max) {
+            be = f_max;
+        }
         size_t n = (be > bs) ? (be - bs) : 0;
         float mn = 0.0f, mx = 0.0f;
         if (n > 0) {
-            struct yetty_ycore_size_result rr = yetty_yaudio_wav_read_channel_f32(
-                app->wav, 0, bs, app->wave_raw, n);
+            struct yetty_ycore_size_result rr =
+                yetty_yaudio_wav_read_channel_f32(app->wav, 0, bs, app->wave_raw, n);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             } else if (rr.value > 0) {
@@ -342,12 +361,16 @@ static int load_waveform_window(struct yaudio_app *app, double t_min, double t_m
                 mn = mx = app->wave_raw[0];
                 for (size_t k = 1; k < got; k++) {
                     float v = app->wave_raw[k];
-                    if (v < mn) mn = v;
-                    if (v > mx) mx = v;
+                    if (v < mn) {
+                        mn = v;
+                    }
+                    if (v > mx) {
+                        mx = v;
+                    }
                 }
             }
         }
-        app->wave_dec[2 * i]     = mn;
+        app->wave_dec[2 * i] = mn;
         app->wave_dec[2 * i + 1] = mx;
     }
     app->wave_dec_n = 2 * buckets;
@@ -364,10 +387,8 @@ static void update_status_label(struct yaudio_app *app)
         snprintf(buf, sizeof(buf),
                  "interval %d / %zu   start %.3f s   end %.3f s   "
                  "dur %.3f s   peak %.1f dBFS",
-                 app->selected + 1, app->iv->n,
-                 it->start_sec, it->end_sec,
-                 it->end_sec - it->start_sec,
-                 (double)it->peak_dbfs);
+                 app->selected + 1, app->iv->n, it->start_sec, it->end_sec,
+                 it->end_sec - it->start_sec, (double)it->peak_dbfs);
     }
     if (app->status_label) {
         yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(app->status_label, buf));
@@ -382,8 +403,12 @@ static void clamp_view(struct yaudio_app *app)
 {
     double dur = (double)app->wav->frames / (double)app->wav->sample_rate;
     double span = app->view_t_max - app->view_t_min;
-    if (span < 0.001) span = 0.001;       /* never go below 1 ms */
-    if (span > dur)   span = dur;
+    if (span < 0.001) {
+        span = 0.001; /* never go below 1 ms */
+    }
+    if (span > dur) {
+        span = dur;
+    }
     if (app->view_t_min < 0.0) {
         app->view_t_min = 0.0;
         app->view_t_max = span;
@@ -391,10 +416,16 @@ static void clamp_view(struct yaudio_app *app)
     if (app->view_t_max > dur) {
         app->view_t_max = dur;
         app->view_t_min = dur - span;
-        if (app->view_t_min < 0.0) app->view_t_min = 0.0;
+        if (app->view_t_min < 0.0) {
+            app->view_t_min = 0.0;
+        }
     }
-    if (app->wave_y_max < 0.001f) app->wave_y_max = 0.001f;
-    if (app->wave_y_max > 1.0f)   app->wave_y_max = 1.0f;
+    if (app->wave_y_max < 0.001f) {
+        app->wave_y_max = 0.001f;
+    }
+    if (app->wave_y_max > 1.0f) {
+        app->wave_y_max = 1.0f;
+    }
 }
 
 /* Cheap path — mark the view dirty and update the status label. Heavy
@@ -403,7 +434,9 @@ static void clamp_view(struct yaudio_app *app)
  * burst of MOUSE_MOVE events doesn't choke the worker. */
 static void request_view_update(struct yaudio_app *app)
 {
-    if (!app->wav) return;
+    if (!app->wav) {
+        return;
+    }
     clamp_view(app);
     update_status_label(app);
     app->view_dirty = 1;
@@ -411,7 +444,9 @@ static void request_view_update(struct yaudio_app *app)
 
 static void apply_view(struct yaudio_app *app)
 {
-    if (!app->wav) return;
+    if (!app->wav) {
+        return;
+    }
     clamp_view(app);
     update_status_label(app);
     app->view_dirty = 0;
@@ -422,10 +457,14 @@ static void apply_view(struct yaudio_app *app)
     /* Envelope plot — slice of env_dbfs spanning [t_min..t_max]. */
     if (app->plot_widget) {
         double hop_sec = (double)app->env->hop_samples / (double)app->env->sample_rate;
-        size_t i_min   = (size_t)(t_min / hop_sec);
-        size_t i_max   = (size_t)(t_max / hop_sec);
-        if (i_max > app->env_dbfs_n) i_max = app->env_dbfs_n;
-        if (i_min >= i_max) i_min = i_max > 0 ? i_max - 1 : 0;
+        size_t i_min = (size_t)(t_min / hop_sec);
+        size_t i_max = (size_t)(t_max / hop_sec);
+        if (i_max > app->env_dbfs_n) {
+            i_max = app->env_dbfs_n;
+        }
+        if (i_min >= i_max) {
+            i_min = i_max > 0 ? i_max - 1 : 0;
+        }
 
         struct yetty_ygui_yplot_config pc = {0};
         pc.x_min = (float)t_min;
@@ -434,8 +473,8 @@ static void apply_view(struct yaudio_app *app)
         pc.y_max = 0.0f;
         struct yetty_yplot_buffer_input bi = {
             .samples = app->env_dbfs + i_min,
-            .count   = i_max - i_min,
-            .color   = 0,
+            .count = i_max - i_min,
+            .color = 0,
         };
         yetty_ycore_error_destroy_safe(
             yetty_ygui_yplot_set_buffers(app->plot_widget, NULL, 0, &bi, 1, &pc));
@@ -448,11 +487,11 @@ static void apply_view(struct yaudio_app *app)
             wpc.x_min = (float)t_min;
             wpc.x_max = (float)t_max;
             wpc.y_min = -(float)app->wave_y_max;
-            wpc.y_max =  (float)app->wave_y_max;
+            wpc.y_max = (float)app->wave_y_max;
             struct yetty_yplot_buffer_input wbi = {
                 .samples = app->wave_dec,
-                .count   = app->wave_dec_n,
-                .color   = 0xFFE0E5E4u,
+                .count = app->wave_dec_n,
+                .color = 0xFFE0E5E4u,
             };
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_yplot_set_buffers(app->wave_widget, NULL, 0, &wbi, 1, &wpc));
@@ -462,10 +501,12 @@ static void apply_view(struct yaudio_app *app)
 
 static void recenter_plot_on_selected(struct yaudio_app *app)
 {
-    if (!app->plot_widget || app->iv->n == 0) return;
+    if (!app->plot_widget || app->iv->n == 0) {
+        return;
+    }
 
     const struct yetty_yaudio_interval *it = &app->iv->items[app->selected];
-    double dur  = (double)app->wav->frames / (double)app->wav->sample_rate;
+    double dur = (double)app->wav->frames / (double)app->wav->sample_rate;
     double span = app->view_t_max - app->view_t_min;
 
     /* Choose how wide a window to frame the interval in. When the view
@@ -478,8 +519,12 @@ static void recenter_plot_on_selected(struct yaudio_app *app)
     if (span <= 0.0 || span >= dur * 0.98) {
         double iv_d = it->end_sec - it->start_sec;
         span = iv_d * 8.0;
-        if (span < 2.0)  span = 2.0; /* minimum context for very short blips */
-        if (span > dur)  span = dur;
+        if (span < 2.0) {
+            span = 2.0; /* minimum context for very short blips */
+        }
+        if (span > dur) {
+            span = dur;
+        }
     }
 
     /* Centre the interval in the window so the jump is obvious; clamp_view
@@ -496,17 +541,21 @@ static void recenter_plot_on_selected(struct yaudio_app *app)
  *   Ctrl+Shift + wheel — zoom in time (around current center) */
 static void on_wheel(struct yaudio_app *app, float dy, int mods)
 {
-    if (dy == 0.0f) return;
+    if (dy == 0.0f) {
+        return;
+    }
     double span = app->view_t_max - app->view_t_min;
-    if (span <= 0.0) return;
+    if (span <= 0.0) {
+        return;
+    }
 
-    int ctrl  = (mods & MOD_CTRL)  != 0;
+    int ctrl = (mods & MOD_CTRL) != 0;
     int shift = (mods & MOD_SHIFT) != 0;
 
     if (ctrl && shift) {
         /* Time zoom: dy > 0 → zoom in. */
         double factor = exp(-(double)dy * 0.2);
-        double mid    = 0.5 * (app->view_t_min + app->view_t_max);
+        double mid = 0.5 * (app->view_t_min + app->view_t_max);
         double new_sp = span * factor;
         app->view_t_min = mid - 0.5 * new_sp;
         app->view_t_max = mid + 0.5 * new_sp;
@@ -529,7 +578,9 @@ static struct yetty_ycore_void_result on_prev_click(struct yetty_yclass_ctx *ctx
     (void)ctx;
     (void)w;
     struct yaudio_app *app = userdata;
-    if (app->iv->n == 0) return YETTY_OK_VOID();
+    if (app->iv->n == 0) {
+        return YETTY_OK_VOID();
+    }
     app->selected = app->selected == 0 ? (int)app->iv->n - 1 : app->selected - 1;
     recenter_plot_on_selected(app);
     return YETTY_OK_VOID();
@@ -541,7 +592,9 @@ static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_ctx *ctx
     (void)ctx;
     (void)w;
     struct yaudio_app *app = userdata;
-    if (app->iv->n == 0) return YETTY_OK_VOID();
+    if (app->iv->n == 0) {
+        return YETTY_OK_VOID();
+    }
     app->selected = (app->selected + 1) % (int)app->iv->n;
     recenter_plot_on_selected(app);
     return YETTY_OK_VOID();
@@ -562,17 +615,17 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
 
     float W = (float)rt->surface_width;
     float H = (float)rt->surface_height;
-    float top         = 36.0f;     /* room for yui's tabbar */
-    float sb_h        = yetty_yui_statusbar_height(app->yui);
+    float top = 36.0f; /* room for yui's tabbar */
+    float sb_h = yetty_yui_statusbar_height(app->yui);
     float btn_strip_h = 48.0f;
-    float plots_h     = H - top - btn_strip_h - sb_h - 16.0f;
-    float plots_w     = W - 32.0f;
+    float plots_h = H - top - btn_strip_h - sb_h - 16.0f;
+    float plots_w = W - 32.0f;
 
     /* Initial plot config — full duration. */
     double dur = (double)app->wav->frames / (double)app->wav->sample_rate;
-    app->view_t_min  = 0.0;
-    app->view_t_max  = dur;
-    app->wave_y_max  = 1.0f;
+    app->view_t_min = 0.0;
+    app->view_t_max = dur;
+    app->wave_y_max = 1.0f;
 
     /* Flex-column container hosts the two plots + the status label that
      * sits between them. ygui handles the gap automatically — the gap
@@ -605,8 +658,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
     pc.y_max = 0.0f;
     struct yetty_yplot_buffer_input bi = {
         .samples = app->env_dbfs,
-        .count   = app->env_dbfs_n,
-        .color   = 0,
+        .count = app->env_dbfs_n,
+        .color = 0,
     };
     if (col) {
         struct yetty_ygui_object_ptr_result pr =
@@ -649,11 +702,11 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
     wpc.x_min = 0.0f;
     wpc.x_max = (float)dur;
     wpc.y_min = -1.0f;
-    wpc.y_max =  1.0f;
+    wpc.y_max = 1.0f;
     struct yetty_yplot_buffer_input wbi = {
         .samples = app->wave_dec,
-        .count   = app->wave_dec_n,
-        .color   = 0xFFE0E5E4u,
+        .count = app->wave_dec_n,
+        .color = 0xFFE0E5E4u,
     };
     if (col) {
         struct yetty_ygui_object_ptr_result wr =
@@ -682,8 +735,7 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
             yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(app->prev_btn, "◀ Prev"));
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_widget_set_position(app->prev_btn, 16.0f, btn_y));
-            yetty_ycore_error_destroy_safe(
-                yetty_ygui_widget_set_size(app->prev_btn, btn_w, btn_h));
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(app->prev_btn, btn_w, btn_h));
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_clickable_on_click_set(app->prev_btn, on_prev_click, app));
         } else {
@@ -698,8 +750,7 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
             yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(app->next_btn, "Next ▶"));
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_widget_set_position(app->next_btn, 16.0f + btn_w + 12.0f, btn_y));
-            yetty_ycore_error_destroy_safe(
-                yetty_ygui_widget_set_size(app->next_btn, btn_w, btn_h));
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(app->next_btn, btn_w, btn_h));
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_clickable_on_click_set(app->next_btn, on_next_click, app));
         } else {
@@ -717,9 +768,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
         if (YETTY_IS_OK(hr)) {
             struct yetty_ygui_object *help = hr.value;
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(
-                help,
-                "◀ ▶ / ←→: prev·next interval    Drag: pan    Wheel: scroll    "
-                "Ctrl+Wheel: amplitude    Ctrl+Shift+Wheel: time zoom"));
+                help, "◀ ▶ / ←→: prev·next interval    Drag: pan    Wheel: scroll    "
+                      "Ctrl+Wheel: amplitude    Ctrl+Shift+Wheel: time zoom"));
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_font_size(help, 13.0f));
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_widget_set_position(help, help_x, btn_y + 10.0f));
@@ -731,8 +781,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
     }
 
     char status[160];
-    snprintf(status, sizeof(status), "%s  •  %.1f s  •  %zu intervals",
-             app->wav_path, dur, app->iv->n);
+    snprintf(status, sizeof(status), "%s  •  %.1f s  •  %zu intervals", app->wav_path, dur,
+             app->iv->n);
     yetty_yui_set_status_left(app->yui, status);
 
     update_status_label(app);
@@ -758,10 +808,12 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
         return;
     }
 
-    float W  = (float)rt->surface_width;
-    float H  = (float)rt->surface_height;
+    float W = (float)rt->surface_width;
+    float H = (float)rt->surface_height;
     float bw = 460.0f;
-    if (bw > W - 64.0f) bw = W - 64.0f;
+    if (bw > W - 64.0f) {
+        bw = W - 64.0f;
+    }
     float cx = (W - bw) * 0.5f;
     float cy = H * 0.5f;
 
@@ -774,8 +826,7 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_font_size(app->load_label, 20.0f));
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_widget_set_position(app->load_label, cx, cy - 36.0f));
-            yetty_ycore_error_destroy_safe(
-                yetty_ygui_widget_set_size(app->load_label, bw, 26.0f));
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(app->load_label, bw, 26.0f));
         } else {
             yetty_ycore_error_destroy(lr.error);
         }
@@ -786,10 +837,8 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
         if (YETTY_IS_OK(pr)) {
             app->load_bar = pr.value;
             yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(app->load_bar, 0.0f));
-            yetty_ycore_error_destroy_safe(
-                yetty_ygui_widget_set_position(app->load_bar, cx, cy));
-            yetty_ycore_error_destroy_safe(
-                yetty_ygui_widget_set_size(app->load_bar, bw, 22.0f));
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(app->load_bar, cx, cy));
+            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(app->load_bar, bw, 22.0f));
         } else {
             yetty_ycore_error_destroy(pr.error);
             yerror("yaudio: progress widget create failed");
@@ -805,23 +854,34 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
  * the loop thread, once per RENDER while the load is in flight. */
 static void update_loading_ui(struct yaudio_app *app)
 {
-    if (!app->load_bar) return;
+    if (!app->load_bar) {
+        return;
+    }
 
     double p = app->load_progress;
-    if (p < 0.0) p = 0.0;
-    if (p > 1.0) p = 1.0;
+    if (p < 0.0) {
+        p = 0.0;
+    }
+    if (p > 1.0) {
+        p = 1.0;
+    }
     yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(app->load_bar, (float)p));
 
     if (app->load_label) {
         const char *phase;
         switch (app->load_phase) {
-        case YAUDIO_PHASE_ENVELOPE:  phase = "computing energy envelope"; break;
-        case YAUDIO_PHASE_INTERVALS: phase = "detecting intervals";       break;
-        default:                     phase = "opening file";              break;
+        case YAUDIO_PHASE_ENVELOPE:
+            phase = "computing energy envelope";
+            break;
+        case YAUDIO_PHASE_INTERVALS:
+            phase = "detecting intervals";
+            break;
+        default:
+            phase = "opening file";
+            break;
         }
         char buf[256];
-        snprintf(buf, sizeof(buf), "%s — %s … %d%%", app->wav_path, phase,
-                 (int)(p * 100.0 + 0.5));
+        snprintf(buf, sizeof(buf), "%s — %s … %d%%", app->wav_path, phase, (int)(p * 100.0 + 0.5));
         yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(app->load_label, buf));
     }
 }
@@ -834,9 +894,8 @@ static void update_loading_ui(struct yaudio_app *app)
  * — the libuv event loop reads events off the platform_input_pipe and
  * dispatches them here. RENDER does the per-frame work; SHUTDOWN /
  * WINDOW_CLOSE / Escape stop the loop so yaudio_worker returns. */
-static struct yetty_ycore_int_result
-yaudio_event_handler(struct yetty_yevent_event_listener *listener,
-                     const struct yetty_yui_event *ev)
+static struct yetty_ycore_int_result yaudio_event_handler(
+    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
 {
     struct yaudio_app *app = container_of(listener, struct yaudio_app, listener);
 
@@ -866,44 +925,41 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
         } else if (app->view_dirty) {
             apply_view(app);
         }
-        struct yetty_ycore_void_result cl =
-            app->render_target->ops->clear(app->render_target);
-        if (YETTY_IS_ERR(cl)) yetty_ycore_error_destroy(cl.error);
+        struct yetty_ycore_void_result cl = app->render_target->ops->clear(app->render_target);
+        if (YETTY_IS_ERR(cl)) {
+            yetty_ycore_error_destroy(cl.error);
+        }
 
-        struct yetty_ycore_void_result rr =
-            yetty_yui_render(app->yui, app->render_target);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        struct yetty_ycore_void_result rr = yetty_yui_render(app->yui, app->render_target);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
 
-        struct yetty_ycore_void_result pp =
-            app->render_target->ops->present(app->render_target);
-        if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
+        struct yetty_ycore_void_result pp = app->render_target->ops->present(app->render_target);
+        if (YETTY_IS_ERR(pp)) {
+            yetty_ycore_error_destroy(pp.error);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
-        if (app->runtime && app->runtime->event_loop &&
-            app->runtime->event_loop->ops->stop) {
+        if (app->runtime && app->runtime->event_loop && app->runtime->event_loop->ops->stop) {
             app->runtime->event_loop->ops->stop(app->runtime->event_loop);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_RESIZE:
         /* Mirror the new size into the runtime + texture target so
          * surface present uses the live framebuffer dims. */
-        yetty_yframework_reconfigure_surface(app->runtime,
-                                           (uint32_t)ev->resize.width,
-                                           (uint32_t)ev->resize.height);
+        yetty_yframework_reconfigure_surface(app->runtime, (uint32_t)ev->resize.width,
+                                             (uint32_t)ev->resize.height);
         if (app->render_target && app->render_target->ops->resize) {
-            struct yetty_yrender_viewport vp = {
-                0, 0, ev->resize.width, ev->resize.height
-            };
+            struct yetty_yrender_viewport vp = {0, 0, ev->resize.width, ev->resize.height};
             app->render_target->ops->resize(app->render_target, vp);
         }
         if (app->yui) {
-            yetty_yui_resize(app->yui,
-                             (uint32_t)ev->resize.width,
-                             (uint32_t)ev->resize.height);
+            yetty_yui_resize(app->yui, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
         }
         break;
     case YETTY_YCORE_MOUSE_SCROLL:
@@ -912,14 +968,13 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
     case YETTY_YCORE_MOUSE_DOWN:
         if (ev->mouse.button == 0 && app->plots_vbox && app->wav) {
             struct yetty_ycore_rectangle box = yetty_ygui_widget_rect(app->plots_vbox);
-            if (ev->mouse.x >= box.min.x && ev->mouse.x <= box.max.x &&
-                ev->mouse.y >= box.min.y && ev->mouse.y <= box.max.y &&
-                box.max.x > box.min.x) {
-                app->dragging         = 1;
-                app->drag_start_mx    = ev->mouse.x;
+            if (ev->mouse.x >= box.min.x && ev->mouse.x <= box.max.x && ev->mouse.y >= box.min.y &&
+                ev->mouse.y <= box.max.y && box.max.x > box.min.x) {
+                app->dragging = 1;
+                app->drag_start_mx = ev->mouse.x;
                 app->drag_start_t_min = app->view_t_min;
                 app->drag_start_t_max = app->view_t_max;
-                app->drag_plot_w      = box.max.x - box.min.x;
+                app->drag_plot_w = box.max.x - box.min.x;
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
@@ -927,7 +982,7 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
     case YETTY_YCORE_MOUSE_DRAG:
     case YETTY_YCORE_MOUSE_MOVE:
         if (app->dragging && app->drag_plot_w > 0.0f) {
-            double dx   = (double)(ev->mouse.x - app->drag_start_mx);
+            double dx = (double)(ev->mouse.x - app->drag_start_mx);
             double span = app->drag_start_t_max - app->drag_start_t_min;
             /* Drag right → content under cursor follows the mouse →
              * view shifts LEFT in time. Hence the minus. */
@@ -946,8 +1001,7 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
         break;
     case YETTY_YCORE_KEY_DOWN:
         if (ev->key.key == 256 || ev->key.key == 81) {
-            if (app->runtime && app->runtime->event_loop &&
-                app->runtime->event_loop->ops->stop) {
+            if (app->runtime && app->runtime->event_loop && app->runtime->event_loop->ops->stop) {
                 app->runtime->event_loop->ops->stop(app->runtime->event_loop);
             }
             return YETTY_OK(yetty_ycore_int, 1);
@@ -977,8 +1031,7 @@ yaudio_event_handler(struct yetty_yevent_event_listener *listener,
      * wheel, prev/next); the cheapest correct policy is to always
      * follow up with a RENDER. The x11-tile target's tile-diff makes
      * unchanged frames near-free. */
-    if (app->runtime && app->runtime->event_loop &&
-        app->runtime->event_loop->ops->request_render) {
+    if (app->runtime && app->runtime->event_loop && app->runtime->event_loop->ops->request_render) {
         app->runtime->event_loop->ops->request_render(app->runtime->event_loop);
     }
     return YETTY_OK(yetty_ycore_int, 0);
@@ -1020,14 +1073,17 @@ static void yaudio_load_done(void *ctx)
     if (app->load_state == YAUDIO_LOAD_OK) {
         build_widgets(app, app->rt);
         app->ui_built = 1;
-        if (app->load_bar)
+        if (app->load_bar) {
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(app->load_bar, 0));
-        if (app->load_label)
+        }
+        if (app->load_label) {
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(app->load_label, 0));
+        }
     } else {
         /* Keep the window up; show why on the loading caption + status. */
-        if (app->load_bar)
+        if (app->load_bar) {
             yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(app->load_bar, 1.0f));
+        }
         if (app->load_label) {
             char buf[224];
             snprintf(buf, sizeof(buf), "Failed to load %s: %s", app->wav_path, app->load_err);
@@ -1036,8 +1092,7 @@ static void yaudio_load_done(void *ctx)
         yetty_yui_set_status_left(app->yui, app->load_err);
     }
 
-    if (app->runtime && app->runtime->event_loop &&
-        app->runtime->event_loop->ops->request_render) {
+    if (app->runtime && app->runtime->event_loop && app->runtime->event_loop->ops->request_render) {
         app->runtime->event_loop->ops->request_render(app->runtime->event_loop);
     }
 }
@@ -1046,8 +1101,7 @@ static void yaudio_load_done(void *ctx)
 /* Render loop                                                              */
 /* ----------------------------------------------------------------------- */
 
-static struct yetty_ycore_void_result
-yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
+static struct yetty_ycore_void_result yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     struct yaudio_app *app = user;
 
@@ -1058,13 +1112,13 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
      * runtime owns all of it and we borrow via app->ctx.runtime->X. */
     struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yrt_res, "yaudio: yframework_create failed");
-    app->runtime           = yrt_res.value;
-    app->ctx.runtime       = app->runtime;
-    app->ctx.pty_factory   = NULL;          /* yaudio has no terminal */
-    app->ctx.event_loop    = app->runtime->event_loop;
-    app->render_target     = app->runtime->render_target;
-    app->rt                = rt;
-    app->input_pipe        = rt->platform_input_pipe;
+    app->runtime = yrt_res.value;
+    app->ctx.runtime = app->runtime;
+    app->ctx.pty_factory = NULL; /* yaudio has no terminal */
+    app->ctx.event_loop = app->runtime->event_loop;
+    app->render_target = app->runtime->render_target;
+    app->rt = rt;
+    app->input_pipe = rt->platform_input_pipe;
 
     /* yui — owns the scene-canvas + ygui engine. cell_w/h are mostly
      * arbitrary for our use; pick the same defaults yui's tabbar uses. */
@@ -1083,8 +1137,8 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
      * yaudio_event_handler, which renders frames on YETTY_YCORE_RENDER
      * and stops the loop on SHUTDOWN / WINDOW_CLOSE / Esc. */
     app->listener.handler = yaudio_event_handler;
-    struct yetty_ycore_void_result rel = yetty_yevent_register_default_listeners(
-        app->runtime->event_loop, &app->listener);
+    struct yetty_ycore_void_result rel =
+        yetty_yevent_register_default_listeners(app->runtime->event_loop, &app->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "register_default_listeners failed");
 
     /* Offload the load to a worker thread so the loop keeps repainting the
@@ -1094,10 +1148,11 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
     if (YETTY_IS_OK(pres)) {
         app->load_pool = pres.value;
         struct yetty_yplatform_yworkpool_job job = {
-            .run = yaudio_load_run, .done = yaudio_load_done, .ctx = app,
+            .run = yaudio_load_run,
+            .done = yaudio_load_done,
+            .ctx = app,
         };
-        struct yetty_ycore_void_result sres =
-            yetty_yplatform_yworkpool_submit(app->load_pool, job);
+        struct yetty_ycore_void_result sres = yetty_yplatform_yworkpool_submit(app->load_pool, job);
         if (YETTY_IS_ERR(sres)) {
             ywarn("yaudio: load submit failed (%s); loading synchronously", sres.error.msg);
             yetty_ycore_error_destroy(sres.error);
@@ -1129,9 +1184,15 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
      * frees), then yui (it holds GPU resources owned by the runtime), then
      * the runtime (render target, msdf, allocator, event loop, surface,
      * queue, device, adapter, in reverse-creation order). */
-    if (app->load_pool) yetty_yplatform_yworkpool_destroy(app->load_pool);
-    if (app->yui)       yetty_yui_destroy(app->yui);
-    if (app->runtime)   yetty_yframework_destroy(app->runtime);
+    if (app->load_pool) {
+        yetty_yplatform_yworkpool_destroy(app->load_pool);
+    }
+    if (app->yui) {
+        yetty_yui_destroy(app->yui);
+    }
+    if (app->runtime) {
+        yetty_yframework_destroy(app->runtime);
+    }
 
     yetty_yaudio_intervals_destroy(app->iv);
     yetty_yaudio_envelope_destroy(app->env);
@@ -1145,12 +1206,12 @@ yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
 static void usage(FILE *out, const char *prog)
 {
     fprintf(out,
-        "Usage: %s <file.wav>\n"
-        "\n"
-        "Opens an audio analyzer window for a WAV file. Shows the RMS\n"
-        "envelope as a yplot; Prev/Next buttons (and ←/→) walk the\n"
-        "detected noise intervals.\n",
-        prog);
+            "Usage: %s <file.wav>\n"
+            "\n"
+            "Opens an audio analyzer window for a WAV file. Shows the RMS\n"
+            "envelope as a yplot; Prev/Next buttons (and ←/→) walk the\n"
+            "detected noise intervals.\n",
+            prog);
 }
 
 int main(int argc, char **argv)
@@ -1161,7 +1222,9 @@ int main(int argc, char **argv)
             usage(stdout, argv[0]);
             return 0;
         }
-        if (argv[i][0] != '-' && !wav_path) wav_path = argv[i];
+        if (argv[i][0] != '-' && !wav_path) {
+            wav_path = argv[i];
+        }
     }
     if (!wav_path) {
         usage(stderr, argv[0]);
@@ -1172,5 +1235,12 @@ int main(int argc, char **argv)
     struct yetty_yinit_app_config cfg = {
         .extract_assets_fn = yetty_platform_extract_assets,
     };
-    return yetty_yinit_run(argc, argv, &cfg, yaudio_worker, &app);
+    struct yetty_ycore_int_result run_result =
+        yetty_yinit_run(argc, argv, &cfg, yaudio_worker, &app);
+    if (YETTY_IS_ERR(run_result)) {
+        yetty_ycore_error_print(stderr, "yaudio: run", run_result.error);
+        yetty_ycore_error_destroy(run_result.error);
+        return 1;
+    }
+    return run_result.value;
 }

@@ -23,12 +23,12 @@
 #define WINDOW_BTN_PAD 6.0f
 #define WINDOW_BTN_GAP 4.0f
 
-#define WIN_BG 0xFF1F1A14u      /* BRAND_BG_LIFTED   */
+#define WIN_BG 0xFF1F1A14u       /* BRAND_BG_LIFTED   */
 #define WIN_TITLE_BG 0xFF2C261Eu /* BRAND_BG_ROW     */
-#define WIN_BORDER 0xFF474A36u  /* BRAND_BORDER      */
-#define WIN_TEXT 0xFFE4E5E0u    /* BRAND_TEXT_PRIMARY */
-#define WIN_GRIP 0xFFA8A79Fu    /* BRAND_TEXT_SECONDARY */
-#define WIN_CLOSE 0xFFA8A79Fu   /* BRAND_TEXT_SECONDARY */
+#define WIN_BORDER 0xFF474A36u   /* BRAND_BORDER      */
+#define WIN_TEXT 0xFFE4E5E0u     /* BRAND_TEXT_PRIMARY */
+#define WIN_GRIP 0xFFA8A79Fu     /* BRAND_TEXT_SECONDARY */
+#define WIN_CLOSE 0xFFA8A79Fu    /* BRAND_TEXT_SECONDARY */
 
 struct [[clang::annotate("class@ygui:window")]] [[clang::annotate("parent@ygui:vbox")]]
 window_data {
@@ -73,6 +73,7 @@ static float window_hamburger_x(const struct window_data *d, struct yetty_ycore_
     return x;
 }
 
+YETTY_EXTERNAL_CALLBACK
 static const struct yetty_yclass *window_class(void)
 {
     return yetty_ygui_window_class_get().value;
@@ -99,8 +100,8 @@ static struct yetty_ycore_void_result win_rounded(struct yetty_ygui_emit_ctx *ct
                                        .radius_bottom_right = radius,
                                        .radius_top_left = radius,
                                        .radius_bottom_left = radius};
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill, stroke,
-                                                         stroke_w, &g);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill,
+                                                             stroke, stroke_w, &g);
 }
 
 [[clang::annotate("override@ygui:window:constructor")]]
@@ -109,8 +110,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj, window_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
+        obj, window_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "window: super");
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
@@ -171,16 +172,17 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         return YETTY_OK_VOID();
     }
     /* Frame + title strip. */
-    struct yetty_ycore_void_result result_174 = win_rounded(ctx, r.min.x, r.min.y, w, h, WIN_BG, WIN_BORDER, 1.0f,
-                                    WINDOW_RADIUS);
+    struct yetty_ycore_void_result result_174 =
+        win_rounded(ctx, r.min.x, r.min.y, w, h, WIN_BG, WIN_BORDER, 1.0f, WINDOW_RADIUS);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_174, "window: frame");
-    struct yetty_ycore_void_result result_178 = win_rounded(ctx, r.min.x, r.min.y, w, WINDOW_TITLE_H, WIN_TITLE_BG, 0, 0.0f,
-                                    WINDOW_RADIUS);
+    struct yetty_ycore_void_result result_178 =
+        win_rounded(ctx, r.min.x, r.min.y, w, WINDOW_TITLE_H, WIN_TITLE_BG, 0, 0.0f, WINDOW_RADIUS);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_178, "window: titlebar");
     if (d->title) {
         float fs = 14.0f;
         float ty = r.min.y + (WINDOW_TITLE_H + fs) * 0.5f - 3.0f;
-        struct yetty_ycore_void_result result_185 = yguix_text(ctx, d->title, r.min.x + 10.0f, ty, fs, WIN_TEXT);
+        struct yetty_ycore_void_result result_185 =
+            yguix_text(ctx, d->title, r.min.x + 10.0f, ty, fs, WIN_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_185, "window: title");
     }
     float by = r.min.y + (WINDOW_TITLE_H - WINDOW_BTN) * 0.5f;
@@ -190,7 +192,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (close_bx >= 0.0f) {
         float fs = 16.0f;
         float ty = r.min.y + (WINDOW_TITLE_H + fs) * 0.5f - 3.0f;
-        struct yetty_ycore_void_result result_195 = yguix_text(ctx, "\xC3\x97", close_bx + 4.0f, ty, fs, WIN_CLOSE);
+        struct yetty_ycore_void_result result_195 =
+            yguix_text(ctx, "\xC3\x97", close_bx + 4.0f, ty, fs, WIN_CLOSE);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_195, "window: close x");
     }
 
@@ -198,8 +201,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     float ham_bx = window_hamburger_x(d, r);
     if (ham_bx >= 0.0f) {
         for (int i = 0; i < 3; i++) {
-            struct yetty_ycore_void_result result_204 = yguix_box(ctx, ham_bx + 3.0f, by + 4.0f + (float)i * 5.0f,
-                                          WINDOW_BTN - 6.0f, 2.0f, WIN_GRIP, 0);
+            struct yetty_ycore_void_result result_204 =
+                yguix_box(ctx, ham_bx + 3.0f, by + 4.0f + (float)i * 5.0f, WINDOW_BTN - 6.0f, 2.0f,
+                          WIN_GRIP, 0);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_204, "window: hamburger");
         }
     }

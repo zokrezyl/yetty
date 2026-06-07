@@ -22,16 +22,16 @@
 #define SCROLLBAR_W 6.0f
 #define SCROLLBAR_MIN_THUMB 24.0f
 
-struct [[clang::annotate("class@ygui:scrollarea")]] [[clang::annotate("parent@ygui:vbox")]]
-[[clang::annotate("uses@ygui:draggable")]] scrollarea_data {
+struct [[clang::annotate("class@ygui:scrollarea")]] [[clang::annotate(
+    "parent@ygui:vbox")]] [[clang::annotate("uses@ygui:draggable")]] scrollarea_data {
     float offset;       /* scroll position in px (0 = top) */
     float max_offset;   /* content_h - viewport_h, clamped >= 0 (cached) */
     float thumb_travel; /* track_h - thumb_h, clamped >= 0 (cached) */
 };
 
-static const struct yetty_yclass *scrollarea_class(void)
+static struct yetty_yclass_ptr_result scrollarea_class(void)
 {
-    return yetty_ygui_scrollarea_class_get().value;
+    return yetty_ygui_scrollarea_class_get();
 }
 
 /* Apply a clamped offset: store it, push it to the base scroll offset (so
@@ -58,7 +58,9 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_ygui_objec
 {
     (void)dx;
     (void)userdata;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, scrollarea_class());
+    struct yetty_yclass_ptr_result class_result = scrollarea_class();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, class_result, "scrollarea_on_drag: class");
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "scrollarea_on_drag: data_get");
     struct scrollarea_data *d = d_dr.value;
     if (d->max_offset <= 0.0f || d->thumb_travel <= 0.0f) {
@@ -84,7 +86,9 @@ static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_ctx *yclass_c
     (void)y;
     (void)dx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, scrollarea_class());
+    struct yetty_yclass_ptr_result class_result = scrollarea_class();
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "on_scroll: class");
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_scroll: data_get");
     struct scrollarea_data *d = d_dr.value;
     if (d->max_offset <= 0.0f) {
@@ -102,8 +106,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj,
-                              yetty_ygui_scrollarea_class_get().value,
+        yetty_ygui_super_void(obj, yetty_ygui_scrollarea_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "scrollarea: super");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -132,7 +135,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "scrollarea paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, scrollarea_class());
+    struct yetty_yclass_ptr_result class_result = scrollarea_class();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, class_result, "paint: class");
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct scrollarea_data *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -208,11 +213,11 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     }
     d->thumb_travel = thumb_travel;
 
-    struct yetty_ycore_void_result result_211 = yguix_box(ctx, track_x, track_y, SCROLLBAR_W, track_h, COLOR_TRACK,
-                                  SCROLLBAR_W * 0.5f);
+    struct yetty_ycore_void_result result_211 =
+        yguix_box(ctx, track_x, track_y, SCROLLBAR_W, track_h, COLOR_TRACK, SCROLLBAR_W * 0.5f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_211, "scrollarea: track");
-    struct yetty_ycore_void_result result_215 = yguix_box(ctx, track_x, thumb_y, SCROLLBAR_W, thumb_h, COLOR_THUMB,
-                                  SCROLLBAR_W * 0.5f);
+    struct yetty_ycore_void_result result_215 =
+        yguix_box(ctx, track_x, thumb_y, SCROLLBAR_W, thumb_h, COLOR_THUMB, SCROLLBAR_W * 0.5f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_215, "scrollarea: thumb");
     return YETTY_OK_VOID();
 }

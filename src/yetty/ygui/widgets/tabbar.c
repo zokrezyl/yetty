@@ -146,8 +146,12 @@ static struct yetty_ycore_void_result header_on_click(struct yetty_yclass_ctx *y
     struct tabbar_data *td = td_dr.value;
     if (td->close_cb) {
         float px = 0.0f, py = 0.0f;
-        { struct yetty_ycore_void_result pp_r = yetty_ygui_clickable_press_pos(obj, &px, &py);
-          if (YETTY_IS_ERR(pp_r)) yetty_ycore_error_destroy(pp_r.error); }
+        {
+            struct yetty_ycore_void_result pp_r = yetty_ygui_clickable_press_pos(obj, &px, &py);
+            if (YETTY_IS_ERR(pp_r)) {
+                yetty_ycore_error_destroy(pp_r.error);
+            }
+        }
         struct yetty_ycore_rectangle pr = yetty_ygui_widget_rect(obj);
         if (px >= pr.max.x - TABBAR_CLOSE_W) {
             td->close_cb(hd->tabbar, idx, td->close_userdata);
@@ -162,9 +166,8 @@ static struct yetty_ycore_void_result header_constructor(struct yetty_yclass_ctx
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj, header_class_get().value,
-                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
+        obj, header_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "header_constructor: super");
     struct yetty_ygui_void_ptr_result hd_dr =
         yetty_ygui_data_get_result(obj, header_class_get().value);
@@ -193,8 +196,7 @@ static struct yetty_ycore_void_result header_destructor(struct yetty_yclass_ctx 
     struct header_data *hd = hd_dr.value;
     free(hd->label);
     hd->label = NULL;
-    return yetty_ygui_super_void(obj,
-                                 header_class_get().value,
+    return yetty_ygui_super_void(obj, header_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -293,17 +295,22 @@ static struct yetty_ycore_rectangle tabbar_plus_rect(struct yetty_ycore_rectangl
     return pr;
 }
 
-static int tabbar_pt_in_plus(struct yetty_ygui_object *obj, float x, float y)
+static struct yetty_ycore_int_result tabbar_pt_in_plus(struct yetty_ygui_object *obj, float x,
+                                                       float y)
 {
-    struct tabbar_data *td = yetty_ygui_data_get(
-        obj, yetty_ygui_tabbar_class_get().value);
+    struct yetty_yclass_ptr_result class_result = yetty_ygui_tabbar_class_get();
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "tabbar_pt_in_plus: class");
+    struct yetty_ygui_void_ptr_result td_dr = yetty_ygui_data_get_result(obj, class_result.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, td_dr, "tabbar_pt_in_plus: data_get");
+    struct tabbar_data *td = td_dr.value;
     if (!td->new_tab_cb) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     struct yetty_ycore_rectangle strip = yetty_ygui_widget_rect(obj);
     float tabs_right = tabbar_tabs_right_edge(obj, strip.min.x);
     struct yetty_ycore_rectangle pr = tabbar_plus_rect(strip, tabs_right);
-    return x >= pr.min.x && x < pr.max.x && y >= pr.min.y && y < pr.max.y;
+    return YETTY_OK(yetty_ycore_int,
+                    x >= pr.min.x && x < pr.max.x && y >= pr.min.y && y < pr.max.y);
 }
 
 /* A press reaches the tabbar only when it missed every tab header (headers
@@ -312,8 +319,8 @@ static int tabbar_pt_in_plus(struct yetty_ygui_object *obj, float x, float y)
  * to the host's window drag-to-move handler. */
 [[clang::annotate("override@ygui:tabbar:widget_on_press")]]
 static struct yetty_ycore_int_result tabbar_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj, float x,
-                                                     float y, int button)
+                                                     struct yetty_yclass_object *yclass_obj,
+                                                     float x, float y, int button)
 {
     (void)yclass_ctx;
     (void)button;
@@ -322,7 +329,9 @@ static struct yetty_ycore_int_result tabbar_on_press(struct yetty_yclass_ctx *yc
         yetty_ygui_data_get_result(obj, yetty_ygui_tabbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, td_dr, "tabbar_on_press: data_get");
     struct tabbar_data *td = td_dr.value;
-    if (!tabbar_pt_in_plus(obj, x, y)) {
+    struct yetty_ycore_int_result in_plus = tabbar_pt_in_plus(obj, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, in_plus, "tabbar_on_press: pt_in_plus");
+    if (!in_plus.value) {
         td->plus_pressed = 0;
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -348,8 +357,12 @@ static struct yetty_ycore_int_result tabbar_on_release(struct yetty_yclass_ctx *
         return YETTY_OK(yetty_ycore_int, 0);
     }
     /* Fire only if the release lands back on the "+", like a button. */
-    if (td->new_tab_cb && tabbar_pt_in_plus(obj, x, y)) {
-        td->new_tab_cb(obj, td->new_tab_userdata);
+    if (td->new_tab_cb) {
+        struct yetty_ycore_int_result in_plus = tabbar_pt_in_plus(obj, x, y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, in_plus, "tabbar_on_release: pt_in_plus");
+        if (in_plus.value) {
+            td->new_tab_cb(obj, td->new_tab_userdata);
+        }
     }
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -361,8 +374,7 @@ static struct yetty_ycore_void_result tabbar_constructor(struct yetty_yclass_ctx
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_tabbar_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_tabbar_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "tabbar_constructor: super");
     struct yetty_ygui_void_ptr_result td_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_tabbar_class_get().value);
@@ -399,8 +411,8 @@ static struct yetty_ycore_void_result paint_pill(struct yetty_ygui_emit_ctx *ctx
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
-                                                     &geom);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
+                                                         0.0f, &geom);
     }
     struct yetty_ysdf_rounded_box geom = {
         .center_x = x + w * 0.5f,
@@ -412,8 +424,8 @@ static struct yetty_ycore_void_result paint_pill(struct yetty_ygui_emit_ctx *ctx
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
-                                                         0.0f, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill,
+                                                             0u, 0.0f, &geom);
 }
 
 static struct yetty_ycore_void_result paint_label(struct yetty_ygui_emit_ctx *ctx, const char *text,
@@ -427,8 +439,9 @@ static struct yetty_ycore_void_result paint_label(struct yetty_ygui_emit_ctx *ct
         .capacity = strlen(text),
         .size = strlen(text),
     };
-    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &text_buf, font_size, color,
-                                          /*layer=*/0, /*font_id=*/-1, /*rotation=*/0.0f);
+    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &text_buf, font_size,
+                                              color,
+                                              /*layer=*/0, /*font_id=*/-1, /*rotation=*/0.0f);
 }
 
 [[clang::annotate("override@ygui:tabbar:widget_paint")]]
@@ -463,8 +476,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
     float base_font_size = theme && theme->font_size > 0.0f ? theme->font_size : 14.0f;
 
     /* Strip background — a flat band the width of the widget. */
-    ydebug("tabbar_paint: strip rect=(%.1f,%.1f)+%.1fx%.1f color=0x%08X",
-           r.min.x, r.min.y, strip_w, strip_h, color_strip);
+    ydebug("tabbar_paint: strip rect=(%.1f,%.1f)+%.1fx%.1f color=0x%08X", r.min.x, r.min.y, strip_w,
+           strip_h, color_strip);
     struct yetty_ycore_void_result rr =
         paint_pill(ctx, r.min.x, r.min.y, strip_w, strip_h, color_strip, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: strip bg");
@@ -492,8 +505,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: pill");
 
         if (is_active && ph > TABBAR_ACCENT_BAR_H) {
-            ydebug("tabbar_paint: accent rect=(%.1f,%.1f)+%.1fx%.1f color=0x%08X",
-                   pr.min.x, pr.max.y - TABBAR_ACCENT_BAR_H, pw, TABBAR_ACCENT_BAR_H, color_accent);
+            ydebug("tabbar_paint: accent rect=(%.1f,%.1f)+%.1fx%.1f color=0x%08X", pr.min.x,
+                   pr.max.y - TABBAR_ACCENT_BAR_H, pw, TABBAR_ACCENT_BAR_H, color_accent);
             rr = paint_pill(ctx, pr.min.x, pr.max.y - TABBAR_ACCENT_BAR_H, pw, TABBAR_ACCENT_BAR_H,
                             color_accent, 0.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: accent bar");
@@ -507,8 +520,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
             float sep_y = pr.min.y + TABBAR_SEPARATOR_INSET_Y;
             float sep_h = ph - 2.0f * TABBAR_SEPARATOR_INSET_Y;
             if (sep_h > 0.0f) {
-                rr = paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, color_separator,
-                                0.0f);
+                rr =
+                    paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, color_separator, 0.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: separator");
             }
         }
@@ -552,8 +565,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
             float sep_y = r.min.y + TABBAR_SEPARATOR_INSET_Y;
             float sep_h = strip_h - 2.0f * TABBAR_SEPARATOR_INSET_Y;
             if (sep_h > 0.0f) {
-                rr = paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, color_separator,
-                                0.0f);
+                rr =
+                    paint_pill(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h, color_separator, 0.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: plus separator");
             }
         }
@@ -583,8 +596,7 @@ struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ygui_
     if (!tabbar) {
         return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_tabbar_add_tab: NULL tabbar");
     }
-    struct yetty_ygui_object_ptr_result r =
-        yetty_ygui_add(header_class_get().value, tabbar);
+    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(header_class_get().value, tabbar);
     if (YETTY_IS_ERR(r)) {
         return r;
     }
@@ -733,8 +745,8 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_ygui_ob
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_ygui_object *tabbar,
-                                                             yetty_ygui_tab_close_cb cb,
-                                                             void *userdata)
+                                                              yetty_ygui_tab_close_cb cb,
+                                                              void *userdata)
 {
     if (!tabbar) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tabbar_set_on_close: NULL tabbar");
@@ -774,6 +786,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_ygu
 
 #ifdef YCLASS_CODEGEN
 struct yetty_ygui_object;
-typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index, void *userdata);
+typedef void (*yetty_ygui_tab_close_cb)(struct yetty_ygui_object *tabbar, int index,
+                                        void *userdata);
 typedef void (*yetty_ygui_tab_new_cb)(struct yetty_ygui_object *tabbar, void *userdata);
 #endif

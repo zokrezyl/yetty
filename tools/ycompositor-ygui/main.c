@@ -67,11 +67,11 @@
 /* Brand palette (rules/08-branding.md) — used directly on widget
  * properties since the default theme uses a darker surface that's hard
  * to see against the brand-bg backdrop. */
-#define COL_BG_LIFTED   0xFF141A1Fu
-#define COL_BORDER      0xFF364A47u
-#define COL_TEXT_PRI    0xFFE0E5E4u
-#define COL_ACCENT      0xFF6BA892u
-#define COL_ACCENT_HI   0xFF74C5A5u
+#define COL_BG_LIFTED 0xFF141A1Fu
+#define COL_BORDER 0xFF364A47u
+#define COL_TEXT_PRI 0xFFE0E5E4u
+#define COL_ACCENT 0xFF6BA892u
+#define COL_ACCENT_HI 0xFF74C5A5u
 
 static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result r)
 {
@@ -82,8 +82,8 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
 
 struct ycomp_ygui_app {
     int quit;
-    struct yetty_context       ctx;
-    struct yetty_yframework     *yrt;
+    struct yetty_context ctx;
+    struct yetty_yframework *yrt;
     struct yetty_ydraw_target *target;
     struct yetty_yfigure_container *root;
     /* The root container's yclass object — wired into the ygui
@@ -91,14 +91,14 @@ struct ycomp_ygui_app {
      * straight in (in-process, no PTY). */
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *registry;
-    struct yetty_ygui_framework  *ygui;
+    struct yetty_ygui_framework *ygui;
     /* Borrowed pointer to the outer window — it is the framework root,
      * so the layout pass stretches it to the viewport automatically. */
-    struct yetty_ygui_object  *win;
+    struct yetty_ygui_object *win;
     /* Default font handed to the compositor; every per-group ygrid the
      * compositor creates borrows this at slot 0 so TEXT_DRAWABLE_LIST records
      * (button labels, etc.) expand into renderable glyphs. */
-    struct yetty_yfont_font   *font;
+    struct yetty_yfont_font *font;
     /* ygrid factory bundle — borrowed by every ygrid the registry mints;
      * must outlive every ygrid (i.e. outlive the container). */
     struct yetty_ygrid_factory_args figure_args;
@@ -107,28 +107,28 @@ struct ycomp_ygui_app {
      * kind=YETTY_YFIGURE_KIND_YMGUI (the ymgui demo, ygui, …) get
      * their figures created instead of failing in registry_mint. */
     struct yetty_ymgui_factory_args ymgui_factory_args;
-    void                       *surface;
-    uint32_t                    surface_w;
-    uint32_t                    surface_h;
+    void *surface;
+    uint32_t surface_w;
+    uint32_t surface_h;
 
     /* Interpose mode: forkpty + yface scanner. argv slice borrowed from
      * the process argv vector; NULL/0 means "headless demo mode" and the
      * in-process ygui scene is used. */
-    char                      **child_argv;
-    int                         child_argc;
-    pid_t                       child_pid;
-    int                         pty_master_fd;
+    char **child_argv;
+    int child_argc;
+    pid_t child_pid;
+    int pty_master_fd;
     /* Cell size used to translate (cols, rows) into pixel TIOCSWINSZ
      * for the child. Matches imgui_impl_yetty's defaults so the demo
      * gets the pane size it expects. */
-    float                       cell_w_px;
-    float                       cell_h_px;
-    struct yetty_yface         *yface_in;
+    float cell_w_px;
+    float cell_h_px;
+    struct yetty_yface *yface_in;
     /* OSC analyzer counters — populated by on_osc; logged on shutdown. */
-    uint64_t                    n_osc_total;
-    uint64_t                    n_osc_compositor; /* OSC 630000 */
-    uint64_t                    n_osc_other;
-    uint64_t                    n_bytes_in;
+    uint64_t n_osc_total;
+    uint64_t n_osc_compositor; /* OSC 630000 */
+    uint64_t n_osc_other;
+    uint64_t n_bytes_in;
 };
 
 /* Build the widget tree once. A window holds a vbox body containing a
@@ -283,8 +283,8 @@ static struct yetty_ycore_void_result push_ygui_scene(struct ycomp_ygui_app *app
      * and emit. framework_emit lays out, walks the tree, and ships the
      * record stream straight into app->root via the in-process yclass
      * slot path (set_container_obj was wired at startup). */
-    struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-        app->ygui, (float)app->surface_w, (float)app->surface_h);
+    struct yetty_ycore_void_result vr =
+        yetty_ygui_framework_set_viewport(app->ygui, (float)app->surface_w, (float)app->surface_h);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "push_ygui_scene: set_viewport");
     yetty_ygui_framework_mark_dirty(app->ygui);
     return yetty_ygui_framework_emit(app->ygui);
@@ -300,20 +300,34 @@ static struct yetty_ycore_void_result push_ygui_scene(struct ycomp_ygui_app *app
 static const char *osc_code_name(int code)
 {
     switch (code) {
-    case 620000: return "YETTY_DCS_YDRAW_BIN";
-    case 620001: return "YETTY_DCS_YDRAW_TEXT_ZONE";
-    case 620002: return "YETTY_DCS_YDRAW_TEXT_END";
-    case 620003: return "YETTY_DCS_YDRAW_CLEAR";
-    case 630000: return "YETTY_DCS_YCOMPOSITOR_BIN";
-    case 610010: return "YETTY_OSC_CS_CLIENT_INPUT_SUB";
-    case 700000: return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE";
-    case 700001: return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE";
-    case 700002: return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS";
-    case 700003: return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY";
-    case 700010: return "YETTY_OSC_SC_CLIENT_INPUT_MOUSE";
-    case 700011: return "YETTY_OSC_SC_CLIENT_INPUT_RESIZE";
-    case 700012: return "YETTY_OSC_SC_CLIENT_INPUT_KEY";
-    default:     return NULL;
+    case 620000:
+        return "YETTY_DCS_YDRAW_BIN";
+    case 620001:
+        return "YETTY_DCS_YDRAW_TEXT_ZONE";
+    case 620002:
+        return "YETTY_DCS_YDRAW_TEXT_END";
+    case 620003:
+        return "YETTY_DCS_YDRAW_CLEAR";
+    case 630000:
+        return "YETTY_DCS_YCOMPOSITOR_BIN";
+    case 610010:
+        return "YETTY_OSC_CS_CLIENT_INPUT_SUB";
+    case 700000:
+        return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE";
+    case 700001:
+        return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE";
+    case 700002:
+        return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS";
+    case 700003:
+        return "YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY";
+    case 700010:
+        return "YETTY_OSC_SC_CLIENT_INPUT_MOUSE";
+    case 700011:
+        return "YETTY_OSC_SC_CLIENT_INPUT_RESIZE";
+    case 700012:
+        return "YETTY_OSC_SC_CLIENT_INPUT_KEY";
+    default:
+        return NULL;
     }
 }
 
@@ -326,13 +340,16 @@ static const char *osc_code_name(int code)
 /* If `payload` is an LZ4F frame, decompress into a malloc'd buffer and
  * return it (caller frees). Otherwise return NULL and leave the caller
  * to process the bytes as-is. */
-static uint8_t *maybe_decompress_lz4f(const uint8_t *payload, size_t payload_len,
-                                       size_t *out_len)
+static uint8_t *maybe_decompress_lz4f(const uint8_t *payload, size_t payload_len, size_t *out_len)
 {
-    if (payload_len < 4) return NULL;
+    if (payload_len < 4) {
+        return NULL;
+    }
     uint32_t magic;
     memcpy(&magic, payload, 4);
-    if (magic != LZ4F_FRAME_MAGIC_LE) return NULL;
+    if (magic != LZ4F_FRAME_MAGIC_LE) {
+        return NULL;
+    }
 
     LZ4F_decompressionContext_t ctx = NULL;
     if (LZ4F_isError(LZ4F_createDecompressionContext(&ctx, LZ4F_VERSION))) {
@@ -349,8 +366,7 @@ static uint8_t *maybe_decompress_lz4f(const uint8_t *payload, size_t payload_len
     while (in_pos < payload_len) {
         size_t out_left = cap - used;
         size_t in_left = payload_len - in_pos;
-        size_t r = LZ4F_decompress(ctx, buf + used, &out_left,
-                                   payload + in_pos, &in_left, NULL);
+        size_t r = LZ4F_decompress(ctx, buf + used, &out_left, payload + in_pos, &in_left, NULL);
         if (LZ4F_isError(r)) {
             free(buf);
             LZ4F_freeDecompressionContext(ctx);
@@ -358,11 +374,17 @@ static uint8_t *maybe_decompress_lz4f(const uint8_t *payload, size_t payload_len
         }
         used += out_left;
         in_pos += in_left;
-        if (r == 0) break; /* frame complete */
+        if (r == 0) {
+            break; /* frame complete */
+        }
         if (out_left == 0 && used == cap) {
             cap *= 2;
             uint8_t *nb = (uint8_t *)realloc(buf, cap);
-            if (!nb) { free(buf); LZ4F_freeDecompressionContext(ctx); return NULL; }
+            if (!nb) {
+                free(buf);
+                LZ4F_freeDecompressionContext(ctx);
+                return NULL;
+            }
             buf = nb;
         }
     }
@@ -379,7 +401,8 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
                    const uint8_t *payload, size_t payload_len)
 {
     struct ycomp_ygui_app *app = user;
-    (void)args; (void)args_len;
+    (void)args;
+    (void)args_len;
     app->n_osc_total++;
 
     const char *name = osc_code_name(osc_code);
@@ -394,9 +417,8 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
     const uint8_t *body = inflated ? inflated : payload;
     size_t body_len = inflated ? inflated_len : payload_len;
 
-    yinfo("ycompositor-ygui[osc]: code=%d (%s) args=%zu payload=%zu%s",
-          osc_code, name ? name : "?", args_len, body_len,
-          inflated ? " [lz4f-decompressed]" : "");
+    yinfo("ycompositor-ygui[osc]: code=%d (%s) args=%zu payload=%zu%s", osc_code, name ? name : "?",
+          args_len, body_len, inflated ? " [lz4f-decompressed]" : "");
 
     if (osc_code == YETTY_DCS_YCOMPOSITOR_BIN) {
         app->n_osc_compositor++;
@@ -404,13 +426,13 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             struct yetty_ycore_void_result pr =
                 yetty_yfigure_container_process_records(app->root, body, body_len);
             if (YETTY_IS_ERR(pr)) {
-                yerror("ycompositor-ygui[osc]: process_records failed: %s",
-                       pr.error.msg);
+                yerror("ycompositor-ygui[osc]: process_records failed: %s", pr.error.msg);
                 yetty_ycore_error_destroy(pr.error);
             }
-            struct yetty_yfigure_figure *rf =
-                yetty_yfigure_container_as_figure(app->root);
-            if (rf) yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+            struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+            if (rf) {
+                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
+            }
         }
     } else {
         app->n_osc_other++;
@@ -441,8 +463,12 @@ static int spawn_child(struct ycomp_ygui_app *app)
     if (app->cell_h_px > 0.0f) {
         ws.ws_row = (unsigned short)(app->surface_h / (uint32_t)app->cell_h_px);
     }
-    if (ws.ws_col == 0) ws.ws_col = 80;
-    if (ws.ws_row == 0) ws.ws_row = 24;
+    if (ws.ws_col == 0) {
+        ws.ws_col = 80;
+    }
+    if (ws.ws_row == 0) {
+        ws.ws_row = 24;
+    }
     ws.ws_xpixel = 0;
     ws.ws_ypixel = 0;
 
@@ -453,21 +479,27 @@ static int spawn_child(struct ycomp_ygui_app *app)
     }
     if (pid == 0) {
         /* Child — close inherited high fds and exec. */
-        for (int fd = 3; fd < 1024; fd++) close(fd);
+        for (int fd = 3; fd < 1024; fd++) {
+            close(fd);
+        }
         execvp(app->child_argv[0], app->child_argv);
         _exit(127);
     }
     app->child_pid = pid;
     int flags = fcntl(app->pty_master_fd, F_GETFL, 0);
-    if (flags >= 0) fcntl(app->pty_master_fd, F_SETFL, flags | O_NONBLOCK);
-    yinfo("ycompositor-ygui: spawned child pid=%d cmd='%s' winsize=%ux%u cells",
-          pid, app->child_argv[0], ws.ws_col, ws.ws_row);
+    if (flags >= 0) {
+        fcntl(app->pty_master_fd, F_SETFL, flags | O_NONBLOCK);
+    }
+    yinfo("ycompositor-ygui: spawned child pid=%d cmd='%s' winsize=%ux%u cells", pid,
+          app->child_argv[0], ws.ws_col, ws.ws_row);
     return 0;
 }
 
 static void update_child_winsize(struct ycomp_ygui_app *app)
 {
-    if (app->pty_master_fd < 0) return;
+    if (app->pty_master_fd < 0) {
+        return;
+    }
     struct winsize ws = {0};
     if (app->cell_w_px > 0.0f) {
         ws.ws_col = (unsigned short)(app->surface_w / (uint32_t)app->cell_w_px);
@@ -475,8 +507,12 @@ static void update_child_winsize(struct ycomp_ygui_app *app)
     if (app->cell_h_px > 0.0f) {
         ws.ws_row = (unsigned short)(app->surface_h / (uint32_t)app->cell_h_px);
     }
-    if (ws.ws_col == 0) ws.ws_col = 80;
-    if (ws.ws_row == 0) ws.ws_row = 24;
+    if (ws.ws_col == 0) {
+        ws.ws_col = 80;
+    }
+    if (ws.ws_row == 0) {
+        ws.ws_row = 24;
+    }
     if (ioctl(app->pty_master_fd, TIOCSWINSZ, &ws) != 0) {
         ywarn("ycompositor-ygui: TIOCSWINSZ failed: %s", strerror(errno));
     }
@@ -486,7 +522,9 @@ static void update_child_winsize(struct ycomp_ygui_app *app)
  * to the yface scanner. Returns 1 if the child closed (EOF). */
 static int pump_pty_in(struct ycomp_ygui_app *app)
 {
-    if (app->pty_master_fd < 0) return 0;
+    if (app->pty_master_fd < 0) {
+        return 0;
+    }
     char buf[8192];
     for (;;) {
         ssize_t n = read(app->pty_master_fd, buf, sizeof(buf));
@@ -499,12 +537,20 @@ static int pump_pty_in(struct ycomp_ygui_app *app)
             }
             continue;
         }
-        if (n == 0) return 1;
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
-        if (errno == EINTR) continue;
+        if (n == 0) {
+            return 1;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 0;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
         /* PTY master read errors after the child exits with EIO on Linux
          * — treat as EOF, not a hard error. */
-        if (errno == EIO) return 1;
+        if (errno == EIO) {
+            return 1;
+        }
         yerror("ycompositor-ygui: pty read failed: %s", strerror(errno));
         return 1;
     }
@@ -520,18 +566,18 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
     case YETTY_YCORE_RESIZE: {
         uint32_t w = (uint32_t)ev->resize.width;
         uint32_t h = (uint32_t)ev->resize.height;
-        if (w == 0 || h == 0) return;
+        if (w == 0 || h == 0) {
+            return;
+        }
         app->surface_w = w;
         app->surface_h = h;
-        struct yetty_ycore_void_result rr =
-            yetty_yframework_reconfigure_surface(app->yrt, w, h);
+        struct yetty_ycore_void_result rr = yetty_yframework_reconfigure_surface(app->yrt, w, h);
         if (YETTY_IS_ERR(rr)) {
             yerror("ycompositor-ygui: reconfigure_surface failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         }
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
-        struct yetty_ycore_void_result tr =
-            app->target->ops->resize(app->target, vp);
+        struct yetty_ycore_void_result tr = app->target->ops->resize(app->target, vp);
         if (YETTY_IS_ERR(tr)) {
             yerror("ycompositor-ygui: render_target resize failed: %s", tr.error.msg);
             yetty_ycore_error_destroy(tr.error);
@@ -539,12 +585,13 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
         /* Root container's rect tracks the framebuffer. The producer
          * re-emits the scene at the new dims; child figures move via
          * SET_CHILD_RECT records embedded in that re-emit. */
-        struct yetty_yfigure_figure *rf =
-            yetty_yfigure_container_as_figure(app->root);
-        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, (struct yetty_ycore_rectangle){
-            .min = {.x = 0.0f, .y = 0.0f}, .max = {.x = (float)w, .y = (float)h},
-        });
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1,
+                                      (struct yetty_ycore_rectangle){
+                                          .min = {.x = 0.0f, .y = 0.0f},
+                                          .max = {.x = (float)w, .y = (float)h},
+                                      });
+        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
         if (app->child_argv) {
             /* Interpose: tell the child the new pane size. The child
              * decides how to re-emit (the ymgui demo re-runs
@@ -606,8 +653,7 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
     }
 }
 
-static struct yetty_ycore_void_result
-ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
+static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     struct ycomp_ygui_app *app = user;
 
@@ -615,11 +661,11 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
     app->yrt = yr.value;
 
-    app->ctx.runtime     = app->yrt;
+    app->ctx.runtime = app->yrt;
     app->ctx.pty_factory = NULL;
-    app->ctx.event_loop  = app->yrt->event_loop;
+    app->ctx.event_loop = app->yrt->event_loop;
 
-    app->surface   = rt->surface;
+    app->surface = rt->surface;
     app->surface_w = rt->surface_width;
     app->surface_h = rt->surface_height;
 
@@ -629,8 +675,10 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     app->yrt->render_target->ops->destroy(app->yrt->render_target);
     app->yrt->render_target = NULL;
     struct yetty_yrender_viewport vp = {
-        .x = 0, .y = 0,
-        .w = (float)app->surface_w, .h = (float)app->surface_h,
+        .x = 0,
+        .y = 0,
+        .w = (float)app->surface_w,
+        .h = (float)app->surface_h,
     };
     struct yetty_yrender_target_ptr_result tr = yetty_yrender_target_texture_create(
         app->yrt->gpu.device, app->yrt->gpu.queue, app->yrt->gpu.surface_format,
@@ -641,22 +689,20 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     /* Load font first — it's needed as user-data for the ygrid factory. */
     {
         struct yetty_yconfig_config *config = app->yrt->config;
-        const char *fonts_dir   = config->ops->get_string(config, "paths/fonts", "");
+        const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
         const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
         const char *font_family = "DejaVuSansMNerdFontMono";
         char cdb_path[768];
         char shader_path[768];
-        snprintf(cdb_path, sizeof(cdb_path),
-                 "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir, font_family);
-        snprintf(shader_path, sizeof(shader_path),
-                 "%s/msdf-font.wgsl", shaders_dir);
+        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
+                 font_family);
+        snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
         yinfo("ycompositor-ygui: loading font cdb='%s'", cdb_path);
         struct yetty_font_font_result font_result =
             yetty_yfont_msdf_font_create(cdb_path, shader_path, "ycompositor_ygui");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, font_result, "msdf_font_create failed");
         app->font = font_result.value;
-        struct yetty_ycore_void_result load_result =
-            app->font->ops->load_basic_latin(app->font);
+        struct yetty_ycore_void_result load_result = app->font->ops->load_basic_latin(app->font);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, load_result, "font load_basic_latin failed");
     }
 
@@ -664,8 +710,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
      * CREATE_CHILD records with KIND_YGRID; in interpose mode the
      * captured app can also emit KIND_YMGUI (the ymgui demo, etc.) so
      * we register both factories then. */
-    struct yetty_yfigure_registry_ptr_result reg_r =
-        yetty_yfigure_registry_create();
+    struct yetty_yfigure_registry_ptr_result reg_r = yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
     /* Bundle the font into the factory-args struct; no composite
@@ -679,10 +724,9 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     if (app->child_argv) {
         app->ymgui_factory_args.context = &app->ctx;
         app->ymgui_factory_args.pipeline = NULL;
-        struct yetty_ycore_void_result mr = yetty_ymgui_register_factory(
-            app->registry, &app->ymgui_factory_args);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, mr,
-                            "ymgui_register_factory failed");
+        struct yetty_ycore_void_result mr =
+            yetty_ymgui_register_factory(app->registry, &app->ymgui_factory_args);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "ymgui_register_factory failed");
     }
 
     struct yetty_ycore_rectangle root_rect = {
@@ -690,8 +734,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         .max = {.x = (float)app->surface_w, .y = (float)app->surface_h},
     };
     struct yetty_yclass_ctx yclass_ctx = {0};
-    struct yetty_yclass_object_ptr_result obj_res =
-        yetty_yfigure_container_create(&yclass_ctx);
+    struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "root_container create failed");
     app->container_obj = obj_res.value;
     app->root = yetty_yfigure_container_from(obj_res.value);
@@ -722,7 +765,8 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "framework set_container_obj failed");
         build_scene(app);
         if (app->win) {
-            struct yetty_ycore_void_result rootr = yetty_ygui_framework_set_root(app->ygui, app->win);
+            struct yetty_ycore_void_result rootr =
+                yetty_ygui_framework_set_root(app->ygui, app->win);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rootr, "framework set_root failed");
         }
 
@@ -741,7 +785,9 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     int needs_render = 1;
     while (!app->quit) {
         struct pollfd pfds[2];
-        pfds[0].fd = pipe_fd; pfds[0].events = POLLIN; pfds[0].revents = 0;
+        pfds[0].fd = pipe_fd;
+        pfds[0].events = POLLIN;
+        pfds[0].revents = 0;
         nfds_t nfds = 1;
         if (app->pty_master_fd >= 0) {
             pfds[1].fd = app->pty_master_fd;
@@ -755,9 +801,10 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
             for (;;) {
                 struct yetty_yui_event ev = {0};
                 struct yetty_ycore_size_result rr =
-                    rt->platform_input_pipe->ops->read(rt->platform_input_pipe,
-                                                       &ev, sizeof(ev));
-                if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) break;
+                    rt->platform_input_pipe->ops->read(rt->platform_input_pipe, &ev, sizeof(ev));
+                if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) {
+                    break;
+                }
                 handle_event(app, &ev);
                 had_events = 1;
             }
@@ -770,8 +817,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
                       "compositor=%llu other=%llu raw_bytes=%llu)",
                       (unsigned long long)app->n_osc_total,
                       (unsigned long long)app->n_osc_compositor,
-                      (unsigned long long)app->n_osc_other,
-                      (unsigned long long)app->n_bytes_in);
+                      (unsigned long long)app->n_osc_other, (unsigned long long)app->n_bytes_in);
                 close(app->pty_master_fd);
                 app->pty_master_fd = -1;
             }
@@ -779,9 +825,9 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
         if (rt->instance) {
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
-        struct yetty_yfigure_figure *rrf =
-            yetty_yfigure_container_as_figure(app->root);
-        if (!(needs_render || had_events || yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf) - 1).value)) {
+        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
+        if (!(needs_render || had_events ||
+              yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf)-1).value)) {
             continue;
         }
 
@@ -797,7 +843,7 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
             yerror("ycompositor-ygui: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf) - 1, 0);
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf)-1, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) {
@@ -810,17 +856,17 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     /* Teardown — root container first so any pending GPU work bound
      * to the runtime's device flushes before yframework_destroy. */
     {
-        struct yetty_yfigure_figure *rrf =
-            yetty_yfigure_container_as_figure(app->root);
+        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
         struct yetty_ycore_void_result dr =
             yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rrf - 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
     }
     app->root = NULL;
     if (app->registry) {
-        struct yetty_ycore_void_result r =
-            yetty_yfigure_registry_destroy(app->registry);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        struct yetty_ycore_void_result r = yetty_yfigure_registry_destroy(app->registry);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
         app->registry = NULL;
     }
 
@@ -853,7 +899,9 @@ ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
     if (app->child_argv) {
         struct yetty_ycore_void_result rr =
             yetty_ymgui_factory_args_release(&app->ymgui_factory_args);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
     }
 
     if (app->font) {
@@ -891,5 +939,12 @@ int main(int argc, char **argv)
     struct yetty_yinit_app_config cfg = {
         .extract_assets_fn = yetty_platform_extract_assets,
     };
-    return yetty_yinit_run(trimmed_argc, argv, &cfg, ycomp_ygui_worker, &app);
+    struct yetty_ycore_int_result run_result =
+        yetty_yinit_run(trimmed_argc, argv, &cfg, ycomp_ygui_worker, &app);
+    if (YETTY_IS_ERR(run_result)) {
+        yetty_ycore_error_print(stderr, "ycompositor-ygui: run", run_result.error);
+        yetty_ycore_error_destroy(run_result.error);
+        return 1;
+    }
+    return run_result.value;
 }
