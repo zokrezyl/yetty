@@ -15,6 +15,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(yless PRIVATE
     yetty_yview
     yetty_ycat
+    yetty_ymusic   # LilyPond (.ly) scores render directly via ymusic
     Threads::Threads
     yetty_yplatform_core
 )

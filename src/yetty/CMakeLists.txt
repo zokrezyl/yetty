@@ -255,6 +255,12 @@ endif()
 # yetty_yplatform_window_manager.
 add_subdirectory(ychrome)
 
+# ymusic — LilyPond-subset music renderer. Needs the ydraw-core record builder,
+# the SDF primitives and the yface envelope encoder (same set as yflame).
+if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    add_subdirectory(ymusic)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YPDF)
     add_subdirectory(ypdf)
 endif()

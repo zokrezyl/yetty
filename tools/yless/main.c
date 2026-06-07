@@ -18,6 +18,8 @@
  */
 #include <yetty/ycat/ycat.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ymusic/music.h> /* yetty_ymusic_* — LilyPond score rendering */
+#include <yetty/ymusic/rpc.h>   /* yetty_ymusic_music_create / _register */
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yplatform/term.h> /* yetty_yplatform_term_get_size */
 #include <yetty/yplatform/tty.h>  /* raw mode + stdin read, cross-platform */
@@ -73,7 +75,8 @@ static void usage(FILE *out, const char *prog)
             "scrollback; on exit the surface is cleared.\n"
             "\n"
             "Supported content: source files (tree-sitter), images, svg, mermaid\n"
-            "diagrams, pdf (first page).\n"
+            "diagrams, pdf (first page), and LilyPond scores (.ly — engraved with\n"
+            "the Emmentaler music font).\n"
             "\n"
             "Options (position/size are in terminal CELLS; default = whole pane):\n"
             "  -x, --x=N        origin column   (default 0)\n"
@@ -259,6 +262,171 @@ static struct yetty_ydraw_drawable_list *render_content(const uint8_t *bytes, si
 }
 
 /*=============================================================================
+ * LilyPond — render .ly scores directly via ymusic (clefs/noteheads/rests as
+ * Emmentaler MSDF glyphs; staff/stems/beams as SDF). Bypasses ycat's MIME
+ * dispatch (there is no tree-sitter LilyPond grammar) and produces the same
+ * single scrollable drawable list.
+ *===========================================================================*/
+
+static bool file_exists(const char *path)
+{
+    FILE *probe = fopen(path, "rb");
+    if (!probe) {
+        return false;
+    }
+    fclose(probe);
+    return true;
+}
+
+static bool ends_with_ci(const char *text, const char *suffix)
+{
+    size_t text_len = strlen(text);
+    size_t suffix_len = strlen(suffix);
+    if (suffix_len > text_len) {
+        return false;
+    }
+    const char *tail = text + (text_len - suffix_len);
+    for (size_t i = 0; i < suffix_len; i++) {
+        char a = tail[i], b = suffix[i];
+        if (a >= 'A' && a <= 'Z') {
+            a = (char)(a - 'A' + 'a');
+        }
+        if (b >= 'A' && b <= 'Z') {
+            b = (char)(b - 'A' + 'a');
+        }
+        if (a != b) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool window_contains(const uint8_t *hay, size_t hay_len, const char *needle)
+{
+    size_t needle_len = strlen(needle);
+    if (needle_len == 0 || needle_len > hay_len) {
+        return false;
+    }
+    for (size_t i = 0; i + needle_len <= hay_len; i++) {
+        if (memcmp(hay + i, needle, needle_len) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* LilyPond if the path ends .ly/.ily, or the first few KB carry a telltale
+ * LilyPond command. */
+static bool is_lilypond(const uint8_t *bytes, size_t len, const char *path)
+{
+    if (path && (ends_with_ci(path, ".ly") || ends_with_ci(path, ".ily"))) {
+        return true;
+    }
+    size_t scan = len < 4096 ? len : 4096;
+    static const char *markers[] = {"\\relative", "\\version", "\\score",
+                                    "\\new Staff", "\\clef",    "\\time"};
+    for (size_t i = 0; i < sizeof(markers) / sizeof(markers[0]); i++) {
+        if (window_contains(bytes, scan, markers[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Locate the Emmentaler music font: explicit override, then the runtime fonts
+ * dir the parent yetty exports, then dev-tree fallbacks. Returns out on
+ * success (a readable path), or NULL. */
+static const char *resolve_music_font(char *out, size_t cap)
+{
+    const char *env_font = getenv("YETTY_YMUSIC_FONT");
+    if (env_font && env_font[0] && file_exists(env_font)) {
+        snprintf(out, cap, "%s", env_font);
+        return out;
+    }
+    const char *fonts_dir = getenv("YETTY_FONTS_DIR");
+    if (fonts_dir && fonts_dir[0]) {
+        snprintf(out, cap, "%s/Emmentaler-20.otf", fonts_dir);
+        if (file_exists(out)) {
+            return out;
+        }
+    }
+    const char *data_dir = getenv("YETTY_DATA_DIR");
+    if (data_dir && data_dir[0]) {
+        snprintf(out, cap, "%s/fonts/Emmentaler-20.otf", data_dir);
+        if (file_exists(out)) {
+            return out;
+        }
+    }
+    static const char *dev_paths[] = {
+        "assets/fonts/Emmentaler-20.otf",
+        "build-desktop-ytrace-release/assets/fonts/Emmentaler-20.otf",
+    };
+    for (size_t i = 0; i < sizeof(dev_paths) / sizeof(dev_paths[0]); i++) {
+        if (file_exists(dev_paths[i])) {
+            snprintf(out, cap, "%s", dev_paths[i]);
+            return out;
+        }
+    }
+    return NULL;
+}
+
+/* Render LilyPond `bytes` into one drawable list, wrapped into systems that fit
+ * `width_px`. Returns NULL on failure (message on stderr). */
+static struct yetty_ydraw_drawable_list *render_lilypond(const uint8_t *bytes, size_t len,
+                                                         float width_px, float cell_h)
+{
+    char font_path[1024];
+    if (!resolve_music_font(font_path, sizeof(font_path))) {
+        fprintf(stderr, "yless: music font not found; set YETTY_YMUSIC_FONT to an "
+                        "Emmentaler/SMuFL .otf\n");
+        return NULL;
+    }
+
+    struct yetty_ycore_void_result reg = yetty_ymusic_register();
+    if (YETTY_IS_ERR(reg)) {
+        fprintf(stderr, "yless: ymusic register failed: %s\n", reg.error.msg);
+        yetty_ycore_error_destroy(reg.error);
+        return NULL;
+    }
+    struct yetty_yclass_object_ptr_result obj_r = yetty_ymusic_music_create(NULL);
+    if (YETTY_IS_ERR(obj_r)) {
+        fprintf(stderr, "yless: ymusic create failed: %s\n", obj_r.error.msg);
+        yetty_ycore_error_destroy(obj_r.error);
+        return NULL;
+    }
+    struct yetty_yclass_object *music = obj_r.value;
+
+    float staff_space = cell_h * 0.85f;
+    if (staff_space < 8.0f) {
+        staff_space = 8.0f;
+    }
+    (void)yetty_ymusic_configure(NULL, music, width_px, staff_space, 0);
+    (void)yetty_ymusic_set_font_path(NULL, music, font_path);
+
+    struct yetty_ycore_void_result pr = yetty_ymusic_parse(NULL, music, (const char *)bytes, len);
+    if (YETTY_IS_ERR(pr)) {
+        fprintf(stderr, "yless: lilypond parse failed: %s\n", pr.error.msg);
+        yetty_ycore_error_destroy(pr.error);
+        (void)yetty_ymusic_destroy(NULL, music);
+        return NULL;
+    }
+
+    struct yetty_ydraw_drawable_list_result rr = yetty_ymusic_render(NULL, music);
+    /* The rendered list owns its own bytes (font + primitives), so the model
+     * can go now. */
+    (void)yetty_ymusic_destroy(NULL, music);
+    if (YETTY_IS_ERR(rr)) {
+        fprintf(stderr, "yless: lilypond render failed: %s\n", rr.error.msg);
+        for (const struct yetty_ycore_error *cause = rr.error.cause; cause; cause = cause->cause) {
+            fprintf(stderr, "  caused by: %s\n", cause->msg);
+        }
+        yetty_ycore_error_destroy(rr.error);
+        return NULL;
+    }
+    return rr.value;
+}
+
+/*=============================================================================
  * Raw-mode keyboard
  *===========================================================================*/
 
@@ -423,7 +591,14 @@ int main(int argc, char **argv)
         .height_cells = 0,
     };
 
-    struct yetty_ydraw_drawable_list *content = render_content(input.data, input.len, path, &cfg);
+    struct yetty_ydraw_drawable_list *content = NULL;
+    if (is_lilypond(input.data, input.len, path)) {
+        /* LilyPond scores wrap into systems sized to the viewport width and
+         * scroll vertically like the rest of yless's content. */
+        content = render_lilypond(input.data, input.len, rect_w, (float)vp.cell_h);
+    } else {
+        content = render_content(input.data, input.len, path, &cfg);
+    }
     if (!content) {
         free(input.data);
         return 1;

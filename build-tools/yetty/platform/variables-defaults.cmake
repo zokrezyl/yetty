@@ -94,6 +94,7 @@ option(YETTY_ENABLE_FEATURE_YRICH     "yrich — rich text"                    O
 option(YETTY_ENABLE_FEATURE_YDIAGRAM   "diagram — diagram rendering"          ON)
 option(YETTY_ENABLE_FEATURE_YPLOT     "yplot — plotting"                     ON)
 option(YETTY_ENABLE_FEATURE_YFLAME    "yflame — flame graphs"                ON)
+option(YETTY_ENABLE_FEATURE_YMUSIC    "ymusic — music notation rendering"    ON)
 
 # Cards
 option(YETTY_ENABLE_FEATURE_CARDS     "cards — card plugin system"           OFF)
