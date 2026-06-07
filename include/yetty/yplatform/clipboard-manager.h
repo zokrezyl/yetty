@@ -64,8 +64,7 @@ struct yetty_yclass_object;
  * behaviour, kept for builds that don't compile the window manager). */
 struct yetty_yplatform_clipboard_manager_result yetty_platform_clipboard_manager_create(
     struct yetty_ycore_xthread_event_pipe *output_pipe,
-    struct yetty_ycore_xthread_event_pipe *input_pipe,
-    struct yetty_yclass_object *window_manager);
+    struct yetty_ycore_xthread_event_pipe *input_pipe, struct yetty_yclass_object *window_manager);
 
 #ifdef __cplusplus
 }

@@ -69,13 +69,13 @@ GPU-friendly layout so it uploads with no per-row copying. A scroll is a single
 `memmove` of the visible region plus a cleared last row; libvterm's
 `sb_pushline` callback feeds the scrollback ring.
 
-Anchored content (ydraw primitives, figures) does **not** move on scroll. Each
-item stores the **rolling row** it was created at; the shader subtracts the
-current top rolling-row to find its screen position. Scroll is therefore O(1) —
-no primitive ever rewrites its coordinates. The full model, including
-content-layer scroll propagation and alt-screen save/restore, is in
-[Layered Rendering](layered-rendering.md); the primitive-side detail is in
-[ydraw](../src/yetty/ydraw/README.md).
+Row-anchored ydraw content does **not** rewrite coordinates on scroll. Each
+primitive stores the **rolling row** it was created at; the shader subtracts the
+current top rolling-row to find its screen position. Scroll is therefore O(1).
+Root-container figures are compositor-positioned and do not automatically
+participate in row scrolling. The full model, including content-layer scroll
+propagation and alt-screen save/restore, is in [Layered Rendering](layered-rendering.md);
+the primitive-side detail is in [ydraw](../src/yetty/ydraw/README.md).
 
 ---
 

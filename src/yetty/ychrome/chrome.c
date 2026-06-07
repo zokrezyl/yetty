@@ -43,8 +43,8 @@
 #include <yetty/yclass/class.h>
 #include <yetty/ychrome/chrome.h>
 
-#include <yetty/yevent/event.h>        /* event types + resize-edge / cursor enums */
-#include <yetty/yplatform/methods.h>   /* window_manager gesture slots */
+#include <yetty/yevent/event.h>      /* event types + resize-edge / cursor enums */
+#include <yetty/yplatform/methods.h> /* window_manager gesture slots */
 #include <yetty/ycore/types.h>
 
 #include <stdint.h>
@@ -55,7 +55,7 @@
 #define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
 #define YETTY_YCHROME_FLAG_RESIZE 0x2u   /* right/bottom edges resize          */
 #define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
-#define YETTY_YCHROME_FLAG_ALL                                                                      \
+#define YETTY_YCHROME_FLAG_ALL                                                                     \
     (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)
 #endif
 
@@ -78,7 +78,7 @@ struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     float edge_size;      /* right/bottom resize border thickness (px)          */
     float width;          /* current window size (px); set via set_size()       */
     float height;
-    uint32_t flags;       /* YETTY_YCHROME_FLAG_*                               */
+    uint32_t flags; /* YETTY_YCHROME_FLAG_*                               */
 
     /* Drag (move) gesture state. */
     int dragging;
@@ -143,8 +143,8 @@ static int chrome_event_xy(const struct yetty_yui_event *event, float *out_x, fl
 
 /* Bind the engine to a window_manager and set the caption/edge geometry. Call
  * once after create(), before feeding events. window_manager is borrowed. */
-[[clang::annotate("override@ychrome:chrome:configure")]]
-[[clang::annotate("local@ychrome:configure")]]
+[[clang::annotate("override@ychrome:chrome:configure")]] [[clang::annotate(
+    "local@ychrome:configure")]]
 static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_ctx *ctx,
                                                        struct yetty_yclass_object *obj,
                                                        struct yetty_yclass_object *window_manager,
@@ -167,8 +167,8 @@ static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_ctx *
 
 /* Update the window size so the right/bottom edge bands track it. Call on every
  * resize. */
-[[clang::annotate("override@ychrome:chrome:set_size")]]
-[[clang::annotate("local@ychrome:set_size")]]
+[[clang::annotate("override@ychrome:chrome:set_size")]] [[clang::annotate(
+    "local@ychrome:set_size")]]
 static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float width,
                                                       float height)
@@ -182,8 +182,7 @@ static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_ctx *c
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ychrome:chrome:destroy")]]
-[[clang::annotate("local@ychrome:destroy")]]
+[[clang::annotate("override@ychrome:chrome:destroy")]] [[clang::annotate("local@ychrome:destroy")]]
 static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_ctx *ctx,
                                                      struct yetty_yclass_object *obj)
 {
@@ -199,8 +198,8 @@ static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_ctx *ct
 /* Cursor shape to show for a hover at (x, y): a resize arrow over an active
  * edge, else the default. Lets the app give resize-edge feedback without
  * duplicating the hit-test. */
-[[clang::annotate("override@ychrome:chrome:edge_cursor_at")]]
-[[clang::annotate("local@ychrome:edge_cursor_at")]]
+[[clang::annotate("override@ychrome:chrome:edge_cursor_at")]] [[clang::annotate(
+    "local@ychrome:edge_cursor_at")]]
 static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_ctx *ctx,
                                                            struct yetty_yclass_object *obj, float x,
                                                            float y)
@@ -236,8 +235,8 @@ static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_c
 /* Feed one mouse event. Returns 1 if chrome claimed it (the app should stop
  * processing it), 0 if it's not a chrome gesture. Forward events here only
  * after your own controls (buttons, tabs) had their chance. */
-[[clang::annotate("override@ychrome:chrome:handle_event")]]
-[[clang::annotate("local@ychrome:handle_event")]]
+[[clang::annotate("override@ychrome:chrome:handle_event")]] [[clang::annotate(
+    "local@ychrome:handle_event")]]
 static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx *ctx,
                                                          struct yetty_yclass_object *obj,
                                                          const struct yetty_yui_event *event)

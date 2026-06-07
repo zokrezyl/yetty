@@ -333,8 +333,7 @@ static const struct yetty_platform_clipboard_manager_ops glfw_clipboard_ops = {
 
 struct yetty_yplatform_clipboard_manager_result yetty_platform_clipboard_manager_create(
     struct yetty_ycore_xthread_event_pipe *output_pipe,
-    struct yetty_ycore_xthread_event_pipe *input_pipe,
-    struct yetty_yclass_object *window_manager)
+    struct yetty_ycore_xthread_event_pipe *input_pipe, struct yetty_yclass_object *window_manager)
 {
     if (!output_pipe || !input_pipe) {
         return YETTY_ERR(yetty_yplatform_clipboard_manager,
