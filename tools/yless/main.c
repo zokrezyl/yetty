@@ -18,8 +18,9 @@
  */
 #include <yetty/ycat/ycat.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ymusic/music.h> /* yetty_ymusic_* — LilyPond score rendering */
-#include <yetty/ymusic/rpc.h>   /* yetty_ymusic_music_create / _register */
+#include <yetty/yconfig/config.h> /* read brand colours from the yetty config */
+#include <yetty/ymusic/music.h>   /* yetty_ymusic_* — LilyPond score rendering */
+#include <yetty/ymusic/rpc.h>     /* yetty_ymusic_music_create / _register */
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yplatform/term.h> /* yetty_yplatform_term_get_size */
 #include <yetty/yplatform/tty.h>  /* raw mode + stdin read, cross-platform */
@@ -62,6 +63,12 @@ struct yless_opts {
 /* Brand near-black background (#0B1014), per the palette. RGB only — the
  * opacity flag supplies the alpha byte. */
 #define YLESS_BG_RGB 0x0B1014u
+/* LilyPond scores render on the brand mint, read live from the yetty config
+ * (style/ygui/accent). This is only the fallback if the config can't be read. */
+#define YLESS_MUSIC_BG_RGB 0x6BA892u
+#define YLESS_MUSIC_BG_KEY "style/ygui/accent"
+/* Scale the config mint down to a dark mint for the page background. */
+#define YLESS_MUSIC_BG_DARKEN 0.08f
 
 static void usage(FILE *out, const char *prog)
 {
@@ -370,6 +377,79 @@ static const char *resolve_music_font(char *out, size_t cap)
     return NULL;
 }
 
+/* Pack an 0xRRGGBB colour + opacity into the ABGR word (byte0=R, byte1=G,
+ * byte2=B, byte3=A) that ydraw / yview backgrounds expect. */
+static uint32_t pack_bg_abgr(uint32_t rrggbb, float opacity)
+{
+    uint32_t r = (rrggbb >> 16) & 0xFFu;
+    uint32_t g = (rrggbb >> 8) & 0xFFu;
+    uint32_t b = rrggbb & 0xFFu;
+    uint32_t a = (uint32_t)(opacity * 255.0f + 0.5f);
+    return (a << 24) | (b << 16) | (g << 8) | r;
+}
+
+/* Parse a "#RRGGBB" (or "RRGGBB") colour into 0xRRGGBB. Returns fallback on any
+ * malformed input. */
+static uint32_t parse_hex_rgb(const char *text, uint32_t fallback)
+{
+    if (!text) {
+        return fallback;
+    }
+    if (*text == '#') {
+        text++;
+    }
+    uint32_t value = 0;
+    int digits = 0;
+    for (; digits < 6 && text[digits]; digits++) {
+        char ch = text[digits];
+        uint32_t nibble;
+        if (ch >= '0' && ch <= '9') {
+            nibble = (uint32_t)(ch - '0');
+        } else if (ch >= 'a' && ch <= 'f') {
+            nibble = (uint32_t)(ch - 'a' + 10);
+        } else if (ch >= 'A' && ch <= 'F') {
+            nibble = (uint32_t)(ch - 'A' + 10);
+        } else {
+            return fallback;
+        }
+        value = (value << 4) | nibble;
+    }
+    return digits == 6 ? value : fallback;
+}
+
+/* Read the brand mint (style/ygui/accent) from the yetty config the parent
+ * exported via the YETTY_*_DIR env vars, so the colour is never hardcoded.
+ * Falls back to YLESS_MUSIC_BG_RGB only if the config can't be loaded. */
+static uint32_t music_bg_rgb_from_config(void)
+{
+    struct yetty_yconfig_paths paths = {
+        .shaders_dir = getenv("YETTY_SHADERS_DIR"),
+        .fonts_dir = getenv("YETTY_FONTS_DIR"),
+        .runtime_dir = getenv("YETTY_RUNTIME_DIR"),
+        .bin_dir = getenv("YETTY_BIN_DIR"),
+        .config_dir = getenv("YETTY_CONFIG_DIR"),
+    };
+    char prog[] = "yless";
+    char *argv[] = {prog, NULL};
+    struct yetty_yconfig_result config_r = yetty_yconfig_create(1, argv, &paths);
+    if (YETTY_IS_ERR(config_r)) {
+        yetty_ycore_error_destroy(config_r.error);
+        return YLESS_MUSIC_BG_RGB;
+    }
+    struct yetty_yconfig_config *config = config_r.value;
+    const char *mint = config->ops->get_string(config, YLESS_MUSIC_BG_KEY, NULL);
+    uint32_t rgb = parse_hex_rgb(mint, YLESS_MUSIC_BG_RGB);
+    config->ops->destroy(config);
+
+    /* The config mint (style/ygui/accent) is a bright accent; for a page
+     * background we want a DARK mint — same hue, scaled down — so the off-white
+     * notes stay legible. The hue still comes from the config, not a literal. */
+    uint32_t r = (uint32_t)(((rgb >> 16) & 0xFFu) * YLESS_MUSIC_BG_DARKEN);
+    uint32_t g = (uint32_t)(((rgb >> 8) & 0xFFu) * YLESS_MUSIC_BG_DARKEN);
+    uint32_t b = (uint32_t)((rgb & 0xFFu) * YLESS_MUSIC_BG_DARKEN);
+    return (r << 16) | (g << 8) | b;
+}
+
 /* Render LilyPond `bytes` into one drawable list, wrapped into systems that fit
  * `width_px`. Returns NULL on failure (message on stderr). */
 static struct yetty_ydraw_drawable_list *render_lilypond(const uint8_t *bytes, size_t len,
@@ -591,8 +671,9 @@ int main(int argc, char **argv)
         .height_cells = 0,
     };
 
+    bool is_ly = is_lilypond(input.data, input.len, path);
     struct yetty_ydraw_drawable_list *content = NULL;
-    if (is_lilypond(input.data, input.len, path)) {
+    if (is_ly) {
         /* LilyPond scores wrap into systems sized to the viewport width and
          * scroll vertically like the rest of yless's content. */
         content = render_lilypond(input.data, input.len, rect_w, (float)vp.cell_h);
@@ -607,7 +688,8 @@ int main(int argc, char **argv)
     /* Mint the scrollable view (yclass object) and configure it over the
      * resolved rect. ctx is NULL — a view is always a local in-process
      * emitter. */
-    uint32_t bg_color = ((uint32_t)(opts.opacity * 255.0f + 0.5f) << 24) | YLESS_BG_RGB;
+    uint32_t bg_rgb = is_ly ? music_bg_rgb_from_config() : YLESS_BG_RGB;
+    uint32_t bg_color = pack_bg_abgr(bg_rgb, opts.opacity);
     struct yetty_yclass_object_ptr_result view_r = yetty_yview_view_create(NULL);
     if (YETTY_IS_ERR(view_r)) {
         fprintf(stderr, "yless: view create failed: %s\n", view_r.error.msg);

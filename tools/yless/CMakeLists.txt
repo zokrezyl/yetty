@@ -3,6 +3,7 @@
 
 add_executable(yless
     main.c
+    ${YETTY_ROOT}/src/yetty/yconfig/config.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 
@@ -16,6 +17,7 @@ target_link_libraries(yless PRIVATE
     yetty_yview
     yetty_ycat
     yetty_ymusic   # LilyPond (.ly) scores render directly via ymusic
+    yaml           # config.c parses the yetty config (brand colours)
     Threads::Threads
     yetty_yplatform_core
 )

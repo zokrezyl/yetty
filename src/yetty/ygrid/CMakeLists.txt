@@ -18,6 +18,8 @@ target_link_libraries(yetty_ygrid PUBLIC
     yetty_yfigure
     yetty_ydraw_core
     yetty_yrender
+    yetty_yfont_core      # font cache: materialise wire-shipped figure fonts
+    yetty_yplatform_core  # cache dir + mkdir/file_exists for the font cache
     webgpu
 )
 

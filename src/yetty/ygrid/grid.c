@@ -43,6 +43,10 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/yfont/font.h>
+#include <yetty/yfont/font-cache.h>
+#include <yetty/ymsdf/generator.h>
+#include <yetty/yplatform/fs.h>
+#include <yetty/yplatform/paths.h>
 #include <yetty/yrender/font-dispatcher.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
@@ -263,6 +267,19 @@ yetty_ygrid_grid {
     uint32_t font_count;
     uint32_t font_generation;
     uint32_t last_emitted_font_generation;
+
+    /* Wire-shipped fonts. A FONT prim in the drawable list carries TTF bytes
+     * (or a hash-ref); we generate/cache its MSDF cdb, open it through the
+     * font cache, and install it in a slot — so any figure (ymusic scores,
+     * ypdf-in-a-figure) can carry its own font, the same way the scrolling
+     * layer already does. `wire_font_slot` maps the producer's envelope-local
+     * font_id to the ygrid slot we assigned (-1 = unassigned); `font_cache`
+     * owns these fonts; `msdf_generator` is borrowed from the runtime. */
+    struct yetty_yfont_cache *font_cache;
+    struct yetty_ymsdf_generator *msdf_generator;
+    char shaders_dir[512];
+    int32_t wire_font_slot[YETTY_YRENDER_RS_MAX_CHILDREN];
+    uint32_t next_font_slot;
 
     int staging_dirty;
 
@@ -1018,11 +1035,19 @@ static struct yetty_ycore_void_result expand_text_span(
     struct yetty_ygrid_grid *grid, const struct yetty_ydraw_text_drawable_list_view *span,
     const uint8_t *text_run, uint32_t text_run_len)
 {
-    /* font_id < 0 means "default" → slot 0. Otherwise the producer chose
-     * an explicit slot via the slot-indexed set_font API. Out-of-range
-     * or NULL-slot fonts are dropped silently — same as scene-canvas's
-     * "no font registered yet" path. */
-    uint32_t slot = (span->font_id < 0) ? 0u : (uint32_t)span->font_id;
+    /* font_id < 0 means "default" → slot 0. A font_id shipped via a wire FONT
+     * prim is remapped through wire_font_slot to the slot we installed it in.
+     * Otherwise the producer chose an explicit slot via the slot-indexed
+     * set_font API. Out-of-range or NULL-slot fonts are dropped silently —
+     * same as scene-canvas's "no font registered yet" path. */
+    size_t slot_map_cap = sizeof(grid->wire_font_slot) / sizeof(grid->wire_font_slot[0]);
+    uint32_t slot;
+    if (span->font_id >= 0 && (size_t)span->font_id < slot_map_cap &&
+        grid->wire_font_slot[span->font_id] >= 0) {
+        slot = (uint32_t)grid->wire_font_slot[span->font_id];
+    } else {
+        slot = (span->font_id < 0) ? 0u : (uint32_t)span->font_id;
+    }
     if (slot >= grid->font_count || !grid->fonts[slot]) {
         ydebug("ygrid: TEXT_DRAWABLE_LIST font_id=%d -> slot %u has no font; dropped",
                span->font_id, slot);
@@ -1135,6 +1160,106 @@ static struct yetty_ycore_void_result expand_text_span(
     return YETTY_OK_VOID();
 }
 
+static uint64_t ygrid_fnv1a64(const uint8_t *data, size_t len)
+{
+    uint64_t hash = 1469598103934665603ULL;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= data[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+/* Materialise a wire-shipped font: write the TTF to the content-addressed
+ * font cache, generate its MSDF cdb on a miss (or resolve a hash-ref), open it
+ * through the font cache, and install it in a fresh slot keyed by the
+ * producer's envelope-local font_id. Mirrors scrolling-canvas's blob-font path
+ * so the figure path supports custom fonts too. No-op (font dropped) when the
+ * ygrid is headless / has no MSDF generator. */
+static struct yetty_ycore_void_result ygrid_install_wire_font(
+    struct yetty_ygrid_grid *g, const struct yetty_ydraw_font_resource_view *fv)
+{
+    size_t slot_map_cap = sizeof(g->wire_font_slot) / sizeof(g->wire_font_slot[0]);
+    if (fv->font_id < 0 || (size_t)fv->font_id >= slot_map_cap) {
+        return YETTY_OK_VOID();
+    }
+    if (!g->font_cache) {
+        return YETTY_OK_VOID(); /* headless / no GPU — nothing to render into */
+    }
+    if (g->wire_font_slot[fv->font_id] >= 0) {
+        return YETTY_OK_VOID(); /* already installed this envelope */
+    }
+
+    const char *cache_dir = yetty_yplatform_get_cache_dir();
+    if (!cache_dir || !*cache_dir) {
+        return YETTY_ERR(yetty_ycore_void, "ygrid wire font: no cache dir");
+    }
+
+    char hex[17];
+    if (fv->ttf_len == 0) {
+        /* Hash-ref form: name carries the 16-hex FNV1a64 of a font already
+         * shipped (and cached) in a prior envelope. */
+        if (fv->name_len != 16) {
+            return YETTY_ERR(yetty_ycore_void, "ygrid wire font: hash-ref name not 16 hex chars");
+        }
+        memcpy(hex, fv->name, 16);
+        hex[16] = '\0';
+    } else {
+        snprintf(hex, sizeof(hex), "%016llx",
+                 (unsigned long long)ygrid_fnv1a64(fv->ttf, fv->ttf_len));
+        char fonts_dir[768], ttf_path[1024], cdb_path[1024];
+        snprintf(fonts_dir, sizeof(fonts_dir), "%s/ydraw-fonts", cache_dir);
+        snprintf(ttf_path, sizeof(ttf_path), "%s/pdf_%s.ttf", fonts_dir, hex);
+        snprintf(cdb_path, sizeof(cdb_path), "%s/pdf_%s.cdb", fonts_dir, hex);
+        if (!yetty_yplatform_file_exists(cdb_path)) {
+            if (!g->msdf_generator) {
+                return YETTY_ERR(yetty_ycore_void, "ygrid wire font: no MSDF generator");
+            }
+            yetty_yplatform_mkdir_p(fonts_dir);
+            if (!yetty_yplatform_file_exists(ttf_path)) {
+                FILE *out = fopen(ttf_path, "wb");
+                if (!out) {
+                    return YETTY_ERR(yetty_ycore_void, "ygrid wire font: open ttf cache");
+                }
+                size_t written = fwrite(fv->ttf, 1, fv->ttf_len, out);
+                if (fclose(out) != 0 || written != fv->ttf_len) {
+                    return YETTY_ERR(yetty_ycore_void, "ygrid wire font: write ttf cache");
+                }
+            }
+            struct yetty_ymsdf_generator_config gen = {
+                .ttf_path = ttf_path,
+                .cdb_path = cdb_path,
+                .font_size = 32.0f,
+                .pixel_range = 4.0f,
+            };
+            struct yetty_ycore_void_result gr =
+                g->msdf_generator->ops->generate(g->msdf_generator, &gen);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "ygrid wire font: msdf generate");
+        }
+    }
+
+    char cdb_path[1024];
+    snprintf(cdb_path, sizeof(cdb_path), "%s/ydraw-fonts/pdf_%s.cdb", cache_dir, hex);
+    struct yetty_yfont_cache_ref_result ref =
+        yetty_yfont_cache_get_font(g->font_cache, hex, cdb_path);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ref, "ygrid wire font: cache get_font");
+
+    uint32_t slot = g->next_font_slot;
+    if (slot >= YETTY_YRENDER_RS_MAX_CHILDREN - 1u) {
+        yetty_yfont_cache_release_font(g->font_cache, ref.value.handle);
+        return YETTY_ERR(yetty_ycore_void, "ygrid wire font: out of font slots");
+    }
+    struct yetty_ycore_void_result sr = yetty_ygrid_set_font(g, slot, ref.value.font);
+    if (YETTY_IS_ERR(sr)) {
+        yetty_yfont_cache_release_font(g->font_cache, ref.value.handle);
+        return YETTY_ERR(yetty_ycore_void, "ygrid wire font: set_font", sr);
+    }
+    g->wire_font_slot[fv->font_id] = (int32_t)slot;
+    g->next_font_slot = slot + 1u;
+    ydebug("ygrid: installed wire font_id=%d -> slot=%u hex=%s", fv->font_id, slot, hex);
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_grid *g,
                                                              uint32_t record_offset,
                                                              size_t record_len)
@@ -1195,6 +1320,18 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
         return YETTY_OK_VOID();
     }
 
+    /* FONT: a shipped font (TTF bytes or hash-ref). Materialise it into a slot
+     * so the text spans that reference it can render; it is not a drawn prim. */
+    if (type == YETTY_YDRAW_RESOURCE_FONT) {
+        struct yetty_ydraw_font_resource_view fv;
+        if (yetty_ydraw_font_resource_parse(hdr, &fv) != 0) {
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ycore_void_result install_result = ygrid_install_wire_font(g, &fv);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, install_result, "ygrid: install wire font");
+        return YETTY_OK_VOID();
+    }
+
     struct rectangle_result ar;
     if (type == YGRID_GLYPH_TYPE) {
         /* GLYPH wire layout — 7 words, identical to scrolling-canvas's
@@ -1216,9 +1353,43 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
         float gx = *(const float *)&hdr[2];
         float gy = *(const float *)&hdr[3];
         float gs = *(const float *)&hdr[4];
+        /* (gx,gy) is the glyph quad's top-left and gs the font size. The drawn
+         * quad is size_x/size_y (px at base_size) scaled by gs/base_size — for
+         * tall symbol glyphs (music clefs, large rests) that is much taller
+         * than a gs square. Bucket the real quad extent (looked up from the
+         * font slot's metadata) so the whole glyph reaches the shader; a
+         * gs-square aabb would leave the lower part unbucketed and clipped.
+         * Falls back to the square if the metadata isn't resolvable. */
+        float quad_w = gs;
+        float quad_h = gs;
+        uint32_t packed = hdr[5];
+        uint32_t slot_plus_one = packed >> 16;
+        uint32_t glyph_idx = packed & 0xFFFFu;
+        if (slot_plus_one > 0u) {
+            uint32_t slot = slot_plus_one - 1u;
+            if (slot < g->font_count && g->fonts[slot]) {
+                struct yetty_yfont_font *font = g->fonts[slot];
+                float base = font->ops->get_base_size(font);
+                float scale = (base > 0.0f) ? gs / base : 1.0f;
+                struct yetty_yrender_gpu_resource_set_result rs_r =
+                    font->ops->get_gpu_resource_set(font);
+                if (YETTY_IS_OK(rs_r) && rs_r.value->buffer_count > 0 &&
+                    rs_r.value->buffers[0].data) {
+                    const float *meta = (const float *)rs_r.value->buffers[0].data;
+                    uint32_t meta_count =
+                        (uint32_t)(rs_r.value->buffers[0].size / (6u * sizeof(float)));
+                    if (glyph_idx < meta_count) {
+                        quad_w = meta[glyph_idx * 6u + 0u] * scale;
+                        quad_h = meta[glyph_idx * 6u + 1u] * scale;
+                    }
+                } else if (YETTY_IS_ERR(rs_r)) {
+                    yetty_ycore_error_destroy(rs_r.error);
+                }
+            }
+        }
         ar = YETTY_OK(rectangle, ((struct yetty_ycore_rectangle){
                                      .min = {.x = gx, .y = gy},
-                                     .max = {.x = gx + gs, .y = gy + gs},
+                                     .max = {.x = gx + quad_w, .y = gy + quad_h},
                                  }));
     } else if (yetty_ydraw_is_composite(type) && g->composite_factory) {
         /* Complex prim (yplot / yimage / yvideo / yzoo / yjungle …).
@@ -1426,6 +1597,13 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     }
     if (g->registry) {
         yetty_ydraw_drawable_list_registry_destroy(g->registry);
+    }
+    /* Wire-shipped fonts live in this cache (the default font in slot 0 is
+     * borrowed from the host and is not ours to free). Destroy after the
+     * binder, which referenced their resource sets. */
+    if (g->font_cache) {
+        yetty_yfont_cache_destroy(g->font_cache);
+        g->font_cache = NULL;
     }
 
     free(g->sdf_lib_code.data);
@@ -2431,9 +2609,29 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         }
         ydebug("ygrid_create: rect=(%.1f,%.1f)+%.1fx%.1f content_scale=%.3f", rect.min.x,
                rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y, g->content_scale);
+
+        /* Font cache + MSDF generator for wire-shipped fonts (custom figure
+         * fonts). Best-effort: if the cache can't be created, wire fonts are
+         * dropped but SDF prims still render. */
+        const char *shaders_dir =
+            context->runtime->config->ops->get_string(context->runtime->config, "paths/shaders", "");
+        snprintf(g->shaders_dir, sizeof(g->shaders_dir), "%s", shaders_dir ? shaders_dir : "");
+        g->msdf_generator = context->runtime->gpu.msdf_generator;
+        struct yetty_yfont_cache_ptr_result font_cache_r =
+            yetty_yfont_cache_create(g->shaders_dir);
+        if (YETTY_IS_OK(font_cache_r)) {
+            g->font_cache = font_cache_r.value;
+        } else {
+            ydebug("ygrid_create: font cache unavailable: %s", font_cache_r.error.msg);
+            yetty_ycore_error_destroy(font_cache_r.error);
+        }
     }
     g->staging_dirty = 1;
     g->free_slot_head = YGRID_INVALID_SLOT;
+    for (size_t i = 0; i < sizeof(g->wire_font_slot) / sizeof(g->wire_font_slot[0]); i++) {
+        g->wire_font_slot[i] = -1;
+    }
+    g->next_font_slot = 1u;
 
     /* Allocate the implicit root entity at slot 0. Plain ADD records
      * arriving outside any CMD_GROUP scope attach to it. external_id=0
