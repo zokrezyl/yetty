@@ -91,6 +91,7 @@ if(YBROWSER_STANDALONE)
         yetty_yplatform_core
         yetty_yplatform_move_resize
         yetty_yplatform_window_manager
+        yetty_ychrome
         yetty_yco
         yetty_telnet
         ${BROTLIDEC_LIBRARIES}

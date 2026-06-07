@@ -65,6 +65,9 @@
  * doesn't, and on platforms without WebGPU (riscv64 cross) including
  * them breaks the build. Keep gated. */
 #include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include <yetty/ychrome/host.h>
+#include <yetty/ychrome/methods.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
@@ -259,6 +262,7 @@ struct app {
     struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
     struct yetty_yfont_font *font;
+    struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
     /* ~30 fps animation pump for self-animating widgets (ymaze, …). */
@@ -3329,6 +3333,24 @@ static struct yetty_ycore_int_result standalone_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* Window chrome gets first dibs on pointer events; anything it doesn't
+     * claim (caption drag / edge resize / its buttons) falls through to the
+     * greeter UI. */
+    if (app->chrome &&
+        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result chrome_r =
+            yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(app->chrome), ev);
+        int chrome_consumed = YETTY_IS_OK(chrome_r) && chrome_r.value;
+        if (YETTY_IS_ERR(chrome_r)) {
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+        if (chrome_consumed) {
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
+
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
@@ -3360,6 +3382,13 @@ static struct yetty_ycore_int_result standalone_event_handler(
                 app->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
+            }
+        }
+        if (app->chrome) {
+            struct yetty_ycore_void_result chrome_rz = yetty_ychrome_host_resized(
+                app->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            if (YETTY_IS_ERR(chrome_rz)) {
+                yetty_ycore_error_destroy(chrome_rz.error);
             }
         }
         if (app->yframework->event_loop->ops->request_render) {
@@ -3592,6 +3621,21 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     struct yetty_ycore_void_result br = build_ui(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "standalone: build_ui");
 
+    /* Window chrome: draggable/resizable titlebar + min/max/close (SDF, no
+     * font), composited as a pinned figure over the greeter UI. */
+    {
+        struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
+            app->root_container, app->font, &ctx, app->yframework->window_manager,
+            (float)rt->surface_width, (float)rt->surface_height, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
+        if (YETTY_IS_OK(chrome_r)) {
+            app->chrome = chrome_r.value;
+        } else {
+            ywarn("ygreeter standalone: chrome host create failed: %s", chrome_r.error.msg);
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+    }
+
     /* Wire memory-pty wake → request_render so producer writes drive the
      * event loop. Without this, ygui_framework_emit appends bytes to the
      * mem-pty but the consumer side never schedules a render. */
@@ -3644,6 +3688,13 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         yetty_ycore_error_destroy(run_res.error);
     }
 
+    if (app->chrome) {
+        struct yetty_ycore_void_result dc = yetty_ychrome_host_destroy(app->chrome);
+        if (YETTY_IS_ERR(dc)) {
+            yetty_ycore_error_destroy(dc.error);
+        }
+        app->chrome = NULL;
+    }
     if (app->engine) {
         struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(app->engine);
         if (YETTY_IS_ERR(dr)) {

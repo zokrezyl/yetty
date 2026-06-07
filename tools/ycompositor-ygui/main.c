@@ -44,6 +44,9 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
+#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include <yetty/ychrome/host.h>
+#include <yetty/ychrome/methods.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ymgui/figure.h>
 #include <yetty/yface/yface.h>
@@ -92,6 +95,8 @@ struct ycomp_ygui_app {
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *registry;
     struct yetty_ygui_framework *ygui;
+    /* Window chrome host (draggable/resizable titlebar + min/max/close). */
+    struct yetty_ychrome_host *chrome;
     /* Borrowed pointer to the outer window — it is the framework root,
      * so the layout pass stretches it to the viewport automatically. */
     struct yetty_ygui_object *win;
@@ -558,6 +563,23 @@ static int pump_pty_in(struct ycomp_ygui_app *app)
 
 static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_event *ev)
 {
+    /* Window chrome gets first dibs on pointer events. It only claims caption
+     * drags / edge resizes / its own buttons (all outside the app's content),
+     * so anything it doesn't consume falls through to the scene below. */
+    if (app->chrome &&
+        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result cr =
+            yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(app->chrome), ev);
+        int consumed = YETTY_IS_OK(cr) && cr.value;
+        if (YETTY_IS_ERR(cr)) {
+            yetty_ycore_error_destroy(cr.error);
+        }
+        if (consumed) {
+            return;
+        }
+    }
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
@@ -592,6 +614,13 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
                                           .max = {.x = (float)w, .y = (float)h},
                                       });
         yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
+        if (app->chrome) {
+            struct yetty_ycore_void_result cr =
+                yetty_ychrome_host_resized(app->chrome, (float)w, (float)h);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
+        }
         if (app->child_argv) {
             /* Interpose: tell the child the new pane size. The child
              * decides how to re-emit (the ymgui demo re-runs
@@ -774,6 +803,20 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr0, "initial push_ygui_scene failed");
     }
 
+    /* Window chrome: draggable/resizable titlebar + min/max/close, composited
+     * as a pinned figure over the scene. */
+    {
+        struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
+            app->root, app->font, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
+            (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+        if (YETTY_IS_OK(chrome_r)) {
+            app->chrome = chrome_r.value;
+        } else {
+            ywarn("ycompositor-ygui: chrome host create failed: %s", chrome_r.error.msg);
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+    }
+
     /* Event-driven render loop — polls the platform input pipe (window
      * events) plus, in interpose mode, the child's PTY master so OSC
      * envelopes arrive in the same iteration. */
@@ -851,6 +894,16 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
             yetty_ycore_error_destroy(pp.error);
         }
         needs_render = 0;
+    }
+
+    /* Chrome engine (its caption figure is owned by the container, freed with
+     * it below). */
+    if (app->chrome) {
+        struct yetty_ycore_void_result dc = yetty_ychrome_host_destroy(app->chrome);
+        if (YETTY_IS_ERR(dc)) {
+            yetty_ycore_error_destroy(dc.error);
+        }
+        app->chrome = NULL;
     }
 
     /* Teardown — root container first so any pending GPU work bound

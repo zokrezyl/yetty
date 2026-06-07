@@ -10,6 +10,9 @@
  */
 
 #include <yetty/yinit/yinit.h>
+#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include <yetty/ychrome/host.h>
+#include <yetty/ychrome/methods.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
@@ -49,6 +52,8 @@ struct yzoo_app {
     void *surface;
     uint32_t surface_w;
     uint32_t surface_h;
+    /* Window chrome host (draggable/resizable titlebar + min/max/close). */
+    struct yetty_ychrome_host *chrome;
 };
 
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
@@ -140,6 +145,22 @@ static struct yetty_ycore_void_result rebuild_figure(struct yzoo_app *app)
 
 static void handle_event(struct yzoo_app *app, const struct yetty_yui_event *ev)
 {
+    /* Window chrome gets first dibs on pointer events; anything it doesn't
+     * claim (caption drag / edge resize / its buttons) falls through. */
+    if (app->chrome &&
+        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result chrome_r =
+            yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(app->chrome), ev);
+        int chrome_consumed = YETTY_IS_OK(chrome_r) && chrome_r.value;
+        if (YETTY_IS_ERR(chrome_r)) {
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+        if (chrome_consumed) {
+            return;
+        }
+    }
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
@@ -165,6 +186,13 @@ static void handle_event(struct yzoo_app *app, const struct yetty_yui_event *ev)
         struct yetty_ycore_void_result fr = rebuild_figure(app);
         if (YETTY_IS_ERR(fr)) {
             yetty_ycore_error_destroy(fr.error);
+        }
+        if (app->chrome) {
+            struct yetty_ycore_void_result chrome_rz =
+                yetty_ychrome_host_resized(app->chrome, (float)w, (float)h);
+            if (YETTY_IS_ERR(chrome_rz)) {
+                yetty_ycore_error_destroy(chrome_rz.error);
+            }
         }
         return;
     }
@@ -227,6 +255,19 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
     struct yetty_ycore_void_result fr = rebuild_figure(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "rebuild_figure (initial) failed");
 
+    /* Window chrome: draggable/resizable titlebar + min/max/close, drawn with
+     * SDF (no font needed). */
+    {
+        struct yetty_ychrome_host_ptr_result chrome_host_r = yetty_ychrome_host_create(
+            app->root, NULL, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
+            (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+        if (YETTY_IS_OK(chrome_host_r)) {
+            app->chrome = chrome_host_r.value;
+        } else {
+            yetty_ycore_error_destroy(chrome_host_r.error);
+        }
+    }
+
     struct yetty_ycore_int_result fdr =
         rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fdr, "pipe read_fd failed");
@@ -282,6 +323,13 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
         struct yetty_ycore_void_result dr =
             yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
+    }
+    if (app->chrome) {
+        struct yetty_ycore_void_result chrome_dr = yetty_ychrome_host_destroy(app->chrome);
+        if (YETTY_IS_ERR(chrome_dr)) {
+            yetty_ycore_error_destroy(chrome_dr.error);
+        }
+        app->chrome = NULL;
     }
     app->root = NULL;
     app->grid = NULL;

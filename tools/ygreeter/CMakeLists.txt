@@ -167,6 +167,7 @@ if(YETTY_ENABLE_LIB_WEBGPU)
         ${YETTY_LIBS}
         yetty_yplatform_move_resize
         yetty_yplatform_window_manager
+        yetty_ychrome
         ${FONTCONFIG_LIBRARIES}
     )
     target_include_directories(ygreeter PRIVATE ${FONTCONFIG_INCLUDE_DIRS})

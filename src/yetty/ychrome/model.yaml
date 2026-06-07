@@ -139,11 +139,19 @@ classes:
         type: int
         get: false
         set: false
-      - name: resize_dir_x
+      - name: resize_left
         type: int
         get: false
         set: false
-      - name: resize_dir_y
+      - name: resize_right
+        type: int
+        get: false
+        set: false
+      - name: resize_top
+        type: int
+        get: false
+        set: false
+      - name: resize_bottom
         type: int
         get: false
         set: false

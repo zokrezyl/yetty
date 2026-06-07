@@ -56,8 +56,6 @@
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
-#include <string.h>
-
 #include <stdint.h>
 
 #ifdef YCLASS_CODEGEN
@@ -82,16 +80,12 @@ enum {
     YCHROME_BTN_W = 46,
 };
 
-/* Caption fill + glyph colours, packed 0xAABBGGRR (the encoding ydraw uses).
- * Match yetty's titlebar: BRAND_BG_ROW strip, off-white glyphs. */
-#define YCHROME_STRIP_BG 0xFF2C261Eu   /* #1E262C */
+/* Caption fill + icon colours, packed 0xAABBGGRR (the encoding ydraw uses).
+ * Match yetty's titlebar: BRAND_BG_ROW strip, off-white icons. The window
+ * controls are drawn as SDF primitives (bar / box / X), not font glyphs — no
+ * font dependency. */
+#define YCHROME_STRIP_BG 0xFF2C261Eu    /* #1E262C */
 #define YCHROME_GLYPH_COLOR 0xFFE4E5E0u /* #E0E5E4 */
-
-/* Window-control glyphs, in left→right order: minimize, maximize, close. Same
- * codepoints yui's titlebar uses (in the bundled font): − □ × */
-#define YCHROME_GLYPH_MINIMIZE "\xE2\x88\x92"
-#define YCHROME_GLYPH_MAXIMIZE "\xE2\x96\xA1"
-#define YCHROME_GLYPH_CLOSE "\xC3\x97"
 
 struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     /* Borrowed yplatform:window_manager yclass object — set by configure(). */
@@ -332,23 +326,39 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
         return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: bg box", bg_r);
     }
 
-    /* Window-control glyphs, flush right. Glyph metrics aren't measured (no font
-     * dep), so each glyph is placed at a fixed inset inside its slot — close
-     * enough for single symbols. */
-    const char *glyphs[3] = {YCHROME_GLYPH_MINIMIZE, YCHROME_GLYPH_MAXIMIZE, YCHROME_GLYPH_CLOSE};
-    float font_size = height * 0.5f;
-    float baseline = height * 0.5f + font_size * 0.35f;
+    /* Window-control icons, flush right, drawn as SDF primitives — NO font:
+     * minimize = a bar, maximize = a box outline, close = an X. Each centered in
+     * its YCHROME_BTN_W slot. */
+    float cy = height * 0.5f;
+    float r = height * 0.18f;   /* icon half-extent */
+    float stroke = 1.5f;        /* line thickness */
     for (int i = 0; i < 3; i++) {
-        float slot_left = width - (float)((3 - i) * YCHROME_BTN_W);
-        struct yetty_ycore_buffer glyph = {.data = (uint8_t *)(uintptr_t)glyphs[i],
-                                           .capacity = strlen(glyphs[i]),
-                                           .size = strlen(glyphs[i])};
-        struct yetty_ycore_void_result glyph_r = yetty_ydraw_drawable_list_add_text(
-            list, slot_left + (float)YCHROME_BTN_W * 0.34f, baseline, &glyph, font_size,
-            YCHROME_GLYPH_COLOR, /*layer=*/1, /*font_id=*/-1, /*rotation=*/0.0f);
-        if (YETTY_IS_ERR(glyph_r)) {
+        float cx = width - (float)((3 - i) * YCHROME_BTN_W) + (float)YCHROME_BTN_W * 0.5f;
+        struct yetty_ycore_void_result icon = YETTY_OK_VOID();
+        if (i == 0) {
+            /* minimize: horizontal bar */
+            struct yetty_ysdf_segment seg = {cx - r, cy, cx + r, cy};
+            icon = yetty_ydraw_drawable_list_add_cmd_add_segment(list, 0, 1, 0u,
+                                                                 YCHROME_GLYPH_COLOR, stroke, &seg);
+        } else if (i == 1) {
+            /* maximize: box outline (fill transparent, stroked) */
+            struct yetty_ysdf_box box = {cx, cy, r, r, 1.0f};
+            icon = yetty_ydraw_drawable_list_add_cmd_add_box(list, 0, 1, 0u, YCHROME_GLYPH_COLOR,
+                                                             stroke, &box);
+        } else {
+            /* close: two diagonals forming an X */
+            struct yetty_ysdf_segment a = {cx - r, cy - r, cx + r, cy + r};
+            struct yetty_ysdf_segment b = {cx - r, cy + r, cx + r, cy - r};
+            icon = yetty_ydraw_drawable_list_add_cmd_add_segment(list, 0, 1, 0u, YCHROME_GLYPH_COLOR,
+                                                                 stroke, &a);
+            if (YETTY_IS_OK(icon)) {
+                icon = yetty_ydraw_drawable_list_add_cmd_add_segment(
+                    list, 0, 1, 0u, YCHROME_GLYPH_COLOR, stroke, &b);
+            }
+        }
+        if (YETTY_IS_ERR(icon)) {
             yetty_ydraw_drawable_list_destroy(list);
-            return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: glyph", glyph_r);
+            return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: icon", icon);
         }
     }
     return YETTY_OK(yetty_ydraw_drawable_list, list);

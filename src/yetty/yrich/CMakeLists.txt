@@ -126,6 +126,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
         yetty_yplatform_core
         yetty_yplatform_move_resize
         yetty_yplatform_window_manager
+        yetty_ychrome
         yetty_yco
         yetty_telnet
         ${BROTLIDEC_LIBRARIES}

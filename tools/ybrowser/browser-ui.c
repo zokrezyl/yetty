@@ -1473,6 +1473,9 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
+#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include <yetty/ychrome/host.h>
+#include <yetty/ychrome/methods.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
@@ -1493,6 +1496,7 @@ struct standalone {
     struct yetty_yplatform_memory_pty_pair pty_pair;
     int has_pty_pair;
     struct yetty_yfont_font *font;
+    struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
     struct yetty_ydraw_target *render_target;
@@ -1589,6 +1593,25 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* Window chrome gets first dibs on pointer events (caption drag / edge
+     * resize / its buttons); anything it doesn't claim falls through to the
+     * browser UI below. */
+    if (s->chrome &&
+        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result cr =
+            yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(s->chrome), ev);
+        int consumed = YETTY_IS_OK(cr) && cr.value;
+        if (YETTY_IS_ERR(cr)) {
+            yetty_ycore_error_destroy(cr.error);
+        }
+        if (consumed) {
+            sa_request_render(s);
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
+
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
@@ -1607,6 +1630,13 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         s->app.viewport_h = (float)ev->resize.height;
         err_ok(yetty_ygui_framework_set_viewport(s->app.fw, (float)ev->resize.width,
                                                  (float)ev->resize.height));
+        if (s->chrome) {
+            struct yetty_ycore_void_result cr = yetty_ychrome_host_resized(
+                s->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
+        }
         /* Drive the compositor-side rect through the pty pair (→
 		 * sa_pty_resize_cb) rather than poking the container directly, so
 		 * the resize travels the pair like a real PTY's TIOCSWINSZ. */
@@ -1836,6 +1866,20 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
         yetty_yfigure_container_set_rect(s->root_container, root_rect);
     }
 
+    /* Window chrome: draggable/resizable titlebar + min/max/close. */
+    {
+        struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
+            s->root_container, s->font, &ctx, s->yframework->window_manager,
+            (float)rt->surface_width, (float)rt->surface_height, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
+        if (YETTY_IS_OK(chrome_r)) {
+            s->chrome = chrome_r.value;
+        } else {
+            ywarn("ybrowser standalone: chrome host create failed: %s", chrome_r.error.msg);
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+    }
+
     /* Memory pty pair → wire SM → container. */
     {
         struct yetty_yplatform_memory_pty_pair_result pr =
@@ -1918,6 +1962,10 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
             err_ok(s->pty_pair.b->ops->destroy(s->pty_pair.b));
         }
         s->has_pty_pair = 0;
+    }
+    if (s->chrome) {
+        err_ok(yetty_ychrome_host_destroy(s->chrome));
+        s->chrome = NULL;
     }
     if (s->root_container) {
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(s->root_container);

@@ -38,6 +38,9 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
+#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include <yetty/ychrome/host.h>
+#include <yetty/ychrome/methods.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/ysdf/types.gen.h>
@@ -63,6 +66,8 @@ struct ycomp_app {
     void *surface; /* WGPUSurface borrowed from yinit_rt */
     uint32_t surface_w;
     uint32_t surface_h;
+    /* Window chrome host (draggable/resizable titlebar + min/max/close). */
+    struct yetty_ychrome_host *chrome;
 };
 
 /* Mint brand color from rules/08-branding.md: BRAND_ACCENT #6BA892, etc.
@@ -413,6 +418,22 @@ static struct yetty_ycore_void_result rebuild_figure(struct ycomp_app *app)
 
 static void handle_event(struct ycomp_app *app, const struct yetty_yui_event *ev)
 {
+    /* Window chrome gets first dibs on pointer events (caption drag / edge
+     * resize / its buttons); anything it doesn't claim falls through. */
+    if (app->chrome &&
+        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result cr =
+            yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(app->chrome), ev);
+        int consumed = YETTY_IS_OK(cr) && cr.value;
+        if (YETTY_IS_ERR(cr)) {
+            yetty_ycore_error_destroy(cr.error);
+        }
+        if (consumed) {
+            return;
+        }
+    }
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
@@ -441,6 +462,13 @@ static void handle_event(struct ycomp_app *app, const struct yetty_yui_event *ev
         if (YETTY_IS_ERR(fr)) {
             yerror("ycompositor: rebuild_figure failed: %s", fr.error.msg);
             yetty_ycore_error_destroy(fr.error);
+        }
+        if (app->chrome) {
+            struct yetty_ycore_void_result cr =
+                yetty_ychrome_host_resized(app->chrome, (float)w, (float)h);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
         }
         return;
     }
@@ -533,6 +561,19 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
     struct yetty_ycore_void_result fr = rebuild_figure(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "rebuild_figure (initial) failed");
 
+    /* Window chrome: draggable/resizable titlebar + min/max/close. */
+    {
+        struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
+            app->root, app->font, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
+            (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+        if (YETTY_IS_OK(chrome_r)) {
+            app->chrome = chrome_r.value;
+        } else {
+            ywarn("ycompositor: chrome host create failed: %s", chrome_r.error.msg);
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+    }
+
     /* Event-driven render loop — same shape as yaudio. */
     struct yetty_ycore_int_result fdr =
         rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
@@ -584,6 +625,15 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
             yetty_ycore_error_destroy(pp.error);
         }
         needs_render = 0;
+    }
+
+    /* Chrome engine (its caption figure is owned by the container below). */
+    if (app->chrome) {
+        struct yetty_ycore_void_result dc = yetty_ychrome_host_destroy(app->chrome);
+        if (YETTY_IS_ERR(dc)) {
+            yetty_ycore_error_destroy(dc.error);
+        }
+        app->chrome = NULL;
     }
 
     /* Strict teardown: root container + figures before yframework so any
