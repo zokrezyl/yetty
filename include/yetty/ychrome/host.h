@@ -29,6 +29,7 @@
  */
 
 #include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h> /* yetty_ycore_int_result */
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +40,7 @@ struct yetty_yfigure_container;
 struct yetty_yfont_font;
 struct yetty_context;
 struct yetty_yclass_object;
+struct yetty_yui_event;
 
 YETTY_YRESULT_DECLARE(yetty_ychrome_host_ptr, struct yetty_ychrome_host *);
 
@@ -55,6 +57,13 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
 /* The underlying ychrome:chrome object — feed it mouse events via
  * yetty_ychrome_handle_event. NULL if `host` is NULL. */
 struct yetty_yclass_object *yetty_ychrome_host_chrome(struct yetty_ychrome_host *host);
+
+/* Forward one event to the chrome engine and re-paint the caption if the hover
+ * highlight changed. Returns 1 if chrome claimed the event (the app should stop
+ * processing it), 0 otherwise. Prefer this over calling
+ * yetty_ychrome_handle_event directly so the hover highlight tracks the pointer. */
+struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychrome_host *host,
+                                                              const struct yetty_yui_event *event);
 
 /* Update the window size: re-sizes the engine's edge bands and repositions +
  * repaints the caption figure. Call on every resize. */

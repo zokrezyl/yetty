@@ -171,6 +171,10 @@ classes:
         type: float
         get: false
         set: false
+      - name: hover_button
+        type: int
+        get: false
+        set: false
     ops:
       - slot: configure
         slot_domain: ychrome
@@ -199,6 +203,12 @@ exposed:
 #define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
 #define YETTY_YCHROME_FLAG_ALL                                                                     \\
     (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)"
+  - source_file: src/yetty/ychrome/chrome.c
+    name: yetty_ychrome_hover_button
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

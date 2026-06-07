@@ -425,7 +425,7 @@ static void handle_event(struct ycomp_app *app, const struct yetty_yui_event *ev
          ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
          ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
         struct yetty_ycore_int_result cr =
-            yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(app->chrome), ev);
+            yetty_ychrome_host_handle_event(app->chrome, ev);
         int consumed = YETTY_IS_OK(cr) && cr.value;
         if (YETTY_IS_ERR(cr)) {
             yetty_ycore_error_destroy(cr.error);

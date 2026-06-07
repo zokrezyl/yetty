@@ -86,6 +86,10 @@ enum {
  * font dependency. */
 #define YCHROME_STRIP_BG 0xFF2C261Eu    /* #1E262C */
 #define YCHROME_GLYPH_COLOR 0xFFE4E5E0u /* #E0E5E4 */
+/* Hover backings (packed 0xAABBGGRR): a lifted strip tone for minimize/maximize,
+ * a red wash for close — matching common window managers. */
+#define YCHROME_HOVER_BG 0xFF463A30u       /* lifted strip */
+#define YCHROME_HOVER_CLOSE_BG 0xFF3B3BC8u /* #C83B3B red */
 
 struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     /* Borrowed yplatform:window_manager yclass object — set by configure(). */
@@ -118,6 +122,10 @@ struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     float resize_last_y;
     float resize_anchor_x;
     float resize_anchor_y;
+
+    /* Window-control button currently under the pointer: 1=minimize,
+     * 2=maximize, 3=close, 0=none. Drawn with a highlight backing. */
+    int hover_button;
 };
 
 /* Resolve the object's chrome_data slice, preserving the class_get /
@@ -333,7 +341,19 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
     float r = height * 0.18f;   /* icon half-extent */
     float stroke = 1.5f;        /* line thickness */
     for (int i = 0; i < 3; i++) {
-        float cx = width - (float)((3 - i) * YCHROME_BTN_W) + (float)YCHROME_BTN_W * 0.5f;
+        float slot_left = width - (float)((3 - i) * YCHROME_BTN_W);
+        float cx = slot_left + (float)YCHROME_BTN_W * 0.5f;
+        /* Hover highlight backing (close gets a red wash, like most WMs). */
+        if (chrome->hover_button == i + 1) {
+            struct yetty_ysdf_box hl = {cx, cy, (float)YCHROME_BTN_W * 0.5f, height * 0.5f, 0.0f};
+            uint32_t hl_color = (i == 2) ? YCHROME_HOVER_CLOSE_BG : YCHROME_HOVER_BG;
+            struct yetty_ycore_void_result hl_r = yetty_ydraw_drawable_list_add_cmd_add_box(
+                list, 0, 0, hl_color, 0u, 0.0f, &hl);
+            if (YETTY_IS_ERR(hl_r)) {
+                yetty_ydraw_drawable_list_destroy(list);
+                return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: hover", hl_r);
+            }
+        }
         struct yetty_ycore_void_result icon = YETTY_OK_VOID();
         if (i == 0) {
             /* minimize: horizontal bar */
@@ -393,6 +413,13 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
 
     float x = 0.0f, y = 0.0f;
     int have_xy = chrome_event_xy(event, &x, &y);
+    /* Track the control under the pointer for the hover highlight (cleared while
+     * a drag/resize gesture owns the pointer). The host re-paints when it
+     * changes. */
+    if (have_xy) {
+        chrome->hover_button =
+            (chrome->dragging || chrome->resizing) ? 0 : chrome_button_at(chrome, x, y);
+    }
     ydebug("CHROMETRACE: type=%d xy=(%.1f,%.1f) have_xy=%d caption_h=%.1f wh=(%.1f,%.1f) "
            "dragging=%d resizing=%d flags=0x%x",
            (int)event->type, x, y, have_xy, chrome->caption_height, chrome->width, chrome->height,
@@ -551,6 +578,17 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     }
 
     return YETTY_OK(yetty_ycore_int, 0);
+}
+
+/* Current window-control button under the pointer (1=minimize, 2=maximize,
+ * 3=close; 0=none). Hosts poll this after forwarding an event and re-paint the
+ * caption when it changes, so the hover highlight tracks the pointer. */
+[[clang::annotate("expose")]]
+struct yetty_ycore_int_result yetty_ychrome_hover_button(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome hover_button: object");
+    return YETTY_OK(yetty_ycore_int, ((struct chrome_data *)data_r.value)->hover_button);
 }
 
 #include "chrome.gen.c"

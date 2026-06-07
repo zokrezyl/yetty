@@ -169,7 +169,7 @@ static void handle_event(struct ymaze_app *app, const struct yetty_yui_event *ev
          ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
          ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
         struct yetty_ycore_int_result chrome_r =
-            yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(app->chrome), ev);
+            yetty_ychrome_host_handle_event(app->chrome, ev);
         int chrome_consumed = YETTY_IS_OK(chrome_r) && chrome_r.value;
         if (YETTY_IS_ERR(chrome_r)) {
             yetty_ycore_error_destroy(chrome_r.error);

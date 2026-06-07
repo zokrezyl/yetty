@@ -22,6 +22,7 @@ struct yetty_ychrome_host {
     struct yetty_yclass_object *chrome; /* ychrome:chrome engine */
     struct yetty_ygrid_grid *caption;   /* pinned figure compositing its bar */
     float caption_height;
+    int last_hover; /* last hovered control — re-paint the caption when it changes */
 };
 
 /* The figure's yclass object sits one slot before the figure pointer (the data
@@ -137,6 +138,31 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
 struct yetty_yclass_object *yetty_ychrome_host_chrome(struct yetty_ychrome_host *host)
 {
     return host ? host->chrome : NULL;
+}
+
+struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychrome_host *host,
+                                                              const struct yetty_yui_event *event)
+{
+    if (!host) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_ycore_int_result cr = yetty_ychrome_handle_event(NULL, host->chrome, event);
+    int consumed = YETTY_IS_OK(cr) && cr.value;
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+    }
+    /* Re-paint the caption when the hovered control changes so the highlight
+     * follows the pointer. */
+    struct yetty_ycore_int_result hr = yetty_ychrome_hover_button(host->chrome);
+    int hover = YETTY_IS_OK(hr) ? hr.value : 0;
+    if (YETTY_IS_ERR(hr)) {
+        yetty_ycore_error_destroy(hr.error);
+    }
+    if (hover != host->last_hover) {
+        host->last_hover = hover;
+        host_caption_refresh(host);
+    }
+    return YETTY_OK(yetty_ycore_int, consumed);
 }
 
 struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_host *host,

@@ -105,8 +105,9 @@ struct demo_runner {
      * runner draws a caption strip and routes unclaimed mouse events through
      * `chrome` to move/resize/maximize the borderless OS window. */
     int enable_chrome;
-    struct yetty_yclass_object *chrome;        /* ychrome:chrome object, or NULL */
-    struct yetty_ygrid_grid *chrome_caption;   /* pinned figure compositing chrome's bar */
+    struct yetty_yclass_object *chrome;      /* ychrome:chrome object, or NULL */
+    struct yetty_ygrid_grid *chrome_caption; /* pinned figure compositing chrome's bar */
+    int chrome_last_hover;                   /* last hovered control — repaint on change */
 };
 
 static struct yetty_ycore_int_result frame_tick(struct yetty_yevent_event_listener *listener,
@@ -288,11 +289,21 @@ static int runner_chrome_handle(struct demo_runner *r, const struct yetty_yui_ev
         return 0;
     }
     struct yetty_ycore_int_result cr = yetty_ychrome_handle_event(NULL, r->chrome, ev);
+    int consumed = YETTY_IS_OK(cr) && cr.value;
     if (YETTY_IS_ERR(cr)) {
         yetty_ycore_error_destroy(cr.error);
-        return 0;
     }
-    return cr.value;
+    /* Re-paint the caption when the hovered control changes (hover highlight). */
+    struct yetty_ycore_int_result hr = yetty_ychrome_hover_button(r->chrome);
+    int hover = YETTY_IS_OK(hr) ? hr.value : 0;
+    if (YETTY_IS_ERR(hr)) {
+        yetty_ycore_error_destroy(hr.error);
+    }
+    if (hover != r->chrome_last_hover) {
+        r->chrome_last_hover = hover;
+        runner_chrome_caption_refresh(r);
+    }
+    return consumed;
 }
 
 static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_listener *listener,

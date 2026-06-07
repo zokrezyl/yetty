@@ -1601,7 +1601,7 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
          ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
          ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
         struct yetty_ycore_int_result cr =
-            yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(s->chrome), ev);
+            yetty_ychrome_host_handle_event(s->chrome, ev);
         int consumed = YETTY_IS_OK(cr) && cr.value;
         if (YETTY_IS_ERR(cr)) {
             yetty_ycore_error_destroy(cr.error);
