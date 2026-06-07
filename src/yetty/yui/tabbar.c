@@ -964,7 +964,8 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                 int step_dx = (int)(mx - bar->resize_last_x) * bar->resize_dir_x;
                 int step_dy = (int)(my - bar->resize_last_y) * bar->resize_dir_y;
                 if (wm && (step_dx != 0 || step_dy != 0)) {
-                    wm_absorb(yetty_yplatform_window_manager_resize_by(NULL, wm, step_dx, step_dy));
+                    wm_absorb(yetty_yplatform_window_manager_resize_by(NULL, wm, step_dx, step_dy,
+                                                                       bar->resize_edge));
                 }
                 bar->resize_last_x = mx;
                 bar->resize_last_y = my;

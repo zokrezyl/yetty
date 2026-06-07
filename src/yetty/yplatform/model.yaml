@@ -82,6 +82,8 @@ methods:
         type: int
       - name: dy
         type: int
+      - name: edge
+        type: int
     local: true
   - slot: window_manager_begin_interactive_move
     domain: yplatform

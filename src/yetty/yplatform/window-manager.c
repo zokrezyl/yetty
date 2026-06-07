@@ -116,8 +116,10 @@ static void post_event(struct window_manager_data *manager, const struct yetty_y
 
 /* Bind the manager to its GLFW window and the render↔main event pipes. Call
  * once after create(), before any other slot. All three are borrowed. */
-[[clang::annotate("override@yplatform:window_manager:window_manager_configure")]] [[clang::annotate(
-    "local@yplatform:window_manager_configure")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_configure")]]
+[[clang::annotate("local@yplatform:window_manager_configure")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_configure(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, void *os_window,
     struct yetty_ycore_xthread_event_pipe *output_pipe,
@@ -137,8 +139,10 @@ static struct yetty_ycore_void_result window_manager_configure(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:window_manager:window_manager_destroy")]] [[clang::annotate(
-    "local@yplatform:window_manager_destroy")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_destroy")]]
+[[clang::annotate("local@yplatform:window_manager_destroy")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_destroy(struct yetty_yclass_ctx *ctx,
                                                              struct yetty_yclass_object *obj)
 {
@@ -172,8 +176,10 @@ static struct yetty_ycore_void_result window_manager_destroy(struct yetty_yclass
  * Producer slots (any thread)
  *===========================================================================*/
 
-[[clang::annotate("override@yplatform:window_manager:window_manager_iconify")]] [[clang::annotate(
-    "local@yplatform:window_manager_iconify")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_iconify")]]
+[[clang::annotate("local@yplatform:window_manager_iconify")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_iconify(struct yetty_yclass_ctx *ctx,
                                                              struct yetty_yclass_object *obj)
 {
@@ -185,15 +191,10 @@ static struct yetty_ycore_void_result window_manager_iconify(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate(
-    "override@yplatform:window_manager:window_manager_toggle_maximize")]] [[clang::
-                                                                                annotate(
-                                                                                    "local@"
-                                                                                    "yplatform:"
-                                                                                    "window_"
-                                                                                    "manager_"
-                                                                                    "toggle_"
-                                                                                    "maximize")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_toggle_maximize")]]
+[[clang::annotate("local@yplatform:window_manager_toggle_maximize")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_toggle_maximize(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
 {
@@ -205,12 +206,10 @@ static struct yetty_ycore_void_result window_manager_toggle_maximize(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate(
-    "override@yplatform:window_manager:window_manager_request_close")]] [[clang::
-                                                                              annotate(
-                                                                                  "local@yplatform:"
-                                                                                  "window_manager_"
-                                                                                  "request_close")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_request_close")]]
+[[clang::annotate("local@yplatform:window_manager_request_close")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_request_close(struct yetty_yclass_ctx *ctx,
                                                                    struct yetty_yclass_object *obj)
 {
@@ -222,8 +221,10 @@ static struct yetty_ycore_void_result window_manager_request_close(struct yetty_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:window_manager:window_manager_drag_by")]] [[clang::annotate(
-    "local@yplatform:window_manager_drag_by")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_drag_by")]]
+[[clang::annotate("local@yplatform:window_manager_drag_by")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_drag_by(struct yetty_yclass_ctx *ctx,
                                                              struct yetty_yclass_object *obj,
                                                              int dx, int dy)
@@ -245,11 +246,14 @@ static struct yetty_ycore_void_result window_manager_drag_by(struct yetty_yclass
 /* Grow (or shrink, with negative deltas) the window's outer size by (dx, dy)
  * screen pixels. Top-left stays fixed — only the right/bottom edges move. The
  * tabbar's edge/corner resize handles call this. */
-[[clang::annotate("override@yplatform:window_manager:window_manager_resize_by")]] [[clang::annotate(
-    "local@yplatform:window_manager_resize_by")]]
+/* clang-format off: keep each annotation on one line — splitting the long
+ * override string breaks the codegen parser. */
+[[clang::annotate("override@yplatform:window_manager:window_manager_resize_by")]]
+[[clang::annotate("local@yplatform:window_manager_resize_by")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_resize_by(struct yetty_yclass_ctx *ctx,
                                                                struct yetty_yclass_object *obj,
-                                                               int dx, int dy)
+                                                               int dx, int dy, int edge)
 {
     (void)ctx;
     if (dx == 0 && dy == 0) {
@@ -258,16 +262,17 @@ static struct yetty_ycore_void_result window_manager_resize_by(struct yetty_ycla
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager resize_by: object");
     struct yetty_yui_event event = {.type = YETTY_YCORE_WINDOW_RESIZE_BY,
-                                    .window_resize = {.dx = dx, .dy = dy}};
+                                    .window_resize = {.dx = dx, .dy = dy, .edge = edge}};
     post_event(data_r.value, &event);
     return YETTY_OK_VOID();
 }
 
 /* Hand the move gesture to the compositor (Wayland) or fall back to per-pixel
  * drag_by (X11). Called once on the MOUSE_DOWN that starts a titlebar drag. */
-[[clang::annotate("override@yplatform:window_manager:window_manager_begin_interactive_"
-                  "move")]] [[clang::annotate(
-    "local@yplatform:window_manager_begin_interactive_move")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_begin_interactive_move")]]
+[[clang::annotate("local@yplatform:window_manager_begin_interactive_move")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_begin_interactive_move(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
 {
@@ -285,9 +290,10 @@ static struct yetty_ycore_void_result window_manager_begin_interactive_move(
  * yetty_ycore_resize_edge bitmask telling the compositor which edge the user
  * grabbed; on X11 this is a no-op and per-pixel resize_by keeps driving
  * glfwSetWindowSize. */
-[[clang::annotate("override@yplatform:window_manager:window_manager_begin_interactive_"
-                  "resize")]] [[clang::annotate(
-    "local@yplatform:window_manager_begin_interactive_resize")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_begin_interactive_resize")]]
+[[clang::annotate("local@yplatform:window_manager_begin_interactive_resize")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_begin_interactive_resize(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int edge)
 {
@@ -307,9 +313,10 @@ static struct yetty_ycore_void_result window_manager_begin_interactive_resize(
 /* Set the OS mouse cursor shape. Shape is an enum yetty_ycore_cursor_shape
  * value. Posted to output_pipe and applied on the main thread (GLFW cursor
  * calls aren't safe off the main thread). Idempotent on the OS side. */
-[[clang::
-      annotate("override@yplatform:window_manager:window_manager_set_cursor")]] [[clang::annotate(
-    "local@yplatform:window_manager_set_cursor")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_set_cursor")]]
+[[clang::annotate("local@yplatform:window_manager_set_cursor")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_set_cursor(struct yetty_yclass_ctx *ctx,
                                                                 struct yetty_yclass_object *obj,
                                                                 int shape)
@@ -326,9 +333,10 @@ static struct yetty_ycore_void_result window_manager_set_cursor(struct yetty_ycl
  * Main-thread side — apply one drained event by calling GLFW
  *===========================================================================*/
 
-[[clang::
-      annotate("override@yplatform:window_manager:window_manager_handle_event")]] [[clang::annotate(
-    "local@yplatform:window_manager_handle_event")]]
+/* clang-format off */
+[[clang::annotate("override@yplatform:window_manager:window_manager_handle_event")]]
+[[clang::annotate("local@yplatform:window_manager_handle_event")]]
+/* clang-format on */
 static struct yetty_ycore_void_result window_manager_handle_event(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
     const struct yetty_yui_event *event)
@@ -509,22 +517,53 @@ static struct yetty_ycore_void_result window_manager_handle_event(
             yetty_yplatform_os_event_invalidate_click_pairing(manager->window);
             break;
         }
-        int ww = 0, wh = 0, fw = 0, fh = 0;
+        int ww = 0, wh = 0, fw = 0, fh = 0, wx = 0, wy = 0;
         glfwGetWindowSize(manager->window, &ww, &wh);
         glfwGetFramebufferSize(manager->window, &fw, &fh);
+        glfwGetWindowPos(manager->window, &wx, &wy);
         double sx = (fw > 0 && ww > 0) ? (double)ww / (double)fw : 1.0;
         double sy = (fh > 0 && wh > 0) ? (double)wh / (double)fh : 1.0;
+        /* Delta in framebuffer px → screen px. */
+        int dx = (int)(event->window_resize.dx * sx);
+        int dy = (int)(event->window_resize.dy * sy);
+        int edge = event->window_resize.edge;
 
-        int nw = ww + (int)(event->window_resize.dx * sx);
-        int nh = wh + (int)(event->window_resize.dy * sy);
-        /* Minimum size — anything smaller than a couple of cells makes the
-         * terminal grid degenerate and risks divide-by-zero or negative-bound
-         * math downstream. Screen-coord minimums. */
+        /* Apply per edge from FRESH geometry. Right/bottom grow with the
+         * top-left fixed; left/top move the origin too. Reading current x/y/w/h
+         * each event (rather than accumulating) keeps the dragged edge tracking
+         * the cursor — the caller anchors left/top so the window-relative cursor
+         * resets after each move. edge==0 → legacy right+bottom growth. */
+        int nx = wx, ny = wy, nw = ww, nh = wh;
+        if (edge == 0 || (edge & YETTY_YCORE_RESIZE_EDGE_RIGHT)) {
+            nw = ww + dx;
+        }
+        if (edge & YETTY_YCORE_RESIZE_EDGE_LEFT) {
+            nx = wx + dx;
+            nw = ww - dx;
+        }
+        if (edge == 0 || (edge & YETTY_YCORE_RESIZE_EDGE_BOTTOM)) {
+            nh = wh + dy;
+        }
+        if (edge & YETTY_YCORE_RESIZE_EDGE_TOP) {
+            ny = wy + dy;
+            nh = wh - dy;
+        }
+        /* Minimum size — keep the opposite (fixed) edge in place when clamping a
+         * left/top drag, so the window doesn't jump. */
         if (nw < 200) {
+            if (edge & YETTY_YCORE_RESIZE_EDGE_LEFT) {
+                nx -= (200 - nw);
+            }
             nw = 200;
         }
         if (nh < 100) {
+            if (edge & YETTY_YCORE_RESIZE_EDGE_TOP) {
+                ny -= (100 - nh);
+            }
             nh = 100;
+        }
+        if (nx != wx || ny != wy) {
+            glfwSetWindowPos(manager->window, nx, ny);
         }
         glfwSetWindowSize(manager->window, nw, nh);
         yetty_yplatform_os_event_invalidate_click_pairing(manager->window);

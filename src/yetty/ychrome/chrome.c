@@ -113,11 +113,16 @@ struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     int resizing;
     int resize_grab_sent; /* begin_interactive_resize fired once for this gesture */
     int resize_edge;      /* yetty_ycore_resize_edge bitmask (xdg-shell)          */
-    int resize_dir_x;     /* which axes grow under per-pixel resize_by            */
-    int resize_dir_y;
+    int resize_left;      /* which edges the gesture grabbed */
+    int resize_right;
+    int resize_top;
+    int resize_bottom;
+    /* Right/bottom edges keep the top-left fixed → track incrementally from
+     * resize_last. Left/top edges move the origin → the window-relative cursor
+     * resets after each move, so they measure from a fixed anchor instead. */
     float resize_last_x;
     float resize_last_y;
-    float resize_anchor_x; /* press position — slop check before the grab */
+    float resize_anchor_x;
     float resize_anchor_y;
 };
 
@@ -221,6 +226,18 @@ static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_ctx *ct
 /* Cursor shape to show for a hover at (x, y): a resize arrow over an active
  * edge, else the default. Lets the app give resize-edge feedback without
  * duplicating the hit-test. */
+/* Which resize edges (if any) the point (x, y) is over. Any combination →
+ * corners are two edges at once. The bands hug all four window margins. */
+static void chrome_edges_at(const struct chrome_data *chrome, float x, float y, int *left,
+                            int *right, int *top, int *bottom)
+{
+    float edge = chrome->edge_size;
+    *left = x >= 0.0f && x < edge;
+    *right = x <= chrome->width && x > chrome->width - edge;
+    *top = y >= 0.0f && y < edge;
+    *bottom = y <= chrome->height && y > chrome->height - edge;
+}
+
 [[clang::annotate("override@ychrome:chrome:edge_cursor_at")]] [[clang::annotate(
     "local@ychrome:edge_cursor_at")]]
 static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_ctx *ctx,
@@ -235,17 +252,13 @@ static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_c
         chrome->height <= 0.0f) {
         return YETTY_OK(yetty_ycore_int, YETTY_YCORE_CURSOR_DEFAULT);
     }
-    /* The caption is drag territory, not resize. */
-    if (y < chrome->caption_height) {
-        return YETTY_OK(yetty_ycore_int, YETTY_YCORE_CURSOR_DEFAULT);
-    }
-    int right = x >= chrome->width - chrome->edge_size && x <= chrome->width;
-    int bottom = y >= chrome->height - chrome->edge_size && y <= chrome->height;
-    /* No diagonal cursor in the enum yet — a corner reports HRESIZE. */
-    if (right) {
+    int left, right, top, bottom;
+    chrome_edges_at(chrome, x, y, &left, &right, &top, &bottom);
+    /* No diagonal cursor in the enum yet — corners fall back to HRESIZE. */
+    if (left || right) {
         return YETTY_OK(yetty_ycore_int, YETTY_YCORE_CURSOR_HRESIZE);
     }
-    if (bottom) {
+    if (top || bottom) {
         return YETTY_OK(yetty_ycore_int, YETTY_YCORE_CURSOR_VRESIZE);
     }
     return YETTY_OK(yetty_ycore_int, YETTY_YCORE_CURSOR_DEFAULT);
@@ -392,13 +405,29 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
                 wm_absorb(yetty_yplatform_window_manager_begin_interactive_resize(
                     NULL, wm, chrome->resize_edge));
             }
-            int step_dx = (int)(x - chrome->resize_last_x) * chrome->resize_dir_x;
-            int step_dy = (int)(y - chrome->resize_last_y) * chrome->resize_dir_y;
-            if (step_dx != 0 || step_dy != 0) {
-                wm_absorb(yetty_yplatform_window_manager_resize_by(NULL, wm, step_dx, step_dy));
+            /* Per-axis delta. Right/bottom keep the top-left fixed → track
+             * incrementally (update resize_last). Left/top move the origin →
+             * after each move the window-relative cursor snaps back to the
+             * press anchor, so measure from that fixed anchor (don't update) to
+             * avoid a feedback loop. window_manager applies the per-edge origin
+             * shift from fresh geometry. */
+            int step_dx = 0, step_dy = 0;
+            if (chrome->resize_right) {
+                step_dx = (int)(x - chrome->resize_last_x);
+                chrome->resize_last_x = x;
+            } else if (chrome->resize_left) {
+                step_dx = (int)(x - chrome->resize_anchor_x);
             }
-            chrome->resize_last_x = x;
-            chrome->resize_last_y = y;
+            if (chrome->resize_bottom) {
+                step_dy = (int)(y - chrome->resize_last_y);
+                chrome->resize_last_y = y;
+            } else if (chrome->resize_top) {
+                step_dy = (int)(y - chrome->resize_anchor_y);
+            }
+            if (step_dx != 0 || step_dy != 0) {
+                wm_absorb(yetty_yplatform_window_manager_resize_by(NULL, wm, step_dx, step_dy,
+                                                                   chrome->resize_edge));
+            }
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (event->type == YETTY_YCORE_MOUSE_UP) {
@@ -462,6 +491,34 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
         }
     }
 
+    /* --- edge / corner press → start a resize -------------------------- *
+     * Checked before the caption drag so the resize bands win where they run
+     * through the caption (the top band, and the left/right margins along the
+     * caption row). Buttons were already handled above, so they keep priority
+     * in the top-right. All four margins + the four corners are live. */
+    if ((chrome->flags & YETTY_YCHROME_FLAG_RESIZE) && event->type == YETTY_YCORE_MOUSE_DOWN &&
+        chrome->width > 0.0f && chrome->height > 0.0f) {
+        int left, right, top, bottom;
+        chrome_edges_at(chrome, x, y, &left, &right, &top, &bottom);
+        if (left || right || top || bottom) {
+            chrome->resizing = 1;
+            chrome->resize_left = left;
+            chrome->resize_right = right;
+            chrome->resize_top = top;
+            chrome->resize_bottom = bottom;
+            chrome->resize_last_x = x;
+            chrome->resize_last_y = y;
+            chrome->resize_anchor_x = x;
+            chrome->resize_anchor_y = y;
+            chrome->resize_grab_sent = 0;
+            chrome->resize_edge = (left ? YETTY_YCORE_RESIZE_EDGE_LEFT : 0) |
+                                  (right ? YETTY_YCORE_RESIZE_EDGE_RIGHT : 0) |
+                                  (top ? YETTY_YCORE_RESIZE_EDGE_TOP : 0) |
+                                  (bottom ? YETTY_YCORE_RESIZE_EDGE_BOTTOM : 0);
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
+
     /* --- caption double-click → toggle maximize ------------------------ */
     if ((chrome->flags & YETTY_YCHROME_FLAG_MAXIMIZE) && in_caption &&
         event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK && event->mouse.button == 0) {
@@ -470,9 +527,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    /* --- caption press → start a window drag --------------------------- *
-     * The caption wins over the right edge where they overlap (top-right
-     * corner), matching the tab-strip behaviour. */
+    /* --- caption press → start a window drag --------------------------- */
     if ((chrome->flags & YETTY_YCHROME_FLAG_DRAG) && in_caption &&
         event->type == YETTY_YCORE_MOUSE_DOWN) {
         chrome->dragging = 1;
@@ -483,26 +538,6 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
          * slop, so a clean click (and the first half of a double-click) isn't
          * eaten by a zero-distance compositor grab. */
         return YETTY_OK(yetty_ycore_int, 1);
-    }
-
-    /* --- edge press (below the caption) → start a resize --------------- */
-    if ((chrome->flags & YETTY_YCHROME_FLAG_RESIZE) && !in_caption &&
-        event->type == YETTY_YCORE_MOUSE_DOWN && chrome->width > 0.0f && chrome->height > 0.0f) {
-        int right = x >= chrome->width - chrome->edge_size && x <= chrome->width;
-        int bottom = y >= chrome->height - chrome->edge_size && y <= chrome->height;
-        if (right || bottom) {
-            chrome->resizing = 1;
-            chrome->resize_dir_x = right ? 1 : 0;
-            chrome->resize_dir_y = bottom ? 1 : 0;
-            chrome->resize_last_x = x;
-            chrome->resize_last_y = y;
-            chrome->resize_anchor_x = x;
-            chrome->resize_anchor_y = y;
-            chrome->resize_grab_sent = 0;
-            chrome->resize_edge = (right ? YETTY_YCORE_RESIZE_EDGE_RIGHT : 0) |
-                                  (bottom ? YETTY_YCORE_RESIZE_EDGE_BOTTOM : 0);
-            return YETTY_OK(yetty_ycore_int, 1);
-        }
     }
 
     return YETTY_OK(yetty_ycore_int, 0);
