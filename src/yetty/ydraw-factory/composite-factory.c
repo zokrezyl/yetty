@@ -153,7 +153,7 @@ struct yetty_ydraw_figure_ptr_result yetty_ydraw_composite_factory_create_instan
 //=============================================================================
 
 void yetty_ydraw_composite_factory_set_visual_zoom(struct yetty_ydraw_composite_factory *factory,
-                                                    float scale, float offset_x, float offset_y)
+                                                   float scale, float offset_x, float offset_y)
 {
     if (!factory) {
         return;
@@ -167,14 +167,14 @@ void yetty_ydraw_composite_factory_set_visual_zoom(struct yetty_ydraw_composite_
 }
 
 void yetty_ydraw_composite_factory_set_cell_zoom(struct yetty_ydraw_composite_factory *factory,
-                                                  float scale, float offset_x, float offset_y)
+                                                 float scale, float offset_x, float offset_y)
 {
     if (!factory) {
         ydebug("composite_factory_set_cell_zoom: factory is NULL");
         return;
     }
-    ydebug("composite_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale, offset_x,
-           offset_y, factory->count);
+    ydebug("composite_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale,
+           offset_x, offset_y, factory->count);
     for (uint32_t i = 0; i < factory->count; i++) {
         struct yetty_ydraw_concrete_factory *cf = factory->factories[i];
         if (!cf) {

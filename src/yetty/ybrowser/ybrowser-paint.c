@@ -764,7 +764,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                     .corner_radius = b->border_radius,
                 };
                 (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->bg), 0, 0,
-                                                            &box);
+                                                                &box);
             }
 
             /* P2.10 background-image yimage emission removed: ylexbor
@@ -841,7 +841,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                     .half_height = b->h * 0.5f,
                     .corner_radius = 0,
                 };
-                (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, 0xc0c0c0ffu, 0, 0, &box);
+                (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, 0xc0c0c0ffu, 0, 0,
+                                                                &box);
                 ydebug("paint image (placeholder) i=%u xy=%.0f,%.0f wh=%.0fx%.0f", i, b->x, b->y,
                        b->w, b->h);
                 break;
@@ -908,8 +909,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 			 * confirm it's not the source of the user-reported
 			 * scattered glyphs we keep it dormant. */
             (void)yetty_ydraw_drawable_list_add_text(buf, b->x, baseline_y, &txt, b->font_size,
-                                                 pack_rgba(b->fg), z++, /*font_id=*/-1,
-                                                 /*rotation=*/0.0f);
+                                                     pack_rgba(b->fg), z++, /*font_id=*/-1,
+                                                     /*rotation=*/0.0f);
             if (b->underline && b->w > 0) {
                 float thickness = b->font_size * 0.06f;
                 if (thickness < 1.0f) {
@@ -923,7 +924,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                     .half_height = thickness * 0.5f,
                 };
                 (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0, 0,
-                                                            &ubx);
+                                                                &ubx);
             }
             break;
         }

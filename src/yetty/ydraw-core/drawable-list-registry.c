@@ -36,7 +36,7 @@ void yetty_ydraw_drawable_list_registry_destroy(struct yetty_ydraw_drawable_list
 }
 
 void yetty_ydraw_drawable_list_registry_set_default(struct yetty_ydraw_drawable_list_registry *reg,
-                                                yetty_ydraw_drawable_handler_fn handler)
+                                                    yetty_ydraw_drawable_handler_fn handler)
 {
     if (reg) {
         reg->default_handler = handler;

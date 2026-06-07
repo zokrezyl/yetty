@@ -18,7 +18,8 @@ struct yetty_ygui_chip_data_ptr_result yetty_ygui_chip_data(struct yetty_ygui_ob
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_ygui_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_ygui_object *obj,
+                                                         const char *label);
 struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_ygui_object *obj, int c);
 
 #endif

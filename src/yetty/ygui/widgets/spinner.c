@@ -36,10 +36,9 @@ static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_ct
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_spinner_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_spinner_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "spinner_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_spinner_class_get().value);
@@ -101,7 +100,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                    .center_y = y + h * 0.5f,
                                    .half_width = w * 0.5f,
                                    .half_height = h * 0.5f};
-        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0,
+                                                         &g);
     }
     if (radius > w * 0.5f) {
         radius = w * 0.5f;
@@ -117,8 +117,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                        .radius_bottom_right = radius,
                                        .radius_top_left = radius,
                                        .radius_bottom_left = radius};
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0,
-                                                         &g);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill,
+                                                             0, 0, &g);
 }
 
 static struct yetty_ycore_void_result paint_text(struct yetty_ygui_emit_ctx *ctx, const char *t,
@@ -151,15 +151,19 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_ctx *ycl
     float third = w / 3.0f;
     struct yetty_ycore_void_result result_152 = paint_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_152, "spinner_paint: bg");
-    struct yetty_ycore_void_result result_154 = paint_box(ctx, r.min.x + 2, r.min.y + 2, third - 4, h - 4, COLOR_BTN, 3);
+    struct yetty_ycore_void_result result_154 =
+        paint_box(ctx, r.min.x + 2, r.min.y + 2, third - 4, h - 4, COLOR_BTN, 3);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_154, "spinner_paint: minus_bg");
-    struct yetty_ycore_void_result result_157 = paint_box(ctx, r.min.x + 2 * third + 2, r.min.y + 2, third - 4, h - 4, COLOR_BTN, 3);
+    struct yetty_ycore_void_result result_157 =
+        paint_box(ctx, r.min.x + 2 * third + 2, r.min.y + 2, third - 4, h - 4, COLOR_BTN, 3);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_157, "spinner_paint: plus_bg");
     float fs = 14.0f;
     float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
-    struct yetty_ycore_void_result result_163 = paint_text(ctx, "-", r.min.x + third * 0.5f - 4, ty, fs, COLOR_ACC);
+    struct yetty_ycore_void_result result_163 =
+        paint_text(ctx, "-", r.min.x + third * 0.5f - 4, ty, fs, COLOR_ACC);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_163, "spinner_paint: minus");
-    struct yetty_ycore_void_result result_166 = paint_text(ctx, "+", r.min.x + 2.5f * third - 4, ty, fs, COLOR_ACC);
+    struct yetty_ycore_void_result result_166 =
+        paint_text(ctx, "+", r.min.x + 2.5f * third - 4, ty, fs, COLOR_ACC);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_166, "spinner_paint: plus");
     char buf[32];
     snprintf(buf, sizeof(buf), "%g", d->value);

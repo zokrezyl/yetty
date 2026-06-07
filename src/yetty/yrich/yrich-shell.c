@@ -56,10 +56,9 @@ static struct yetty_ygui_object_ptr_result add_button(struct yetty_ygui_object *
                                                       const char *label, yetty_ygui_event_cb cb,
                                                       void *userdata)
 {
-    struct yetty_ygui_object_ptr_result br =
-        add_child(yetty_ygui_class_expect(yetty_ygui_button_class_get(),
-                                          "yetty_ygui_button_class_get"),
-                  toolbar, NULL);
+    struct yetty_ygui_object_ptr_result br = add_child(
+        yetty_ygui_class_expect(yetty_ygui_button_class_get(), "yetty_ygui_button_class_get"),
+        toolbar, NULL);
     YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, br, "add_button: add");
     struct yetty_ycore_void_result lr = yetty_ygui_button_set_label(br.value, label);
     YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, lr, "add_button: label");
@@ -77,8 +76,7 @@ static struct yetty_ycore_void_result fit_and_status(struct yetty_yrich_editor *
                                                      const char *kind)
 {
     float cw = 0.0f, ch = 0.0f;
-    struct yetty_ycore_void_result szr =
-        yetty_ygui_yrich_view_content_size(editor->view, &cw, &ch);
+    struct yetty_ycore_void_result szr = yetty_ygui_yrich_view_content_size(editor->view, &cw, &ch);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, szr, "fit_and_status: content_size");
     if (cw < 1.0f) {
         cw = 1.0f;
@@ -102,10 +100,9 @@ static struct yetty_ycore_void_result build_skeleton(struct yetty_ygui_object *p
 {
     memset(out, 0, sizeof(*out));
 
-    struct yetty_ygui_object_ptr_result rootr =
-        add_child(yetty_ygui_class_expect(yetty_ygui_vbox_class_get(), "yetty_ygui_vbox_class_get"),
-                  parent,
-                  "flex-grow: 1; align-self: stretch; align-items: stretch; gap: 0; padding: 0;");
+    struct yetty_ygui_object_ptr_result rootr = add_child(
+        yetty_ygui_class_expect(yetty_ygui_vbox_class_get(), "yetty_ygui_vbox_class_get"), parent,
+        "flex-grow: 1; align-self: stretch; align-items: stretch; gap: 0; padding: 0;");
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rootr, "build_skeleton: root");
     out->root = rootr.value;
 
@@ -128,10 +125,9 @@ static struct yetty_ycore_void_result build_skeleton(struct yetty_ygui_object *p
     YETTY_RETURN_IF_ERR(yetty_ycore_void, viewr, "build_skeleton: view");
     out->view = viewr.value;
 
-    struct yetty_ygui_object_ptr_result statr =
-        add_child(yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(),
-                                          "yetty_ygui_statusbar_class_get"),
-                  out->root, "height: 24px;");
+    struct yetty_ygui_object_ptr_result statr = add_child(
+        yetty_ygui_class_expect(yetty_ygui_statusbar_class_get(), "yetty_ygui_statusbar_class_get"),
+        out->root, "height: 24px;");
     YETTY_RETURN_IF_ERR(yetty_ycore_void, statr, "build_skeleton: statusbar");
     out->statusbar = statr.value;
 
@@ -247,7 +243,7 @@ static struct yetty_ycore_void_result act_slide_add(struct yetty_yclass_ctx *ctx
  *---------------------------------------------------------------------------*/
 
 struct yetty_ycore_void_result yetty_yrich_ydoc_editor_create(struct yetty_ygui_object *parent,
-                                                             struct yetty_yrich_editor *out)
+                                                              struct yetty_yrich_editor *out)
 {
     if (!out) {
         return YETTY_ERR(yetty_ycore_void, "ydoc_editor_create: NULL out");
@@ -258,8 +254,7 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_editor_create(struct yetty_ygui_
     struct yetty_yrich_ydoc_ptr_result dr = yetty_yrich_ydoc_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "ydoc_editor_create: ydoc_create");
     out->doc = &dr.value->base;
-    struct yetty_ycore_void_result ar =
-        yetty_ygui_yrich_view_set_document(out->view, out->doc, 1);
+    struct yetty_ycore_void_result ar = yetty_ygui_yrich_view_set_document(out->view, out->doc, 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "ydoc_editor_create: set_document");
 
     struct yetty_ygui_object_ptr_result b0 = add_button(out->toolbar, "Undo", act_undo, out->view);
@@ -274,7 +269,7 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_editor_create(struct yetty_ygui_
 }
 
 struct yetty_ycore_void_result yetty_yrich_ysheet_editor_create(struct yetty_ygui_object *parent,
-                                                               struct yetty_yrich_editor *out)
+                                                                struct yetty_yrich_editor *out)
 {
     if (!out) {
         return YETTY_ERR(yetty_ycore_void, "ysheet_editor_create: NULL out");
@@ -286,8 +281,7 @@ struct yetty_ycore_void_result yetty_yrich_ysheet_editor_create(struct yetty_ygu
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "ysheet_editor_create: spreadsheet_create");
     yetty_yrich_spreadsheet_set_grid_size(dr.value, 20, 8);
     out->doc = &dr.value->base;
-    struct yetty_ycore_void_result ar =
-        yetty_ygui_yrich_view_set_document(out->view, out->doc, 1);
+    struct yetty_ycore_void_result ar = yetty_ygui_yrich_view_set_document(out->view, out->doc, 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "ysheet_editor_create: set_document");
 
     struct yetty_ygui_object_ptr_result b0 = add_button(out->toolbar, "Undo", act_undo, out->view);
@@ -299,7 +293,7 @@ struct yetty_ycore_void_result yetty_yrich_ysheet_editor_create(struct yetty_ygu
 }
 
 struct yetty_ycore_void_result yetty_yrich_yslide_editor_create(struct yetty_ygui_object *parent,
-                                                               struct yetty_yrich_editor *out)
+                                                                struct yetty_yrich_editor *out)
 {
     if (!out) {
         return YETTY_ERR(yetty_ycore_void, "yslide_editor_create: NULL out");
@@ -311,8 +305,7 @@ struct yetty_ycore_void_result yetty_yrich_yslide_editor_create(struct yetty_ygu
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "yslide_editor_create: slides_create");
     yetty_yrich_slides_add_slide(dr.value);
     out->doc = &dr.value->base;
-    struct yetty_ycore_void_result ar =
-        yetty_ygui_yrich_view_set_document(out->view, out->doc, 1);
+    struct yetty_ycore_void_result ar = yetty_ygui_yrich_view_set_document(out->view, out->doc, 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "yslide_editor_create: set_document");
 
     struct yetty_ygui_object_ptr_result b0 =
@@ -328,8 +321,7 @@ struct yetty_ycore_void_result yetty_yrich_yslide_editor_create(struct yetty_ygu
     return fit_and_status(out, "yslide");
 }
 
-struct yetty_ycore_void_result yetty_yrich_editor_refresh(
-    struct yetty_yrich_editor *editor)
+struct yetty_ycore_void_result yetty_yrich_editor_refresh(struct yetty_yrich_editor *editor)
 {
     if (!editor || !editor->view) {
         return YETTY_ERR(yetty_ycore_void, "yrich_editor_refresh: NULL");

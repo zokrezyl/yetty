@@ -441,7 +441,12 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
             .center_y = ymaze_cell_y(m, m->start_row),
             .radius = cell_min * 0.3f,
         };
-        { struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z++, m->config.start_color, 0u, 0.0f, &c); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_ydraw_drawable_list_add_cmd_add_circle"); }
+        {
+            struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_circle(
+                buf, 0, z++, m->config.start_color, 0u, 0.0f, &c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r,
+                                "drop: yetty_ydraw_drawable_list_add_cmd_add_circle");
+        }
     }
 
     /* End marker — 5-point star. */
@@ -453,7 +458,12 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
             .num_points = 5.0f,
             .inner_ratio = 2.2f,
         };
-        { struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_star(buf, 0, z++, m->config.end_color, 0u, 0.0f, &s); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_ydraw_drawable_list_add_cmd_add_star"); }
+        {
+            struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_star(
+                buf, 0, z++, m->config.end_color, 0u, 0.0f, &s);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r,
+                                "drop: yetty_ydraw_drawable_list_add_cmd_add_star");
+        }
     }
 
     if (m->path_len == 0) {
@@ -484,8 +494,9 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
             };
             /* Segment has no interior — paint via stroke. */
             {
-                struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_segment(
-                    buf, 0, z++, 0u, trail_color, trail_width, &seg);
+                struct yetty_ycore_void_result set_r =
+                    yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, z++, 0u, trail_color,
+                                                                  trail_width, &seg);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "ymaze: trail segment");
             }
         }
@@ -515,7 +526,12 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
             .center_y = ay,
             .radius = cell_min * 0.28f,
         };
-        { struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_circle(buf, 0, z++, m->config.actor_color, 0u, 0.0f, &c); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_ydraw_drawable_list_add_cmd_add_circle"); }
+        {
+            struct yetty_ycore_void_result set_r = yetty_ydraw_drawable_list_add_cmd_add_circle(
+                buf, 0, z++, m->config.actor_color, 0u, 0.0f, &c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r,
+                                "drop: yetty_ydraw_drawable_list_add_cmd_add_circle");
+        }
     }
 
     return YETTY_OK_VOID();
@@ -675,7 +691,7 @@ struct yetty_ycore_void_result yetty_ymaze_render(struct yetty_ymaze *maze,
 
     yetty_ydraw_drawable_list_clear(buf);
     yetty_ydraw_drawable_list_set_scene_bounds(buf, 0.0f, 0.0f, maze->config.scene_width,
-                                           maze->config.scene_height);
+                                               maze->config.scene_height);
 
     struct yetty_ycore_void_result br = ymaze_build_prims(maze, buf, time);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ymaze_render: build_prims failed");

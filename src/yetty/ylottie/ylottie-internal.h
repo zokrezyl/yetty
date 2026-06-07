@@ -188,7 +188,7 @@ void yetty_ylottie_polyline_destroy(struct yetty_ylottie_polyline *pl);
  * `k`, or the active keyframe's `s`); the resolver lives in ylottie-path.c
  * via yetty_ylottie_path_eval below. */
 int yetty_ylottie_bezier_flatten(struct yetty_ylottie_polyline *out,
-                                  const struct yetty_ylottie_json *shape_value, float tolerance);
+                                 const struct yetty_ylottie_json *shape_value, float tolerance);
 
 /* Resolve a shape ("sh") property `{a,k}` to the bezier value object active
  * at `frame` (no vertex interpolation between keyframes — the keyframe whose

@@ -215,7 +215,8 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
 
     struct yetty_ydraw_drawable_list_config bcfg = {
         .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = scene_w, .scene_max_y = scene_h};
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         yetty_ysvg_doc_destroy(doc);
         return YETTY_ERR(yetty_ysvg_render, "ysvg: buffer create failed", br);

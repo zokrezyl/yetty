@@ -54,7 +54,7 @@ static void sb_arena_drop_newest(struct yetty_yvterm_text_sb_arena *arena)
  * ydraw scrollback. Bail with a loud yerror rather than memcpy from a
  * bogus pointer — the caller has already filled dst with blank if needed. */
 void yetty_yvterm_text_sb_arena_read(const struct yetty_yvterm_text_sb_arena *arena, size_t offset,
-                                    int cols, VTermScreenCell *dst)
+                                     int cols, VTermScreenCell *dst)
 {
     if (cols <= 0) {
         return;
@@ -90,7 +90,7 @@ const struct yetty_yvterm_text_sb_line_rec *yetty_yvterm_text_sb_arena_peek(
 
 /* Push one line. Returns 1 on success. */
 int yetty_yvterm_text_sb_arena_push(struct yetty_yvterm_text_sb_arena *arena,
-                                   const VTermScreenCell *src, int cols)
+                                    const VTermScreenCell *src, int cols)
 {
     if (cols <= 0) {
         return 1;
@@ -175,7 +175,7 @@ int yetty_yvterm_text_sb_arena_push(struct yetty_yvterm_text_sb_arena *arena,
 /* Pop newest line. Copies up to copy_cols cells into dst. Returns the number
  * of cells copied (0 on empty). */
 int yetty_yvterm_text_sb_arena_pop(struct yetty_yvterm_text_sb_arena *arena, VTermScreenCell *dst,
-                                  int copy_cols)
+                                   int copy_cols)
 {
     if (arena->lines_count == 0 || !dst || copy_cols <= 0) {
         return 0;

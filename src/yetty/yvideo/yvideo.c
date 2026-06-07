@@ -113,13 +113,15 @@ struct yetty_ydraw_drawable_list_result yetty_yvideo_render(
         .scene_max_x = u.bounds_x + u.bounds_w,
         .scene_max_y = u.bounds_y + u.bounds_h,
     };
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
     if (YETTY_IS_ERR(br)) {
         free(prim_buf);
         return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo: drawable_list create failed", br);
     }
 
-    struct yetty_ydraw_id_result idr = yetty_ydraw_drawable_list_add_prim(br.value, prim_buf, required);
+    struct yetty_ydraw_id_result idr =
+        yetty_ydraw_drawable_list_add_prim(br.value, prim_buf, required);
     free(prim_buf);
     if (YETTY_IS_ERR(idr)) {
         yetty_ydraw_drawable_list_destroy(br.value);
@@ -128,14 +130,15 @@ struct yetty_ydraw_drawable_list_result yetty_yvideo_render(
     return YETTY_OK(yetty_ydraw_drawable_list, br.value);
 }
 
-struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
-                                                         FILE *out)
+struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(
+    const struct yetty_ydraw_drawable_list *buffer, FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
-    size_t raw_size = yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
+    size_t raw_size =
+        yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: empty serialize");
     }

@@ -936,15 +936,15 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
                     int64_t vterm_row = (int64_t)canvas_y - (int64_t)live_rolling_row_0;
                     if (vterm_row >= 0) {
                         for (uint32_t x = 0; x < YDRAW_GRID_COLS_MAX; x++) {
-                            uint32_t *handle_ptr = cell_source->handle_at(cell_source->user,
-                                                                         (uint32_t)vterm_row, x);
+                            uint32_t *handle_ptr =
+                                cell_source->handle_at(cell_source->user, (uint32_t)vterm_row, x);
                             if (!handle_ptr) {
                                 break; /* past the live row width */
                             }
                             const struct drawable_ref_array *hrefs =
-                                (*handle_ptr != 0)
-                                    ? yetty_ydraw_cell_ref_table_get(cell_source->table, *handle_ptr)
-                                    : NULL;
+                                (*handle_ptr != 0) ? yetty_ydraw_cell_ref_table_get(
+                                                         cell_source->table, *handle_ptr)
+                                                   : NULL;
                             for (uint32_t ri = 0; hrefs && ri < hrefs->count; ri++) {
                                 uint32_t bl = canvas_y + hrefs->data[ri].lines_ahead;
                                 if (bl < grid->lines_count && bl > max_anchor) {

@@ -50,8 +50,8 @@ typedef void (*yetty_yplatform_install_asset_fn)(const char *name, const uint8_t
  * callbacks and still returns success (a development build links no
  * manifest).
  */
-struct yetty_ycore_void_result
-yetty_yplatform_install_foreach_asset(yetty_yplatform_install_asset_fn callback, void *userdata);
+struct yetty_ycore_void_result yetty_yplatform_install_foreach_asset(
+    yetty_yplatform_install_asset_fn callback, void *userdata);
 
 #ifdef __cplusplus
 }

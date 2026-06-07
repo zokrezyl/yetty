@@ -64,8 +64,8 @@ static struct yetty_incbin_assets *g_current_assets = NULL;
  * targets that link this file embed no manifest (tools, demos), so compile
  * the whole chain only when a manifest is present — otherwise it sits dead
  * and trips -Wunused-function. */
-#if defined(HAS_DATA_MANIFEST) || defined(HAS_YCONFIG_MANIFEST) || \
-    defined(HAS_YEMU_MANIFEST) || defined(HAS_QEMU_MANIFEST)
+#if defined(HAS_DATA_MANIFEST) || defined(HAS_YCONFIG_MANIFEST) || defined(HAS_YEMU_MANIFEST) ||   \
+    defined(HAS_QEMU_MANIFEST)
 /* Helper to add asset entry */
 static void add_asset(struct yetty_incbin_assets *assets, const char *name, const uint8_t *data,
                       size_t size, int compressed)

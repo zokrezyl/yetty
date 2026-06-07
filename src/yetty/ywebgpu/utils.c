@@ -202,8 +202,7 @@ char *yetty_ywebgpu_get_webgpu_description(WGPUAdapter adapter, WGPUSurface surf
     }
 
     if (has_caps && w >= 0) {
-        int m = snprintf(out + w, total - (size_t)w,
-                         "Surface formats (%zu, preferred first):\n",
+        int m = snprintf(out + w, total - (size_t)w, "Surface formats (%zu, preferred first):\n",
                          (size_t)caps.formatCount);
         if (m > 0) {
             w += m;
@@ -216,8 +215,8 @@ char *yetty_ywebgpu_get_webgpu_description(WGPUAdapter adapter, WGPUSurface surf
                 w += m;
             }
         }
-        m = snprintf(out + w, total - (size_t)w,
-                     "Surface present modes (%zu):\n", (size_t)caps.presentModeCount);
+        m = snprintf(out + w, total - (size_t)w, "Surface present modes (%zu):\n",
+                     (size_t)caps.presentModeCount);
         if (m > 0) {
             w += m;
         }

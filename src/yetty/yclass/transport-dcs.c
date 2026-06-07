@@ -44,10 +44,9 @@ struct dcs_transport {
 /* Buffered handler — fires once per inbound envelope with the full
  * decoded body. Append it to inbuf for the next recv() call. */
 static struct yetty_ycore_void_result dcs_on_envelope(void *userdata,
-                                                       enum yetty_ywire_envelope_kind kind,
-                                                       int code, const uint8_t *args,
-                                                       size_t args_len, const uint8_t *payload,
-                                                       size_t payload_len)
+                                                      enum yetty_ywire_envelope_kind kind, int code,
+                                                      const uint8_t *args, size_t args_len,
+                                                      const uint8_t *payload, size_t payload_len)
 {
     (void)kind;
     (void)code;
@@ -68,17 +67,16 @@ static struct yetty_ycore_void_result dcs_flush_outbuf(struct dcs_transport *t)
     if (t->outbuf.size == 0) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r =
-        yetty_ywire_emit_to_fd(t->write_fd, YETTY_YWIRE_ENVELOPE_DCS, t->dcs_code,
-                               /*has_args=*/0, t->compressed, NULL, 0, t->outbuf.data,
-                               t->outbuf.size);
+    struct yetty_ycore_void_result r = yetty_ywire_emit_to_fd(
+        t->write_fd, YETTY_YWIRE_ENVELOPE_DCS, t->dcs_code,
+        /*has_args=*/0, t->compressed, NULL, 0, t->outbuf.data, t->outbuf.size);
     yetty_ycore_buffer_clear(&t->outbuf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "dcs_flush_outbuf: emit_to_fd");
     return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_size_result dcs_send(struct yetty_yclass_transport *base,
-                                                const void *bytes, size_t len)
+                                               const void *bytes, size_t len)
 {
     struct dcs_transport *t = (struct dcs_transport *)base;
     if (len == 0) {
@@ -93,7 +91,7 @@ static struct yetty_ycore_size_result dcs_send(struct yetty_yclass_transport *ba
 }
 
 static struct yetty_ycore_size_result dcs_recv(struct yetty_yclass_transport *base, void *buf,
-                                                size_t max)
+                                               size_t max)
 {
     struct dcs_transport *t = (struct dcs_transport *)base;
 
@@ -178,9 +176,9 @@ static struct yetty_ycore_void_result dcs_destroy(struct yetty_yclass_transport 
 }
 
 struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int read_fd,
-                                                                            int write_fd,
-                                                                            int dcs_code,
-                                                                            int compressed)
+                                                                           int write_fd,
+                                                                           int dcs_code,
+                                                                           int compressed)
 {
     if (read_fd < 0 || write_fd < 0) {
         return YETTY_ERR(yetty_yclass_transport_ptr, "transport_dcs_create: invalid fd");
@@ -202,8 +200,7 @@ struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int r
 
     /* NULL pty — we push bytes via wire_statemachine_feed instead of
      * letting the SM pull them itself. */
-    struct yetty_ywire_wire_statemachine_ptr_result sr =
-        yetty_ywire_wire_statemachine_create(NULL);
+    struct yetty_ywire_wire_statemachine_ptr_result sr = yetty_ywire_wire_statemachine_create(NULL);
     if (YETTY_IS_ERR(sr)) {
         free(t);
         return YETTY_ERR(yetty_yclass_transport_ptr, "transport_dcs_create: sm_create", sr);

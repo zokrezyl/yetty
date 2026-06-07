@@ -289,16 +289,15 @@ struct yetty_ylottie_animation_ptr_result yetty_ylottie_animation_create(
     anim->info.out_point = (float)yetty_ylottie_json_num_key(root, "op", 0.0);
     anim->info.width = (float)yetty_ylottie_json_num_key(root, "w", 0.0);
     anim->info.height = (float)yetty_ylottie_json_num_key(root, "h", 0.0);
-    anim->info.layer_count =
-        (anim->layers && anim->layers->type == YETTY_YLOTTIE_JSON_ARRAY)
-            ? (int)anim->layers->child_count
-            : 0;
+    anim->info.layer_count = (anim->layers && anim->layers->type == YETTY_YLOTTIE_JSON_ARRAY)
+                                 ? (int)anim->layers->child_count
+                                 : 0;
 
     resolve_target_size(config, anim->info.width, anim->info.height, &anim->scene_w,
                         &anim->scene_h);
     float scale = (anim->info.width > 0.0f) ? anim->scene_w / anim->info.width : 1.0f;
-    anim->default_font_size = (config && config->cell_height > 0) ? (float)config->cell_height
-                                                                  : 14.0f;
+    anim->default_font_size =
+        (config && config->cell_height > 0) ? (float)config->cell_height : 14.0f;
     /* root_ctm: uniform composition-unit → pixel scale (Lottie's origin is
      * already top-left, y-down, like the ydraw canvas). */
     anim->root_ctm.a = scale;
@@ -327,10 +326,11 @@ struct yetty_ylottie_render_result yetty_ylottie_animation_render_frame(
         return YETTY_ERR(yetty_ylottie_render, "ylottie: NULL animation");
     }
     struct yetty_ydraw_drawable_list_config bcfg = {.scene_min_x = 0.0f,
-                                                .scene_min_y = 0.0f,
-                                                .scene_max_x = anim->scene_w,
-                                                .scene_max_y = anim->scene_h};
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
+                                                    .scene_min_y = 0.0f,
+                                                    .scene_max_x = anim->scene_w,
+                                                    .scene_max_y = anim->scene_h};
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ylottie_render, "ylottie: buffer create failed", br);
     }
@@ -382,10 +382,9 @@ void yetty_ylottie_animation_destroy(struct yetty_ylottie_animation *anim)
  * Public entry point — one-shot single-frame wrapper over the animation API
  *===========================================================================*/
 
-struct yetty_ylottie_render_result yetty_ylottie_render(const char *content, size_t content_len,
-                                                        const char *args, size_t args_len,
-                                                        const struct yetty_ylottie_render_config
-                                                            *config)
+struct yetty_ylottie_render_result yetty_ylottie_render(
+    const char *content, size_t content_len, const char *args, size_t args_len,
+    const struct yetty_ylottie_render_config *config)
 {
     struct ylottie_params params = {0};
     params_parse(args, args_len, &params);

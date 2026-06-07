@@ -388,9 +388,8 @@ static nserror p_path(const struct redraw_context *ctx, const plot_style_t *s, c
                         .end_y = ys[k],
                     };
                     struct yetty_ycore_void_result seg_result =
-                        yetty_ydraw_drawable_list_add_cmd_add_segment(ns->cur_buf, 0,
-                                                                      ns->z_counter++, 0, col, sw,
-                                                                      &seg);
+                        yetty_ydraw_drawable_list_add_cmd_add_segment(
+                            ns->cur_buf, 0, ns->z_counter++, 0, col, sw, &seg);
                     if (YETTY_IS_ERR(seg_result)) {
                         free(xs);
                         free(ys);

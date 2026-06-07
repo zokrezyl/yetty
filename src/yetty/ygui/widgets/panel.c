@@ -31,8 +31,7 @@ static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_ctx 
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_panel_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_panel_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "panel_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_panel_class_get().value);
@@ -77,9 +76,9 @@ static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *yclas
         .half_height = h * 0.5f,
         .corner_radius = 0.0f,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, /*id=*/0, /*z_order=*/0,
-                                                 pack_rgba(d->bg), pack_rgba(d->border),
-                                                 d->border_width, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, /*id=*/0,
+                                                     /*z_order=*/0, pack_rgba(d->bg),
+                                                     pack_rgba(d->border), d->border_width, &geom);
 }
 
 [[clang::annotate("expose")]]

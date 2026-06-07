@@ -58,10 +58,9 @@ static struct yetty_ycore_void_result checkbox_constructor(struct yetty_yclass_c
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_checkbox_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_checkbox_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "checkbox_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_checkbox_class_get().value);
@@ -84,10 +83,8 @@ static struct yetty_ycore_void_result checkbox_destructor(struct yetty_yclass_ct
     struct checkbox_data *d = d_dr.value;
     free(d->label);
     d->label = NULL;
-    return yetty_ygui_super_void(
-        obj,
-        yetty_ygui_checkbox_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_checkbox_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx, float x, float y,
@@ -100,8 +97,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
-                                                     &geom);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
+                                                         0.0f, &geom);
     }
     struct yetty_ysdf_rounded_box geom = {
         .center_x = x + w * 0.5f,
@@ -113,8 +110,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
-                                                         0.0f, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill,
+                                                             0u, 0.0f, &geom);
 }
 
 [[clang::annotate("override@ygui:checkbox:widget_paint")]]
@@ -156,7 +153,7 @@ static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_ctx *yc
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)d->label, .capacity = strlen(d->label), .size = strlen(d->label)};
         rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, tx, ty, &tb, font_size,
-                                            COLOR_TEXT, 0, -1, 0.0f);
+                                                COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "checkbox_paint: label");
     }
     return YETTY_OK_VOID();
@@ -208,7 +205,8 @@ struct yetty_ycore_int_result yetty_ygui_checkbox_get_checked(const struct yetty
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_checkbox_get_checked: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_checkbox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_checkbox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_checkbox_get_checked: data_get");
     struct checkbox_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->checked);

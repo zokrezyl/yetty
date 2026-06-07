@@ -29,10 +29,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_choicebox_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_choicebox_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "choicebox: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
@@ -58,10 +57,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
         free(d->rows[i].label);
     }
     free(d->rows);
-    return yetty_ygui_super_void(
-        obj,
-        yetty_ygui_choicebox_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_choicebox_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:choicebox:widget_on_press")]]
@@ -126,14 +123,17 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         if (y > r.max.y) {
             break;
         }
-        struct yetty_ycore_void_result result_129 = yguix_box(ctx, r.min.x, y, w, ROW_H, d->rows[i].selected ? COLOR_ROW_ON : COLOR_ROW, 0);
+        struct yetty_ycore_void_result result_129 =
+            yguix_box(ctx, r.min.x, y, w, ROW_H, d->rows[i].selected ? COLOR_ROW_ON : COLOR_ROW, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_129, "choicebox: row");
         float fs = 13.0f;
         float ty = y + (ROW_H + fs) * 0.5f - 3;
-        struct yetty_ycore_void_result result_135 = yguix_text(ctx, d->rows[i].selected ? "[x]" : "[ ]", r.min.x + 8, ty,
-                                       fs, d->rows[i].selected ? COLOR_CHECK : COLOR_TEXT);
+        struct yetty_ycore_void_result result_135 =
+            yguix_text(ctx, d->rows[i].selected ? "[x]" : "[ ]", r.min.x + 8, ty, fs,
+                       d->rows[i].selected ? COLOR_CHECK : COLOR_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_135, "choicebox: marker");
-        struct yetty_ycore_void_result result_139 = yguix_text(ctx, d->rows[i].label, r.min.x + 40, ty, fs, COLOR_TEXT);
+        struct yetty_ycore_void_result result_139 =
+            yguix_text(ctx, d->rows[i].label, r.min.x + 40, ty, fs, COLOR_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_139, "choicebox: text");
     }
     return YETTY_OK_VOID();
@@ -183,12 +183,14 @@ struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_ygui_object
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(const struct yetty_ygui_object *obj, int idx)
+struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(const struct yetty_ygui_object *obj,
+                                                               int idx)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_choicebox_is_selected: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_choicebox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_choicebox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_choicebox_is_selected: data_get");
     struct cb_data *d = d_dr.value;
     if (idx < 0 || idx >= d->n) {

@@ -29,7 +29,7 @@ YETTY_YRESULT_DECLARE(yetty_yterminal_layer, struct yetty_yrender_terminal_layer
 
 /* PTY write callback - called when layer needs to send data to PTY */
 typedef struct yetty_ycore_void_result (*yetty_yterminal_pty_write_fn)(const char *data, size_t len,
-                                                                   void *userdata);
+                                                                       void *userdata);
 
 /* Request render callback - called when layer needs a render frame */
 typedef struct yetty_ycore_void_result (*yetty_yterminal_request_render_fn)(void *userdata);
@@ -50,22 +50,23 @@ typedef struct yetty_ycore_void_result (*yetty_yterminal_cursor_fn)(
  * args carry the *current* subscription state for both modes; the layer
  * fires this whenever either changes. */
 typedef struct yetty_ycore_void_result (*yetty_yterminal_mouse_sub_fn)(int click_enabled,
-                                                                   int move_enabled,
-                                                                   void *userdata);
+                                                                       int move_enabled,
+                                                                       void *userdata);
 
 /* Terminal-wide input subscription callback — fired when a layer
  * receives YETTY_OSC_CS_CLIENT_INPUT_SUB from the inferior. `flags` is the
  * new (post-update) bitmask of YETTY_YMGUI_TERM_SUB_* bits. flags == 0
  * means full unsubscribe. */
 typedef struct yetty_ycore_void_result (*yetty_yterminal_term_input_sub_fn)(uint32_t flags,
-                                                                        void *userdata);
+                                                                            void *userdata);
 
 /* OSC emit callback - fires when a layer needs to send an OSC envelope
  * back to the client app (PTY child). Used by ymgui-layer to deliver
  * focus events, by future bidirectional layers, etc. The terminal
  * implements this via terminal_yface_emit. */
-typedef struct yetty_ycore_void_result (*yetty_yterminal_emit_osc_fn)(int osc_code, const void *payload,
-                                                                  size_t len, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterminal_emit_osc_fn)(int osc_code,
+                                                                      const void *payload,
+                                                                      size_t len, void *userdata);
 
 /* Alt-screen-toggle callback - fired by the text-layer when libvterm
  * switches in/out of alternate-screen mode (DEC ?1047/?1049/?47). The
@@ -252,7 +253,8 @@ struct yetty_yrender_terminal_layer {
  * "#RRGGBBAA"). Default when unset or unparseable is opaque black. */
 struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     struct yetty_ycore_grid_size grid_size, const struct yetty_context *yetty_context);
-struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(struct yetty_yterminal_terminal *terminal);
+struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
+    struct yetty_yterminal_terminal *terminal);
 
 /* Get terminal as yui view (for pushing into pane) */
 struct yetty_yui_view *yetty_yterminal_terminal_as_view(struct yetty_yterminal_terminal *terminal);

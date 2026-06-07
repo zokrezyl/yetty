@@ -37,8 +37,7 @@ static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_ctx
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_dialog_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_dialog_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "dialog_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
@@ -71,9 +70,8 @@ static struct yetty_ycore_void_result dialog_destructor(struct yetty_yclass_ctx 
     struct dialog_data *d = d_dr.value;
     free(d->title);
     d->title = NULL;
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_dialog_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_dialog_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx, float x, float y,
@@ -89,8 +87,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
             .half_width = w * 0.5f,
             .half_height = h * 0.5f,
         };
-        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
-                                                     &geom);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
+                                                         0.0f, &geom);
     }
     if (radius > w * 0.5f) {
         radius = w * 0.5f;
@@ -108,8 +106,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
-                                                         0.0f, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill,
+                                                             0u, 0.0f, &geom);
 }
 
 [[clang::annotate("override@ygui:dialog:widget_paint")]]
@@ -144,8 +142,8 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *ycla
         float ty = r.min.y + (DIALOG_TITLE_H + fs) * 0.5f - 3.0f;
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)d->title, .capacity = strlen(d->title), .size = strlen(d->title)};
-        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + DIALOG_PAD, ty, &tb, fs,
-                                            COLOR_TITLE_TEXT, 0, -1, 0.0f);
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + DIALOG_PAD, ty,
+                                                &tb, fs, COLOR_TITLE_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "dialog_paint: title");
     }
     return YETTY_OK_VOID();
@@ -227,7 +225,8 @@ struct yetty_ycore_int_result yetty_ygui_dialog_is_open(const struct yetty_ygui_
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_dialog_is_open: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_dialog_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_dialog_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_dialog_is_open: data_get");
     struct dialog_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->open);

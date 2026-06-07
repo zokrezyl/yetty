@@ -31,8 +31,7 @@ static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx 
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_label_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_label_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "label_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_label_class_get().value);
@@ -56,9 +55,8 @@ static struct yetty_ycore_void_result label_destructor(struct yetty_yclass_ctx *
     struct label_data *d = d_dr.value;
     free(d->text);
     d->text = NULL;
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_label_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_label_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static uint32_t pack_rgba(struct yetty_ycore_rgba c)
@@ -96,9 +94,10 @@ static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *yclas
         .capacity = strlen(d->text),
         .size = strlen(d->text),
     };
-    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &text_buf, d->font_size,
-                                          pack_rgba(d->color), /*layer=*/0, /*font_id=*/-1,
-                                          /*rotation=*/0.0f);
+    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &text_buf,
+                                              d->font_size, pack_rgba(d->color), /*layer=*/0,
+                                              /*font_id=*/-1,
+                                              /*rotation=*/0.0f);
 }
 
 [[clang::annotate("expose")]]
@@ -127,12 +126,14 @@ struct yetty_ycore_void_result yetty_ygui_label_set_text(struct yetty_ygui_objec
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_const_char_ptr_result yetty_ygui_label_get_text(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_label_get_text(
+    const struct yetty_ygui_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_label_get_text: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_label_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_label_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_label_get_text: data_get");
     struct label_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, d->text);

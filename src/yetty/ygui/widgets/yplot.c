@@ -57,8 +57,7 @@ static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_ctx 
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_yplot_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_yplot_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yplot_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
@@ -85,9 +84,8 @@ static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_ctx *
     free(d->source);
     d->source = NULL;
     yplot_free_buffers(d);
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_yplot_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_yplot_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:yplot:widget_emit_container")]]
@@ -174,7 +172,8 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *y
          * accumulation bug as yimage. Prefix CMD_ZERO so the figure's
          * ygrid resets before consuming the fresh yplot record. See
          * yimage.c for the full rationale. */
-        struct yetty_ydraw_drawable_list_result zlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+        struct yetty_ydraw_drawable_list_result zlr =
+            yetty_ydraw_drawable_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(zlr)) {
             yetty_ydraw_drawable_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yplot_emit_body: prefix list create", zlr);

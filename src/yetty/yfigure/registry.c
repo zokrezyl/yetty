@@ -80,7 +80,8 @@ struct yetty_yfigure_figure_data_ptr_result yetty_yfigure_registry_mint(
     struct kind_entry *e;
     HASH_FIND_INT(registry->kinds, &kind, e);
     if (!e) {
-        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "yfigure_registry_mint: kind not registered");
+        return YETTY_ERR(yetty_yfigure_figure_data_ptr,
+                         "yfigure_registry_mint: kind not registered");
     }
     return e->factory(rect, context, e->user);
 }

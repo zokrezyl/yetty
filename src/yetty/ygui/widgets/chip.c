@@ -21,8 +21,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_chip_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_chip_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "chip: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
@@ -44,9 +43,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct chip_data *d = d_dr.value;
     free(d->label);
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_chip_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_chip_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:chip:widget_paint")]]
@@ -68,18 +66,21 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result result_71 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, h * 0.5f);
+    struct yetty_ycore_void_result result_71 =
+        yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, h * 0.5f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_71, "chip: bg");
     if (d->label) {
         float fs = h * 0.55f;
         float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
-        struct yetty_ycore_void_result result_76 = yguix_text(ctx, d->label, r.min.x + h * 0.5f, ty, fs, COLOR_TEXT);
+        struct yetty_ycore_void_result result_76 =
+            yguix_text(ctx, d->label, r.min.x + h * 0.5f, ty, fs, COLOR_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_76, "chip: label");
     }
     if (d->closable) {
         float fs = h * 0.55f;
         float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
-        struct yetty_ycore_void_result result_83 = yguix_text(ctx, "x", r.max.x - h * 0.5f - 4, ty, fs, COLOR_TEXT);
+        struct yetty_ycore_void_result result_83 =
+            yguix_text(ctx, "x", r.max.x - h * 0.5f - 4, ty, fs, COLOR_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_83, "chip: x");
     }
     return YETTY_OK_VOID();

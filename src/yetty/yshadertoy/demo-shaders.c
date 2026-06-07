@@ -145,7 +145,7 @@ static const char SHADER_SPIRAL[] =
     "}\n";
 
 const struct yetty_yshadertoy_demo_shader yetty_yshadertoy_demo_shaders[] = {
-    {"Mandelbrot", SHADER_MANDELBROT}, {"Julia", SHADER_JULIA}, {"Voronoi", SHADER_VORONOI},
+    {"Mandelbrot", SHADER_MANDELBROT}, {"Julia", SHADER_JULIA},   {"Voronoi", SHADER_VORONOI},
     {"Plasma", SHADER_PLASMA},         {"Spiral", SHADER_SPIRAL},
 };
 

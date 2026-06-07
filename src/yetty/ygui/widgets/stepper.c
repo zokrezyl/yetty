@@ -25,10 +25,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_stepper_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_stepper_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "stepper: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_stepper_class_get().value);
@@ -55,10 +54,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
         free(d->labels[i]);
     }
     free(d->labels);
-    return yetty_ygui_super_void(
-        obj,
-        yetty_ygui_stepper_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_stepper_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:stepper:widget_paint")]]
@@ -95,8 +92,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         float x0 = cx + (cr + gap * 0.5f) * (i == 0 ? 1 : 0) + i * (2 * cr + gap) + cr;
         (void)x0;
         float lx = r.min.x + cr + i * (2 * cr + gap) + cr;
-        struct yetty_ycore_void_result result_98 = yguix_box(ctx, lx, cy - 1, 2 * cr + gap, 2,
-                                      i < d->current ? COLOR_DONE : COLOR_LINE, 1);
+        struct yetty_ycore_void_result result_98 = yguix_box(
+            ctx, lx, cy - 1, 2 * cr + gap, 2, i < d->current ? COLOR_DONE : COLOR_LINE, 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_98, "stepper: line");
     }
     for (int i = 0; i < d->n; i++) {
@@ -105,10 +102,12 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_105, "stepper: c");
         char buf[8];
         snprintf(buf, sizeof(buf), "%d", i + 1);
-        struct yetty_ycore_void_result result_108 = yguix_text(ctx, buf, cx - 4, cy + 5, 13.0f, COLOR_NUM);
+        struct yetty_ycore_void_result result_108 =
+            yguix_text(ctx, buf, cx - 4, cy + 5, 13.0f, COLOR_NUM);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_108, "stepper: num");
         if (d->labels[i]) {
-            struct yetty_ycore_void_result result_111 = yguix_text(ctx, d->labels[i], cx - 24, cy + cr + 14, 12.0f, COLOR_TEXT);
+            struct yetty_ycore_void_result result_111 =
+                yguix_text(ctx, d->labels[i], cx - 24, cy + cr + 14, 12.0f, COLOR_TEXT);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_111, "stepper: label");
         }
         cx += 2 * cr + gap;

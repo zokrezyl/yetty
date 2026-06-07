@@ -311,7 +311,11 @@ struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *
         resize_ev.type = YETTY_YCORE_RESIZE;
         resize_ev.resize.width = width;
         resize_ev.resize.height = ws_h;
-        { struct yetty_ycore_int_result drop_r = yetty_yui_workspace_on_event(bar->workspaces[i], &resize_ev); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_on_event"); }
+        {
+            struct yetty_ycore_int_result drop_r =
+                yetty_yui_workspace_on_event(bar->workspaces[i], &resize_ev);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_on_event");
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -378,7 +382,11 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
      * leaf view gets a focus-out notification before the new one's
      * focus-in. */
     if (bar->count > 0 && bar->workspaces[bar->active]) {
-        { struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active"); }
+        {
+            struct yetty_ycore_void_result drop_r =
+                yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active");
+        }
     }
 
     bar->workspaces[bar->count++] = ws;
@@ -386,7 +394,10 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
 
     /* The new workspace becomes active immediately — cascade focus down
      * to its terminal so it knows it's the foreground view. */
-    { struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(ws, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active"); }
+    {
+        struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(ws, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active");
+    }
 
     /* Critical: the initial layout sets bounds via set_bounds, which the
      * terminal view only stores. The terminal grid (cols/rows) and the
@@ -402,7 +413,10 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
         resize_ev.type = YETTY_YCORE_RESIZE;
         resize_ev.resize.width = bar->width;
         resize_ev.resize.height = bar->height - strip;
-        { struct yetty_ycore_int_result drop_r = yetty_yui_workspace_on_event(ws, &resize_ev); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_on_event"); }
+        {
+            struct yetty_ycore_int_result drop_r = yetty_yui_workspace_on_event(ws, &resize_ev);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_on_event");
+        }
     }
 
     /* Kick a render so the just-created tab actually shows up. Otherwise
@@ -461,7 +475,11 @@ struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
     }
 
     if (bar->count > 0 && bar->workspaces[bar->active]) {
-        { struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active"); }
+        {
+            struct yetty_ycore_void_result drop_r =
+                yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active");
+        }
     }
     bar->workspaces[bar->count++] = ws;
     bar->active = bar->count - 1;
@@ -587,7 +605,11 @@ static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabba
      * Either way, refresh its focus cascade so its terminal knows it's
      * now the foreground view. */
     if (bar->count > 0 && bar->workspaces[bar->active]) {
-        { struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(bar->workspaces[bar->active], 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active"); }
+        {
+            struct yetty_ycore_void_result drop_r =
+                yetty_yui_workspace_set_active(bar->workspaces[bar->active], 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active");
+        }
     }
     tabbar_request_render(bar);
     return YETTY_OK_VOID();
@@ -722,8 +744,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (k >= KEY_1 && k <= KEY_9) {
-            struct yetty_ycore_void_result switch_result =
-                tabbar_switch(bar, (size_t)(k - KEY_1));
+            struct yetty_ycore_void_result switch_result = tabbar_switch(bar, (size_t)(k - KEY_1));
             if (YETTY_IS_ERR(switch_result)) {
                 yerror("tabbar: switch failed: %s", switch_result.error.msg);
                 yetty_ycore_error_destroy(switch_result.error);
@@ -1026,7 +1047,11 @@ struct yetty_ycore_void_result yetty_yui_tabbar_close_at(struct yetty_yui_tabbar
         bar->active--;
     }
     if (bar->count > 0 && bar->workspaces[bar->active]) {
-        { struct yetty_ycore_void_result drop_r = yetty_yui_workspace_set_active(bar->workspaces[bar->active], 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active"); }
+        {
+            struct yetty_ycore_void_result drop_r =
+                yetty_yui_workspace_set_active(bar->workspaces[bar->active], 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_workspace_set_active");
+        }
     }
     tabbar_request_render(bar);
     return YETTY_OK_VOID();

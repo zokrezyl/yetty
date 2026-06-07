@@ -124,7 +124,8 @@ struct yetty_ycore_int_result yetty_ygui_clickable_is_pressed(const struct yetty
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj, float *x, float *y)
+struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty_ygui_object *obj,
+                                                              float *x, float *y)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_clickable_press_pos: NULL obj");

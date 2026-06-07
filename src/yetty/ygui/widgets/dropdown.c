@@ -83,10 +83,9 @@ static struct yetty_ycore_void_result dropdown_constructor(struct yetty_yclass_c
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_dropdown_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_dropdown_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "dropdown_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_dropdown_class_get().value);
@@ -116,10 +115,8 @@ static struct yetty_ycore_void_result dropdown_destructor(struct yetty_yclass_ct
     free(d->options);
     d->options = NULL;
     /* Menu is borrowed; its parent owns its lifetime. */
-    return yetty_ygui_super_void(
-        obj,
-        yetty_ygui_dropdown_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_dropdown_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx, float x, float y,
@@ -130,8 +127,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                       .center_y = y + h * 0.5f,
                                       .half_width = w * 0.5f,
                                       .half_height = h * 0.5f};
-        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
-                                                     &geom);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
+                                                         0.0f, &geom);
     }
     if (radius > w * 0.5f) {
         radius = w * 0.5f;
@@ -149,8 +146,8 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
-                                                         0.0f, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill,
+                                                             0u, 0.0f, &geom);
 }
 
 [[clang::annotate("override@ygui:dropdown:widget_paint")]]
@@ -184,13 +181,13 @@ static struct yetty_ycore_void_result dropdown_paint(struct yetty_yclass_ctx *yc
     struct yetty_ycore_buffer tb = {
         .data = (uint8_t *)label, .capacity = strlen(label), .size = strlen(label)};
     rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + 12.0f, ty, &tb, fs,
-                                        COLOR_TEXT, 0, -1, 0.0f);
+                                            COLOR_TEXT, 0, -1, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "dropdown_paint: label");
     /* Down chevron glyph at right edge. */
     const char *chev = "v";
     struct yetty_ycore_buffer cb = {.data = (uint8_t *)chev, .capacity = 1, .size = 1};
     rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.max.x - 16.0f, ty, &cb, fs,
-                                        COLOR_CHEVRON, 0, -1, 0.0f);
+                                            COLOR_CHEVRON, 0, -1, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "dropdown_paint: chev");
     return YETTY_OK_VOID();
 }
@@ -270,7 +267,8 @@ struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(const struct yett
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_dropdown_get_selected: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_dropdown_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_dropdown_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_dropdown_get_selected: data_get");
     struct dropdown_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->selected);

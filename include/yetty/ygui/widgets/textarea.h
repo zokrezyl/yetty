@@ -18,7 +18,9 @@ struct yetty_ygui_textarea_data_ptr_result yetty_ygui_textarea_data(struct yetty
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_ygui_object *obj, const char *text);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_textarea_get_text(const struct yetty_ygui_object *obj);
+struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_ygui_object *obj,
+                                                            const char *text);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_textarea_get_text(
+    const struct yetty_ygui_object *obj);
 
 #endif

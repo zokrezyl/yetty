@@ -14,11 +14,13 @@ struct yetty_yclass_ptr_result yetty_ygui_ydraw_embed_class_get(void);
 struct yetty_ygui_object;
 struct embed_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_ydraw_embed_data_ptr, struct embed_data *);
-struct yetty_ygui_ydraw_embed_data_ptr_result yetty_ygui_ydraw_embed_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_ydraw_embed_data_ptr_result yetty_ygui_ydraw_embed_data(
+    struct yetty_ygui_object *obj);
 
 struct yetty_ydraw_drawable_list;
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_ygui_object *obj, struct yetty_ydraw_drawable_list *buf);
+struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(
+    struct yetty_ygui_object *obj, struct yetty_ydraw_drawable_list *buf);
 
 #endif

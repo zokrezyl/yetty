@@ -91,8 +91,8 @@ int yetty_ycat_register_handler(enum yetty_ycat_type type, yetty_ycat_handler_fn
 
 /* One-shot: detect → render. */
 struct yetty_ydraw_drawable_list_result yetty_ycat_render(const uint8_t *bytes, size_t len,
-                                                      const char *path_hint,
-                                                      const struct yetty_ycat_config *config);
+                                                          const char *path_hint,
+                                                          const struct yetty_ycat_config *config);
 
 /*=============================================================================
  * Streaming handlers — for types whose natural unit is smaller than the
@@ -133,9 +133,9 @@ const char *yetty_ycat_grammar_lookup(const char *mime, const char *path);
 
 /* Parse bytes with `grammar_name`, emit coloured spans into a fresh ydraw
  * buffer. Useful when targeting a yetty terminal (via the OSC envelope). */
-struct yetty_ydraw_drawable_list_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
-                                                         const char *grammar_name,
-                                                         const struct yetty_ycat_config *config);
+struct yetty_ydraw_drawable_list_result yetty_ycat_ts_render(
+    const uint8_t *bytes, size_t len, const char *grammar_name,
+    const struct yetty_ycat_config *config);
 
 /* Parse bytes with `grammar_name`, emit 24-bit SGR-coloured source text to
  * `out`. Works on any terminal. Returns 0 on success, -1 on failure. */
@@ -160,8 +160,8 @@ int yetty_ycat_fetch_url(const char *url, uint8_t **out, size_t *out_len, char *
 /* Emit an OSC 666674 (YDRAW_SCROLL) sequence wrapping the buffer's primitive
  * bytes (base64-encoded, `--bin` format) to `out`. Returns number of bytes
  * written, 0 on failure. */
-struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
-                                                       FILE *out);
+struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
+    const struct yetty_ydraw_drawable_list *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

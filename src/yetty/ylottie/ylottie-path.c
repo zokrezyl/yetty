@@ -101,7 +101,7 @@ static int read_xy(const struct yetty_ylottie_json *arr, size_t index, float *x,
  *===========================================================================*/
 
 int yetty_ylottie_bezier_flatten(struct yetty_ylottie_polyline *out,
-                                  const struct yetty_ylottie_json *shape_value, float tolerance)
+                                 const struct yetty_ylottie_json *shape_value, float tolerance)
 {
     memset(out, 0, sizeof(*out));
     if (!shape_value) {
@@ -214,8 +214,8 @@ int yetty_ylottie_polystar_build(struct yetty_ylottie_polyline *out,
     float rotation = yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(star, "r"), frame, 0.0f);
     float pts_f = yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(star, "pt"), frame, 5.0f);
     float outer = yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(star, "or"), frame, 0.0f);
-    float star_type = yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(star, "sy"), frame,
-                                                     1.0f);
+    float star_type =
+        yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(star, "sy"), frame, 1.0f);
 
     int num_pts = (int)lroundf(pts_f);
     if (num_pts < 2 || outer <= 0.0f) {

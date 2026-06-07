@@ -35,8 +35,7 @@ static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_yimage_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_yimage_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yimage_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
@@ -60,9 +59,8 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx 
     free(d->bytes);
     d->bytes = NULL;
     d->len = 0;
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_yimage_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_yimage_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 /* Mint the receiver-side YIMAGE figure on first emit; on subsequent
@@ -133,7 +131,8 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
          * instance/prim/cell state before consuming the fresh yimage
          * record. (The chrome ygrid's stream already starts with
          * CMD_ZERO via framework_emit; figure bodies need the same.) */
-        struct yetty_ydraw_drawable_list_result zlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+        struct yetty_ydraw_drawable_list_result zlr =
+            yetty_ydraw_drawable_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(zlr)) {
             yetty_ydraw_drawable_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: prefix list create", zlr);
@@ -198,12 +197,14 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(
+    const struct yetty_ygui_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_uint8_ptr, "yetty_ygui_yimage_bytes: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_uint8_ptr, d_dr, "yetty_ygui_yimage_bytes: data_get");
     struct yimage_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_uint8_ptr, d->bytes);
@@ -215,7 +216,8 @@ struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_yg
     if (!obj) {
         return YETTY_ERR(yetty_ycore_size, "yetty_ygui_yimage_bytes_len: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, d_dr, "yetty_ygui_yimage_bytes_len: data_get");
     struct yimage_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_size, d->len);

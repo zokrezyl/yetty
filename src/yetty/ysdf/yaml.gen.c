@@ -540,8 +540,8 @@ static struct yetty_ycore_void_result add_prim(
     }
 
     /* Add primitive to buffer */
-    struct yetty_ydraw_id_result r =
-        yetty_ydraw_drawable_list_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
+    struct yetty_ydraw_id_result r = yetty_ydraw_drawable_list_add_prim(
+        yaml_parse_ctx->buffer, data, word_count * sizeof(float));
     yaml_parse_ctx->z_order++;
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysdf yaml: add_prim failed");
     return YETTY_OK_VOID();

@@ -42,8 +42,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_radio_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_radio_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "radio: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_radio_class_get().value);
@@ -65,9 +64,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct radio_data *d = d_dr.value;
     free(d->label);
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_radio_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_radio_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:radio:widget_paint")]]
@@ -91,17 +89,21 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (radius < 7.0f) {
         radius = 7.0f;
     }
-    struct yetty_ycore_void_result result_94 = yguix_circle(ctx, r.min.x + radius + 2, cy, radius, COLOR_OUTER);
+    struct yetty_ycore_void_result result_94 =
+        yguix_circle(ctx, r.min.x + radius + 2, cy, radius, COLOR_OUTER);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_94, "radio: outer");
-    struct yetty_ycore_void_result result_97 = yguix_circle(ctx, r.min.x + radius + 2, cy, radius - 2, COLOR_INNER_OFF);
+    struct yetty_ycore_void_result result_97 =
+        yguix_circle(ctx, r.min.x + radius + 2, cy, radius - 2, COLOR_INNER_OFF);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_97, "radio: inner_bg");
     if (d->selected) {
-        struct yetty_ycore_void_result result_101 = yguix_circle(ctx, r.min.x + radius + 2, cy, radius * 0.5f, COLOR_INNER_ON);
+        struct yetty_ycore_void_result result_101 =
+            yguix_circle(ctx, r.min.x + radius + 2, cy, radius * 0.5f, COLOR_INNER_ON);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_101, "radio: dot");
     }
     if (d->label) {
         float fs = 14.0f;
-        struct yetty_ycore_void_result result_108 = yguix_text(ctx, d->label, r.min.x + 2 * radius + 12, cy + fs * 0.4f, fs, COLOR_TEXT);
+        struct yetty_ycore_void_result result_108 =
+            yguix_text(ctx, d->label, r.min.x + 2 * radius + 12, cy + fs * 0.4f, fs, COLOR_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_108, "radio: label");
     }
     return YETTY_OK_VOID();

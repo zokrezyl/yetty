@@ -242,12 +242,12 @@ void yetty_ydraw_figure_destroy(struct yetty_ydraw_figure *instance YETTY_ANNOT_
 // yimage, ...). Safe to call with no registrations. Concrete factories that
 // don't implement set_visual_zoom are silently skipped.
 void yetty_ydraw_composite_factory_set_visual_zoom(struct yetty_ydraw_composite_factory *factory,
-                                                    float scale, float offset_x, float offset_y);
+                                                   float scale, float offset_x, float offset_y);
 
 // Fan out "intrusive" cell-zoom state the same way (separate uniforms,
 // separate semantics — see set_cell_zoom in the concrete factory ops).
 void yetty_ydraw_composite_factory_set_cell_zoom(struct yetty_ydraw_composite_factory *factory,
-                                                  float scale, float offset_x, float offset_y);
+                                                 float scale, float offset_x, float offset_y);
 
 #ifdef __cplusplus
 }

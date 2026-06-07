@@ -77,8 +77,7 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     dw->pane_id = pane_id;
 
     struct yetty_ygui_object_ptr_result wr =
-        yetty_ygui_add(yetty_ygui_window_class_get().value,
-                       root);
+        yetty_ygui_add(yetty_ygui_window_class_get().value, root);
     if (YETTY_IS_ERR(wr)) {
         free(dw);
         return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: window widget", wr);
@@ -86,7 +85,8 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     dw->window = wr.value;
     yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(dw->window, "Debug"));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_bg_color(dw->window, DEBUG_WIN_BG));
-    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(dw->window, DEBUG_WIN_W, DEBUG_WIN_H));
+    yetty_ycore_error_destroy_safe(
+        yetty_ygui_widget_set_size(dw->window, DEBUG_WIN_W, DEBUG_WIN_H));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_floating(dw->window, 1));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dw->window, 1));
 
@@ -95,8 +95,7 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
      * a child of the same root and floats absolutely when opened. */
     {
         struct yetty_ygui_object_ptr_result mr =
-            yetty_ygui_add(yetty_ygui_popup_menu_class_get().value,
-                           root);
+            yetty_ygui_add(yetty_ygui_popup_menu_class_get().value, root);
         if (YETTY_IS_OK(mr)) {
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_popup_menu_add_item(mr.value, "(no actions yet)", NULL, NULL));
@@ -110,9 +109,8 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     if (body) {
         struct yetty_ygui_object **slots[3] = {&dw->label_1s, &dw->label_10s, &dw->label_60s};
         for (int i = 0; i < 3; i++) {
-            struct yetty_ygui_object_ptr_result lr = yetty_ygui_add(
-                yetty_ygui_label_class_get().value,
-                body);
+            struct yetty_ygui_object_ptr_result lr =
+                yetty_ygui_add(yetty_ygui_label_class_get().value, body);
             if (YETTY_IS_OK(lr)) {
                 yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(lr.value, "—"));
                 yetty_ycore_error_destroy_safe(
@@ -212,7 +210,8 @@ struct yetty_ycore_void_result yetty_yui_debug_window_set_stats(
         }
     } else {
         if (dw->label_1s) {
-            yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(dw->label_1s, "(no terminal)"));
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_label_set_text(dw->label_1s, "(no terminal)"));
         }
         if (dw->label_10s) {
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(dw->label_10s, ""));

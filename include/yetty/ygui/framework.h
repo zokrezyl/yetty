@@ -94,8 +94,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
  * Input — caller pushes raw byte stream (ASCII + CSI escapes) here.
  * The framework decodes and dispatches to widgets / the key callback.
  *---------------------------------------------------------------------------*/
-struct yetty_ycore_void_result yetty_ygui_framework_feed_input(struct yetty_ygui_framework *framework,
-                                                               const char *bytes, size_t n);
+struct yetty_ycore_void_result yetty_ygui_framework_feed_input(
+    struct yetty_ygui_framework *framework, const char *bytes, size_t n);
 
 /*-----------------------------------------------------------------------------
  * Mouse — caller pushes pointer events here. Coordinates are viewport
@@ -142,8 +142,8 @@ void yetty_ygui_framework_viewport(const struct yetty_ygui_framework *framework,
  * the old one). */
 struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_ygui_framework *framework);
 
-struct yetty_ycore_void_result yetty_ygui_framework_set_theme(struct yetty_ygui_framework *framework,
-                                                              struct yetty_ygui_theme *theme);
+struct yetty_ycore_void_result yetty_ygui_framework_set_theme(
+    struct yetty_ygui_framework *framework, struct yetty_ygui_theme *theme);
 
 /* Convenience: overlay any `style.ygui.*` / `style.yui.*` keys from
  * `config` onto the framework's owned theme in place. Missing keys leave
@@ -165,8 +165,10 @@ int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_framework *f
  * hit under the pointer on the last motion event, or NULL. Hosts use
  * these to drive cursor-shape decisions (e.g. resize cursor over a
  * splitter). Both are borrowed — do not destroy. */
-struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(struct yetty_ygui_framework *framework);
-struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(struct yetty_ygui_framework *framework);
+struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(
+    struct yetty_ygui_framework *framework);
+struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(
+    struct yetty_ygui_framework *framework);
 
 /* Transient notification ("toast"). The new toolkit has no overlay
  * surface yet, so these record the message to the trace log; the

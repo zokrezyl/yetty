@@ -368,8 +368,8 @@ static void ts_parse_done(TSParser *parser, TSTree *tree, uint32_t *color_map)
  *===========================================================================*/
 
 struct yetty_ydraw_drawable_list_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
-                                                         const char *grammar_name,
-                                                         const struct yetty_ycat_config *config)
+                                                             const char *grammar_name,
+                                                             const struct yetty_ycat_config *config)
 {
     TSParser *parser = NULL;
     TSTree *tree = NULL;
@@ -392,7 +392,8 @@ struct yetty_ydraw_drawable_list_result yetty_ycat_ts_render(const uint8_t *byte
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         ts_parse_done(parser, tree, color_map);
         return br;
@@ -479,8 +480,8 @@ int yetty_ycat_ts_emit_sgr(const uint8_t *bytes, size_t len, const char *grammar
 #else /* !YETTY_YCAT_HAS_TREESITTER */
 
 struct yetty_ydraw_drawable_list_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
-                                                         const char *grammar_name,
-                                                         const struct yetty_ycat_config *config)
+                                                             const char *grammar_name,
+                                                             const struct yetty_ycat_config *config)
 {
     (void)bytes;
     (void)len;

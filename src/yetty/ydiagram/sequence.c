@@ -385,9 +385,12 @@ static struct yetty_ycore_void_result seq_arrowhead(struct seq_render *r, float 
     float size = 9.0f;
     float ax = dir > 0 ? x - size : x + size;
     struct yetty_ysdf_triangle g = {
-        .vertex_a_x = x,        .vertex_a_y = y,
-        .vertex_b_x = ax,       .vertex_b_y = y - size * 0.45f,
-        .vertex_c_x = ax,       .vertex_c_y = y + size * 0.45f,
+        .vertex_a_x = x,
+        .vertex_a_y = y,
+        .vertex_b_x = ax,
+        .vertex_b_y = y - size * 0.45f,
+        .vertex_c_x = ax,
+        .vertex_c_y = y + size * 0.45f,
     };
     struct yetty_ycore_void_result add_result =
         yetty_ydraw_drawable_list_add_cmd_add_triangle(r->buf, 0, r->z++, color, 0, 0.0f, &g);
@@ -441,13 +444,11 @@ static struct yetty_ycore_void_result seq_emit_drawables(
         struct yetty_ycore_void_result bot_box_result =
             seq_box(r, p->x, bot_cy, bw, (float)SEQ_HEADER_H, header_fill, stroke, 2.0f, 4.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, bot_box_result, "seq_emit: bottom header box");
-        struct yetty_ycore_void_result top_text_result =
-            seq_text(r, p->x - lw * 0.5f, top_cy + SEQ_PART_FS / 3.0f, p->label, SEQ_PART_FS,
-                     text_color);
+        struct yetty_ycore_void_result top_text_result = seq_text(
+            r, p->x - lw * 0.5f, top_cy + SEQ_PART_FS / 3.0f, p->label, SEQ_PART_FS, text_color);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, top_text_result, "seq_emit: top header label");
-        struct yetty_ycore_void_result bot_text_result =
-            seq_text(r, p->x - lw * 0.5f, bot_cy + SEQ_PART_FS / 3.0f, p->label, SEQ_PART_FS,
-                     text_color);
+        struct yetty_ycore_void_result bot_text_result = seq_text(
+            r, p->x - lw * 0.5f, bot_cy + SEQ_PART_FS / 3.0f, p->label, SEQ_PART_FS, text_color);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, bot_text_result, "seq_emit: bottom header label");
     }
 
@@ -512,8 +513,7 @@ static struct yetty_ycore_void_result seq_emit_drawables(
             YETTY_RETURN_IF_ERR(yetty_ycore_void, line_result, "seq_emit: message line");
         }
         if (e->arrow) {
-            struct yetty_ycore_void_result head_result =
-                seq_arrowhead(r, tip, e->y, dir, stroke);
+            struct yetty_ycore_void_result head_result = seq_arrowhead(r, tip, e->y, dir, stroke);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, head_result, "seq_emit: message arrow");
         }
         float tw = measure(measure_fn, measure_ud, e->text, SEQ_MSG_FS);
@@ -588,7 +588,8 @@ struct yetty_ydiagram_seq_buffer_result yetty_ydiagram_sequence_render(
 
     struct yetty_ydraw_drawable_list_config cfg = {
         .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = total_w, .scene_max_y = total_h};
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
         seq_destroy(&s);
         return YETTY_ERR(yetty_ydiagram_seq_buffer, "sequence_render: buffer create failed", br);

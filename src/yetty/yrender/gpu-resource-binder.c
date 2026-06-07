@@ -133,8 +133,9 @@ struct yetty_yrender_gpu_resource_binder_impl {
 
 /* Forward declarations */
 static void binder_destroy(struct yetty_yrender_gpu_resource_binder *self);
-static struct yetty_ycore_void_result binder_submit(struct yetty_yrender_gpu_resource_binder *self,
-                                                    const struct yetty_yrender_gpu_resource_set *rs);
+static struct yetty_ycore_void_result binder_submit(
+    struct yetty_yrender_gpu_resource_binder *self,
+    const struct yetty_yrender_gpu_resource_set *rs);
 static struct yetty_ycore_void_result binder_finalize(
     struct yetty_yrender_gpu_resource_binder *self);
 static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_resource_binder *self);

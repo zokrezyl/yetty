@@ -29,8 +29,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_table_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_table_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "table: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
@@ -70,9 +69,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
         free_row(d->rows[i], d->n_cols);
     }
     free(d->rows);
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_table_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_table_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:table:widget_paint")]]
@@ -100,29 +98,32 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     float col_w = w / (float)d->n_cols;
     struct yetty_ycore_void_result result_101 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_BG, 4);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_101, "table: bg");
-    struct yetty_ycore_void_result result_103 = yguix_box(ctx, r.min.x, r.min.y, w, ROW_H, COLOR_HEADER, 0);
+    struct yetty_ycore_void_result result_103 =
+        yguix_box(ctx, r.min.x, r.min.y, w, ROW_H, COLOR_HEADER, 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_103, "table: header_bg");
     float fs = 13.0f;
     for (int c = 0; c < d->n_cols; c++) {
-        struct yetty_ycore_void_result result_108 = yguix_text(ctx, d->headers[c] ? d->headers[c] : "",
-                                       r.min.x + c * col_w + 8, r.min.y + (ROW_H + fs) * 0.5f - 3,
-                                       fs, COLOR_HEADER_TEXT);
+        struct yetty_ycore_void_result result_108 =
+            yguix_text(ctx, d->headers[c] ? d->headers[c] : "", r.min.x + c * col_w + 8,
+                       r.min.y + (ROW_H + fs) * 0.5f - 3, fs, COLOR_HEADER_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_108, "table: header");
     }
     /* Separator hairline below header. */
-    struct yetty_ycore_void_result result_115 = yguix_box(ctx, r.min.x, r.min.y + ROW_H, w, 1, COLOR_BORDER, 0);
+    struct yetty_ycore_void_result result_115 =
+        yguix_box(ctx, r.min.x, r.min.y + ROW_H, w, 1, COLOR_BORDER, 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_115, "table: hsep");
     for (int rr = 0; rr < d->n_rows; rr++) {
         float ry = r.min.y + (rr + 1) * ROW_H + 1;
         if (ry > r.max.y) {
             break;
         }
-        struct yetty_ycore_void_result result_123 = yguix_box(ctx, r.min.x, ry, w, ROW_H, (rr % 2) ? COLOR_ROW_B : COLOR_ROW_A, 0);
+        struct yetty_ycore_void_result result_123 =
+            yguix_box(ctx, r.min.x, ry, w, ROW_H, (rr % 2) ? COLOR_ROW_B : COLOR_ROW_A, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_123, "table: row");
         for (int c = 0; c < d->n_cols; c++) {
-            struct yetty_ycore_void_result result_128 = yguix_text(ctx, d->rows[rr][c] ? d->rows[rr][c] : "",
-                                           r.min.x + c * col_w + 8, ry + (ROW_H + fs) * 0.5f - 3,
-                                           fs, COLOR_TEXT);
+            struct yetty_ycore_void_result result_128 =
+                yguix_text(ctx, d->rows[rr][c] ? d->rows[rr][c] : "", r.min.x + c * col_w + 8,
+                           ry + (ROW_H + fs) * 0.5f - 3, fs, COLOR_TEXT);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_128, "table: cell");
         }
     }
