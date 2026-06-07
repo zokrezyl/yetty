@@ -493,6 +493,26 @@ struct yetty_ycore_void_result yetty_yvterm_ydraw_content_process_input(
         switch (code) {
         case YETTY_DCS_YDRAW_CLEAR:
             r = layer->canvas->ops->clear(layer->canvas);
+            /* CLEAR carries no payload, but its envelope terminator still
+             * has to be drained off the state machine — otherwise
+             * terminator_seen never gets set, the SM stalls inside this
+             * envelope, and the next envelope (typically the YDRAW_BIN that
+             * follows a clear+bin re-render) is silently dropped. The body
+             * is empty, so a single read consumes the terminator; loop to
+             * stay robust against a fragmented read landing on the boundary. */
+            while (YETTY_IS_OK(r) && !yetty_ywire_wire_statemachine_at_end(osc_statemachine)) {
+                uint8_t drain[16];
+                struct yetty_ycore_size_result drain_result =
+                    yetty_ywire_wire_statemachine_read(osc_statemachine, drain, sizeof(drain));
+                if (YETTY_IS_ERR(drain_result)) {
+                    r = YETTY_ERR(yetty_ycore_void, "ydraw: clear drain", drain_result);
+                    break;
+                }
+                if (drain_result.value == 0 &&
+                    !yetty_ywire_wire_statemachine_at_end(osc_statemachine)) {
+                    yetty_yplatform_coro_yield();
+                }
+            }
             break;
         case YETTY_DCS_YDRAW_BIN:
         case YETTY_DCS_YDRAW_OVERLAY:
