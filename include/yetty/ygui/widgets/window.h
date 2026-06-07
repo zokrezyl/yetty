@@ -19,8 +19,11 @@ struct yetty_ygui_window_data_ptr_result yetty_ygui_window_data(struct yetty_ygu
 struct yetty_ygui_object;
 
 struct yetty_ygui_object *yetty_ygui_window_body(struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_ygui_object *obj, const char *title);
-struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_ygui_object *obj, struct yetty_ygui_object *menu);
-struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_ygui_object *obj, int closable);
+struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_ygui_object *obj,
+                                                           const char *title);
+struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_ygui_object *obj,
+                                                          struct yetty_ygui_object *menu);
+struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_ygui_object *obj,
+                                                              int closable);
 
 #endif

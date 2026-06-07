@@ -218,7 +218,11 @@ static struct yetty_ycore_void_result write_file(const char *path, const uint8_t
     return YETTY_OK_VOID();
 }
 
-/* yetty_yplatform_install_asset_fn — invoked once per embedded blob. */
+/* yetty_yplatform_install_asset_fn — invoked once per embedded blob.
+ * Registered as a function pointer with a void signature dictated by the
+ * install iterator, so Result-returning calls inside are absorbed into
+ * ctx->result / ctx->failed and surfaced by the caller after the walk. */
+YETTY_EXTERNAL_CALLBACK
 static void install_asset(const char *name, const uint8_t *data, size_t size, int compressed,
                           void *userdata)
 {
@@ -293,9 +297,9 @@ static void install_asset(const char *name, const uint8_t *data, size_t size, in
 }
 
 /* Install one component and print its log line. */
-static struct yetty_ycore_void_result install_component(const struct yetty_yinstall_component *comp,
-                                                        const struct yetty_yinstall_options *options,
-                                                        uint64_t *total_bytes, size_t *total_files)
+static struct yetty_ycore_void_result install_component(
+    const struct yetty_yinstall_component *comp, const struct yetty_yinstall_options *options,
+    uint64_t *total_bytes, size_t *total_files)
 {
     struct component_install_ctx ctx = {0};
     ctx.component = comp;

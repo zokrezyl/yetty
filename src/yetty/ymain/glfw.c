@@ -90,5 +90,12 @@ int main(int argc, char **argv)
     struct yetty_yinit_app_config cfg = {
         .extract_assets_fn = yetty_platform_extract_assets,
     };
-    return yetty_yinit_run(argc, argv, &cfg, yetty_worker, NULL);
+    struct yetty_ycore_int_result run_result =
+        yetty_yinit_run(argc, argv, &cfg, yetty_worker, NULL);
+    if (YETTY_IS_ERR(run_result)) {
+        yetty_ycore_error_print(stderr, "yetty: bootstrap", run_result.error);
+        yetty_ycore_error_destroy(run_result.error);
+        return 1;
+    }
+    return run_result.value;
 }

@@ -27,8 +27,7 @@ static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_ctx *y
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_ymaze_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_ymaze_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymaze_ctor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ymaze_class_get().value);
@@ -57,9 +56,8 @@ static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_ctx *yc
     struct ymaze_data *d = d_dr.value;
     yetty_ymaze_destroy(d->maze);
     d->maze = NULL;
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_ymaze_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_ymaze_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:ymaze:widget_emit_body")]]
@@ -106,10 +104,14 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *ycl
     }
 
     /* Forward to super's emit_body (ydraw_embed paints the buffer). */
-    yetty_yclass_method_slot slot =
+    struct yetty_yclass_method_slot_result slot_result =
         yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
-    yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(
-        yetty_ygui_ymaze_class_get().value, slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_result, "ymaze_emit_body: slot");
+    yetty_yclass_method_slot slot = slot_result.value;
+    struct yetty_yclass_impl_t_result impl_result =
+        yetty_ygui_dispatch_lookup_super(yetty_ygui_ymaze_class_get().value, slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, impl_result, "ymaze_emit_body: dispatch");
+    yetty_yclass_impl_t impl = impl_result.value;
     if (!impl) {
         return YETTY_OK_VOID();
     }

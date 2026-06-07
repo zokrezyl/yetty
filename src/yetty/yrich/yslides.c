@@ -103,8 +103,8 @@ static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_drawable_list
         .capacity = s->text_len,
     };
     return yetty_ydraw_drawable_list_add_text(buf, text_x, text_y, &text, s->text_style.font_size,
-                                          s->text_style.color, layer + 1, s->text_style.font_id,
-                                          0.0f);
+                                              s->text_style.color, layer + 1, s->text_style.font_id,
+                                              0.0f);
 }
 
 static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e,
@@ -352,7 +352,7 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yrich_document 
 
     yetty_ydraw_drawable_list_clear(doc->buffer);
     yetty_ydraw_drawable_list_set_scene_bounds(doc->buffer, 0.0f, 0.0f, s->slide_width,
-                                           s->slide_height);
+                                               s->slide_height);
 
     struct yetty_yrich_slide *slide = yetty_yrich_slides_slide_at(s, s->current_slide);
     if (!slide) {

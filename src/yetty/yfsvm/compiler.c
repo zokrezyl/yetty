@@ -269,13 +269,13 @@ static const struct yetty_yfsvm_func_map funcs_1arg[] = {
 };
 
 static const struct yetty_yfsvm_func_map funcs_2arg[] = {
-    {"pow", YETTY_YFSVM_OP_POW},   {"atan2", YETTY_YFSVM_OP_ATAN2},
-    {"min", YETTY_YFSVM_OP_MIN},   {"max", YETTY_YFSVM_OP_MAX},
-    {"mod", YETTY_YFSVM_OP_MOD},   {"fmod", YETTY_YFSVM_OP_MOD},
-    {"step", YETTY_YFSVM_OP_STEP}, {"lt", YETTY_YFSVM_OP_LT},
-    {"gt", YETTY_YFSVM_OP_GT},     {"le", YETTY_YFSVM_OP_LE},
-    {"ge", YETTY_YFSVM_OP_GE},     {"eq", YETTY_YFSVM_OP_EQ},
-    {"ne", YETTY_YFSVM_OP_NE},     {"rand2", YETTY_YFSVM_OP_RAND2},
+    {"pow", YETTY_YFSVM_OP_POW},       {"atan2", YETTY_YFSVM_OP_ATAN2},
+    {"min", YETTY_YFSVM_OP_MIN},       {"max", YETTY_YFSVM_OP_MAX},
+    {"mod", YETTY_YFSVM_OP_MOD},       {"fmod", YETTY_YFSVM_OP_MOD},
+    {"step", YETTY_YFSVM_OP_STEP},     {"lt", YETTY_YFSVM_OP_LT},
+    {"gt", YETTY_YFSVM_OP_GT},         {"le", YETTY_YFSVM_OP_LE},
+    {"ge", YETTY_YFSVM_OP_GE},         {"eq", YETTY_YFSVM_OP_EQ},
+    {"ne", YETTY_YFSVM_OP_NE},         {"rand2", YETTY_YFSVM_OP_RAND2},
     {"noise2", YETTY_YFSVM_OP_NOISE2}, {NULL, 0},
 };
 

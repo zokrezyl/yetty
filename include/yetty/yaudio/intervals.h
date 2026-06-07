@@ -68,8 +68,8 @@ void yetty_yaudio_intervals_config_defaults(struct yetty_yaudio_intervals_config
  * dominant cost); `progress_ud` is passed through to it. */
 struct yetty_yaudio_intervals_ptr_result yetty_yaudio_intervals_find(
     const struct yetty_yaudio_wav *w, uint32_t channel,
-    const struct yetty_yaudio_intervals_config *cfg,
-    yetty_yaudio_progress_fn progress, void *progress_ud);
+    const struct yetty_yaudio_intervals_config *cfg, yetty_yaudio_progress_fn progress,
+    void *progress_ud);
 
 void yetty_yaudio_intervals_destroy(struct yetty_yaudio_intervals *iv);
 

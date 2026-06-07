@@ -78,10 +78,8 @@ struct yetty_ycore_void_result yetty_platform_extract_assets(void)
     if (yetty_incbin_assets_has_yemu(assets)) {
         if (yetty_incbin_assets_needs_extraction(assets, data_dir, "yemu")) {
             const char *yemu_files[] = {
-                "yemu/kernel-riscv64.bin",
-                "yemu/opensbi-fw_jump.elf",
-                "yemu/opensbi-fw_dynamic.bin",
-                "yemu/alpine-rootfs.img",
+                "yemu/kernel-riscv64.bin",     "yemu/opensbi-fw_jump.elf",
+                "yemu/opensbi-fw_dynamic.bin", "yemu/alpine-rootfs.img",
                 "yemu/yetty-rootfs-riscv.img",
             };
             for (size_t i = 0; i < sizeof(yemu_files) / sizeof(yemu_files[0]); i++) {

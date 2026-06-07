@@ -17,9 +17,11 @@
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ytrace/ytrace.h>
 
-struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_registry_create_default(void)
+struct yetty_ydraw_drawable_list_registry_ptr_result
+yetty_ydraw_drawable_list_registry_create_default(void)
 {
-    struct yetty_ydraw_drawable_list_registry_ptr_result res = yetty_ydraw_drawable_list_registry_create();
+    struct yetty_ydraw_drawable_list_registry_ptr_result res =
+        yetty_ydraw_drawable_list_registry_create();
     if (YETTY_IS_ERR(res)) {
         return res;
     }
@@ -40,7 +42,8 @@ struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_r
 
     // Drawable-list entry prims — one handler per type id, registered like SDF/complex
     struct yetty_ycore_void_result r_font = yetty_ydraw_drawable_list_registry_add(
-        reg, YETTY_YDRAW_RESOURCE_FONT, YETTY_YDRAW_RESOURCE_FONT, yetty_ydraw_font_resource_handler);
+        reg, YETTY_YDRAW_RESOURCE_FONT, YETTY_YDRAW_RESOURCE_FONT,
+        yetty_ydraw_font_resource_handler);
     if (YETTY_IS_ERR(r_font)) {
         yetty_ydraw_drawable_list_registry_destroy(reg);
         return YETTY_ERR(yetty_ydraw_drawable_list_registry_ptr,
@@ -51,8 +54,9 @@ struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_r
         yetty_ydraw_text_drawable_list_handler);
     if (YETTY_IS_ERR(r_ts)) {
         yetty_ydraw_drawable_list_registry_destroy(reg);
-        return YETTY_ERR(yetty_ydraw_drawable_list_registry_ptr,
-                         "drawable_list_registry_create_default: register TEXT_DRAWABLE_LIST handler", r_ts);
+        return YETTY_ERR(
+            yetty_ydraw_drawable_list_registry_ptr,
+            "drawable_list_registry_create_default: register TEXT_DRAWABLE_LIST handler", r_ts);
     }
 
     // Complex prim handler (types >= 0x80000000)
@@ -61,9 +65,11 @@ struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_r
     if (YETTY_IS_ERR(r_complex)) {
         yetty_ydraw_drawable_list_registry_destroy(reg);
         return YETTY_ERR(yetty_ydraw_drawable_list_registry_ptr,
-                         "drawable_list_registry_create_default: register complex handler", r_complex);
+                         "drawable_list_registry_create_default: register complex handler",
+                         r_complex);
     }
 
-    ydebug("drawable_list_registry_create_default: cmd + SDF default + FONT + TEXT_DRAWABLE_LIST + complex");
+    ydebug("drawable_list_registry_create_default: cmd + SDF default + FONT + TEXT_DRAWABLE_LIST + "
+           "complex");
     return res;
 }

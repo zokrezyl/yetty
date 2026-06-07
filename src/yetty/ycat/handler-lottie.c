@@ -10,10 +10,8 @@
 
 #include <yetty/ylottie/ylottie.h>
 
-struct yetty_ydraw_drawable_list_result yetty_ycat_handler_lottie(const uint8_t *bytes, size_t len,
-                                                              const char *path_hint,
-                                                              const struct yetty_ycat_config
-                                                                  *config)
+struct yetty_ydraw_drawable_list_result yetty_ycat_handler_lottie(
+    const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config)
 {
     (void)path_hint;
 

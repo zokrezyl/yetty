@@ -28,8 +28,8 @@ struct yetty_ycore_void_result yetty_yvterm_text_layer_process_input(
  * Pointer is owned by the text layer (or libvterm). Valid only until the
  * next call into text-layer that mutates the screen — read inside one
  * get_gpu_resource_set / render call only. */
-void yetty_yvterm_text_layer_get_cells(
-    const struct yetty_yrender_terminal_layer *self, const uint8_t **out_data, size_t *out_size);
+void yetty_yvterm_text_layer_get_cells(const struct yetty_yrender_terminal_layer *self,
+                                       const uint8_t **out_data, size_t *out_size);
 
 /* Row within the borrowed cell buffer where the visible screen's row 0 sits.
  * libvterm allocates the live buffer 2*rows tall and bumps this offset on
@@ -37,8 +37,7 @@ void yetty_yvterm_text_layer_get_cells(
  * cells (shader-glyph figure) must add this offset to locate visible cells,
  * exactly as text-layer.wgsl does. Returns 0 in scrollback-view mode, where
  * get_cells hands back a staging buffer already laid out from row 0. */
-uint32_t yetty_yvterm_text_layer_get_root_row(
-    const struct yetty_yrender_terminal_layer *self);
+uint32_t yetty_yvterm_text_layer_get_root_row(const struct yetty_yrender_terminal_layer *self);
 
 /* TEMP isolation: render the text-layer's owned figures (shader-glyph). */
 struct yetty_ydraw_target;
@@ -52,7 +51,6 @@ struct yetty_ycore_void_result yetty_yvterm_text_layer_render_figures(
  * the ydraw primitives are folded in. */
 struct yetty_ycore_void_result yetty_yvterm_text_layer_bind_ydraw(
     struct yetty_yrender_terminal_layer *self, struct yetty_yrender_terminal_layer *ydraw_layer);
-
 
 #ifdef __cplusplus
 }

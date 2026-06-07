@@ -30,10 +30,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_yshadertoy_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_yshadertoy_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yshadertoy: super");
     struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "ctor: data");
@@ -54,10 +53,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "dtor: data");
     struct yshadertoy_data *d = d_r.value;
     free(d->src);
-    return yetty_ygui_super_void(
-        obj,
-        yetty_ygui_yshadertoy_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_yshadertoy_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:yshadertoy:widget_emit_container")]]

@@ -33,8 +33,8 @@ static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *y
         .half_width = w * 0.5f,
         .half_height = h * 0.5f,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, COLOR_BORDER, 0u,
-                                                 0.0f, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u, COLOR_BORDER,
+                                                     0u, 0.0f, &geom);
 }
 
 struct [[clang::annotate("class@ygui:separator")]] [[clang::annotate(

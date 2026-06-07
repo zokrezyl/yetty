@@ -56,12 +56,12 @@
  * box. ~0.8 covers the tallest ascenders of the default font. */
 #define YMD_ASCENT 0.8f
 
-#define YMD_MARGIN 2.0f         /* left/top margin of the document */
-#define YMD_LIST_INDENT 20.0f   /* bullet / ordered-list hanging indent */
-#define YMD_QUOTE_GUTTER 12.0f  /* horizontal space reserved per quote level */
-#define YMD_QUOTE_BAR_W 3.0f    /* accent bar thickness for blockquotes */
-#define YMD_CODE_PAD 6.0f       /* horizontal padding inside a code panel */
-#define YMD_TABLE_PAD 6.0f      /* horizontal padding inside a table cell */
+#define YMD_MARGIN 2.0f        /* left/top margin of the document */
+#define YMD_LIST_INDENT 20.0f  /* bullet / ordered-list hanging indent */
+#define YMD_QUOTE_GUTTER 12.0f /* horizontal space reserved per quote level */
+#define YMD_QUOTE_BAR_W 3.0f   /* accent bar thickness for blockquotes */
+#define YMD_CODE_PAD 6.0f      /* horizontal padding inside a code panel */
+#define YMD_TABLE_PAD 6.0f     /* horizontal padding inside a table cell */
 #define YMD_TABLE_MIN_COLW 24.0f
 #define YMD_TABLE_BORDER_W 1.0f
 
@@ -72,10 +72,10 @@
  * the conventional #RRGGBB; the constant stores it byte-swapped (B and R
  * exchanged). Symmetric greys (#E6E6E6, #FFFFFF, #3D3D3D) read the same
  * either way. */
-#define YMD_COLOR_TEXT 0xFFE6E6E6u   /* #E6E6E6 off-white body */
-#define YMD_COLOR_BOLD 0xFFFFFFFFu   /* #FFFFFF */
-#define YMD_COLOR_CODE 0xFF99CC66u   /* #66CC99 */
-#define YMD_COLOR_HEADER 0xFFFFFFFFu /* #FFFFFF */
+#define YMD_COLOR_TEXT 0xFFE6E6E6u    /* #E6E6E6 off-white body */
+#define YMD_COLOR_BOLD 0xFFFFFFFFu    /* #FFFFFF */
+#define YMD_COLOR_CODE 0xFF99CC66u    /* #66CC99 */
+#define YMD_COLOR_HEADER 0xFFFFFFFFu  /* #FFFFFF */
 #define YMD_COLOR_CODE_BG 0xFF3D3D3Du /* #3D3D3D */
 
 /* New surfaces follow the brand palette (mint accent, teal borders,
@@ -146,8 +146,8 @@ struct yetty_ymarkdown_ymd_line {
     float scale;
 
     enum yetty_ymarkdown_ymd_kind kind;
-    int quote_depth;        /* >0 for blockquote lines */
-    size_t code_cols;       /* CODE lines: panel width in characters */
+    int quote_depth;  /* >0 for blockquote lines */
+    size_t code_cols; /* CODE lines: panel width in characters */
 
     /* Owned buffer that backs span text slices (and the verbatim text of a
      * CODE line). Inline markers stay in the buffer; spans address exact
@@ -453,8 +453,8 @@ static int ymd_parse_inline(struct yetty_ymarkdown_ymd_span **spans, size_t *cou
                     s.text = ln + pos + 1;
                     s.text_len = close - pos - 1;
                     s.is_link = true;
-                    s.style = (header_level > 0) ? YETTY_YMARKDOWN_YMD_BOLD
-                                                 : YETTY_YMARKDOWN_YMD_REGULAR;
+                    s.style =
+                        (header_level > 0) ? YETTY_YMARKDOWN_YMD_BOLD : YETTY_YMARKDOWN_YMD_REGULAR;
                     if (ymd_spans_push(spans, count, cap, s) < 0) {
                         return -1;
                     }
@@ -472,8 +472,8 @@ static int ymd_parse_inline(struct yetty_ymarkdown_ymd_span **spans, size_t *cou
                 s.text = ln + pos + 2;
                 s.text_len = end - pos - 2;
                 s.strike = true;
-                s.style = (header_level > 0) ? YETTY_YMARKDOWN_YMD_BOLD
-                                             : YETTY_YMARKDOWN_YMD_REGULAR;
+                s.style =
+                    (header_level > 0) ? YETTY_YMARKDOWN_YMD_BOLD : YETTY_YMARKDOWN_YMD_REGULAR;
                 if (ymd_spans_push(spans, count, cap, s) < 0) {
                     return -1;
                 }
@@ -733,8 +733,8 @@ struct ymd_line_slice {
 /* Parse a table that starts at slices[*idx] (header) with slices[*idx+1] as
  * the separator. Pushes one TABLE line onto `doc` and advances *idx past the
  * whole table. */
-static int ymd_parse_table(struct yetty_ymarkdown_ymd_doc *doc,
-                           const struct ymd_line_slice *slices, size_t nslices, size_t *idx)
+static int ymd_parse_table(struct yetty_ymarkdown_ymd_doc *doc, const struct ymd_line_slice *slices,
+                           size_t nslices, size_t *idx)
 {
     size_t header = *idx;
     size_t sep = header + 1;
@@ -774,7 +774,8 @@ static int ymd_parse_table(struct yetty_ymarkdown_ymd_doc *doc,
     /* header row (bold) */
     for (size_t c = 0; c < ncols; c++) {
         struct yetty_ymarkdown_ymd_cell *cell = &table->cells[c];
-        cell->align = c < na ? ymd_parse_align(acells[c], alens[c]) : YETTY_YMARKDOWN_YMD_ALIGN_LEFT;
+        cell->align =
+            c < na ? ymd_parse_align(acells[c], alens[c]) : YETTY_YMARKDOWN_YMD_ALIGN_LEFT;
         if (ymd_cell_fill(cell, hcells[c], hlens[c], 1) < 0) {
             ymd_table_destroy(table);
             return -1;
@@ -817,7 +818,7 @@ static int ymd_parse_table(struct yetty_ymarkdown_ymd_doc *doc,
  *===========================================================================*/
 
 static int ymd_parse_normal_line(struct yetty_ymarkdown_ymd_doc *doc, const char *src,
-                                  size_t src_len)
+                                 size_t src_len)
 {
     struct yetty_ymarkdown_ymd_line line = {0};
     line.scale = 1.0f;
@@ -1017,7 +1018,8 @@ static int ymd_parse(struct yetty_ymarkdown_ymd_doc *doc, const char *content, s
             size_t body_start = idx + 1;
             size_t body_end = body_start;
             size_t max_cols = 0;
-            while (body_end < nslices && ymd_fence_char(slices[body_end].p, slices[body_end].len) != fence) {
+            while (body_end < nslices &&
+                   ymd_fence_char(slices[body_end].p, slices[body_end].len) != fence) {
                 if (slices[body_end].len > max_cols) {
                     max_cols = slices[body_end].len;
                 }
@@ -1130,12 +1132,12 @@ static struct yetty_ycore_void_result ymd_emit_box(struct yetty_ydraw_drawable_l
     return yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, 0, fill, 0, 0.0f, &geom);
 }
 
-static struct yetty_ycore_void_result ymd_emit_hline(struct yetty_ydraw_drawable_list *buf, float x0,
-                                                     float x1, float y, uint32_t color)
+static struct yetty_ycore_void_result ymd_emit_hline(struct yetty_ydraw_drawable_list *buf,
+                                                     float x0, float x1, float y, uint32_t color)
 {
     struct yetty_ysdf_segment geom = {.start_x = x0, .start_y = y, .end_x = x1, .end_y = y};
     return yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, 0, 0u, color, YMD_TABLE_BORDER_W,
-                                                     &geom);
+                                                         &geom);
 }
 
 static struct yetty_ycore_void_result ymd_emit_vline(struct yetty_ydraw_drawable_list *buf, float x,
@@ -1143,7 +1145,7 @@ static struct yetty_ycore_void_result ymd_emit_vline(struct yetty_ydraw_drawable
 {
     struct yetty_ysdf_segment geom = {.start_x = x, .start_y = y0, .end_x = x, .end_y = y1};
     return yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, 0, 0u, color, YMD_TABLE_BORDER_W,
-                                                     &geom);
+                                                         &geom);
 }
 
 /* Emit a run of spans starting at (x, y). `override` recolours spans that
@@ -1181,9 +1183,9 @@ static struct yetty_ycore_void_result ymd_emit_spans(struct yetty_ydraw_drawable
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "ymd span: text add failed");
 
         if (span->strike) {
-            struct yetty_ycore_void_result sr = ymd_emit_box(
-                buf, cursor_x + text_w * 0.5f, y + scaled_size * 0.5f, text_w * 0.5f, 0.9f,
-                YMD_COLOR_STRIKE);
+            struct yetty_ycore_void_result sr =
+                ymd_emit_box(buf, cursor_x + text_w * 0.5f, y + scaled_size * 0.5f, text_w * 0.5f,
+                             0.9f, YMD_COLOR_STRIKE);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymd span: strike add failed");
         }
 
@@ -1220,7 +1222,8 @@ static struct yetty_ycore_void_result ymd_emit_table(struct yetty_ydraw_drawable
         float w = YMD_TABLE_MIN_COLW;
         for (size_t r = 0; r < nrows; r++) {
             const struct yetty_ymarkdown_ymd_cell *cell = &table->cells[r * ncols + c];
-            float cw = ymd_measure_spans(cell->spans, cell->span_count, scaled) + 2.0f * YMD_TABLE_PAD;
+            float cw =
+                ymd_measure_spans(cell->spans, cell->span_count, scaled) + 2.0f * YMD_TABLE_PAD;
             if (cw > w) {
                 w = cw;
             }
@@ -1235,9 +1238,9 @@ static struct yetty_ycore_void_result ymd_emit_table(struct yetty_ydraw_drawable
     float table_h = (float)nrows * row_h;
 
     /* header background */
-    struct yetty_ycore_void_result hb = ymd_emit_box(buf, x0 + table_w * 0.5f, y0 + row_h * 0.5f,
-                                                     table_w * 0.5f, row_h * 0.5f,
-                                                     YMD_COLOR_TABLE_HDR_BG);
+    struct yetty_ycore_void_result hb =
+        ymd_emit_box(buf, x0 + table_w * 0.5f, y0 + row_h * 0.5f, table_w * 0.5f, row_h * 0.5f,
+                     YMD_COLOR_TABLE_HDR_BG);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hb, "ymd table: header bg");
 
     /* horizontal grid lines */
@@ -1413,7 +1416,8 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ymarkdown_render, br.error.msg);
     }

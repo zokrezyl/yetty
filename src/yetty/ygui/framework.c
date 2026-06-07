@@ -1266,7 +1266,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
      * subtree into it, ship it as the figure's body, then restore. The
      * leading CMD_ZERO wipes this figure's prims on the receiver each
      * frame (full-redraw model, same as the chrome ygrid). */
-    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result dlr =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dlr,
                         "yetty_ygui_framework_walk_emit_body: figure drawable_list create");
     struct yetty_ydraw_drawable_list *figure_dl = dlr.value;
@@ -1511,9 +1512,11 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_frame
      * across frames. clear() rewinds the primitives byte cursor without
      * freeing the allocation. */
     if (!framework->ygrid_drawable_list) {
-        struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+        struct yetty_ydraw_drawable_list_result dlr =
+            yetty_ydraw_drawable_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(dlr)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: drawable_list create", dlr);
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: drawable_list create",
+                             dlr);
         }
         framework->ygrid_drawable_list = dlr.value;
     } else {

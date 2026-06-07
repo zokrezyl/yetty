@@ -69,9 +69,8 @@ static void on_frame(void *user)
          * before SIGWINCH fires) and emits SET_CHILD_RECT. With
          * (col=0,row=0,w_cells=0,h_cells=0) the figure auto-fills the
          * pane. */
-        yetty_ymgui_ImGui_ImplYetty_MoveFigure(
-            S->figure_id, /*col=*/0, /*row=*/0,
-            /*w_cells=*/0, /*h_cells=*/0);
+        yetty_ymgui_ImGui_ImplYetty_MoveFigure(S->figure_id, /*col=*/0, /*row=*/0,
+                                               /*w_cells=*/0, /*h_cells=*/0);
     }
 
     yetty_ymgui_ImGui_ImplYetty_BeginFigureFrame(S->figure_id);
@@ -168,13 +167,15 @@ int main(int argc, char **argv)
     struct yetty_yclient_lib_event_loop_config cfg = {};
     cfg.in_fd = -1;
     cfg.user = &state;
-    state.loop = yetty_yclient_event_loop_create(&cfg);
-    if (!state.loop) {
-        fprintf(stderr, "ymgui: event loop create failed\n");
+    struct yetty_yclient_event_loop_ptr_result loop_result = yetty_yclient_event_loop_create(&cfg);
+    if (YETTY_IS_ERR(loop_result)) {
+        yetty_ycore_error_print(stderr, "ymgui: event loop create", loop_result.error);
+        yetty_ycore_error_destroy(loop_result.error);
         yetty_ymgui_ImGui_ImplYetty_PlatformShutdown();
         yetty_ymgui_ImGui_ImplYetty_Shutdown();
         return 1;
     }
+    state.loop = loop_result.value;
 
     yetty_ymgui_ImGui_ImplYetty_AttachEventLoop(state.loop);
     yetty_yclient_event_loop_set_user(state.loop, &state);

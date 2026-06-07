@@ -28,8 +28,9 @@
  * across compilers. */
 static inline _Bool size_add_check(size_t a, size_t b, size_t *out)
 {
-    if (a > SIZE_MAX - b)
+    if (a > SIZE_MAX - b) {
         return 1;
+    }
     *out = a + b;
     return 0;
 }
@@ -59,19 +60,19 @@ struct yetty_yclass {
 };
 
 struct slot_entry {
-    char *qname;                       /* owned: "<domain>_<local_name>" */
-    const char *local_name;            /* points into qname after the boundary */
+    char *qname;            /* owned: "<domain>_<local_name>" */
+    const char *local_name; /* points into qname after the boundary */
     yetty_yclass_method_id_t local_id;
     yetty_yclass_method_slot slot_index; /* packed (domain_id, local_idx) */
-    UT_hash_handle hh_lname;           /* by local_name within the per-domain table */
-    UT_hash_handle hh_id;              /* by local_id within the per-domain table */
-    UT_hash_handle hh_qname;           /* by qname in the global qname hash */
+    UT_hash_handle hh_lname;             /* by local_name within the per-domain table */
+    UT_hash_handle hh_id;                /* by local_id within the per-domain table */
+    UT_hash_handle hh_qname;             /* by qname in the global qname hash */
 };
 
 struct yetty_yclass_slot_table {
-    char *domain;                     /* owned */
-    uint8_t domain_id;                /* 1..YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS-1 */
-    struct slot_entry **by_index;     /* local index → entry */
+    char *domain;                 /* owned */
+    uint8_t domain_id;            /* 1..YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS-1 */
+    struct slot_entry **by_index; /* local index → entry */
     size_t count;
     size_t cap;
     struct slot_entry *by_local_name; /* uthash root */
@@ -118,14 +119,12 @@ struct yetty_yclass_slot_table_ptr_result yetty_yclass_slot_table_get(const char
     }
     tbl = calloc(1, sizeof(*tbl));
     if (!tbl) {
-        return YETTY_ERR(yetty_yclass_slot_table_ptr,
-                         "slot_table_get: calloc(slot_table) failed");
+        return YETTY_ERR(yetty_yclass_slot_table_ptr, "slot_table_get: calloc(slot_table) failed");
     }
     tbl->domain = strdup(domain);
     if (!tbl->domain) {
         free(tbl);
-        return YETTY_ERR(yetty_yclass_slot_table_ptr,
-                         "slot_table_get: strdup(domain) failed");
+        return YETTY_ERR(yetty_yclass_slot_table_ptr, "slot_table_get: strdup(domain) failed");
     }
     tbl->domain_id = reg->next_id++;
     reg->by_id[tbl->domain_id] = tbl;
@@ -133,23 +132,20 @@ struct yetty_yclass_slot_table_ptr_result yetty_yclass_slot_table_get(const char
     return YETTY_OK(yetty_yclass_slot_table_ptr, tbl);
 }
 
-struct yetty_yclass_method_slot_result
-yetty_yclass_method_slot_register(const char *domain, const char *name,
-                                  yetty_yclass_method_id_t id)
+struct yetty_yclass_method_slot_result yetty_yclass_method_slot_register(
+    const char *domain, const char *name, yetty_yclass_method_id_t id)
 {
     ydebug("domain=%s name=%s id=%p", domain ? domain : "(null)", name ? name : "(null)",
            (void *)id);
     if (!domain || !name) {
-        return YETTY_ERR(yetty_yclass_method_slot,
-                         "method_slot_register: NULL domain or name");
+        return YETTY_ERR(yetty_yclass_method_slot, "method_slot_register: NULL domain or name");
     }
     /* `id` is the public-stub fn-ptr used as the by_local_id hash key.
      * method_slot_get rejects NULL ids, so accepting NULL here would
      * create a slot that can't be located through the dispatch path —
      * silently broken at first call. Reject at registration time. */
     if (!id) {
-        return YETTY_ERR(yetty_yclass_method_slot,
-                         "method_slot_register: NULL method_id_t");
+        return YETTY_ERR(yetty_yclass_method_slot, "method_slot_register: NULL method_id_t");
     }
     struct yetty_yclass_slot_table_ptr_result tbl_r = yetty_yclass_slot_table_get(domain);
     YETTY_RETURN_IF_ERR(yetty_yclass_method_slot, tbl_r,
@@ -191,14 +187,12 @@ yetty_yclass_method_slot_register(const char *domain, const char *name,
         size_add_check(qname_size, loc_len, &qname_size) ||
         size_add_check(qname_size, 1, &qname_size)) {
         free(e);
-        return YETTY_ERR(yetty_yclass_method_slot,
-                         "method_slot_register: qname size overflow");
+        return YETTY_ERR(yetty_yclass_method_slot, "method_slot_register: qname size overflow");
     }
     e->qname = malloc(qname_size);
     if (!e->qname) {
         free(e);
-        return YETTY_ERR(yetty_yclass_method_slot,
-                         "method_slot_register: malloc(qname) failed");
+        return YETTY_ERR(yetty_yclass_method_slot, "method_slot_register: malloc(qname) failed");
     }
     memcpy(e->qname, tbl->domain, dom_len);
     e->qname[dom_len] = '_';
@@ -252,8 +246,8 @@ yetty_yclass_method_slot_register(const char *domain, const char *name,
     return YETTY_OK(yetty_yclass_method_slot, e->slot_index);
 }
 
-struct yetty_yclass_method_slot_result
-yetty_yclass_method_slot_get(const char *domain, yetty_yclass_method_id_t id)
+struct yetty_yclass_method_slot_result yetty_yclass_method_slot_get(const char *domain,
+                                                                    yetty_yclass_method_id_t id)
 {
     ydebug("domain=%s id=%p", domain ? domain : "(null)", (void *)id);
     if (!domain || !id) {
@@ -274,20 +268,18 @@ yetty_yclass_method_slot_get(const char *domain, yetty_yclass_method_id_t id)
     return YETTY_OK(yetty_yclass_method_slot, e->slot_index);
 }
 
-struct yetty_yclass_method_slot_result
-yetty_yclass_method_slot_by_name(const char *domain, const char *name)
+struct yetty_yclass_method_slot_result yetty_yclass_method_slot_by_name(const char *domain,
+                                                                        const char *name)
 {
     ydebug("domain=%s name=%s", domain ? domain : "(null)", name ? name : "(null)");
     if (!domain || !name) {
-        return YETTY_ERR(yetty_yclass_method_slot,
-                         "method_slot_by_name: NULL domain or name");
+        return YETTY_ERR(yetty_yclass_method_slot, "method_slot_by_name: NULL domain or name");
     }
     struct domain_registry *reg = dreg();
     struct yetty_yclass_slot_table *tbl = NULL;
     HASH_FIND(hh_dom, reg->by_name, domain, strlen(domain), tbl);
     if (!tbl) {
-        return YETTY_ERR(yetty_yclass_method_slot,
-                         "method_slot_by_name: domain not registered");
+        return YETTY_ERR(yetty_yclass_method_slot, "method_slot_by_name: domain not registered");
     }
     struct slot_entry *e = NULL;
     HASH_FIND(hh_lname, tbl->by_local_name, name, strlen(name), e);
@@ -307,19 +299,17 @@ struct yetty_yclass_method_slot_result yetty_yclass_method_slot_by_qname(const c
     struct slot_entry *e = NULL;
     HASH_FIND(hh_qname, *global_qname_root(), qname, strlen(qname), e);
     if (!e) {
-        return YETTY_ERR(yetty_yclass_method_slot,
-                         "method_slot_by_qname: qname not registered");
+        return YETTY_ERR(yetty_yclass_method_slot, "method_slot_by_qname: qname not registered");
     }
     return YETTY_OK(yetty_yclass_method_slot, e->slot_index);
 }
 
-struct yetty_yclass_const_char_ptr_result
-yetty_yclass_method_slot_name(yetty_yclass_method_slot slot)
+struct yetty_yclass_const_char_ptr_result yetty_yclass_method_slot_name(
+    yetty_yclass_method_slot slot)
 {
     ydebug("slot=0x%08x", slot);
     if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        return YETTY_ERR(yetty_yclass_const_char_ptr,
-                         "method_slot_name: METHOD_SLOT_UNDEFINED");
+        return YETTY_ERR(yetty_yclass_const_char_ptr, "method_slot_name: METHOD_SLOT_UNDEFINED");
     }
     uint8_t dom = YETTY_YCLASS_METHOD_SLOT_DOMAIN_OF(slot);
     uint32_t idx = YETTY_YCLASS_METHOD_SLOT_INDEX_OF(slot);
@@ -328,42 +318,45 @@ yetty_yclass_method_slot_name(yetty_yclass_method_slot slot)
     }
     struct yetty_yclass_slot_table *tbl = dreg()->by_id[dom];
     if (!tbl || idx >= tbl->count) {
-        return YETTY_ERR(yetty_yclass_const_char_ptr,
-                         "method_slot_name: slot index out of range");
+        return YETTY_ERR(yetty_yclass_const_char_ptr, "method_slot_name: slot index out of range");
     }
     return YETTY_OK(yetty_yclass_const_char_ptr, tbl->by_index[idx]->qname);
 }
 
-struct yetty_yclass_impl_t_result
-yetty_yclass_dispatch_lookup(const struct yetty_yclass *cls, yetty_yclass_method_slot slot)
+struct yetty_yclass_impl_t_result yetty_yclass_dispatch_lookup(const struct yetty_yclass *cls,
+                                                               yetty_yclass_method_slot slot)
 {
-    if (!cls)
+    if (!cls) {
         return YETTY_ERR(yetty_yclass_impl_t, "dispatch_lookup: NULL class");
-    if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED)
-        return YETTY_ERR(yetty_yclass_impl_t,
-                         "dispatch_lookup: METHOD_SLOT_UNDEFINED");
+    }
+    if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        return YETTY_ERR(yetty_yclass_impl_t, "dispatch_lookup: METHOD_SLOT_UNDEFINED");
+    }
     uint8_t dom = YETTY_YCLASS_METHOD_SLOT_DOMAIN_OF(slot);
     uint32_t idx = YETTY_YCLASS_METHOD_SLOT_INDEX_OF(slot);
-    if (dom == 0 || dom >= YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS)
-        return YETTY_ERR(yetty_yclass_impl_t,
-                         "dispatch_lookup: invalid slot domain id");
+    if (dom == 0 || dom >= YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS) {
+        return YETTY_ERR(yetty_yclass_impl_t, "dispatch_lookup: invalid slot domain id");
+    }
     const struct dispatch_slice *ds = &cls->dispatch_by_domain[dom];
-    if (idx >= ds->count)
+    if (idx >= ds->count) {
         return YETTY_ERR(yetty_yclass_impl_t,
                          "dispatch_lookup: slot index out of class's dispatch range");
-    if (!ds->impls[idx])
+    }
+    if (!ds->impls[idx]) {
         return YETTY_ERR(yetty_yclass_impl_t,
                          "dispatch_lookup: class does not implement this slot");
+    }
     return YETTY_OK(yetty_yclass_impl_t, ds->impls[idx]);
 }
 
-struct yetty_yclass_ptr_result
-yetty_yclass_object_class(const struct yetty_yclass_object *obj)
+struct yetty_yclass_ptr_result yetty_yclass_object_class(const struct yetty_yclass_object *obj)
 {
-    if (!obj)
+    if (!obj) {
         return YETTY_ERR(yetty_yclass_ptr, "object_class: NULL object");
-    if (!obj->klass)
+    }
+    if (!obj->klass) {
         return YETTY_ERR(yetty_yclass_ptr, "object_class: object has no class");
+    }
     return YETTY_OK(yetty_yclass_ptr, obj->klass);
 }
 
@@ -394,9 +387,8 @@ static struct yetty_ycore_void_result class_registry_add(struct yetty_yclass *cl
     struct yetty_yclass *existing = NULL;
     HASH_FIND_STR(reg->by_name, cls->desc->name, existing);
     if (existing) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "class_registry_add: class with this qualified name "
-                         "is already registered");
+        return YETTY_ERR(yetty_ycore_void, "class_registry_add: class with this qualified name "
+                                           "is already registered");
     }
     if (reg->count == reg->cap) {
         size_t ncap = reg->cap ? reg->cap * 2 : 16;
@@ -414,8 +406,7 @@ static struct yetty_ycore_void_result class_registry_add(struct yetty_yclass *cl
 
 /* --- helpers for yetty_yclass_register ---------------------------- */
 
-static struct yetty_ycore_void_result dispatch_slice_grow(struct dispatch_slice *ds,
-                                                          size_t needed)
+static struct yetty_ycore_void_result dispatch_slice_grow(struct dispatch_slice *ds, size_t needed)
 {
     if (needed <= ds->count) {
         return YETTY_OK_VOID();
@@ -480,16 +471,12 @@ static struct yetty_ycore_void_result class_add_data_slice(struct yetty_yclass *
     return YETTY_OK_VOID();
 }
 
-struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_descriptor *desc,
-                                                     const struct yetty_yclass_op *ops,
-                                                     size_t ops_count,
-                                                     const struct yetty_yclass *parent,
-                                                     const struct yetty_yclass *const *mixins,
-                                                     size_t mixin_count)
+struct yetty_yclass_ptr_result yetty_yclass_register(
+    const struct yetty_yclass_descriptor *desc, const struct yetty_yclass_op *ops, size_t ops_count,
+    const struct yetty_yclass *parent, const struct yetty_yclass *const *mixins, size_t mixin_count)
 {
-    ydebug("class=%s ops=%zu parent=%s mixins=%zu",
-           desc && desc->name ? desc->name : "(null)", ops_count,
-           parent && parent->desc ? parent->desc->name : "(none)", mixin_count);
+    ydebug("class=%s ops=%zu parent=%s mixins=%zu", desc && desc->name ? desc->name : "(null)",
+           ops_count, parent && parent->desc ? parent->desc->name : "(none)", mixin_count);
     if (!desc) {
         return YETTY_ERR(yetty_yclass_ptr, "class_register: NULL descriptor");
     }
@@ -505,8 +492,7 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
         return YETTY_ERR(yetty_yclass_ptr, "class_register: ops_count > 0 but ops is NULL");
     }
     if (mixin_count > 0 && !mixins) {
-        return YETTY_ERR(yetty_yclass_ptr,
-                         "class_register: mixin_count > 0 but mixins is NULL");
+        return YETTY_ERR(yetty_yclass_ptr, "class_register: mixin_count > 0 but mixins is NULL");
     }
     /* NULL mixin element would be dereferenced later in instance_size
      * accumulation and class_inherit_dispatch — reject up front. */
@@ -541,8 +527,7 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
         struct yetty_ycore_void_result so = class_add_data_slice(cls, p, offset);
         if (YETTY_IS_ERR(so)) {
             class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr,
-                             "class_register: add parent data slice failed", so);
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: add parent data slice failed", so);
         }
         if (size_add_check(offset, p->desc->data_size, &offset)) {
             class_destroy(cls);
@@ -566,20 +551,18 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
     struct yetty_ycore_void_result so = class_add_data_slice(cls, cls, offset);
     if (YETTY_IS_ERR(so)) {
         class_destroy(cls);
-        return YETTY_ERR(yetty_yclass_ptr,
-                         "class_register: add own data slice failed", so);
+        return YETTY_ERR(yetty_yclass_ptr, "class_register: add own data slice failed", so);
     }
     if (size_add_check(offset, desc->data_size, &offset)) {
         class_destroy(cls);
-        return YETTY_ERR(yetty_yclass_ptr,
-                         "class_register: instance_size overflow (own data)");
+        return YETTY_ERR(yetty_yclass_ptr, "class_register: instance_size overflow (own data)");
     }
     for (size_t m = 0; m < mixin_count; ++m) {
         so = class_add_data_slice(cls, mixins[m], offset);
         if (YETTY_IS_ERR(so)) {
             class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr,
-                             "class_register: add own mixin data slice failed", so);
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: add own mixin data slice failed",
+                             so);
         }
         if (size_add_check(offset, mixins[m]->desc->data_size, &offset)) {
             class_destroy(cls);
@@ -593,16 +576,16 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
         struct yetty_ycore_void_result inh = class_inherit_dispatch(cls, parent);
         if (YETTY_IS_ERR(inh)) {
             class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr,
-                             "class_register: inherit parent dispatch failed", inh);
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: inherit parent dispatch failed",
+                             inh);
         }
     }
     for (size_t m = 0; m < mixin_count; ++m) {
         struct yetty_ycore_void_result inh = class_inherit_dispatch(cls, mixins[m]);
         if (YETTY_IS_ERR(inh)) {
             class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr,
-                             "class_register: inherit mixin dispatch failed", inh);
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: inherit mixin dispatch failed",
+                             inh);
         }
     }
 
@@ -616,12 +599,11 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
             class_destroy(cls);
             return YETTY_ERR(yetty_yclass_ptr, "class_register: op has NULL impl");
         }
-        struct yetty_yclass_method_slot_result sr = yetty_yclass_method_slot_register(
-            ops[i].slot_domain, ops[i].name, ops[i].method_id);
+        struct yetty_yclass_method_slot_result sr =
+            yetty_yclass_method_slot_register(ops[i].slot_domain, ops[i].name, ops[i].method_id);
         if (YETTY_IS_ERR(sr)) {
             class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr,
-                             "class_register: method_slot_register failed", sr);
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: method_slot_register failed", sr);
         }
         yetty_yclass_method_slot slot = sr.value;
         uint8_t dom = YETTY_YCLASS_METHOD_SLOT_DOMAIN_OF(slot);
@@ -630,8 +612,7 @@ struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_d
         struct yetty_ycore_void_result g = dispatch_slice_grow(ds, (size_t)idx + 1);
         if (YETTY_IS_ERR(g)) {
             class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr,
-                             "class_register: dispatch slice grow failed", g);
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: dispatch slice grow failed", g);
         }
         ds->impls[idx] = ops[i].impl;
     }
@@ -657,8 +638,7 @@ static struct accessor_node **accessor_chain_head(void)
     return &head;
 }
 
-struct yetty_ycore_void_result
-yetty_yclass_add_accessor_lookup(yetty_yclass_accessor_lookup_fn fn)
+struct yetty_ycore_void_result yetty_yclass_add_accessor_lookup(yetty_yclass_accessor_lookup_fn fn)
 {
     ydebug("fn=%p", (void *)(uintptr_t)fn);
     if (!fn) {
@@ -699,21 +679,20 @@ struct yetty_yclass_ptr_result yetty_yclass_by_name(const char *name)
             return r;
         }
     }
-    return YETTY_ERR(yetty_yclass_ptr,
-                     "class_by_name: class not found in registry or any hook");
+    return YETTY_ERR(yetty_yclass_ptr, "class_by_name: class not found in registry or any hook");
 }
 
-struct yetty_ycore_void_result
-yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
-                           void (*cb)(const char *name, yetty_yclass_method_slot slot,
-                                      void *ud),
-                           void *userdata)
+struct yetty_ycore_void_result yetty_yclass_for_each_slot(
+    const struct yetty_yclass *cls,
+    void (*cb)(const char *name, yetty_yclass_method_slot slot, void *ud), void *userdata)
 {
     ydebug("cls=%s", cls && cls->desc ? cls->desc->name : "(null)");
-    if (!cls)
+    if (!cls) {
         return YETTY_ERR(yetty_ycore_void, "for_each_slot: NULL cls");
-    if (!cb)
+    }
+    if (!cb) {
         return YETTY_ERR(yetty_ycore_void, "for_each_slot: NULL cb");
+    }
     for (uint8_t d = 0; d < YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS; ++d) {
         const struct dispatch_slice *ds = &cls->dispatch_by_domain[d];
         for (size_t i = 0; i < ds->count; ++i) {
@@ -721,8 +700,7 @@ yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
                 continue;
             }
             yetty_yclass_method_slot slot = YETTY_YCLASS_METHOD_SLOT_PACK(d, i);
-            struct yetty_yclass_const_char_ptr_result nr =
-                yetty_yclass_method_slot_name(slot);
+            struct yetty_yclass_const_char_ptr_result nr = yetty_yclass_method_slot_name(slot);
             /* Bail on first slot-name lookup failure rather than
              * silently skipping the slot. Previously, GET_CLASS
              * could ship a class map missing entries and report
@@ -731,9 +709,10 @@ yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
              * RESOLVE_SLOT round-trips (slow) or never (silent). */
             YETTY_RETURN_IF_ERR(yetty_ycore_void, nr,
                                 "for_each_slot: method_slot_name failed mid-walk");
-            if (!nr.value)
+            if (!nr.value) {
                 return YETTY_ERR(yetty_ycore_void,
                                  "for_each_slot: method_slot_name returned OK with NULL");
+            }
             cb(nr.value, slot, userdata);
         }
     }

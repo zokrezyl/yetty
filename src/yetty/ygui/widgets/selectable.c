@@ -43,8 +43,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj,
-                              yetty_ygui_selectable_class_get().value,
+        yetty_ygui_super_void(obj, yetty_ygui_selectable_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "selectable: super");
     struct yetty_ygui_void_ptr_result d_dr =
@@ -67,8 +66,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct sel_data *d = d_dr.value;
     free(d->text);
-    return yetty_ygui_super_void(obj,
-                                 yetty_ygui_selectable_class_get().value,
+    return yetty_ygui_super_void(obj, yetty_ygui_selectable_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -91,16 +89,19 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result result_94 = yguix_box(ctx, r.min.x, r.min.y, w, h, d->selected ? COLOR_BG_ON : COLOR_BG_OFF, 4);
+    struct yetty_ycore_void_result result_94 =
+        yguix_box(ctx, r.min.x, r.min.y, w, h, d->selected ? COLOR_BG_ON : COLOR_BG_OFF, 4);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_94, "selectable: bg");
     if (d->selected) {
-        struct yetty_ycore_void_result result_99 = yguix_box(ctx, r.min.x, r.min.y, 3, h, COLOR_BAR, 0);
+        struct yetty_ycore_void_result result_99 =
+            yguix_box(ctx, r.min.x, r.min.y, 3, h, COLOR_BAR, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_99, "selectable: bar");
     }
     float fs = 14.0f;
     float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
     if (d->text) {
-        struct yetty_ycore_void_result result_105 = yguix_text(ctx, d->text, r.min.x + 12, ty, fs, COLOR_TEXT);
+        struct yetty_ycore_void_result result_105 =
+            yguix_text(ctx, d->text, r.min.x + 12, ty, fs, COLOR_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_105, "selectable: text");
     }
     return YETTY_OK_VOID();
@@ -153,7 +154,8 @@ struct yetty_ycore_int_result yetty_ygui_selectable_is_selected(const struct yet
     }
     struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_selectable_class_get().value);
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result, "yetty_ygui_selectable_is_selected: data_get");
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result,
+                        "yetty_ygui_selectable_is_selected: data_get");
     return YETTY_OK(yetty_ycore_int, ((struct sel_data *)data_result.value)->selected);
 }
 

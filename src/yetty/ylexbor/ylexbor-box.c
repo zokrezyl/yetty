@@ -233,17 +233,15 @@ static int inline_buf_append(struct yl_inline_buf *b, const char *s, size_t n)
  * DOM walker — recursive
  * ===========================================================================*/
 
-static int box_alloc(struct yetty_ylexbor *r, uint32_t *out_idx)
+static struct yetty_ycore_void_result box_alloc(struct yetty_ylexbor *r, uint32_t *out_idx)
 {
     struct yetty_ycore_void_result rr =
         _yetty_ylexbor_box_vec_reserve(&r->boxes, r->boxes.size + 1);
-    if (YETTY_IS_ERR(rr)) {
-        return -1;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "box_alloc: reserve");
     struct yetty_ylexbor_box *b = &r->boxes.data[r->boxes.size];
     memset(b, 0, sizeof(*b));
     *out_idx = r->boxes.size++;
-    return 0;
+    return YETTY_OK_VOID();
 }
 
 /* Append `cidx` as the last child of `parent_idx`. Walks the existing
@@ -738,18 +736,20 @@ static enum yetty_ylexbor_layout_mode layout_mode_for(lxb_dom_element_t *el)
     return YL_LAYOUT_FLEX_ROW;
 }
 
-static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
-                 const struct yl_style_state *parent_style, uint32_t parent_idx,
-                 struct yl_inline_buf *inline_collect, int depth);
+static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
+                                           const struct yl_style_state *parent_style,
+                                           uint32_t parent_idx,
+                                           struct yl_inline_buf *inline_collect, int depth);
 
 /* Flush an accumulated inline-text run as one or more YL_BOX_INLINE_TEXT
  * children of `parent_idx`. Layout will wrap it into lines; box-build
  * stores the un-wrapped string. */
-static void flush_inline(struct yetty_ylexbor *r, const struct yl_style_state *style,
-                         uint32_t parent_idx, struct yl_inline_buf *coll)
+static struct yetty_ycore_void_result flush_inline(struct yetty_ylexbor *r,
+                                                   const struct yl_style_state *style,
+                                                   uint32_t parent_idx, struct yl_inline_buf *coll)
 {
     if (coll->buf == NULL || coll->len == 0) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* Trim trailing single space introduced by whitespace collapsing. */
@@ -758,13 +758,12 @@ static void flush_inline(struct yetty_ylexbor *r, const struct yl_style_state *s
     }
     if (coll->len == 0) {
         coll->last_was_space = 0;
-        return;
+        return YETTY_OK_VOID();
     }
 
     uint32_t cidx;
-    if (box_alloc(r, &cidx) != 0) {
-        return;
-    }
+    struct yetty_ycore_void_result alloc_res = box_alloc(r, &cidx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, alloc_res, "flush_inline: box_alloc");
     struct yetty_ylexbor_box *b = &r->boxes.data[cidx];
     b->kind = YL_BOX_INLINE_TEXT;
     style_to_box(b, style);
@@ -774,11 +773,13 @@ static void flush_inline(struct yetty_ylexbor *r, const struct yl_style_state *s
 
     coll->len = 0;
     coll->last_was_space = 0;
+    return YETTY_OK_VOID();
 }
 
-static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
-                 const struct yl_style_state *parent_style, uint32_t parent_idx,
-                 struct yl_inline_buf *inline_collect, int depth)
+static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
+                                           const struct yl_style_state *parent_style,
+                                           uint32_t parent_idx,
+                                           struct yl_inline_buf *inline_collect, int depth)
 {
     for (lxb_dom_node_t *child = node->first_child; child != NULL; child = child->next) {
         if (child->type == LXB_DOM_NODE_TYPE_TEXT) {
@@ -812,12 +813,13 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
         if (d->disp == YL_DISP_BLOCK) {
             /* Flush any inline text accumulated for the parent
 			 * block before opening a new child block. */
-            flush_inline(r, parent_style, parent_idx, inline_collect);
+            struct yetty_ycore_void_result flush_res =
+                flush_inline(r, parent_style, parent_idx, inline_collect);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "walk: flush before block");
 
             uint32_t bidx;
-            if (box_alloc(r, &bidx) != 0) {
-                return;
-            }
+            struct yetty_ycore_void_result alloc_res = box_alloc(r, &bidx);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, alloc_res, "walk: box_alloc block");
             struct yetty_ylexbor_box *b = &r->boxes.data[bidx];
             b->kind = YL_BOX_BLOCK;
             b->element = el;
@@ -1168,8 +1170,16 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
             /* Recurse with a fresh inline accumulator for this
 			 * block's children. */
             struct yl_inline_buf ib = {0};
-            walk(r, child, &s, bidx, &ib, depth + 1);
-            flush_inline(r, &s, bidx, &ib);
+            struct yetty_ycore_void_result walk_res = walk(r, child, &s, bidx, &ib, depth + 1);
+            if (YETTY_IS_ERR(walk_res)) {
+                free(ib.buf);
+                return YETTY_ERR(yetty_ycore_void, "walk: recurse block child", walk_res);
+            }
+            struct yetty_ycore_void_result flush_child_res = flush_inline(r, &s, bidx, &ib);
+            if (YETTY_IS_ERR(flush_child_res)) {
+                free(ib.buf);
+                return YETTY_ERR(yetty_ycore_void, "walk: flush block child", flush_child_res);
+            }
             free(ib.buf);
         } else {
             /* <img>: pre-decode (or hit the cache) so the box's
@@ -1178,11 +1188,12 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
 			 * present. The placeholder fallback (grey box) kicks
 			 * in if the fetch or decode failed. */
             if (child->local_name == LXB_TAG_IMG) {
-                flush_inline(r, parent_style, parent_idx, inline_collect);
+                struct yetty_ycore_void_result flush_res =
+                    flush_inline(r, parent_style, parent_idx, inline_collect);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "walk: flush before img");
                 uint32_t iidx;
-                if (box_alloc(r, &iidx) != 0) {
-                    return;
-                }
+                struct yetty_ycore_void_result alloc_res = box_alloc(r, &iidx);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, alloc_res, "walk: box_alloc img");
                 struct yetty_ylexbor_box *ib = &r->boxes.data[iidx];
                 ib->kind = YL_BOX_INLINE_IMAGE;
                 ib->element = el;
@@ -1244,9 +1255,12 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
 			 * for inheritance, not s — because only the *style*
 			 * of the inline run as a whole is captured by the
 			 * surrounding text, not per-segment styling (MVP). */
-            walk(r, child, &s, parent_idx, inline_collect, depth);
+            struct yetty_ycore_void_result walk_res =
+                walk(r, child, &s, parent_idx, inline_collect, depth);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, walk_res, "walk: recurse inline child");
         }
     }
+    return YETTY_OK_VOID();
 }
 
 /* ===========================================================================
@@ -1263,9 +1277,8 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
 
     /* Root box wraps the whole viewport. */
     uint32_t root_idx;
-    if (box_alloc(r, &root_idx) != 0) {
-        return YETTY_ERR(yetty_ycore_void, "alloc root");
-    }
+    struct yetty_ycore_void_result root_alloc_res = box_alloc(r, &root_idx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, root_alloc_res, "ylexbor_box_build: alloc root");
     struct yetty_ylexbor_box *root = &r->boxes.data[root_idx];
     root->kind = YL_BOX_BLOCK;
     root->font_size = r->default_font_size;
@@ -1283,8 +1296,17 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
     };
 
     struct yl_inline_buf ib = {0};
-    walk(r, lxb_dom_interface_node(r->document), &initial, root_idx, &ib, 0);
-    flush_inline(r, &initial, root_idx, &ib);
+    struct yetty_ycore_void_result walk_res =
+        walk(r, lxb_dom_interface_node(r->document), &initial, root_idx, &ib, 0);
+    if (YETTY_IS_ERR(walk_res)) {
+        free(ib.buf);
+        return YETTY_ERR(yetty_ycore_void, "ylexbor_box_build: walk", walk_res);
+    }
+    struct yetty_ycore_void_result flush_res = flush_inline(r, &initial, root_idx, &ib);
+    if (YETTY_IS_ERR(flush_res)) {
+        free(ib.buf);
+        return YETTY_ERR(yetty_ycore_void, "ylexbor_box_build: flush", flush_res);
+    }
     free(ib.buf);
 
     return YETTY_OK_VOID();

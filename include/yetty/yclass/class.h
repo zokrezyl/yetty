@@ -48,8 +48,7 @@ typedef uint32_t yetty_yclass_method_slot;
 #define YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS (1u << YETTY_YCLASS_METHOD_SLOT_DOMAIN_BITS)
 #define YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT 24
 #define YETTY_YCLASS_METHOD_SLOT_INDEX_MASK ((1u << YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT) - 1)
-#define YETTY_YCLASS_METHOD_SLOT_DOMAIN_OF(s)                                                      \
-    (((s) >> YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT) & 0xFu)
+#define YETTY_YCLASS_METHOD_SLOT_DOMAIN_OF(s) (((s) >> YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT) & 0xFu)
 #define YETTY_YCLASS_METHOD_SLOT_INDEX_OF(s) ((s) & YETTY_YCLASS_METHOD_SLOT_INDEX_MASK)
 #define YETTY_YCLASS_METHOD_SLOT_PACK(dom, idx)                                                    \
     (((uint32_t)(dom) << YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT) |                                   \
@@ -114,28 +113,27 @@ struct yetty_yclass_slot_table_ptr_result yetty_yclass_slot_table_get(const char
 /* Allocate (or look up) the slot for (`domain`, `name`). If first
  * sighting, binds `id` to it. Subsequent registrations with the same
  * (domain, name) return the existing slot. */
-struct yetty_yclass_method_slot_result
-yetty_yclass_method_slot_register(const char *domain, const char *name,
-                                  yetty_yclass_method_id_t id);
+struct yetty_yclass_method_slot_result yetty_yclass_method_slot_register(
+    const char *domain, const char *name, yetty_yclass_method_id_t id);
 
 /* --- Lookups (per call / per handshake) --------------------------- */
 
 /* Dispatch: only the fn-ptr identity is available at the public stub,
  * but the stub knows its own (compile-time) domain. */
-struct yetty_yclass_method_slot_result
-yetty_yclass_method_slot_get(const char *domain, yetty_yclass_method_id_t id);
+struct yetty_yclass_method_slot_result yetty_yclass_method_slot_get(const char *domain,
+                                                                    yetty_yclass_method_id_t id);
 
 /* Local-name lookup within a domain. */
-struct yetty_yclass_method_slot_result
-yetty_yclass_method_slot_by_name(const char *domain, const char *name);
+struct yetty_yclass_method_slot_result yetty_yclass_method_slot_by_name(const char *domain,
+                                                                        const char *name);
 
 /* Wire-side lookup: caller passes the full "<domain>_<local_name>"
  * the remote sent. */
 struct yetty_yclass_method_slot_result yetty_yclass_method_slot_by_qname(const char *qname);
 
 /* Reverse: slot → fully qualified name (interned). */
-struct yetty_yclass_const_char_ptr_result
-yetty_yclass_method_slot_name(yetty_yclass_method_slot slot);
+struct yetty_yclass_const_char_ptr_result yetty_yclass_method_slot_name(
+    yetty_yclass_method_slot slot);
 
 /* --- Dispatch / registry ------------------------------------------ */
 
@@ -143,13 +141,12 @@ yetty_yclass_method_slot_name(yetty_yclass_method_slot slot);
  * NULL cls, invalid slot encoding, no impl registered for the slot
  * (callers may treat that as "walk the inheritance chain" if their
  * dispatch model supports it). */
-struct yetty_yclass_impl_t_result
-yetty_yclass_dispatch_lookup(const struct yetty_yclass *cls, yetty_yclass_method_slot slot);
+struct yetty_yclass_impl_t_result yetty_yclass_dispatch_lookup(const struct yetty_yclass *cls,
+                                                               yetty_yclass_method_slot slot);
 
 /* Returns the class pointer the object was minted under. Errors:
  * NULL obj. */
-struct yetty_yclass_ptr_result
-yetty_yclass_object_class(const struct yetty_yclass_object *obj);
+struct yetty_yclass_ptr_result yetty_yclass_object_class(const struct yetty_yclass_object *obj);
 
 struct yetty_yclass_ptr_result yetty_yclass_register(const struct yetty_yclass_descriptor *desc,
                                                      const struct yetty_yclass_op *ops,
@@ -168,16 +165,13 @@ struct yetty_yclass_ptr_result yetty_yclass_by_name(const char *name);
  * yetty_yclass_by_name walks the chain on registry miss until one
  * returns a non-error result with a non-NULL value. */
 typedef struct yetty_yclass_ptr_result (*yetty_yclass_accessor_lookup_fn)(const char *name);
-struct yetty_ycore_void_result
-yetty_yclass_add_accessor_lookup(yetty_yclass_accessor_lookup_fn fn);
+struct yetty_ycore_void_result yetty_yclass_add_accessor_lookup(yetty_yclass_accessor_lookup_fn fn);
 
 /* Walk the class's populated dispatch slots — used by the GET_CLASS
  * handler on the server. */
-struct yetty_ycore_void_result
-yetty_yclass_for_each_slot(const struct yetty_yclass *cls,
-                           void (*cb)(const char *name, yetty_yclass_method_slot slot,
-                                      void *ud),
-                           void *userdata);
+struct yetty_ycore_void_result yetty_yclass_for_each_slot(
+    const struct yetty_yclass *cls,
+    void (*cb)(const char *name, yetty_yclass_method_slot slot, void *ud), void *userdata);
 
 /* --- Inheritance / layout accessors ------------------------------- */
 /*
@@ -198,8 +192,8 @@ struct yetty_ycore_size_result yetty_yclass_data_size(const struct yetty_yclass 
 struct yetty_ycore_size_result yetty_yclass_object_data_offset(const struct yetty_yclass *leaf,
                                                                const struct yetty_yclass *cls);
 struct yetty_yclass_const_char_ptr_result yetty_yclass_name(const struct yetty_yclass *cls);
-struct yetty_yclass_const_char_ptr_result
-yetty_yclass_type_str(const struct yetty_yclass *cls); /* "regular" or "mixin" */
+struct yetty_yclass_const_char_ptr_result yetty_yclass_type_str(
+    const struct yetty_yclass *cls); /* "regular" or "mixin" */
 
 struct yetty_yclass_object_ptr_result yetty_yclass_object_alloc(const struct yetty_yclass *cls);
 struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_object *obj);

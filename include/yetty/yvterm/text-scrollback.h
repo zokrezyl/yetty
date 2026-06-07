@@ -52,7 +52,7 @@ void yetty_yvterm_text_sb_arena_destroy(struct yetty_yvterm_text_sb_arena *arena
 
 /* Read cols cells from the ring at byte offset into dst, handling wrap. */
 void yetty_yvterm_text_sb_arena_read(const struct yetty_yvterm_text_sb_arena *arena, size_t offset,
-                                    int cols, VTermScreenCell *dst);
+                                     int cols, VTermScreenCell *dst);
 
 /* Resolve logical index (0=oldest) to a descriptor pointer, or NULL. */
 const struct yetty_yvterm_text_sb_line_rec *yetty_yvterm_text_sb_arena_peek(
@@ -60,12 +60,12 @@ const struct yetty_yvterm_text_sb_line_rec *yetty_yvterm_text_sb_arena_peek(
 
 /* Push one line. Returns 1 on success, 0 on allocation failure. */
 int yetty_yvterm_text_sb_arena_push(struct yetty_yvterm_text_sb_arena *arena,
-                                   const VTermScreenCell *src, int cols);
+                                    const VTermScreenCell *src, int cols);
 
 /* Pop newest line. Copies up to copy_cols cells into dst. Returns the number
  * of cells copied (0 on empty). */
 int yetty_yvterm_text_sb_arena_pop(struct yetty_yvterm_text_sb_arena *arena, VTermScreenCell *dst,
-                                  int copy_cols);
+                                   int copy_cols);
 
 #ifdef __cplusplus
 }

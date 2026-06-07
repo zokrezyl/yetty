@@ -44,17 +44,17 @@
 
 struct ymaze_app {
     int quit;
-    struct yetty_context           ctx;
-    struct yetty_yframework        *yrt;
-    struct yetty_ydraw_target      *target;
+    struct yetty_context ctx;
+    struct yetty_yframework *yrt;
+    struct yetty_ydraw_target *target;
     struct yetty_yfigure_container *root;
-    struct yetty_ygrid_grid        *grid;
-    struct yetty_ymaze             *maze;
-    struct yetty_ydraw_drawable_list   *buf; /* reused across frames */
-    double                          start_time;
-    void                           *surface;
-    uint32_t                        surface_w;
-    uint32_t                        surface_h;
+    struct yetty_ygrid_grid *grid;
+    struct yetty_ymaze *maze;
+    struct yetty_ydraw_drawable_list *buf; /* reused across frames */
+    double start_time;
+    void *surface;
+    uint32_t surface_w;
+    uint32_t surface_h;
 };
 
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
@@ -64,8 +64,8 @@ struct ymaze_app {
  * (`[type|z_order|fill|stroke|stroke_width|geom…]`, plus an optional id
  * word when the HAS_ID flag is set) is exactly the ygrid record format, so
  * each prim is forwarded verbatim. */
-static struct yetty_ycore_void_result push_buffer_to_grid(struct yetty_ygrid_grid *grid,
-                                                          const struct yetty_ydraw_drawable_list *buf)
+static struct yetty_ycore_void_result push_buffer_to_grid(
+    struct yetty_ygrid_grid *grid, const struct yetty_ydraw_drawable_list *buf)
 {
     const uint8_t *data = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
     size_t total = yetty_ydraw_drawable_list_size(buf);
@@ -113,7 +113,7 @@ static struct yetty_ycore_void_result render_maze(struct ymaze_app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_maze: push to grid");
 
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
     return YETTY_OK_VOID();
 }
 
@@ -165,16 +165,24 @@ static void handle_event(struct ymaze_app *app, const struct yetty_yui_event *ev
     case YETTY_YCORE_RESIZE: {
         uint32_t w = (uint32_t)ev->resize.width;
         uint32_t h = (uint32_t)ev->resize.height;
-        if (w == 0 || h == 0) return;
+        if (w == 0 || h == 0) {
+            return;
+        }
         app->surface_w = w;
         app->surface_h = h;
         struct yetty_ycore_void_result rr = yetty_yframework_reconfigure_surface(app->yrt, w, h);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
         struct yetty_ycore_void_result tr = app->target->ops->resize(app->target, vp);
-        if (YETTY_IS_ERR(tr)) yetty_ycore_error_destroy(tr.error);
+        if (YETTY_IS_ERR(tr)) {
+            yetty_ycore_error_destroy(tr.error);
+        }
         struct yetty_ycore_void_result fr = rebuild_figure(app);
-        if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
         return;
     }
     case YETTY_YCORE_KEY_DOWN:
@@ -257,31 +265,41 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
                 struct yetty_yui_event ev = {0};
                 struct yetty_ycore_size_result rr =
                     rt->platform_input_pipe->ops->read(rt->platform_input_pipe, &ev, sizeof(ev));
-                if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) break;
+                if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) {
+                    break;
+                }
                 handle_event(app, &ev);
             }
         }
-        if (app->quit) break;
+        if (app->quit) {
+            break;
+        }
         if (rt->instance) {
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
 
         struct yetty_ycore_void_result mrr = render_maze(app);
-        if (YETTY_IS_ERR(mrr)) yetty_ycore_error_destroy(mrr.error);
+        if (YETTY_IS_ERR(mrr)) {
+            yetty_ycore_error_destroy(mrr.error);
+        }
 
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
         struct yetty_ydraw_target *target = app->target;
         struct yetty_ycore_void_result cl = target->ops->clear(target);
-        if (YETTY_IS_ERR(cl)) yetty_ycore_error_destroy(cl.error);
+        if (YETTY_IS_ERR(cl)) {
+            yetty_ycore_error_destroy(cl.error);
+        }
         struct yetty_ycore_void_result rrr =
             yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         if (YETTY_IS_ERR(rrr)) {
             yetty_ycore_error_destroy(rrr.error);
         } else {
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
-        if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
+        if (YETTY_IS_ERR(pp)) {
+            yetty_ycore_error_destroy(pp.error);
+        }
     }
 
     {
@@ -309,5 +327,12 @@ int main(int argc, char **argv)
     struct yetty_yinit_app_config cfg = {
         .extract_assets_fn = yetty_platform_extract_assets,
     };
-    return yetty_yinit_run(argc, argv, &cfg, ymaze_worker, &app);
+    struct yetty_ycore_int_result run_result =
+        yetty_yinit_run(argc, argv, &cfg, ymaze_worker, &app);
+    if (YETTY_IS_ERR(run_result)) {
+        yetty_ycore_error_print(stderr, "ymaze: run", run_result.error);
+        yetty_ycore_error_destroy(run_result.error);
+        return 1;
+    }
+    return run_result.value;
 }

@@ -56,22 +56,25 @@ struct yetty_ydraw_primitive_ops {
 // Drawable-list entry - wraps pointer to primitive data + base ops
 // Works for ALL primitives (SDF and complex)
 struct yetty_ydraw_drawable_list_entry {
-    const uint32_t *data;                            // type at data[0]
+    const uint32_t *data;                                  // type at data[0]
     const struct yetty_ydraw_drawable_list_entry_ops *ops; // base ops (size, aabb)
 };
 
 YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_entry_ops_ptr,
                       const struct yetty_ydraw_drawable_list_entry_ops *);
-YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_entry_ptr, struct yetty_ydraw_drawable_list_entry *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_entry_ptr,
+                      struct yetty_ydraw_drawable_list_entry *);
 
 // Drawable-list registry instance (opaque)
 struct yetty_ydraw_drawable_list_registry;
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_registry_ptr, struct yetty_ydraw_drawable_list_registry *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_list_registry_ptr,
+                      struct yetty_ydraw_drawable_list_registry *);
 
 // Create/destroy registry instance
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_registry_create(void);
+struct yetty_ydraw_drawable_list_registry_ptr_result yetty_ydraw_drawable_list_registry_create(
+    void);
 
 void yetty_ydraw_drawable_list_registry_destroy(
     struct yetty_ydraw_drawable_list_registry *reg YETTY_ANNOT_CALLEE_OWNED);

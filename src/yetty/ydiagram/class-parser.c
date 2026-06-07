@@ -167,7 +167,7 @@ static bool split_relationship(char *line, char **left, char *op_out, size_t op_
         memcpy(op_out, line + start, oplen);
         op_out[oplen] = '\0';
 
-        line[start] = '\0';     /* terminate the left id */
+        line[start] = '\0'; /* terminate the left id */
         *left = trim(line);
         *right = trim(line + j); /* the rest of the (NUL-terminated) line */
         return (*left)[0] != '\0' && (*right)[0] != '\0';

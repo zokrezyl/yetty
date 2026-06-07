@@ -1270,8 +1270,8 @@ static struct yetty_ycore_void_result render_block(struct render_state *rs,
                         .half_height = rs->font_size * 0.5f + 0.5f,
                         .corner_radius = 0.0f,
                     };
-                    struct yetty_ycore_void_result br =
-                        yetty_ydraw_drawable_list_add_cmd_add_box(rs->buf, 0, 0, bg, 0, 0.0f, &geom);
+                    struct yetty_ycore_void_result br = yetty_ydraw_drawable_list_add_cmd_add_box(
+                        rs->buf, 0, 0, bg, 0, 0.0f, &geom);
                     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ysdf_add_box failed");
                 }
                 if (i < len && s[i] == '\n') {
@@ -1315,7 +1315,8 @@ struct yetty_ydraw_drawable_list_result yetty_yecho_render(
         .scene_max_x = (float)(width_cells * cell_w),
         .scene_max_y = (float)cell_h * 2.0f, /* updated as content grows */
     };
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ydraw_drawable_list, "ydraw buffer create failed", br);
     }
@@ -1377,7 +1378,8 @@ struct yetty_ydraw_drawable_list_result yetty_yecho_render(
                 sb_free(&fb);
                 if (YETTY_IS_ERR(tr)) {
                     yetty_ydraw_drawable_list_destroy(rs.buf);
-                    return YETTY_ERR(yetty_ydraw_drawable_list, "glyph fallback emission failed", tr);
+                    return YETTY_ERR(yetty_ydraw_drawable_list, "glyph fallback emission failed",
+                                     tr);
                 }
             } else {
                 struct strbuf u = {0};
@@ -1409,7 +1411,7 @@ struct yetty_ydraw_drawable_list_result yetty_yecho_render(
 
     /* Update the scene bounds to what we actually painted. */
     yetty_ydraw_drawable_list_set_scene_bounds(rs.buf, 0.0f, 0.0f, rs.scene_max_x,
-                                           rs.cursor_y + rs.font_size);
+                                               rs.cursor_y + rs.font_size);
 
     return YETTY_OK(yetty_ydraw_drawable_list, rs.buf);
 }
@@ -1435,14 +1437,15 @@ struct yetty_ydraw_drawable_list_result yetty_yecho_render_string(
 #include <yetty/yface/yface.h>
 #include <yetty/yterminal/dcs-codes.h> /* YETTY_DCS_YDRAW_BIN */
 
-struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
-                                                        FILE *out)
+struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
+    const struct yetty_ydraw_drawable_list *buffer, FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
-    size_t raw_size = yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
+    size_t raw_size =
+        yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: empty serialize");
     }

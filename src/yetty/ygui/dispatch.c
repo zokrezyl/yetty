@@ -20,52 +20,53 @@
 
 #include <yetty/ytrace/ytrace.h>
 
-yetty_yclass_method_slot yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id)
+struct yetty_yclass_method_slot_result yetty_ygui_method_slot_get(
+    yetty_yclass_method_id_t method_id)
 {
     if (!method_id) {
-        return YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+        return YETTY_OK(yetty_yclass_method_slot, YETTY_YCLASS_METHOD_SLOT_UNDEFINED);
     }
-    struct yetty_yclass_method_slot_result r =
+    struct yetty_yclass_method_slot_result slot_result =
         yetty_yclass_method_slot_get(YETTY_YGUI_DOMAIN, method_id);
-    if (YETTY_IS_ERR(r)) {
+    if (YETTY_IS_ERR(slot_result)) {
         /* Not registered yet — caller treats UNDEFINED as "no impl",
          * matching the historical ygui contract that a never-overridden
          * method silently no-ops. */
-        yetty_ycore_error_destroy(r.error);
-        return YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+        yetty_ycore_error_destroy(slot_result.error);
+        return YETTY_OK(yetty_yclass_method_slot, YETTY_YCLASS_METHOD_SLOT_UNDEFINED);
     }
-    return r.value;
+    return slot_result;
 }
 
-yetty_yclass_impl_t yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls,
-                                               yetty_yclass_method_slot slot)
+struct yetty_yclass_impl_t_result yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls,
+                                                             yetty_yclass_method_slot slot)
 {
     if (!cls || slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_impl_t, NULL);
     }
-    struct yetty_yclass_impl_t_result r = yetty_yclass_dispatch_lookup(cls, slot);
-    if (YETTY_IS_ERR(r)) {
+    struct yetty_yclass_impl_t_result impl_result = yetty_yclass_dispatch_lookup(cls, slot);
+    if (YETTY_IS_ERR(impl_result)) {
         /* yclass returns ERR when the class has no impl on this slot;
          * ygui's convention is NULL = no override. Drop the error. */
-        yetty_ycore_error_destroy(r.error);
-        return NULL;
+        yetty_ycore_error_destroy(impl_result.error);
+        return YETTY_OK(yetty_yclass_impl_t, NULL);
     }
-    return r.value;
+    return impl_result;
 }
 
-yetty_yclass_impl_t yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
-                                                     yetty_yclass_method_slot slot)
+struct yetty_yclass_impl_t_result yetty_ygui_dispatch_lookup_super(
+    const struct yetty_yclass *self_class, yetty_yclass_method_slot slot)
 {
     if (!self_class) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_impl_t, NULL);
     }
-    struct yetty_yclass_ptr_result pr = yetty_yclass_parent(self_class);
-    if (YETTY_IS_ERR(pr)) {
-        yetty_ycore_error_destroy(pr.error);
-        return NULL;
+    struct yetty_yclass_ptr_result parent_result = yetty_yclass_parent(self_class);
+    if (YETTY_IS_ERR(parent_result)) {
+        yetty_ycore_error_destroy(parent_result.error);
+        return YETTY_OK(yetty_yclass_impl_t, NULL);
     }
-    if (!pr.value) {
-        return NULL;
+    if (!parent_result.value) {
+        return YETTY_OK(yetty_yclass_impl_t, NULL);
     }
-    return yetty_ygui_dispatch_lookup(pr.value, slot);
+    return yetty_ygui_dispatch_lookup(parent_result.value, slot);
 }

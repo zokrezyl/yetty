@@ -81,7 +81,8 @@ static struct yetty_ycore_void_result content_on_layer_cursor(
         }
         struct yetty_ycore_void_result r =
             layer->ops->set_cursor(layer, (int)cursor_pos.cols, (int)cursor_pos.rows);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "content_on_layer_cursor: layer set_cursor failed");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                            "content_on_layer_cursor: layer set_cursor failed");
     }
     return YETTY_OK_VOID();
 }
@@ -127,7 +128,8 @@ static struct yetty_ycore_void_result content_on_clear_screen(void *userdata)
  * terminal_layer_ops — the terminal sees exactly one layer.
  *---------------------------------------------------------------------*/
 
-static struct yetty_ycore_void_result content_layer_destroy(struct yetty_yrender_terminal_layer *self)
+static struct yetty_ycore_void_result content_layer_destroy(
+    struct yetty_yrender_terminal_layer *self)
 {
     struct yetty_yvterm_content_layer *content =
         container_of(self, struct yetty_yvterm_content_layer, base);
@@ -205,9 +207,8 @@ static struct yetty_ycore_void_result content_layer_set_visual_zoom(
 static struct yetty_yrender_gpu_resource_set_result content_layer_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yvterm_content_layer *content =
-        container_of((struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer,
-                     base);
+    const struct yetty_yvterm_content_layer *content = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer, base);
     if (content->text && content->text->ops && content->text->ops->get_gpu_resource_set) {
         return content->text->ops->get_gpu_resource_set(content->text);
     }
@@ -235,7 +236,8 @@ static struct yetty_ycore_int_result content_layer_render(struct yetty_yrender_t
 
     /* 1. text grid */
     if (content->text && content->text->ops && content->text->ops->render) {
-        struct yetty_ycore_int_result tr = content->text->ops->render(content->text, target, cascade);
+        struct yetty_ycore_int_result tr =
+            content->text->ops->render(content->text, target, cascade);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, tr, "content_layer_render: text grid render failed");
         if (tr.value == 1) {
             drew = 1;
@@ -246,7 +248,8 @@ static struct yetty_ycore_int_result content_layer_render(struct yetty_yrender_t
     /* 2. ydraw prims + figures */
     if (!content->new_osc_path_active && content->ydraw && content->ydraw->ops &&
         content->ydraw->ops->render) {
-        int ydraw_empty = content->ydraw->ops->is_empty && content->ydraw->ops->is_empty(content->ydraw);
+        int ydraw_empty =
+            content->ydraw->ops->is_empty && content->ydraw->ops->is_empty(content->ydraw);
         if (!ydraw_empty) {
             struct yetty_ycore_int_result yr =
                 content->ydraw->ops->render(content->ydraw, target, cascade);
@@ -268,15 +271,15 @@ static struct yetty_ycore_int_result content_layer_render(struct yetty_yrender_t
 
 static int content_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yvterm_content_layer *content =
-        container_of((struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer,
-                     base);
+    const struct yetty_yvterm_content_layer *content = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer, base);
     if (content->text && content->text->ops && content->text->ops->is_dirty &&
         content->text->ops->is_dirty(content->text)) {
         return 1;
     }
     if (!content->new_osc_path_active && content->ydraw && content->ydraw->ops) {
-        int ydraw_empty = content->ydraw->ops->is_empty && content->ydraw->ops->is_empty(content->ydraw);
+        int ydraw_empty =
+            content->ydraw->ops->is_empty && content->ydraw->ops->is_empty(content->ydraw);
         if (!ydraw_empty && content->ydraw->ops->is_dirty &&
             content->ydraw->ops->is_dirty(content->ydraw)) {
             return 1;
@@ -318,9 +321,8 @@ static int content_layer_on_char(struct yetty_yrender_terminal_layer *self, uint
  * safe fallback if they ever drift). */
 static uint32_t content_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yvterm_content_layer *content =
-        container_of((struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer,
-                     base);
+    const struct yetty_yvterm_content_layer *content = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer, base);
     uint32_t anchor = 0;
     struct yetty_yrender_terminal_layer *layers[2] = {content->text, content->ydraw};
     for (size_t i = 0; i < 2; i++) {
@@ -377,16 +379,16 @@ static struct yetty_ycore_void_result content_layer_set_selection(
 static struct yetty_ycore_void_result content_layer_get_selection_text(
     const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out)
 {
-    const struct yetty_yvterm_content_layer *content =
-        container_of((struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer,
-                     base);
+    const struct yetty_yvterm_content_layer *content = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer, base);
     struct yetty_yrender_terminal_layer *layers[2] = {content->text, content->ydraw};
     for (size_t i = 0; i < 2; i++) {
         struct yetty_yrender_terminal_layer *layer = layers[i];
         if (layer && layer->ops && layer->ops->get_selection_text) {
             struct yetty_ycore_void_result r = layer->ops->get_selection_text(layer, out);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
-                                "content_layer_get_selection_text: layer get_selection_text failed");
+            YETTY_RETURN_IF_ERR(
+                yetty_ycore_void, r,
+                "content_layer_get_selection_text: layer get_selection_text failed");
         }
     }
     return YETTY_OK_VOID();
@@ -496,8 +498,7 @@ struct yetty_yterminal_layer_result yetty_yvterm_content_layer_create(
                 yetty_ycore_error_destroy(dr.error);
             }
             free(content);
-            return YETTY_ERR(yetty_yterminal_layer, "content_layer_create: bind_ydraw failed",
-                             br);
+            return YETTY_ERR(yetty_yterminal_layer, "content_layer_create: bind_ydraw failed", br);
         }
     }
 
@@ -519,12 +520,12 @@ struct yetty_ycore_void_result yetty_yvterm_content_layer_register_wire(
                         "content_layer_register_wire: set_default(text grid) failed");
 
     /* ydraw canvas consumes the YDRAW DCS codes. */
-    const int ydraw_codes[3] = {YETTY_DCS_YDRAW_CLEAR, YETTY_DCS_YDRAW_BIN, YETTY_DCS_YDRAW_OVERLAY};
+    const int ydraw_codes[3] = {YETTY_DCS_YDRAW_CLEAR, YETTY_DCS_YDRAW_BIN,
+                                YETTY_DCS_YDRAW_OVERLAY};
     for (size_t i = 0; i < 3; i++) {
-        rr = yetty_ywire_wire_statemachine_register(sm, YETTY_YWIRE_ENVELOPE_DCS, ydraw_codes[i],
-                                                    /*has_args=*/1,
-                                                    yetty_yvterm_ydraw_content_process_input,
-                                                    content->ydraw);
+        rr = yetty_ywire_wire_statemachine_register(
+            sm, YETTY_YWIRE_ENVELOPE_DCS, ydraw_codes[i],
+            /*has_args=*/1, yetty_yvterm_ydraw_content_process_input, content->ydraw);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
                             "content_layer_register_wire: register ydraw DCS code failed");
     }

@@ -160,7 +160,10 @@ struct yetty_ycore_void_result yetty_yui_workspace_set_active(struct yetty_yui_w
      * "you are the foreground view now". */
     struct yetty_yui_event ev = {.type = YETTY_YCORE_SET_FOCUS};
     ev.set_focus.object_id = active ? yetty_yui_tile_id(focused) : 0;
-    { struct yetty_ycore_int_result drop_r = yetty_yui_tile_on_event(focused, &ev); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_on_event"); }
+    {
+        struct yetty_ycore_int_result drop_r = yetty_yui_tile_on_event(focused, &ev);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_on_event");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -406,8 +409,16 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
     /* Parent split is root? Promote sibling to root */
     if (ws->root == parent_split) {
         /* Clear parent's children to prevent double-free */
-        { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_first(parent_split, NULL); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_first"); }
-        { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_second(parent_split, NULL); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_second"); }
+        {
+            struct yetty_ycore_void_result drop_r =
+                yetty_yui_tile_split_set_first(parent_split, NULL);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_first");
+        }
+        {
+            struct yetty_ycore_void_result drop_r =
+                yetty_yui_tile_split_set_second(parent_split, NULL);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_second");
+        }
         (void)yetty_yui_tile_destroy(parent_split);
 
         ws->root = sibling;
@@ -425,8 +436,14 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
     }
 
     /* Clear parent's children to prevent double-free */
-    { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_first(parent_split, NULL); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_first"); }
-    { struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_second(parent_split, NULL); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_second"); }
+    {
+        struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_first(parent_split, NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_first");
+    }
+    {
+        struct yetty_ycore_void_result drop_r = yetty_yui_tile_split_set_second(parent_split, NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_second");
+    }
 
     if (yetty_yui_tile_split_first(grandparent) == parent_split) {
         res = yetty_yui_tile_split_set_first(grandparent, sibling);
@@ -579,8 +596,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
     }
 
     if (YETTY_IS_ERR(tile_res)) {
-        return YETTY_ERR(yetty_ycore_void, "workspace_load_layout: tile creation failed",
-                         tile_res);
+        return YETTY_ERR(yetty_ycore_void, "workspace_load_layout: tile creation failed", tile_res);
     }
 
     /* Set as root */

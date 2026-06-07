@@ -120911,6 +120911,7 @@ void yrdawn_client_free_WGPUYCbCrVkDescriptor(WGPUYCbCrVkDescriptor *s)
     }
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuCreateInstance(struct yetty_yrdawn_client *c)
 {
     struct yrdawn_args_wgpuCreateInstance args = {0};
@@ -120939,6 +120940,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuDeviceTick(struct yetty_yrdawn_
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceGetQueue(struct yetty_yrdawn_client *c, uint64_t device)
 {
     struct yrdawn_args_wgpuDeviceGetQueue args = {0};
@@ -120977,6 +120979,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuAdapterRelease(struct yetty_yrd
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateCommandEncoder(struct yetty_yrdawn_client *c,
                                                       uint64_t device)
 {
@@ -120998,6 +121001,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuCommandEncoderRelease(
                                              &args, sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuCommandEncoderFinish(struct yetty_yrdawn_client *c, uint64_t encoder)
 {
     struct yrdawn_args_wgpuCommandEncoderFinish args = {0};
@@ -121018,6 +121022,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuCommandBufferRelease(struct yet
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuInstanceRequestAdapter(struct yetty_yrdawn_client *c, uint64_t instance,
                                                   yetty_yrdawn_reply_cb cb, void *user)
 {
@@ -121030,6 +121035,7 @@ uint64_t yrdawn_client_wgpuInstanceRequestAdapter(struct yetty_yrdawn_client *c,
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuAdapterRequestDevice(struct yetty_yrdawn_client *c, uint64_t adapter,
                                                 yetty_yrdawn_reply_cb cb, void *user)
 {
@@ -121051,6 +121057,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuAdapterAddRef(struct yetty_yrda
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuAdapterCreateDevice(struct yetty_yrdawn_client *c, uint64_t adapter,
                                                WGPUDeviceDescriptor const *descriptor)
 {
@@ -121123,6 +121130,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuAdapterGetFeatures(struct yetty
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuAdapterGetFormatCapabilities(struct yetty_yrdawn_client *c,
                                                           uint64_t adapter, uint32_t format,
                                                           WGPUDawnFormatCapabilities *capabilities)
@@ -121163,6 +121171,7 @@ WGPUStatus yrdawn_client_wgpuAdapterGetFormatCapabilities(struct yetty_yrdawn_cl
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuAdapterGetInfo(struct yetty_yrdawn_client *c, uint64_t adapter,
                                             WGPUAdapterInfo *info)
 {
@@ -121201,6 +121210,7 @@ WGPUStatus yrdawn_client_wgpuAdapterGetInfo(struct yetty_yrdawn_client *c, uint6
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuAdapterGetInstance(struct yetty_yrdawn_client *c, uint64_t adapter)
 {
     struct yrdawn_args_wgpuAdapterGetInstance args = {0};
@@ -121212,6 +121222,7 @@ uint64_t yrdawn_client_wgpuAdapterGetInstance(struct yetty_yrdawn_client *c, uin
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuAdapterGetLimits(struct yetty_yrdawn_client *c, uint64_t adapter,
                                               WGPULimits *limits)
 {
@@ -121250,6 +121261,7 @@ WGPUStatus yrdawn_client_wgpuAdapterGetLimits(struct yetty_yrdawn_client *c, uin
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUBool yrdawn_client_wgpuAdapterHasFeature(struct yetty_yrdawn_client *c, uint64_t adapter,
                                              uint32_t feature)
 {
@@ -121415,6 +121427,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuBufferAddRef(struct yetty_yrdaw
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuBufferCreateTexelView(struct yetty_yrdawn_client *c, uint64_t buffer,
                                                  WGPUTexelBufferViewDescriptor const *descriptor)
 {
@@ -121463,6 +121476,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuBufferDestroy(struct yetty_yrda
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUBufferMapState yrdawn_client_wgpuBufferGetMapState(struct yetty_yrdawn_client *c,
                                                        uint64_t buffer)
 {
@@ -121480,6 +121494,7 @@ WGPUBufferMapState yrdawn_client_wgpuBufferGetMapState(struct yetty_yrdawn_clien
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuBufferGetSize(struct yetty_yrdawn_client *c, uint64_t buffer)
 {
     struct yrdawn_args_wgpuBufferGetSize args = {0};
@@ -121496,6 +121511,7 @@ uint64_t yrdawn_client_wgpuBufferGetSize(struct yetty_yrdawn_client *c, uint64_t
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUBufferUsage yrdawn_client_wgpuBufferGetUsage(struct yetty_yrdawn_client *c, uint64_t buffer)
 {
     struct yrdawn_args_wgpuBufferGetUsage args = {0};
@@ -121512,6 +121528,7 @@ WGPUBufferUsage yrdawn_client_wgpuBufferGetUsage(struct yetty_yrdawn_client *c, 
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUFuture yrdawn_client_wgpuBufferMapAsync(struct yetty_yrdawn_client *c, uint64_t buffer,
                                             uint32_t mode, size_t offset, size_t size,
                                             yetty_yrdawn_reply_cb cb, void *user)
@@ -121526,6 +121543,7 @@ WGPUFuture yrdawn_client_wgpuBufferMapAsync(struct yetty_yrdawn_client *c, uint6
     return (WGPUFuture){0};
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuBufferReadMappedRange(struct yetty_yrdawn_client *c, uint64_t buffer,
                                                    size_t offset, void *data, size_t size)
 {
@@ -121632,6 +121650,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuBufferUnmap(struct yetty_yrdawn
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuBufferWriteMappedRange(struct yetty_yrdawn_client *c, uint64_t buffer,
                                                     size_t offset, void const *data, size_t size)
 {
@@ -121728,6 +121747,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuCommandEncoderAddRef(struct yet
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuCommandEncoderBeginComputePass(
     struct yetty_yrdawn_client *c, uint64_t commandEncoder,
     WGPUComputePassDescriptor const *descriptor)
@@ -121768,6 +121788,7 @@ uint64_t yrdawn_client_wgpuCommandEncoderBeginComputePass(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuCommandEncoderBeginRenderPass(struct yetty_yrdawn_client *c,
                                                          uint64_t commandEncoder,
                                                          WGPURenderPassDescriptor const *descriptor)
@@ -122532,6 +122553,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuComputePipelineAddRef(
                                              &args, sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuComputePipelineGetBindGroupLayout(struct yetty_yrdawn_client *c,
                                                              uint64_t computePipeline,
                                                              uint32_t groupIndex)
@@ -122610,6 +122632,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuDeviceAddRef(struct yetty_yrdaw
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateBindGroup(struct yetty_yrdawn_client *c, uint64_t device,
                                                  WGPUBindGroupDescriptor const *descriptor)
 {
@@ -122649,6 +122672,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateBindGroup(struct yetty_yrdawn_client *c, 
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateBindGroupLayout(
     struct yetty_yrdawn_client *c, uint64_t device, WGPUBindGroupLayoutDescriptor const *descriptor)
 {
@@ -122688,6 +122712,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateBindGroupLayout(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateBuffer(struct yetty_yrdawn_client *c, uint64_t device,
                                               WGPUBufferDescriptor const *descriptor)
 {
@@ -122727,6 +122752,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateBuffer(struct yetty_yrdawn_client *c, uin
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateComputePipeline(
     struct yetty_yrdawn_client *c, uint64_t device, WGPUComputePipelineDescriptor const *descriptor)
 {
@@ -122766,6 +122792,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateComputePipeline(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUFuture yrdawn_client_wgpuDeviceCreateComputePipelineAsync(
     struct yetty_yrdawn_client *c, uint64_t device, WGPUComputePipelineDescriptor const *descriptor,
     yetty_yrdawn_reply_cb cb, void *user)
@@ -122805,6 +122832,7 @@ WGPUFuture yrdawn_client_wgpuDeviceCreateComputePipelineAsync(
     return (WGPUFuture){0};
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateErrorBuffer(struct yetty_yrdawn_client *c, uint64_t device,
                                                    WGPUBufferDescriptor const *descriptor)
 {
@@ -122844,6 +122872,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateErrorBuffer(struct yetty_yrdawn_client *c
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateErrorExternalTexture(struct yetty_yrdawn_client *c,
                                                             uint64_t device)
 {
@@ -122856,6 +122885,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateErrorExternalTexture(struct yetty_yrdawn_
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateErrorShaderModule(
     struct yetty_yrdawn_client *c, uint64_t device, WGPUShaderModuleDescriptor const *descriptor,
     WGPUStringView errorMessage)
@@ -122912,6 +122942,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateErrorShaderModule(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateErrorTexture(struct yetty_yrdawn_client *c, uint64_t device,
                                                     WGPUTextureDescriptor const *descriptor)
 {
@@ -122951,6 +122982,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateErrorTexture(struct yetty_yrdawn_client *
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateExternalTexture(
     struct yetty_yrdawn_client *c, uint64_t device,
     WGPUExternalTextureDescriptor const *externalTextureDescriptor)
@@ -122991,6 +123023,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateExternalTexture(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreatePipelineLayout(
     struct yetty_yrdawn_client *c, uint64_t device, WGPUPipelineLayoutDescriptor const *descriptor)
 {
@@ -123030,6 +123063,7 @@ uint64_t yrdawn_client_wgpuDeviceCreatePipelineLayout(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateQuerySet(struct yetty_yrdawn_client *c, uint64_t device,
                                                 WGPUQuerySetDescriptor const *descriptor)
 {
@@ -123069,6 +123103,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateQuerySet(struct yetty_yrdawn_client *c, u
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateRenderBundleEncoder(
     struct yetty_yrdawn_client *c, uint64_t device,
     WGPURenderBundleEncoderDescriptor const *descriptor)
@@ -123109,6 +123144,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateRenderBundleEncoder(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateRenderPipeline(
     struct yetty_yrdawn_client *c, uint64_t device, WGPURenderPipelineDescriptor const *descriptor)
 {
@@ -123148,6 +123184,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateRenderPipeline(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUFuture yrdawn_client_wgpuDeviceCreateRenderPipelineAsync(
     struct yetty_yrdawn_client *c, uint64_t device, WGPURenderPipelineDescriptor const *descriptor,
     yetty_yrdawn_reply_cb cb, void *user)
@@ -123187,6 +123224,7 @@ WGPUFuture yrdawn_client_wgpuDeviceCreateRenderPipelineAsync(
     return (WGPUFuture){0};
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateResourceTable(struct yetty_yrdawn_client *c, uint64_t device,
                                                      WGPUResourceTableDescriptor const *descriptor)
 {
@@ -123226,6 +123264,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateResourceTable(struct yetty_yrdawn_client 
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateSampler(struct yetty_yrdawn_client *c, uint64_t device,
                                                WGPUSamplerDescriptor const *descriptor)
 {
@@ -123265,6 +123304,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateSampler(struct yetty_yrdawn_client *c, ui
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateShaderModule(struct yetty_yrdawn_client *c, uint64_t device,
                                                     WGPUShaderModuleDescriptor const *descriptor)
 {
@@ -123304,6 +123344,7 @@ uint64_t yrdawn_client_wgpuDeviceCreateShaderModule(struct yetty_yrdawn_client *
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceCreateTexture(struct yetty_yrdawn_client *c, uint64_t device,
                                                WGPUTextureDescriptor const *descriptor)
 {
@@ -123393,6 +123434,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuDeviceForceLoss(struct yetty_yr
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuDeviceGetAHardwareBufferProperties(
     struct yetty_yrdawn_client *c, uint64_t device, uint64_t handle,
     WGPUAHardwareBufferProperties *properties)
@@ -123433,6 +123475,7 @@ WGPUStatus yrdawn_client_wgpuDeviceGetAHardwareBufferProperties(
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceGetAdapter(struct yetty_yrdawn_client *c, uint64_t device)
 {
     struct yrdawn_args_wgpuDeviceGetAdapter args = {0};
@@ -123444,6 +123487,7 @@ uint64_t yrdawn_client_wgpuDeviceGetAdapter(struct yetty_yrdawn_client *c, uint6
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuDeviceGetAdapterInfo(struct yetty_yrdawn_client *c, uint64_t device,
                                                   WGPUAdapterInfo *adapterInfo)
 {
@@ -123515,6 +123559,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuDeviceGetFeatures(struct yetty_
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuDeviceGetLimits(struct yetty_yrdawn_client *c, uint64_t device,
                                              WGPULimits *limits)
 {
@@ -123553,6 +123598,7 @@ WGPUStatus yrdawn_client_wgpuDeviceGetLimits(struct yetty_yrdawn_client *c, uint
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUFuture yrdawn_client_wgpuDeviceGetLostFuture(struct yetty_yrdawn_client *c, uint64_t device)
 {
     struct yrdawn_args_wgpuDeviceGetLostFuture args = {0};
@@ -123569,6 +123615,7 @@ WGPUFuture yrdawn_client_wgpuDeviceGetLostFuture(struct yetty_yrdawn_client *c, 
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUBool yrdawn_client_wgpuDeviceHasFeature(struct yetty_yrdawn_client *c, uint64_t device,
                                             uint32_t feature)
 {
@@ -123587,6 +123634,7 @@ WGPUBool yrdawn_client_wgpuDeviceHasFeature(struct yetty_yrdawn_client *c, uint6
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceImportSharedBufferMemory(
     struct yetty_yrdawn_client *c, uint64_t device,
     WGPUSharedBufferMemoryDescriptor const *descriptor)
@@ -123627,6 +123675,7 @@ uint64_t yrdawn_client_wgpuDeviceImportSharedBufferMemory(
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceImportSharedFence(struct yetty_yrdawn_client *c, uint64_t device,
                                                    WGPUSharedFenceDescriptor const *descriptor)
 {
@@ -123666,6 +123715,7 @@ uint64_t yrdawn_client_wgpuDeviceImportSharedFence(struct yetty_yrdawn_client *c
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuDeviceImportSharedTextureMemory(
     struct yetty_yrdawn_client *c, uint64_t device,
     WGPUSharedTextureMemoryDescriptor const *descriptor)
@@ -123747,6 +123797,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuDeviceInjectError(struct yetty_
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUFuture yrdawn_client_wgpuDevicePopErrorScope(struct yetty_yrdawn_client *c, uint64_t device,
                                                  yetty_yrdawn_reply_cb cb, void *user)
 {
@@ -123969,6 +124020,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuGetInstanceFeatures(
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuGetInstanceLimits(struct yetty_yrdawn_client *c,
                                                WGPUInstanceLimits *limits)
 {
@@ -124006,6 +124058,7 @@ WGPUStatus yrdawn_client_wgpuGetInstanceLimits(struct yetty_yrdawn_client *c,
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuGetProcAddress(struct yetty_yrdawn_client *c, WGPUStringView procName)
 {
     struct yrdawn_args_wgpuGetProcAddress args = {0};
@@ -124045,6 +124098,7 @@ uint64_t yrdawn_client_wgpuGetProcAddress(struct yetty_yrdawn_client *c, WGPUStr
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUBool yrdawn_client_wgpuHasInstanceFeature(struct yetty_yrdawn_client *c, uint32_t feature)
 {
     struct yrdawn_args_wgpuHasInstanceFeature args = {0};
@@ -124070,6 +124124,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuInstanceAddRef(struct yetty_yrd
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuInstanceCreateSurface(struct yetty_yrdawn_client *c, uint64_t instance,
                                                  WGPUSurfaceDescriptor const *descriptor)
 {
@@ -124141,6 +124196,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuInstanceGetWGSLLanguageFeatures
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUBool yrdawn_client_wgpuInstanceHasWGSLLanguageFeature(struct yetty_yrdawn_client *c,
                                                           uint64_t instance, uint32_t feature)
 {
@@ -124168,6 +124224,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuInstanceProcessEvents(
                                              &args, sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUWaitStatus yrdawn_client_wgpuInstanceWaitAny(struct yetty_yrdawn_client *c, uint64_t instance,
                                                  size_t futureCount,
                                                  WGPUFutureWaitInfo const *futures,
@@ -124268,6 +124325,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuQuerySetDestroy(struct yetty_yr
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_client_wgpuQuerySetGetCount(struct yetty_yrdawn_client *c, uint64_t querySet)
 {
     struct yrdawn_args_wgpuQuerySetGetCount args = {0};
@@ -124284,6 +124342,7 @@ uint32_t yrdawn_client_wgpuQuerySetGetCount(struct yetty_yrdawn_client *c, uint6
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUQueryType yrdawn_client_wgpuQuerySetGetType(struct yetty_yrdawn_client *c, uint64_t querySet)
 {
     struct yrdawn_args_wgpuQuerySetGetType args = {0};
@@ -124500,6 +124559,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuQueueCopyTextureForBrowser(
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUFuture yrdawn_client_wgpuQueueOnSubmittedWorkDone(struct yetty_yrdawn_client *c, uint64_t queue,
                                                       yetty_yrdawn_reply_cb cb, void *user)
 {
@@ -124759,6 +124819,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuRenderBundleEncoderDrawIndirect
         c, YETTY_YRDAWN_METHOD_wgpuRenderBundleEncoderDrawIndirect, &args, sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuRenderBundleEncoderFinish(struct yetty_yrdawn_client *c,
                                                      uint64_t renderBundleEncoder,
                                                      WGPURenderBundleDescriptor const *descriptor)
@@ -125614,6 +125675,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuRenderPipelineAddRef(struct yet
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuRenderPipelineGetBindGroupLayout(struct yetty_yrdawn_client *c,
                                                             uint64_t renderPipeline,
                                                             uint32_t groupIndex)
@@ -125694,6 +125756,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuResourceTableDestroy(struct yet
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_client_wgpuResourceTableGetSize(struct yetty_yrdawn_client *c,
                                                 uint64_t resourceTable)
 {
@@ -125711,6 +125774,7 @@ uint32_t yrdawn_client_wgpuResourceTableGetSize(struct yetty_yrdawn_client *c,
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_client_wgpuResourceTableInsertBinding(struct yetty_yrdawn_client *c,
                                                       uint64_t resourceTable,
                                                       WGPUBindingResource const *resource)
@@ -125760,6 +125824,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuResourceTableRelease(struct yet
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuResourceTableRemoveBinding(struct yetty_yrdawn_client *c,
                                                         uint64_t resourceTable, uint32_t slot)
 {
@@ -125778,6 +125843,7 @@ WGPUStatus yrdawn_client_wgpuResourceTableRemoveBinding(struct yetty_yrdawn_clie
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuResourceTableUpdate(struct yetty_yrdawn_client *c,
                                                  uint64_t resourceTable, uint32_t slot,
                                                  WGPUBindingResource const *resource)
@@ -125886,6 +125952,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuShaderModuleAddRef(struct yetty
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUFuture yrdawn_client_wgpuShaderModuleGetCompilationInfo(struct yetty_yrdawn_client *c,
                                                             uint64_t shaderModule,
                                                             yetty_yrdawn_reply_cb cb, void *user)
@@ -125955,6 +126022,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuSharedBufferMemoryAddRef(
                                              &args, sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuSharedBufferMemoryBeginAccess(
     struct yetty_yrdawn_client *c, uint64_t sharedBufferMemory, uint64_t buffer,
     WGPUSharedBufferMemoryBeginAccessDescriptor const *descriptor)
@@ -125996,6 +126064,7 @@ WGPUStatus yrdawn_client_wgpuSharedBufferMemoryBeginAccess(
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuSharedBufferMemoryCreateBuffer(struct yetty_yrdawn_client *c,
                                                           uint64_t sharedBufferMemory,
                                                           WGPUBufferDescriptor const *descriptor)
@@ -126036,6 +126105,7 @@ uint64_t yrdawn_client_wgpuSharedBufferMemoryCreateBuffer(struct yetty_yrdawn_cl
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuSharedBufferMemoryEndAccess(
     struct yetty_yrdawn_client *c, uint64_t sharedBufferMemory, uint64_t buffer,
     WGPUSharedBufferMemoryEndAccessState *descriptor)
@@ -126084,6 +126154,7 @@ void yrdawn_client_wgpuSharedBufferMemoryEndAccessStateFreeMembers(
     yrdawn_client_free_WGPUSharedBufferMemoryEndAccessState(&sharedBufferMemoryEndAccessState);
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuSharedBufferMemoryGetProperties(
     struct yetty_yrdawn_client *c, uint64_t sharedBufferMemory,
     WGPUSharedBufferMemoryProperties *properties)
@@ -126123,6 +126194,7 @@ WGPUStatus yrdawn_client_wgpuSharedBufferMemoryGetProperties(
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUBool yrdawn_client_wgpuSharedBufferMemoryIsDeviceLost(struct yetty_yrdawn_client *c,
                                                           uint64_t sharedBufferMemory)
 {
@@ -126287,6 +126359,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuSharedTextureMemoryAddRef(
                                              &args, sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuSharedTextureMemoryBeginAccess(
     struct yetty_yrdawn_client *c, uint64_t sharedTextureMemory, uint64_t texture,
     WGPUSharedTextureMemoryBeginAccessDescriptor const *descriptor)
@@ -126328,6 +126401,7 @@ WGPUStatus yrdawn_client_wgpuSharedTextureMemoryBeginAccess(
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuSharedTextureMemoryCreateTexture(struct yetty_yrdawn_client *c,
                                                             uint64_t sharedTextureMemory,
                                                             WGPUTextureDescriptor const *descriptor)
@@ -126368,6 +126442,7 @@ uint64_t yrdawn_client_wgpuSharedTextureMemoryCreateTexture(struct yetty_yrdawn_
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuSharedTextureMemoryEndAccess(
     struct yetty_yrdawn_client *c, uint64_t sharedTextureMemory, uint64_t texture,
     WGPUSharedTextureMemoryEndAccessState *descriptor)
@@ -126416,6 +126491,7 @@ void yrdawn_client_wgpuSharedTextureMemoryEndAccessStateFreeMembers(
     yrdawn_client_free_WGPUSharedTextureMemoryEndAccessState(&sharedTextureMemoryEndAccessState);
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuSharedTextureMemoryGetProperties(
     struct yetty_yrdawn_client *c, uint64_t sharedTextureMemory,
     WGPUSharedTextureMemoryProperties *properties)
@@ -126455,6 +126531,7 @@ WGPUStatus yrdawn_client_wgpuSharedTextureMemoryGetProperties(
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUBool yrdawn_client_wgpuSharedTextureMemoryIsDeviceLost(struct yetty_yrdawn_client *c,
                                                            uint64_t sharedTextureMemory)
 {
@@ -126594,6 +126671,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuSurfaceConfigure(
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuSurfaceGetCapabilities(struct yetty_yrdawn_client *c, uint64_t surface,
                                                     uint64_t adapter,
                                                     WGPUSurfaceCapabilities *capabilities)
@@ -126666,6 +126744,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuSurfaceGetCurrentTexture(
     return YETTY_OK_VOID();
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUStatus yrdawn_client_wgpuSurfacePresent(struct yetty_yrdawn_client *c, uint64_t surface)
 {
     struct yrdawn_args_wgpuSurfacePresent args = {0};
@@ -126806,6 +126885,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuTextureAddRef(struct yetty_yrda
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuTextureCreateErrorView(struct yetty_yrdawn_client *c, uint64_t texture,
                                                   WGPUTextureViewDescriptor const *descriptor)
 {
@@ -126845,6 +126925,7 @@ uint64_t yrdawn_client_wgpuTextureCreateErrorView(struct yetty_yrdawn_client *c,
     return h;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint64_t yrdawn_client_wgpuTextureCreateView(struct yetty_yrdawn_client *c, uint64_t texture,
                                              WGPUTextureViewDescriptor const *descriptor)
 {
@@ -126893,6 +126974,7 @@ struct yetty_ycore_void_result yrdawn_client_wgpuTextureDestroy(struct yetty_yrd
                                              sizeof(args));
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_client_wgpuTextureGetDepthOrArrayLayers(struct yetty_yrdawn_client *c,
                                                         uint64_t texture)
 {
@@ -126910,6 +126992,7 @@ uint32_t yrdawn_client_wgpuTextureGetDepthOrArrayLayers(struct yetty_yrdawn_clie
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUTextureDimension yrdawn_client_wgpuTextureGetDimension(struct yetty_yrdawn_client *c,
                                                            uint64_t texture)
 {
@@ -126927,6 +127010,7 @@ WGPUTextureDimension yrdawn_client_wgpuTextureGetDimension(struct yetty_yrdawn_c
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUTextureFormat yrdawn_client_wgpuTextureGetFormat(struct yetty_yrdawn_client *c,
                                                      uint64_t texture)
 {
@@ -126944,6 +127028,7 @@ WGPUTextureFormat yrdawn_client_wgpuTextureGetFormat(struct yetty_yrdawn_client 
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_client_wgpuTextureGetHeight(struct yetty_yrdawn_client *c, uint64_t texture)
 {
     struct yrdawn_args_wgpuTextureGetHeight args = {0};
@@ -126960,6 +127045,7 @@ uint32_t yrdawn_client_wgpuTextureGetHeight(struct yetty_yrdawn_client *c, uint6
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_client_wgpuTextureGetMipLevelCount(struct yetty_yrdawn_client *c, uint64_t texture)
 {
     struct yrdawn_args_wgpuTextureGetMipLevelCount args = {0};
@@ -126976,6 +127062,7 @@ uint32_t yrdawn_client_wgpuTextureGetMipLevelCount(struct yetty_yrdawn_client *c
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_client_wgpuTextureGetSampleCount(struct yetty_yrdawn_client *c, uint64_t texture)
 {
     struct yrdawn_args_wgpuTextureGetSampleCount args = {0};
@@ -126992,6 +127079,7 @@ uint32_t yrdawn_client_wgpuTextureGetSampleCount(struct yetty_yrdawn_client *c, 
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUTextureViewDimension yrdawn_client_wgpuTextureGetTextureBindingViewDimension(
     struct yetty_yrdawn_client *c, uint64_t texture)
 {
@@ -127009,6 +127097,7 @@ WGPUTextureViewDimension yrdawn_client_wgpuTextureGetTextureBindingViewDimension
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 WGPUTextureUsage yrdawn_client_wgpuTextureGetUsage(struct yetty_yrdawn_client *c, uint64_t texture)
 {
     struct yrdawn_args_wgpuTextureGetUsage args = {0};
@@ -127025,6 +127114,7 @@ WGPUTextureUsage yrdawn_client_wgpuTextureGetUsage(struct yetty_yrdawn_client *c
     return _result;
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_client_wgpuTextureGetWidth(struct yetty_yrdawn_client *c, uint64_t texture)
 {
     struct yrdawn_args_wgpuTextureGetWidth args = {0};

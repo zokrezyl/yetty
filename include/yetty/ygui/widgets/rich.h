@@ -20,6 +20,8 @@ struct yetty_ygui_object;
 
 struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *obj);
 struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object *obj, const char *text, float font_size, uint32_t color_rgba);
+struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object *obj,
+                                                        const char *text, float font_size,
+                                                        uint32_t color_rgba);
 
 #endif

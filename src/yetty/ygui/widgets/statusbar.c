@@ -27,10 +27,9 @@ static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_statusbar_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_statusbar_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "statusbar_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
@@ -58,10 +57,8 @@ static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_c
     free(d->left);
     free(d->right);
     d->left = d->right = NULL;
-    return yetty_ygui_super_void(
-        obj,
-        yetty_ygui_statusbar_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_statusbar_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:statusbar:widget_paint")]]
@@ -98,8 +95,8 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
     if (d->left && d->left[0]) {
         struct yetty_ycore_buffer tb = {
             .data = (uint8_t *)d->left, .capacity = strlen(d->left), .size = strlen(d->left)};
-        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + 12.0f, ty, &tb, fs,
-                                            COLOR_TEXT, 0, -1, 0.0f);
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.min.x + 12.0f, ty, &tb,
+                                                fs, COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "statusbar_paint: left");
     }
     if (d->right && d->right[0]) {
@@ -109,8 +106,8 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
          * measurement lands in a follow-up; this is the same heuristic
          * the old toolkit used. */
         float text_w = (float)n * fs * 0.55f;
-        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.max.x - 12.0f - text_w, ty, &tb,
-                                            fs, COLOR_TEXT, 0, -1, 0.0f);
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, r.max.x - 12.0f - text_w,
+                                                ty, &tb, fs, COLOR_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "statusbar_paint: right");
     }
     return YETTY_OK_VOID();

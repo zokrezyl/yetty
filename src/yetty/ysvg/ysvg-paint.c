@@ -258,14 +258,14 @@ static struct yetty_ycore_void_result emit_circle(struct ysvg_paint_state *ps,
 
     if (fabsf(sx - sy) < 1e-4f) {
         struct yetty_ysdf_circle geom = {.center_x = cx, .center_y = cy, .radius = r * sx};
-        struct yetty_ycore_void_result q =
-            yetty_ydraw_drawable_list_add_cmd_add_circle(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
+        struct yetty_ycore_void_result q = yetty_ydraw_drawable_list_add_cmd_add_circle(
+            ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, q, "ysvg: circle emit failed");
     } else {
         struct yetty_ysdf_ellipse geom = {
             .center_x = cx, .center_y = cy, .radius_x = r * sx, .radius_y = r * sy};
-        struct yetty_ycore_void_result q =
-            yetty_ydraw_drawable_list_add_cmd_add_ellipse(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
+        struct yetty_ycore_void_result q = yetty_ydraw_drawable_list_add_cmd_add_ellipse(
+            ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, q, "ysvg: circle-as-ellipse emit failed");
     }
     return YETTY_OK_VOID();
@@ -485,8 +485,8 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
         .size = blen,
         .capacity = blen,
     };
-    struct yetty_ycore_void_result tr =
-        yetty_ydraw_drawable_list_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1, 0.0f);
+    struct yetty_ycore_void_result tr = yetty_ydraw_drawable_list_add_text(
+        ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1, 0.0f);
     if (YETTY_IS_ERR(tr)) {
         return tr;
     }

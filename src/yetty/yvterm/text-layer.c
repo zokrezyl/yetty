@@ -327,7 +327,12 @@ static int text_layer_is_empty(const struct yetty_yrender_terminal_layer *self)
 }
 
 /* Mirrors the dirty check inside text_layer_render — single-pass over the
- * whole grid, so the base dirty bit is the only state that matters. */
+ * whole grid, so the base dirty bit is the only state that matters.
+ *
+ * This is a terminal-layer vtable slot (`.is_dirty`) with an int-returning
+ * signature dictated by <yetty/yterminal/terminal.h>; it cannot return a
+ * Result, so the figure-dirty query's Result is absorbed here. */
+YETTY_EXTERNAL_CALLBACK
 static int text_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
 {
     if (self->dirty) {
@@ -335,9 +340,8 @@ static int text_layer_is_dirty(const struct yetty_yrender_terminal_layer *self)
     }
     /* The owned shader-glyph figure animates independently — surface its dirty
      * so the frame renders us (and thus it). */
-    struct yetty_yclass_object *sgf_obj = text_layer_sgf_object(
-        container_of((struct yetty_yrender_terminal_layer *)self,
-                     struct yetty_yvterm_text_layer, base));
+    struct yetty_yclass_object *sgf_obj = text_layer_sgf_object(container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base));
     return sgf_obj && yetty_yfigure_figure_dirty_get(sgf_obj).value;
 }
 
@@ -626,8 +630,8 @@ static void vterm_output_callback(const char *data, size_t len, void *user)
 
 /* Resolve one config colour key to a VTermColor. Missing / malformed keys
  * fall back to default_hex so a partial palette in config still works. */
-static VTermColor color_from_config(const struct yetty_yconfig_config *config,
-                                           const char *key, const char *default_hex)
+static VTermColor color_from_config(const struct yetty_yconfig_config *config, const char *key,
+                                    const char *default_hex)
 {
     const char *s = NULL;
     if (config && config->ops && config->ops->get_string) {
@@ -669,22 +673,14 @@ static void apply_color_palette(const struct yetty_yconfig_config *config, VTerm
         const char *key;
         const char *hex;
     } palette[16] = {
-        {"terminal/colors/normal/black", "#1d1f21"},
-        {"terminal/colors/normal/red", "#cc6666"},
-        {"terminal/colors/normal/green", "#b5bd68"},
-        {"terminal/colors/normal/yellow", "#f0c674"},
-        {"terminal/colors/normal/blue", "#81a2be"},
-        {"terminal/colors/normal/magenta", "#b294bb"},
-        {"terminal/colors/normal/cyan", "#8abeb7"},
-        {"terminal/colors/normal/white", "#c5c8c6"},
-        {"terminal/colors/bright/black", "#666666"},
-        {"terminal/colors/bright/red", "#d54e53"},
-        {"terminal/colors/bright/green", "#b9ca4a"},
-        {"terminal/colors/bright/yellow", "#e7c547"},
-        {"terminal/colors/bright/blue", "#7aa6da"},
-        {"terminal/colors/bright/magenta", "#c397d8"},
-        {"terminal/colors/bright/cyan", "#70c0ba"},
-        {"terminal/colors/bright/white", "#eaeaea"},
+        {"terminal/colors/normal/black", "#1d1f21"}, {"terminal/colors/normal/red", "#cc6666"},
+        {"terminal/colors/normal/green", "#b5bd68"}, {"terminal/colors/normal/yellow", "#f0c674"},
+        {"terminal/colors/normal/blue", "#81a2be"},  {"terminal/colors/normal/magenta", "#b294bb"},
+        {"terminal/colors/normal/cyan", "#8abeb7"},  {"terminal/colors/normal/white", "#c5c8c6"},
+        {"terminal/colors/bright/black", "#666666"}, {"terminal/colors/bright/red", "#d54e53"},
+        {"terminal/colors/bright/green", "#b9ca4a"}, {"terminal/colors/bright/yellow", "#e7c547"},
+        {"terminal/colors/bright/blue", "#7aa6da"},  {"terminal/colors/bright/magenta", "#c397d8"},
+        {"terminal/colors/bright/cyan", "#70c0ba"},  {"terminal/colors/bright/white", "#eaeaea"},
     };
 
     VTermState *state = vterm_obtain_state(vterm);
@@ -711,35 +707,33 @@ static void apply_color_palette(const struct yetty_yconfig_config *config, VTerm
  * physical cell (in either the primary or alt buffer) still references it. This
  * sidesteps every double-free hazard the cell-duplicating paths would create.
  * Cost: a couple of linear scans of the 2*rows*cols cell buffers. */
-static void text_layer_gc_handles(struct yetty_yvterm_text_layer *text_layer)
+static struct yetty_ycore_void_result text_layer_gc_handles(
+    struct yetty_yvterm_text_layer *text_layer)
 {
     /* Handles only ever live on the primary buffer. While the altscreen is
      * active the active buffer is the altscreen (no handles), so scanning it
      * would reap the primary's still-referenced handles — suppress GC until
      * the primary screen is restored. */
     if (!text_layer->screen || text_layer->alt_active) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ydraw_cell_ref_table *table = &text_layer->cell_ref_table;
     uint32_t live_before = table->count > 1 ? (table->count - 1 - table->free_count) : 0;
     struct yetty_ycore_void_result gb = yetty_ydraw_cell_ref_table_gc_begin(table);
-    if (YETTY_IS_ERR(gb)) {
-        /* Out of memory growing the mark bitmap — skip this GC pass; slots
-         * simply persist until the next successful pass. */
-        yetty_ycore_error_destroy(gb.error);
-        return;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gb, "text_layer_gc_handles: gc_begin");
     const VTermScreenCell *buffer = vterm_screen_get_buffer(text_layer->screen);
     size_t cells = vterm_screen_get_buffer_size(text_layer->screen) / sizeof(VTermScreenCell);
     for (size_t cell = 0; cell < cells; cell++) {
         yetty_ydraw_cell_ref_table_gc_mark(table, buffer[cell].rich_handle);
     }
-    yetty_ydraw_cell_ref_table_gc_end(table);
+    struct yetty_ycore_void_result ge = yetty_ydraw_cell_ref_table_gc_end(table);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ge, "text_layer_gc_handles: gc_end");
     uint32_t live_after = table->count > 1 ? (table->count - 1 - table->free_count) : 0;
     if (live_before != live_after) {
         ydebug("rich: gc reclaimed %u handles (live %u -> %u)", live_before - live_after,
                live_before, live_after);
     }
+    return YETTY_OK_VOID();
 }
 
 /* cell_source.handle_at — returns a writable pointer to the rich_handle of
@@ -780,8 +774,7 @@ struct yetty_ycore_void_result yetty_yvterm_text_layer_bind_ydraw(
 
 /* yclass object behind the owned shader-glyph figure (for render/dirty/destroy
  * dispatch), or NULL if none. */
-static struct yetty_yclass_object *text_layer_sgf_object(
-    struct yetty_yvterm_text_layer *text_layer)
+static struct yetty_yclass_object *text_layer_sgf_object(struct yetty_yvterm_text_layer *text_layer)
 {
     if (!text_layer->shader_glyph_figure) {
         return NULL;
@@ -818,8 +811,9 @@ struct yetty_yterminal_layer_result yetty_yvterm_text_layer_create(
     }
 
     /* Initialise the scrollback arena with the configured max-lines cap. */
-    yetty_yvterm_text_sb_arena_init(&text_layer->sb,
-                  config->ops->scrollback_lines ? config->ops->scrollback_lines(config) : 10000);
+    yetty_yvterm_text_sb_arena_init(&text_layer->sb, config->ops->scrollback_lines
+                                                         ? config->ops->scrollback_lines(config)
+                                                         : 10000);
 
     text_layer->shader_code = shader_res.value;
     text_layer->base.ops = &text_layer_ops;
@@ -987,11 +981,10 @@ struct yetty_yterminal_layer_result yetty_yvterm_text_layer_create(
                     .y = (float)rows * text_layer->base.cell_size.height},
         };
         struct yetty_yvterm_shader_glyph_figure_ptr_result sgf_res =
-            yetty_yvterm_shader_glyph_figure_create(sgf_rect, cols, rows,
-                                                   text_layer->base.cell_size.width,
-                                                   text_layer->base.cell_size.height,
-                                                   &text_layer->base, context, request_render_fn,
-                                                   request_render_userdata);
+            yetty_yvterm_shader_glyph_figure_create(
+                sgf_rect, cols, rows, text_layer->base.cell_size.width,
+                text_layer->base.cell_size.height, &text_layer->base, context, request_render_fn,
+                request_render_userdata);
         YETTY_RETURN_IF_ERR(yetty_yterminal_layer, sgf_res,
                             "text_layer_create: shader_glyph figure create failed");
         text_layer->shader_glyph_figure = sgf_res.value;
@@ -1223,13 +1216,20 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
 {
     struct yetty_yvterm_text_layer *text_layer =
         (struct yetty_yvterm_text_layer *)((const char *)self -
-                                                   offsetof(struct yetty_yvterm_text_layer,
-                                                            base));
+                                           offsetof(struct yetty_yvterm_text_layer, base));
 
     /* Reclaim rich-handle slots no cell references anymore. Runs before the
      * ydraw layer (rendered after us) reads the table, and after this frame's
-     * ingestion has stamped any new handles, so live refs are never collected. */
-    text_layer_gc_handles(text_layer);
+     * ingestion has stamped any new handles, so live refs are never collected.
+     *
+     * GC is best-effort: an OOM growing the mark bitmap just defers the sweep
+     * to the next dirty pass (slots stay live, never wrongly collected), so a
+     * failure here must not abort producing this frame's resource set. */
+    struct yetty_ycore_void_result gc_res = text_layer_gc_handles(text_layer);
+    if (YETTY_IS_ERR(gc_res)) {
+        ydebug("rich: gc pass skipped: %s", gc_res.error.msg ? gc_res.error.msg : "(no msg)");
+        yetty_ycore_error_destroy(gc_res.error);
+    }
 
     /* Live mode: GPU reads vterm's buffer directly (zero-copy).
      * Scrollback view: rebuild the stitched buffer every dirty pass — new
@@ -1316,7 +1316,10 @@ struct yetty_ycore_void_result yetty_yvterm_text_layer_render_figures(
     }
     struct yetty_ycore_void_result fr = yetty_yfigure_render(NULL, sgf_obj, target);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "text_layer_render_figures: shader_glyph render");
-    { struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set(sgf_obj, 0); YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set"); }
+    {
+        struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_dirty_set(sgf_obj, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -1324,8 +1327,8 @@ struct yetty_ycore_void_result yetty_yvterm_text_layer_render_figures(
  * shader-glyph layer) that need to read the same grid as the text shader.
  * Returns the same pointer text-layer uploads — live screen in normal mode,
  * stitched scrollback view when view_active. */
-void yetty_yvterm_text_layer_get_cells(
-    const struct yetty_yrender_terminal_layer *self, const uint8_t **out_data, size_t *out_size)
+void yetty_yvterm_text_layer_get_cells(const struct yetty_yrender_terminal_layer *self,
+                                       const uint8_t **out_data, size_t *out_size)
 {
     const struct yetty_yvterm_text_layer *text_layer = container_of(
         (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base);
@@ -1349,8 +1352,7 @@ void yetty_yvterm_text_layer_get_cells(
     }
 }
 
-uint32_t yetty_yvterm_text_layer_get_root_row(
-    const struct yetty_yrender_terminal_layer *self)
+uint32_t yetty_yvterm_text_layer_get_root_row(const struct yetty_yrender_terminal_layer *self)
 {
     const struct yetty_yvterm_text_layer *text_layer = container_of(
         (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base);
@@ -1537,7 +1539,8 @@ static void text_layer_build_view(struct yetty_yvterm_text_layer *layer)
         VTermScreenCell *dst = layer->view_staging + (size_t)gpu_y * cols;
 
         if (total_idx < layer->sb.lines_count) {
-            const struct yetty_yvterm_text_sb_line_rec *rec = yetty_yvterm_text_sb_arena_peek(&layer->sb, total_idx);
+            const struct yetty_yvterm_text_sb_line_rec *rec =
+                yetty_yvterm_text_sb_arena_peek(&layer->sb, total_idx);
             /* Sanity-check the record. If anything looks off (uninit slot,
              * stale offset, negative cols), fill blank and shout. Without
              * this we segfault deep in memcpy with no breadcrumbs. */
@@ -1634,9 +1637,8 @@ static int on_sb_popline(int cols, VTermScreenCell *cells, void *user)
 /* Sort (anchor_row, anchor_col) and (head_row, head_col) into a reading-order
  * (start, end) pair. start always precedes end in top-down, left-to-right
  * stream order. */
-static void text_layer_sel_sorted(const struct yetty_yvterm_text_layer *layer,
-                                  uint32_t *out_sr, uint32_t *out_sc, uint32_t *out_er,
-                                  uint32_t *out_ec)
+static void text_layer_sel_sorted(const struct yetty_yvterm_text_layer *layer, uint32_t *out_sr,
+                                  uint32_t *out_sc, uint32_t *out_er, uint32_t *out_ec)
 {
     uint32_t sr = layer->sel_anchor_row;
     uint32_t sc = layer->sel_anchor_col;
@@ -1721,8 +1723,8 @@ static uint32_t text_layer_codepoint_from_cell(struct yetty_yvterm_text_layer *l
  * cell". We trim trailing blanks within the slice — copying 80 trailing
  * spaces because the user dragged past EOL is never useful. */
 static struct yetty_ycore_void_result text_layer_append_row_slice(
-    struct yetty_yvterm_text_layer *layer, uint32_t row, uint32_t start_col,
-    uint32_t end_col, struct yetty_ycore_buffer *out)
+    struct yetty_yvterm_text_layer *layer, uint32_t row, uint32_t start_col, uint32_t end_col,
+    struct yetty_ycore_buffer *out)
 {
     int cols = (int)layer->base.grid_size.cols;
     if (cols <= 0 || (int)start_col >= cols || end_col == 0 || start_col >= end_col) {

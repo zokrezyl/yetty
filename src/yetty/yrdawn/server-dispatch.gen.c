@@ -106561,6 +106561,7 @@ static void yrdawn_trampoline_wgpuShaderModuleGetCompilationInfo(
     free(d);
 }
 
+YETTY_EXTERNAL_CALLBACK
 uint32_t yrdawn_server_dispatch(void *ctx, uint32_t method_id, uint32_t req_id, const void *body,
                                 size_t body_len)
 {

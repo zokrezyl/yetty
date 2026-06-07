@@ -14,14 +14,20 @@ struct yetty_yclass_ptr_result yetty_ygui_textinput_class_get(void);
 struct yetty_ygui_object;
 struct textinput_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_textinput_data_ptr, struct textinput_data *);
-struct yetty_ygui_textinput_data_ptr_result yetty_ygui_textinput_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_textinput_data_ptr_result yetty_ygui_textinput_data(
+    struct yetty_ygui_object *obj);
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_ygui_object *obj, const char *text);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(const struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty_ygui_object *obj, const char *placeholder);
-struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_ygui_object *obj, int focused);
-int yetty_ygui_textinput_handle_key(struct yetty_ygui_object *obj, uint32_t key);
+struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_ygui_object *obj,
+                                                             const char *text);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
+    const struct yetty_ygui_object *obj);
+struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty_ygui_object *obj,
+                                                                    const char *placeholder);
+struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_ygui_object *obj,
+                                                              int focused);
+struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_ygui_object *obj,
+                                                              uint32_t key);
 
 #endif

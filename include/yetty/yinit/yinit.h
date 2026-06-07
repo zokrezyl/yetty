@@ -94,9 +94,12 @@ struct yetty_yinit_app_config {
  *
  * `app_cfg` may be NULL — defaults are: extract_yetty_assets=false.
  *
- * Returns the process exit code. */
-int yetty_yinit_run(int argc, char **argv, const struct yetty_yinit_app_config *app_cfg,
-                    yetty_yinit_worker_fn worker, void *user);
+ * On success the Result's value is the process exit code (the worker's
+ * own exit status). Bootstrap failures (config, window, GPU, …) are
+ * surfaced as an error Result with the cause chain attached. */
+struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
+                                              const struct yetty_yinit_app_config *app_cfg,
+                                              yetty_yinit_worker_fn worker, void *user);
 
 #ifdef __cplusplus
 }

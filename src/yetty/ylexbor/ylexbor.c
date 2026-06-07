@@ -222,7 +222,8 @@ static int g_css_loaded = 0, g_css_failed = 0, g_css_inline = 0;
  * processed by lexbor's HTML parser, but we re-attach them defensively
  * so the cascade fires for css class/id selectors used by the boxes
  * we'll later read computed style from. */
-static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *node)
+static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_ylexbor *r,
+                                                                lxb_dom_node_t *node)
 {
     for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
         if (c->type == LXB_DOM_NODE_TYPE_ELEMENT) {
@@ -250,10 +251,12 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
                                     struct yetty_ycore_void_result ar =
                                         yetty_ylexbor_add_css(r, body, blen);
                                     if (YETTY_IS_ERR(ar)) {
-                                        g_css_failed++;
-                                    } else {
-                                        g_css_loaded++;
+                                        free(body);
+                                        free(url);
+                                        return YETTY_ERR(yetty_ycore_void,
+                                                         "load_external_stylesheets: add_css", ar);
                                     }
+                                    g_css_loaded++;
                                 } else {
                                     g_css_failed++;
                                 }
@@ -291,19 +294,22 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
                         css[off] = '\0';
                         struct yetty_ycore_void_result ar = yetty_ylexbor_add_css(r, css, off);
                         if (YETTY_IS_ERR(ar)) {
-                            g_css_failed++;
-                        } else {
-                            g_css_inline++;
+                            free(css);
+                            return YETTY_ERR(yetty_ycore_void,
+                                             "load_external_stylesheets: add_css inline", ar);
                         }
+                        g_css_inline++;
                         free(css);
                     }
                 }
             }
         }
         if (c->first_child) {
-            load_external_stylesheets(r, c);
+            struct yetty_ycore_void_result rec = load_external_stylesheets(r, c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rec, "load_external_stylesheets: recurse");
         }
     }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, const char *html,
@@ -328,7 +334,9 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
 	 * reads make sense; done before box-build so colored backgrounds
 	 * land on the boxes we paint. Skipped silently when libcurl is
 	 * unavailable or a fetch errors. */
-    load_external_stylesheets(r, lxb_dom_interface_node(r->document));
+    struct yetty_ycore_void_result css_res =
+        load_external_stylesheets(r, lxb_dom_interface_node(r->document));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, css_res, "load_html: load_external_stylesheets");
 
     /* Run inline + external <script> blocks. */
     (void)yetty_ylexbor_js_run_inline_scripts(r);

@@ -1975,6 +1975,11 @@ def emit_skel(m: dict) -> str:
 """
 
     return f"""\
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. */
+YETTY_EXTERNAL_CALLBACK
 static size_t {slot}_skel(const void *body, size_t body_len,
                           void *resp, size_t resp_max)
 {{
@@ -2137,6 +2142,10 @@ static const struct yetty_{module}_skel_row yetty_{module}_skel_rows[] = {{
 {skel_rows}
 }};
 
+/* Signature is dictated by the skel-lookup hook contract (registered as a
+ * fn-pointer via yetty_yclass_rpc_add_skel_lookup); a slot-name lookup
+ * failure is absorbed into a NULL return at this boundary. */
+YETTY_EXTERNAL_CALLBACK
 static yetty_yclass_rpc_skel_fn yetty_{module}_skel_lookup(yetty_yclass_method_slot slot)
 {{
     struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);

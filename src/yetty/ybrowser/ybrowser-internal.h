@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <yetty/ycore/types.h>
 #include <yetty/ybrowser/ybrowser.h>
 
 #include <lexbor/dom/interfaces/element.h>

@@ -2576,6 +2576,13 @@ def emit_methods_h(methods: list[dict]) -> str:
             ret_t = m.get("return_ctype", "uint32_t")
         else:
             ret_t = "struct yetty_ycore_void_result"
+        # Stubs that mirror the WGPU C API return a handle/value rather than
+        # a Result, so the wire-send Result they make has nowhere to
+        # propagate — it is absorbed at this boundary. Mark the declaration
+        # so the attribute is present on every redeclaration the
+        # result-checker visits.
+        if m["returns"] in ("handle", "value"):
+            lines.append("YETTY_EXTERNAL_CALLBACK")
         lines.append(f"{ret_t} yrdawn_client_{m['name']}({', '.join(params)});")
     lines.append("")
     lines.append("#ifdef __cplusplus")
@@ -2749,6 +2756,12 @@ def emit_client_c(methods: list[dict], codec_meta: dict | None = None) -> str:
         else:
             ret_t = "struct yetty_ycore_void_result"
         sig = f"{ret_t} yrdawn_client_{m['name']}({', '.join(params)})"
+        # Handle/value stubs mirror the WGPU C API signature and so cannot
+        # return a Result; the buffer_write / send_cmd Result is absorbed at
+        # this boundary. The matching declaration in methods.gen.h carries
+        # the same annotation.
+        if m["returns"] in ("handle", "value"):
+            lines.append("YETTY_EXTERNAL_CALLBACK")
         lines.append(sig)
         lines.append("{")
         lines.append(f"    struct yrdawn_args_{m['name']} args = {{0}};")
@@ -3033,6 +3046,10 @@ def emit_server_c(methods: list[dict], codec_meta: dict | None = None) -> str:
         if m.get("trampoline"):
             lines.append(m["trampoline"])
             lines.append("")
+    # Signature is dictated by the server dispatch entry-point contract; it
+    # returns a wire reply code, so the Result errors raised by the
+    # per-method handlers are absorbed into reply codes at this boundary.
+    lines.append("YETTY_EXTERNAL_CALLBACK")
     lines.append("uint32_t yrdawn_server_dispatch(void *ctx, uint32_t method_id, uint32_t req_id,")
     lines.append("                                const void *body, size_t body_len)")
     lines.append("{")

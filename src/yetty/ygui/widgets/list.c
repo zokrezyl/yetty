@@ -26,8 +26,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_list_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_list_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "list: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_list_class_get().value);
@@ -54,9 +53,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
         free(d->rows[i]);
     }
     free(d->rows);
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_list_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_list_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:list:widget_on_press")]]
@@ -117,14 +115,17 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
             break;
         }
         int on = i == d->selected;
-        struct yetty_ycore_void_result result_120 = yguix_box(ctx, r.min.x, y, w, ROW_H, on ? COLOR_ROW_ON : COLOR_ROW, 0);
+        struct yetty_ycore_void_result result_120 =
+            yguix_box(ctx, r.min.x, y, w, ROW_H, on ? COLOR_ROW_ON : COLOR_ROW, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_120, "list: row");
         if (on) {
-            struct yetty_ycore_void_result result_124 = yguix_box(ctx, r.min.x, y, 3, ROW_H, COLOR_BAR, 0);
+            struct yetty_ycore_void_result result_124 =
+                yguix_box(ctx, r.min.x, y, 3, ROW_H, COLOR_BAR, 0);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_124, "list: bar");
         }
         float fs = 13.0f;
-        struct yetty_ycore_void_result result_128 = yguix_text(ctx, d->rows[i], r.min.x + 10, y + (ROW_H + fs) * 0.5f - 3, fs, COLOR_TEXT);
+        struct yetty_ycore_void_result result_128 =
+            yguix_text(ctx, d->rows[i], r.min.x + 10, y + (ROW_H + fs) * 0.5f - 3, fs, COLOR_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_128, "list: text");
     }
     return YETTY_OK_VOID();

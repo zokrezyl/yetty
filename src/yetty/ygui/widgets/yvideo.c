@@ -21,8 +21,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_yvideo_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_yvideo_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yvideo: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yvideo_class_get().value);
@@ -44,9 +43,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct yvideo_data *d = d_dr.value;
     free(d->bytes);
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_yvideo_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_yvideo_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:yvideo:widget_emit_container")]]
@@ -104,7 +102,8 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
         /* CMD_ZERO prefix so the receiver-side ygrid clears its
          * instance/prim/cell state before consuming the fresh yvideo
          * record. Same reason as yimage_emit_body. */
-        struct yetty_ydraw_drawable_list_result zlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+        struct yetty_ydraw_drawable_list_result zlr =
+            yetty_ydraw_drawable_list_config_buffer_create(NULL);
         if (YETTY_IS_ERR(zlr)) {
             yetty_ydraw_drawable_list_destroy(dl);
             return YETTY_ERR(yetty_ycore_void, "yvideo_emit_body: prefix list create", zlr);

@@ -54,6 +54,7 @@ yrich_view_data {
     int pressed; /* a press is in flight → forward motion as drag */
 };
 
+YETTY_EXTERNAL_CALLBACK
 static const struct yetty_yclass *yrich_view_class(void)
 {
     return yetty_ygui_class_expect(yetty_ygui_yrich_view_class_get(),
@@ -98,7 +99,7 @@ static struct yetty_ycore_void_result yrich_view_dtor(struct yetty_yclass_ctx *y
     }
     d->doc = NULL;
     return yetty_ygui_super_void(obj, yrich_view_class(),
-                                (yetty_yclass_method_id_t)yetty_ygui_destructor);
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 /* Render the document into a fresh draw list sized (w, h) and install it
@@ -174,7 +175,8 @@ static struct yetty_ycore_void_result yrich_view_render(struct yetty_ygui_object
     if (!d->doc || w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yrich_view_render: buffer create");
     yetty_yrich_document_set_buffer(d->doc, br.value);
     struct yetty_ycore_void_result rr = yetty_yrich_document_render(d->doc);
@@ -217,15 +219,20 @@ static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_c
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
-    if (d->doc && (w != d->rendered_w || h != d->rendered_h ||
-                   yetty_yrich_document_is_dirty(d->doc))) {
+    if (d->doc &&
+        (w != d->rendered_w || h != d->rendered_h || yetty_yrich_document_is_dirty(d->doc))) {
         struct yetty_ycore_void_result rr = yrich_view_render(obj, w, h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yrich_view_emit_body: render");
     }
     /* Chain into the ydraw_embed → primitive_widget → paint super body. */
-    yetty_yclass_method_slot slot =
+    struct yetty_yclass_method_slot_result slot_result =
         yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
-    yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(yrich_view_class(), slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_result, "yrich_view_emit_body: slot");
+    yetty_yclass_method_slot slot = slot_result.value;
+    struct yetty_yclass_impl_t_result impl_result =
+        yetty_ygui_dispatch_lookup_super(yrich_view_class(), slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, impl_result, "yrich_view_emit_body: dispatch");
+    yetty_yclass_impl_t impl = impl_result.value;
     if (!impl) {
         return YETTY_OK_VOID();
     }

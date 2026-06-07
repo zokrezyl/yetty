@@ -59,8 +59,8 @@ static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs, fl
     rs->uniforms[U_VZ_OFF].vec2[0] = off_x;
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
-static inline void set_cell_zoom(struct yetty_yrender_gpu_resource_set *rs, float scale, float off_x,
-                                 float off_y)
+static inline void set_cell_zoom(struct yetty_yrender_gpu_resource_set *rs, float scale,
+                                 float off_x, float off_y)
 {
     rs->uniforms[U_CZ_SCALE].f32 = scale;
     rs->uniforms[U_CZ_OFF].vec2[0] = off_x;
@@ -173,16 +173,16 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_content_get_gpu_resour
     const struct yetty_yrender_terminal_layer *self);
 static int ydraw_content_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
 static int ydraw_content_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
-                               int mods);
+                                 int mods);
 static int ydraw_content_is_empty(const struct yetty_yrender_terminal_layer *self);
 static int ydraw_content_is_dirty(const struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result ydraw_content_scroll(struct yetty_yrender_terminal_layer *self,
-                                                         int lines);
+static struct yetty_ycore_void_result ydraw_content_scroll(
+    struct yetty_yrender_terminal_layer *self, int lines);
 static struct yetty_ycore_void_result ydraw_content_set_cursor(
     struct yetty_yrender_terminal_layer *self, int col, int row);
 static struct yetty_ycore_int_result ydraw_content_render(struct yetty_yrender_terminal_layer *self,
-                                                        struct yetty_ydraw_target *target,
-                                                        int force);
+                                                          struct yetty_ydraw_target *target,
+                                                          int force);
 static uint32_t ydraw_content_get_live_anchor(const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ydraw_content_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
@@ -306,8 +306,8 @@ struct yetty_yterminal_layer_result yetty_yvterm_ydraw_content_create(
     struct yetty_ycore_buffer_result sdf_lib_res = yetty_ycore_read_file(sdf_lib_path);
     if (YETTY_IS_ERR(sdf_lib_res)) {
         free(shader_res.value.data);
-        return YETTY_ERR(yetty_yterminal_layer,
-                         "ydraw_content_create: read_file(sdf_lib) failed", sdf_lib_res);
+        return YETTY_ERR(yetty_yterminal_layer, "ydraw_content_create: read_file(sdf_lib) failed",
+                         sdf_lib_res);
     }
 
     layer = calloc(1, sizeof(struct yetty_yvterm_ydraw_content));
@@ -352,14 +352,12 @@ struct yetty_yterminal_layer_result yetty_yvterm_ydraw_content_create(
     }
     if (kind != YETTY_YVTERM_YDRAW_CONTENT_KIND_SCROLLING) {
         free(layer);
-        return YETTY_ERR(yetty_yterminal_layer,
-                         "ydraw-layer: only KIND_SCROLLING is supported");
+        return YETTY_ERR(yetty_yterminal_layer, "ydraw-layer: only KIND_SCROLLING is supported");
     }
     struct yetty_ydraw_canvas_ptr_result canvas_res = yetty_ydraw_scrolling_canvas_create(context);
     if (YETTY_IS_ERR(canvas_res)) {
         free(layer);
-        return YETTY_ERR(yetty_yterminal_layer, "ydraw-layer: canvas create failed",
-                         canvas_res);
+        return YETTY_ERR(yetty_yterminal_layer, "ydraw-layer: canvas create failed", canvas_res);
     }
     layer->canvas = canvas_res.value;
 
@@ -420,14 +418,15 @@ struct yetty_yterminal_layer_result yetty_yvterm_ydraw_content_create(
     }
 
     ydebug("ydraw_content_create: kind=%s, %ux%u grid, %.1fx%.1f cells",
-           kind == YETTY_YVTERM_YDRAW_CONTENT_KIND_SCROLLING ? "scrolling" : "scene", cols, rows, cell_width,
-           cell_height);
+           kind == YETTY_YVTERM_YDRAW_CONTENT_KIND_SCROLLING ? "scrolling" : "scene", cols, rows,
+           cell_width, cell_height);
 
     return YETTY_OK(yetty_yterminal_layer, &layer->base);
 }
 
 /* Destroy */
-static struct yetty_ycore_void_result ydraw_content_destroy(struct yetty_yrender_terminal_layer *self)
+static struct yetty_ycore_void_result ydraw_content_destroy(
+    struct yetty_yrender_terminal_layer *self)
 {
     struct yetty_yvterm_ydraw_content *layer = (struct yetty_yvterm_ydraw_content *)self;
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
@@ -458,7 +457,8 @@ static struct yetty_ycore_void_result ydraw_content_destroy(struct yetty_yrender
     free(layer);
 
     if (YETTY_IS_ERR(first_err)) {
-        return YETTY_ERR(yetty_ycore_void, "ydraw_content_destroy: canvas destroy failed", first_err);
+        return YETTY_ERR(yetty_ycore_void, "ydraw_content_destroy: canvas destroy failed",
+                         first_err);
     }
     return YETTY_OK_VOID();
 }
@@ -714,7 +714,7 @@ static int ydraw_content_on_key(struct yetty_yrender_terminal_layer *self, int k
 }
 
 static int ydraw_content_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
-                               int mods)
+                                 int mods)
 {
     (void)self;
     (void)codepoint;
@@ -725,7 +725,8 @@ static int ydraw_content_on_char(struct yetty_yrender_terminal_layer *self, uint
 /* YDraw layer is empty if there are no drawables */
 static int ydraw_content_is_empty(const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yvterm_ydraw_content *layer = (const struct yetty_yvterm_ydraw_content *)self;
+    const struct yetty_yvterm_ydraw_content *layer =
+        (const struct yetty_yvterm_ydraw_content *)self;
 
     if (!layer->canvas) {
         return 1;
@@ -740,7 +741,8 @@ static int ydraw_content_is_empty(const struct yetty_yrender_terminal_layer *sel
  * new dirty source is added there, add it here too. */
 static int ydraw_content_is_dirty(const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yvterm_ydraw_content *layer = (const struct yetty_yvterm_ydraw_content *)self;
+    const struct yetty_yvterm_ydraw_content *layer =
+        (const struct yetty_yvterm_ydraw_content *)self;
 
     if (self->dirty) {
         return 1;
@@ -762,8 +764,8 @@ static int ydraw_content_is_dirty(const struct yetty_yrender_terminal_layer *sel
 }
 
 /* Scroll - called when another layer scrolls */
-static struct yetty_ycore_void_result ydraw_content_scroll(struct yetty_yrender_terminal_layer *self,
-                                                         int lines)
+static struct yetty_ycore_void_result ydraw_content_scroll(
+    struct yetty_yrender_terminal_layer *self, int lines)
 {
     struct yetty_yvterm_ydraw_content *layer = (struct yetty_yvterm_ydraw_content *)self;
 
@@ -798,7 +800,8 @@ static struct yetty_ycore_void_result ydraw_content_scroll(struct yetty_yrender_
  * into a stable absolute view_top. */
 static uint32_t ydraw_content_get_live_anchor(const struct yetty_yrender_terminal_layer *self)
 {
-    const struct yetty_yvterm_ydraw_content *layer = (const struct yetty_yvterm_ydraw_content *)self;
+    const struct yetty_yvterm_ydraw_content *layer =
+        (const struct yetty_yvterm_ydraw_content *)self;
     if (!layer->canvas) {
         return 0;
     }
@@ -925,8 +928,8 @@ static struct yetty_ycore_void_result ydraw_content_set_cursor(
  * entirely. Bails immediately on any inner error — never silently
  * continues. */
 static struct yetty_ycore_int_result ydraw_content_render(struct yetty_yrender_terminal_layer *self,
-                                                        struct yetty_ydraw_target *target,
-                                                        int force)
+                                                          struct yetty_ydraw_target *target,
+                                                          int force)
 {
     struct yetty_yvterm_ydraw_content *layer = (struct yetty_yvterm_ydraw_content *)self;
     if (!layer->canvas || !layer->canvas->ops) {
@@ -940,7 +943,8 @@ static struct yetty_ycore_int_result ydraw_content_render(struct yetty_yrender_t
     int simple_dirty = self->dirty || layer->canvas->ops->is_dirty(layer->canvas);
     if (simple_dirty || force) {
         struct yetty_ycore_void_result rr = target->ops->render_layer(target, self);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr, "ydraw_content_render: render_layer (simple prims)");
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr,
+                            "ydraw_content_render: render_layer (simple prims)");
         /* get_gpu_resource_set inside render_layer already cleared
          * self->dirty when it rebuilt the staging — we just record
          * that we drew. */

@@ -67,7 +67,7 @@ static float measure_text(struct render_state *s, const char *text, float font_s
 /* Forward declarations — record/compartment rendering (defined with the shape
  * emitters) reuses the text and segment helpers defined further down. */
 static struct yetty_ycore_void_result emit_text(struct render_state *s, float x, float y,
-                                                 const char *text, float font_size, uint32_t color);
+                                                const char *text, float font_size, uint32_t color);
 static struct yetty_ycore_void_result emit_segment_xy(struct render_state *s, float x0, float y0,
                                                       float x1, float y1, uint32_t color,
                                                       float width);
@@ -77,8 +77,8 @@ static struct yetty_ycore_void_result emit_segment_xy(struct render_state *s, fl
  *===========================================================================*/
 
 static struct yetty_ycore_void_result emit_rect(struct render_state *s,
-                                                 const struct yetty_ydiagram_node *n,
-                                                 float corner_radius)
+                                                const struct yetty_ydiagram_node *n,
+                                                float corner_radius)
 {
     struct yetty_ysdf_box geom = {
         .center_x = n->x,
@@ -88,7 +88,8 @@ static struct yetty_ycore_void_result emit_rect(struct render_state *s,
         .corner_radius = corner_radius,
     };
     struct yetty_ycore_void_result add_result = yetty_ydraw_drawable_list_add_cmd_add_box(
-        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width, &geom);
+        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width,
+        &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "emit_rect: add box");
     return YETTY_OK_VOID();
 }
@@ -99,7 +100,8 @@ static struct yetty_ycore_void_result emit_circle(struct render_state *s,
     float r = (n->width < n->height ? n->width : n->height) * 0.5f;
     struct yetty_ysdf_circle geom = {.center_x = n->x, .center_y = n->y, .radius = r};
     struct yetty_ycore_void_result add_result = yetty_ydraw_drawable_list_add_cmd_add_circle(
-        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width, &geom);
+        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width,
+        &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "emit_circle: add circle");
     return YETTY_OK_VOID();
 }
@@ -114,7 +116,8 @@ static struct yetty_ycore_void_result emit_diamond(struct render_state *s,
         .half_height = n->height * 0.5f,
     };
     struct yetty_ycore_void_result add_result = yetty_ydraw_drawable_list_add_cmd_add_rhombus(
-        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width, &geom);
+        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width,
+        &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "emit_diamond: add rhombus");
     return YETTY_OK_VOID();
 }
@@ -129,7 +132,8 @@ static struct yetty_ycore_void_result emit_ellipse(struct render_state *s,
         .radius_y = n->height * 0.5f,
     };
     struct yetty_ycore_void_result add_result = yetty_ydraw_drawable_list_add_cmd_add_ellipse(
-        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width, &geom);
+        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width,
+        &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "emit_ellipse: add ellipse");
     return YETTY_OK_VOID();
 }
@@ -168,9 +172,8 @@ static struct yetty_ycore_void_result emit_hexagon(struct render_state *s,
         .half_height = hh,
         .corner_radius = 0.0f,
     };
-    struct yetty_ycore_void_result body_result =
-        yetty_ydraw_drawable_list_add_cmd_add_box(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f,
-                                                  &body);
+    struct yetty_ycore_void_result body_result = yetty_ydraw_drawable_list_add_cmd_add_box(
+        s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f, &body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, body_result, "emit_hexagon: add body box");
 
     /* Fill: left and right triangles. */
@@ -232,7 +235,8 @@ static struct yetty_ycore_void_result emit_capsule(struct render_state *s,
         .radius = r,
     };
     struct yetty_ycore_void_result add_result = yetty_ydraw_drawable_list_add_cmd_add_capsule(
-        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width, &geom);
+        s->buf, 0, s->z++, n->style.fill_color, n->style.stroke_color, n->style.stroke_width,
+        &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "emit_capsule: add capsule");
     return YETTY_OK_VOID();
 }
@@ -251,9 +255,8 @@ static struct yetty_ycore_void_result emit_cylinder(struct render_state *s,
         .half_height = body_h * 0.5f,
         .corner_radius = 0.0f,
     };
-    struct yetty_ycore_void_result body_result =
-        yetty_ydraw_drawable_list_add_cmd_add_box(s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f,
-                                                  &body);
+    struct yetty_ycore_void_result body_result = yetty_ydraw_drawable_list_add_cmd_add_box(
+        s->buf, 0, s->z++, n->style.fill_color, 0, 0.0f, &body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, body_result, "emit_cylinder: add body box");
 
     struct yetty_ysdf_ellipse top = {
@@ -315,9 +318,9 @@ static struct yetty_ycore_void_result emit_double_circle(struct render_state *s,
 }
 
 /* Multi-line text run, top-aligned and left-padded inside a band. */
-static struct yetty_ycore_void_result emit_left_text(struct render_state *s, float x, float baseline,
-                                                     const char *text, float font_size,
-                                                     uint32_t color)
+static struct yetty_ycore_void_result emit_left_text(struct render_state *s, float x,
+                                                     float baseline, const char *text,
+                                                     float font_size, uint32_t color)
 {
     return emit_text(s, x, baseline, text, font_size, color);
 }
@@ -349,8 +352,8 @@ static struct yetty_ycore_void_result emit_record(struct render_state *s,
     }
     if (n->label && n->label[0]) {
         float tw = measure_text(s, n->label, fs);
-        struct yetty_ycore_void_result label_result = emit_text(
-            s, n->x - tw * 0.5f, title_cy + fs / 3.0f, n->label, fs, n->style.text_color);
+        struct yetty_ycore_void_result label_result =
+            emit_text(s, n->x - tw * 0.5f, title_cy + fs / 3.0f, n->label, fs, n->style.text_color);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, label_result, "emit_record: title text");
     }
 
@@ -366,9 +369,9 @@ static struct yetty_ycore_void_result emit_record(struct render_state *s,
     float line_h = (n->height - n->header_h) / (float)n->row_count;
     for (size_t r = 0; r < n->row_count; r++) {
         float band_top = top + n->header_h + (float)r * line_h;
-        struct yetty_ycore_void_result row_result = emit_left_text(
-            s, left + pad_x, band_top + line_h * 0.5f + fs / 3.0f, n->rows[r], fs,
-            n->style.text_color);
+        struct yetty_ycore_void_result row_result =
+            emit_left_text(s, left + pad_x, band_top + line_h * 0.5f + fs / 3.0f, n->rows[r], fs,
+                           n->style.text_color);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, row_result, "emit_record: row text");
         if (r == n->method_start && n->method_start > 0 && n->method_start < n->row_count) {
             struct yetty_ycore_void_result compartment_result = emit_segment_xy(
@@ -504,8 +507,12 @@ static struct yetty_ycore_void_result emit_filled_triangle(struct render_state *
                                                            float cy, uint32_t color)
 {
     struct yetty_ysdf_triangle geom = {
-        .vertex_a_x = ax, .vertex_a_y = ay, .vertex_b_x = bx,
-        .vertex_b_y = by, .vertex_c_x = cx, .vertex_c_y = cy,
+        .vertex_a_x = ax,
+        .vertex_a_y = ay,
+        .vertex_b_x = bx,
+        .vertex_b_y = by,
+        .vertex_c_x = cx,
+        .vertex_c_y = cy,
     };
     struct yetty_ycore_void_result add_result =
         yetty_ydraw_drawable_list_add_cmd_add_triangle(s->buf, 0, s->z++, color, 0, 0.0f, &geom);
@@ -540,9 +547,9 @@ static struct yetty_ycore_void_result emit_arrowhead(struct render_state *s, flo
     default: {
         float spread = 0.4f;
         float bx = x + bxu * size, by = y + byu * size;
-        struct yetty_ycore_void_result tri_result = emit_filled_triangle(
-            s, x, y, bx + pxu * size * spread, by + pyu * size * spread,
-            bx - pxu * size * spread, by - pyu * size * spread, color);
+        struct yetty_ycore_void_result tri_result =
+            emit_filled_triangle(s, x, y, bx + pxu * size * spread, by + pyu * size * spread,
+                                 bx - pxu * size * spread, by - pyu * size * spread, color);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tri_result, "emit_arrowhead: normal head");
         break;
     }
@@ -564,16 +571,16 @@ static struct yetty_ycore_void_result emit_arrowhead(struct render_state *s, flo
     case YETTY_YDIAGRAM_ARROW_DIAMOND:
     case YETTY_YDIAGRAM_ARROW_DIAMOND_OPEN: {
         float d = size * 1.1f;
-        float mx = x + bxu * d, my = y + byu * d;        /* mid  */
+        float mx = x + bxu * d, my = y + byu * d;               /* mid  */
         float fx = x + bxu * d * 2.0f, fy = y + byu * d * 2.0f; /* far */
         float lx = mx + pxu * d * 0.7f, ly = my + pyu * d * 0.7f;
         float rx = mx - pxu * d * 0.7f, ry = my - pyu * d * 0.7f;
         if (style == YETTY_YDIAGRAM_ARROW_DIAMOND) {
-            struct yetty_ycore_void_result half_a = emit_filled_triangle(s, x, y, lx, ly, fx, fy,
-                                                                         color);
+            struct yetty_ycore_void_result half_a =
+                emit_filled_triangle(s, x, y, lx, ly, fx, fy, color);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, half_a, "emit_arrowhead: diamond half a");
-            struct yetty_ycore_void_result half_b = emit_filled_triangle(s, x, y, fx, fy, rx, ry,
-                                                                         color);
+            struct yetty_ycore_void_result half_b =
+                emit_filled_triangle(s, x, y, fx, fy, rx, ry, color);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, half_b, "emit_arrowhead: diamond half b");
         } else {
             struct yetty_ycore_void_result side_a = emit_segment_xy(s, x, y, lx, ly, color, lw);
@@ -645,7 +652,7 @@ static struct yetty_ycore_void_result emit_arrowhead(struct render_state *s, flo
  *===========================================================================*/
 
 static struct yetty_ycore_void_result emit_text(struct render_state *s, float x, float y,
-                                                 const char *text, float font_size, uint32_t color)
+                                                const char *text, float font_size, uint32_t color)
 {
     if (!text || !text[0]) {
         return YETTY_OK_VOID();
@@ -656,8 +663,8 @@ static struct yetty_ycore_void_result emit_text(struct render_state *s, float x,
         .capacity = n,
         .size = n,
     };
-    struct yetty_ycore_void_result add_result = yetty_ydraw_drawable_list_add_text(
-        s->buf, x, y, &view, font_size, color, s->z++, -1, 0.0f);
+    struct yetty_ycore_void_result add_result =
+        yetty_ydraw_drawable_list_add_text(s->buf, x, y, &view, font_size, color, s->z++, -1, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "emit_text: add text run");
     return YETTY_OK_VOID();
 }

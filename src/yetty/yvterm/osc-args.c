@@ -157,7 +157,7 @@ const char *yetty_yvterm_osc_args_get(const struct yetty_yvterm_osc_args *args, 
 }
 
 int yetty_yvterm_osc_args_get_int(const struct yetty_yvterm_osc_args *args, const char *key,
-                                 int default_val)
+                                  int default_val)
 {
     const char *val = yetty_yvterm_osc_args_get(args, key);
     if (!val) {

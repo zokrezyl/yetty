@@ -180,8 +180,8 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
 }
 
 /* Pack uniforms + buffers into a fresh ydraw buffer carrying one yplot prim. */
-static struct yetty_ydraw_drawable_list_result yplot_emit_prim(const struct yetty_yplot_uniforms *u,
-                                                           const struct yetty_yplot_buffers *bufs)
+static struct yetty_ydraw_drawable_list_result yplot_emit_prim(
+    const struct yetty_yplot_uniforms *u, const struct yetty_yplot_buffers *bufs)
 {
     size_t required = yetty_yplot_uniforms_serialized_size(u, bufs);
     uint8_t *drawable_buf = malloc(required);
@@ -201,7 +201,8 @@ static struct yetty_ydraw_drawable_list_result yplot_emit_prim(const struct yett
         .scene_max_x = u->bounds_x + u->bounds_w,
         .scene_max_y = u->bounds_y + u->bounds_h,
     };
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(drawable_buf);
         return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: ydraw buffer create failed", br);
@@ -338,14 +339,15 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
     return out;
 }
 
-struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(const struct yetty_ydraw_drawable_list *buffer,
-                                                        FILE *out)
+struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
+    const struct yetty_ydraw_drawable_list *buffer, FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
-    size_t raw_size = yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
+    size_t raw_size =
+        yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: empty serialize");
     }

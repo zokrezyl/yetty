@@ -85,7 +85,7 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
  * via process_bytes after this call mint a figure instance through
  * the factory and are rendered alongside the SDF / glyph pass. */
 void yetty_ygrid_set_composite_factory(struct yetty_ygrid_grid *grid,
-                                    struct yetty_ydraw_composite_factory *factory);
+                                       struct yetty_ydraw_composite_factory *factory);
 
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 

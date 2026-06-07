@@ -58,21 +58,16 @@ struct yetty_yui_config_dialog {
     size_t bundles_cap;
 };
 
-/* Add `cls` under `parent`, returning the new object or NULL (error
- * destroyed). Keeps the build code below readable. */
-static struct yetty_ygui_object *cfg_add(struct yetty_ygui_object *parent,
-                                         struct yetty_yclass_ptr_result cls_r)
+/* Add `cls` under `parent`, returning the new object. Propagates both
+ * the class-getter error and the add error so the build chain surfaces
+ * the cause. Keeps the build code below readable. */
+static struct yetty_ygui_object_ptr_result cfg_add(struct yetty_ygui_object *parent,
+                                                   struct yetty_yclass_ptr_result cls_r)
 {
-    if (YETTY_IS_ERR(cls_r)) {
-        yetty_ycore_error_destroy(cls_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, cls_r, "cfg_add: class getter");
     struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls_r.value, parent);
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_error_destroy(r.error);
-        return NULL;
-    }
-    return r.value;
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, r, "cfg_add: add");
+    return r;
 }
 
 /* Compose `parent/key` into `out`. Treats NULL/empty parent as "root",
@@ -117,10 +112,11 @@ static int count_branches(const struct yetty_yconfig_config *cfg, const char *pa
 }
 
 /* Repaint the right pane with the leaves of `path`. */
-static void show_path(struct yetty_yui_config_dialog *dlg, const char *path)
+static struct yetty_ycore_void_result show_path(struct yetty_yui_config_dialog *dlg,
+                                                const char *path)
 {
     if (!dlg || !dlg->textarea || !dlg->config) {
-        return;
+        return YETTY_OK_VOID();
     }
     char buf[8192];
     size_t off = 0;
@@ -153,7 +149,9 @@ static void show_path(struct yetty_yui_config_dialog *dlg, const char *path)
     if (leaves == 0 && off + 1 < sizeof(buf)) {
         snprintf(buf + off, sizeof(buf) - off, "(no direct settings in this section)\n");
     }
-    yetty_ycore_error_destroy_safe(yetty_ygui_textarea_set_text(dlg->textarea, buf));
+    struct yetty_ycore_void_result set_text_r = yetty_ygui_textarea_set_text(dlg->textarea, buf);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_text_r, "show_path: textarea_set_text");
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result on_tree_toggle(struct yetty_yclass_ctx *ctx,
@@ -166,7 +164,8 @@ static struct yetty_ycore_void_result on_tree_toggle(struct yetty_yclass_ctx *ct
     if (!pb || !pb->dlg) {
         return YETTY_OK_VOID();
     }
-    show_path(pb->dlg, pb->path);
+    struct yetty_ycore_void_result show_r = show_path(pb->dlg, pb->path);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, show_r, "on_tree_toggle: show_path");
     return YETTY_OK_VOID();
 }
 
@@ -175,18 +174,20 @@ static struct yetty_ycore_void_result on_close(struct yetty_yclass_ctx *ctx,
 {
     (void)ctx;
     (void)button;
-    yetty_yui_config_dialog_hide(userdata);
+    struct yetty_ycore_void_result hide_r = yetty_yui_config_dialog_hide(userdata);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hide_r, "on_close: config_dialog_hide");
     return YETTY_OK_VOID();
 }
 
 /* Recursively materialise tree_nodes for every branch under
  * `parent_path`. Children of a node are added directly under the
  * tree_node object itself. */
-static void build_tree(struct yetty_yui_config_dialog *dlg, struct yetty_ygui_object *container,
-                       const char *parent_path, int depth)
+static struct yetty_ycore_void_result build_tree(struct yetty_yui_config_dialog *dlg,
+                                                 struct yetty_ygui_object *container,
+                                                 const char *parent_path, int depth)
 {
     if (!dlg || !container || depth > YUI_CFG_DLG_MAX_DEPTH) {
-        return;
+        return YETTY_OK_VOID();
     }
     int n = dlg->config->ops->get_child_count(dlg->config, parent_path);
     for (int i = 0; i < n; i++) {
@@ -208,21 +209,28 @@ static void build_tree(struct yetty_yui_config_dialog *dlg, struct yetty_ygui_ob
         pb->dlg = dlg;
         snprintf(pb->path, sizeof(pb->path), "%s", child_path);
 
-        struct yetty_ygui_object *node = cfg_add(container, yetty_ygui_tree_node_class_get());
-        if (!node) {
-            continue;
-        }
-        yetty_ycore_error_destroy_safe(yetty_ygui_tree_node_set_label(node, key));
-        yetty_ycore_error_destroy_safe(yetty_ygui_tree_node_on_toggle(node, on_tree_toggle, pb));
+        struct yetty_ygui_object_ptr_result node_r =
+            cfg_add(container, yetty_ygui_tree_node_class_get());
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, node_r, "build_tree: tree_node");
+        struct yetty_ygui_object *node = node_r.value;
+
+        struct yetty_ycore_void_result label_r = yetty_ygui_tree_node_set_label(node, key);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, label_r, "build_tree: tree_node_set_label");
+        struct yetty_ycore_void_result toggle_r =
+            yetty_ygui_tree_node_on_toggle(node, on_tree_toggle, pb);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, toggle_r, "build_tree: tree_node_on_toggle");
 
         /* Nested branches go directly under the tree_node. */
-        build_tree(dlg, node, child_path, depth + 1);
+        struct yetty_ycore_void_result nested_r = build_tree(dlg, node, child_path, depth + 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, nested_r, "build_tree: nested");
 
         /* Start collapsed: folds this node's children (added above) so
          * the tree opens as a clean list of top-level categories the
          * user expands on demand. */
-        yetty_ycore_error_destroy_safe(yetty_ygui_tree_node_set_open(node, 0));
+        struct yetty_ycore_void_result open_r = yetty_ygui_tree_node_set_open(node, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, open_r, "build_tree: tree_node_set_open");
     }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
@@ -262,12 +270,13 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
         dlg->bundles_cap = (size_t)branches;
     }
 
-    struct yetty_ygui_object *win = cfg_add(root, yetty_ygui_window_class_get());
-    if (!win) {
+    struct yetty_ygui_object_ptr_result win_r = cfg_add(root, yetty_ygui_window_class_get());
+    if (YETTY_IS_ERR(win_r)) {
         free(dlg->bundles);
         free(dlg);
-        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: window alloc");
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: window alloc", win_r);
     }
+    struct yetty_ygui_object *win = win_r.value;
     dlg->window = win;
     yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(win, "Settings"));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(win, 720.0f, 460.0f));
@@ -282,56 +291,87 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
         body, "display:flex;flex-direction:column;gap:10;padding:14 14 14 14;"));
 
-    struct yetty_ygui_object *split = cfg_add(body, yetty_ygui_hbox_class_get());
-    if (split) {
-        yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
-            split, "display:flex;flex-direction:row;gap:12;flex:1 1 0;align-items:stretch;"));
-
-        struct yetty_ygui_object *left_scroll = cfg_add(split, yetty_ygui_scrollarea_class_get());
-        if (left_scroll) {
-            yetty_ycore_error_destroy_safe(
-                yetty_ygui_widget_apply_css(left_scroll, "flex:0 0 220;align-self:stretch;"));
-            /* apply_css's flex shorthand doesn't carry the basis into a
-             * width, so pin the left tree column at a fixed 220px (it
-             * must not flex-grow or collapse onto the right pane). */
-            struct yetty_ygui_layout sl = *yetty_ygui_widget_layout_get(left_scroll);
-            sl.width = 220.0f;
-            sl.flex_grow = 0.0f;
-            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(left_scroll, &sl));
-
-            struct yetty_ygui_object *tree_box = cfg_add(left_scroll, yetty_ygui_vbox_class_get());
-            if (tree_box) {
-                yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
-                    tree_box, "display:flex;flex-direction:column;gap:2;align-items:stretch;"));
-                build_tree(dlg, tree_box, NULL, 0);
-            }
-        }
-
-        struct yetty_ygui_object *right = cfg_add(split, yetty_ygui_textarea_class_get());
-        if (right) {
-            yetty_ycore_error_destroy_safe(
-                yetty_ygui_widget_apply_css(right, "flex:1 1 0;align-self:stretch;"));
-            yetty_ycore_error_destroy_safe(yetty_ygui_textarea_set_text(
-                right, "Select a category on the left to view its settings."));
-            dlg->textarea = right;
-        }
+    struct yetty_ygui_object_ptr_result split_r = cfg_add(body, yetty_ygui_hbox_class_get());
+    if (YETTY_IS_ERR(split_r)) {
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: split row", split_r);
     }
+    struct yetty_ygui_object *split = split_r.value;
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
+        split, "display:flex;flex-direction:row;gap:12;flex:1 1 0;align-items:stretch;"));
+
+    struct yetty_ygui_object_ptr_result left_scroll_r =
+        cfg_add(split, yetty_ygui_scrollarea_class_get());
+    if (YETTY_IS_ERR(left_scroll_r)) {
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: left scroll", left_scroll_r);
+    }
+    struct yetty_ygui_object *left_scroll = left_scroll_r.value;
+    yetty_ycore_error_destroy_safe(
+        yetty_ygui_widget_apply_css(left_scroll, "flex:0 0 220;align-self:stretch;"));
+    /* apply_css's flex shorthand doesn't carry the basis into a
+     * width, so pin the left tree column at a fixed 220px (it
+     * must not flex-grow or collapse onto the right pane). */
+    struct yetty_ygui_layout sl = *yetty_ygui_widget_layout_get(left_scroll);
+    sl.width = 220.0f;
+    sl.flex_grow = 0.0f;
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(left_scroll, &sl));
+
+    struct yetty_ygui_object_ptr_result tree_box_r =
+        cfg_add(left_scroll, yetty_ygui_vbox_class_get());
+    if (YETTY_IS_ERR(tree_box_r)) {
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: tree box", tree_box_r);
+    }
+    struct yetty_ygui_object *tree_box = tree_box_r.value;
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
+        tree_box, "display:flex;flex-direction:column;gap:2;align-items:stretch;"));
+    struct yetty_ycore_void_result tree_r = build_tree(dlg, tree_box, NULL, 0);
+    if (YETTY_IS_ERR(tree_r)) {
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: build_tree", tree_r);
+    }
+
+    struct yetty_ygui_object_ptr_result right_r = cfg_add(split, yetty_ygui_textarea_class_get());
+    if (YETTY_IS_ERR(right_r)) {
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: right pane", right_r);
+    }
+    struct yetty_ygui_object *right = right_r.value;
+    yetty_ycore_error_destroy_safe(
+        yetty_ygui_widget_apply_css(right, "flex:1 1 0;align-self:stretch;"));
+    yetty_ycore_error_destroy_safe(
+        yetty_ygui_textarea_set_text(right, "Select a category on the left to view its settings."));
+    dlg->textarea = right;
 
     /* Authored height on the actions row so flex reserves the space up
      * front (see gpu_info dialog comment in yui.c). */
-    struct yetty_ygui_object *actions = cfg_add(body, yetty_ygui_hbox_class_get());
-    if (actions) {
-        yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(actions, 0.0f, 36.0f));
-        yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
-            actions, "display:flex;flex-direction:row;justify-content:end;gap:8;"
-                     "flex:0 0 auto;align-items:center;"));
-        struct yetty_ygui_object *close = cfg_add(actions, yetty_ygui_button_class_get());
-        if (close) {
-            yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(close, "Close"));
-            yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(close, 80.0f, 28.0f));
-            yetty_ycore_error_destroy_safe(yetty_ygui_clickable_on_click_set(close, on_close, dlg));
-        }
+    struct yetty_ygui_object_ptr_result actions_r = cfg_add(body, yetty_ygui_hbox_class_get());
+    if (YETTY_IS_ERR(actions_r)) {
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: actions row", actions_r);
     }
+    struct yetty_ygui_object *actions = actions_r.value;
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(actions, 0.0f, 36.0f));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
+        actions, "display:flex;flex-direction:row;justify-content:end;gap:8;"
+                 "flex:0 0 auto;align-items:center;"));
+    struct yetty_ygui_object_ptr_result close_r = cfg_add(actions, yetty_ygui_button_class_get());
+    if (YETTY_IS_ERR(close_r)) {
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: close button", close_r);
+    }
+    struct yetty_ygui_object *close = close_r.value;
+    yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(close, "Close"));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(close, 80.0f, 28.0f));
+    yetty_ycore_error_destroy_safe(yetty_ygui_clickable_on_click_set(close, on_close, dlg));
 
     return YETTY_OK(yetty_yui_config_dialog_ptr, dlg);
 }
@@ -345,26 +385,30 @@ void yetty_yui_config_dialog_destroy(struct yetty_yui_config_dialog *dlg)
     free(dlg);
 }
 
-void yetty_yui_config_dialog_show(struct yetty_yui_config_dialog *dlg)
+struct yetty_ycore_void_result yetty_yui_config_dialog_show(struct yetty_yui_config_dialog *dlg)
 {
     if (!dlg || !dlg->window) {
-        return;
+        return YETTY_OK_VOID();
     }
-    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dlg->window, 1));
+    struct yetty_ycore_void_result visible_r = yetty_ygui_widget_set_visible(dlg->window, 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, visible_r, "config_dialog_show: set_visible");
     if (dlg->framework) {
         yetty_ygui_framework_mark_dirty(dlg->framework);
     }
+    return YETTY_OK_VOID();
 }
 
-void yetty_yui_config_dialog_hide(struct yetty_yui_config_dialog *dlg)
+struct yetty_ycore_void_result yetty_yui_config_dialog_hide(struct yetty_yui_config_dialog *dlg)
 {
     if (!dlg || !dlg->window) {
-        return;
+        return YETTY_OK_VOID();
     }
-    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dlg->window, 0));
+    struct yetty_ycore_void_result visible_r = yetty_ygui_widget_set_visible(dlg->window, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, visible_r, "config_dialog_hide: set_visible");
     if (dlg->framework) {
         yetty_ygui_framework_mark_dirty(dlg->framework);
     }
+    return YETTY_OK_VOID();
 }
 
 int yetty_yui_config_dialog_is_visible(const struct yetty_yui_config_dialog *dlg)

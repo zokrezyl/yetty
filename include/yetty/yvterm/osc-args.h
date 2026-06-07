@@ -57,7 +57,7 @@ const char *yetty_yvterm_osc_args_get(const struct yetty_yvterm_osc_args *args, 
  * Get value as int. Returns default_val if not found or not a number.
  */
 int yetty_yvterm_osc_args_get_int(const struct yetty_yvterm_osc_args *args, const char *key,
-                                 int default_val);
+                                  int default_val);
 
 /**
  * Get payload as a yetty_ycore_buffer_result.

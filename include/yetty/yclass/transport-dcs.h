@@ -39,9 +39,9 @@ extern "C" {
  * overhead for tiny frames), 1 = b64+lz4 (worth it for larger
  * frames). */
 struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int read_fd,
-                                                                            int write_fd,
-                                                                            int dcs_code,
-                                                                            int compressed);
+                                                                           int write_fd,
+                                                                           int dcs_code,
+                                                                           int compressed);
 
 #ifdef __cplusplus
 }

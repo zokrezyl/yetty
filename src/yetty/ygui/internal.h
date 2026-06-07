@@ -39,17 +39,18 @@ extern "C" {
 
 /* Look up the slot owned by `method_id` in ygui's domain. Returns
  * YETTY_YCLASS_METHOD_SLOT_UNDEFINED when the id isn't registered. */
-yetty_yclass_method_slot yetty_ygui_method_slot_get(yetty_yclass_method_id_t method_id);
+struct yetty_yclass_method_slot_result yetty_ygui_method_slot_get(
+    yetty_yclass_method_id_t method_id);
 
 /* Resolve `slot` against `cls`'s dispatch table. NULL on miss (a missing
  * override is a no-op, not an error). */
-yetty_yclass_impl_t yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls,
-                                               yetty_yclass_method_slot slot);
+struct yetty_yclass_impl_t_result yetty_ygui_dispatch_lookup(const struct yetty_yclass *cls,
+                                                             yetty_yclass_method_slot slot);
 
 /* Walk up the parent chain (skipping the leaf) and return the first
  * non-NULL dispatch entry for `slot`. Super invokers chain through this. */
-yetty_yclass_impl_t yetty_ygui_dispatch_lookup_super(const struct yetty_yclass *self_class,
-                                                     yetty_yclass_method_slot slot);
+struct yetty_yclass_impl_t_result yetty_ygui_dispatch_lookup_super(
+    const struct yetty_yclass *self_class, yetty_yclass_method_slot slot);
 
 /*===========================================================================
  * Classes — `struct yetty_yclass` (from <yetty/yclass/class.h>) is the only

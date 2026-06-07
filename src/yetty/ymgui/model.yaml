@@ -188,7 +188,8 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
 /* Downcast helper. Returns the typed pointer when `base` is actually
  * an ymgui figure (identified by its ops vtable), NULL otherwise. Use
  * this to filter the heterogeneous children of a yfigure container. */
-struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from_base(struct yetty_yfigure_figure *base);"
+struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from_base(
+    struct yetty_yfigure_figure *base);"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

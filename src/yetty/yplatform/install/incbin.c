@@ -68,8 +68,8 @@ static void bridge_trampoline(const char *name, const uint8_t *data, size_t size
     }
 }
 
-struct yetty_ycore_void_result
-yetty_yplatform_install_foreach_asset(yetty_yplatform_install_asset_fn callback, void *userdata)
+struct yetty_ycore_void_result yetty_yplatform_install_foreach_asset(
+    yetty_yplatform_install_asset_fn callback, void *userdata)
 {
     if (!callback) {
         return YETTY_OK_VOID();

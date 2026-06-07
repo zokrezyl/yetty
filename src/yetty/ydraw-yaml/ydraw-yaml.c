@@ -160,9 +160,9 @@ static yetty_ydraw_yaml_factory_fn find_factory(struct yetty_ydraw_yaml_parser *
     return NULL;
 }
 
-struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(struct yetty_ydraw_yaml_parser *parser,
-                                                             struct yetty_ydraw_drawable_list *buffer,
-                                                             const char *yaml, size_t len)
+struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(
+    struct yetty_ydraw_yaml_parser *parser, struct yetty_ydraw_drawable_list *buffer,
+    const char *yaml, size_t len)
 {
     if (!parser || !buffer || !yaml) {
         return YETTY_ERR(yetty_ycore_void, "null argument");
@@ -461,7 +461,8 @@ struct yetty_ydraw_drawable_list_result yetty_ydraw_yaml_parse(const char *yaml,
         return YETTY_ERR(yetty_ydraw_drawable_list, "null or empty yaml");
     }
 
-    struct yetty_ydraw_drawable_list_result buf_res = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result buf_res =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(buf_res)) {
         return buf_res;
     }
@@ -479,7 +480,8 @@ struct yetty_ydraw_drawable_list_result yetty_ydraw_yaml_parse(const char *yaml,
     if (YETTY_IS_ERR(reg_res)) {
         yetty_ydraw_yaml_parser_destroy(parser);
         yetty_ydraw_drawable_list_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "ydraw_yaml: ysdf factories registration", reg_res);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ydraw_yaml: ysdf factories registration",
+                         reg_res);
     }
     ydebug("ydraw_yaml: ysdf factories registered, count=%zu", parser->count);
 

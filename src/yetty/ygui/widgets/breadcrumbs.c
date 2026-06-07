@@ -21,8 +21,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj,
-                              yetty_ygui_breadcrumbs_class_get().value,
+        yetty_ygui_super_void(obj, yetty_ygui_breadcrumbs_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "breadcrumbs: super");
     struct yetty_ygui_void_ptr_result d_dr =
@@ -49,8 +48,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
         free(d->items[i]);
     }
     free(d->items);
-    return yetty_ygui_super_void(obj,
-                                 yetty_ygui_breadcrumbs_class_get().value,
+    return yetty_ygui_super_void(obj, yetty_ygui_breadcrumbs_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -78,12 +76,13 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     float cx = r.min.x;
     for (int i = 0; i < d->n_items; i++) {
         if (i > 0) {
-            struct yetty_ycore_void_result result_81 = yguix_text(ctx, ">", cx + 4, ty, fs, COLOR_SEP);
+            struct yetty_ycore_void_result result_81 =
+                yguix_text(ctx, ">", cx + 4, ty, fs, COLOR_SEP);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, result_81, "bc: sep");
             cx += 18;
         }
-        struct yetty_ycore_void_result result_85 = yguix_text(ctx, d->items[i], cx, ty, fs,
-                                       i == d->n_items - 1 ? 0xFF92A86Bu : COLOR_TEXT);
+        struct yetty_ycore_void_result result_85 = yguix_text(
+            ctx, d->items[i], cx, ty, fs, i == d->n_items - 1 ? 0xFF92A86Bu : COLOR_TEXT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_85, "bc: item");
         cx += (float)strlen(d->items[i]) * fs * 0.55f + 8;
     }

@@ -170,8 +170,8 @@ int yetty_ycat_register_handler_streaming(enum yetty_ycat_type type,
  *===========================================================================*/
 
 struct yetty_ydraw_drawable_list_result yetty_ycat_render(const uint8_t *bytes, size_t len,
-                                                      const char *path_hint,
-                                                      const struct yetty_ycat_config *config)
+                                                          const char *path_hint,
+                                                          const struct yetty_ycat_config *config)
 {
     enum yetty_ycat_type type = yetty_ycat_detect(bytes, len, path_hint);
     yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);

@@ -28,11 +28,10 @@ struct dcs_server_state {
 };
 
 static struct yetty_ycore_void_result on_request_envelope(void *userdata,
-                                                           enum yetty_ywire_envelope_kind kind,
-                                                           int code, const uint8_t *args,
-                                                           size_t args_len,
-                                                           const uint8_t *payload,
-                                                           size_t payload_len)
+                                                          enum yetty_ywire_envelope_kind kind,
+                                                          int code, const uint8_t *args,
+                                                          size_t args_len, const uint8_t *payload,
+                                                          size_t payload_len)
 {
     (void)kind;
     (void)code;
@@ -56,8 +55,19 @@ static struct yetty_ycore_void_result on_request_envelope(void *userdata,
     /* Dispatch the request — same per-request shape as the
      * transport-based server loop in rpc.c. */
     static uint8_t resp[DCS_SERVER_BUF_MAX];
-    size_t resp_len = yetty_yclass_rpc_dispatch_one(header, payload + 8, body_len, resp,
-                                                    sizeof(resp));
+    /* A failed dispatch is logged server-side and answered with a
+     * zero-length response so the client maps it to "remote impl returned
+     * error" and the loop stays up for the next frame — same contract as
+     * the transport-based server loop in rpc.c. */
+    struct yetty_ycore_size_result dispatch_res =
+        yetty_yclass_rpc_dispatch_one(header, payload + 8, body_len, resp, sizeof(resp));
+    size_t resp_len = 0;
+    if (YETTY_IS_OK(dispatch_res)) {
+        resp_len = dispatch_res.value;
+    } else {
+        yetty_ycore_error_print(stderr, "[dcs-server] dispatch", dispatch_res.error);
+        yetty_ycore_error_destroy(dispatch_res.error);
+    }
 
     /* Wire response: u32 resp_len | resp bytes — packed into one
      * DCS envelope. */

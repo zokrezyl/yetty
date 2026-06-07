@@ -25,11 +25,15 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include <yetty/ycore/result.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct yetty_yclient_event_loop;
+
+YETTY_YRESULT_DECLARE(yetty_yclient_event_loop_ptr, struct yetty_yclient_event_loop *);
 
 /*=============================================================================
  * Input callbacks (GLFW-style: one setter per event type)
@@ -85,9 +89,12 @@ struct yetty_yclient_lib_event_loop_config {
 /* Create a loop. Allocates the libuv loop, opens uv_poll on in_fd, and
  * spins up a yface for stream decoding. Does NOT start running yet —
  * call run / poll. */
-struct yetty_yclient_event_loop *yetty_yclient_event_loop_create(
+struct yetty_yclient_event_loop_ptr_result yetty_yclient_event_loop_create(
     const struct yetty_yclient_lib_event_loop_config *cfg);
-void yetty_yclient_event_loop_destroy(struct yetty_yclient_event_loop *loop);
+/* Best-effort teardown — always frees the loop; the Result surfaces the
+ * first sub-destroy failure (e.g. the owned yface) for callers that care. */
+struct yetty_ycore_void_result yetty_yclient_event_loop_destroy(
+    struct yetty_yclient_event_loop *loop);
 
 /*=============================================================================
  * Callback wiring

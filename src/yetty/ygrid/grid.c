@@ -308,7 +308,6 @@ static struct yetty_ygrid_grid_ptr_result ygrid_from_obj(struct yetty_yclass_obj
     return YETTY_OK(yetty_ygrid_grid_ptr, (struct yetty_ygrid_grid *)slice_r.value);
 }
 
-
 /*===========================================================================
  * Entity helpers — ported from scene-canvas (commit 39adaca).
  *=========================================================================*/
@@ -609,14 +608,15 @@ static void entity_drop_prims(struct yetty_ygrid_grid *g, struct ygrid_entity *e
  *
  * which is what the shader expects (composite back-to-front, parent
  * first, leaves on top). */
-static void rebucket_subtree_to_back(struct yetty_ygrid_grid *g, uint32_t slot)
+static struct yetty_ycore_void_result rebucket_subtree_to_back(struct yetty_ygrid_grid *g,
+                                                               uint32_t slot)
 {
     if (slot >= g->entity_capacity) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct ygrid_entity *e = &g->entities[slot];
     if (!e->in_use) {
-        return;
+        return YETTY_OK_VOID();
     }
     for (uint32_t i = 0; i < e->children_count; i++) {
         uint32_t cs = e->children[i];
@@ -637,22 +637,18 @@ static void rebucket_subtree_to_back(struct yetty_ygrid_grid *g, uint32_t slot)
                 uint32_t pi = child->prim_indices[k];
                 if (pi < g->prim_count && g->prims[pi].entity_slot != YGRID_INVALID_SLOT) {
                     struct yetty_ycore_void_result br = bucket_prim(g, pi);
-                    if (YETTY_IS_ERR(br)) {
-                        /* OOM during re-bucket — best-effort log,
-                         * skip this prim. The visible effect is one
-                         * widget temporarily painted under its
-                         * parent's chrome, which the next emit
-                         * will repair. */
-                        yetty_ycore_error_destroy(br.error);
-                    }
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, br,
+                                        "rebucket_subtree_to_back: bucket_prim");
                 }
             }
             g->staging_dirty = 1;
         }
         /* Recurse so grandchildren get pushed to the back too,
          * preserving tree order all the way down. */
-        rebucket_subtree_to_back(g, cs);
+        struct yetty_ycore_void_result recurse_r = rebucket_subtree_to_back(g, cs);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, recurse_r, "rebucket_subtree_to_back: recurse");
     }
+    return YETTY_OK_VOID();
 }
 
 /* Recursive subtree delete. Frees the slot AND removes the entry from
@@ -1028,7 +1024,8 @@ static struct yetty_ycore_void_result expand_text_span(
      * "no font registered yet" path. */
     uint32_t slot = (span->font_id < 0) ? 0u : (uint32_t)span->font_id;
     if (slot >= grid->font_count || !grid->fonts[slot]) {
-        ydebug("ygrid: TEXT_DRAWABLE_LIST font_id=%d -> slot %u has no font; dropped", span->font_id, slot);
+        ydebug("ygrid: TEXT_DRAWABLE_LIST font_id=%d -> slot %u has no font; dropped",
+               span->font_id, slot);
         return YETTY_OK_VOID();
     }
     struct yetty_yfont_font *font = grid->fonts[slot];
@@ -1250,11 +1247,11 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
         }
         g->figure_instances[g->figure_instance_count++] = ir.value;
         ir.value->dirty = 1;
-    {
-        struct yetty_ycore_void_result set_dirty_r =
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(g->base) - 1, 1);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
-    }
+        {
+            struct yetty_ycore_void_result set_dirty_r =
+                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(g->base) - 1, 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
+        }
         return YETTY_OK_VOID();
     } else {
         struct yetty_ydraw_drawable_list_entry_ops_ptr_result ops_r = yetty_ysdf_handler(type);
@@ -1420,8 +1417,7 @@ static struct yetty_ycore_void_result rebuild_prim_staging(struct yetty_ygrid_gr
 
 static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure *self)
 {
-    struct yetty_ygrid_grid_ptr_result g_r =
-        ygrid_from_obj((struct yetty_yclass_object *)self - 1);
+    struct yetty_ygrid_grid_ptr_result g_r = ygrid_from_obj((struct yetty_yclass_object *)self - 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, g_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *g = g_r.value;
 
@@ -1468,7 +1464,7 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
 }
 
 void yetty_ygrid_set_composite_factory(struct yetty_ygrid_grid *grid,
-                                    struct yetty_ydraw_composite_factory *factory)
+                                       struct yetty_ydraw_composite_factory *factory)
 {
     if (!grid) {
         return;
@@ -1719,7 +1715,7 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
         wgpuCommandEncoderRelease(enc);
         {
             struct yetty_ycore_void_result set_dirty_r =
-                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(self) - 1, 0);
+                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(self)-1, 0);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
         }
         return YETTY_OK_VOID();
@@ -1768,7 +1764,7 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
 
     {
         struct yetty_ycore_void_result set_dirty_r =
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(self) - 1, 0);
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(self)-1, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
     }
     return YETTY_OK_VOID();
@@ -1876,7 +1872,9 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
              *   [parent NEW] [child NEW] [grandchild NEW] …
              * which matches the entity tree's render order. */
             if (was_existing) {
-                rebucket_subtree_to_back(g, child_slot);
+                struct yetty_ycore_void_result rebucket_r = rebucket_subtree_to_back(g, child_slot);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, rebucket_r,
+                                    "ygrid_process_bytes: rebucket_subtree_to_back");
             }
             off += (uint32_t)pr.value;
             continue;
@@ -1895,8 +1893,7 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
 static struct yetty_ycore_void_result ygrid_process_bytes(struct yetty_yfigure_figure *self,
                                                           const uint8_t *bytes, size_t bytes_len)
 {
-    struct yetty_ygrid_grid_ptr_result g_r =
-        ygrid_from_obj((struct yetty_yclass_object *)self - 1);
+    struct yetty_ygrid_grid_ptr_result g_r = ygrid_from_obj((struct yetty_yclass_object *)self - 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, g_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *g = g_r.value;
     return process_group_body(g, YGRID_ROOT_SLOT, bytes, bytes_len);
@@ -1910,8 +1907,7 @@ static struct yetty_ycore_void_result ygrid_process_bytes(struct yetty_yfigure_f
  * render is a cheap upload instead of a full pipeline rebuild. */
 static struct yetty_ycore_void_result ygrid_reset_content(struct yetty_yfigure_figure *self)
 {
-    struct yetty_ygrid_grid_ptr_result g_r =
-        ygrid_from_obj((struct yetty_yclass_object *)self - 1);
+    struct yetty_ygrid_grid_ptr_result g_r = ygrid_from_obj((struct yetty_yclass_object *)self - 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, g_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *g = g_r.value;
     g->bytes_len = 0;
@@ -2025,28 +2021,19 @@ static uint32_t ygrid_live_prim_count(const struct yetty_ygrid_grid *g)
     return live;
 }
 
-static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
+static struct yetty_ycore_char_ptr_result ygrid_dump(const struct yetty_yfigure_figure *self,
+                                                     int indent)
 {
-    struct yetty_ygrid_grid_ptr_result g_r =
-        ygrid_from_obj((struct yetty_yclass_object *)self - 1);
-    if (YETTY_IS_ERR(g_r)) {
-        yetty_ycore_error_destroy(g_r.error);
-        return NULL;
-    }
+    struct yetty_ygrid_grid_ptr_result g_r = ygrid_from_obj((struct yetty_yclass_object *)self - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, g_r, "ygrid_dump: from_obj");
     const struct yetty_ygrid_grid *g = g_r.value;
     struct rectangle_result base_rect_r =
         yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)self - 1);
-    if (YETTY_IS_ERR(base_rect_r)) {
-        yetty_ycore_error_destroy(base_rect_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, base_rect_r, "ygrid_dump: rect_get");
     struct yetty_ycore_rectangle base_rect = base_rect_r.value;
     struct yetty_ycore_int_result base_dirty_r =
         yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)self - 1);
-    if (YETTY_IS_ERR(base_dirty_r)) {
-        yetty_ycore_error_destroy(base_dirty_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, base_dirty_r, "ygrid_dump: dirty_get");
     int base_dirty = base_dirty_r.value;
     char pad[64];
     ygrid_dump_pad(pad, sizeof(pad), indent);
@@ -2054,43 +2041,42 @@ static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
     char *buf = NULL;
     buf = ygrid_dump_appendf(buf, &len, &cap, "%skind: ygrid\n", pad);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
-    buf =
-        ygrid_dump_appendf(buf, &len, &cap, "%srect: [%.1f, %.1f, %.1f, %.1f]\n", pad,
-                           base_rect.min.x, base_rect.min.y, base_rect.max.x, base_rect.max.y);
+    buf = ygrid_dump_appendf(buf, &len, &cap, "%srect: [%.1f, %.1f, %.1f, %.1f]\n", pad,
+                             base_rect.min.x, base_rect.min.y, base_rect.max.x, base_rect.max.y);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sdirty: %d\n", pad, base_dirty);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sgrid_cols: %u\n", pad, g->grid_cols);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sgrid_rows: %u\n", pad, g->grid_rows);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sprim_count: %u\n", pad, ygrid_live_prim_count(g));
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sprim_count_with_tombstones: %u\n", pad,
                              g->prim_count);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sbytes_len: %zu\n", pad, g->bytes_len);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     buf =
         ygrid_dump_appendf(buf, &len, &cap, "%sentity_high_water: %u\n", pad, g->entity_high_water);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     /* Entities. Walk every slot up to entity_high_water; skip released
      * (free-list) slots — those have in_use=false. external_id=0 is the
@@ -2106,11 +2092,11 @@ static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
     }
     if (!any) {
         buf = ygrid_dump_appendf(buf, &len, &cap, "%sentities: []\n", pad);
-        return buf;
+        return YETTY_OK(yetty_ycore_char_ptr, buf);
     }
     buf = ygrid_dump_appendf(buf, &len, &cap, "%sentities:\n", pad);
     if (!buf) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
     }
     for (uint32_t s = 0; s < g->entity_high_water; s++) {
         const struct ygrid_entity *e = &g->entities[s];
@@ -2119,12 +2105,12 @@ static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
         }
         buf = ygrid_dump_appendf(buf, &len, &cap, "%s  - slot: %u\n", pad, s);
         if (!buf) {
-            return NULL;
+            return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
         }
         buf = ygrid_dump_appendf(buf, &len, &cap, "%s    external_id: %llu\n", pad,
                                  (unsigned long long)e->external_id);
         if (!buf) {
-            return NULL;
+            return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
         }
         if (e->parent_slot == YGRID_INVALID_SLOT) {
             buf = ygrid_dump_appendf(buf, &len, &cap, "%s    parent_slot: ~\n", pad);
@@ -2133,32 +2119,32 @@ static char *ygrid_dump(const struct yetty_yfigure_figure *self, int indent)
                 ygrid_dump_appendf(buf, &len, &cap, "%s    parent_slot: %u\n", pad, e->parent_slot);
         }
         if (!buf) {
-            return NULL;
+            return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
         }
         buf = ygrid_dump_appendf(buf, &len, &cap, "%s    prim_count: %u\n", pad, e->prim_count);
         if (!buf) {
-            return NULL;
+            return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
         }
         if (e->children_count == 0) {
             buf = ygrid_dump_appendf(buf, &len, &cap, "%s    children: []\n", pad);
         } else {
             buf = ygrid_dump_appendf(buf, &len, &cap, "%s    children: [", pad);
             if (!buf) {
-                return NULL;
+                return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
             }
             for (uint32_t i = 0; i < e->children_count; i++) {
                 buf = ygrid_dump_appendf(buf, &len, &cap, "%s%u", i ? ", " : "", e->children[i]);
                 if (!buf) {
-                    return NULL;
+                    return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
                 }
             }
             buf = ygrid_dump_appendf(buf, &len, &cap, "]\n");
         }
         if (!buf) {
-            return NULL;
+            return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
         }
     }
-    return buf;
+    return YETTY_OK(yetty_ycore_char_ptr, buf);
 }
 
 /* yclass cross-domain override of the yfigure:render slot. Recovers the
@@ -2443,9 +2429,8 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         if (scale > 0.0f) {
             g->content_scale = scale;
         }
-        ydebug("ygrid_create: rect=(%.1f,%.1f)+%.1fx%.1f content_scale=%.3f",
-               rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y,
-               g->content_scale);
+        ydebug("ygrid_create: rect=(%.1f,%.1f)+%.1fx%.1f content_scale=%.3f", rect.min.x,
+               rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y, g->content_scale);
     }
     g->staging_dirty = 1;
     g->free_slot_head = YGRID_INVALID_SLOT;
@@ -2479,27 +2464,27 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         yetty_ydraw_drawable_list_registry_set_default(g->registry, yetty_ysdf_handler);
         struct yetty_ycore_void_result hr;
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_CMD_BASE,
-                                                YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
+                                                    YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
         if (YETTY_IS_ERR(hr)) {
             (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry cmd", hr);
         }
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_RESOURCE_FONT,
-                                                YETTY_YDRAW_RESOURCE_FONT,
-                                                yetty_ydraw_font_resource_handler);
+                                                    YETTY_YDRAW_RESOURCE_FONT,
+                                                    yetty_ydraw_font_resource_handler);
         if (YETTY_IS_ERR(hr)) {
             (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry font", hr);
         }
-        hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
-                                                YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
-                                                yetty_ydraw_text_drawable_list_handler);
+        hr = yetty_ydraw_drawable_list_registry_add(
+            g->registry, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+            yetty_ydraw_text_drawable_list_handler);
         if (YETTY_IS_ERR(hr)) {
             (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
         }
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
-                                                0xFFFFFFFFu, yetty_ydraw_composite_handler);
+                                                    0xFFFFFFFFu, yetty_ydraw_composite_handler);
         if (YETTY_IS_ERR(hr)) {
             (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);
@@ -2566,9 +2551,9 @@ static void ygrid_dims_from_rect(struct yetty_ycore_rectangle rect, uint32_t *ou
  * (optional) composite factory. NULL `user` is allowed — produces
  * an ygrid with no font and no composite support, useful for tests
  * and tooling. */
-static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_impl(struct yetty_ycore_rectangle rect,
-                                                                 const struct yetty_context *context,
-                                                                 void *user, int absolute_coords)
+static struct yetty_yfigure_figure_data_ptr_result ygrid_factory_impl(
+    struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user,
+    int absolute_coords)
 {
     uint32_t grid_cols, grid_rows;
     ygrid_dims_from_rect(rect, &grid_cols, &grid_rows);
@@ -2673,8 +2658,8 @@ static void scale_record_word(uint32_t *word, float scale)
  *
  * Everything else (FONT, complex figures, admin commands) falls through
  * untouched — those carry no scalable chrome coordinates here. */
-static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offset,
-                                size_t record_len)
+static struct yetty_ycore_void_result scale_record_coords(struct yetty_ygrid_grid *g,
+                                                          uint32_t record_offset, size_t record_len)
 {
     /* Only absolute-coords grids carry ygui chrome authored in logical
      * pixels; their rect/scissor is scaled to physical in ygrid_render to
@@ -2682,15 +2667,15 @@ static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offs
      * space (rect comes from the compositor in framebuffer pixels) and are
      * left untouched. */
     if (!g->absolute_coords) {
-        return;
+        return YETTY_OK_VOID();
     }
     float scale = g->content_scale;
     if (scale == 1.0f) {
-        return;
+        return YETTY_OK_VOID();
     }
     uint32_t word_count = (uint32_t)(record_len / 4u);
     if (word_count < 5u) {
-        return;
+        return YETTY_OK_VOID();
     }
     uint32_t *words = (uint32_t *)(g->bytes + record_offset);
     uint32_t type = words[0];
@@ -2700,7 +2685,7 @@ static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offs
         scale_record_word(&words[2], scale);
         scale_record_word(&words[3], scale);
         scale_record_word(&words[4], scale);
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* SDF prims share the header [type, z_order, fill, stroke, stroke_w]
@@ -2708,9 +2693,11 @@ static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offs
      * non-SDF records are skipped. */
     struct yetty_ydraw_drawable_list_entry_ops_ptr_result ops_r = yetty_ysdf_handler(type);
     if (YETTY_IS_ERR(ops_r)) {
+        /* A non-SDF type is a valid skip, not an error — this walk only
+         * rewrites scalable SDF chrome coordinates. */
         yetty_ycore_error_destroy(ops_r.error);
         ydebug("scale_record_coords: SKIP type=0x%08X (not SDF) word_count=%u", type, word_count);
-        return;
+        return YETTY_OK_VOID();
     }
     uint32_t geom_end = word_count;
     if (type == YETTY_YSDF_LINEAR_GRADIENT_BOX || type == YETTY_YSDF_RADIAL_GRADIENT_BOX) {
@@ -2733,6 +2720,7 @@ static void scale_record_coords(struct yetty_ygrid_grid *g, uint32_t record_offs
                "post-scale center=(%.1f,%.1f) half=(%.1f,%.1f)",
                type, fill, stroke, cx, cy, hw, hh);
     }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_grid *grid,
@@ -2755,7 +2743,8 @@ struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_g
 
     /* Receiver-side HiDPI scaling: rewrite logical-pixel coordinates to
      * framebuffer pixels in place before the record is indexed/staged. */
-    scale_record_coords(grid, record_offset, record_len);
+    struct yetty_ycore_void_result scale_r = scale_record_coords(grid, record_offset, record_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scale_r, "ygrid_add_record: scale_record_coords");
 
     struct yetty_ycore_void_result pr = parse_and_index_record(grid, record_offset, record_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid_add_record: parse_and_index");
@@ -2897,8 +2886,7 @@ static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
 {
     (void)ctx;
-    return YETTY_OK(yetty_ycore_char_ptr,
-                    ygrid_dump((struct yetty_yfigure_figure *)(obj + 1), indent));
+    return ygrid_dump((struct yetty_yfigure_figure *)(obj + 1), indent);
 }
 
 /* Scrollable-figure slots — the container drives these by id (wire

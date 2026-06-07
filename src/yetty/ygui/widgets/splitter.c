@@ -34,9 +34,9 @@ struct [[clang::annotate("class@ygui:splitter")]] [[clang::annotate(
     void *change_userdata;
 };
 
-static const struct yetty_yclass *splitter_class(void)
+static struct yetty_yclass_ptr_result splitter_class(void)
 {
-    return yetty_ygui_splitter_class_get().value;
+    return yetty_ygui_splitter_class_get();
 }
 
 /* Effective axis: 1 = row-bar (horizontal resize), 0 = column-bar
@@ -73,7 +73,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result result_76 = yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_TRACK, 0);
+    struct yetty_ycore_void_result result_76 =
+        yguix_box(ctx, r.min.x, r.min.y, w, h, COLOR_TRACK, 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_76, "splitter: track");
     /* Grip dots — three small marks centred. */
     float cx = r.min.x + w * 0.5f;
@@ -125,7 +126,9 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result sd_dr = yetty_ygui_data_get_result(obj, splitter_class());
+    struct yetty_yclass_ptr_result class_result = splitter_class();
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "on_motion: class");
+    struct yetty_ygui_void_ptr_result sd_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, sd_dr, "on_motion: data_get");
     struct splitter_data *sd = sd_dr.value;
 
@@ -237,13 +240,13 @@ struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_yg
         /* Not a splitter — a valid query result, not an error. */
         return YETTY_OK(yetty_ycore_int, -1);
     }
-    const struct splitter_data *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, cr.value);
+    const struct splitter_data *d = yetty_ygui_data_get((struct yetty_ygui_object *)obj, cr.value);
     return YETTY_OK(yetty_ycore_int, d->axis_plus1 == 0 ? -1 : d->axis_plus1 - 1);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_ygui_object *obj, float min_size)
+struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_ygui_object *obj,
+                                                           float min_size)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_splitter_set_min: NULL obj");
@@ -262,7 +265,8 @@ struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_ygui_obj
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_ygui_object *obj,
-                                   yetty_ygui_splitter_change_cb cb, void *userdata)
+                                                             yetty_ygui_splitter_change_cb cb,
+                                                             void *userdata)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_splitter_on_change: NULL obj");

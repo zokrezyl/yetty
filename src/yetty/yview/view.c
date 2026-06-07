@@ -99,7 +99,8 @@ static struct yetty_ycore_void_result append_admin_id_f32x2(struct yetty_ydraw_d
  * full content extent so it always fills the visible window at any scroll
  * offset. Matches the SDF ROUNDED_BOX wire record (5-word header + 8 geom). */
 static struct yetty_ycore_void_result add_background_box(struct yetty_ydraw_drawable_list *buf,
-                                                         uint32_t bg_color, float box_w, float box_h)
+                                                         uint32_t bg_color, float box_w,
+                                                         float box_h)
 {
     float cx = box_w * 0.5f;
     float cy = box_h * 0.5f;

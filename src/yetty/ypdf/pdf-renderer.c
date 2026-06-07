@@ -1111,8 +1111,8 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
  * Per-font failures are absorbed (logged + continue), matching the legacy
  * extract_page_fonts. */
 static struct yetty_ycore_void_result extract_and_emit_page_fonts_streaming(
-    pdfio_obj_t *page_obj, struct yetty_ydraw_drawable_list *buffer, struct yetty_ypdf_font_info *fonts,
-    size_t *font_count)
+    pdfio_obj_t *page_obj, struct yetty_ydraw_drawable_list *buffer,
+    struct yetty_ypdf_font_info *fonts, size_t *font_count)
 {
     pdfio_dict_t *page_dict = pdfioObjGetDict(page_obj);
     if (!page_dict) {
@@ -1578,7 +1578,8 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         .scene_max_x = max_width * YPDF_RENDER_SCALE,
         .scene_max_y = total_height * YPDF_RENDER_SCALE,
     };
-    struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_drawable_list_result br =
+        yetty_ydraw_drawable_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ypdf_render, br.error.msg);
     }
@@ -1741,7 +1742,8 @@ struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
             .scene_max_x = pw * YPDF_RENDER_SCALE,
             .scene_max_y = (ph + PAGE_MARGIN) * YPDF_RENDER_SCALE,
         };
-        struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
+        struct yetty_ydraw_drawable_list_result br =
+            yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
         if (YETTY_IS_ERR(br)) {
             emit_err = YETTY_ERR(yetty_ycore_void, "drawable_list create failed", br);
             break;

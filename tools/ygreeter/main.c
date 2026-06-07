@@ -99,20 +99,20 @@
  *===========================================================================*/
 
 enum tab_kind {
-    TAB_KIND_RICH = 0,    /* per-row span list, rendered by `rich` widget */
-    TAB_KIND_PLOTS,       /* per-row yplot source, rendered by `yplot` figure */
-    TAB_KIND_IMAGES,      /* per-row logo path, rendered by `yimage` figure */
-    TAB_KIND_VIDEO,       /* per-row mp4 path, rendered by `yvideo` figure */
-    TAB_KIND_ELEMENTS,    /* showcase of ygui widgets in a scrollarea */
-    TAB_KIND_YREADME,     /* extracted README.md, rendered by `ymarkdown` */
-    TAB_KIND_YBROWSER,    /* inline HTML, rendered by `ybrowser` */
-    TAB_KIND_DIAGRAMS,    /* Mermaid diagrams in collapsing headers (ydiagram) */
-    TAB_KIND_YMAZE,       /* animated maze, rendered by the `ymaze` widget */
-    TAB_KIND_YZOO,        /* animated zoo, rendered by the `yzoo` widget */
-    TAB_KIND_YJUNGLE,     /* animated jungle, rendered by the `yjungle` widget */
-    TAB_KIND_YSHADERTOY,  /* Shadertoy-style WGSL, rendered by the `yshadertoy` widget */
-    TAB_KIND_YNODES,      /* node-graph editor, rendered by the `ynodes` widget */
-    TAB_KIND_YPDF,        /* PDF document, rendered by the `ypdf` widget */
+    TAB_KIND_RICH = 0,   /* per-row span list, rendered by `rich` widget */
+    TAB_KIND_PLOTS,      /* per-row yplot source, rendered by `yplot` figure */
+    TAB_KIND_IMAGES,     /* per-row logo path, rendered by `yimage` figure */
+    TAB_KIND_VIDEO,      /* per-row mp4 path, rendered by `yvideo` figure */
+    TAB_KIND_ELEMENTS,   /* showcase of ygui widgets in a scrollarea */
+    TAB_KIND_YREADME,    /* extracted README.md, rendered by `ymarkdown` */
+    TAB_KIND_YBROWSER,   /* inline HTML, rendered by `ybrowser` */
+    TAB_KIND_DIAGRAMS,   /* Mermaid diagrams in collapsing headers (ydiagram) */
+    TAB_KIND_YMAZE,      /* animated maze, rendered by the `ymaze` widget */
+    TAB_KIND_YZOO,       /* animated zoo, rendered by the `yzoo` widget */
+    TAB_KIND_YJUNGLE,    /* animated jungle, rendered by the `yjungle` widget */
+    TAB_KIND_YSHADERTOY, /* Shadertoy-style WGSL, rendered by the `yshadertoy` widget */
+    TAB_KIND_YNODES,     /* node-graph editor, rendered by the `ynodes` widget */
+    TAB_KIND_YPDF,       /* PDF document, rendered by the `ypdf` widget */
 };
 
 /* Scenes — the leaf content panels. `tab_kind_for` / `tab_entry_*` are
@@ -121,9 +121,9 @@ enum tab_kind {
 #define TAB_COUNT 15
 
 static const char *SCENE_LABELS[TAB_COUNT] = {
-    "Welcome",  "Plots",        "Images",   "Code",  "Video",  "Elements", "Markdown",
-    "HTML/Browser", "Diagrams", "YMaze",    "YZoo",  "YJungle", "Shadertoy", "Node Editor",
-    "PDF"};
+    "Welcome",  "Plots",    "Images",       "Code",        "Video",
+    "Elements", "Markdown", "HTML/Browser", "Diagrams",    "YMaze",
+    "YZoo",     "YJungle",  "Shadertoy",    "Node Editor", "PDF"};
 
 /* Top-level tabs. A tab with a single scene shows it directly; a tab with
  * several shows a sub-tabbar (same widget the Shadertoy gallery uses) that
@@ -137,11 +137,11 @@ struct top_tab {
 static const struct top_tab TOP_TABS[] = {
     {"Welcome", 1, {0}},
     {"Plots", 1, {1}},
-    {"Media", 2, {2, 4}},                 /* Images, Video */
-    {"Rich text", 5, {6, 3, 14, 7, 8}},   /* Markdown, Code, PDF, HTML/Browser, Diagrams */
-    {"YGUI Widgets", 1, {5}},             /* former Elements */
-    {"Shadertoy", 1, {12}},               /* own tab — it already carries a gallery sub-tabbar */
-    {"Ymazing", 4, {9, 10, 11, 13}},      /* YMaze, YZoo, YJungle, Node Editor */
+    {"Media", 2, {2, 4}},               /* Images, Video */
+    {"Rich text", 5, {6, 3, 14, 7, 8}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams */
+    {"YGUI Widgets", 1, {5}},           /* former Elements */
+    {"Shadertoy", 1, {12}},             /* own tab — it already carries a gallery sub-tabbar */
+    {"Ymazing", 4, {9, 10, 11, 13}},    /* YMaze, YZoo, YJungle, Node Editor */
 };
 
 #define TOP_TAB_COUNT ((int)(sizeof(TOP_TABS) / sizeof(TOP_TABS[0])))
@@ -157,11 +157,11 @@ static const struct top_tab TOP_TABS[] = {
 #define BRAND_BORDER 0xFF474A36u
 /* Code-snippet syntax colours (off-palette by design — code highlighting
  * exists in every editor and uses its own conventions). */
-#define CODE_KEYWORD 0xFF4E8BECu  /* warm orange — int / return */
-#define CODE_TYPE 0xFFFFD8B9u     /* light blue — struct names */
-#define CODE_STRING 0xFFA8E0A8u   /* mint — literals */
-#define CODE_COMMENT 0xFF8B8B8Bu  /* gray */
-#define CODE_PUNCT 0xFFC0C0C0u    /* off-white */
+#define CODE_KEYWORD 0xFF4E8BECu /* warm orange — int / return */
+#define CODE_TYPE 0xFFFFD8B9u    /* light blue — struct names */
+#define CODE_STRING 0xFFA8E0A8u  /* mint — literals */
+#define CODE_COMMENT 0xFF8B8B8Bu /* gray */
+#define CODE_PUNCT 0xFFC0C0C0u   /* off-white */
 
 /* One nav entry binds a row label to a producer-specific payload. The
  * tab kind picks which field is used:
@@ -274,7 +274,9 @@ struct app {
 
 static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result r)
 {
-    if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 /*-----------------------------------------------------------------------------
@@ -288,7 +290,9 @@ static struct yetty_ygui_object *g_shadertoy_widget;
 
 static void shadertoy_apply(int idx)
 {
-    if (idx < 0 || idx >= yetty_yshadertoy_demo_shader_count || !g_shadertoy_widget) return;
+    if (idx < 0 || idx >= yetty_yshadertoy_demo_shader_count || !g_shadertoy_widget) {
+        return;
+    }
     const char *wgsl = yetty_yshadertoy_demo_shaders[idx].wgsl;
     yetty_ycore_error_destroy_safe(
         yetty_ygui_yshadertoy_set_source(g_shadertoy_widget, wgsl, strlen(wgsl)));
@@ -377,7 +381,10 @@ static const struct code_line code_minimal_lines[] = {
     {{{"/* Minimal ygui app — fits in main(). */", CODE_COMMENT}}},
     {{{"#include ", CODE_KEYWORD}, {"<yetty/ygui/ygui.h>", CODE_STRING}}},
     {{{"", 0}}},
-    {{{"int", CODE_KEYWORD}, {" main", CODE_TYPE}, {"(", CODE_PUNCT}, {"void", CODE_KEYWORD},
+    {{{"int", CODE_KEYWORD},
+      {" main", CODE_TYPE},
+      {"(", CODE_PUNCT},
+      {"void", CODE_KEYWORD},
       {") {", CODE_PUNCT}}},
     {{{"    framework_emit(engine);", BRAND_TEXT}}},
     {{{"    ", BRAND_TEXT}, {"return ", CODE_KEYWORD}, {"0", CODE_STRING}, {";", CODE_PUNCT}}},
@@ -386,17 +393,20 @@ static const struct code_line code_minimal_lines[] = {
 
 static const struct code_line code_widget_lines[] = {
     {{{"/* Adding a button — single call site. */", CODE_COMMENT}}},
-    {{{"struct ", CODE_KEYWORD}, {"yetty_ygui_object_ptr_result ", CODE_TYPE},
+    {{{"struct ", CODE_KEYWORD},
+      {"yetty_ygui_object_ptr_result ", CODE_TYPE},
       {"br = yetty_ygui_add(", BRAND_TEXT}}},
     {{{"    yetty_ygui_button_class_get().value, parent);", BRAND_TEXT}}},
-    {{{"yetty_ygui_button_set_label(br.value, ", BRAND_TEXT}, {"\"Apply\"", CODE_STRING},
+    {{{"yetty_ygui_button_set_label(br.value, ", BRAND_TEXT},
+      {"\"Apply\"", CODE_STRING},
       {");", CODE_PUNCT}}},
 };
 
 static const struct code_line code_subscribe_lines[] = {
     {{{"/* Subscribe to a value-changed event. */", CODE_COMMENT}}},
     {{{"yetty_ygui_object_subscribe(", BRAND_TEXT}}},
-    {{{"    slider, ", BRAND_TEXT}, {"YETTY_YGUI_EVENT_VALUE_CHANGED", CODE_TYPE},
+    {{{"    slider, ", BRAND_TEXT},
+      {"YETTY_YGUI_EVENT_VALUE_CHANGED", CODE_TYPE},
       {",", CODE_PUNCT}}},
     {{{"    on_changed, userdata);", BRAND_TEXT}}},
 };
@@ -410,7 +420,9 @@ static const struct code_snippet *code_snippet_at(const char *id)
          sizeof(code_subscribe_lines) / sizeof(code_subscribe_lines[0])},
     };
     for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); ++i) {
-        if (strcmp(table[i].id, id) == 0) return &table[i];
+        if (strcmp(table[i].id, id) == 0) {
+            return &table[i];
+        }
     }
     return NULL;
 }
@@ -442,15 +454,11 @@ static const struct welcome_nav welcome_nav_entries[] = {
 };
 
 static const struct nav_entry plot_nav_entries[] = {
-    {"sin / cos",
-     "f = sin(x); g = cos(x); @f.color = #6BA892; @g.color = #74C5A5",
-     -3.14159f, 3.14159f, -1.5f, 1.5f},
-    {"Polynomial",
-     "f = x*x; g = 2*x + 1; @f.color = #FFD700; @g.color = #74C5A5",
-     -5.0f, 5.0f, -2.0f, 12.0f},
-    {"Damped wave",
-     "f = exp(-x*x/4) * sin(3*x); @f.color = #74C0FC",
-     -6.0f, 6.0f, -1.2f, 1.2f},
+    {"sin / cos", "f = sin(x); g = cos(x); @f.color = #6BA892; @g.color = #74C5A5", -3.14159f,
+     3.14159f, -1.5f, 1.5f},
+    {"Polynomial", "f = x*x; g = 2*x + 1; @f.color = #FFD700; @g.color = #74C5A5", -5.0f, 5.0f,
+     -2.0f, 12.0f},
+    {"Damped wave", "f = exp(-x*x/4) * sin(3*x); @f.color = #74C0FC", -6.0f, 6.0f, -1.2f, 1.2f},
 };
 
 static const struct nav_entry code_nav_entries[] = {
@@ -465,10 +473,14 @@ static const struct nav_entry code_nav_entries[] = {
  * main-branch behaviour. */
 static void discover_logo_images(struct app *app)
 {
-    if (app->image_paths) return;
+    if (app->image_paths) {
+        return;
+    }
     const char *data_dir = yetty_yplatform_get_data_dir();
     ydebug("ygreeter: discover_logo_images data_dir=%s", data_dir ? data_dir : "(null)");
-    if (!data_dir || !*data_dir) return;
+    if (!data_dir || !*data_dir) {
+        return;
+    }
     char path_buf[1024];
     char **paths = NULL;
     int count = 0;
@@ -478,16 +490,22 @@ static void discover_logo_images(struct app *app)
         int ok = yetty_yplatform_file_exists(path_buf);
         ydebug("ygreeter: discover_logo_images probe=%s status=%s", path_buf,
                ok ? "found" : "missing");
-        if (!ok) continue;
+        if (!ok) {
+            continue;
+        }
         if (count == cap) {
             int ncap = cap ? cap * 2 : 4;
             char **np = realloc(paths, (size_t)ncap * sizeof(*np));
-            if (!np) break;
+            if (!np) {
+                break;
+            }
             paths = np;
             cap = ncap;
         }
         paths[count] = strdup(path_buf);
-        if (!paths[count]) break;
+        if (!paths[count]) {
+            break;
+        }
         count++;
     }
     app->image_paths = paths;
@@ -502,10 +520,14 @@ static void discover_logo_images(struct app *app)
  * without a callsite refactor. */
 static void discover_video_files(struct app *app)
 {
-    if (app->video_paths) return;
+    if (app->video_paths) {
+        return;
+    }
     const char *data_dir = yetty_yplatform_get_data_dir();
     ydebug("ygreeter: discover_video_files data_dir=%s", data_dir ? data_dir : "(null)");
-    if (!data_dir || !*data_dir) return;
+    if (!data_dir || !*data_dir) {
+        return;
+    }
     char path_buf[1024];
     char **paths = NULL;
     int count = 0;
@@ -516,16 +538,22 @@ static void discover_video_files(struct app *app)
         int ok = yetty_yplatform_file_exists(path_buf);
         ydebug("ygreeter: discover_video_files probe=%s status=%s", path_buf,
                ok ? "found" : "missing");
-        if (!ok) continue;
+        if (!ok) {
+            continue;
+        }
         if (count == cap) {
             int ncap = cap ? cap * 2 : 4;
             char **np = realloc(paths, (size_t)ncap * sizeof(*np));
-            if (!np) break;
+            if (!np) {
+                break;
+            }
             paths = np;
             cap = ncap;
         }
         paths[count] = strdup(path_buf);
-        if (!paths[count]) break;
+        if (!paths[count]) {
+            break;
+        }
         count++;
     }
     app->video_paths = paths;
@@ -538,14 +566,20 @@ static void discover_video_files(struct app *app)
  * YReadme tab then falls back to a small inline markdown blurb. */
 static void discover_readme(struct app *app)
 {
-    if (app->readme_path) return;
+    if (app->readme_path) {
+        return;
+    }
     const char *data_dir = yetty_yplatform_get_data_dir();
-    if (!data_dir || !*data_dir) return;
+    if (!data_dir || !*data_dir) {
+        return;
+    }
     char path_buf[1024];
     snprintf(path_buf, sizeof(path_buf), "%s/README.md", data_dir);
     int ok = yetty_yplatform_file_exists(path_buf);
     ydebug("ygreeter: discover_readme probe=%s status=%s", path_buf, ok ? "found" : "missing");
-    if (!ok) return;
+    if (!ok) {
+        return;
+    }
     app->readme_path = strdup(path_buf);
 }
 
@@ -554,14 +588,20 @@ static void discover_readme(struct app *app)
  * subtab then renders an empty ypdf. */
 static void discover_pdf(struct app *app)
 {
-    if (app->pdf_path) return;
+    if (app->pdf_path) {
+        return;
+    }
     const char *data_dir = yetty_yplatform_get_data_dir();
-    if (!data_dir || !*data_dir) return;
+    if (!data_dir || !*data_dir) {
+        return;
+    }
     char path_buf[1024];
     snprintf(path_buf, sizeof(path_buf), "%s/pdf-sample.pdf", data_dir);
     int ok = yetty_yplatform_file_exists(path_buf);
     ydebug("ygreeter: discover_pdf probe=%s status=%s", path_buf, ok ? "found" : "missing");
-    if (!ok) return;
+    if (!ok) {
+        return;
+    }
     app->pdf_path = strdup(path_buf);
 }
 
@@ -577,7 +617,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
                                                        int scene_index);
 static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index);
 
-static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_yc_ctx,
+                                                      struct yetty_yclass_object *_yc_obj,
                                                       const struct nav_entry *entry)
 {
     (void)_yc_ctx;
@@ -599,9 +640,13 @@ static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_
  * load_video_entry — the same idiom twice wasn't worth keeping. */
 static uint8_t *slurp_file(const char *path, size_t *out_len)
 {
-    if (!path) return NULL;
+    if (!path) {
+        return NULL;
+    }
     FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
+    if (!f) {
+        return NULL;
+    }
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -620,7 +665,8 @@ static uint8_t *slurp_file(const char *path, size_t *out_len)
     return buf;
 }
 
-static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_ctx *_yc_ctx,
+                                                       struct yetty_yclass_object *_yc_obj,
                                                        const char *path)
 {
     (void)_yc_ctx;
@@ -630,7 +676,9 @@ static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_ctx *
     }
     size_t got = 0;
     uint8_t *buf = slurp_file(path, &got);
-    if (!buf) return YETTY_ERR(yetty_ycore_void, "load_image_entry: slurp failed");
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "load_image_entry: slurp failed");
+    }
     struct yetty_ycore_void_result r = yetty_ygui_yimage_set_bytes(image, buf, got);
     free(buf);
     return r;
@@ -647,7 +695,9 @@ static struct yetty_ycore_void_result load_video_entry(struct yetty_yclass_ctx *
     }
     size_t got = 0;
     uint8_t *buf = slurp_file(path, &got);
-    if (!buf) return YETTY_ERR(yetty_ycore_void, "load_video_entry: slurp failed");
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "load_video_entry: slurp failed");
+    }
     struct yetty_ycore_void_result r = yetty_ygui_yvideo_set_bytes(video, buf, got);
     free(buf);
     return r;
@@ -681,29 +731,37 @@ static const char YBROWSER_SAMPLE_HTML[] =
  * renders a stack of collapsing-header sections, one ybrowser each, so
  * YBROWSER_SAMPLE_HTML above is reused as the "Overview" section. */
 
-static struct yetty_ycore_void_result write_code_snippet(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result write_code_snippet(struct yetty_yclass_ctx *_yc_ctx,
+                                                         struct yetty_yclass_object *_yc_obj,
                                                          const char *snippet_id)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *rich = (struct yetty_ygui_object *)_yc_obj;
     const struct code_snippet *snip = code_snippet_at(snippet_id);
-    if (!snip) return YETTY_OK_VOID();
+    if (!snip) {
+        return YETTY_OK_VOID();
+    }
     for (size_t li = 0; li < snip->n_lines; ++li) {
         struct yetty_ycore_void_result lr = yetty_ygui_rich_add_line(rich);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "code: rich_add_line");
-        for (size_t si = 0;
-             si < sizeof(snip->lines[li].spans) / sizeof(snip->lines[li].spans[0]); ++si) {
+        for (size_t si = 0; si < sizeof(snip->lines[li].spans) / sizeof(snip->lines[li].spans[0]);
+             ++si) {
             const char *t = snip->lines[li].spans[si].text;
-            if (!t) break;
-            if (t[0] == '\0') continue;
-            yetty_ycore_error_destroy_safe(yetty_ygui_rich_add_span(
-                rich, t, 13.0f, snip->lines[li].spans[si].color));
+            if (!t) {
+                break;
+            }
+            if (t[0] == '\0') {
+                continue;
+            }
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_rich_add_span(rich, t, 13.0f, snip->lines[li].spans[si].color));
         }
     }
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result write_welcome_spans(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result write_welcome_spans(struct yetty_yclass_ctx *_yc_ctx,
+                                                          struct yetty_yclass_object *_yc_obj,
                                                           const struct rich_span *spans,
                                                           size_t n_spans)
 {
@@ -754,7 +812,9 @@ static struct row_link *new_row_link(struct app *app, int tab, int entry)
     if (g_row_links.count == g_row_links.cap) {
         int ncap = g_row_links.cap ? g_row_links.cap * 2 : 16;
         struct row_link *na = realloc(g_row_links.items, (size_t)ncap * sizeof(*na));
-        if (!na) return NULL;
+        if (!na) {
+            return NULL;
+        }
         g_row_links.items = na;
         g_row_links.cap = ncap;
     }
@@ -768,66 +828,97 @@ static struct row_link *new_row_link(struct app *app, int tab, int entry)
 static int tab_entry_count(const struct app *app, int tab_index)
 {
     switch (tab_index) {
-    case 0: return (int)(sizeof(welcome_nav_entries) / sizeof(welcome_nav_entries[0]));
-    case 1: return (int)(sizeof(plot_nav_entries) / sizeof(plot_nav_entries[0]));
-    case 2: return app->image_path_count > 0 ? app->image_path_count : 1;
-    case 3: return (int)(sizeof(code_nav_entries) / sizeof(code_nav_entries[0]));
-    case 4: return app->video_path_count > 0 ? app->video_path_count : 1;
-    case 5: /* Elements — chrome-only, the single nav row is a label hook. */
-    case 6: /* YReadme  — single piece of content (README.md). */
-    case 7: /* YBrowser — single inline HTML sample. */
+    case 0:
+        return (int)(sizeof(welcome_nav_entries) / sizeof(welcome_nav_entries[0]));
+    case 1:
+        return (int)(sizeof(plot_nav_entries) / sizeof(plot_nav_entries[0]));
+    case 2:
+        return app->image_path_count > 0 ? app->image_path_count : 1;
+    case 3:
+        return (int)(sizeof(code_nav_entries) / sizeof(code_nav_entries[0]));
+    case 4:
+        return app->video_path_count > 0 ? app->video_path_count : 1;
+    case 5:  /* Elements — chrome-only, the single nav row is a label hook. */
+    case 6:  /* YReadme  — single piece of content (README.md). */
+    case 7:  /* YBrowser — single inline HTML sample. */
     case 8:  /* Diagrams — single self-contained scrollarea. */
     case 9:  /* YMaze     — single self-contained animated widget. */
     case 10: /* YZoo      — single self-contained animated widget. */
     case 11: /* YJungle   — single self-contained animated widget. */
     case 12: /* Shadertoy — single self-contained animated widget. */
         return 1;
-    default: return 0;
+    default:
+        return 0;
     }
 }
 
 static const char *tab_entry_label(const struct app *app, int tab_index, int entry_index)
 {
     switch (tab_index) {
-    case 0: return welcome_nav_entries[entry_index].label;
-    case 1: return plot_nav_entries[entry_index].label;
+    case 0:
+        return welcome_nav_entries[entry_index].label;
+    case 1:
+        return plot_nav_entries[entry_index].label;
     case 2: {
-        if (app->image_path_count <= 0) return "(no images found)";
+        if (app->image_path_count <= 0) {
+            return "(no images found)";
+        }
         static char buf[64];
         snprintf(buf, sizeof(buf), "logo-%d", entry_index + 1);
         return buf;
     }
-    case 3: return code_nav_entries[entry_index].label;
+    case 3:
+        return code_nav_entries[entry_index].label;
     case 4: {
-        if (app->video_path_count <= 0) return "(no videos found)";
+        if (app->video_path_count <= 0) {
+            return "(no videos found)";
+        }
         static char buf[64];
         snprintf(buf, sizeof(buf), "clip-%d", entry_index + 1);
         return buf;
     }
-    case 5: return "Showcase";
-    case 6: return app->readme_path ? "README.md" : "(no README)";
-    case 7: return "Sample";
-    case 8: return "Showcase";
-    default: return "";
+    case 5:
+        return "Showcase";
+    case 6:
+        return app->readme_path ? "README.md" : "(no README)";
+    case 7:
+        return "Sample";
+    case 8:
+        return "Showcase";
+    default:
+        return "";
     }
 }
 
 static enum tab_kind tab_kind_for(int tab_index)
 {
     switch (tab_index) {
-    case 1: return TAB_KIND_PLOTS;
-    case 2: return TAB_KIND_IMAGES;
-    case 4: return TAB_KIND_VIDEO;
-    case 5: return TAB_KIND_ELEMENTS;
-    case 6: return TAB_KIND_YREADME;
-    case 7: return TAB_KIND_YBROWSER;
-    case 8: return TAB_KIND_DIAGRAMS;
-    case 9: return TAB_KIND_YMAZE;
-    case 10: return TAB_KIND_YZOO;
-    case 11: return TAB_KIND_YJUNGLE;
-    case 12: return TAB_KIND_YSHADERTOY;
-    case 13: return TAB_KIND_YNODES;
-    case 14: return TAB_KIND_YPDF;
+    case 1:
+        return TAB_KIND_PLOTS;
+    case 2:
+        return TAB_KIND_IMAGES;
+    case 4:
+        return TAB_KIND_VIDEO;
+    case 5:
+        return TAB_KIND_ELEMENTS;
+    case 6:
+        return TAB_KIND_YREADME;
+    case 7:
+        return TAB_KIND_YBROWSER;
+    case 8:
+        return TAB_KIND_DIAGRAMS;
+    case 9:
+        return TAB_KIND_YMAZE;
+    case 10:
+        return TAB_KIND_YZOO;
+    case 11:
+        return TAB_KIND_YJUNGLE;
+    case 12:
+        return TAB_KIND_YSHADERTOY;
+    case 13:
+        return TAB_KIND_YNODES;
+    case 14:
+        return TAB_KIND_YPDF;
     case 0:
     case 3:
     default:
@@ -963,7 +1054,7 @@ static struct yetty_ycore_void_result el_open_menu(struct yetty_yclass_ctx *yc,
 }
 
 static struct yetty_ycore_void_result build_elements_content(struct app *app,
-                                                              struct yetty_ygui_object *root)
+                                                             struct yetty_ygui_object *root)
 {
     (void)app;
 
@@ -1001,8 +1092,8 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
         yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(pr, 0.65f));
 
         struct yetty_ygui_object *ta = el_w(sec, yetty_ygui_textarea_class_get().value, 120);
-        yetty_ycore_error_destroy_safe(
-            yetty_ygui_textarea_set_text(ta, "Multi-line text area.\nClick to focus, then type.\n"));
+        yetty_ycore_error_destroy_safe(yetty_ygui_textarea_set_text(
+            ta, "Multi-line text area.\nClick to focus, then type.\n"));
 
         el_finalize_section(sec);
     }
@@ -1024,13 +1115,15 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
         yetty_ycore_error_destroy_safe(yetty_ygui_dropdown_add_option(dd, "Option C"));
         yetty_ycore_error_destroy_safe(yetty_ygui_dropdown_set_selected(dd, 0));
 
-        struct yetty_ygui_object *combo = el_w(sec, yetty_ygui_combobox_class_get().value, EL_ROW_H);
+        struct yetty_ygui_object *combo =
+            el_w(sec, yetty_ygui_combobox_class_get().value, EL_ROW_H);
         yetty_ycore_error_destroy_safe(yetty_ygui_combobox_set_text(combo, "red"));
         yetty_ycore_error_destroy_safe(yetty_ygui_combobox_add_suggestion(combo, "green"));
         yetty_ycore_error_destroy_safe(yetty_ygui_combobox_add_suggestion(combo, "blue"));
         yetty_ycore_error_destroy_safe(yetty_ygui_combobox_add_suggestion(combo, "magenta"));
 
-        struct yetty_ygui_object *ch = el_w(sec, yetty_ygui_choicebox_class_get().value, 4 * EL_ROW_H);
+        struct yetty_ygui_object *ch =
+            el_w(sec, yetty_ygui_choicebox_class_get().value, 4 * EL_ROW_H);
         yetty_ycore_error_destroy_safe(yetty_ygui_choicebox_add(ch, "Small"));
         yetty_ycore_error_destroy_safe(yetty_ygui_choicebox_add(ch, "Medium"));
         yetty_ycore_error_destroy_safe(yetty_ygui_choicebox_add(ch, "Large"));
@@ -1078,7 +1171,8 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(chip_row, &l));
             static const char *tags[] = {"linux", "gpu", "rust-free"};
             for (int i = 0; i < 3; i++) {
-                struct yetty_ygui_object *chip = el_w(chip_row, yetty_ygui_chip_class_get().value, 24);
+                struct yetty_ygui_object *chip =
+                    el_w(chip_row, yetty_ygui_chip_class_get().value, 24);
                 el_set_width(chip, 90);
                 yetty_ycore_error_destroy_safe(yetty_ygui_chip_set_label(chip, tags[i]));
                 yetty_ycore_error_destroy_safe(yetty_ygui_chip_set_closable(chip, i < 2 ? 1 : 0));
@@ -1239,21 +1333,21 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
  * flexbox, and live JavaScript) at a glance. The brand palette is baked
  * into each page so they blend with the dark canvas.
  *===========================================================================*/
-#define YG_BROWSER_CSS                                                                              \
-    "html,body{margin:0;padding:0;}"                                                                \
-    "body{background:#0B1014;color:#E0E5E4;font-size:15px;padding:14px 18px;}"                      \
-    "h1{color:#74C5A5;}h2{color:#6BA892;}h3{color:#9FA7A8;}"                                        \
-    "p{margin:0 0 10px;}"                                                                           \
-    "a{color:#6BA892;}"                                                                             \
-    ".muted{color:#9FA7A8;}"                                                                        \
-    ".accent{color:#74C5A5;}"                                                                       \
-    "code{color:#74C5A5;}"                                                                          \
-    "hr{border:0;border-top:1px solid #364A47;margin:14px 0;}"                                      \
-    ".card{background:#141A1F;border:1px solid #364A47;border-radius:10px;"                         \
+#define YG_BROWSER_CSS                                                                             \
+    "html,body{margin:0;padding:0;}"                                                               \
+    "body{background:#0B1014;color:#E0E5E4;font-size:15px;padding:14px 18px;}"                     \
+    "h1{color:#74C5A5;}h2{color:#6BA892;}h3{color:#9FA7A8;}"                                       \
+    "p{margin:0 0 10px;}"                                                                          \
+    "a{color:#6BA892;}"                                                                            \
+    ".muted{color:#9FA7A8;}"                                                                       \
+    ".accent{color:#74C5A5;}"                                                                      \
+    "code{color:#74C5A5;}"                                                                         \
+    "hr{border:0;border-top:1px solid #364A47;margin:14px 0;}"                                     \
+    ".card{background:#141A1F;border:1px solid #364A47;border-radius:10px;"                        \
     "padding:14px 16px;margin:0 0 12px;}"
 
-#define YG_DOC(EXTRA_CSS, BODY)                                                                     \
-    "<!doctype html><html lang=en><head><meta charset=utf-8><style>" YG_BROWSER_CSS EXTRA_CSS       \
+#define YG_DOC(EXTRA_CSS, BODY)                                                                    \
+    "<!doctype html><html lang=en><head><meta charset=utf-8><style>" YG_BROWSER_CSS EXTRA_CSS      \
     "</style></head><body>" BODY "</body></html>"
 
 struct ybrowser_scenario {
@@ -1391,39 +1485,41 @@ static const struct ybrowser_scenario *ybrowser_scenarios(int *count)
          260.0f},
 
         {"JavaScript",
-         YG_DOC("pre{background:#0B1014;border:1px solid #364A47;border-radius:8px;"
-                "padding:12px 14px;color:#74C5A5;margin:0 0 14px;}"
-                ".jrow{display:flex;flex-direction:row;}"
-                ".jrow .jc{flex-grow:1;padding:8px 12px;border-top:1px solid #1E262C;color:#E0E5E4;}"
-                ".jrow.jhead{background:#1E262C;border-radius:8px 8px 0 0;}"
-                ".jrow.jhead .jc{border-top:0;color:#74C5A5;}"
-                "#out{border:1px solid #364A47;border-radius:8px;background:#141A1F;margin:0 0 12px;}"
-                ".note{padding:9px 12px;color:#9FA7A8;border-top:1px solid #1E262C;}",
-                "<div class=card>"
-                "<h2>JavaScript at load</h2>"
-                "<p class=muted>QuickJS runs inline scripts while the page loads and mutates "
-                "the DOM before paint. Everything in the box below was produced by this script:</p>"
-                "<pre>var out = document.querySelector('#out');\n"
-                "for (var n = 1; n &lt;= 6; n++)\n"
-                "  out.innerHTML += row(n, n*n, Math.pow(2,n));\n"
-                "out.appendChild(stamp(new Date()));</pre>"
-                "<div id=out><div class=note>This panel is generated by JavaScript "
-                "at page load. Seeing this line means the build was configured "
-                "without QuickJS (the lib-quickjs prebuilt wasn't available).</div></div>"
-                "</div>"
-                "<script>"
-                "function cell(t){return '<div class=\"jc\">'+t+'</div>';}"
-                "var out = document.querySelector('#out');"
-                "var html = '<div class=\"jrow jhead\">'+cell('n')+cell('n squared')+cell('2^n')+'</div>';"
-                "for (var n = 1; n <= 6; n++) {"
-                "  html += '<div class=\"jrow\">'+cell(n)+cell(n*n)+cell(Math.pow(2,n))+'</div>';"
-                "}"
-                "out.innerHTML = html;"
-                "var note = document.createElement('div');"
-                "note.className = 'note';"
-                "note.textContent = 'document.createElement + new Date(): ' + new Date().toString();"
-                "out.appendChild(note);"
-                "</script>"),
+         YG_DOC(
+             "pre{background:#0B1014;border:1px solid #364A47;border-radius:8px;"
+             "padding:12px 14px;color:#74C5A5;margin:0 0 14px;}"
+             ".jrow{display:flex;flex-direction:row;}"
+             ".jrow .jc{flex-grow:1;padding:8px 12px;border-top:1px solid #1E262C;color:#E0E5E4;}"
+             ".jrow.jhead{background:#1E262C;border-radius:8px 8px 0 0;}"
+             ".jrow.jhead .jc{border-top:0;color:#74C5A5;}"
+             "#out{border:1px solid #364A47;border-radius:8px;background:#141A1F;margin:0 0 12px;}"
+             ".note{padding:9px 12px;color:#9FA7A8;border-top:1px solid #1E262C;}",
+             "<div class=card>"
+             "<h2>JavaScript at load</h2>"
+             "<p class=muted>QuickJS runs inline scripts while the page loads and mutates "
+             "the DOM before paint. Everything in the box below was produced by this script:</p>"
+             "<pre>var out = document.querySelector('#out');\n"
+             "for (var n = 1; n &lt;= 6; n++)\n"
+             "  out.innerHTML += row(n, n*n, Math.pow(2,n));\n"
+             "out.appendChild(stamp(new Date()));</pre>"
+             "<div id=out><div class=note>This panel is generated by JavaScript "
+             "at page load. Seeing this line means the build was configured "
+             "without QuickJS (the lib-quickjs prebuilt wasn't available).</div></div>"
+             "</div>"
+             "<script>"
+             "function cell(t){return '<div class=\"jc\">'+t+'</div>';}"
+             "var out = document.querySelector('#out');"
+             "var html = '<div class=\"jrow jhead\">'+cell('n')+cell('n "
+             "squared')+cell('2^n')+'</div>';"
+             "for (var n = 1; n <= 6; n++) {"
+             "  html += '<div class=\"jrow\">'+cell(n)+cell(n*n)+cell(Math.pow(2,n))+'</div>';"
+             "}"
+             "out.innerHTML = html;"
+             "var note = document.createElement('div');"
+             "note.className = 'note';"
+             "note.textContent = 'document.createElement + new Date(): ' + new Date().toString();"
+             "out.appendChild(note);"
+             "</script>"),
          400.0f},
     };
     *count = (int)(sizeof(table) / sizeof(table[0]));
@@ -1719,8 +1815,9 @@ static struct yetty_ycore_void_result build_ynodes_content(struct app *app,
         yetty_ygui_add(yetty_ygui_label_class_get().value, parent);
     if (YETTY_IS_OK(hint)) {
         yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(
-            hint.value, "drag nodes  \xe2\x80\xa2  drag pin\xe2\x86\x92pin to connect  \xe2\x80\xa2  "
-                        "right-click for menu  \xe2\x80\xa2  pan: drag canvas  \xe2\x80\xa2  wheel: zoom"));
+            hint.value,
+            "drag nodes  \xe2\x80\xa2  drag pin\xe2\x86\x92pin to connect  \xe2\x80\xa2  "
+            "right-click for menu  \xe2\x80\xa2  pan: drag canvas  \xe2\x80\xa2  wheel: zoom"));
         yetty_ycore_error_destroy_safe(yetty_ygui_label_set_color(hint.value, muted));
         yetty_ycore_error_destroy_safe(el_set_height(hint.value, 24.0f));
     } else {
@@ -1815,7 +1912,9 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     app->cur_scene = tab_index;
     while (1) {
         struct yetty_ygui_object *c = yetty_ygui_object_first_child(parent);
-        if (!c) break;
+        if (!c) {
+            break;
+        }
         yetty_ycore_error_destroy_safe(yetty_ygui_del(c));
     }
 
@@ -1823,7 +1922,9 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     t->kind = tab_kind_for(tab_index);
     int n = tab_entry_count(app, tab_index);
     t->n_entries = n;
-    if (t->active_entry < 0 || t->active_entry >= n) t->active_entry = 0;
+    if (t->active_entry < 0 || t->active_entry >= n) {
+        t->active_entry = 0;
+    }
 
     /* Tabs whose body is a single self-contained content widget skip
      * the nav vbox entirely — listing a single "Showcase" / "clip-1"
@@ -1970,7 +2071,9 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         for (int i = 0; i < yetty_yshadertoy_demo_shader_count; i++) {
             struct yetty_ygui_object_ptr_result hh =
                 yetty_ygui_tabbar_add_tab(str.value, yetty_yshadertoy_demo_shaders[i].label);
-            if (YETTY_IS_ERR(hh)) yetty_ycore_error_destroy(hh.error);
+            if (YETTY_IS_ERR(hh)) {
+                yetty_ycore_error_destroy(hh.error);
+            }
         }
         struct yetty_ygui_object_ptr_result zr =
             yetty_ygui_add(yetty_ygui_yshadertoy_class_get().value, vr.value);
@@ -2104,9 +2207,9 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
             yetty_ycore_error_destroy_safe(write_welcome_spans(
                 NULL, (struct yetty_yclass_object *)content, e->spans, e->n_spans));
         } else {
-            yetty_ycore_error_destroy_safe(write_code_snippet(
-                NULL, (struct yetty_yclass_object *)content,
-                code_nav_entries[t->active_entry].payload));
+            yetty_ycore_error_destroy_safe(
+                write_code_snippet(NULL, (struct yetty_yclass_object *)content,
+                                   code_nav_entries[t->active_entry].payload));
         }
         break;
     }
@@ -2159,7 +2262,9 @@ static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index
     /* Grouped tab — wipe the body and lay out vbox(sub-tabbar, subbody). */
     while (1) {
         struct yetty_ygui_object *c = yetty_ygui_object_first_child(app->body_panel);
-        if (!c) break;
+        if (!c) {
+            break;
+        }
         yetty_ycore_error_destroy_safe(yetty_ygui_del(c));
     }
     struct yetty_ygui_object_ptr_result vr =
@@ -2182,7 +2287,9 @@ static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index
     for (int k = 0; k < tt->n_subs; k++) {
         struct yetty_ygui_object_ptr_result hh =
             yetty_ygui_tabbar_add_tab(str.value, SCENE_LABELS[tt->subs[k]]);
-        if (YETTY_IS_ERR(hh)) yetty_ycore_error_destroy(hh.error);
+        if (YETTY_IS_ERR(hh)) {
+            yetty_ycore_error_destroy(hh.error);
+        }
     }
     struct yetty_ygui_object_ptr_result sb =
         yetty_ygui_add(yetty_ygui_vbox_class_get().value, vr.value);
@@ -2209,13 +2316,17 @@ static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index
     return build_scene_body(app, sb.value, tt->subs[sub]);
 }
 
-static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj, void *userdata)
+static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *_yc_ctx,
+                                                     struct yetty_yclass_object *_yc_obj,
+                                                     void *userdata)
 {
     (void)_yc_ctx;
     struct yetty_ygui_object *btn = (struct yetty_ygui_object *)_yc_obj;
     (void)btn;
     struct row_link *rl = (struct row_link *)userdata;
-    if (!rl) return YETTY_OK_VOID();
+    if (!rl) {
+        return YETTY_OK_VOID();
+    }
     /* Ignore stale row-links from a scene that's no longer the one on screen. */
     if (rl->tab != rl->app->cur_scene) {
         return YETTY_OK_VOID();
@@ -2224,7 +2335,8 @@ static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *_y
     return build_scene_body(rl->app, rl->app->scene_parent, rl->tab);
 }
 
-static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc_ctx, struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc_ctx,
+                                                    struct yetty_yclass_object *_yc_obj,
                                                     const struct yetty_ygui_event *event,
                                                     void *userdata)
 {
@@ -2232,7 +2344,9 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
     struct yetty_ygui_object *target = (struct yetty_ygui_object *)_yc_obj;
     (void)target;
     int idx = event->i0;
-    if (idx < 0 || idx >= TOP_TAB_COUNT) return YETTY_OK_VOID();
+    if (idx < 0 || idx >= TOP_TAB_COUNT) {
+        return YETTY_OK_VOID();
+    }
     return rebuild_top((struct app *)userdata, idx);
 }
 
@@ -2357,7 +2471,9 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
     const char *env_tab = getenv("YGREETER_TAB");
     if (env_tab && *env_tab) {
         int v = atoi(env_tab);
-        if (v >= 0 && v < TOP_TAB_COUNT) start_tab = v;
+        if (v >= 0 && v < TOP_TAB_COUNT) {
+            start_tab = v;
+        }
     }
     const char *env_sub = getenv("YGREETER_SUBTAB");
     if (env_sub && *env_sub) {
@@ -2387,7 +2503,9 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
     struct key_ctx *kc = (struct key_ctx *)userdata;
     struct app *app = kc->app;
     if (key == 'q' || key == 'Q' || key == 0x03 || key == 0x04) {
-        if (kc->stop_cb) kc->stop_cb(app);
+        if (kc->stop_cb) {
+            kc->stop_cb(app);
+        }
         return 1;
     }
     if (key == YETTY_YGUI_KEY_ARROW_LEFT) {
@@ -2398,7 +2516,9 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
         }
         int next = active > 0 ? active - 1 : TOP_TAB_COUNT - 1;
         struct yetty_ycore_void_result r = yetty_ygui_tabbar_set_active(app->tabbar, next);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
         return 1;
     }
     if (key == YETTY_YGUI_KEY_ARROW_RIGHT) {
@@ -2409,7 +2529,9 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
         }
         int next = (active + 1) % TOP_TAB_COUNT;
         struct yetty_ycore_void_result r = yetty_ygui_tabbar_set_active(app->tabbar, next);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
         return 1;
     }
     return 0;
@@ -2572,15 +2694,21 @@ static int ygreeter_tty_raw(void)
     int fd = STDIN_FILENO;
     if (!isatty(fd)) {
         fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-        if (fd < 0) return -1;
+        if (fd < 0) {
+            return -1;
+        }
         ygreeter_tty_owned_fd = fd;
     }
-    if (tcgetattr(fd, &ygreeter_saved_tty) < 0) goto fail;
+    if (tcgetattr(fd, &ygreeter_saved_tty) < 0) {
+        goto fail;
+    }
     struct termios raw = ygreeter_saved_tty;
     cfmakeraw(&raw);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 0;
-    if (tcsetattr(fd, TCSANOW, &raw) < 0) goto fail;
+    if (tcsetattr(fd, TCSANOW, &raw) < 0) {
+        goto fail;
+    }
     ygreeter_tty_fd = fd;
     atexit(ygreeter_tty_restore);
     return 0;
@@ -2651,22 +2779,26 @@ static const struct yetty_platform_pty_ops *stdin_pty_ops_get(void)
  * keyboard input from the controlling terminal. Forward them to ygui's
  * input decoder verbatim (it understands CSI arrow sequences + ASCII).
  *---------------------------------------------------------------------------*/
-static struct yetty_ycore_void_result client_default_sink(
-    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+static struct yetty_ycore_void_result client_default_sink(void *userdata,
+                                                          struct yetty_ywire_wire_statemachine *sm)
 {
     struct client_state *cs = (struct client_state *)userdata;
     uint8_t buf[256];
     for (;;) {
         struct yetty_ycore_size_result rr =
             yetty_ywire_wire_statemachine_read(sm, buf, sizeof(buf));
-        if (YETTY_IS_ERR(rr)) return YETTY_ERR(yetty_ycore_void, "default_sink: read", rr);
+        if (YETTY_IS_ERR(rr)) {
+            return YETTY_ERR(yetty_ycore_void, "default_sink: read", rr);
+        }
         if (rr.value == 0) {
             /* SM expects this coro to loop forever — never return. */
             continue;
         }
         struct yetty_ycore_void_result fr =
             yetty_ygui_framework_feed_input(cs->app->engine, (const char *)buf, rr.value);
-        if (YETTY_IS_ERR(fr)) yetty_ycore_error_destroy(fr.error);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
     }
 }
 
@@ -2676,8 +2808,8 @@ static struct yetty_ycore_void_result client_default_sink(
  * dispatch to ygui's framework_feed_mouse_* entry points (same path
  * the standalone mode uses for synthetic events).
  *---------------------------------------------------------------------------*/
-static struct yetty_ycore_void_result client_mouse_handler(
-    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
+                                                           struct yetty_ywire_wire_statemachine *sm)
 {
     /* userdata is cs.app (distinct from set_default's &cs — the SM
      * dedupes handler coros by userdata pointer, so reusing &cs would
@@ -2688,9 +2820,11 @@ static struct yetty_ycore_void_result client_mouse_handler(
         struct yetty_client_input_mouse msg;
         size_t got = 0;
         while (got < sizeof(msg)) {
-            struct yetty_ycore_size_result rr = yetty_ywire_wire_statemachine_read(
-                sm, ((uint8_t *)&msg) + got, sizeof(msg) - got);
-            if (YETTY_IS_ERR(rr)) return YETTY_ERR(yetty_ycore_void, "mouse: read", rr);
+            struct yetty_ycore_size_result rr =
+                yetty_ywire_wire_statemachine_read(sm, ((uint8_t *)&msg) + got, sizeof(msg) - got);
+            if (YETTY_IS_ERR(rr)) {
+                return YETTY_ERR(yetty_ycore_void, "mouse: read", rr);
+            }
             if (rr.value == 0) {
                 /* Envelope ended — _read returns 0 immediately without
                  * yielding when terminator_seen + empty. Break out. */
@@ -2703,13 +2837,17 @@ static struct yetty_ycore_void_result client_mouse_handler(
             case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
                 struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_button(
                     app->engine, msg.x, msg.y, msg.button, msg.pressed, 0);
-                if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+                if (YETTY_IS_ERR(r)) {
+                    yetty_ycore_error_destroy(r.error);
+                }
                 break;
             }
             case YETTY_YMGUI_INPUT_MOUSE_POS: {
                 struct yetty_ycore_void_result r =
                     yetty_ygui_framework_feed_mouse_motion(app->engine, msg.x, msg.y);
-                if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+                if (YETTY_IS_ERR(r)) {
+                    yetty_ycore_error_destroy(r.error);
+                }
                 break;
             }
             default:
@@ -2745,7 +2883,9 @@ static struct yetty_ycore_void_result client_resize_handler(
         while (got < sizeof(msg)) {
             struct yetty_ycore_size_result rr =
                 yetty_ywire_wire_statemachine_read(sm, ((uint8_t *)&msg) + got, sizeof(msg) - got);
-            if (YETTY_IS_ERR(rr)) return YETTY_ERR(yetty_ycore_void, "resize: read", rr);
+            if (YETTY_IS_ERR(rr)) {
+                return YETTY_ERR(yetty_ycore_void, "resize: read", rr);
+            }
             if (rr.value == 0) {
                 break;
             }
@@ -2755,7 +2895,9 @@ static struct yetty_ycore_void_result client_resize_handler(
             msg.width > 0.0f && msg.height > 0.0f) {
             struct yetty_ycore_void_result r =
                 yetty_ygui_framework_set_viewport(app->engine, msg.width, msg.height);
-            if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+            if (YETTY_IS_ERR(r)) {
+                yetty_ycore_error_destroy(r.error);
+            }
             yetty_ygui_framework_mark_dirty(app->engine);
         }
         yetty_yplatform_coro_yield();
@@ -2790,7 +2932,9 @@ static struct yetty_ycore_void_result client_enable_mouse_forwarding(struct clie
 
 static void client_stop(struct app *app)
 {
-    if (app && app->client) app->client->running = 0;
+    if (app && app->client) {
+        app->client->running = 0;
+    }
 }
 
 static void client_stdin_cb(uv_poll_t *handle, int status, int events)
@@ -2808,13 +2952,16 @@ static void client_stdin_cb(uv_poll_t *handle, int status, int events)
          * tty) flow through the default sink to framework_feed_input. */
         if (cs->wire_sm) {
             yetty_ywire_wire_statemachine_feed(cs->wire_sm, buf, (size_t)n);
-            struct yetty_ycore_void_result pr =
-                yetty_ywire_wire_statemachine_process(cs->wire_sm);
-            if (YETTY_IS_ERR(pr)) yetty_ycore_error_destroy(pr.error);
+            struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(cs->wire_sm);
+            if (YETTY_IS_ERR(pr)) {
+                yetty_ycore_error_destroy(pr.error);
+            }
         } else {
             struct yetty_ycore_void_result r =
                 yetty_ygui_framework_feed_input(cs->app->engine, buf, (size_t)n);
-            if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+            if (YETTY_IS_ERR(r)) {
+                yetty_ycore_error_destroy(r.error);
+            }
         }
     } else if (n == 0 && !isatty(STDIN_FILENO)) {
         /* Real EOF only when stdin is not a tty. With raw mode VMIN=0
@@ -2829,7 +2976,9 @@ static void client_pickup_winsz(struct client_state *cs)
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
         struct yetty_ycore_void_result r = yetty_ygui_framework_set_viewport(
             cs->app->engine, (float)ws.ws_xpixel, (float)ws.ws_ypixel);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
     }
 }
 
@@ -2844,7 +2993,9 @@ static void client_prep_cb(uv_prepare_t *handle)
     struct client_state *cs = (struct client_state *)handle->data;
     if (yetty_ygui_framework_is_dirty(cs->app->engine)) {
         struct yetty_ycore_void_result r = yetty_ygui_framework_emit(cs->app->engine);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
     }
     if (!cs->running) {
         uv_stop(handle->loop);
@@ -2909,9 +3060,11 @@ static int run_client_mode(void)
     }
     cs.wire_sm = smr.value;
     {
-        struct yetty_ycore_void_result rd = yetty_ywire_wire_statemachine_set_default(
-            cs.wire_sm, client_default_sink, &cs);
-        if (YETTY_IS_ERR(rd)) yetty_ycore_error_destroy(rd.error);
+        struct yetty_ycore_void_result rd =
+            yetty_ywire_wire_statemachine_set_default(cs.wire_sm, client_default_sink, &cs);
+        if (YETTY_IS_ERR(rd)) {
+            yetty_ycore_error_destroy(rd.error);
+        }
     }
     {
         /* Distinct userdata from set_default — see comment in
@@ -2920,7 +3073,9 @@ static int run_client_mode(void)
         struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
             cs.wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE,
             /*has_args=*/1, client_mouse_handler, cs.app);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
     }
     {
         /* Pane pixel size from the host. Distinct userdata (&cs.app) so the
@@ -2928,7 +3083,9 @@ static int run_client_mode(void)
         struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
             cs.wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE,
             /*has_args=*/1, client_resize_handler, &cs.app);
-        if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
     }
     /* Tell the host yetty to forward pointer events to our stdin. */
     {
@@ -2981,7 +3138,9 @@ static int run_client_mode(void)
     {
         struct yetty_ycore_void_result cr =
             yetty_ygui_framework_clear_remote_fd(app.engine, STDOUT_FILENO);
-        if (YETTY_IS_ERR(cr)) yetty_ycore_error_destroy(cr.error);
+        if (YETTY_IS_ERR(cr)) {
+            yetty_ycore_error_destroy(cr.error);
+        }
     }
 
     uv_poll_stop(&cs.stdin_poll);
@@ -2994,13 +3153,16 @@ static int run_client_mode(void)
     uv_run(&cs.loop, UV_RUN_NOWAIT);
 
     if (cs.wire_sm) {
-        struct yetty_ycore_void_result wd =
-            yetty_ywire_wire_statemachine_destroy(cs.wire_sm);
-        if (YETTY_IS_ERR(wd)) yetty_ycore_error_destroy(wd.error);
+        struct yetty_ycore_void_result wd = yetty_ywire_wire_statemachine_destroy(cs.wire_sm);
+        if (YETTY_IS_ERR(wd)) {
+            yetty_ycore_error_destroy(wd.error);
+        }
         cs.wire_sm = NULL;
     }
     struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(app.engine);
-    if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
     uv_loop_close(&cs.loop);
     ygreeter_tty_restore();
     return 0;
@@ -3093,8 +3255,8 @@ static float app_content_scale(const struct app *app)
  * lands here — the SIGWINCH analog — and we hand the new pixel size to the
  * compositor's root container. cols/rows are terminal-grid concepts the
  * compositor has no use for; only the pixel extent matters. */
-static void standalone_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows,
-                                     uint32_t pixel_w, uint32_t pixel_h)
+static void standalone_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, uint32_t pixel_w,
+                                     uint32_t pixel_h)
 {
     struct app *app = userdata;
     (void)cols;
@@ -3105,8 +3267,8 @@ static void standalone_pty_resize_cb(void *userdata, uint32_t cols, uint32_t row
     struct yetty_ycore_rectangle root_rect = {.min = {0, 0},
                                               .max = {(float)pixel_w, (float)pixel_h}};
     struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root_container);
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf) - 1, root_rect);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 1);
+    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, root_rect);
+    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
 }
 
 static struct yetty_ycore_int_result standalone_event_handler(
@@ -3140,25 +3302,30 @@ static struct yetty_ycore_int_result standalone_event_handler(
         }
         /* Drain consumer-side bytes through the wire SM → container. */
         if (app->wire_sm) {
-            struct yetty_ycore_void_result pr =
-                yetty_ywire_wire_statemachine_process(app->wire_sm);
-            if (YETTY_IS_ERR(pr)) yetty_ycore_error_destroy(pr.error);
+            struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(app->wire_sm);
+            if (YETTY_IS_ERR(pr)) {
+                yetty_ycore_error_destroy(pr.error);
+            }
         }
         /* Clear + paint container + present. */
-        struct yetty_ycore_void_result cl =
-            app->render_target->ops->clear(app->render_target);
-        if (YETTY_IS_ERR(cl)) yetty_ycore_error_destroy(cl.error);
+        struct yetty_ycore_void_result cl = app->render_target->ops->clear(app->render_target);
+        if (YETTY_IS_ERR(cl)) {
+            yetty_ycore_error_destroy(cl.error);
+        }
         if (app->root_container) {
             struct yetty_yfigure_figure *rf =
                 yetty_yfigure_container_as_figure(app->root_container);
-            struct yetty_ycore_void_result rr =
-                yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, app->render_target);
-            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf) - 1, 0);
+            struct yetty_ycore_void_result rr = yetty_yfigure_render(
+                NULL, (struct yetty_yclass_object *)rf - 1, app->render_target);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+            }
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
         }
-        struct yetty_ycore_void_result pp =
-            app->render_target->ops->present(app->render_target);
-        if (YETTY_IS_ERR(pp)) yetty_ycore_error_destroy(pp.error);
+        struct yetty_ycore_void_result pp = app->render_target->ops->present(app->render_target);
+        if (YETTY_IS_ERR(pp)) {
+            yetty_ycore_error_destroy(pp.error);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -3172,7 +3339,7 @@ static struct yetty_ycore_int_result standalone_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_RESIZE:
         yetty_yframework_reconfigure_surface(app->yframework, (uint32_t)ev->resize.width,
-                                            (uint32_t)ev->resize.height);
+                                             (uint32_t)ev->resize.height);
         if (app->render_target && app->render_target->ops->resize) {
             struct yetty_yrender_viewport vp = {0, 0, ev->resize.width, ev->resize.height};
             app->render_target->ops->resize(app->render_target, vp);
@@ -3181,7 +3348,9 @@ static struct yetty_ycore_int_result standalone_event_handler(
             /* Logical viewport; container rect below stays framebuffer px. */
             struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
                 app->engine, (float)ev->resize.width / scale, (float)ev->resize.height / scale);
-            if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
+            if (YETTY_IS_ERR(vr)) {
+                yetty_ycore_error_destroy(vr.error);
+            }
         }
         /* Drive the compositor-side rect through the pty pair (→
          * standalone_pty_resize_cb) instead of poking the container directly,
@@ -3189,7 +3358,9 @@ static struct yetty_ycore_int_result standalone_event_handler(
         if (app->pty_pair.a && app->pty_pair.a->ops->resize) {
             struct yetty_ycore_void_result rr = app->pty_pair.a->ops->resize(
                 app->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
-            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+            }
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
@@ -3198,12 +3369,13 @@ static struct yetty_ycore_int_result standalone_event_handler(
     case YETTY_YCORE_KEY_DOWN: {
         char scratch[8];
         size_t n = 0;
-        const char *bytes =
-            standalone_encode_key(ev->key.key, scratch, sizeof(scratch), &n);
+        const char *bytes = standalone_encode_key(ev->key.key, scratch, sizeof(scratch), &n);
         if (bytes && n > 0) {
             struct yetty_ycore_void_result r =
                 yetty_ygui_framework_feed_input(app->engine, bytes, n);
-            if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+            if (YETTY_IS_ERR(r)) {
+                yetty_ycore_error_destroy(r.error);
+            }
             if (app->yframework->event_loop->ops->request_render) {
                 app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
             }
@@ -3215,7 +3387,9 @@ static struct yetty_ycore_int_result standalone_event_handler(
         struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_button(
             app->engine, ev->mouse.x / scale, ev->mouse.y / scale, ev->mouse.button,
             ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0, ev->mouse.mods);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
         }
@@ -3226,7 +3400,9 @@ static struct yetty_ycore_int_result standalone_event_handler(
         struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_scroll(
             app->engine, ev->mouse_scroll.x / scale, ev->mouse_scroll.y / scale,
             ev->mouse_scroll.dx, ev->mouse_scroll.dy);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
         }
@@ -3236,7 +3412,9 @@ static struct yetty_ycore_int_result standalone_event_handler(
     case YETTY_YCORE_MOUSE_DRAG: {
         struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_motion(
             app->engine, ev->mouse.x / scale, ev->mouse.y / scale);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
         /* Hover state may have flipped — request a render so the new
          * hovered widget repaints before the next event. */
         if (app->yframework->event_loop->ops->request_render) {
@@ -3255,14 +3433,12 @@ static struct yetty_ycore_int_result standalone_event_handler(
 
 static void standalone_stop(struct app *app)
 {
-    if (app->yframework && app->yframework->event_loop &&
-        app->yframework->event_loop->ops->stop) {
+    if (app->yframework && app->yframework->event_loop && app->yframework->event_loop->ops->stop) {
         app->yframework->event_loop->ops->stop(app->yframework->event_loop);
     }
 }
 
-static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runtime *rt,
-                                                        void *user)
+static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     struct app *app = (struct app *)user;
 
@@ -3273,10 +3449,10 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
 
     /* MSDF font for the receiver-side ygrid (glyph expansion). */
     {
-        const char *fonts_dir = app->yframework->config->ops->get_string(
-            app->yframework->config, "paths/fonts", "");
-        const char *shaders_dir = app->yframework->config->ops->get_string(
-            app->yframework->config, "paths/shaders", "");
+        const char *fonts_dir =
+            app->yframework->config->ops->get_string(app->yframework->config, "paths/fonts", "");
+        const char *shaders_dir =
+            app->yframework->config->ops->get_string(app->yframework->config, "paths/shaders", "");
         char cdb_path[768];
         char shader_path[768];
         snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
@@ -3306,24 +3482,27 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     /* Raw figure factory — needed for the yplot / yimage producer
      * kinds. Same wiring yui.c uses (yui_create lines 506-571). */
     {
-        struct yetty_ydraw_composite_factory_ptr_result ffr =
-            yetty_ydraw_composite_factory_create(
-                app->yframework->gpu.device, app->yframework->gpu.queue,
-                app->yframework->gpu.surface_format, app->yframework->gpu.allocator,
-                app->yframework->event_loop);
+        struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
+            app->yframework->gpu.device, app->yframework->gpu.queue,
+            app->yframework->gpu.surface_format, app->yframework->gpu.allocator,
+            app->yframework->event_loop);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "standalone: raw_composite_factory_create");
         app->composite_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             struct yetty_ycore_void_result rr =
                 yetty_ydraw_composite_factory_register(app->composite_factory, yplot_f);
-            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+            }
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             struct yetty_ycore_void_result rr =
                 yetty_ydraw_composite_factory_register(app->composite_factory, yimage_f);
-            if (YETTY_IS_ERR(rr)) yetty_ycore_error_destroy(rr.error);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+            }
         }
     }
 
@@ -3339,7 +3518,9 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             yetty_ygrid_register_factory(app->figure_registry, &app->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "standalone: ygrid_register_factory");
         static const uint32_t producer_kinds[] = {
-            YETTY_YFIGURE_KIND_YPLOT, YETTY_YFIGURE_KIND_YIMAGE, YETTY_YFIGURE_KIND_YVIDEO,
+            YETTY_YFIGURE_KIND_YPLOT,
+            YETTY_YFIGURE_KIND_YIMAGE,
+            YETTY_YFIGURE_KIND_YVIDEO,
         };
         for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
@@ -3354,13 +3535,13 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     }
 
     /* Local container. */
-    struct yetty_context ctx = {.runtime = app->yframework, .event_loop = app->yframework->event_loop};
+    struct yetty_context ctx = {.runtime = app->yframework,
+                                .event_loop = app->yframework->event_loop};
     {
         struct yetty_ycore_rectangle root_rect = {
             .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
         struct yetty_yclass_ctx yclass_ctx = {0};
-        struct yetty_yclass_object_ptr_result obj_res =
-            yetty_yfigure_container_create(&yclass_ctx);
+        struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "standalone: container_create");
         app->root_container = yetty_yfigure_container_from(obj_res.value);
         yetty_yfigure_container_set_context(app->root_container, &ctx);
@@ -3391,8 +3572,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
 
     /* ygui framework — producer end of the pty pair. */
     {
-        struct yetty_ygui_framework_ptr_result fr =
-            yetty_ygui_framework_create(app->pty_pair.a);
+        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(app->pty_pair.a);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
         app->engine = fr.value;
         /* Logical viewport: chrome is authored in logical px, the ygrid
@@ -3400,7 +3580,9 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         float cs = app_content_scale(app);
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
             app->engine, (float)rt->surface_width / cs, (float)rt->surface_height / cs);
-        if (YETTY_IS_ERR(vr)) yetty_ycore_error_destroy(vr.error);
+        if (YETTY_IS_ERR(vr)) {
+            yetty_ycore_error_destroy(vr.error);
+        }
     }
 
     struct key_ctx kc = {.app = app, .stop_cb = standalone_stop};
@@ -3435,12 +3617,18 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             app->frame_timer = tr.value;
             app->frame_listener.handler = standalone_frame_tick;
             struct yetty_ycore_void_result cr = loop->ops->config_timer(loop, app->frame_timer, 33);
-            if (YETTY_IS_ERR(cr)) yetty_ycore_error_destroy(cr.error);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
             struct yetty_ycore_void_result lr =
                 loop->ops->register_timer_listener(loop, app->frame_timer, &app->frame_listener);
-            if (YETTY_IS_ERR(lr)) yetty_ycore_error_destroy(lr.error);
+            if (YETTY_IS_ERR(lr)) {
+                yetty_ycore_error_destroy(lr.error);
+            }
             struct yetty_ycore_void_result st = loop->ops->start_timer(loop, app->frame_timer);
-            if (YETTY_IS_ERR(st)) yetty_ycore_error_destroy(st.error);
+            if (YETTY_IS_ERR(st)) {
+                yetty_ycore_error_destroy(st.error);
+            }
         } else {
             yetty_ycore_error_destroy(tr.error);
         }
@@ -3458,22 +3646,30 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
 
     if (app->engine) {
         struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(app->engine);
-        if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
         app->engine = NULL;
     }
     if (app->wire_sm) {
         struct yetty_ycore_void_result dr = yetty_ywire_wire_statemachine_destroy(app->wire_sm);
-        if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
         app->wire_sm = NULL;
     }
     if (app->has_pty_pair) {
         if (app->pty_pair.a && app->pty_pair.a->ops->destroy) {
             struct yetty_ycore_void_result dr = app->pty_pair.a->ops->destroy(app->pty_pair.a);
-            if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
         }
         if (app->pty_pair.b && app->pty_pair.b->ops->destroy) {
             struct yetty_ycore_void_result dr = app->pty_pair.b->ops->destroy(app->pty_pair.b);
-            if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
         }
         app->has_pty_pair = 0;
     }
@@ -3481,7 +3677,9 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root_container);
         struct yetty_ycore_void_result dr =
             yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
-        if (YETTY_IS_ERR(dr)) yetty_ycore_error_destroy(dr.error);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
         app->root_container = NULL;
     }
     if (app->figure_registry) {
@@ -3503,13 +3701,17 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     /* Discovered-paths arrays — allocated by discover_logo_images /
      * discover_video_files / discover_readme at build_ui time. */
     if (app->image_paths) {
-        for (int i = 0; i < app->image_path_count; ++i) free(app->image_paths[i]);
+        for (int i = 0; i < app->image_path_count; ++i) {
+            free(app->image_paths[i]);
+        }
         free(app->image_paths);
         app->image_paths = NULL;
         app->image_path_count = 0;
     }
     if (app->video_paths) {
-        for (int i = 0; i < app->video_path_count; ++i) free(app->video_paths[i]);
+        for (int i = 0; i < app->video_path_count; ++i) {
+            free(app->video_paths[i]);
+        }
         free(app->video_paths);
         app->video_paths = NULL;
         app->video_path_count = 0;
@@ -3576,7 +3778,14 @@ static int run_standalone_mode(int argc, char **argv)
 {
     struct app app = {0};
     struct yetty_yinit_app_config cfg = {.extract_assets_fn = ygreeter_extract_assets_cb};
-    return yetty_yinit_run(argc, argv, &cfg, standalone_worker, &app);
+    struct yetty_ycore_int_result run_result =
+        yetty_yinit_run(argc, argv, &cfg, standalone_worker, &app);
+    if (YETTY_IS_ERR(run_result)) {
+        yetty_ycore_error_print(stderr, "ygreeter: run", run_result.error);
+        yetty_ycore_error_destroy(run_result.error);
+        return 1;
+    }
+    return run_result.value;
 }
 
 #endif /* YETTY_YGREETER_HAS_STANDALONE */
@@ -3606,9 +3815,8 @@ int main(int argc, char **argv)
 #else
     (void)argc;
     (void)argv;
-    fprintf(stderr,
-            "ygreeter: standalone mode unavailable — built without webgpu. "
-            "Run inside a yetty terminal (set TERM_PROGRAM=yetty).\n");
+    fprintf(stderr, "ygreeter: standalone mode unavailable — built without webgpu. "
+                    "Run inside a yetty terminal (set TERM_PROGRAM=yetty).\n");
     return 1;
 #endif
 }

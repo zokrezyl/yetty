@@ -111,13 +111,13 @@ yetty_yvterm_shader_glyph_figure {
 
 /* This kind's own data slice (its fields sit after the figure
  * base slice in the shared yclass object). */
-static struct yetty_yvterm_shader_glyph_figure *shader_glyph_figure_from_obj(struct yetty_yclass_object *obj)
+static struct yetty_yclass_void_ptr_result shader_glyph_figure_from_obj(
+    struct yetty_yclass_object *obj)
 {
-    return (struct yetty_yvterm_shader_glyph_figure *)yetty_yclass_object_data(
-               obj, yetty_yvterm_shader_glyph_class_get().value)
-        .value;
+    struct yetty_yclass_ptr_result class_r = yetty_yvterm_shader_glyph_class_get();
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, class_r, "shader_glyph_figure_from_obj: class");
+    return yetty_yclass_object_data(obj, class_r.value);
 }
-
 
 /* ===========================================================================
  * Uniform helpers
@@ -481,8 +481,7 @@ static int figure_is_empty(struct yetty_yvterm_shader_glyph_figure *f)
     }
     uint32_t cols = (uint32_t)f->grid_size.cols;
     uint32_t rows = (uint32_t)f->grid_size.rows;
-    uint32_t root_row =
-        yetty_yvterm_text_layer_get_root_row(f->text_layer);
+    uint32_t root_row = yetty_yvterm_text_layer_get_root_row(f->text_layer);
     size_t total_cells = size / sizeof(VTermScreenCell);
     size_t window_first = (size_t)root_row * cols;
     size_t window_last = window_first + (size_t)cols * rows; /* exclusive */
@@ -507,8 +506,7 @@ static uint32_t figure_pack_instances(struct yetty_yvterm_shader_glyph_figure *f
 {
     const uint8_t *cells_data = NULL;
     size_t cells_size = 0;
-    yetty_yvterm_text_layer_get_cells(f->text_layer, &cells_data,
-                                                             &cells_size);
+    yetty_yvterm_text_layer_get_cells(f->text_layer, &cells_data, &cells_size);
     if (!cells_data || cells_size < sizeof(VTermScreenCell)) {
         f->instance_count = 0;
         return 0;
@@ -521,8 +519,7 @@ static uint32_t figure_pack_instances(struct yetty_yvterm_shader_glyph_figure *f
      * scrollback-view mode (get_cells hands back a row-0 staging buffer). */
     uint32_t cols = (uint32_t)f->grid_size.cols;
     uint32_t rows = (uint32_t)f->grid_size.rows;
-    uint32_t root_row =
-        yetty_yvterm_text_layer_get_root_row(f->text_layer);
+    uint32_t root_row = yetty_yvterm_text_layer_get_root_row(f->text_layer);
     set_root_row(&f->rs, root_row);
 
     size_t total_cells = cells_size / sizeof(VTermScreenCell);
@@ -583,8 +580,8 @@ static inline struct yetty_yvterm_shader_glyph_figure *figure_from_listener(
 {
     return (
         struct yetty_yvterm_shader_glyph_figure *)((char *)l -
-                                                  offsetof(struct yetty_yvterm_shader_glyph_figure,
-                                                           listener));
+                                                   offsetof(struct yetty_yvterm_shader_glyph_figure,
+                                                            listener));
 }
 
 static void anim_timer_stop(struct yetty_yvterm_shader_glyph_figure *f)
@@ -618,7 +615,11 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
         anim_timer_stop(f);
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_int, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
+    {
+        struct yetty_ycore_void_result set_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, set_r, "drop: yetty_yfigure_figure_dirty_set");
+    }
     if (f->request_render_fn) {
         struct yetty_ycore_void_result r = f->request_render_fn(f->request_render_userdata);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "shader-glyph anim tick: request_render failed");
@@ -635,7 +636,10 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yfigure_figure
     if (!self) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yvterm_shader_glyph_figure *f = shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
+    struct yetty_yclass_void_ptr_result figure_r =
+        shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, figure_r, "shader-glyph figure_destroy: from_obj");
+    struct yetty_yvterm_shader_glyph_figure *f = figure_r.value;
 
     if (f->timer_created && f->event_loop && f->event_loop->ops) {
         if (f->timer_running && f->event_loop->ops->stop_timer) {
@@ -681,7 +685,10 @@ static struct yetty_ycore_void_result figure_ensure_binder(
 static struct yetty_ycore_void_result figure_render(struct yetty_yfigure_figure *self,
                                                     struct yetty_ydraw_target *target)
 {
-    struct yetty_yvterm_shader_glyph_figure *f = shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
+    struct yetty_yclass_void_ptr_result figure_r =
+        shader_glyph_figure_from_obj((struct yetty_yclass_object *)self - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, figure_r, "shader-glyph figure_render: from_obj");
+    struct yetty_yvterm_shader_glyph_figure *f = figure_r.value;
 
     /* No shader-glyph cells visible → stop ticking, skip the draw.
      * Without this the layer would burn a render pass every frame for an
@@ -817,7 +824,6 @@ static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_ct
     return figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-
 /* ===========================================================================
  * Public API
  * ========================================================================= */
@@ -868,7 +874,8 @@ struct yetty_yvterm_shader_glyph_figure_ptr_result yetty_yvterm_shader_glyph_fig
     free(template_res.value.data);
     free(glyph_blob);
     if (!spliced) {
-        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr, "shader-glyph figure: splice failed");
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr,
+                         "shader-glyph figure: splice failed");
     }
 
     /* Allocate as a yclass object so the figure carries a class header
@@ -887,12 +894,28 @@ struct yetty_yvterm_shader_glyph_figure_ptr_result yetty_yvterm_shader_glyph_fig
         return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr, "shader-glyph figure: object_alloc",
                          glyph_obj_r);
     }
-    struct yetty_yvterm_shader_glyph_figure *f = shader_glyph_figure_from_obj(glyph_obj_r.value);
+    struct yetty_yclass_void_ptr_result figure_r = shader_glyph_figure_from_obj(glyph_obj_r.value);
+    if (YETTY_IS_ERR(figure_r)) {
+        free(spliced);
+        return YETTY_ERR(yetty_yvterm_shader_glyph_figure_ptr, "shader-glyph figure: from_obj",
+                         figure_r);
+    }
+    struct yetty_yvterm_shader_glyph_figure *f = figure_r.value;
     f->base = (struct yetty_yfigure_figure *)(glyph_obj_r.value + 1);
 
-    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect); YETTY_RETURN_IF_ERR(yetty_yvterm_shader_glyph_figure_ptr, set_r, "drop: yetty_yfigure_figure_rect_set"); }
+    {
+        struct yetty_ycore_void_result set_r =
+            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(f->base) - 1, rect);
+        YETTY_RETURN_IF_ERR(yetty_yvterm_shader_glyph_figure_ptr, set_r,
+                            "drop: yetty_yfigure_figure_rect_set");
+    }
     /* Start dirty so the first frame uploads the buffer pointer + uniforms. */
-    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_yvterm_shader_glyph_figure_ptr, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
+    {
+        struct yetty_ycore_void_result set_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_yvterm_shader_glyph_figure_ptr, set_r,
+                            "drop: yetty_yfigure_figure_dirty_set");
+    }
 
     f->text_layer = text_layer;
     f->context = context;
@@ -996,13 +1019,18 @@ struct yetty_ycore_void_result yetty_yvterm_shader_glyph_figure_resize(
     f->rs.pixel_size.height = (float)grid_size.rows * cell_size.height;
     {
         struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set(
-            (struct yetty_yclass_object *)(f->base) - 1, (struct yetty_ycore_rectangle){
+            (struct yetty_yclass_object *)(f->base) - 1,
+            (struct yetty_ycore_rectangle){
                 .min = {.x = 0.0f, .y = 0.0f},
                 .max = {.x = f->rs.pixel_size.width, .y = f->rs.pixel_size.height},
             });
         YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "shader-glyph: resize rect");
     }
-    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
+    {
+        struct yetty_ycore_void_result set_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -1013,7 +1041,11 @@ struct yetty_ycore_void_result yetty_yvterm_shader_glyph_figure_set_visual_zoom(
         return YETTY_ERR(yetty_ycore_void, "shader-glyph figure set_visual_zoom: NULL figure");
     }
     set_visual_zoom(&f->rs, scale, offset_x, offset_y);
-    { struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1); YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set"); }
+    {
+        struct yetty_ycore_void_result set_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(f->base) - 1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set");
+    }
     return YETTY_OK_VOID();
 }
 

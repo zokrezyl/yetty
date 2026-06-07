@@ -73,17 +73,15 @@ static int g_tests = 0;
 
 struct test_leaf {
     struct yetty_yfigure_figure *base;
-    size_t bytes_seen;       /* total bytes through process_bytes */
-    uint32_t call_count;     /* number of process_bytes calls */
+    size_t bytes_seen;   /* total bytes through process_bytes */
+    uint32_t call_count; /* number of process_bytes calls */
 };
 
 static struct yetty_yclass_ptr_result test_leaf_class_get(void);
 /* test_leaf's own data slice (after the figure base slice). */
 static struct test_leaf *test_leaf_from_obj(struct yetty_yclass_object *obj)
 {
-    return (struct test_leaf *)yetty_yclass_object_data(
-               obj, test_leaf_class_get().value)
-        .value;
+    return (struct test_leaf *)yetty_yclass_object_data(obj, test_leaf_class_get().value).value;
 }
 
 /* test_leaf is a yclass figure (manually registered — test TUs aren't run
@@ -108,7 +106,8 @@ static struct yetty_ycore_void_result test_leaf_render(struct yetty_yclass_ctx *
 
 static struct yetty_ycore_void_result test_leaf_process_bytes(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
-                                                              const uint8_t *bytes, size_t bytes_len)
+                                                              const uint8_t *bytes,
+                                                              size_t bytes_len)
 {
     (void)ctx;
     (void)bytes;
@@ -129,7 +128,8 @@ static struct yetty_ycore_void_result test_leaf_reset_content(struct yetty_yclas
 }
 
 static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj, int indent)
+                                                         struct yetty_yclass_object *obj,
+                                                         int indent)
 {
     (void)ctx;
     const struct test_leaf *l = test_leaf_from_obj(obj);
@@ -152,8 +152,12 @@ static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx
              "%srect: [%.1f, %.1f, %.1f, %.1f]\n"
              "%sbytes_seen: %zu\n"
              "%scall_count: %u\n",
-             pad, pad, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.x, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.min.y, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.x, yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self) - 1).value.max.y,
-             pad, l->bytes_seen, pad, l->call_count);
+             pad, pad,
+             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self)-1).value.min.x,
+             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self)-1).value.min.y,
+             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self)-1).value.max.x,
+             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self)-1).value.max.y, pad,
+             l->bytes_seen, pad, l->call_count);
     return YETTY_OK(yetty_ycore_char_ptr, buf);
 }
 
@@ -192,9 +196,8 @@ static struct yetty_yclass_ptr_result test_leaf_class_get(void)
     return r;
 }
 
-static struct yetty_yfigure_figure_data_ptr_result test_leaf_factory(struct yetty_ycore_rectangle rect,
-                                                                 const struct yetty_context *ctx,
-                                                                 void *user)
+static struct yetty_yfigure_figure_data_ptr_result test_leaf_factory(
+    struct yetty_ycore_rectangle rect, const struct yetty_context *ctx, void *user)
 {
     (void)ctx;
     (void)user;
@@ -240,8 +243,7 @@ static struct yetty_yfigure_container *make_root(struct yetty_yfigure_registry *
 {
     struct yetty_ycore_rectangle rect = {{0, 0}, {1000, 1000}};
     struct yetty_yclass_ctx yclass_ctx = {0};
-    struct yetty_yclass_object_ptr_result obj_res =
-        yetty_yfigure_container_create(&yclass_ctx);
+    struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
     if (YETTY_IS_ERR(obj_res)) {
         fprintf(stderr, "container_create failed: %s\n", obj_res.error.msg);
         yetty_ycore_error_destroy(obj_res.error);
@@ -255,7 +257,8 @@ static struct yetty_yfigure_container *make_root(struct yetty_yfigure_registry *
 
 static struct yetty_ydraw_drawable_list *make_buf(void)
 {
-    struct yetty_ydraw_drawable_list_result r = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result r =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "buffer_create failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);
@@ -278,7 +281,14 @@ static void feed(struct yetty_yfigure_container *root, const struct yetty_ydraw_
 
 static char *dump_root(struct yetty_yfigure_container *root)
 {
-    return yetty_yfigure_dump(yetty_yfigure_container_as_figure(root), 0);
+    struct yetty_ycore_char_ptr_result dump_result =
+        yetty_yfigure_dump(yetty_yfigure_container_as_figure(root), 0);
+    if (YETTY_IS_ERR(dump_result)) {
+        fprintf(stderr, "yfigure_dump failed: %s\n", dump_result.error.msg);
+        yetty_ycore_error_destroy(dump_result.error);
+        exit(3);
+    }
+    return dump_result.value;
 }
 
 /*===========================================================================
@@ -292,12 +302,11 @@ static void test_empty_container(void)
     struct yetty_yfigure_container *root = make_root(reg);
 
     char *dump = dump_root(root);
-    const char *expected =
-        "kind: container\n"
-        "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
-        "dirty: 0\n"
-        "viewport_offset: [0.0, 0.0]\n"
-        "children: {}\n";
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 0\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children: {}\n";
     ASSERT_STR_EQ("empty_container", dump, expected);
     free(dump);
 
@@ -317,23 +326,22 @@ static void test_one_create_child(void)
     struct yetty_yfigure_container *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, /*child_id=*/1u, TEST_LEAF_KIND,
-                                                  10.0f, 20.0f, 110.0f, 80.0f, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, /*child_id=*/1u, TEST_LEAF_KIND, 10.0f,
+                                                     20.0f, 110.0f, 80.0f, NULL, 0);
     feed(root, buf);
     yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
-    const char *expected =
-        "kind: container\n"
-        "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
-        "dirty: 1\n"
-        "viewport_offset: [0.0, 0.0]\n"
-        "children:\n"
-        "  '1':\n"
-        "    kind: test_leaf\n"
-        "    rect: [10.0, 20.0, 110.0, 80.0]\n"
-        "    bytes_seen: 0\n"
-        "    call_count: 0\n";
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children:\n"
+                           "  '1':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [10.0, 20.0, 110.0, 80.0]\n"
+                           "    bytes_seen: 0\n"
+                           "    call_count: 0\n";
     ASSERT_STR_EQ("one_create_child", dump, expected);
     free(dump);
 
@@ -354,28 +362,29 @@ static void test_two_create_child(void)
     struct yetty_yfigure_container *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 100, 100, NULL, 0);
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 100, 0, 200, 100, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 100, 100, NULL,
+                                                     0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 100, 0, 200, 100,
+                                                     NULL, 0);
     feed(root, buf);
     yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
-    const char *expected =
-        "kind: container\n"
-        "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
-        "dirty: 1\n"
-        "viewport_offset: [0.0, 0.0]\n"
-        "children:\n"
-        "  '1':\n"
-        "    kind: test_leaf\n"
-        "    rect: [0.0, 0.0, 100.0, 100.0]\n"
-        "    bytes_seen: 0\n"
-        "    call_count: 0\n"
-        "  '2':\n"
-        "    kind: test_leaf\n"
-        "    rect: [100.0, 0.0, 200.0, 100.0]\n"
-        "    bytes_seen: 0\n"
-        "    call_count: 0\n";
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children:\n"
+                           "  '1':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [0.0, 0.0, 100.0, 100.0]\n"
+                           "    bytes_seen: 0\n"
+                           "    call_count: 0\n"
+                           "  '2':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [100.0, 0.0, 200.0, 100.0]\n"
+                           "    bytes_seen: 0\n"
+                           "    call_count: 0\n";
     ASSERT_STR_EQ("two_create_child", dump, expected);
     free(dump);
 
@@ -395,24 +404,25 @@ static void test_create_then_delete(void)
     struct yetty_yfigure_container *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL, 0);
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL,
+                                                     0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL,
+                                                     0);
     yetty_ydraw_drawable_list_add_admin_delete_child(buf, 1u);
     feed(root, buf);
     yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
-    const char *expected =
-        "kind: container\n"
-        "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
-        "dirty: 1\n"
-        "viewport_offset: [0.0, 0.0]\n"
-        "children:\n"
-        "  '2':\n"
-        "    kind: test_leaf\n"
-        "    rect: [0.0, 0.0, 50.0, 50.0]\n"
-        "    bytes_seen: 0\n"
-        "    call_count: 0\n";
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children:\n"
+                           "  '2':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [0.0, 0.0, 50.0, 50.0]\n"
+                           "    bytes_seen: 0\n"
+                           "    call_count: 0\n";
     ASSERT_STR_EQ("create_then_delete", dump, expected);
     free(dump);
 
@@ -439,22 +449,21 @@ static void test_create_with_init_payload(void)
     }
     struct yetty_ydraw_drawable_list *buf = make_buf();
     yetty_ydraw_drawable_list_add_admin_create_child(buf, 7u, TEST_LEAF_KIND, 0, 0, 10, 10, init,
-                                                  sizeof(init));
+                                                     sizeof(init));
     feed(root, buf);
     yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
-    const char *expected =
-        "kind: container\n"
-        "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
-        "dirty: 1\n"
-        "viewport_offset: [0.0, 0.0]\n"
-        "children:\n"
-        "  '7':\n"
-        "    kind: test_leaf\n"
-        "    rect: [0.0, 0.0, 10.0, 10.0]\n"
-        "    bytes_seen: 32\n"
-        "    call_count: 1\n";
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children:\n"
+                           "  '7':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [0.0, 0.0, 10.0, 10.0]\n"
+                           "    bytes_seen: 32\n"
+                           "    call_count: 1\n";
     ASSERT_STR_EQ("create_with_init_payload", dump, expected);
     free(dump);
 
@@ -484,17 +493,16 @@ static void test_routed_to_child(void)
     yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
-    const char *expected =
-        "kind: container\n"
-        "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
-        "dirty: 1\n"
-        "viewport_offset: [0.0, 0.0]\n"
-        "children:\n"
-        "  '3':\n"
-        "    kind: test_leaf\n"
-        "    rect: [0.0, 0.0, 1.0, 1.0]\n"
-        "    bytes_seen: 16\n"
-        "    call_count: 1\n";
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children:\n"
+                           "  '3':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [0.0, 0.0, 1.0, 1.0]\n"
+                           "    bytes_seen: 16\n"
+                           "    call_count: 1\n";
     ASSERT_STR_EQ("routed_to_child", dump, expected);
     free(dump);
 
@@ -521,12 +529,11 @@ static void test_clear_all(void)
     yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
-    const char *expected =
-        "kind: container\n"
-        "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
-        "dirty: 1\n"
-        "viewport_offset: [0.0, 0.0]\n"
-        "children: {}\n";
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children: {}\n";
     ASSERT_STR_EQ("clear_all", dump, expected);
     free(dump);
 
@@ -548,23 +555,23 @@ static void test_stale_delete_is_noop(void)
     struct yetty_yfigure_container *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 5u, TEST_LEAF_KIND, 0, 0, 10, 10, NULL, 0);
+    yetty_ydraw_drawable_list_add_admin_create_child(buf, 5u, TEST_LEAF_KIND, 0, 0, 10, 10, NULL,
+                                                     0);
     yetty_ydraw_drawable_list_add_admin_delete_child(buf, 99u); /* never bound */
     feed(root, buf);
     yetty_ydraw_drawable_list_destroy(buf);
 
     char *dump = dump_root(root);
-    const char *expected =
-        "kind: container\n"
-        "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
-        "dirty: 1\n"
-        "viewport_offset: [0.0, 0.0]\n"
-        "children:\n"
-        "  '5':\n"
-        "    kind: test_leaf\n"
-        "    rect: [0.0, 0.0, 10.0, 10.0]\n"
-        "    bytes_seen: 0\n"
-        "    call_count: 0\n";
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children:\n"
+                           "  '5':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [0.0, 0.0, 10.0, 10.0]\n"
+                           "    bytes_seen: 0\n"
+                           "    call_count: 0\n";
     ASSERT_STR_EQ("stale_delete_is_noop", dump, expected);
     free(dump);
 

@@ -31,7 +31,8 @@ static inline struct yetty_ycore_void_result yguix_box(struct yetty_ygui_emit_ct
                                    .center_y = y + h * 0.5f,
                                    .half_width = w * 0.5f,
                                    .half_height = h * 0.5f};
-        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0,
+                                                         &g);
     }
     if (radius > w * 0.5f) {
         radius = w * 0.5f;
@@ -47,8 +48,8 @@ static inline struct yetty_ycore_void_result yguix_box(struct yetty_ygui_emit_ct
                                        .radius_bottom_right = radius,
                                        .radius_top_left = radius,
                                        .radius_bottom_left = radius};
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0,
-                                                         &g);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0, 0, fill,
+                                                             0, 0, &g);
 }
 
 static inline struct yetty_ycore_void_result yguix_text(struct yetty_ygui_emit_ctx *ctx,
@@ -60,15 +61,16 @@ static inline struct yetty_ycore_void_result yguix_text(struct yetty_ygui_emit_c
     }
     size_t n = strlen(text);
     struct yetty_ycore_buffer tb = {.data = (uint8_t *)text, .capacity = n, .size = n};
-    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &tb, font_size, color, 0, -1,
-                                          0.0f);
+    return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &tb, font_size, color,
+                                              0, -1, 0.0f);
 }
 
 static inline struct yetty_ycore_void_result yguix_circle(struct yetty_ygui_emit_ctx *ctx, float cx,
                                                           float cy, float radius, uint32_t fill)
 {
     struct yetty_ysdf_circle g = {.center_x = cx, .center_y = cy, .radius = radius};
-    return yetty_ydraw_drawable_list_add_cmd_add_circle(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0, &g);
+    return yetty_ydraw_drawable_list_add_cmd_add_circle(ctx->ygrid_drawable_list, 0, 0, fill, 0, 0,
+                                                        &g);
 }
 
 static inline void yguix_err_drop(struct yetty_ycore_void_result r)

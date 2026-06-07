@@ -75,18 +75,19 @@ typedef void (*yetty_yui_split_cb)(void *userdata, enum yetty_yui_view_kind kind
  * Returns NULL when the dialog wasn't built, the slot is empty, or the
  * indices are out of range. The returned pointer is owned by the
  * textinput widget — copy if it needs to outlive the next mutation. */
-const char *yetty_yui_get_field_text(const struct yetty_yui *yui, enum yetty_yui_view_kind kind,
-                                     int field_idx);
+struct yetty_ycore_const_char_ptr_result yetty_yui_get_field_text(const struct yetty_yui *yui,
+                                                                  enum yetty_yui_view_kind kind,
+                                                                  int field_idx);
 
 /* Sugar for the EXEC dialog's one field. Identical to
  * yetty_yui_get_field_text(yui, YETTY_YUI_VIEW_EXEC, 0). */
-const char *yetty_yui_get_exec_command(const struct yetty_yui *yui);
+struct yetty_ycore_const_char_ptr_result yetty_yui_get_exec_command(const struct yetty_yui *yui);
 
 /* True iff yui currently has any interactive widget on screen — v-menu
  * open or any dialog visible. Use this in the host's mouse dispatch to
  * decide whether to route the event to yui first (yes ⇒ yui owns the
  * pointer; no ⇒ fall through to the workspace below). */
-int yetty_yui_is_active(const struct yetty_yui *yui);
+struct yetty_ycore_int_result yetty_yui_is_active(const struct yetty_yui *yui);
 
 /* Route a platform mouse / mouse-scroll event into yui's ygui engine.
  * Returns 1 if yui consumed it (an open menu / dialog was hit-tested or
@@ -126,7 +127,7 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
  * pixels the chrome is about to vacate would otherwise show its
  * previous frame. Cheap query (one bit on the engine). 0 when yui is
  * NULL. */
-int yetty_yui_is_dirty(const struct yetty_yui *yui);
+struct yetty_ycore_int_result yetty_yui_is_dirty(const struct yetty_yui *yui);
 
 /* Update the scene-canvas grid to match a new framebuffer size. Called
  * from the RESIZE handler. Cell stride stays as set at create time. */
@@ -136,7 +137,8 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
 /* Open the view-launcher menu at (anchor_x, anchor_y) in window pixels.
  * Wired to the tabbar's v-button click. Items: shell, ssh, telnet, yvnc;
  * each opens the corresponding config dialog. */
-void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float anchor_y);
+struct yetty_ycore_void_result yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x,
+                                                        float anchor_y);
 
 /* Open the right-click context menu at (anchor_x, anchor_y). Items:
  *   GPU info…
@@ -146,7 +148,8 @@ void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float ancho
  * chosen kind + orientation; the host is responsible for finding the
  * target pane (typically the one most recently focused / right-clicked)
  * and performing the workspace split. */
-void yetty_yui_show_context_menu(struct yetty_yui *yui, float anchor_x, float anchor_y);
+struct yetty_ycore_void_result yetty_yui_show_context_menu(struct yetty_yui *yui, float anchor_x,
+                                                           float anchor_y);
 
 /* Application statusbar — STATUSBAR widget pinned to the bottom of the
  * engine canvas by engine_set_statusbar. Lives for the whole yui
@@ -169,8 +172,8 @@ struct yetty_ygui_framework *yetty_yui_engine(struct yetty_yui *yui);
  * passed through and the caller should try its own handler. */
 struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
                                                  const struct yetty_yui_event *event);
-void yetty_yui_set_status_left(struct yetty_yui *yui, const char *text);
-void yetty_yui_set_status_right(struct yetty_yui *yui, const char *text);
+struct yetty_ycore_void_result yetty_yui_set_status_left(struct yetty_yui *yui, const char *text);
+struct yetty_ycore_void_result yetty_yui_set_status_right(struct yetty_yui *yui, const char *text);
 
 /* Pixel height of the statusbar strip, or 0 when no statusbar is
  * attached. Used by the tabbar / workspace layout so terminal cells

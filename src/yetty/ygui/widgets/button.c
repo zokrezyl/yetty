@@ -33,8 +33,7 @@ static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_ctx
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_button_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_button_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "button_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_button_class_get().value);
@@ -56,9 +55,8 @@ static struct yetty_ycore_void_result button_destructor(struct yetty_yclass_ctx 
     struct button_data *d = d_dr.value;
     free(d->label);
     d->label = NULL;
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_button_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_button_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 /* Brand colors as packed RGBA — R in low byte. Per rules/08-branding.md.
@@ -169,8 +167,10 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
         };
         uint32_t stroke = hovered ? BTN_HOVER_OUTLINE : 0u;
         float stroke_w = hovered ? 2.0f : 0.0f;
-        struct yetty_ycore_void_result rr = yetty_ydraw_drawable_list_add_cmd_add_linear_gradient_box(
-            ctx->ygrid_drawable_list, /*id=*/0, /*z_order=*/0, /*fill=*/0u, stroke, stroke_w, &gg);
+        struct yetty_ycore_void_result rr =
+            yetty_ydraw_drawable_list_add_cmd_add_linear_gradient_box(
+                ctx->ygrid_drawable_list, /*id=*/0, /*z_order=*/0, /*fill=*/0u, stroke, stroke_w,
+                &gg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: gradient surface");
     } else {
         struct yetty_ysdf_rounded_box geom = {
@@ -203,9 +203,10 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
             .capacity = strlen(d->label),
             .size = strlen(d->label),
         };
-        struct yetty_ycore_void_result rr = yetty_ydraw_drawable_list_add_text(
-            ctx->ygrid_drawable_list, x, y, &text_buf, font_size, BTN_FG, /*layer=*/0, /*font_id=*/-1,
-            /*rotation=*/0.0f);
+        struct yetty_ycore_void_result rr =
+            yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &text_buf, font_size,
+                                               BTN_FG, /*layer=*/0, /*font_id=*/-1,
+                                               /*rotation=*/0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "button_paint: label");
     }
     return YETTY_OK_VOID();
@@ -237,12 +238,14 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(
+    const struct yetty_ygui_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_button_get_label: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_button_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_button_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_button_get_label: data_get");
     struct button_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, d->label);

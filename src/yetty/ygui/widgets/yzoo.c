@@ -27,8 +27,7 @@ static struct yetty_ycore_void_result yzoo_ctor(struct yetty_yclass_ctx *yclass_
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_yzoo_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_yzoo_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yzoo_ctor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yzoo_class_get().value);
@@ -57,9 +56,8 @@ static struct yetty_ycore_void_result yzoo_dtor(struct yetty_yclass_ctx *yclass_
     struct yzoo_data *d = d_dr.value;
     yetty_yzoo_destroy(d->zoo);
     d->zoo = NULL;
-    return yetty_ygui_super_void(
-        obj, yetty_ygui_yzoo_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_yzoo_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:yzoo:widget_emit_body")]]
@@ -85,7 +83,8 @@ static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_ctx *yc
         }
         struct yetty_ydraw_drawable_list_config bcfg = {
             .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = w, .scene_max_y = h};
-        struct yetty_ydraw_drawable_list_result br = yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
+        struct yetty_ydraw_drawable_list_result br =
+            yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yzoo_emit_body: buffer create");
         float t = (float)(yetty_yplatform_ytime_monotonic_sec() - d->start_time);
         struct yetty_ycore_void_result rr = yetty_yzoo_render(d->zoo, br.value, t);
@@ -98,10 +97,14 @@ static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_ctx *yc
         (void)yetty_ygui_object_set_dirty(obj);
     }
 
-    yetty_yclass_method_slot slot =
+    struct yetty_yclass_method_slot_result slot_result =
         yetty_ygui_method_slot_get((yetty_yclass_method_id_t)yetty_ygui_widget_emit_body);
-    yetty_yclass_impl_t impl = yetty_ygui_dispatch_lookup_super(
-        yetty_ygui_yzoo_class_get().value, slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_result, "yzoo_emit_body: slot");
+    yetty_yclass_method_slot slot = slot_result.value;
+    struct yetty_yclass_impl_t_result impl_result =
+        yetty_ygui_dispatch_lookup_super(yetty_ygui_yzoo_class_get().value, slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, impl_result, "yzoo_emit_body: dispatch");
+    yetty_yclass_impl_t impl = impl_result.value;
     if (!impl) {
         return YETTY_OK_VOID();
     }

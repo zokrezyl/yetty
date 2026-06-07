@@ -69,7 +69,7 @@ struct yetty_ydraw_cell_source {
      * pointer is into the cell buffer and is only valid for the duration of
      * the current canvas operation (no resize/scroll in between). */
     uint32_t *(*handle_at)(void *user, uint32_t row, uint32_t col);
-    void *user;                              /* opaque, passed back to handle_at */
+    void *user;                               /* opaque, passed back to handle_at */
     struct yetty_ydraw_cell_ref_table *table; /* borrowed; owned by the text-layer */
 };
 
@@ -96,8 +96,10 @@ struct yetty_ydraw_cell_handle_result yetty_ydraw_cell_ref_table_alloc(
     struct yetty_ydraw_cell_ref_table *table);
 
 /* Free the ref array for `handle`, NULL its slot, and recycle the id.
- * A handle of 0 (or out of range / already free) is a no-op. */
-void yetty_ydraw_cell_ref_table_release(struct yetty_ydraw_cell_ref_table *table, uint32_t handle);
+ * A handle of 0 (or out of range / already free) is a no-op. Errors only
+ * if the free-list cannot grow to take the recycled id. */
+struct yetty_ycore_void_result yetty_ydraw_cell_ref_table_release(
+    struct yetty_ydraw_cell_ref_table *table, uint32_t handle);
 
 /* Returns the mutable ref array for `handle`, or NULL for 0 / out of range /
  * released. */
@@ -124,7 +126,10 @@ struct yetty_ycore_void_result yetty_ydraw_cell_ref_table_push(
 struct yetty_ycore_void_result yetty_ydraw_cell_ref_table_gc_begin(
     struct yetty_ydraw_cell_ref_table *table);
 void yetty_ydraw_cell_ref_table_gc_mark(struct yetty_ydraw_cell_ref_table *table, uint32_t handle);
-void yetty_ydraw_cell_ref_table_gc_end(struct yetty_ydraw_cell_ref_table *table);
+/* Frees every live slot that went unmarked. Best-effort: surfaces the first
+ * id-recycle failure (free-list grow) but always finishes the sweep. */
+struct yetty_ycore_void_result yetty_ydraw_cell_ref_table_gc_end(
+    struct yetty_ydraw_cell_ref_table *table);
 
 #ifdef __cplusplus
 }

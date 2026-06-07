@@ -428,7 +428,8 @@ struct yetty_ydraw_drawable_list_result yetty_yvideo_render_from_mp4_bytes(
         cfg.flags = YETTY_YVIDEO_FLAG_LOOP | YETTY_YVIDEO_FLAG_AUTOPLAY;
     }
 
-    struct yetty_ydraw_drawable_list_result r = yetty_yvideo_render(annexb, annexb_len, NULL, 0, &cfg);
+    struct yetty_ydraw_drawable_list_result r =
+        yetty_yvideo_render(annexb, annexb_len, NULL, 0, &cfg);
     free(annexb);
     return r;
 }
@@ -444,7 +445,8 @@ struct yetty_ydraw_drawable_list_result yetty_yvideo_render_from_mp4_file(
     if (slurp_file(path, &buf, &len) != 0) {
         return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo_mp4: file slurp failed");
     }
-    struct yetty_ydraw_drawable_list_result r = yetty_yvideo_render_from_mp4_bytes(buf, len, overrides);
+    struct yetty_ydraw_drawable_list_result r =
+        yetty_yvideo_render_from_mp4_bytes(buf, len, overrides);
     free(buf);
     return r;
 }

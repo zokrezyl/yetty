@@ -51,10 +51,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj,
-        yetty_ygui_combobox_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+    struct yetty_ycore_void_result sr =
+        yetty_ygui_super_void(obj, yetty_ygui_combobox_class_get().value,
+                              (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "combo: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_combobox_class_get().value);
@@ -76,10 +75,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct combo_data *d = d_dr.value;
     free(d->text);
-    return yetty_ygui_super_void(
-        obj,
-        yetty_ygui_combobox_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_destructor);
+    return yetty_ygui_super_void(obj, yetty_ygui_combobox_class_get().value,
+                                 (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
 [[clang::annotate("override@ygui:combobox:widget_paint")]]
@@ -105,9 +102,11 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_104, "combo: bg");
     float fs = 14.0f;
     float ty = r.min.y + (h + fs) * 0.5f - 3.0f;
-    struct yetty_ycore_void_result result_108 = yguix_text(ctx, d->text ? d->text : "", r.min.x + 10, ty, fs, COLOR_TEXT);
+    struct yetty_ycore_void_result result_108 =
+        yguix_text(ctx, d->text ? d->text : "", r.min.x + 10, ty, fs, COLOR_TEXT);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_108, "combo: text");
-    struct yetty_ycore_void_result result_111 = yguix_text(ctx, "v", r.max.x - 16, ty, fs, COLOR_CHEV);
+    struct yetty_ycore_void_result result_111 =
+        yguix_text(ctx, "v", r.max.x - 16, ty, fs, COLOR_CHEV);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_111, "combo: chev");
     return YETTY_OK_VOID();
 }
@@ -169,12 +168,14 @@ struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_ygui_ob
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_const_char_ptr_result yetty_ygui_combobox_get_text(const struct yetty_ygui_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_combobox_get_text(
+    const struct yetty_ygui_object *obj)
 {
     if (!obj) {
         return YETTY_OK(yetty_ycore_const_char_ptr, "");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_combobox_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_combobox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_combobox_get_text: data_get");
     struct combo_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, d->text ? d->text : "");

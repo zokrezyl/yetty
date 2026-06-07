@@ -344,7 +344,8 @@ static struct yetty_ycore_void_result handle_proto_version(struct yetty_ydvnc_rf
     yinfo("ydvnc: server version: %.*s", YETTY_YDVNC_RFB_PROTO_VERSION_LEN - 1, server_version);
 
     /* Always reply 003.008 — that's what every modern server supports. */
-    struct yetty_ycore_void_result result_338 = transport_send(c, YETTY_YDVNC_RFB_PROTO_VERSION_38, YETTY_YDVNC_RFB_PROTO_VERSION_LEN);
+    struct yetty_ycore_void_result result_338 =
+        transport_send(c, YETTY_YDVNC_RFB_PROTO_VERSION_38, YETTY_YDVNC_RFB_PROTO_VERSION_LEN);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_338, "sending client version failed");
 
     c->state = YDVNC_ST_SECURITY_TYPES;
@@ -557,7 +558,8 @@ static struct yetty_ycore_void_result handle_server_init(struct yetty_ydvnc_rfb_
 
     /* Initial full update request. */
     struct yetty_ycore_void_result result_548 = send_full_fb_update_request(c, 0);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_548, "initial FramebufferUpdateRequest send failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_548,
+                        "initial FramebufferUpdateRequest send failed");
 
     c->state = YDVNC_ST_MAIN;
     if (c->on_connected) {
@@ -640,7 +642,8 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
                 c->in_fb_update = 0;
                 /* Ask for the next incremental update. */
                 struct yetty_ycore_void_result result_631 = send_full_fb_update_request(c, 1);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, result_631, "incremental FramebufferUpdateRequest failed");
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, result_631,
+                                    "incremental FramebufferUpdateRequest failed");
                 if (c->on_frame) {
                     c->on_frame(c->on_frame_userdata);
                 }
@@ -668,8 +671,10 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
             int32_t enc = c->current_rect.encoding;
             if (enc == YETTY_YDVNC_RFB_PSEUDO_DESKTOP_SIZE) {
                 /* No payload — width/height are in the rect header itself. */
-                struct yetty_ycore_void_result result_660 = resize_framebuffer(c, c->current_rect.width, c->current_rect.height);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, result_660, "DesktopSize: resize_framebuffer failed");
+                struct yetty_ycore_void_result result_660 =
+                    resize_framebuffer(c, c->current_rect.width, c->current_rect.height);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, result_660,
+                                    "DesktopSize: resize_framebuffer failed");
                 c->have_rect_header = 0;
                 c->fb_rects_remaining--;
                 continue;

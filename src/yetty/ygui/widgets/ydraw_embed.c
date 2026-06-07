@@ -35,8 +35,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
-        yetty_ygui_super_void(obj,
-                              yetty_ygui_ydraw_embed_class_get().value,
+        yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ydraw_embed: super");
     struct yetty_ygui_void_ptr_result d_dr =
@@ -61,8 +60,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
         yetty_ydraw_drawable_list_destroy(d->buf);
     }
     d->buf = NULL;
-    return yetty_ygui_super_void(obj,
-                                 yetty_ygui_ydraw_embed_class_get().value,
+    return yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
@@ -216,8 +214,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_ygui_object *obj,
-                                                                 struct yetty_ydraw_drawable_list *buf)
+struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(
+    struct yetty_ygui_object *obj, struct yetty_ydraw_drawable_list *buf)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "ydraw_embed_set_buffer: NULL");

@@ -514,7 +514,8 @@ static struct yetty_ycore_void_result yzoo_emit_shape(struct yetty_ydraw_drawabl
     }
     case 15: {
         struct yetty_ysdf_rounded_x g = {cx, cy, size, size * 0.2f};
-        return yetty_ydraw_drawable_list_add_cmd_add_rounded_x(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_rounded_x(buf, 0, z_order, color, 0u, 0.0f,
+                                                               &g);
     }
     case 16: {
         struct yetty_ysdf_capsule g = {cx - size * 0.7f, cy, cx + size * 0.7f, cy, size * 0.3f};
@@ -539,7 +540,8 @@ static struct yetty_ycore_void_result yzoo_emit_shape(struct yetty_ydraw_drawabl
     }
     case 21: {
         struct yetty_ysdf_pentagram g = {cx, cy, size};
-        return yetty_ydraw_drawable_list_add_cmd_add_pentagram(buf, 0, z_order, color, 0u, 0.0f, &g);
+        return yetty_ydraw_drawable_list_add_cmd_add_pentagram(buf, 0, z_order, color, 0u, 0.0f,
+                                                               &g);
     }
     default:
         break;
@@ -560,9 +562,8 @@ static struct yetty_ycore_void_result yzoo_emit_curve(struct yetty_ydraw_drawabl
         float x = omt * omt * p0x + 2.0f * omt * t * cx + t * t * p1x;
         float y = omt * omt * p0y + 2.0f * omt * t * cy + t * t * p1y;
         struct yetty_ysdf_segment g = {prev_x, prev_y, x, y};
-        struct yetty_ycore_void_result add_result =
-            yetty_ydraw_drawable_list_add_cmd_add_segment(buf, 0, (*z_order)++, 0u, color, width,
-                                                          &g);
+        struct yetty_ycore_void_result add_result = yetty_ydraw_drawable_list_add_cmd_add_segment(
+            buf, 0, (*z_order)++, 0u, color, width, &g);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, add_result, "yzoo_emit_curve: add segment");
         prev_x = x;
         prev_y = y;
@@ -946,7 +947,7 @@ struct yetty_ycore_void_result yetty_yzoo_render(struct yetty_yzoo *zoo,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yzoo_render: add_cmd_zero");
 
     yetty_ydraw_drawable_list_set_scene_bounds(buf, 0.0f, 0.0f, zoo->config.scene_width,
-                                           zoo->config.scene_height);
+                                               zoo->config.scene_height);
 
     struct yetty_ycore_void_result br = yzoo_build_prims(zoo, buf, time);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yzoo_render: build_prims");

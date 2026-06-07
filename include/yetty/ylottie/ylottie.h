@@ -76,10 +76,9 @@ YETTY_YRESULT_DECLARE(yetty_ylottie_render, struct yetty_ylottie_render_output);
  *                            over --frame when both are given
  *   --bg=<#RRGGBB|#RRGGBBAA> background fill (default transparent)
  * Pass NULL/0 for defaults. */
-struct yetty_ylottie_render_result yetty_ylottie_render(const char *content, size_t content_len,
-                                                        const char *args, size_t args_len,
-                                                        const struct yetty_ylottie_render_config
-                                                            *config);
+struct yetty_ylottie_render_result yetty_ylottie_render(
+    const char *content, size_t content_len, const char *args, size_t args_len,
+    const struct yetty_ylottie_render_config *config);
 
 /* Cheap content sniff used by ycat's type detector: does this byte buffer
  * look like a Lottie/Bodymovin JSON document? (A leading '{' plus the

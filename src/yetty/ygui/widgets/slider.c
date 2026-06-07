@@ -31,8 +31,7 @@ static struct yetty_ycore_void_result slider_constructor(struct yetty_yclass_ctx
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
-        obj, yetty_ygui_slider_class_get().value,
-        (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        obj, yetty_ygui_slider_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "slider_constructor: super");
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
@@ -78,8 +77,8 @@ static struct yetty_ycore_void_result paint_rounded(struct yetty_ygui_emit_ctx *
         .radius_top_left = radius,
         .radius_bottom_left = radius,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
-                                                         0.0f, &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_rounded_box(ctx->ygrid_drawable_list, 0u, 0u, fill,
+                                                             0u, 0.0f, &geom);
 }
 
 static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *ctx, float cx,
@@ -90,8 +89,8 @@ static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *c
         .center_y = cy,
         .radius = radius,
     };
-    return yetty_ydraw_drawable_list_add_cmd_add_circle(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u, 0.0f,
-                                                    &geom);
+    return yetty_ydraw_drawable_list_add_cmd_add_circle(ctx->ygrid_drawable_list, 0u, 0u, fill, 0u,
+                                                        0.0f, &geom);
 }
 
 [[clang::annotate("override@ygui:slider:widget_paint")]]
@@ -239,7 +238,8 @@ struct yetty_ycore_float_result yetty_ygui_slider_get_value(const struct yetty_y
     if (!obj) {
         return YETTY_OK(yetty_ycore_float, 0.0f);
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yetty_ygui_slider_class_get().value);
+    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
+        (struct yetty_ygui_object *)obj, yetty_ygui_slider_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, d_dr, "yetty_ygui_slider_get_value: data_get");
     struct slider_data *d = d_dr.value;
     return YETTY_OK(yetty_ycore_float, d->value);

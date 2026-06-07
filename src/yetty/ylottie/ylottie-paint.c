@@ -84,9 +84,9 @@ static bool item_hidden(const struct yetty_ylottie_json *item)
  *===========================================================================*/
 
 static struct yetty_ycore_void_result emit_segment(struct yetty_ydraw_drawable_list *buf,
-                                                    const struct yetty_ylottie_xform *m, float x0,
-                                                    float y0, float x1, float y1, uint32_t color,
-                                                    float width)
+                                                   const struct yetty_ylottie_xform *m, float x0,
+                                                   float y0, float x1, float y1, uint32_t color,
+                                                   float width)
 {
     float ax, ay, bx, by;
     yetty_ylottie_xform_point(m, x0, y0, &ax, &ay);
@@ -146,11 +146,11 @@ static struct yetty_ycore_void_result emit_polyline_shape(struct yetty_ydraw_dra
 
 /* Read a fill ("fl") item into a paint. */
 static struct ylottie_paint resolve_fill(const struct yetty_ylottie_json *item, float frame,
-                                          float opacity)
+                                         float opacity)
 {
     struct ylottie_paint p = {0};
-    float o = yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(item, "o"), frame, 100.0f) *
-              0.01f;
+    float o =
+        yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(item, "o"), frame, 100.0f) * 0.01f;
     p.color = yetty_ylottie_color_eval(yetty_ylottie_json_get(item, "c"), frame, opacity * o);
     p.present = true;
     p.width = 0.0f;
@@ -159,11 +159,11 @@ static struct ylottie_paint resolve_fill(const struct yetty_ylottie_json *item, 
 
 /* Read a stroke ("st") item into a paint. */
 static struct ylottie_paint resolve_stroke(const struct yetty_ylottie_json *item, float frame,
-                                            float opacity)
+                                           float opacity)
 {
     struct ylottie_paint p = {0};
-    float o = yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(item, "o"), frame, 100.0f) *
-              0.01f;
+    float o =
+        yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(item, "o"), frame, 100.0f) * 0.01f;
     p.color = yetty_ylottie_color_eval(yetty_ylottie_json_get(item, "c"), frame, opacity * o);
     p.width = yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(item, "w"), frame, 1.0f);
     p.present = true;
@@ -176,8 +176,8 @@ static struct ylottie_paint resolve_gradient(const struct yetty_ylottie_json *it
                                              float opacity, bool is_stroke)
 {
     struct ylottie_paint p = {0};
-    float o = yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(item, "o"), frame, 100.0f) *
-              0.01f;
+    float o =
+        yetty_ylottie_prop_eval_scalar(yetty_ylottie_json_get(item, "o"), frame, 100.0f) * 0.01f;
     const struct yetty_ylottie_json *g = yetty_ylottie_json_get(item, "g");
     const struct yetty_ylottie_json *gk = yetty_ylottie_json_get(g, "k");
     float stop[4] = {0, 0, 0, 0};
@@ -195,10 +195,10 @@ static struct ylottie_paint resolve_gradient(const struct yetty_ylottie_json *it
  *===========================================================================*/
 
 static struct yetty_ycore_void_result emit_ellipse(struct ylottie_walk *w,
-                                                    const struct yetty_ylottie_json *item,
-                                                    const struct yetty_ylottie_xform *m,
-                                                    float frame, const struct ylottie_paint *fill,
-                                                    const struct ylottie_paint *stroke)
+                                                   const struct yetty_ylottie_json *item,
+                                                   const struct yetty_ylottie_xform *m, float frame,
+                                                   const struct ylottie_paint *fill,
+                                                   const struct ylottie_paint *stroke)
 {
     float size[2] = {0, 0};
     float pos[2] = {0, 0};
@@ -250,10 +250,10 @@ static struct yetty_ycore_void_result emit_ellipse(struct ylottie_walk *w,
 }
 
 static struct yetty_ycore_void_result emit_rect(struct ylottie_walk *w,
-                                                 const struct yetty_ylottie_json *item,
-                                                 const struct yetty_ylottie_xform *m, float frame,
-                                                 const struct ylottie_paint *fill,
-                                                 const struct ylottie_paint *stroke)
+                                                const struct yetty_ylottie_json *item,
+                                                const struct yetty_ylottie_xform *m, float frame,
+                                                const struct ylottie_paint *fill,
+                                                const struct ylottie_paint *stroke)
 {
     float size[2] = {0, 0};
     float pos[2] = {0, 0};
@@ -316,10 +316,10 @@ static struct yetty_ycore_void_result emit_rect(struct ylottie_walk *w,
 }
 
 static struct yetty_ycore_void_result emit_path(struct ylottie_walk *w,
-                                                 const struct yetty_ylottie_json *item,
-                                                 const struct yetty_ylottie_xform *m, float frame,
-                                                 const struct ylottie_paint *fill,
-                                                 const struct ylottie_paint *stroke)
+                                                const struct yetty_ylottie_json *item,
+                                                const struct yetty_ylottie_xform *m, float frame,
+                                                const struct ylottie_paint *fill,
+                                                const struct ylottie_paint *stroke)
 {
     const struct yetty_ylottie_json *shape_value =
         yetty_ylottie_path_eval(yetty_ylottie_json_get(item, "ks"), frame);
@@ -360,20 +360,20 @@ static struct yetty_ycore_void_result emit_polystar(struct ylottie_walk *w,
  *===========================================================================*/
 
 static struct yetty_ycore_void_result process_items(struct ylottie_walk *w,
-                                                     const struct yetty_ylottie_json *items,
-                                                     const struct yetty_ylottie_xform *ctm,
-                                                     float frame, float opacity,
-                                                     struct ylottie_paint fill,
-                                                     struct ylottie_paint stroke, int depth);
+                                                    const struct yetty_ylottie_json *items,
+                                                    const struct yetty_ylottie_xform *ctm,
+                                                    float frame, float opacity,
+                                                    struct ylottie_paint fill,
+                                                    struct ylottie_paint stroke, int depth);
 
 /* A group ("gr") wraps its items with its own transform (`tr`, always present
  * as one of the items) and opacity. */
 static struct yetty_ycore_void_result process_group(struct ylottie_walk *w,
-                                                     const struct yetty_ylottie_json *group,
-                                                     const struct yetty_ylottie_xform *ctm,
-                                                     float frame, float opacity,
-                                                     struct ylottie_paint fill,
-                                                     struct ylottie_paint stroke, int depth)
+                                                    const struct yetty_ylottie_json *group,
+                                                    const struct yetty_ylottie_xform *ctm,
+                                                    float frame, float opacity,
+                                                    struct ylottie_paint fill,
+                                                    struct ylottie_paint stroke, int depth)
 {
     const struct yetty_ylottie_json *it = yetty_ylottie_json_get(group, "it");
     if (!it || it->type != YETTY_YLOTTIE_JSON_ARRAY) {
@@ -395,11 +395,11 @@ static struct yetty_ycore_void_result process_group(struct ylottie_walk *w,
 }
 
 static struct yetty_ycore_void_result process_items(struct ylottie_walk *w,
-                                                     const struct yetty_ylottie_json *items,
-                                                     const struct yetty_ylottie_xform *ctm,
-                                                     float frame, float opacity,
-                                                     struct ylottie_paint fill,
-                                                     struct ylottie_paint stroke, int depth)
+                                                    const struct yetty_ylottie_json *items,
+                                                    const struct yetty_ylottie_xform *ctm,
+                                                    float frame, float opacity,
+                                                    struct ylottie_paint fill,
+                                                    struct ylottie_paint stroke, int depth)
 {
     if (depth > YLOTTIE_MAX_GROUP_DEPTH || !items) {
         return YETTY_OK_VOID();
@@ -446,7 +446,7 @@ static struct yetty_ycore_void_result process_items(struct ylottie_walk *w,
  *===========================================================================*/
 
 static const struct yetty_ylottie_json *find_layer_by_ind(const struct yetty_ylottie_json *layers,
-                                                           double ind)
+                                                          double ind)
 {
     if (!layers) {
         return NULL;
@@ -483,10 +483,10 @@ static void build_layer_ctm(const struct yetty_ylottie_json *layers,
 /* The text document active at `frame`: t.d.k is an array of {s,t}; pick the
  * keyframe whose time bounds the frame from below. */
 static const struct yetty_ylottie_json *text_document(const struct yetty_ylottie_json *layer,
-                                                       float frame)
+                                                      float frame)
 {
-    const struct yetty_ylottie_json *d = yetty_ylottie_json_get(yetty_ylottie_json_get(layer, "t"),
-                                                                "d");
+    const struct yetty_ylottie_json *d =
+        yetty_ylottie_json_get(yetty_ylottie_json_get(layer, "t"), "d");
     const struct yetty_ylottie_json *k = yetty_ylottie_json_get(d, "k");
     if (!k || k->type != YETTY_YLOTTIE_JSON_ARRAY || !k->first_child) {
         return NULL;
@@ -606,7 +606,7 @@ static struct yetty_ycore_void_result emit_solid_layer(struct ylottie_walk *w,
 }
 
 static struct yetty_ycore_void_result walk_layer(struct ylottie_walk *w,
-                                                  const struct yetty_ylottie_json *layer)
+                                                 const struct yetty_ylottie_json *layer)
 {
     if (item_hidden(layer)) {
         return YETTY_OK_VOID();
