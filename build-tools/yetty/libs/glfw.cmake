@@ -127,6 +127,32 @@ if(NOT TARGET yetty_yplatform_move_resize)
     target_link_libraries(yetty_yplatform_move_resize PUBLIC yetty_ycore)
 endif()
 
+# yetty_yplatform_window_manager — yclass class `yplatform:window_manager`:
+# the render→main marshaling for OS window control (move/resize/min/max/close/
+# cursor). Its own static lib (like move_resize above) so the GLFW dependency
+# and the C23 `[[clang::annotate]]` codegen attributes stay scoped to this TU
+# set instead of leaking into the main exec's source list. window-manager.gen.c
+# is #included at the foot of window-manager.c; methods.gen.c / rpc.gen.c are
+# separate codegen TUs.
+if(NOT TARGET yetty_yplatform_window_manager)
+    add_library(yetty_yplatform_window_manager STATIC
+        ${YETTY_ROOT}/src/yetty/yplatform/window-manager.c
+        ${YETTY_ROOT}/src/yetty/yplatform/methods.gen.c
+        ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c)
+    target_include_directories(yetty_yplatform_window_manager
+        PUBLIC ${YETTY_ROOT}/include
+        PRIVATE ${YETTY_ROOT}/src)
+    target_link_libraries(yetty_yplatform_window_manager
+        PUBLIC yetty_ycore yetty_yclass
+        PRIVATE glfw yetty_yplatform_move_resize)
+    # window-manager.c carries C23 `[[clang::annotate(...)]]` attributes.
+    if(NOT MSVC)
+        set_target_properties(yetty_yplatform_window_manager PROPERTIES
+            C_STANDARD 23
+            C_STANDARD_REQUIRED ON)
+    endif()
+endif()
+
 #------------------------------------------------------------------------------
 # glfw3webgpu — adapter that creates a WGPUSurface from a glfw window.
 #------------------------------------------------------------------------------

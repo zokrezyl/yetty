@@ -18,8 +18,7 @@ struct yetty_ygui_stepper_data_ptr_result yetty_ygui_stepper_data(struct yetty_y
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_object *obj,
-                                                           const char *label);
+struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_object *obj, const char *label);
 struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_ygui_object *obj, int i);
 
 #endif

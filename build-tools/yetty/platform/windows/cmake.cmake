@@ -51,7 +51,6 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window-manager/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
@@ -128,6 +127,7 @@ target_link_libraries(yetty PRIVATE
     ws2_32
     yetty_yplatform_core
     yetty_yplatform_move_resize
+    yetty_yplatform_window_manager
 )
 
 # Copy runtime assets to build directory

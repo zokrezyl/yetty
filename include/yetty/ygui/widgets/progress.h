@@ -18,10 +18,8 @@ struct yetty_ygui_progress_data_ptr_result yetty_ygui_progress_data(struct yetty
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_ygui_object *obj,
-                                                             float value);
+struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_ygui_object *obj, float value);
 struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_ygui_object *obj,
-                                                              uint32_t color);
+struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_ygui_object *obj, uint32_t color);
 
 #endif

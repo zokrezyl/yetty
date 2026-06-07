@@ -20,7 +20,6 @@ struct yetty_ydraw_drawable_list;
  * under the point: the caller should focus the parent / reset to root. */
 #define YETTY_YFLAME_HIT_UP (-2)
 #define YETTY_YFLAME_HIT_ROOT (-3)
-struct yetty_ycore_void_result yetty_yflame_emit_osc(const struct yetty_ydraw_drawable_list *list,
-                                                     int fd);
+struct yetty_ycore_void_result yetty_yflame_emit_osc(const struct yetty_ydraw_drawable_list *list, int fd);
 
 #endif

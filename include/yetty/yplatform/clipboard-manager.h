@@ -50,7 +50,7 @@ struct yetty_platform_clipboard_manager {
     const struct yetty_platform_clipboard_manager_ops *ops;
 };
 
-struct yetty_yplatform_window_manager;
+struct yetty_yclass_object;
 
 /* Construct a clipboard manager that uses output_pipe for render→main
  * requests and writes paste responses back to input_pipe (as
@@ -65,7 +65,7 @@ struct yetty_yplatform_window_manager;
 struct yetty_yplatform_clipboard_manager_result yetty_platform_clipboard_manager_create(
     struct yetty_ycore_xthread_event_pipe *output_pipe,
     struct yetty_ycore_xthread_event_pipe *input_pipe,
-    struct yetty_yplatform_window_manager *window_manager);
+    struct yetty_yclass_object *window_manager);
 
 #ifdef __cplusplus
 }

@@ -167,7 +167,7 @@ yetty-side state, but they are **not** yetty extensions.
 
 | Sequence | libvterm prop | yetty reaction |
 |---|---|---|
-| `CSI ?1049 h/l`, `?1047`, `?47` | `VTERM_PROP_ALTSCREEN` | Alt-screen toggle — the content layer swaps the ydraw canvas to/from its saved half. See `term-layers.md` §2. |
+| `CSI ?1049 h/l`, `?1047`, `?47` | `VTERM_PROP_ALTSCREEN` | Alt-screen toggle — the content layer swaps the ydraw canvas to/from its saved half. See [Layered Rendering](layered-rendering.md#alt-screen). |
 | `CSI ?25 h/l` (DECTCEM)         | `VTERM_PROP_CURSORVISIBLE` | Show/hide the cursor in the GPU uniform. |
 | `CSI <n> SP q` (DECSCUSR)       | `VTERM_PROP_CURSORSHAPE` | Cursor shape: 1=block, 2=underline, 3=bar. |
 | `CSI ?1500 h/l` (card click)    | `VTERM_PROP_CARDCLICK` | Gate whether GLFW mouse-button events are forwarded to figures as `700000`/`700010`. |
@@ -194,4 +194,4 @@ handled inside libvterm and are not part of yetty's vendor namespace.
   (`…_register_wire`), `src/yetty/yterminal/terminal.c` (compositor + RPC)
 - ydraw payload decode: `src/yetty/yvterm/ydraw-content.c`
 - Standard-sequence reactions: `src/yetty/yvterm/text-layer.c::on_settermprop`
-- The layer / figure dynamic model these codes feed: `docs/term-layers.md`
+- The layer / figure dynamic model these codes feed: `docs/layered-rendering.md`

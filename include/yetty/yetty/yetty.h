@@ -15,7 +15,7 @@ struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
 struct yetty_platform_clipboard_manager;
 struct yetty_yplatform_pty_factory;
-struct yetty_yplatform_window_manager;
+struct yetty_yclass_object;
 struct yetty_yevent_event_loop;
 struct yetty_ydraw_gpu_allocator;
 struct yetty_ymsdf_generator;

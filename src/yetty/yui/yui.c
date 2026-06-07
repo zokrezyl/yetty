@@ -41,7 +41,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/methods.h> /* yetty_yplatform_window_manager_* slots */
 
 #include "config-dialog.h"
 #include "debug-window.h"
@@ -2361,9 +2361,13 @@ static struct yetty_ycore_void_result yui_apply_cursor(struct yetty_yui *yui, fl
     if (shape == yui->last_cursor_shape) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yplatform_window_manager *wm = yui->ctx->runtime->window_manager;
-    if (wm && wm->ops && wm->ops->set_cursor) {
-        wm->ops->set_cursor(wm, shape);
+    struct yetty_yclass_object *wm = yui->ctx->runtime->window_manager;
+    if (wm) {
+        struct yetty_ycore_void_result cursor_result =
+            yetty_yplatform_window_manager_set_cursor(NULL, wm, shape);
+        if (YETTY_IS_ERR(cursor_result)) {
+            yetty_ycore_error_destroy(cursor_result.error);
+        }
     }
     yui->last_cursor_shape = shape;
     return YETTY_OK_VOID();

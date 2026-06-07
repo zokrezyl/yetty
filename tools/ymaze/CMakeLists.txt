@@ -21,7 +21,6 @@ set(YMAZE_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window-manager/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
@@ -67,6 +66,7 @@ target_link_libraries(ymaze PRIVATE
     yetty_ydraw_core
     yetty_yplatform_core
     yetty_yplatform_move_resize
+    yetty_yplatform_window_manager
     yetty_yco
     yetty_telnet
     ${BROTLIDEC_LIBRARIES}
