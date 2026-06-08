@@ -31,4 +31,32 @@ of the Licensed Work, are subject to this License.
 This License does not grant you any right in any trademark or logo of
 Licensor or its affiliates.
 
+---
+
+Scope — Third-Party Components
+
+For the avoidance of doubt, the "Licensed Work" covered by this License
+consists ONLY of the original portions of Yetty authored by the Licensor.
+The Licensed Work bundles and incorporates third-party components that are
+the copyright of their respective authors and that are licensed to you
+under their own license terms, NOT under this License.
+
+Nothing in this License limits, supersedes, or adds conditions to the
+rights granted to you by the licenses of those third-party components. In
+particular, the production-use restriction and the Change Date of this
+License do NOT apply to those components. To the extent of any conflict
+between this License and a third-party component's own license, that
+component's own license governs for that component.
+
+Bundled third-party components vendored in this repository (with the
+location of each component's license text), include, without limitation:
+
+  - libvterm — MIT — (c) 2008 Paul Evans — src/libvterm-0.3.3/LICENSE
+  - TinyEMU  — MIT — (c) 2016-2017 Fabrice Bellard — src/tinyemu/MIT-LICENSE.txt
+
+A complete list of third-party dependencies and their licenses is in
+DEPENDENCIES.md at the root of this repository.
+
+---
+
 Full BSL 1.1 text: https://mariadb.com/bsl11/

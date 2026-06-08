@@ -9,7 +9,7 @@
 
 GPU-accelerated terminal with rich content. Pure C. Any language.
 
-> **License:** Business Source License 1.1. Non-production use is free; production use requires a commercial license. See [LICENSE](LICENSE).
+> **License:** Business Source License 1.1, applying to Yetty's own code only. Non-production use is free; production use requires a commercial license. See [LICENSE](LICENSE). Bundled third-party components keep their own (mostly permissive) licenses — see [DEPENDENCIES.md](DEPENDENCIES.md).
 
 > **Status:** Early alpha — actively rewriting established concepts for efficiency.
 
@@ -225,7 +225,9 @@ Share suggestions on [GitHub Discussions](https://github.com/zokrezyl/yetty/disc
 - **ThorVG** — SVG and Lottie rendering (wired in build; renderer in progress)
 
 Dependencies use permissive licenses (MIT, BSD, Zlib, Apache-2.0); the optional
-NetSurf integration (`ynetsurf`) is GPL and off by default.
+NetSurf integration (`ynetsurf`) is GPL and off by default. Yetty's BSL applies
+only to its own code and does not relicense these components. Full list and
+license terms: [DEPENDENCIES.md](DEPENDENCIES.md).
 
 
 ---
