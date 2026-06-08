@@ -38,11 +38,11 @@ struct yetty_context;
 struct yetty_ydraw_target;
 struct yetty_ygui_object;
 struct yetty_ygui_framework;
-struct yetty_yui_tabbar;
+struct yetty_yui_tabbar_model;
 
 YETTY_YRESULT_DECLARE(yetty_yui_ptr, struct yetty_yui *);
 
-/* View kinds the v-menu can start. Mirrors yetty_yui_tabbar_kind 1:1 —
+/* View kinds the v-menu can start. Mirrors yetty_yui_tabbar_model_kind 1:1 —
  * kept as a separate type so yui doesn't need to depend on tabbar's
  * header. The yetty.c bridge translates between them. */
 enum yetty_yui_view_kind {
@@ -195,7 +195,7 @@ void yetty_yui_set_split_callback(struct yetty_yui *yui, yetty_yui_split_cb cb, 
  * unbind (used during yetty teardown). Safe to call before or after
  * yetty_yui_create; if called before the engine is built it just
  * stashes the pointer for the engine-construction path. */
-void yetty_yui_set_tabbar_model(struct yetty_yui *yui, struct yetty_yui_tabbar *tabbar);
+void yetty_yui_set_tabbar_model(struct yetty_yui *yui, struct yetty_yui_tabbar_model *tabbar);
 
 void yetty_yui_set_connect_callback(struct yetty_yui *yui, yetty_yui_connect_cb cb, void *userdata);
 

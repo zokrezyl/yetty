@@ -972,10 +972,17 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         }
         const struct yetty_client_input_mouse *m = (const struct yetty_client_input_mouse *)payload;
         if (m->kind == YETTY_YMGUI_INPUT_MOUSE_POS) {
-            err_ok(yetty_ygui_framework_feed_mouse_motion(a->fw, m->x, m->y));
+            struct yetty_ycore_int_result fr =
+                yetty_ygui_framework_feed_mouse_motion(a->fw, m->x, m->y);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON) {
-            err_ok(yetty_ygui_framework_feed_mouse_button(a->fw, m->x, m->y, m->button, m->pressed,
-                                                          0));
+            struct yetty_ycore_int_result fr =
+                yetty_ygui_framework_feed_mouse_button(a->fw, m->x, m->y, m->button, m->pressed, 0);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
             if (m->pressed) {
                 page_click(a, m->x, m->y);
             }
@@ -1066,6 +1073,10 @@ static int build_ui(struct app *a)
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(a->tabbar);
         l.height = 36.0f;
         l.gap = 4.0f;
+        /* Leave room on the right for the window controls (min/max/close) the
+         * chrome overlays on this row — the client's responsibility, so a tab
+         * never sits under a control. */
+        l.padding_right = 3.0f * 46.0f;
         err_ok(yetty_ygui_widget_layout_set(a->tabbar, &l));
     }
     err_ok(yetty_ygui_tabbar_set_on_new_tab(a->tabbar, on_new_tab_cb, a));
@@ -1593,24 +1604,6 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    /* Window chrome gets first dibs on pointer events (caption drag / edge
-     * resize / its buttons); anything it doesn't claim falls through to the
-     * browser UI below. */
-    if (s->chrome &&
-        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
-         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
-         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
-        struct yetty_ycore_int_result cr =
-            yetty_ychrome_host_handle_event(s->chrome, ev);
-        int consumed = YETTY_IS_OK(cr) && cr.value;
-        if (YETTY_IS_ERR(cr)) {
-            yetty_ycore_error_destroy(cr.error);
-        }
-        if (consumed) {
-            sa_request_render(s);
-            return YETTY_OK(yetty_ycore_int, 1);
-        }
-    }
 
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
@@ -1686,8 +1679,18 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP: {
         int press = ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0;
-        err_ok(yetty_ygui_framework_feed_mouse_button(s->app.fw, ev->mouse.x, ev->mouse.y,
-                                                      ev->mouse.button, press, ev->mouse.mods));
+        struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
+            s->app.fw, ev->mouse.x, ev->mouse.y, ev->mouse.button, press, ev->mouse.mods);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, fr, "ybrowser: feed button");
+        /* Client-first: only if no browser widget (tab / toolbar) took it does
+         * the window chrome get the event (empty title-bar drag, edges,
+         * min/max/close). */
+        if (!fr.value && s->chrome) {
+            struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(s->chrome, ev);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
+        }
         if (press) {
             page_click(&s->app, ev->mouse.x, ev->mouse.y);
         }
@@ -1695,6 +1698,16 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         sa_request_render(s);
         return YETTY_OK(yetty_ycore_int, 1);
     }
+    case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
+        /* Title-bar maximize gesture — the browser UI has no double-click. */
+        if (s->chrome) {
+            struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(s->chrome, ev);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
+        }
+        sa_request_render(s);
+        return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_SCROLL:
         err_ok(yetty_ygui_framework_feed_mouse_scroll(s->app.fw, ev->mouse_scroll.x,
                                                       ev->mouse_scroll.y, ev->mouse_scroll.dx,
@@ -1702,10 +1715,19 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         sa_request_render(s);
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_MOVE:
-    case YETTY_YCORE_MOUSE_DRAG:
-        err_ok(yetty_ygui_framework_feed_mouse_motion(s->app.fw, ev->mouse.x, ev->mouse.y));
+    case YETTY_YCORE_MOUSE_DRAG: {
+        struct yetty_ycore_int_result fr =
+            yetty_ygui_framework_feed_mouse_motion(s->app.fw, ev->mouse.x, ev->mouse.y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, fr, "ybrowser: feed motion");
+        if (!fr.value && s->chrome) {
+            struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(s->chrome, ev);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
+        }
         sa_request_render(s);
         return YETTY_OK(yetty_ycore_int, 1);
+    }
     default:
         break;
     }
@@ -1870,7 +1892,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             s->root_container, s->font, &ctx, s->yframework->window_manager,
-            (float)rt->surface_width, (float)rt->surface_height, 34.0f, 8.0f,
+            (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             s->chrome = chrome_r.value;

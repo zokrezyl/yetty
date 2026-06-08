@@ -70,18 +70,6 @@ struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychro
 struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_host *host,
                                                           float width, float height);
 
-/* Declare the header-bar content band — the slot the app fills with its own UI
- * (e.g. a ygui tabbar laid out across the top of its scene). With `active`
- * non-zero, chrome yields pointer events inside [left, right] to the app and
- * paints no caption background there (the app's content paints the strip),
- * while the rest of the caption stays a drag handle and the window controls stay
- * on the right. Keep `right` at or left of (width - 3 * 46 px) so the controls
- * stay clickable. Call whenever the content's extent changes (tabs added). Pass
- * active=0 to take the whole caption back. */
-struct yetty_ycore_void_result yetty_ychrome_host_set_content_band(struct yetty_ychrome_host *host,
-                                                                   int active, float left,
-                                                                   float right);
-
 /* Destroy the chrome engine + caption figure ownership held by the host, then
  * free the host. Handles NULL. */
 struct yetty_ycore_void_result yetty_ychrome_host_destroy(struct yetty_ychrome_host *host);

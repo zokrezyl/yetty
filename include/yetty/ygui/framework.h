@@ -105,10 +105,16 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_input(
  * yetty_ygui_widget_on_release to the deepest widget whose rect
  * contains (x, y), bubbling up until something consumes the event.
  *---------------------------------------------------------------------------*/
-struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
+/* Returns 1 (in the int_result value) if an interactive widget consumed the
+ * event, 0 if it fell through unhandled. Callers route the event to the window
+ * chrome (drag / resize / maximize) only when it was NOT consumed. */
+struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
     struct yetty_ygui_framework *framework, float x, float y, int button, int pressed, int mods);
 
-struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
+/* Returns 1 (value) if a widget consumed the motion (e.g. an in-progress drag
+ * or a hover the widget acted on), 0 otherwise — so the chrome can apply the
+ * resize-edge cursor only when the client didn't claim the pointer. */
+struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
     struct yetty_ygui_framework *framework, float x, float y);
 
 /* Wheel / trackpad scroll at (x, y) with deltas (dx, dy). Delivered to the

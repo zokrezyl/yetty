@@ -1,5 +1,5 @@
 /*
- * yetty_yui_tabbar — see tabbar.h for the design.
+ * yetty_yui_tabbar_model — see tabbar-model.h for the design.
  *
  * Today this file only implements the architecture: data, sizing, event
  * routing, keyboard/mouse shortcuts. The visual tab cells (rounded
@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "tabbar.h"
+#include "tabbar-model.h"
 
 /* GLFW modifier bit layout (matches glfw-main.c, ydvnc, yetty.c). Duplicated
  * here so tabbar.c doesn't pull in GLFW headers. */
@@ -39,10 +39,10 @@
 
 #define INITIAL_CAPACITY 4
 
-struct yetty_yui_tabbar;
-static void tabbar_request_render(const struct yetty_yui_tabbar *bar);
+struct yetty_yui_tabbar_model;
+static void tabbar_request_render(const struct yetty_yui_tabbar_model *bar);
 
-struct yetty_yui_tabbar {
+struct yetty_yui_tabbar_model {
     struct yetty_yui_workspace **workspaces;
     size_t count;
     size_t capacity;
@@ -103,7 +103,7 @@ struct yetty_yui_tabbar {
      * NULL means "no menu attached", in which case the click is a
      * no-op. Field name retained for binary compatibility with the
      * existing callback typedef. */
-    yetty_yui_tabbar_v_menu_cb v_menu_cb;
+    yetty_yui_tabbar_model_v_menu_cb v_menu_cb;
     void *v_menu_userdata;
 
     /* Style colors used to live here for the custom tab-strip painter.
@@ -116,7 +116,7 @@ struct yetty_yui_tabbar {
  * yetty_yinit_gpu_context::content_scale). Falls back to 1× when ctx
  * isn't bound yet — pre-first-add the strip is never hit-tested or
  * laid out anyway, so this keeps callers free of NULL guards. */
-static inline float tabbar_dp(const struct yetty_yui_tabbar *bar, float dp)
+static inline float tabbar_dp(const struct yetty_yui_tabbar_model *bar, float dp)
 {
     if (!bar || !bar->yetty_ctx) {
         return dp;
@@ -128,7 +128,7 @@ static inline float tabbar_dp(const struct yetty_yui_tabbar *bar, float dp)
  * Allocation helpers
  *--------------------------------------------------------------------------*/
 
-static struct yetty_ycore_void_result tabbar_grow(struct yetty_yui_tabbar *bar)
+static struct yetty_ycore_void_result tabbar_grow(struct yetty_yui_tabbar_model *bar)
 {
     size_t new_cap = bar->capacity ? bar->capacity * 2 : INITIAL_CAPACITY;
     struct yetty_yui_workspace **arr = realloc(bar->workspaces, new_cap * sizeof(*bar->workspaces));
@@ -144,18 +144,18 @@ static struct yetty_ycore_void_result tabbar_grow(struct yetty_yui_tabbar *bar)
  * Create / destroy
  *--------------------------------------------------------------------------*/
 
-struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(
+struct yetty_yui_tabbar_model_ptr_result yetty_yui_tabbar_model_create(
     const struct yetty_yconfig_config *config)
 {
     (void)config; /* style keys are now consumed by yui's ygui theme. */
-    struct yetty_yui_tabbar *bar = calloc(1, sizeof(struct yetty_yui_tabbar));
+    struct yetty_yui_tabbar_model *bar = calloc(1, sizeof(struct yetty_yui_tabbar_model));
     if (!bar) {
-        return YETTY_ERR(yetty_yui_tabbar_ptr, "tabbar_create: allocation failed");
+        return YETTY_ERR(yetty_yui_tabbar_model_ptr, "tabbar_create: allocation failed");
     }
-    return YETTY_OK(yetty_yui_tabbar_ptr, bar);
+    return YETTY_OK(yetty_yui_tabbar_model_ptr, bar);
 }
 
-struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar *bar)
+struct yetty_ycore_void_result yetty_yui_tabbar_model_destroy(struct yetty_yui_tabbar_model *bar)
 {
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
@@ -201,7 +201,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
  * helpers) used to live here. It has been replaced by ygui widgets pinned
  * to the engine titlebar slot — see yui.c::yui_titlebar_build. */
 
-struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *bar,
+struct yetty_ycore_void_result yetty_yui_tabbar_model_render(struct yetty_yui_tabbar_model *bar,
                                                        struct yetty_ydraw_target *render_target,
                                                        int force_redraw)
 {
@@ -236,7 +236,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *
  * changes.
  *--------------------------------------------------------------------------*/
 
-int yetty_yui_tabbar_edge_cursor_at(const struct yetty_yui_tabbar *bar, float x, float y)
+int yetty_yui_tabbar_model_edge_cursor_at(const struct yetty_yui_tabbar_model *bar, float x, float y)
 {
     /* Same EDGE band and edge selection rules as the resize hit-test in
      * the event handler — keep in sync if one changes. All four margins +
@@ -260,7 +260,7 @@ int yetty_yui_tabbar_edge_cursor_at(const struct yetty_yui_tabbar *bar, float x,
     return YETTY_YCORE_CURSOR_DEFAULT;
 }
 
-struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *bar, float width,
+struct yetty_ycore_void_result yetty_yui_tabbar_model_resize(struct yetty_yui_tabbar_model *bar, float width,
                                                        float height, float total_height)
 {
     if (!bar) {
@@ -322,8 +322,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *
  * Workspace management
  *--------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
-    struct yetty_yui_tabbar *bar, const struct yetty_yconfig_config *config,
+struct yetty_ycore_void_result yetty_yui_tabbar_model_add_workspace_from_config(
+    struct yetty_yui_tabbar_model *bar, const struct yetty_yconfig_config *config,
     const struct yetty_context *yetty_ctx)
 {
     if (!bar) {
@@ -424,8 +424,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
-    struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id,
+struct yetty_ycore_void_result yetty_yui_tabbar_model_attach_empty_workspace(
+    struct yetty_yui_tabbar_model *bar, yetty_ycore_object_id workspace_id,
     const struct yetty_yconfig_config *config, const struct yetty_context *yetty_ctx,
     struct yetty_yui_workspace **out_ws)
 {
@@ -489,7 +489,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
     return YETTY_OK_VOID();
 }
 
-struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(const struct yetty_yui_tabbar *bar,
+struct yetty_yui_workspace *yetty_yui_tabbar_model_find_workspace(const struct yetty_yui_tabbar_model *bar,
                                                             yetty_ycore_object_id workspace_id)
 {
     if (!bar) {
@@ -518,8 +518,8 @@ struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(const struct yetty_y
  * command from -e flag). The const-cast on bar->config reflects that:
  * the field is declared const for borrow-discipline, but the underlying
  * object is mutable. */
-struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
-    struct yetty_yui_tabbar *bar, enum yetty_yui_tabbar_kind kind)
+struct yetty_ycore_void_result yetty_yui_tabbar_model_add_workspace_of_kind(
+    struct yetty_yui_tabbar_model *bar, enum yetty_yui_tabbar_model_kind kind)
 {
     if (!bar) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_add_of_kind: NULL bar");
@@ -563,10 +563,10 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
         break;
     }
 
-    return yetty_yui_tabbar_add_workspace_from_config(bar, cfg, bar->yetty_ctx);
+    return yetty_yui_tabbar_model_add_workspace_from_config(bar, cfg, bar->yetty_ctx);
 }
 
-static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabbar *bar)
+static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabbar_model *bar)
 {
     if (bar->count == 0) {
         return YETTY_OK_VOID();
@@ -623,7 +623,7 @@ static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabba
  * yetty_ctx is borrowed from the cached pointer add_workspace_from_config
  * stored on the first call, which always happens before the first switch
  * (the initial workspace setup populates it). */
-static void tabbar_request_render(const struct yetty_yui_tabbar *bar)
+static void tabbar_request_render(const struct yetty_yui_tabbar_model *bar)
 {
     if (!bar || !bar->yetty_ctx || !bar->yetty_ctx->event_loop) {
         return;
@@ -634,7 +634,7 @@ static void tabbar_request_render(const struct yetty_yui_tabbar *bar)
     }
 }
 
-static struct yetty_ycore_void_result tabbar_switch(struct yetty_yui_tabbar *bar, size_t idx)
+static struct yetty_ycore_void_result tabbar_switch(struct yetty_yui_tabbar_model *bar, size_t idx)
 {
     if (idx >= bar->count || idx == bar->active) {
         return YETTY_OK_VOID();
@@ -696,7 +696,7 @@ static void wm_absorb(struct yetty_ycore_void_result window_manager_result)
     }
 }
 
-struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar *bar,
+struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_tabbar_model *bar,
                                                         const struct yetty_yui_event *event)
 {
     if (!bar) {
@@ -720,7 +720,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         if (shift && k == KEY_T) {
             if (bar->config && bar->yetty_ctx) {
                 struct yetty_ycore_void_result r =
-                    yetty_yui_tabbar_add_workspace_from_config(bar, bar->config, bar->yetty_ctx);
+                    yetty_yui_tabbar_model_add_workspace_from_config(bar, bar->config, bar->yetty_ctx);
                 if (YETTY_IS_ERR(r)) {
                     yerror("tabbar: new tab failed: %s", r.error.msg);
                     yetty_ycore_error_destroy(r.error);
@@ -1010,7 +1010,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
  * Accessors
  *--------------------------------------------------------------------------*/
 
-struct yetty_yui_workspace *yetty_yui_tabbar_active_workspace(const struct yetty_yui_tabbar *bar)
+struct yetty_yui_workspace *yetty_yui_tabbar_model_active_workspace(const struct yetty_yui_tabbar_model *bar)
 {
     if (!bar || bar->count == 0) {
         return NULL;
@@ -1018,17 +1018,17 @@ struct yetty_yui_workspace *yetty_yui_tabbar_active_workspace(const struct yetty
     return bar->workspaces[bar->active];
 }
 
-size_t yetty_yui_tabbar_count(const struct yetty_yui_tabbar *bar)
+size_t yetty_yui_tabbar_model_count(const struct yetty_yui_tabbar_model *bar)
 {
     return bar ? bar->count : 0;
 }
 
-size_t yetty_yui_tabbar_active_index(const struct yetty_yui_tabbar *bar)
+size_t yetty_yui_tabbar_model_active_index(const struct yetty_yui_tabbar_model *bar)
 {
     return bar ? bar->active : 0;
 }
 
-struct yetty_ycore_void_result yetty_yui_tabbar_switch_to(struct yetty_yui_tabbar *bar, size_t idx)
+struct yetty_ycore_void_result yetty_yui_tabbar_model_switch_to(struct yetty_yui_tabbar_model *bar, size_t idx)
 {
     if (!bar) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_switch_to: NULL");
@@ -1041,7 +1041,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_switch_to(struct yetty_yui_tabba
 /* Index-aware close; mirrors the bookkeeping of the static tabbar_close_active
  * but lets the caller pick which tab to drop. The "refuse to close the last
  * workspace" guard stays — it's a UX invariant, not specific to active-vs-N. */
-struct yetty_ycore_void_result yetty_yui_tabbar_close_at(struct yetty_yui_tabbar *bar, size_t idx)
+struct yetty_ycore_void_result yetty_yui_tabbar_model_close_at(struct yetty_yui_tabbar_model *bar, size_t idx)
 {
     if (!bar) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_close_at: NULL");
@@ -1082,7 +1082,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_close_at(struct yetty_yui_tabbar
     return YETTY_OK_VOID();
 }
 
-void yetty_yui_tabbar_iconify(struct yetty_yui_tabbar *bar)
+void yetty_yui_tabbar_model_iconify(struct yetty_yui_tabbar_model *bar)
 {
     if (!bar || !bar->yetty_ctx) {
         return;
@@ -1093,7 +1093,7 @@ void yetty_yui_tabbar_iconify(struct yetty_yui_tabbar *bar)
     }
 }
 
-void yetty_yui_tabbar_toggle_maximize(struct yetty_yui_tabbar *bar)
+void yetty_yui_tabbar_model_toggle_maximize(struct yetty_yui_tabbar_model *bar)
 {
     if (!bar || !bar->yetty_ctx) {
         return;
@@ -1104,7 +1104,7 @@ void yetty_yui_tabbar_toggle_maximize(struct yetty_yui_tabbar *bar)
     }
 }
 
-void yetty_yui_tabbar_close_window(struct yetty_yui_tabbar *bar)
+void yetty_yui_tabbar_model_close_window(struct yetty_yui_tabbar_model *bar)
 {
     if (!bar || !bar->yetty_ctx) {
         return;
@@ -1115,8 +1115,8 @@ void yetty_yui_tabbar_close_window(struct yetty_yui_tabbar *bar)
     }
 }
 
-void yetty_yui_tabbar_set_v_menu_callback(struct yetty_yui_tabbar *bar,
-                                          yetty_yui_tabbar_v_menu_cb cb, void *userdata)
+void yetty_yui_tabbar_model_set_v_menu_callback(struct yetty_yui_tabbar_model *bar,
+                                          yetty_yui_tabbar_model_v_menu_cb cb, void *userdata)
 {
     if (!bar) {
         return;
