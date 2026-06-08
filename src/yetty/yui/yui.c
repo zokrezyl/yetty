@@ -1930,6 +1930,26 @@ static struct yetty_ygui_object_ptr_result yui_titlebar_button(struct yetty_yui 
     return button_r;
 }
 
+/* Like yui_titlebar_button but draws an SDF window-control icon (1=minimize,
+ * 2=maximize, 3=close) instead of a font glyph, so yetty's controls match the
+ * ychrome SDF controls the tools use. */
+static struct yetty_ygui_object_ptr_result yui_titlebar_icon_button(struct yetty_yui *yui, int kind,
+                                                                    yetty_ygui_click_cb cb)
+{
+    struct yetty_ygui_object_ptr_result button_r =
+        yui_add(yui->titlebar, yetty_ygui_button_class_get());
+    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, button_r, "titlebar_icon_button: add");
+    struct yetty_ygui_object *b = button_r.value;
+    if (!b) {
+        return YETTY_OK(yetty_ygui_object_ptr, NULL);
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_button_set_chrome_icon(b, kind));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(b, TITLEBAR_BTN_W, TITLEBAR_STRIP_H));
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_bg_color(b, TITLEBAR_STRIP_BG));
+    yetty_ycore_error_destroy_safe(yetty_ygui_clickable_on_click_set(b, cb, yui));
+    return button_r;
+}
+
 static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
 {
     if (!yui || !yui->engine || !yui->root) {
@@ -1978,15 +1998,15 @@ static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
     }
 
     struct yetty_ygui_object_ptr_result min_r =
-        yui_titlebar_button(yui, "\xE2\x88\x92" /* − */, yui_titlebar_on_min);
+        yui_titlebar_icon_button(yui, 1 /* minimize */, yui_titlebar_on_min);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, min_r, "titlebar_build: min button");
     yui->titlebar_min = min_r.value;
     struct yetty_ygui_object_ptr_result max_r =
-        yui_titlebar_button(yui, "\xE2\x96\xA1" /* □ */, yui_titlebar_on_max);
+        yui_titlebar_icon_button(yui, 2 /* maximize */, yui_titlebar_on_max);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, max_r, "titlebar_build: max button");
     yui->titlebar_max = max_r.value;
     struct yetty_ygui_object_ptr_result close_r =
-        yui_titlebar_button(yui, "\xC3\x97" /* × */, yui_titlebar_on_close_window);
+        yui_titlebar_icon_button(yui, 3 /* close */, yui_titlebar_on_close_window);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, close_r, "titlebar_build: close button");
     yui->titlebar_close = close_r.value;
 

@@ -824,11 +824,29 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * routes strip clicks and forwards the rest to the workspace. */
     if (yetty->yui) {
         struct yetty_ycore_int_result yr = yetty_yui_on_event(yetty->yui, event);
-        if (YETTY_IS_OK(yr) && yr.value) {
-            if (yetty->event_loop && yetty->event_loop->ops &&
-                yetty->event_loop->ops->request_render) {
-                yetty->event_loop->ops->request_render(yetty->event_loop);
+        int consumed = YETTY_IS_OK(yr) && yr.value;
+        if (YETTY_IS_ERR(yr)) {
+            yetty_ycore_error_destroy(yr.error);
+        }
+        /* Schedule a render whenever the event left the ygui engine dirty —
+         * not only when yui *consumed* it. A hover-only mouse-move over a
+         * titlebar control (minimize/maximize/close) flips the widget's hover
+         * state (engine dirty) but is reported not-consumed so it can still
+         * fall through to the tabbar for cursor/resize. Without this the hover
+         * highlight wouldn't repaint until some unrelated render happened. */
+        int want_render = consumed;
+        if (!want_render) {
+            struct yetty_ycore_int_result dirty_r = yetty_yui_is_dirty(yetty->yui);
+            want_render = YETTY_IS_OK(dirty_r) && dirty_r.value;
+            if (YETTY_IS_ERR(dirty_r)) {
+                yetty_ycore_error_destroy(dirty_r.error);
             }
+        }
+        if (want_render && yetty->event_loop && yetty->event_loop->ops &&
+            yetty->event_loop->ops->request_render) {
+            yetty->event_loop->ops->request_render(yetty->event_loop);
+        }
+        if (consumed) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
     }

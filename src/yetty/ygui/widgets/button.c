@@ -24,6 +24,12 @@
 struct [[clang::annotate("class@ygui:button")]] [[clang::annotate(
     "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] button_data {
     char *label;
+    /* Window-control icon drawn as an SDF primitive instead of a text label:
+     * 0=none (plain label button), 1=minimize (bar), 2=maximize (box outline),
+     * 3=close (X). In this mode the button paints a flat caption-strip cell with
+     * the same SDF icons + hover wash as ychrome's window controls, so titlebars
+     * that use ygui buttons (yetty's yui) match the ychrome-driven tools. */
+    int chrome_icon;
 };
 
 [[clang::annotate("override@ygui:button:constructor")]]
@@ -124,6 +130,47 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
         yetty_ycore_error_destroy(pressed_r.error);
     }
     int hovered = yetty_ygui_object_is_hovered(obj);
+
+    /* Window-control mode: paint a flat caption cell with an SDF icon (no
+     * rounded gradient surface, no text label), matching ychrome's controls so
+     * yetty's yui titlebar reads identically to the ychrome-driven tools.
+     * Colours mirror ychrome: strip bg, off-white icon, a lifted hover wash for
+     * minimize/maximize and a red one for close. */
+    if (d->chrome_icon) {
+        float cx = r.min.x + w * 0.5f;
+        float cy = r.min.y + h * 0.5f;
+        if (hovered || pressed) {
+            uint32_t wash = (d->chrome_icon == 3) ? 0xFF3B3BC8u  /* close → red */
+                                                  : 0xFF463A30u; /* lifted strip */
+            struct yetty_ysdf_box hl = {cx, cy, w * 0.5f, h * 0.5f, 0.0f};
+            struct yetty_ycore_void_result hr = yetty_ydraw_drawable_list_add_cmd_add_box(
+                ctx->ygrid_drawable_list, 0, 0, wash, 0u, 0.0f, &hl);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "button_paint: chrome hover");
+        }
+        float ext = h * 0.18f; /* icon half-extent */
+        float stroke = 1.5f;
+        struct yetty_ycore_void_result ir = YETTY_OK_VOID();
+        if (d->chrome_icon == 1) {
+            struct yetty_ysdf_segment seg = {cx - ext, cy, cx + ext, cy};
+            ir = yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 1, 0u,
+                                                               BTN_FG, stroke, &seg);
+        } else if (d->chrome_icon == 2) {
+            struct yetty_ysdf_box box = {cx, cy, ext, ext, 1.0f};
+            ir = yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0, 1, 0u,
+                                                           BTN_FG, stroke, &box);
+        } else {
+            struct yetty_ysdf_segment a = {cx - ext, cy - ext, cx + ext, cy + ext};
+            struct yetty_ysdf_segment b = {cx - ext, cy + ext, cx + ext, cy - ext};
+            ir = yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 1, 0u,
+                                                               BTN_FG, stroke, &a);
+            if (YETTY_IS_OK(ir)) {
+                ir = yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 1,
+                                                                   0u, BTN_FG, stroke, &b);
+            }
+        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "button_paint: chrome icon");
+        return YETTY_OK_VOID();
+    }
 
     /* Pressed surface goes to accent + drops 1 px to give tactile feedback.
      * Hover replaces the idle row-grey with the slightly lighter BG_LIFTED
@@ -234,6 +281,24 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_ygui_obj
         }
         memcpy(d->label, label, n + 1);
     }
+    return yetty_ygui_object_set_dirty(obj);
+}
+
+/* Draw the button as a window-control cell with an SDF icon instead of a text
+ * label: 0=none (normal label button), 1=minimize, 2=maximize, 3=close. Used by
+ * yetty's yui titlebar so its controls match the ychrome-driven tools. */
+[[clang::annotate("expose")]]
+struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_ygui_object *obj,
+                                                                 int kind)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_button_set_chrome_icon: NULL obj");
+    }
+    struct yetty_ygui_void_ptr_result d_dr =
+        yetty_ygui_data_get_result(obj, yetty_ygui_button_class_get().value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_button_set_chrome_icon: data_get");
+    struct button_data *d = d_dr.value;
+    d->chrome_icon = (kind >= 1 && kind <= 3) ? kind : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
 

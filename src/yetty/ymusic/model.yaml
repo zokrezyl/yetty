@@ -145,10 +145,6 @@ classes:
         type: float
         get: false
         set: false
-      - name: elements_x0
-        type: float
-        get: false
-        set: false
     ops:
       - slot: configure
         slot_domain: ymusic

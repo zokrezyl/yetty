@@ -11,6 +11,9 @@ add_library(yetty_ychrome STATIC
     chrome.c
     methods.gen.c
     rpc.gen.c
+    # host.c: reusable glue (engine + pinned caption figure) so any app gets
+    # window chrome in a few calls. Plain C, no annotations.
+    host.c
 )
 
 target_include_directories(yetty_ychrome PUBLIC
@@ -27,6 +30,10 @@ target_link_libraries(yetty_ychrome PUBLIC
     yetty_ydraw_core
     yetty_ysdf
     yetty_yface
+    # host.c composites the caption as a pinned ygrid figure — framework
+    # figure libs, still not ygui.
+    yetty_ygrid
+    yetty_yfigure
 )
 
 # chrome.c carries C23 `[[clang::annotate(...)]]` attributes.

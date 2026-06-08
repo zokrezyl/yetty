@@ -21,6 +21,9 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfont/font.h>
+#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include <yetty/ychrome/host.h>
+#include <yetty/ychrome/methods.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
@@ -64,6 +67,7 @@ struct yrich_app {
     struct yetty_ygui_framework *ygui;
     struct yetty_ygui_object *win; /* framework root widget */
     struct yetty_yfont_font *font;
+    struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
     void *surface;
     uint32_t surface_w;
@@ -127,6 +131,22 @@ static struct yetty_ycore_void_result push_scene(struct yrich_app *app)
 static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
                                                    const struct yetty_yui_event *ev)
 {
+    /* Window chrome gets first dibs on pointer events; anything it doesn't
+     * claim (caption drag / edge resize / its buttons) falls through. */
+    if (app->chrome &&
+        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result chrome_r =
+            yetty_ychrome_host_handle_event(app->chrome, ev);
+        int chrome_consumed = YETTY_IS_OK(chrome_r) && chrome_r.value;
+        if (YETTY_IS_ERR(chrome_r)) {
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+        if (chrome_consumed) {
+            return YETTY_OK_VOID();
+        }
+    }
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
@@ -158,6 +178,13 @@ static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dirty_r, "yrich: root dirty");
         struct yetty_ycore_void_result scene_r = push_scene(app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
+        if (app->chrome) {
+            struct yetty_ycore_void_result chrome_rz =
+                yetty_ychrome_host_resized(app->chrome, (float)w, (float)h);
+            if (YETTY_IS_ERR(chrome_rz)) {
+                yetty_ycore_error_destroy(chrome_rz.error);
+            }
+        }
         return YETTY_OK_VOID();
     }
     case YETTY_YCORE_KEY_DOWN:
@@ -278,6 +305,20 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     struct yetty_ycore_void_result result_260 = push_scene(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_260, "initial push_scene failed");
 
+    /* Window chrome: draggable/resizable titlebar + min/max/close (SDF, no
+     * font). Composited as a pinned figure over the document. */
+    {
+        struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
+            app->root, app->font, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
+            (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+        if (YETTY_IS_OK(chrome_r)) {
+            app->chrome = chrome_r.value;
+        } else {
+            ywarn("yrich app: chrome host create failed: %s", chrome_r.error.msg);
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+    }
+
     struct yetty_ycore_int_result fdr =
         rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fdr, "pipe read_fd failed");
@@ -325,6 +366,12 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
         }
         destroy_safe(app->target->ops->present(app->target));
         needs_render = 0;
+    }
+
+    /* Chrome engine (its caption figure is owned by the container below). */
+    if (app->chrome) {
+        destroy_safe(yetty_ychrome_host_destroy(app->chrome));
+        app->chrome = NULL;
     }
 
     /* Teardown — container first so pending GPU work flushes. */

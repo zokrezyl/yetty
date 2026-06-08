@@ -317,6 +317,10 @@ classes:
         type: "char *"
         get: false
         set: false
+      - name: chrome_icon
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -2502,6 +2506,14 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_ygui_objec
         type: "struct yetty_ygui_object *"
       - name: label
         type: "const char *"
+  - source_file: src/yetty/ygui/widgets/button.c
+    name: yetty_ygui_button_set_chrome_icon
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_ygui_object *"
+      - name: kind
+        type: int
   - source_file: src/yetty/ygui/widgets/button.c
     name: yetty_ygui_button_get_label
     return_type: struct yetty_ycore_const_char_ptr_result

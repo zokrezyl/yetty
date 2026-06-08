@@ -199,6 +199,26 @@ classes:
         type: uint32_t
         get: false
         set: false
+      - name: font_cache
+        type: "struct yetty_yfont_cache *"
+        get: false
+        set: false
+      - name: msdf_generator
+        type: "struct yetty_ymsdf_generator *"
+        get: false
+        set: false
+      - name: shaders_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: wire_font_slot
+        type: "int32_t[64]"
+        get: false
+        set: false
+      - name: next_font_slot
+        type: uint32_t
+        get: false
+        set: false
       - name: staging_dirty
         type: int
         get: false

@@ -56,8 +56,6 @@
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
-#include <string.h>
-
 #include <stdint.h>
 
 #ifdef YCLASS_CODEGEN
@@ -82,16 +80,16 @@ enum {
     YCHROME_BTN_W = 46,
 };
 
-/* Caption fill + glyph colours, packed 0xAABBGGRR (the encoding ydraw uses).
- * Match yetty's titlebar: BRAND_BG_ROW strip, off-white glyphs. */
-#define YCHROME_STRIP_BG 0xFF2C261Eu   /* #1E262C */
+/* Caption fill + icon colours, packed 0xAABBGGRR (the encoding ydraw uses).
+ * Match yetty's titlebar: BRAND_BG_ROW strip, off-white icons. The window
+ * controls are drawn as SDF primitives (bar / box / X), not font glyphs — no
+ * font dependency. */
+#define YCHROME_STRIP_BG 0xFF2C261Eu    /* #1E262C */
 #define YCHROME_GLYPH_COLOR 0xFFE4E5E0u /* #E0E5E4 */
-
-/* Window-control glyphs, in left→right order: minimize, maximize, close. Same
- * codepoints yui's titlebar uses (in the bundled font): − □ × */
-#define YCHROME_GLYPH_MINIMIZE "\xE2\x88\x92"
-#define YCHROME_GLYPH_MAXIMIZE "\xE2\x96\xA1"
-#define YCHROME_GLYPH_CLOSE "\xC3\x97"
+/* Hover backings (packed 0xAABBGGRR): a lifted strip tone for minimize/maximize,
+ * a red wash for close — matching common window managers. */
+#define YCHROME_HOVER_BG 0xFF463A30u       /* lifted strip */
+#define YCHROME_HOVER_CLOSE_BG 0xFF3B3BC8u /* #C83B3B red */
 
 struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     /* Borrowed yplatform:window_manager yclass object — set by configure(). */
@@ -124,6 +122,27 @@ struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     float resize_last_y;
     float resize_anchor_x;
     float resize_anchor_y;
+
+    /* Window-control button currently under the pointer: 1=minimize,
+     * 2=maximize, 3=close, 0=none. Drawn with a highlight backing. */
+    int hover_button;
+
+    /* 1 while chrome is showing a resize cursor for a hovered edge, so it can
+     * restore the default cursor exactly once when the pointer leaves the edge
+     * (and otherwise leave the app's own cursor alone). */
+    int edge_cursor_on;
+
+    /* Content band — the header-bar (CSD) content slot. When `content_active`,
+     * the app has mounted its own content (e.g. a ygui tabbar) into the caption
+     * across [content_left, content_right]. In that band chrome yields pointer
+     * events to the app (so the tabs are clickable) and paints no background —
+     * the app's content (a full-width strip) provides the bar look. Outside the
+     * band (and minus the window controls) the caption is still chrome's drag
+     * handle. Set via content_band_set(); inactive by default → chrome owns and
+     * paints the whole caption as before. */
+    int content_active;
+    float content_left;
+    float content_right;
 };
 
 /* Resolve the object's chrome_data slice, preserving the class_get /
@@ -207,6 +226,29 @@ static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_ctx *c
     struct chrome_data *chrome = data_r.value;
     chrome->width = width;
     chrome->height = height;
+    return YETTY_OK_VOID();
+}
+
+/* Declare the content band — the header-bar content slot the app fills with its
+ * own UI (e.g. a ygui tabbar). With `active` non-zero, chrome yields pointer
+ * events inside [left, right] across the caption to the app and stops painting a
+ * background there (the app's content paints the strip). Pass active=0 to take
+ * the whole caption back. left/right are caption-relative px; keep right at or
+ * left of the window-control cluster (width - 3*button) so the controls stay
+ * clickable. Call again whenever the content's extent changes (tabs added). */
+[[clang::annotate("override@ychrome:chrome:content_band_set")]] [[clang::annotate(
+    "local@ychrome:content_band_set")]]
+static struct yetty_ycore_void_result chrome_content_band_set(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              int active, float left, float right)
+{
+    (void)ctx;
+    struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome content_band_set: object");
+    struct chrome_data *chrome = data_r.value;
+    chrome->content_active = active ? 1 : 0;
+    chrome->content_left = left;
+    chrome->content_right = right;
     return YETTY_OK_VOID();
 }
 
@@ -318,37 +360,70 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_r, "chrome render: list create");
     struct yetty_ydraw_drawable_list *list = list_r.value;
 
-    /* Background strip. */
-    struct yetty_ysdf_box bg = {.center_x = width * 0.5f,
-                                .center_y = height * 0.5f,
-                                .half_width = width * 0.5f,
-                                .half_height = height * 0.5f,
-                                .corner_radius = 0.0f};
-    struct yetty_ycore_void_result bg_r =
-        yetty_ydraw_drawable_list_add_cmd_add_box(list, /*id=*/0, /*z_order=*/0, YCHROME_STRIP_BG,
-                                                  /*stroke=*/0u, /*stroke_width=*/0.0f, &bg);
-    if (YETTY_IS_ERR(bg_r)) {
-        yetty_ydraw_drawable_list_destroy(list);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: bg box", bg_r);
+    /* Background strip. Skipped in content-active mode: the app's mounted
+     * content (a full-width tab strip) paints the bar background itself, so a
+     * chrome strip on top would hide it. Only the window-control icons are drawn
+     * then, sitting directly on the app's strip. */
+    if (!chrome->content_active) {
+        struct yetty_ysdf_box bg = {.center_x = width * 0.5f,
+                                    .center_y = height * 0.5f,
+                                    .half_width = width * 0.5f,
+                                    .half_height = height * 0.5f,
+                                    .corner_radius = 0.0f};
+        struct yetty_ycore_void_result bg_r = yetty_ydraw_drawable_list_add_cmd_add_box(
+            list, /*id=*/0, /*z_order=*/0, YCHROME_STRIP_BG,
+            /*stroke=*/0u, /*stroke_width=*/0.0f, &bg);
+        if (YETTY_IS_ERR(bg_r)) {
+            yetty_ydraw_drawable_list_destroy(list);
+            return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: bg box", bg_r);
+        }
     }
 
-    /* Window-control glyphs, flush right. Glyph metrics aren't measured (no font
-     * dep), so each glyph is placed at a fixed inset inside its slot — close
-     * enough for single symbols. */
-    const char *glyphs[3] = {YCHROME_GLYPH_MINIMIZE, YCHROME_GLYPH_MAXIMIZE, YCHROME_GLYPH_CLOSE};
-    float font_size = height * 0.5f;
-    float baseline = height * 0.5f + font_size * 0.35f;
+    /* Window-control icons, flush right, drawn as SDF primitives — NO font:
+     * minimize = a bar, maximize = a box outline, close = an X. Each centered in
+     * its YCHROME_BTN_W slot. */
+    float cy = height * 0.5f;
+    float r = height * 0.18f;   /* icon half-extent */
+    float stroke = 1.5f;        /* line thickness */
     for (int i = 0; i < 3; i++) {
         float slot_left = width - (float)((3 - i) * YCHROME_BTN_W);
-        struct yetty_ycore_buffer glyph = {.data = (uint8_t *)(uintptr_t)glyphs[i],
-                                           .capacity = strlen(glyphs[i]),
-                                           .size = strlen(glyphs[i])};
-        struct yetty_ycore_void_result glyph_r = yetty_ydraw_drawable_list_add_text(
-            list, slot_left + (float)YCHROME_BTN_W * 0.34f, baseline, &glyph, font_size,
-            YCHROME_GLYPH_COLOR, /*layer=*/1, /*font_id=*/-1, /*rotation=*/0.0f);
-        if (YETTY_IS_ERR(glyph_r)) {
+        float cx = slot_left + (float)YCHROME_BTN_W * 0.5f;
+        /* Hover highlight backing (close gets a red wash, like most WMs). */
+        if (chrome->hover_button == i + 1) {
+            struct yetty_ysdf_box hl = {cx, cy, (float)YCHROME_BTN_W * 0.5f, height * 0.5f, 0.0f};
+            uint32_t hl_color = (i == 2) ? YCHROME_HOVER_CLOSE_BG : YCHROME_HOVER_BG;
+            struct yetty_ycore_void_result hl_r = yetty_ydraw_drawable_list_add_cmd_add_box(
+                list, 0, 0, hl_color, 0u, 0.0f, &hl);
+            if (YETTY_IS_ERR(hl_r)) {
+                yetty_ydraw_drawable_list_destroy(list);
+                return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: hover", hl_r);
+            }
+        }
+        struct yetty_ycore_void_result icon = YETTY_OK_VOID();
+        if (i == 0) {
+            /* minimize: horizontal bar */
+            struct yetty_ysdf_segment seg = {cx - r, cy, cx + r, cy};
+            icon = yetty_ydraw_drawable_list_add_cmd_add_segment(list, 0, 1, 0u,
+                                                                 YCHROME_GLYPH_COLOR, stroke, &seg);
+        } else if (i == 1) {
+            /* maximize: box outline (fill transparent, stroked) */
+            struct yetty_ysdf_box box = {cx, cy, r, r, 1.0f};
+            icon = yetty_ydraw_drawable_list_add_cmd_add_box(list, 0, 1, 0u, YCHROME_GLYPH_COLOR,
+                                                             stroke, &box);
+        } else {
+            /* close: two diagonals forming an X */
+            struct yetty_ysdf_segment a = {cx - r, cy - r, cx + r, cy + r};
+            struct yetty_ysdf_segment b = {cx - r, cy + r, cx + r, cy - r};
+            icon = yetty_ydraw_drawable_list_add_cmd_add_segment(list, 0, 1, 0u, YCHROME_GLYPH_COLOR,
+                                                                 stroke, &a);
+            if (YETTY_IS_OK(icon)) {
+                icon = yetty_ydraw_drawable_list_add_cmd_add_segment(
+                    list, 0, 1, 0u, YCHROME_GLYPH_COLOR, stroke, &b);
+            }
+        }
+        if (YETTY_IS_ERR(icon)) {
             yetty_ydraw_drawable_list_destroy(list);
-            return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: glyph", glyph_r);
+            return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: icon", icon);
         }
     }
     return YETTY_OK(yetty_ydraw_drawable_list, list);
@@ -383,6 +458,13 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
 
     float x = 0.0f, y = 0.0f;
     int have_xy = chrome_event_xy(event, &x, &y);
+    /* Track the control under the pointer for the hover highlight (cleared while
+     * a drag/resize gesture owns the pointer). The host re-paints when it
+     * changes. */
+    if (have_xy) {
+        chrome->hover_button =
+            (chrome->dragging || chrome->resizing) ? 0 : chrome_button_at(chrome, x, y);
+    }
     ydebug("CHROMETRACE: type=%d xy=(%.1f,%.1f) have_xy=%d caption_h=%.1f wh=(%.1f,%.1f) "
            "dragging=%d resizing=%d flags=0x%x",
            (int)event->type, x, y, have_xy, chrome->caption_height, chrome->width, chrome->height,
@@ -469,6 +551,30 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     if (!have_xy) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
+
+    /* Resize-edge cursor feedback. The window is frameless, so without a cursor
+     * change the resize edges are invisible and the window reads as "not
+     * resizable" even though dragging an edge does resize it. Show the H/V
+     * resize cursor while hovering a live edge (matching yetty's titlebar);
+     * restore the default exactly once when leaving an edge, and don't touch the
+     * cursor over content so the app keeps control of its own cursors. Skipped
+     * mid-gesture (an in-progress resize/drag returns above). */
+    if ((chrome->flags & YETTY_YCHROME_FLAG_RESIZE) && chrome->width > 0.0f &&
+        chrome->height > 0.0f) {
+        int edge_left, edge_right, edge_top, edge_bottom;
+        chrome_edges_at(chrome, x, y, &edge_left, &edge_right, &edge_top, &edge_bottom);
+        if (edge_left || edge_right || edge_top || edge_bottom) {
+            int shape = (edge_left || edge_right) ? YETTY_YCORE_CURSOR_HRESIZE
+                                                  : YETTY_YCORE_CURSOR_VRESIZE;
+            wm_absorb(yetty_yplatform_window_manager_set_cursor(NULL, wm, shape));
+            chrome->edge_cursor_on = 1;
+        } else if (chrome->edge_cursor_on) {
+            wm_absorb(yetty_yplatform_window_manager_set_cursor(NULL, wm,
+                                                                YETTY_YCORE_CURSOR_DEFAULT));
+            chrome->edge_cursor_on = 0;
+        }
+    }
+
     int in_caption = y < chrome->caption_height;
 
     /* --- window-control buttons (minimize / maximize / close) ---------- *
@@ -519,6 +625,16 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
         }
     }
 
+    /* --- content band → yield to the app's mounted UI ------------------ *
+     * Events inside the header-bar content slot (e.g. the tabs) belong to the
+     * app. Return not-claimed so the caller routes them to its own widgets.
+     * Reached only after the window controls and resize edges had priority, so
+     * those still win where they overlap the band's margins. */
+    if (chrome->content_active && in_caption && x >= chrome->content_left &&
+        x < chrome->content_right) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+
     /* --- caption double-click → toggle maximize ------------------------ */
     if ((chrome->flags & YETTY_YCHROME_FLAG_MAXIMIZE) && in_caption &&
         event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK && event->mouse.button == 0) {
@@ -541,6 +657,17 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     }
 
     return YETTY_OK(yetty_ycore_int, 0);
+}
+
+/* Current window-control button under the pointer (1=minimize, 2=maximize,
+ * 3=close; 0=none). Hosts poll this after forwarding an event and re-paint the
+ * caption when it changes, so the hover highlight tracks the pointer. */
+[[clang::annotate("expose")]]
+struct yetty_ycore_int_result yetty_ychrome_hover_button(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome hover_button: object");
+    return YETTY_OK(yetty_ycore_int, ((struct chrome_data *)data_r.value)->hover_button);
 }
 
 #include "chrome.gen.c"

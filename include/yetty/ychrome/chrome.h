@@ -18,5 +18,6 @@ struct yetty_yclass_ptr_result yetty_ychrome_chrome_class_get(void);
 #define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
 #define YETTY_YCHROME_FLAG_ALL                                                                     \
     (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)
+struct yetty_ycore_int_result yetty_ychrome_hover_button(struct yetty_yclass_object *obj);
 
 #endif

@@ -65,6 +65,9 @@
  * doesn't, and on platforms without WebGPU (riscv64 cross) including
  * them breaks the build. Keep gated. */
 #include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include <yetty/ychrome/host.h>
+#include <yetty/ychrome/methods.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
@@ -259,6 +262,7 @@ struct app {
     struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
     struct yetty_yfont_font *font;
+    struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
     /* ~30 fps animation pump for self-animating widgets (ymaze, …). */
@@ -2352,19 +2356,16 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
 
 /* Title-bar close-x handler — the window widget emits EVENT_CLOSE; we
  * react by running the app's mode-specific stop hook. */
-static struct yetty_ycore_void_result on_window_close(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *target,
-                                                      const struct yetty_ygui_event *event,
-                                                      void *userdata)
+/* Right edge (px) of the titlebar tab band — the span chrome yields to ygui so
+ * the tabs stay clickable. Covers the laid-out tabs (TAB_PITCH each) plus a
+ * little slack, clamped so it never reaches the window-control cluster
+ * (3 × 46 px). The strip to its right stays a chrome drag/maximize handle. */
+static float ygreeter_tab_band_right(float window_width)
 {
-    (void)ctx;
-    (void)target;
-    (void)event;
-    struct app *app = (struct app *)userdata;
-    if (app && app->stop_cb) {
-        app->stop_cb(app);
-    }
-    return YETTY_OK_VOID();
+    enum { TAB_PITCH = 134 /* 130 px tab + 4 px gap */ };
+    float tabs = (float)(TOP_TAB_COUNT * TAB_PITCH) + 12.0f;
+    float controls_left = window_width - 3.0f * 46.0f;
+    return tabs < controls_left ? tabs : controls_left;
 }
 
 static struct yetty_ycore_void_result build_ui(struct app *app)
@@ -2379,26 +2380,20 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
     discover_readme(app);
     discover_pdf(app);
 
-    /* The app's main window — a framed window with a title bar carrying
-     * a close "x" (set_closable). Closing emits EVENT_CLOSE, handled by
-     * on_window_close above. The chrome (tabbar / body / statusbar) lives
-     * in the window's auto body. */
+    /* Root is a plain vbox — the window title bar + close are provided by the
+     * real OS-window chrome (ychrome), so no in-canvas window widget. The
+     * greeter's own content (its tabbar / body / statusbar) stacks directly in
+     * here. Standalone mode insets the top by the chrome caption height (see
+     * run_standalone_mode); close arrives via ychrome → window_manager →
+     * WINDOW_CLOSE, handled in the event loop. */
     struct yetty_ygui_object_ptr_result rr =
-        yetty_ygui_add(yetty_ygui_window_class_get().value, NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root window add");
+        yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "build_ui: root add");
     app->root = rr.value;
-    yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(app->root, "yetty"));
-    yetty_ycore_error_destroy_safe(yetty_ygui_window_set_closable(app->root, 1));
-    struct yetty_ycore_void_result clsub =
-        yetty_ygui_object_subscribe(app->root, YETTY_YGUI_EVENT_CLOSE, on_window_close, app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, clsub, "build_ui: close subscribe");
     struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(app->engine, app->root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "build_ui: set_root");
 
-    struct yetty_ygui_object *content = yetty_ygui_window_body(app->root);
-    if (!content) {
-        return YETTY_ERR(yetty_ycore_void, "build_ui: window body");
-    }
+    struct yetty_ygui_object *content = app->root;
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(content);
         l.align = YETTY_YGUI_ALIGN_STRETCH;
@@ -2415,6 +2410,9 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(app->tabbar);
         l.height = 36;
         l.gap = 4;
+        /* Keep the tabs clear of the window controls (3 × 46 px) that chrome
+         * paints flush-right on top of this strip. */
+        l.padding_right = 3.0f * 46.0f;
         struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(app->tabbar, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "build_ui: tabbar layout");
     }
@@ -3329,6 +3327,24 @@ static struct yetty_ycore_int_result standalone_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* Window chrome gets first dibs on pointer events; anything it doesn't
+     * claim (caption drag / edge resize / its buttons) falls through to the
+     * greeter UI. */
+    if (app->chrome &&
+        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result chrome_r =
+            yetty_ychrome_host_handle_event(app->chrome, ev);
+        int chrome_consumed = YETTY_IS_OK(chrome_r) && chrome_r.value;
+        if (YETTY_IS_ERR(chrome_r)) {
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+        if (chrome_consumed) {
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
+
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
@@ -3361,6 +3377,17 @@ static struct yetty_ycore_int_result standalone_event_handler(
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
+        }
+        if (app->chrome) {
+            struct yetty_ycore_void_result chrome_rz = yetty_ychrome_host_resized(
+                app->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            if (YETTY_IS_ERR(chrome_rz)) {
+                yetty_ycore_error_destroy(chrome_rz.error);
+            }
+            /* Re-clamp the tab band to the new width so it never runs under the
+             * (now-moved) window controls. */
+            yetty_ycore_error_destroy_safe(yetty_ychrome_host_set_content_band(
+                app->chrome, 1, 0.0f, ygreeter_tab_band_right((float)ev->resize.width)));
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
@@ -3592,6 +3619,30 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     struct yetty_ycore_void_result br = build_ui(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "standalone: build_ui");
 
+    /* Window chrome: draggable/resizable titlebar + min/max/close (SDF, no
+     * font), composited as a pinned figure over the greeter UI. */
+    {
+        struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
+            app->root_container, app->font, &ctx, app->yframework->window_manager,
+            (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
+        if (YETTY_IS_OK(chrome_r)) {
+            app->chrome = chrome_r.value;
+            /* Mount the greeter's top tabbar INTO the titlebar (header-bar
+             * model): the tabbar widget is the first row of the scene and
+             * paints the full-width strip. Yield only the actual tab extent to
+             * ygui so the tabs stay clickable; the strip to the right of the
+             * tabs stays a chrome drag handle (and double-click there toggles
+             * maximize). Clamp to the window-control cluster. Updated on
+             * resize. */
+            yetty_ycore_error_destroy_safe(
+                yetty_ychrome_host_set_content_band(app->chrome, 1, 0.0f, ygreeter_tab_band_right((float)rt->surface_width)));
+        } else {
+            ywarn("ygreeter standalone: chrome host create failed: %s", chrome_r.error.msg);
+            yetty_ycore_error_destroy(chrome_r.error);
+        }
+    }
+
     /* Wire memory-pty wake → request_render so producer writes drive the
      * event loop. Without this, ygui_framework_emit appends bytes to the
      * mem-pty but the consumer side never schedules a render. */
@@ -3644,6 +3695,13 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         yetty_ycore_error_destroy(run_res.error);
     }
 
+    if (app->chrome) {
+        struct yetty_ycore_void_result dc = yetty_ychrome_host_destroy(app->chrome);
+        if (YETTY_IS_ERR(dc)) {
+            yetty_ycore_error_destroy(dc.error);
+        }
+        app->chrome = NULL;
+    }
     if (app->engine) {
         struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(app->engine);
         if (YETTY_IS_ERR(dr)) {
