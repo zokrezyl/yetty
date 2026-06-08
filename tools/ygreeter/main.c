@@ -2356,6 +2356,18 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
 
 /* Title-bar close-x handler — the window widget emits EVENT_CLOSE; we
  * react by running the app's mode-specific stop hook. */
+/* Right edge (px) of the titlebar tab band — the span chrome yields to ygui so
+ * the tabs stay clickable. Covers the laid-out tabs (TAB_PITCH each) plus a
+ * little slack, clamped so it never reaches the window-control cluster
+ * (3 × 46 px). The strip to its right stays a chrome drag/maximize handle. */
+static float ygreeter_tab_band_right(float window_width)
+{
+    enum { TAB_PITCH = 134 /* 130 px tab + 4 px gap */ };
+    float tabs = (float)(TOP_TAB_COUNT * TAB_PITCH) + 12.0f;
+    float controls_left = window_width - 3.0f * 46.0f;
+    return tabs < controls_left ? tabs : controls_left;
+}
+
 static struct yetty_ycore_void_result build_ui(struct app *app)
 {
     /* yinit already ran ygreeter_extract_assets_cb early in startup, so
@@ -3372,11 +3384,10 @@ static struct yetty_ycore_int_result standalone_event_handler(
             if (YETTY_IS_ERR(chrome_rz)) {
                 yetty_ycore_error_destroy(chrome_rz.error);
             }
-            /* Keep the yielded tab band running up to the (now-moved) window
-             * controls so the rightmost tabs stay clickable. */
-            float band_right = (float)ev->resize.width - 3.0f * 46.0f;
-            yetty_ycore_error_destroy_safe(
-                yetty_ychrome_host_set_content_band(app->chrome, 1, 0.0f, band_right));
+            /* Re-clamp the tab band to the new width so it never runs under the
+             * (now-moved) window controls. */
+            yetty_ycore_error_destroy_safe(yetty_ychrome_host_set_content_band(
+                app->chrome, 1, 0.0f, ygreeter_tab_band_right((float)ev->resize.width)));
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
@@ -3619,12 +3630,13 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             app->chrome = chrome_r.value;
             /* Mount the greeter's top tabbar INTO the titlebar (header-bar
              * model): the tabbar widget is the first row of the scene and
-             * paints the full-width strip; yield the strip up to the window
-             * controls to ygui so the tabs stay clickable, and let chrome paint
-             * only the min/max/close icons on top. Updated on resize. */
-            float band_right = (float)rt->surface_width - 3.0f * 46.0f;
+             * paints the full-width strip. Yield only the actual tab extent to
+             * ygui so the tabs stay clickable; the strip to the right of the
+             * tabs stays a chrome drag handle (and double-click there toggles
+             * maximize). Clamp to the window-control cluster. Updated on
+             * resize. */
             yetty_ycore_error_destroy_safe(
-                yetty_ychrome_host_set_content_band(app->chrome, 1, 0.0f, band_right));
+                yetty_ychrome_host_set_content_band(app->chrome, 1, 0.0f, ygreeter_tab_band_right((float)rt->surface_width)));
         } else {
             ywarn("ygreeter standalone: chrome host create failed: %s", chrome_r.error.msg);
             yetty_ycore_error_destroy(chrome_r.error);
